@@ -1385,4 +1385,14 @@ ALTER TABLE agents ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE conversations ADD COLUMN android_device_ids TEXT NOT NULL DEFAULT '[]';
 `,
   },
+  {
+    id: 84,
+    name: "mod_sources",
+    sql: /* sql */ `
+-- Plugins installed from a git repository (JSON, ModSource): where they come from and the commit that runs; files then
+-- holds their manifest and hooks for reading. contents: what such a plugin brings (JSON, ModContents).
+ALTER TABLE mods ADD COLUMN source TEXT;
+ALTER TABLE mods ADD COLUMN contents TEXT;
+`,
+  },
 ];

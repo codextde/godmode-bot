@@ -56,7 +56,7 @@ export interface PromptContext {
   cards?: boolean;
   /** Another agent handed this task over: its questions go to that agent, not to the human. */
   delegated?: boolean;
-  /** A manager can draft Claude Code mods here (mod_save); not on a runner, whose setup is its controller's. */
+  /** A manager can install and draft Claude Code plugins here (plugin_install, plugin_save); not on a runner, whose setup is its controller's. */
   mods?: boolean;
   /** A manager can read and change Godmode's settings here (settings_get, settings_update); not on a runner. */
   settingsTools?: boolean;
@@ -333,8 +333,8 @@ When ${human} describes one in a sentence ("when X happens, do Y"), set it up: p
   }
 
   if (perms.canManageAgents && ctx.mods) {
-    out.push(`### Mods
-${human} can install Claude Code mods under Mods: small plugins of TypeScript function hooks that run inside every turn of the agents they are for — they refuse or rewrite tool calls, rewrite prompts, mask tool output and post notes. \`mods_list\` shows the installed ones. When ${human} asks for one, write it and save it with \`mod_save\`: load Claude Code's \`plugin-authoring\` skill first for the API (it names the type declarations to read), keep the mod small, and give ${human} options through the manifest's \`userConfig\` instead of hard-coding what they will want to change. Write the files in a folder of your own (\`workspace/mods/<name>/\`), not where the skill says — nothing loads from \`~/.claude/dev-mods\` in Godmode — and try them there with \`claude plugin validate\` and \`claude plugin test\` when the \`claude\` command is at hand. In Godmode a mod's \`$.ui.log\`, \`$.ui.toast\` and \`$.ui.status\` show as notes in the chat; panes and bands aren't drawn, and nobody can be asked through \`$.ui\`. \`mod_save\` checks the files with Claude Code's validator and returns the result — fix what it reports and save again until it passes. The mod arrives switched off: only ${human} switches a mod on, after reading its code. Never present a draft as active, and don't change a mod that is switched on.`);
+    out.push(`### Plugins
+${human} can add Claude Code plugins under Plugins; they load into the runs of the agents they are for. Two kinds: whole plugins installed from a git repository (skills, subagents, slash commands, hooks, MCP servers — e.g. Claude Video or oh-my-claudecode) and small plugins of TypeScript function hooks that run inside every turn (they refuse or rewrite tool calls, rewrite prompts, mask tool output and post notes). \`plugins_list\` shows the installed ones. When ${human} asks for a plugin from GitHub, install it with \`plugin_install\`. When ${human} asks for a small one, write it and save it with \`plugin_save\`: load Claude Code's \`plugin-authoring\` skill first for the API (it names the type declarations to read), keep it small, and give ${human} options through the manifest's \`userConfig\` instead of hard-coding what they will want to change. Write the files in a folder of your own (\`workspace/plugins/<name>/\`), not where the skill says — nothing loads from \`~/.claude/dev-mods\` in Godmode — and try them there with \`claude plugin validate\` and \`claude plugin test\` when the \`claude\` command is at hand. In Godmode a plugin's \`$.ui.log\`, \`$.ui.toast\` and \`$.ui.status\` show as notes in the chat; panes and bands aren't drawn, and nobody can be asked through \`$.ui\`. \`plugin_save\` checks the files with Claude Code's validator and returns the result — fix what it reports and save again until it passes. Whatever you install or save arrives switched off: only ${human} switches a plugin on. Never present one as active, and don't change a plugin that is switched on.`);
   }
 
   out.push(`### Notifications

@@ -41,6 +41,7 @@ import {
   isModelId,
   leadOf,
   modState,
+  modUpdateAvailable,
   MAX_AGENT_ROLE_LENGTH,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
   MAX_RUNS_PER_WINDOW,
@@ -139,7 +140,7 @@ import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parse
 import { continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
-import { createMod, findMod, listMods, updateMod } from "../mods/service";
+import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
 
@@ -208,9 +209,18 @@ function modSummary(mod: Mod) {
     state: modState(mod),
     runsFor: mod.scope === "all" ? "every agent" : mod.agentIds,
     options: mod.options.map((o) => ({ key: o.key, title: o.title, value: o.sensitive ? undefined : (mod.values[o.key] ?? o.default) })),
+    ...(mod.source
+      ? {
+          repository: { repo: mod.source.repo, ref: mod.source.ref, path: mod.source.path || undefined, commit: mod.source.commit, version: mod.source.version },
+          updateAvailable: modUpdateAvailable(mod),
+          contents: mod.contents
+            ? { skills: mod.contents.skills, commands: mod.contents.commands, agents: mod.contents.agents, hooks: mod.contents.hooks, mcpServers: mod.contents.mcpServers }
+            : undefined,
+        }
+      : {}),
     check: mod.check
       ? { ok: mod.check.ok, errors: mod.check.errors, warnings: mod.check.warnings, hooks: mod.check.hooks, calls: mod.check.calls }
-      : "Claude Code isn't installed on this computer, so the mod wasn't checked.",
+      : "Claude Code isn't installed on this computer, so the plugin wasn't checked.",
   };
 }
 const fail = (text: string): ToolOutput => ({ text, isError: true });
@@ -2491,42 +2501,69 @@ const TOOLS: ToolDef[] = [
   }),
 
   defineTool({
-    name: "mods_list",
+    name: "plugins_list",
     description:
-      "List the Claude Code mods installed in Godmode: small plugins of TypeScript hooks that run inside every turn of the agents they are for (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, what it hooks, and what Claude Code's validator said. With `mod` (an id or name) the answer includes that mod's files.",
-    schema: z.object({ mod: z.string().max(100).optional().describe("A mod's id or name: return it with its files") }),
+      "List the Claude Code plugins installed in Godmode (the Plugins page): whole plugins installed from a git repository (skills, subagents, commands, hooks, MCP servers — with their repository, commit and whether an update waits) and small plugins of TypeScript hooks that run inside every turn (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, and what Claude Code's validator said. With `plugin` (an id or name) the answer includes its files (for one from a repository: its manifest and hooks).",
+    schema: z.object({ plugin: z.string().max(100).optional().describe("A plugin's id or name: return it with its files") }),
     when: isManager,
-    run: ({ mod }) => {
-      if (mod) {
-        const found = findMod(mod);
-        return found ? json({ ...modSummary(found), files: found.files }) : fail(`There is no mod "${mod}". Call mods_list without arguments to see them.`);
+    run: ({ plugin }) => {
+      if (plugin) {
+        const found = findMod(plugin);
+        return found ? json({ ...modSummary(found), files: found.files }) : fail(`There is no plugin "${plugin}". Call plugins_list without arguments to see them.`);
       }
       return json(listMods().map(modSummary));
     },
   }),
 
   defineTool({
-    name: "mod_save",
+    name: "plugin_install",
     description:
-      "Save a Claude Code mod you wrote as a draft for the human to review: it arrives switched off, the human reads the code under Mods and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `mod` until `check.ok` is true. `mod` (an id or name) saves over a draft an agent wrote that still waits for review. Every other mod is the human's — one they made, added from the gallery or switched on: you can't change it, so save your version as a new mod and say what is different.",
+      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: the human switches it on under Plugins — you can't. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
     schema: z.object({
-      mod: z.string().max(100).optional().describe("Id or name of an agent's draft to save over; omit for a new mod"),
+      source: z.string().min(1).max(500).describe('"owner/repo", a GitHub link or a clone URL'),
+      ref: z.string().max(200).optional().describe("Branch or tag to follow; default: the repository's default branch"),
+      plugin: z.string().max(100).optional().describe("The plugin's name when the repository holds several"),
+    }),
+    when: managesSetup,
+    run: async ({ source, ref, plugin }, { agent }) => {
+      let saved: Mod;
+      try {
+        saved = await installMod({ source, ref, plugin }, `agent:${agent.id}`);
+      } catch (err) {
+        if (err instanceof HttpError) {
+          const choices = (err.details as { plugins?: { name: string; description: string }[] } | undefined)?.plugins;
+          return fail(choices ? `${err.message} ${choices.map((p) => `${p.name}${p.description ? ` (${p.description})` : ""}`).join("; ")}` : err.message);
+        }
+        throw err;
+      }
+      notify("info", `${agent.name} installed the plugin ${saved.title}`, "It is switched off. Look at what it brings and switch it on under Plugins.", `/plugins?plugin=${saved.id}`);
+      return json({ ...modSummary(saved), next: "Installed switched off. Tell the human to review it under Plugins and switch it on." });
+    },
+  }),
+
+  defineTool({
+    name: "plugin_save",
+    description:
+      "Save a small Claude Code plugin you wrote (TypeScript hooks) as a draft for the human to review: it arrives switched off, the human reads the code under Plugins and switches it on — you can't. `files` is the whole plugin by path: \".claude-plugin/plugin.json\" (name, version, description, and `userConfig` for options the human sets), \"hooks/hooks.json\" ({ \"modules\": [\"./register.ts\"] }) and the hooks module \"hooks/register.ts\" exporting `register(on, options)`. Godmode checks the files with Claude Code's validator and returns what it found: fix every error and save again with the same `plugin` until `check.ok` is true. `plugin` (an id or name) saves over a draft an agent wrote that still waits for review. Every other plugin is the human's — one they made, added from the gallery, installed or switched on: you can't change it, so save your version as a new plugin and say what is different. A whole plugin from a git repository is installed with plugin_install instead.",
+    schema: z.object({
+      plugin: z.string().max(100).optional().describe("Id or name of an agent's draft to save over; omit for a new plugin"),
       title: z.string().min(1).max(80).describe("What the human sees, two or three words: \"Protect migrations\""),
-      description: z.string().max(500).optional().describe("One sentence: what the mod does"),
+      description: z.string().max(500).optional().describe("One sentence: what the plugin does"),
       files: z.record(z.string().max(200), z.string()).describe("Every file of the plugin, path → text"),
     }),
     when: managesSetup,
-    run: async ({ mod, title, description, files }, { agent }) => {
+    run: async ({ plugin, title, description, files }, { agent }) => {
       const actor = `agent:${agent.id}`;
-      const existing = mod ? findMod(mod) : null;
-      if (mod && !existing) return fail(`There is no mod "${mod}". Omit \`mod\` to save a new one.`);
+      const existing = plugin ? findMod(plugin) : null;
+      if (plugin && !existing) return fail(`There is no plugin "${plugin}". Omit \`plugin\` to save a new one.`);
       const human = getSettings().general.userName || "the human";
       if (existing?.enabled) {
-        return fail(`"${existing.title}" is switched on: only ${human} changes a mod that is running. Save your version as a new mod and say what you changed.`);
+        return fail(`"${existing.title}" is switched on: only ${human} changes a plugin that is running. Save your version as a new plugin and say what you changed.`);
       }
+      if (existing?.source) return fail(`"${existing.title}" comes from a git repository: it changes when it is updated, not by saving files over it.`);
       // A draft is an agent's until the human has had it on; anything else was made, added or approved by them.
       if (existing && !(existing.needsReview && existing.createdBy.startsWith("agent:"))) {
-        return fail(`"${existing.title}" is ${human}'s mod, not a draft of yours. Save your version as a new mod and say what you changed.`);
+        return fail(`"${existing.title}" is ${human}'s plugin, not a draft of yours. Save your version as a new plugin and say what you changed.`);
       }
       const saved = existing
         ? await updateMod(existing.id, { title, ...(description !== undefined ? { description } : {}), files }, actor)
@@ -2534,13 +2571,13 @@ const TOOLS: ToolDef[] = [
       // Every version is told: the human reads the code as it is now, not the one from an earlier notice.
       notify(
         "info",
-        existing ? `${agent.name} changed its draft of the mod ${saved.title}` : `${agent.name} drafted a mod: ${saved.title}`,
-        "It is switched off. Read the code and switch it on under Mods.",
-        `/mods?mod=${saved.id}&tab=code`,
+        existing ? `${agent.name} changed its draft of the plugin ${saved.title}` : `${agent.name} drafted a plugin: ${saved.title}`,
+        "It is switched off. Read the code and switch it on under Plugins.",
+        `/plugins?plugin=${saved.id}&tab=code`,
       );
       return json({
         ...modSummary(saved),
-        next: saved.check && !saved.check.ok ? "Fix the errors and save again with this mod's id." : "Saved as a draft. Tell the human to review it under Mods and switch it on.",
+        next: saved.check && !saved.check.ok ? "Fix the errors and save again with this plugin's id." : "Saved as a draft. Tell the human to review it under Plugins and switch it on.",
       });
     },
   }),

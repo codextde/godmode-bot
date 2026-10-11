@@ -180,39 +180,44 @@ export interface CheckResult {
   retry: boolean;
 }
 
+/** The validator over `target` (a mod's folder or its manifest); `files` are what its report is told against. */
+async function runValidator(target: string, dir: string, files: Record<string, string>, cmd: string[], stamp: string, cwd: string): Promise<CheckResult> {
+  const [res, version] = await Promise.all([
+    runCommand([...cmd, "plugin", "validate", target, "--json"], { timeoutMs: CHECK_TIMEOUT_MS, env: claudeEnv(), cwd }),
+    claudeVersion(cmd, stamp),
+  ]);
+  const report = parseReport(res.stdout, dir, files, version);
+  if (report) return { check: report, retry: false };
+  const said = stripAnsi(res.stderr || res.stdout).trim().slice(0, 400);
+  log.warn("the mod check gave no report", { timedOut: res.timedOut, code: res.code, said });
+  return {
+    check: {
+      ok: false,
+      errors: [
+        {
+          where: "Claude Code",
+          message: res.timedOut
+            ? "Claude Code took too long to check this plugin. Check it again."
+            : `This Claude Code can't check plugins${said ? ` (${said})` : ""}. Update Claude Code under Settings → System and check again.`,
+        },
+      ],
+      warnings: [],
+      hooks: [],
+      calls: [],
+      startsPrograms: startsPrograms(files),
+      claudeVersion: version,
+      checkedAt: now(),
+    },
+    retry: res.timedOut,
+  };
+}
+
 async function validate(name: string, files: Record<string, string>, cmd: string[], stamp: string): Promise<CheckResult> {
   const work = mkdtempSync(join(tmpdir(), "godmode-mod-"));
   const dir = join(work, name);
   try {
     writeModFiles(dir, files);
-    const [res, version] = await Promise.all([
-      runCommand([...cmd, "plugin", "validate", dir, "--json"], { timeoutMs: CHECK_TIMEOUT_MS, env: claudeEnv(), cwd: work }),
-      claudeVersion(cmd, stamp),
-    ]);
-    const report = parseReport(res.stdout, dir, files, version);
-    if (report) return { check: report, retry: false };
-    const said = stripAnsi(res.stderr || res.stdout).trim().slice(0, 400);
-    log.warn("the mod check gave no report", { timedOut: res.timedOut, code: res.code, said });
-    return {
-      check: {
-        ok: false,
-        errors: [
-          {
-            where: "Claude Code",
-            message: res.timedOut
-              ? "Claude Code took too long to check this mod. Check it again."
-              : `This Claude Code can't check mods${said ? ` (${said})` : ""}. Update Claude Code under Settings → System and check again.`,
-          },
-        ],
-        warnings: [],
-        hooks: [],
-        calls: [],
-        startsPrograms: startsPrograms(files),
-        claudeVersion: version,
-        checkedAt: now(),
-      },
-      retry: res.timedOut,
-    };
+    return await runValidator(dir, dir, files, cmd, stamp, work);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }
@@ -230,6 +235,32 @@ export function checkMod(name: string, files: Record<string, string>): Promise<C
   let pending = inFlight.get(key);
   if (!pending) {
     pending = validate(name, files, cmd, stamp).finally(() => inFlight.delete(key));
+    inFlight.set(key, pending);
+  }
+  return pending;
+}
+
+/** A note about the plugin's own repository layout that nobody installing it can act on. */
+const AUTHOR_ONLY = /^CLAUDE\.md at the plugin root is not loaded/;
+
+/**
+ * Run the validator over a plugin folder as it lies (one from a repository). `target` is the folder or, beside a
+ * marketplace, its manifest; `programs` says what the folder's inventory found it starts.
+ */
+export function checkPluginFolder(dir: string, target: string, files: Record<string, string>, programs: boolean): Promise<CheckResult> {
+  const cmd = resolveClaudeCommand();
+  const stamp = claudeStamp();
+  if (!cmd || !stamp) return Promise.resolve({ check: null, retry: false });
+  const key = `folder\0${dir}\0${stamp}`;
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = runValidator(target, dir, files, cmd, stamp, tmpdir())
+      .then((result) =>
+        result.check
+          ? { ...result, check: { ...result.check, startsPrograms: programs || result.check.startsPrograms, warnings: result.check.warnings.filter((w) => !AUTHOR_ONLY.test(w.message)) } }
+          : result,
+      )
+      .finally(() => inFlight.delete(key));
     inFlight.set(key, pending);
   }
   return pending;

@@ -1,13 +1,30 @@
 /**
- * Mods: Claude Code mods the human installs (see `@godmode/shared` mods.ts). The database holds a mod's files; a run
- * gets its own copy under `<data>/mods/<run-id>/` and loads it with `--plugin-dir`, its options through the run's
- * settings file. A mod is only loaded when Claude Code's validator accepts it (check.ts) — the engine itself says nothing
- * about a mod it refuses. Only the human switches a mod on; code an agent wrote arrives switched off and marked for
+ * Plugins (mods in the code; see `@godmode/shared` mods.ts). The database holds a small plugin's files; a run gets its
+ * own copy under `<data>/mods/<run-id>/` and loads it with `--plugin-dir`, its options through the run's settings file.
+ * A plugin from a git repository lies in a checkout of its installed commit (git.ts) that runs load as it is. A plugin is
+ * only loaded when Claude Code's validator accepts it (check.ts) — the engine itself says nothing about a plugin it
+ * refuses. Only the human switches a plugin on; code an agent wrote or installed arrives switched off and marked for
  * review.
  */
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { Agent, Mod, ModCheck, ModIcon, ModInput, ModOption, ModOptionValue, ModOrigin, ModPatch, ModScope, ModTemplate } from "@godmode/shared";
+import type {
+  Agent,
+  Mod,
+  ModCatalogEntry,
+  ModCheck,
+  ModContents,
+  ModIcon,
+  ModInput,
+  ModInstallInput,
+  ModOption,
+  ModOptionValue,
+  ModOrigin,
+  ModPatch,
+  ModScope,
+  ModSource,
+  ModTemplate,
+} from "@godmode/shared";
 import {
   MAX_MOD_BYTES,
   MAX_MOD_FILE_BYTES,
@@ -26,7 +43,25 @@ import { logger } from "../log";
 import { audit } from "../services/audit";
 import { badRequest, conflict, HttpError, newId, notFound, now, parseJson, truncate } from "../util";
 import * as vault from "../vault/vault";
-import { checkMod, claudeStamp, filesDigest, writeModFiles } from "./check";
+import { listCatalog } from "./catalog";
+import { checkMod, checkPluginFolder, claudeStamp, filesDigest, writeModFiles } from "./check";
+import {
+  alwaysOnTokens,
+  checkoutPath,
+  checkoutsRoot,
+  cloneAt,
+  cloneLatest,
+  contentsStartPrograms,
+  gitTarget,
+  inventory,
+  keyFiles,
+  latestCommit,
+  manifestVersion,
+  pluginDirIn,
+  remoteVersion,
+  resolvePlugin,
+  validateTarget,
+} from "./git";
 import { fitsOption, manifestOptions, readManifest } from "./manifest";
 import { blankModFiles, findModTemplate, listModTemplates, manifestJson } from "./templates";
 
@@ -37,6 +72,10 @@ const RESERVED_NAMES = /^(claude-mem|cc-plugin-.*|godmode)$/;
 const IMPORT_SKIP_DIRS = new Set([".git", "node_modules", ".DS_Store"]);
 /** Run ids name the folder a run's mods are copied to. */
 const SAFE_RUN_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const SAFE_MOD_ID = /^[A-Za-z0-9_-]{1,64}$/;
+const COMMIT = /^[0-9a-f]{40,64}$/;
+/** How often plugins from repositories are looked up for a newer commit. */
+const UPDATE_CHECK_EVERY_MS = 6 * 60 * 60_000;
 
 interface ModRow {
   id: string;
@@ -57,6 +96,8 @@ interface ModRow {
   agent_ids: string;
   check_report: string | null;
   check_key: string | null;
+  source: string | null;
+  contents: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -112,6 +153,50 @@ function checkOf(row: ModRow): ModCheck | null {
     : null;
 }
 
+/** Where a plugin from a repository comes from; null for one whose files Godmode keeps. */
+function sourceOf(row: Pick<ModRow, "source">): ModSource | null {
+  const s = objectOf(row.source);
+  const text = (v: unknown) => (typeof v === "string" ? v : null);
+  if (typeof s.url !== "string" || typeof s.commit !== "string" || !COMMIT.test(s.commit)) return null;
+  const latest = text(s.latestCommit);
+  return {
+    url: s.url,
+    repo: text(s.repo) ?? s.url,
+    web: text(s.web),
+    ref: text(s.ref),
+    path: text(s.path) ?? "",
+    commit: s.commit,
+    version: text(s.version),
+    installedAt: text(s.installedAt) ?? "",
+    latestCommit: latest && COMMIT.test(latest) ? latest : null,
+    latestVersion: text(s.latestVersion),
+    checkedAt: text(s.checkedAt),
+    checkError: text(s.checkError),
+  };
+}
+
+function contentsOf(row: Pick<ModRow, "contents">): ModContents | null {
+  const c = objectOf(row.contents);
+  const names = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  if (!Array.isArray(c.skills)) return null;
+  return {
+    skills: names(c.skills),
+    commands: names(c.commands),
+    agents: names(c.agents),
+    hooks: names(c.hooks),
+    mcpServers: names(c.mcpServers),
+    files: typeof c.files === "number" ? c.files : 0,
+    bytes: typeof c.bytes === "number" ? c.bytes : 0,
+    alwaysOnTokens: typeof c.alwaysOnTokens === "number" ? c.alwaysOnTokens : null,
+  };
+}
+
+/** Which code a plugin is: its files, or the commit of its repository. The human's OK and every check are for it. */
+function codeDigest(row: Pick<ModRow, "source">, files: Record<string, string>): string {
+  const source = sourceOf(row);
+  return source ? `git:${source.commit}` : filesDigest(files);
+}
+
 function scopeOf(row: ModRow): ModScope {
   return row.scope === "agents" ? "agents" : "all";
 }
@@ -129,7 +214,7 @@ function toModel(row: ModRow, agents: Set<string>): Mod {
     title: row.title,
     description: row.description,
     icon: (MOD_ICONS as readonly string[]).includes(row.icon) ? (row.icon as ModIcon) : "puzzle",
-    origin: (["template", "custom", "agent", "import"].includes(row.origin) ? row.origin : "custom") as ModOrigin,
+    origin: (["template", "custom", "agent", "import", "git"].includes(row.origin) ? row.origin : "custom") as ModOrigin,
     templateId: row.template_id,
     createdBy: row.created_by,
     enabled: bool(row.enabled),
@@ -137,11 +222,13 @@ function toModel(row: ModRow, agents: Set<string>): Mod {
     scope: scopeOf(row),
     agentIds: stringsOf(row.agent_ids).filter((id) => agents.has(id)),
     files,
-    digest: filesDigest(files),
+    digest: codeDigest(row, files),
     options,
     values: valuesOf(row, options),
     secretKeys: secretKeysOf(row, options),
     check: checkOf(row),
+    source: sourceOf(row),
+    contents: contentsOf(row),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -149,7 +236,7 @@ function toModel(row: ModRow, agents: Set<string>): Mod {
 
 function getRow(id: string): ModRow {
   const row = get<ModRow>("SELECT * FROM mods WHERE id = ?", id);
-  if (!row) throw notFound("Mod");
+  if (!row) throw notFound("Plugin");
   return row;
 }
 
@@ -172,12 +259,16 @@ export function listTemplates(): ModTemplate[] {
   return listModTemplates();
 }
 
+export function listModCatalog(): ModCatalogEntry[] {
+  return listCatalog();
+}
+
 /* ------------------------------------------------------------------ */
 /* Input                                                                */
 /* ------------------------------------------------------------------ */
 
 function cleanTitle(title: unknown): string {
-  if (typeof title !== "string" || !title.trim()) throw badRequest("Give the mod a name");
+  if (typeof title !== "string" || !title.trim()) throw badRequest("Give the plugin a name");
   return title.trim().slice(0, 80);
 }
 
@@ -192,7 +283,7 @@ function cleanIcon(icon: unknown): ModIcon {
 
 function cleanName(name: unknown): string {
   if (typeof name !== "string" || !MOD_NAME_RE.test(name)) {
-    throw badRequest("A mod's name is 2–48 lowercase letters, digits and dashes, starting with a letter");
+    throw badRequest("A plugin's name is 2–48 lowercase letters, digits and dashes, starting with a letter");
   }
   if (RESERVED_NAMES.test(name)) throw badRequest(`"${name}" is a name Godmode or Claude Code uses itself`);
   return name;
@@ -213,7 +304,7 @@ function freeName(base: string): string {
 function cleanFiles(name: string, input: unknown): Record<string, string> {
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw badRequest("files must be an object of path → text");
   const entries = Object.entries(input as Record<string, unknown>);
-  if (entries.length > MAX_MOD_FILES) throw badRequest(`A mod has at most ${MAX_MOD_FILES} files`);
+  if (entries.length > MAX_MOD_FILES) throw badRequest(`A plugin has at most ${MAX_MOD_FILES} files here — install a larger one from its git repository`);
   const out: Record<string, string> = {};
   const seen = new Set<string>();
   let total = 0;
@@ -230,11 +321,11 @@ function cleanFiles(name: string, input: unknown): Record<string, string> {
     seen.add(key);
     out[path] = content;
   }
-  if (total > MAX_MOD_BYTES) throw badRequest(`A mod's files add up to at most ${MAX_MOD_BYTES / 1000} KB`);
+  if (total > MAX_MOD_BYTES) throw badRequest(`A plugin's files add up to at most ${MAX_MOD_BYTES / 1000} KB here — install a larger one from its git repository`);
   for (const path of seen) {
     if ([...seen].some((other) => other.startsWith(`${path}/`))) throw badRequest(`${path} is both a file and a folder`);
   }
-  if (!Object.hasOwn(out, MOD_MANIFEST_PATH)) throw badRequest(`A mod needs its manifest, ${MOD_MANIFEST_PATH}`);
+  if (!Object.hasOwn(out, MOD_MANIFEST_PATH)) throw badRequest(`A plugin needs its manifest, ${MOD_MANIFEST_PATH}`);
   const manifest = readManifest(out);
   if (!manifest) throw badRequest(`${MOD_MANIFEST_PATH} must be a JSON object`);
   if (manifest.name !== name) out[MOD_MANIFEST_PATH] = manifestJson("name" in manifest ? { ...manifest, name } : { name, ...manifest });
@@ -255,8 +346,8 @@ function cleanAgentIds(ids: unknown): string[] {
   return unique;
 }
 
-function checkKey(files: Record<string, string>): string {
-  return `${filesDigest(files)}|${claudeStamp() ?? ""}`;
+function checkKey(row: Pick<ModRow, "source">, files: Record<string, string>): string {
+  return `${codeDigest(row, files)}|${claudeStamp() ?? ""}`;
 }
 
 /** The saved secret option values; throws 423 while the vault is locked. */
@@ -292,10 +383,21 @@ function firstError(check: ModCheck): string {
   return e ? truncate(`${e.where}: ${e.message.split("; $ is always spelled")[0]}`, 300) : "Claude Code refused it";
 }
 
+interface Checked {
+  check: ModCheck | null;
+  columns: { check_report: string | null; check_key: string | null };
+}
+
 /** Check the files and say what goes into the row: a check that gave no report keeps no key, so it is asked again. */
-async function checked(name: string, files: Record<string, string>): Promise<{ check: ModCheck | null; columns: { check_report: string | null; check_key: string | null } }> {
+async function checked(name: string, files: Record<string, string>): Promise<Checked> {
   const { check, retry } = await checkMod(name, files);
-  return { check, columns: { check_report: check ? JSON.stringify(check) : null, check_key: check && !retry ? checkKey(files) : null } };
+  return { check, columns: { check_report: check ? JSON.stringify(check) : null, check_key: check && !retry ? checkKey({ source: null }, files) : null } };
+}
+
+/** Check a plugin from a repository in its checkout. */
+async function checkedFolder(row: Pick<ModRow, "source">, dir: string, files: Record<string, string>, contents: ModContents): Promise<Checked> {
+  const { check, retry } = await checkPluginFolder(dir, validateTarget(dir), files, contentsStartPrograms(dir, contents));
+  return { check, columns: { check_report: check ? JSON.stringify(check) : null, check_key: check && !retry ? checkKey(row, files) : null } };
 }
 
 /* ------------------------------------------------------------------ */
@@ -303,6 +405,8 @@ async function checked(name: string, files: Record<string, string>): Promise<{ c
 /* ------------------------------------------------------------------ */
 
 interface NewMod {
+  /** Given when the id names a checkout already laid down. */
+  id?: string;
   name: string;
   /** The name was made up from the title: when it got taken meanwhile, another is as good. */
   anyName: boolean;
@@ -315,21 +419,23 @@ interface NewMod {
   enabled: boolean;
   scope: ModScope;
   agentIds: string[];
+  /** A plugin from a repository: where it comes from, what it brings and what the check said in its checkout. */
+  git?: { source: ModSource; contents: ModContents; checked: Checked };
 }
 
 async function insertMod(mod: NewMod, actor: string): Promise<Mod> {
-  const { check, columns } = await checked(mod.name, mod.files);
+  const { check, columns } = mod.git?.checked ?? (await checked(mod.name, mod.files));
   const byAgent = actor.startsWith("agent:");
   // A mod that is on from the start has to load: one the check refuses, or with an option still to fill in, waits.
   const ready = (!check || check.ok) && !missingOption(optionsOf(mod.files), {}, []);
   // The check took a moment: another request may have taken the name meanwhile.
   let name = mod.name;
   if (nameTaken(name)) {
-    if (!mod.anyName) throw conflict(`There already is a mod named "${name}"`);
+    if (!mod.anyName) throw conflict(`There already is a plugin named "${name}"`);
     name = freeName(name);
   }
   const files = name === mod.name ? mod.files : cleanFiles(name, mod.files);
-  const id = newId("mod");
+  const id = mod.id ?? newId("mod");
   const ts = now();
   insert("mods", {
     id,
@@ -350,25 +456,27 @@ async function insertMod(mod: NewMod, actor: string): Promise<Mod> {
     agent_ids: JSON.stringify(mod.agentIds),
     check_report: columns.check_report,
     check_key: columns.check_key && name === mod.name ? columns.check_key : null,
+    source: mod.git ? JSON.stringify(mod.git.source) : null,
+    contents: mod.git ? JSON.stringify(mod.git.contents) : null,
     created_at: ts,
     updated_at: ts,
   });
-  audit(actor, "mod.create", id, { name, origin: mod.origin, files: Object.keys(files) });
+  audit(actor, "mod.create", id, { name, origin: mod.origin, ...(mod.git ? { repo: mod.git.source.repo, commit: mod.git.source.commit } : { files: Object.keys(files) }) });
   bus.changed("mods");
   return getMod(id);
 }
 
 export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
-  if (!input || typeof input !== "object") throw badRequest("Invalid mod");
+  if (!input || typeof input !== "object") throw badRequest("Invalid plugin");
   // A gallery mod is Godmode's code as it ships: other files under its label would be on from the start, unread.
-  if (input.templateId && input.files !== undefined) throw badRequest("Add the gallery mod first, then change its code");
+  if (input.templateId && input.files !== undefined) throw badRequest("Add the gallery plugin first, then change its code");
   const template = input.templateId ? findModTemplate(input.templateId) : null;
-  if (input.templateId && !template) throw badRequest(`There is no mod "${input.templateId}" in the gallery`);
+  if (input.templateId && !template) throw badRequest(`There is no plugin "${input.templateId}" in the gallery`);
   const title = cleanTitle(input.title ?? template?.title);
   let name: string;
   if (input.name !== undefined) {
     name = cleanName(input.name);
-    if (nameTaken(name)) throw conflict(`There already is a mod named "${name}"`);
+    if (nameTaken(name)) throw conflict(`There already is a plugin named "${name}"`);
   } else name = freeName(template?.id ?? modNameFrom(title));
   const description = cleanDescription(input.description ?? template?.description);
   return insertMod(
@@ -391,9 +499,11 @@ export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
 }
 
 export async function updateMod(id: string, patch: ModPatch, actor = "user"): Promise<Mod> {
-  const row = getRow(id);
-  if (!patch || typeof patch !== "object") throw badRequest("Invalid mod update");
+  let row = getRow(id);
+  if (!patch || typeof patch !== "object") throw badRequest("Invalid plugin update");
   const byAgent = actor.startsWith("agent:");
+  const source = sourceOf(row);
+  if (source && patch.files !== undefined) throw badRequest("A plugin from a repository changes when you update it, not by editing its files here");
   const changes: Record<string, string | number | null> = { updated_at: now() };
   if (patch.title !== undefined) changes.title = cleanTitle(patch.title);
   if (patch.description !== undefined) changes.description = cleanDescription(patch.description);
@@ -434,7 +544,7 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
     let secrets: Record<string, string> | null = null;
     for (const [key, value] of Object.entries(patch.values)) {
       const option = options.find((o) => o.key === key);
-      if (!option) throw badRequest(`The mod has no option "${key}"`);
+      if (!option) throw badRequest(`The plugin has no option "${key}"`);
       if (option.sensitive) {
         secrets ??= openSecrets(row, secretKeys);
         if (value === null || value === "") delete secrets[key];
@@ -456,19 +566,24 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
   if (patch.enabled !== undefined && !byAgent) {
     if (patch.enabled) {
       // The human's OK is for the code they read: an agent may have saved another version since the page loaded.
-      if (patch.digest !== undefined && patch.digest !== filesDigest(files)) {
-        throw conflict("The code changed since you opened this mod. Read it again, then switch it on.");
+      if (patch.digest !== undefined && patch.digest !== codeDigest(row, files)) {
+        throw conflict("The code changed since you opened this plugin. Read it again, then switch it on.");
+      }
+      // A checkout that is gone (a restored backup) comes back first: there is nothing to check or load without it.
+      if (source) {
+        await ensureCheckout(row);
+        row = getRow(id);
       }
       // A report about other code, or from another Claude Code, says nothing about what would load now.
-      if (!codeChanged && row.check_key !== checkKey(files)) {
-        const result = await checked(row.name, files);
+      if (!codeChanged && row.check_key !== checkKey(row, files)) {
+        const result = source ? await checkedFolder(row, gitPluginDir(row.id, source), files, contentsOf(row) ?? inventory(gitPluginDir(row.id, source))) : await checked(row.name, files);
         check = result.check;
         Object.assign(changes, result.columns);
         run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ?", result.columns.check_report, result.columns.check_key, id);
       }
-      if (check && !check.ok) throw conflict(`Fix the mod before you switch it on — ${firstError(check)}`);
+      if (check && !check.ok) throw conflict(`${source ? "Claude Code refuses this plugin" : "Fix the plugin before you switch it on"} — ${firstError(check)}`);
       const missing = missingOption(options, values, secretKeys);
-      if (missing) throw conflict(`Set "${missing.title}" under Options before you switch the mod on.`);
+      if (missing) throw conflict(`Set "${missing.title}" under Options before you switch the plugin on.`);
       // Switching it on is the human's OK for the code as it stands.
       changes.needs_review = 0;
     }
@@ -491,8 +606,10 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
 export function deleteMod(id: string, actor = "user"): void {
   const row = getRow(id);
   run("DELETE FROM mods WHERE id = ?", id);
-  audit(actor, "mod.delete", id, { name: row.name });
+  audit(actor, "mod.delete", id, { name: row.name, ...(row.source ? { repo: sourceOf(row)?.repo } : {}) });
   bus.changed("mods");
+  // Its checkouts go once no run holds them.
+  if (row.source) pruneCheckouts();
 }
 
 /** Check a saved mod again (after a Claude Code update, or when it couldn't be checked before). */
@@ -504,6 +621,14 @@ export async function recheckMod(id: string): Promise<Mod> {
 }
 
 async function storeCheck(row: ModRow, files: Record<string, string>): Promise<ModCheck | null> {
+  const source = sourceOf(row);
+  if (source) {
+    await ensureCheckout(row);
+    const dir = gitPluginDir(row.id, source);
+    const { check, columns } = await checkedFolder(row, dir, files, contentsOf(row) ?? inventory(dir));
+    run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ? AND source = ?", columns.check_report, columns.check_key, row.id, row.source);
+    return check;
+  }
   const { check, columns } = await checked(row.name, files);
   // Only for the code that was checked: the human may have saved another version meanwhile.
   run("UPDATE mods SET check_report = ?, check_key = ? WHERE id = ? AND files = ?", columns.check_report, columns.check_key, row.id, row.files);
@@ -537,10 +662,10 @@ function readPluginFolder(root: string): Record<string, string> {
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) walk(join(dir, entry.name), path);
       else if (entry.isFile()) {
-        if (Object.keys(files).length >= MAX_MOD_FILES) throw badRequest(`The folder has more than ${MAX_MOD_FILES} files — a mod is a small plugin`);
+        if (Object.keys(files).length >= MAX_MOD_FILES) throw badRequest(`The folder has more than ${MAX_MOD_FILES} files — install a plugin this large from its git repository`);
         if (statSync(join(dir, entry.name)).size > MAX_MOD_FILE_BYTES) throw badRequest(`${path} is larger than ${MAX_MOD_FILE_BYTES / 1000} KB`);
         const content = readFileSync(join(dir, entry.name), "utf8");
-        if (content.includes("\0")) throw badRequest(`${path} isn't a text file — mods with sounds or images can't be imported yet`);
+        if (content.includes("\0")) throw badRequest(`${path} isn't a text file — install a plugin with sounds or images from its git repository`);
         files[path] = content;
       }
     }
@@ -562,7 +687,7 @@ export async function importMod(path: unknown, actor = "user"): Promise<Mod> {
   if (!manifest) throw badRequest(`${MOD_MANIFEST_PATH} must be a JSON object`);
   const declared = typeof manifest.name === "string" ? manifest.name : "";
   const name = cleanName(MOD_NAME_RE.test(declared) ? declared : modNameFrom(declared));
-  if (nameTaken(name)) throw conflict(`There already is a mod named "${name}"`);
+  if (nameTaken(name)) throw conflict(`There already is a plugin named "${name}"`);
   const words = name.replace(/-/g, " ");
   return insertMod(
     {
@@ -583,6 +708,295 @@ export async function importMod(path: unknown, actor = "user"): Promise<Mod> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Plugins from git repositories                                        */
+/* ------------------------------------------------------------------ */
+
+/** The folder a run loads for a plugin from a repository. */
+function gitPluginDir(id: string, source: ModSource): string {
+  return pluginDirIn(checkoutPath(id, source.commit), source.path);
+}
+
+/** Checkouts being laid down (installs, updates, restores): not tidied away meanwhile. */
+const busyCheckouts = new Set<string>();
+/** The checkouts each run loaded: kept until the run ends, also when the plugin was updated or uninstalled meanwhile. */
+const runCheckouts = new Map<string, Set<string>>();
+const restoring = new Map<string, Promise<void>>();
+
+function titleFrom(name: string): string {
+  const words = name.replace(/-/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function sameRepo(a: string, b: string): boolean {
+  const norm = (url: string) => url.toLowerCase().replace(/\.git$/, "").replace(/\/+$/, "");
+  return norm(a) === norm(b);
+}
+
+function stagingPath(id: string): string {
+  return join(checkoutsRoot(), id, `.staging-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`);
+}
+
+interface Laid {
+  source: ModSource;
+  contents: ModContents;
+  files: Record<string, string>;
+  description: string;
+  checked: Checked;
+}
+
+/**
+ * Clone the newest commit of `target` for plugin `id`, find the plugin in it, and check it there. The checkout ends up
+ * at its commit's place; on failure nothing is left behind.
+ */
+async function layDown(
+  id: string,
+  target: { url: string; repo: string; web: string | null; ref: string | null; path: string },
+  plugin: string | undefined,
+  want: (name: string) => void,
+): Promise<Laid & { name: string }> {
+  const staging = stagingPath(id);
+  busyCheckouts.add(staging);
+  let final: string | null = null;
+  try {
+    const commit = await cloneLatest(target.url, target.ref, staging);
+    const resolved = resolvePlugin(staging, target.path, plugin, target.repo.split("/").at(-1) ?? target.repo);
+    want(resolved.name);
+    final = checkoutPath(id, commit);
+    busyCheckouts.add(final);
+    if (existsSync(final)) rmSync(final, { recursive: true, force: true });
+    renameSync(staging, final);
+    const dir = pluginDirIn(final, resolved.path);
+    const contents = inventory(dir);
+    contents.alwaysOnTokens = await alwaysOnTokens(dir, resolved.name).catch(() => null);
+    const files = keyFiles(dir);
+    const ts = now();
+    const source: ModSource = {
+      url: target.url,
+      repo: target.repo,
+      web: target.web,
+      ref: target.ref,
+      path: resolved.path,
+      commit,
+      version: manifestVersion(dir),
+      installedAt: ts,
+      latestCommit: commit,
+      latestVersion: manifestVersion(dir),
+      checkedAt: ts,
+      checkError: null,
+    };
+    const result = await checkedFolder({ source: JSON.stringify(source) }, dir, files, contents);
+    return { name: resolved.name, source, contents, files, description: resolved.description, checked: result };
+  } catch (err) {
+    if (final) rmSync(final, { recursive: true, force: true });
+    throw err;
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+    busyCheckouts.delete(staging);
+    if (final) busyCheckouts.delete(final);
+  }
+}
+
+/**
+ * Install a plugin from a git repository: "owner/repo", a GitHub link or a clone URL. The human's install switches it on
+ * (unless `enabled: false`) when the check passes; an agent's arrives switched off, for the human to review.
+ */
+export async function installMod(input: ModInstallInput, actor = "user"): Promise<Mod> {
+  if (!input || typeof input !== "object" || typeof input.source !== "string") throw badRequest("Name the repository to install from");
+  const catalog = input.catalogId ? (listCatalog().find((entry) => entry.id === input.catalogId) ?? null) : null;
+  if (input.catalogId && !catalog) throw badRequest(`There is no plugin "${input.catalogId}" in the catalog`);
+  const target = gitTarget(catalog ? catalog.repo : input.source, input.ref);
+  const installed = listMods().find((m) => m.source && sameRepo(m.source.url, target.url) && m.source.path === target.path && (!input.plugin || m.name === input.plugin));
+  if (installed) throw conflict(`${installed.title} is installed already. Update it from its page instead.`);
+  const id = newId("mod");
+  const nameCheck = (name: string) => {
+    if (RESERVED_NAMES.test(name)) throw badRequest(`"${name}" is a name Godmode or Claude Code uses itself`);
+    if (nameTaken(name)) throw conflict(`A plugin named "${name}" is installed already`);
+  };
+  const byAgent = actor.startsWith("agent:");
+  try {
+    const laid = await layDown(id, target, input.plugin, nameCheck);
+    nameCheck(laid.name);
+    return await insertMod(
+      {
+        id,
+        name: laid.name,
+        anyName: false,
+        title: catalog?.title ?? titleFrom(laid.name),
+        description: cleanDescription(catalog?.description ?? laid.description),
+        icon: catalog?.icon ?? "puzzle",
+        origin: "git",
+        templateId: null,
+        files: laid.files,
+        enabled: !byAgent && input.enabled !== false,
+        scope: "all",
+        agentIds: [],
+        git: { source: laid.source, contents: laid.contents, checked: laid.checked },
+      },
+      actor,
+    );
+  } catch (err) {
+    rmSync(join(checkoutsRoot(), id), { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/** One update at a time per plugin. */
+const updating = new Map<string, Promise<Mod>>();
+
+/**
+ * Bring a plugin from a repository to the newest commit of what it follows. The new version replaces the old one only
+ * when Claude Code accepts it; runs under way keep the version they loaded. An agent's update waits for the human's OK.
+ */
+export function updateGitMod(id: string, actor = "user"): Promise<Mod> {
+  let pending = updating.get(id);
+  if (!pending) {
+    pending = doUpdate(id, actor).finally(() => updating.delete(id));
+    updating.set(id, pending);
+  }
+  return pending;
+}
+
+async function doUpdate(id: string, actor: string): Promise<Mod> {
+  const row = getRow(id);
+  const source = sourceOf(row);
+  if (!source) throw badRequest("Only plugins installed from a repository can be updated");
+  const latest = await latestCommit(source.url, source.ref);
+  if (latest === source.commit) {
+    run("UPDATE mods SET source = ? WHERE id = ?", JSON.stringify({ ...source, latestCommit: latest, latestVersion: source.version, checkedAt: now(), checkError: null }), id);
+    bus.changed("mods");
+    return getMod(id);
+  }
+  const laid = await layDown(id, { ...source }, row.name, (name) => {
+    if (name !== row.name) throw conflict(`The new version calls itself "${name}" instead of "${row.name}". Uninstall the plugin and install it again.`);
+  });
+  if (laid.checked.check && !laid.checked.check.ok) {
+    rmSync(checkoutPath(id, laid.source.commit), { recursive: true, force: true });
+    throw conflict(`Claude Code refuses the new version, so ${row.title} stays as it is — ${firstError(laid.checked.check)}`);
+  }
+  const current = getRow(id);
+  const byAgent = actor.startsWith("agent:");
+  const options = optionsOf(laid.files);
+  update("mods", id, {
+    files: JSON.stringify(laid.files),
+    source: JSON.stringify({ ...laid.source, installedAt: now() }),
+    contents: JSON.stringify(laid.contents),
+    option_values: JSON.stringify(valuesOf(current, options)),
+    secret_keys: JSON.stringify(secretKeysOf(current, options)),
+    ...laid.checked.columns,
+    ...(byAgent ? { enabled: 0, needs_review: 1 } : {}),
+    updated_at: now(),
+  });
+  audit(actor, "mod.update", id, { name: row.name, repo: source.repo, from: source.commit, to: laid.source.commit });
+  bus.changed("mods");
+  pruneCheckouts();
+  return getMod(id);
+}
+
+let checkingUpdates: Promise<Mod[]> | null = null;
+
+/** Look up the newest commit of every plugin from a repository (or of `ids`). A failed lookup is noted on the plugin. */
+export function checkModUpdates(ids?: string[]): Promise<Mod[]> {
+  if (!ids && checkingUpdates) return checkingUpdates;
+  const work = (async () => {
+    const rows = all<ModRow>("SELECT * FROM mods WHERE source IS NOT NULL ORDER BY created_at, id").filter((row) => !ids || ids.includes(row.id));
+    await Promise.all(
+      rows.map(async (row) => {
+        const source = sourceOf(row);
+        if (!source) return;
+        let next: ModSource;
+        try {
+          const latest = await latestCommit(source.url, source.ref);
+          const latestVersion = latest === source.commit ? source.version : latest === source.latestCommit ? source.latestVersion : await remoteVersion(source.repo, source.web, source.path, latest);
+          next = { ...source, latestCommit: latest, latestVersion, checkedAt: now(), checkError: null };
+        } catch (err) {
+          next = { ...source, checkedAt: now(), checkError: err instanceof Error ? truncate(err.message, 300) : "The repository couldn't be reached." };
+        }
+        // Only over the version that was looked at: an update may have landed meanwhile.
+        run("UPDATE mods SET source = ? WHERE id = ? AND source = ?", JSON.stringify(next), row.id, row.source);
+      }),
+    );
+    if (rows.length) bus.changed("mods");
+    return listMods().filter((m) => m.source && (!ids || ids.includes(m.id)));
+  })();
+  if (!ids) checkingUpdates = work.finally(() => (checkingUpdates = null));
+  return work;
+}
+
+let updateTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Look for updates a minute after start and every few hours: the Plugins page and the sidebar say when one is waiting. */
+export function startModUpdates(): void {
+  if (updateTimer) return;
+  const due = () => {
+    const stale = all<ModRow>("SELECT * FROM mods WHERE source IS NOT NULL")
+      .filter((row) => {
+        const checkedAt = sourceOf(row)?.checkedAt;
+        return !checkedAt || Date.now() - Date.parse(checkedAt) > UPDATE_CHECK_EVERY_MS - 60_000;
+      })
+      .map((row) => row.id);
+    if (stale.length) checkModUpdates(stale).catch((err) => log.warn("could not look for plugin updates", err));
+  };
+  setTimeout(due, 60_000).unref?.();
+  updateTimer = setInterval(due, UPDATE_CHECK_EVERY_MS);
+  updateTimer.unref?.();
+}
+
+export function stopModUpdates(): void {
+  if (updateTimer) clearInterval(updateTimer);
+  updateTimer = null;
+}
+
+/** A checkout that is gone (a restored backup, a runner that hasn't loaded the plugin yet) comes back at its commit. */
+async function ensureCheckout(row: ModRow): Promise<void> {
+  const source = sourceOf(row);
+  if (!source || !SAFE_MOD_ID.test(row.id)) return;
+  const final = checkoutPath(row.id, source.commit);
+  if (existsSync(pluginDirIn(final, source.path))) return;
+  const key = `${row.id}:${source.commit}`;
+  let pending = restoring.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const staging = stagingPath(row.id);
+      busyCheckouts.add(staging);
+      try {
+        await cloneAt(source.url, source.commit, staging);
+        if (!existsSync(pluginDirIn(final, source.path))) {
+          rmSync(final, { recursive: true, force: true });
+          renameSync(staging, final);
+        }
+      } finally {
+        rmSync(staging, { recursive: true, force: true });
+        busyCheckouts.delete(staging);
+      }
+    })().finally(() => restoring.delete(key));
+    restoring.set(key, pending);
+  }
+  await pending;
+}
+
+/** Remove checkouts no plugin points at and no run holds: older versions, uninstalled plugins, interrupted installs. */
+export function pruneCheckouts(): void {
+  const root = checkoutsRoot();
+  if (!existsSync(root)) return;
+  const current = new Map<string, string>();
+  for (const row of all<Pick<ModRow, "id" | "source">>("SELECT id, source FROM mods WHERE source IS NOT NULL")) {
+    const source = sourceOf(row);
+    if (source) current.set(row.id, checkoutPath(row.id, source.commit));
+  }
+  const held = new Set([...runCheckouts.values()].flatMap((dirs) => [...dirs]));
+  const keep = (path: string) => [...busyCheckouts, ...held].some((p) => p === path || p.startsWith(`${path}/`));
+  for (const id of readdirSync(root)) {
+    const dir = join(root, id);
+    for (const version of existsSync(dir) ? readdirSync(dir) : []) {
+      const path = join(dir, version);
+      if (path === current.get(id) || keep(path)) continue;
+      rmSync(path, { recursive: true, force: true });
+    }
+    if (!current.has(id) && !keep(dir) && readdirSync(dir).length === 0) rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Runs                                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -595,14 +1009,26 @@ export function runModDir(runId: string, name: string): string {
   return join(modsRoot(), runId, name);
 }
 
-/** A run ended: its copy of the mods goes. */
+/** A run ended: its copy of the mods goes, and the checkouts it held may be tidied away. */
 export function removeRunMods(runId: string): void {
   if (SAFE_RUN_ID.test(runId)) rmSync(join(modsRoot(), runId), { recursive: true, force: true });
+  if (runCheckouts.delete(runId)) {
+    try {
+      pruneCheckouts();
+    } catch (err) {
+      log.warn("could not tidy plugin checkouts", err);
+    }
+  }
 }
 
-/** At startup no run is at work: what crashed runs left behind goes. */
+/** At startup no run is at work: what crashed runs left behind goes, and checkouts nothing points at. */
 export function clearRunMods(): void {
   rmSync(modsRoot(), { recursive: true, force: true });
+  try {
+    pruneCheckouts();
+  } catch (err) {
+    log.warn("could not tidy plugin checkouts", err);
+  }
 }
 
 /**
@@ -638,10 +1064,23 @@ export async function modsForRun(agent: Pick<Agent, "id">, runId: string, onNoti
   if (rows.length === 0 || !SAFE_RUN_ID.test(runId)) return out;
   const stamp = claudeStamp();
   let rechecked = false;
+  // A plugin from a repository whose checkout isn't here yet (a runner, a restored backup) is cloned first.
+  const unavailable = new Map<string, string>();
+  await Promise.all(
+    rows
+      .filter((row) => row.source)
+      .map((row) =>
+        ensureCheckout(row).catch((err) => {
+          log.warn(`could not lay down the plugin ${row.name}`, err);
+          unavailable.set(row.id, err instanceof Error ? err.message : "its repository couldn't be reached.");
+        }),
+      ),
+  );
   const checks = await Promise.all(
     rows.map(async (row) => {
       const files = filesOf(row);
-      if (row.check_key === `${filesDigest(files)}|${stamp ?? ""}`) return checkOf(row);
+      if (unavailable.has(row.id)) return null;
+      if (row.check_key === `${codeDigest(row, files)}|${stamp ?? ""}`) return checkOf(row);
       // Another Claude Code than the one that checked it: what loaded yesterday may be refused today.
       rechecked = true;
       return storeCheck(row, files).catch((err) => {
@@ -652,7 +1091,9 @@ export async function modsForRun(agent: Pick<Agent, "id">, runId: string, onNoti
   );
   if (rechecked) bus.changed("mods");
   rows.forEach((row, i) => {
-    const skip = (why: string) => onNotice(`The mod "${row.title}" wasn't loaded: ${why} Fix it under Mods.`);
+    const skip = (why: string) => onNotice(`The plugin "${row.title}" wasn't loaded: ${why} Fix it under Plugins.`);
+    const failed = unavailable.get(row.id);
+    if (failed) return skip(`its files couldn't be downloaded (${truncate(failed.replace(/\.$/, ""), 200)}).`);
     const check = checks[i];
     if (check && !check.ok) return skip(`${firstError(check)}.`);
     const files = filesOf(row);
@@ -668,6 +1109,17 @@ export async function modsForRun(agent: Pick<Agent, "id">, runId: string, onNoti
     }
     const missing = missingOption(options, values, secretKeys);
     if (missing) return skip(`its option "${missing.title}" has no value.`);
+    const source = sourceOf(row);
+    if (source) {
+      const dir = gitPluginDir(row.id, source);
+      if (!existsSync(dir)) return skip("its files are missing.");
+      out.dirs.push(dir);
+      const held = runCheckouts.get(runId) ?? new Set<string>();
+      held.add(checkoutPath(row.id, source.commit));
+      runCheckouts.set(runId, held);
+      if (Object.keys(values).length) out.configs[row.name] = { options: values };
+      return;
+    }
     try {
       const dir = runModDir(runId, row.name);
       rmSync(dir, { recursive: true, force: true });

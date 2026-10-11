@@ -353,8 +353,8 @@ describe("untrusted backup contents", () => {
     // A mod is code: it comes back switched off and unchecked; one whose name is no folder name doesn't come back.
     expect(get<Record<string, unknown>>("SELECT enabled, check_report, check_key FROM mods WHERE id = 'mod_guard'")).toEqual({ enabled: 0, check_report: null, check_key: null });
     expect(get("SELECT id FROM mods WHERE id = 'mod_escape'")).toBeNull();
-    expect(warnings.some((w) => w.includes("Switched off 1 mod(s)") && w.includes("Guard"))).toBe(true);
-    expect(warnings.some((w) => w.includes("1 mod(s) with an unsafe name"))).toBe(true);
+    expect(warnings.some((w) => w.includes("Switched off 1 plugin(s)") && w.includes("Guard"))).toBe(true);
+    expect(warnings.some((w) => w.includes("1 plugin(s) with an unsafe name"))).toBe(true);
   });
 
   test("turns off unattended computer use, clears shared screens and the Cua Driver command", async () => {

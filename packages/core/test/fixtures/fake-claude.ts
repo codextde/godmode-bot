@@ -86,7 +86,7 @@
  */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const args = process.argv.slice(2);
 const argValue = (flag: string): string | null => {
@@ -108,7 +108,8 @@ if (args.includes("--version")) {
  * manifest that isn't a JSON object or declares an option without a title. Each validation goes to validations.jsonl.
  */
 if (args[0] === "plugin" && args[1] === "validate") {
-  const dir = args[2]!;
+  // The manifest itself is checked as the plugin of its folder (Godmode names it when a marketplace lies beside it).
+  const dir = args[2]!.endsWith("plugin.json") ? dirname(dirname(args[2]!)) : args[2]!;
   const events = /^(tool\.(call|check|describe)|prompt\.(submit|compose|context)|session\.(start|end|append|compact)|turn\.(start|step|complete)|ui\.render|command\.run)$/;
   const problem = (path: string, message: string) => ({ path, message, code: null });
   const manifestFile = join(dir, ".claude-plugin", "plugin.json");
@@ -150,6 +151,12 @@ if (args[0] === "plugin" && args[1] === "validate") {
   appendFileSync(join(stateDir, "validations.jsonl"), JSON.stringify({ dir, name, success }) + "\n");
   if (args.includes("--json")) process.stdout.write(JSON.stringify({ success, strict: false, target: manifestFile, manifest, contents }, null, 2) + "\n");
   process.exit(success ? 0 : 1);
+}
+
+/** `--plugin-dir <dir> plugin details <name>`: the inventory's token line Godmode reads. */
+if (args[0] === "--plugin-dir" && args[2] === "plugin" && args[3] === "details") {
+  process.stdout.write(`${args[4]} 1.0.0\n\nProjected token cost\n  Always-on:   ~1,234 tok   added to every session\n`);
+  process.exit(0);
 }
 
 const ultracodeMode = process.env.FAKE_CLAUDE_ULTRACODE ?? "";

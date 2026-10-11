@@ -615,7 +615,7 @@ describe("applying a snapshot on a runner", () => {
     use(runnerDir);
     const result = await applySnapshot(snapshot);
     expect(result.warnings).toHaveLength(6);
-    expect(result.warnings.join("\n")).toContain('mod "../evil"');
+    expect(result.warnings.join("\n")).toContain('plugin "../evil"');
     expect(result.warnings.join("\n")).toContain('agent "Evil"');
     expect(result.warnings.join("\n")).toContain('agent "Escape artist"');
     expect(result.warnings.join("\n")).toContain('browser profile "Outside"');

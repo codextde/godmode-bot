@@ -1,16 +1,17 @@
 /**
- * Mods: Claude Code mods — small plugins of TypeScript function hooks that change what Claude Code does (block or
- * rewrite tool calls, rewrite prompts, edit what the conversation keeps, post notes) — installed in Godmode and loaded
- * into the runs of the agents they are for. Godmode keeps a mod's files, checks them with Claude Code's own validator
- * and hands them to a run with `--plugin-dir`. Only the human switches a mod on.
+ * Plugins (called mods in the code): Claude Code plugins installed in Godmode and loaded into the runs of the agents
+ * they are for. Two kinds: small ones whose files Godmode keeps itself (TypeScript function hooks from the gallery,
+ * written by hand or drafted by an agent), and whole plugins installed from a git repository (skills, agents, commands,
+ * hooks, MCP servers), kept as a checkout at a pinned commit and updated on request. Godmode checks a plugin with Claude
+ * Code's own validator and hands it to a run with `--plugin-dir`. Only the human switches a plugin on.
  */
 import type { ID, ISODate } from "./models";
 
 /** Whose runs load a mod: every agent's, or the listed agents'. */
 export type ModScope = "all" | "agents";
 
-/** Where a mod came from: the gallery, written by hand, drafted by an agent, or a plugin folder. */
-export type ModOrigin = "template" | "custom" | "agent" | "import";
+/** Where a mod came from: the gallery, written by hand, drafted by an agent, a plugin folder, or a git repository. */
+export type ModOrigin = "template" | "custom" | "agent" | "import" | "git";
 
 export const MOD_ICONS = [
   "puzzle",
@@ -25,6 +26,10 @@ export const MOD_ICONS = [
   "bell",
   "filter",
   "wand",
+  "video",
+  "layers",
+  "sparkles",
+  "bot",
 ] as const;
 export type ModIcon = (typeof MOD_ICONS)[number];
 
@@ -85,6 +90,46 @@ export interface ModCheck {
   checkedAt: ISODate;
 }
 
+/** A plugin installed from a git repository: where it comes from and which commit runs. */
+export interface ModSource {
+  /** What `git clone` gets, e.g. "https://github.com/owner/repo.git". */
+  url: string;
+  /** "owner/repo" on GitHub, else the repository's name. */
+  repo: string;
+  /** The repository's page, when it is on a known forge. */
+  web: string | null;
+  /** The branch or tag it follows; null: the default branch. */
+  ref: string | null;
+  /** The plugin's folder in the repository; "" is its root. */
+  path: string;
+  /** The commit that runs. */
+  commit: string;
+  /** The version its manifest names at that commit. */
+  version: string | null;
+  installedAt: ISODate;
+  /** The newest commit of `ref` at the last look; null: not looked yet. */
+  latestCommit: string | null;
+  /** The version the manifest names at `latestCommit`, when it could be read. */
+  latestVersion: string | null;
+  checkedAt: ISODate | null;
+  /** Why the last look for updates failed; null when it worked. */
+  checkError: string | null;
+}
+
+/** What a plugin from a repository brings, read from its folder. */
+export interface ModContents {
+  skills: string[];
+  commands: string[];
+  agents: string[];
+  /** The hook events it runs commands on, e.g. "SessionStart", "PreToolUse". */
+  hooks: string[];
+  mcpServers: string[];
+  files: number;
+  bytes: number;
+  /** Tokens it adds to every session (Claude Code's own estimate); null when unknown. */
+  alwaysOnTokens: number | null;
+}
+
 export interface Mod {
   id: ID;
   /** The plugin's name: lowercase letters, digits and dashes. Fixed once created (the mod's own code refers to it). */
@@ -115,6 +160,9 @@ export interface Mod {
   secretKeys: string[];
   /** null: not checked yet, or Claude Code isn't installed. */
   check: ModCheck | null;
+  /** Installed from a git repository: `files` then holds its manifest and hooks for reading, the code lies in a checkout. */
+  source: ModSource | null;
+  contents: ModContents | null;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
@@ -160,6 +208,42 @@ export interface ModImportInput {
   path: string;
 }
 
+/** POST /api/mods/install — a plugin from a git repository: "owner/repo", a GitHub link or a clone URL. */
+export interface ModInstallInput {
+  source: string;
+  /** Branch or tag; default: the one a GitHub link names, else the default branch. */
+  ref?: string;
+  /** The plugin's name when the repository's marketplace lists several. */
+  plugin?: string;
+  /** Default true: installing is the human's OK. An agent's install arrives switched off. */
+  enabled?: boolean;
+  /** The catalog entry it is installed from. */
+  catalogId?: string;
+}
+
+/** The answer (409, `details`) when a repository holds several plugins and none was named. */
+export interface ModInstallChoices {
+  plugins: { name: string; description: string }[];
+}
+
+/** A plugin Godmode recommends, installed from its repository. */
+export interface ModCatalogEntry {
+  id: string;
+  title: string;
+  description: string;
+  icon: ModIcon;
+  /** "owner/repo" on GitHub. */
+  repo: string;
+  author: string;
+  license: string | null;
+  /** What it does, one short line each. */
+  highlights: string[];
+  /** What it needs on the computer, e.g. "ffmpeg". */
+  requires: string[];
+  /** How the agent uses it, e.g. "/watch <url>". */
+  usage: string | null;
+}
+
 /** A mod of the gallery: ready to add, made and maintained by Godmode. */
 export interface ModTemplate {
   id: string;
@@ -179,6 +263,21 @@ export const MOD_NAME_RE = /^[a-z][a-z0-9-]{1,47}$/;
 export const MAX_MOD_FILES = 40;
 export const MAX_MOD_FILE_BYTES = 200_000;
 export const MAX_MOD_BYTES = 600_000;
+
+/** Is a newer commit of the plugin's repository waiting? */
+export function modUpdateAvailable(mod: Pick<Mod, "source">): boolean {
+  return !!mod.source?.latestCommit && mod.source.latestCommit !== mod.source.commit;
+}
+
+/** "owner/repo" or a GitHub link → "owner/repo"; null when it names no GitHub repository. */
+export function githubRepoOf(input: string): string | null {
+  const m = /^(?:https?:\/\/(?:www\.)?github\.com\/|git@github\.com:)?([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100}?)(?:\.git)?(?:\/.*)?$/.exec(input.trim());
+  if (!m || m[2] === "." || m[2] === "..") return null;
+  const bare = !/^(https?:|git@)/.test(input.trim());
+  // "owner/repo" alone; with a path it is a link only when the host is named.
+  if (bare && input.trim().split("/").length !== 2) return null;
+  return `${m[1]}/${m[2]}`;
+}
 
 /** broken: the check failed · review: an agent's code the human hasn't switched on · on / off. */
 export type ModState = "broken" | "review" | "on" | "off";
