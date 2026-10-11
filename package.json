@@ -1,7 +1,7 @@
 {
   "name": "godmode-bot",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.4",
   "description": "Godmode Bot \u2014 the AI coworker that works like a human on your computer, with your logins, 2FA and tools. Powered by Claude Code + browser-use.",
   "license": "MIT",
   "type": "module",
@@ -22,6 +22,7 @@
     "build:app": "pnpm build:sidecar && pnpm --filter @godmode/desktop tauri build",
     "reinstall:app": "bash scripts/reinstall-app.sh",
     "icons": "bun scripts/icons.ts",
+    "bump": "bun scripts/bump-version.ts",
     "start": "pnpm --filter @godmode/core start",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"

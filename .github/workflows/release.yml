@@ -1,6 +1,6 @@
 name: Release
 
-# Push a tag like v0.2.0 (matching the version in package.json / Cargo.toml / tauri.conf.json) to build:
+# Set the version first (`pnpm bump 0.2.4`, commit, push to main), then push the matching tag (v0.2.4) to build:
 #   * desktop installers (macOS arm64 + x64, Windows x64, Linux x64 + arm64) with the core sidecar,
 #   * standalone `godmode` server binaries (web dashboard embedded) + .sha256 files,
 #   * the Docker image ghcr.io/codextde/godmode-bot,
@@ -55,7 +55,7 @@ jobs:
           cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' apps/desktop/src-tauri/Cargo.toml | head -n1)
           for v in "$desktop" "$core" "$cargo"; do
             if [ "$v" != "$version" ]; then
-              echo "::error::tag $TAG does not match versions (desktop $desktop, core $core, Cargo.toml $cargo)"
+              echo "::error::tag $TAG does not match versions (desktop $desktop, core $core, Cargo.toml $cargo). Run 'pnpm bump $version', push it to main and tag that commit."
               exit 1
             fi
           done
