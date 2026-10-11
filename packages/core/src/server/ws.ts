@@ -81,6 +81,25 @@ export function setRunSnapshots(fn: typeof runSnapshots) {
   runSnapshots = fn;
 }
 
+/** More of them from elsewhere (the runs on runners, as the mirror built them from their deltas). */
+const moreRunSnapshots: (typeof runSnapshots)[] = [];
+
+export function addRunSnapshots(fn: typeof runSnapshots) {
+  moreRunSnapshots.push(fn);
+}
+
+function snapshots(want: { runId?: string; conversationId?: string }): RunDelta[] {
+  const out = [...runSnapshots(want)];
+  for (const more of moreRunSnapshots) {
+    try {
+      out.push(...more(want));
+    } catch (err) {
+      log.warn("run snapshots failed", err);
+    }
+  }
+  return out;
+}
+
 export function addWelcomeEvents(fn: () => ServerEvent[]) {
   moreWelcomeEvents.push(fn);
 }
@@ -231,7 +250,7 @@ function sendWhole(runId: string) {
     }, wait);
     return;
   }
-  const snapshot = runSnapshots({ runId })[0];
+  const snapshot = snapshots({ runId })[0];
   if (!snapshot) return forgetWhole(runId);
   w.at = Date.now();
   const payload = timedSync("send run delta (whole list)", () => JSON.stringify(snapshot));
@@ -340,7 +359,7 @@ export const websocketHandler = {
     send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
     for (const event of welcome) send(ws, event);
     // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
-    if (ws.data.auth !== "device") for (const event of runSnapshots({})) send(ws, event);
+    if (ws.data.auth !== "device") for (const event of snapshots({})) send(ws, event);
     for (const more of moreWelcomeEvents) {
       try {
         for (const event of more()) send(ws, event);
@@ -377,7 +396,7 @@ export const websocketHandler = {
         if (typeof msg.conversationId !== "string" || msg.conversationId.length > 100) break;
         ws.data.conversations ??= new Set();
         if (ws.data.conversations.size < MAX_CONVERSATIONS_PER_SOCKET) ws.data.conversations.add(msg.conversationId);
-        if (ws.data.conversations.has(msg.conversationId)) for (const event of runSnapshots({ conversationId: msg.conversationId })) send(ws, event);
+        if (ws.data.conversations.has(msg.conversationId)) for (const event of snapshots({ conversationId: msg.conversationId })) send(ws, event);
         break;
       case "conversation.unsubscribe":
         if (typeof msg.conversationId === "string") ws.data.conversations?.delete(msg.conversationId);
@@ -399,7 +418,7 @@ export const websocketHandler = {
         break;
       case "run.resync":
         if (typeof msg.runId !== "string" || msg.runId.length > 100) break;
-        for (const event of runSnapshots({ runId: msg.runId })) if (wantsDeltas(ws, event.conversationId)) send(ws, event);
+        for (const event of snapshots({ runId: msg.runId })) if (wantsDeltas(ws, event.conversationId)) send(ws, event);
         break;
     }
   },

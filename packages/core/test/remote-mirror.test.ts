@@ -8,6 +8,7 @@ import { INTERRUPTED, cancelRun, getRun, recoverInterruptedRuns, startRun } from
 import { addMessage, createConversation, getConversation, getConversationSummary, listConversations, updateConversation } from "../src/services/conversations";
 import { clearRunner, remoteRunForConversation, remoteRuns } from "../src/remote/activeRuns";
 import { adoptChat, applyRunnerEvent, catchUp, forgetHeavyChats, reconcileConversation, runnerDisconnected, setMirrorHooks, type RunnerApi } from "../src/remote/mirror";
+import { websocketHandler, type HubSocket } from "../src/server/ws";
 
 const RUNNER = "rnr_mirrortest00000a";
 const OTHER = "rnr_mirrortest00000b";
@@ -333,6 +334,92 @@ describe("messages and runs of a runner's chat", () => {
     const misbooked = run(conversation.id, { agentId: colleague.id });
     expect(during(() => applyRunnerEvent(RUNNER, { type: "run.started", run: misbooked }))).toEqual([]);
     expect(count("runs", misbooked.id)).toBe(0);
+  });
+});
+
+describe("a runner's run streaming in patches", () => {
+  /** What a UI here gets when it asks for the whole list of a run. */
+  function wholeHere(runId: string): Sent<"run.delta"> | undefined {
+    const got: ServerEvent[] = [];
+    const ws: HubSocket = { data: { id: uid("ws"), subscriptions: new Set(), auth: "token" }, send: (m: string) => got.push(JSON.parse(m)), close: () => {}, getBufferedAmount: () => 0 };
+    websocketHandler.message(ws as never, JSON.stringify({ type: "run.resync", runId }));
+    return got.find((e): e is Sent<"run.delta"> => e.type === "run.delta");
+  }
+
+  function working() {
+    const conversation = adopt();
+    const started = run(conversation.id, { status: "running" });
+    const answer = message(conversation.id, { role: "assistant", content: "", runId: started.id });
+    applyRunnerEvent(RUNNER, { type: "run.started", run: started });
+    applyRunnerEvent(RUNNER, { type: "message.created", message: answer });
+    const delta = (seq: number, patch: [number, { type: "text"; text: string }][], length: number): Sent<"run.delta"> => ({
+      type: "run.delta",
+      runId: started.id,
+      conversationId: conversation.id,
+      messageId: answer.id,
+      stream: "str_one",
+      seq,
+      patch,
+      length,
+    });
+    return { conversation, started, answer, delta };
+  }
+
+  test("builds the in-flight message, passes each patch on and answers a UI that asks for the whole list", () => {
+    const { started, delta } = working();
+    const first = delta(1, [[0, { type: "text", text: "Su" }]], 1);
+    const second = delta(2, [[0, { type: "text", text: "Sunny" }], [1, { type: "text", text: "." }]], 2);
+
+    const events = during(() => {
+      applyRunnerEvent(RUNNER, first);
+      applyRunnerEvent(RUNNER, second);
+    });
+
+    expect(events).toEqual([first, second]);
+    expect(wholeHere(started.id)).toMatchObject({ seq: 2, stream: "str_one", blocks: [{ type: "text", text: "Sunny" }, { type: "text", text: "." }] });
+    applyRunnerEvent(RUNNER, { type: "run.finished", run: { ...started, status: "succeeded", finishedAt: at(5) } });
+    expect(wholeHere(started.id)).toBeUndefined();
+  });
+
+  test("a missed patch asks the runner for the whole list once and passes nothing on until it comes", () => {
+    const { started, delta } = working();
+    const asked: [string, string][] = [];
+    setMirrorHooks({ resync: (runnerId, runId) => asked.push([runnerId, runId]) });
+    applyRunnerEvent(RUNNER, delta(1, [[0, { type: "text", text: "Su" }]], 1));
+
+    const whole: Sent<"run.delta"> = { ...delta(4, [], 2), patch: undefined, length: undefined, blocks: [{ type: "text", text: "Sunny" }, { type: "text", text: "!" }] };
+    delete whole.patch;
+    delete whole.length;
+    const next = delta(5, [[1, { type: "text", text: "!!" }]], 2);
+    const events = during(() => {
+      applyRunnerEvent(RUNNER, delta(3, [[0, { type: "text", text: "Sunn" }]], 1));
+      applyRunnerEvent(RUNNER, delta(4, [[0, { type: "text", text: "Sunny" }]], 1));
+      applyRunnerEvent(RUNNER, whole);
+      applyRunnerEvent(RUNNER, next);
+    });
+
+    expect(asked).toEqual([[RUNNER, started.id]]);
+    expect(events).toEqual([whole, next]);
+    expect(wholeHere(started.id)?.blocks).toEqual([{ type: "text", text: "Sunny" }, { type: "text", text: "!!" }]);
+    setMirrorHooks({});
+    runnerDisconnected(RUNNER);
+    expect(wholeHere(started.id)).toBeUndefined();
+  });
+
+  test("a patch that points outside its list, or makes one too long to hold, is dropped", () => {
+    const { started, delta } = working();
+    const asked: string[] = [];
+    setMirrorHooks({ resync: (_runnerId, runId) => asked.push(runId) });
+    const events = during(() => {
+      applyRunnerEvent(RUNNER, delta(1, [[3, { type: "text", text: "x" }]], 2));
+      applyRunnerEvent(RUNNER, delta(1, [[0, { type: "text", text: "x" }]], 10_000_000));
+      applyRunnerEvent(RUNNER, { ...delta(1, [], 1), patch: [[0, "not a block"]] } as never);
+    });
+    expect(events).toEqual([]);
+    expect(asked).toEqual([]);
+    expect(wholeHere(started.id)).toBeUndefined();
+    setMirrorHooks({});
+    applyRunnerEvent(RUNNER, { type: "run.finished", run: { ...started, status: "cancelled", finishedAt: at(5) } });
   });
 });
 
