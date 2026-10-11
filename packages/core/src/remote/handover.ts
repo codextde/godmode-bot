@@ -69,12 +69,25 @@ export function readHandover(conversationId: string): ChatHandover {
   return { sessionId, session: file ? readUpTo(file, MAX_SESSION_BYTES) : null, transcript };
 }
 
+/** A Claude Code transcript: one JSON object with a `type` per line. */
+function isSession(text: string): boolean {
+  return text.split("\n").every((line) => {
+    if (!line.trim()) return true;
+    try {
+      const entry: unknown = JSON.parse(line);
+      return !!entry && typeof entry === "object" && !Array.isArray(entry) && typeof (entry as { type?: unknown }).type === "string";
+    } catch {
+      return false;
+    }
+  });
+}
+
 /** What the runner answered, read field by field. */
 export function parseHandover(v: unknown): ChatHandover | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const h = v as Record<string, unknown>;
   const sessionId = typeof h.sessionId === "string" && SESSION_ID.test(h.sessionId) ? h.sessionId : null;
-  const session = sessionId && typeof h.session === "string" && h.session.length <= MAX_SESSION_BYTES ? h.session : null;
+  const session = sessionId && typeof h.session === "string" && h.session.length <= MAX_SESSION_BYTES && isSession(h.session) ? h.session : null;
   const transcript = typeof h.transcript === "string" && h.transcript.length <= MAX_TRANSCRIPT_BYTES ? h.transcript : null;
   return { sessionId, session, transcript };
 }

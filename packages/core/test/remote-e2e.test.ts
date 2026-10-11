@@ -306,10 +306,11 @@ describe("a runner, end to end", () => {
   }, 90_000);
 
   test("a chat moves back here with its Claude session and transcript; the runner drops it, and a busy one stays", async () => {
-    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ content: "A chat to move", agentId, runnerId }) });
+    const res = await api("/api/chat", { method: "POST", body: JSON.stringify({ content: "A chat to move TASK_FOLLOWUP", agentId, runnerId }) });
     const { conversation, run } = (await res.json()) as StartChatResult;
     const id = conversation.id;
     await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", run.id)?.status === "succeeded", 30_000, "run done");
+    await until(async () => !!((await (await api(`/api/conversations/${id}`)).json()) as Conversation).followup, 10_000, "the runner's follow-up");
 
     const busy = (await (await api(`/api/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content: "SLEEP for a while" }) })).json()) as { run: { id: string } };
     await until(() => get<{ status: string }>("SELECT status FROM runs WHERE id = ?", busy.run.id)?.status === "running", 20_000, "second run working");
@@ -336,8 +337,9 @@ describe("a runner, end to end", () => {
     const project = realpathSync(agent.workingDirectory ?? agent.repoPath).replace(/[^A-Za-z0-9]/g, "-");
     expect(readFileSync(join(controllerDir, "claude-config", "projects", project, `${sessionId}.jsonl`), "utf8")).toBe(session);
     expect(readFileSync(transcriptPath(agent, id), "utf8")).toContain("A chat to move");
-    expect((await link(runnerId).request("GET", `/api/conversations/${id}`)).status).toBe(404);
-    expect(getMeta(`link.release.${runnerId}`)).toBeNull();
+    expect(get<{ note: string }>("SELECT note FROM followups WHERE conversation_id = ?", id)?.note).toBe("Check the reply");
+    await until(async () => (await link(runnerId).request("GET", `/api/conversations/${id}`)).status === 404, 10_000, "dropped on the runner");
+    await until(() => getMeta(`link.release.${runnerId}`) === null, 10_000, "nothing left to release");
     expect((await api(`/api/conversations/${id}/move-here`, { method: "POST" })).status).toBe(409);
 
     // Claude Code finds the copied session here: the next turn resumes it on this computer.

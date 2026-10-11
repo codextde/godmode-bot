@@ -53,6 +53,9 @@ describe("what a runner's chat takes along", () => {
   test("an answer is read field by field: a session needs an id that can be a file name", () => {
     expect(parseHandover({ sessionId: "../../etc/passwd", session: "x", transcript: "t" })).toEqual({ sessionId: null, session: null, transcript: "t" });
     expect(parseHandover({ sessionId: "abc", session: 42, transcript: null })).toEqual({ sessionId: "abc", session: null, transcript: null });
+    expect(parseHandover({ sessionId: "abc", session: '{"type":"user"}\nnot json\n', transcript: null })?.session).toBeNull();
+    expect(parseHandover({ sessionId: "abc", session: '{"type":"user"}\n\n[1]\n', transcript: null })?.session).toBeNull();
+    expect(parseHandover({ sessionId: "abc", session: '{"type":"user"}\n{"type":"assistant"}\n', transcript: null })?.session).toBe('{"type":"user"}\n{"type":"assistant"}\n');
     expect(parseHandover("nope")).toBeNull();
   });
 });

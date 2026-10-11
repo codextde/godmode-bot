@@ -88,7 +88,7 @@ export function MoveChatDialog({
           <li>
             {away
               ? `${name} can't be reached right now. It removes its copy once it's back — anything it still does in this chat until then is lost.`
-              : `${name} removes its copy. Files the agent saved there stay on it.`}
+              : `${name} removes its copy. Files and logs of its runs stay there.`}
           </li>
           {conversation.followup && <li>The follow-up {followupWhen(conversation.followup.dueAt)} comes along.</li>}
         </ul>

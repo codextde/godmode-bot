@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import {
   type ClientEvent,
   type Conversation,
+  type ConversationFollowup,
   type ConversationWithMessages,
   type RemoteRunner,
   type RunnerAutofixInput,
@@ -46,18 +47,18 @@ import {
   sendMessage,
   transcriptPath,
 } from "../services/conversations";
-import { scheduleFollowup } from "../services/followups";
+import { MIN_DELAY_MS as MIN_FOLLOWUP_DELAY_MS, scheduleFollowup } from "../services/followups";
 import { notify } from "../services/notifications";
 import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import * as vault from "../vault/vault";
-import { clearRemoteRun, remoteRuns } from "./activeRuns";
+import { remoteRuns } from "./activeRuns";
 import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
 import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
 import { parseHandover, writeSession, writeTranscript, type ChatHandover } from "./handover";
-import { adoptChat, applyRunnerEvent, catchUp, reconcileConversation, runnerDisconnected, setMirrorHooks } from "./mirror";
+import { adoptChat, applyRunnerEvent, catchUp, chatMovedHere, reconcileConversation, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
@@ -478,6 +479,8 @@ export function startRunners(): void {
   });
   autoUpdateTimer = setInterval(() => {
     for (const id of links.keys()) void maybeAutoUpdate(id);
+    // Chats that moved here and that a runner couldn't drop yet.
+    for (const id of links.keys()) void releaseChats(id);
   }, AUTO_UPDATE_EVERY_MS);
   autoUpdateTimer.unref?.();
   for (const r of all<RunnerRow>("SELECT * FROM runners")) startLink(r);
@@ -486,6 +489,7 @@ export function startRunners(): void {
       void syncRunner(runnerId, { agentId: run.agentId }).catch((err) => log.warn(`could not merge memory after run ${run.id}`, err instanceof Error ? err.message : err));
     },
     resync: (runnerId, runId) => links.get(runnerId)?.sendClientEvent({ type: "run.resync", runId }),
+    released: (runnerId, conversationId) => pendingReleases(runnerId).includes(conversationId),
   });
   offBus = bus.on((event) => {
     if (event.type === "entity.changed" && SETUP_ENTITIES.has(event.entity)) scheduleSync(false);
@@ -769,11 +773,11 @@ function pendingReleases(runnerId: string): string[] {
 }
 
 /**
- * The runner drops its copy of chats that moved to this computer (`ids`, and those it couldn't drop before). What it
- * can't drop now — it is away — is dropped after its next connect. Never throws.
+ * The runner drops its copy of the chats that moved to this computer. What it can't drop now is tried again after its
+ * next connect and every 15 minutes. Never throws.
  */
-async function releaseChats(runnerId: string, ids: string[] = []): Promise<void> {
-  const wanted = [...new Set([...pendingReleases(runnerId), ...ids])];
+async function releaseChats(runnerId: string): Promise<void> {
+  const wanted = pendingReleases(runnerId);
   if (!wanted.length) return;
   const l = links.get(runnerId);
   const done = new Set<string>();
@@ -788,7 +792,7 @@ async function releaseChats(runnerId: string, ids: string[] = []): Promise<void>
       }
     }
   }
-  const left = [...new Set([...pendingReleases(runnerId), ...ids])].filter((id) => !done.has(id));
+  const left = pendingReleases(runnerId).filter((id) => !done.has(id));
   if (left.length) setMeta(releaseKey(runnerId), JSON.stringify(left));
   else deleteMeta(releaseKey(runnerId));
 }
@@ -797,38 +801,57 @@ function offline(err: unknown): boolean {
   return err instanceof HttpError && err.code === "runner_offline";
 }
 
+/** Chats on their way here: nothing new starts in them on the runner meanwhile (routing.ts). */
+const moving = new Set<string>();
+
+export function chatIsMoving(conversationId: string): boolean {
+  return moving.has(conversationId);
+}
+
+function busyOnRunner(r: RunnerRow): HttpError {
+  return new HttpError(409, `${r.name} is still working on this chat. Stop the run or let it finish, then move it.`, "runner_chat_busy");
+}
+
 /**
  * While the runner is there: bring the copy up to date, refuse while a run works or stands still there, and get what
- * the chat takes along. Null when the runner is away (or went away meanwhile).
+ * the chat takes along. Null when the runner is away, or no longer has the chat. Nothing is changed when it fails.
  */
 async function handoverFrom(r: RunnerRow, conversationId: string): Promise<ChatHandover | null> {
   const l = links.get(r.id);
   if (l?.state.state !== "online") return null;
   const path = encodeURIComponent(conversationId);
+  const gone = (err: unknown) => err instanceof HttpError && err.status === 404;
   try {
-    let chat: ConversationWithMessages | null = null;
+    let remote: ConversationWithMessages;
     try {
-      const remote = await l.json<ConversationWithMessages>("GET", `/api/conversations/${path}`);
-      const runs = await l.json<Run[]>("GET", `/api/runs?conversationId=${path}&limit=500`).catch(() => undefined);
-      chat = reconcileConversation(r.id, remote, runs);
+      remote = await l.json<ConversationWithMessages>("GET", `/api/conversations/${path}`);
     } catch (err) {
-      // The runner lost it: the copy here is all there is.
-      if (!(err instanceof HttpError && err.status === 404)) throw err;
-      return null;
+      if (gone(err)) return null;
+      throw err;
     }
-    if (chat.activeRunId || chat.running) throw new HttpError(409, `${r.name} is still working on this chat. Stop it or let it finish, then move it.`, "runner_chat_busy");
-    if (chat.paused) throw new HttpError(409, `This chat's run stands still on ${r.name}. Stop it or let it finish, then move it.`, "runner_chat_busy");
-    return await l
-      .json<unknown>("GET", `/api/link/conversations/${path}/handover`, undefined, { timeoutMs: 120_000 })
-      .then(parseHandover, (err) => {
-        // A runner from before the move can't hand over: the next turn here starts a new session with a recap.
-        if (offline(err)) throw err;
-        log.info(`runner ${r.id} handed over nothing for chat ${conversationId}`, { error: message(err) });
-        return null;
-      });
+    const runs = await l.json<Run[]>("GET", `/api/runs?conversationId=${path}&limit=500`).catch(() => undefined);
+    const chat = reconcileConversation(r.id, remote, runs);
+    if (chat.activeRunId || chat.running || chat.paused) throw busyOnRunner(r);
+    // A runner from before moving chats has no handover: the next turn here starts a new session with a recap.
+    return await l.json<unknown>("GET", `/api/link/conversations/${path}/handover`, undefined, { timeoutMs: 120_000 }).then(parseHandover, (err) => {
+      if (gone(err)) return null;
+      throw err;
+    });
   } catch (err) {
-    if (offline(err)) return null;
-    throw err;
+    if (offline(err)) throw new HttpError(409, `${r.name} went away while the chat was moving. Nothing changed — try again.`, "runner_offline");
+    if (err instanceof HttpError && err.code === "runner_chat_busy") throw err;
+    throw new HttpError(502, `Couldn't copy the chat from ${r.name}: ${message(err)}. Nothing changed — try again.`, "runner_handover_failed");
+  }
+}
+
+/** A follow-up the runner had for the chat continues here; one that came due meanwhile runs a minute later. */
+function keepFollowup(conversationId: string, agentId: string, followup: ConversationFollowup): void {
+  try {
+    const due = Math.max(Date.parse(followup.dueAt), Date.now() + MIN_FOLLOWUP_DELAY_MS + 5_000);
+    const note = followup.note.trim() || "Continue where you left off.";
+    scheduleFollowup({ conversationId, agentId, dueAt: new Date(due), note });
+  } catch (err) {
+    log.info(`the follow-up of chat ${conversationId} didn't move along`, { error: message(err) });
   }
 }
 
@@ -843,65 +866,55 @@ export async function moveChatHere(conversationId: string): Promise<Conversation
     if (!conversationExists(conversationId)) throw notFound("Conversation");
     throw new HttpError(409, "This chat already works on this computer.", "not_on_runner");
   }
+  if (moving.has(conversationId)) throw new HttpError(409, "This chat is already moving to this computer.", "runner_chat_moving");
   const r = requireRow(runnerId);
-  const handover = await handoverFrom(r, conversationId);
-  const conv = get<{ agent_id: string; runner_id: string | null; runner_state: string | null }>(
-    "SELECT agent_id, runner_id, runner_state FROM conversations WHERE id = ?",
-    conversationId,
-  );
-  if (!conv || conv.runner_id !== runnerId) return getConversationSummary(conversationId);
-  const agent = getAgent(conv.agent_id);
-
-  let session = false;
-  if (handover?.sessionId && handover.session) {
-    try {
-      session = writeSession(agent.workingDirectory ?? agent.repoPath, handover.sessionId, handover.session);
-    } catch (err) {
-      log.warn(`could not keep the Claude session of chat ${conversationId}`, err);
-    }
-  }
-  if (handover?.transcript) {
-    try {
-      writeTranscript(transcriptPath(agent, conversationId), handover.transcript);
-    } catch (err) {
-      log.warn(`could not keep the transcript of chat ${conversationId}`, err);
-    }
-  }
-
-  const followup = parseJson<Partial<RunnerChatState> | null>(conv.runner_state, null)?.followup ?? null;
-  const ts = now();
-  const ended = tx(() => {
-    const changes = sql(
-      "UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE conversation_id = ? AND status IN ('queued', 'running', 'paused')",
-      `Ended: the chat moved from ${r.name} to this computer`,
-      ts,
-      conversationId,
-    ).changes;
-    // What servers and VMs a chat may use was the runner's word: here it starts without any, as after removing a runner.
-    sql(
-      `UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', vm_id = NULL,
-         claude_session_id = COALESCE(?, claude_session_id), updated_at = ? WHERE id = ?`,
-      session ? handover!.sessionId : null,
-      ts,
+  moving.add(conversationId);
+  try {
+    const handover = await handoverFrom(r, conversationId);
+    const conv = get<{ agent_id: string; runner_id: string | null; runner_state: string | null }>(
+      "SELECT agent_id, runner_id, runner_state FROM conversations WHERE id = ?",
       conversationId,
     );
-    return changes;
-  });
-  for (const run of remoteRuns(runnerId)) if (run.conversationId === conversationId) clearRemoteRun(run.runId);
-  if (followup) {
-    try {
-      scheduleFollowup({ conversationId, agentId: conv.agent_id, dueAt: new Date(followup.dueAt), note: followup.note });
-    } catch (err) {
-      log.info(`the follow-up of chat ${conversationId} didn't move along`, { error: message(err) });
-    }
+    if (!conv || conv.runner_id !== runnerId) throw notFound("Conversation");
+    // Something started there while the chat was being copied (a follow-up on the runner).
+    if (links.get(runnerId)?.state.state === "online" && remoteRuns(runnerId).some((x) => x.conversationId === conversationId)) throw busyOnRunner(r);
+    const agent = getAgent(conv.agent_id);
+    const session = !!handover?.sessionId && !!handover.session && writeSession(agent.workingDirectory ?? agent.repoPath, handover.sessionId, handover.session);
+    if (handover?.transcript) writeTranscript(transcriptPath(agent, conversationId), handover.transcript);
+
+    const followup = parseJson<Partial<RunnerChatState> | null>(conv.runner_state, null)?.followup ?? null;
+    const ts = now();
+    const ended = tx(() => {
+      const changes = sql(
+        "UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE conversation_id = ? AND status IN ('queued', 'running', 'paused')",
+        `Ended: the chat moved from ${r.name} to this computer`,
+        ts,
+        conversationId,
+      ).changes;
+      // What servers and VMs a chat may use was the runner's word: here it starts without any, as after removing a runner.
+      sql(
+        `UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', vm_id = NULL,
+           claude_session_id = COALESCE(?, claude_session_id), updated_at = ? WHERE id = ?`,
+        session ? handover!.sessionId : null,
+        ts,
+        conversationId,
+      );
+      const pending = new Set([...pendingReleases(runnerId), conversationId]);
+      setMeta(releaseKey(runnerId), JSON.stringify([...pending]));
+      return changes;
+    });
+    chatMovedHere(runnerId, conversationId);
+    if (followup) keepFollowup(conversationId, conv.agent_id, followup);
+    audit("user", "runner.chat.move", conversationId, { runner: r.name, session, transcript: !!handover?.transcript });
+    log.info("moved a chat from a runner to this computer", { conversationId, runnerId, session });
+    emitConversationUpdated(conversationId);
+    emit(runnerId);
+    if (ended) bus.changed("runs");
+    void releaseChats(runnerId);
+    return getConversationSummary(conversationId);
+  } finally {
+    moving.delete(conversationId);
   }
-  audit("user", "runner.chat.move", conversationId, { runner: r.name, session, transcript: !!handover?.transcript });
-  log.info("moved a chat from a runner to this computer", { conversationId, runnerId, session });
-  emitConversationUpdated(conversationId);
-  emit(runnerId);
-  if (ended) bus.changed("runs");
-  await releaseChats(runnerId, [conversationId]);
-  return getConversationSummary(conversationId);
 }
 
 function describeHealth(health: RunnerHealth): string {
