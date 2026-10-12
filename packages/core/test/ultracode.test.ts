@@ -16,6 +16,9 @@ import { getAccessToken } from "../src/server/auth";
 import * as vault from "../src/vault/vault";
 import { createCredential } from "../src/vault/credentials";
 
+/** The Claude models of a catalog (GLM, appended for special tasks, never has Ultracode). */
+const claude = (c: ModelCatalog) => c.models.filter((m) => !m.provider);
+
 let env: TestEnv;
 let agent: Agent;
 
@@ -75,7 +78,7 @@ describe("Ultracode in the model catalog", () => {
     const catalog = await probe();
     expect(probes()).toBe(before + 1);
     expect(catalog.source).toBe("claude");
-    expect(catalog.models.map((m) => [m.id, m.ultracode])).toEqual([
+    expect(claude(catalog).map((m) => [m.id, m.ultracode])).toEqual([
       ["opus", true],
       ["sonnet", true],
       ["haiku", false],
@@ -100,7 +103,7 @@ describe("Ultracode in the model catalog", () => {
     process.env.FAKE_CLAUDE_ULTRACODE = "off";
     const catalog = await probe();
     expect(catalog.source).toBe("claude");
-    expect(catalog.models.map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
+    expect(claude(catalog).map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
     expect(catalog.models.some((m) => m.ultracode)).toBe(false);
     expect(ultracodeFor("opus", true)).toBe(false);
     expect(ultracodeFor("us.anthropic.some-custom-model-v1:0", true)).toBe(false);
@@ -114,7 +117,7 @@ describe("Ultracode in the model catalog", () => {
       process.env.FAKE_CLAUDE_SESSION_MODEL = session;
       const catalog = await probe();
       expect(asked()).toEqual(["initialize", "get_settings", "set_model opus", "get_settings"]);
-      expect(catalog.models.map((m) => m.ultracode)).toEqual([true, true, false, false]);
+      expect(claude(catalog).map((m) => m.ultracode)).toEqual([true, true, false, false]);
     }
 
     // The second answer decides: no dynamic workflows with a capable model either.
@@ -133,7 +136,7 @@ describe("Ultracode in the model catalog", () => {
       expect(asked()).toEqual(["initialize", "get_settings", "set_model opus"]);
       expect(catalog.source).toBe("claude");
       expect(catalog.error).toBeNull();
-      expect(catalog.models.map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
+      expect(claude(catalog).map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
       expect(catalog.models.some((m) => m.ultracode)).toBe(false);
     }
   }, 30_000);
@@ -145,7 +148,7 @@ describe("Ultracode in the model catalog", () => {
       const catalog = await probe();
       expect(catalog.source).toBe("claude");
       expect(catalog.error).toBeNull();
-      expect(catalog.models.map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
+      expect(claude(catalog).map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
       expect(catalog.models.some((m) => m.ultracode)).toBe(false);
       expect(ultracodeFor("opus", true)).toBe(false);
     }
@@ -189,7 +192,7 @@ describe("Ultracode in the model catalog", () => {
         stop();
       }
       expect(probes()).toBe(before + 1);
-      expect((await getModelCatalog()).models.map((m) => m.ultracode)).toEqual([true, true, false, false]);
+      expect(claude(await getModelCatalog()).map((m) => m.ultracode)).toEqual([true, true, false, false]);
     }
 
     // Answered: no workflows, or a Claude Code that doesn't know the request or the field.
@@ -217,12 +220,12 @@ describe("Ultracode in the model catalog", () => {
     const { events, stop } = captureEvents();
     try {
       const served = await getModelCatalog();
-      expect(served.models).toEqual([{ ...old.models[0]!, efforts: ["low", "medium", "high", "xhigh", "max"], ultracode: false }]);
+      expect(claude(served)).toEqual([{ ...old.models[0]!, efforts: ["low", "medium", "high", "xhigh", "max"], ultracode: false }]);
       await until(() => events.some((e: ServerEvent) => e.type === "entity.changed" && e.entity === "models"), 10_000, "models changed");
     } finally {
       stop();
     }
-    expect((await getModelCatalog()).models.map((m) => m.ultracode)).toEqual([true, true, false, false]);
+    expect(claude(await getModelCatalog()).map((m) => m.ultracode)).toEqual([true, true, false, false]);
     expect(ultracodeFor("opus", true)).toBe(true);
   });
 });

@@ -177,6 +177,7 @@ describe("app secret routes", () => {
     expect(initial.status).toBe(200);
     expect(initial.data.map((s) => s.key)).toEqual([
       "anthropic_api_key",
+      "zai_api_key",
       "openai_api_key",
       "elevenlabs_api_key",
       "composio_api_key",

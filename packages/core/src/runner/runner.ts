@@ -44,6 +44,7 @@ import {
   CUA_MCP_NAME,
   DEFAULT_MODEL,
   EFFORT_OPTIONS,
+  GLM_MODELS,
   RUN_CLI_MISSING,
   RUN_COST_LIMIT,
   RUN_INTERRUPTED,
@@ -54,6 +55,7 @@ import {
   WORKFLOW_TOOL,
   isModelId,
   memoryBudget,
+  modelProvider,
   parseSlashCommand,
   type ActivityNames,
 } from "@godmode/shared";
@@ -109,7 +111,7 @@ import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { modsForRun, removeRunMods } from "../mods/service";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
-import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
+import { applyZaiEnv, claudeEnv, killTree, resolveClaudeCommand, zaiKey } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor, ultracodeFor } from "./models";
 import {
@@ -2000,6 +2002,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  const glm = modelProvider(model) === "zai";
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
@@ -2087,12 +2090,17 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         settingsTools: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",
         team: teamFor(agent),
+        glm: glm ? model : null,
+        glmDelegation: !glm && config().role !== "runner" && zaiKey() ? GLM_MODELS[0]!.id : null,
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
   const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
+  const zai = glm ? zaiKey() : null;
+  if (glm && !zai) return { status: "failed", error: `${model} runs on Z.ai and needs a Z.ai API key: add it under Integrations → API keys (and unlock the vault).` };
+  // The fallback runs in the same process: only a model of the same provider can take over.
   const fallback = settings.runner.fallbackModel?.trim();
   const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
   // cmd.exe cannot pass multi-line arguments: use the file variants for Windows .cmd shims.
@@ -2100,7 +2108,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const baseArgs = ["-p", "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", model];
   if (effort) baseArgs.push("--effort", effort);
-  if (fallback && fallback !== model && isModelId(fallback)) baseArgs.push("--fallback-model", fallback);
+  if (fallback && fallback !== model && isModelId(fallback) && modelProvider(fallback) === modelProvider(model)) baseArgs.push("--fallback-model", fallback);
   // A run in a VM stays off the host: no bypass, so Claude Code's file tools only reach its folders (cwd + --add-dir).
   const hostLocked = !!vm && settings.vm.isolateHostShell;
   if (dreaming) {
@@ -2124,6 +2132,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // goes into a VM, so a VM's browser has none.
   if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
   if (mcp.mcpServers[CUA_MCP_NAME]) disallowed.push(...CUA_HIDDEN_TOOLS.map((t) => `mcp__${CUA_MCP_NAME}__${t}`));
+  // GLM reads text only: a screenshot would end the request.
+  if (glm && mcp.mcpServers[BROWSER_MCP_NAME]) disallowed.push(`mcp__${BROWSER_MCP_NAME}__browser_screenshot`);
   // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
   // commands on this computer) can't be planted for later runs in the folders this run may write to.
   if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
@@ -2178,6 +2188,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
+  if (zai) applyZaiEnv(env, model, zai);
   // Scripts that drive the browser themselves (Playwright, puppeteer) get the run's own endpoint: its profile, its chat's tabs.
   const cdpUrl = !vm && mcp.mcpServers[BROWSER_MCP_NAME] ? chatLeaseUrl(job.runId) : null;
   if (cdpUrl) env[RUN_CDP_ENV] = cdpUrl;

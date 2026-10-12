@@ -145,8 +145,9 @@ export function ModelPicker({
   const { catalog, base, baseEffort, baseUltracode, anyUltracode, current, effort, ultracode } = useEffectiveModel(agent, value);
 
   const listed = catalog.models.some((m) => m.id === current.id) ? catalog.models : [current, ...catalog.models];
-  const latest = listed.filter((m) => m.latest);
-  const older = listed.filter((m) => !m.latest);
+  const latest = listed.filter((m) => m.latest && !m.provider);
+  const older = listed.filter((m) => !m.latest && !m.provider);
+  const special = listed.filter((m) => m.provider);
   const overridden = value.model !== null || value.effort !== null || value.ultracode !== null;
   const effortIndex = effort ? current.efforts.indexOf(effort) : -1;
 
@@ -278,6 +279,22 @@ export function ModelPicker({
                     ref={m.id === focusId ? selectedRef : undefined}
                   />
                 ))}
+            </>
+          )}
+          {special.length > 0 && (
+            <>
+              <p className="px-2 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">Special tasks</p>
+              {special.map((m) => (
+                <ModelOption
+                  key={m.id}
+                  model={m}
+                  selected={m.id === current.id}
+                  isDefault={m.id === base.id}
+                  tabbable={m.id === focusId}
+                  onSelect={() => pickModel(m)}
+                  ref={m.id === focusId ? selectedRef : undefined}
+                />
+              ))}
             </>
           )}
         </div>

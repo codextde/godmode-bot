@@ -1443,6 +1443,8 @@ export interface ClaudeModel {
   ultracode: boolean;
   /** Newest model of its family; the others are older versions. */
   latest: boolean;
+  /** Set for non-Claude models (GLM on Z.ai); absent = Claude. */
+  provider?: "zai";
 }
 
 export interface ModelCatalog {

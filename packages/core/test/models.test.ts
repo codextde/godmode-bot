@@ -100,8 +100,9 @@ describe("catalog from the Claude Code CLI", () => {
     expect(catalog.source).toBe("claude");
     expect(catalog.error).toBeNull();
     expect(catalog.claudeVersion).toBe("9.9.9");
-    expect(catalog.models.map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8"]);
-    expect(catalog.models.map((m) => m.latest)).toEqual([true, true, true, false]);
+    // GLM (Z.ai) comes after Claude's models, for the special cases.
+    expect(catalog.models.map((m) => m.id)).toEqual(["opus", "sonnet", "haiku", "claude-opus-8", "glm-5.3"]);
+    expect(catalog.models.map((m) => m.latest)).toEqual([true, true, true, false, true]);
 
     const [probe] = probes();
     expect(probes()).toHaveLength(1);
@@ -146,7 +147,7 @@ describe("catalog from the Claude Code CLI", () => {
     expect(catalog.error).toContain("exited without answering");
     expect(catalog.error).toContain("not today");
     expect(catalog.models.map((m) => m.id)).toContain("claude-opus-5-5");
-    expect(catalog.models.every((m) => m.efforts.length === 5)).toBe(true);
+    expect(catalog.models.filter((m) => !m.provider).every((m) => m.efforts.length === 5)).toBe(true);
 
     __setClaudeBinaryForTests(false);
     try {
@@ -194,7 +195,7 @@ describe("catalog from the Claude Code CLI", () => {
     const { events, stop } = captureEvents();
     try {
       const served = await getModelCatalog();
-      expect(served.models.map((m) => m.id)).toEqual(["claude-opus-1"]);
+      expect(served.models.map((m) => m.id)).toEqual(["claude-opus-1", "glm-5.3"]);
       await until(() => events.some((e: ServerEvent) => e.type === "entity.changed" && e.entity === "models"), 10_000, "models changed");
     } finally {
       stop();

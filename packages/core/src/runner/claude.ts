@@ -1,5 +1,6 @@
 /** Resolving and launching the Claude Code CLI (owner: runner). Shared by agent runs and the model catalog. */
 import { existsSync } from "node:fs";
+import { ZAI_ANTHROPIC_BASE_URL, ZAI_KEY_SECRET } from "@godmode/shared";
 import type { Subprocess } from "bun";
 import { logger } from "../log";
 import { which } from "../util";
@@ -69,6 +70,32 @@ export function claudeEnv(): Record<string, string | undefined> {
     }
   }
   return env;
+}
+
+/** The Z.ai API key from the vault; null when none is saved or the vault is locked. */
+export function zaiKey(): string | null {
+  if (!isUnlocked()) return null;
+  try {
+    return getAppSecret(ZAI_KEY_SECRET) || null;
+  } catch (err) {
+    log.warn("could not read the Z.ai API key from the vault", err);
+    return null;
+  }
+}
+
+/**
+ * Points a run's Claude Code at Z.ai for a GLM model. The Anthropic credentials leave the env so they never reach
+ * Z.ai, and every model role (subagents, background calls) resolves to the GLM model.
+ */
+export function applyZaiEnv(env: Record<string, string | undefined>, model: string, key: string) {
+  for (const k of ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "ANTHROPIC_CUSTOM_HEADERS"]) delete env[k];
+  env.ANTHROPIC_BASE_URL = ZAI_ANTHROPIC_BASE_URL;
+  env.ANTHROPIC_AUTH_TOKEN = key;
+  env.API_TIMEOUT_MS = "3000000";
+  for (const k of ["ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL"]) {
+    env[k] = model;
+  }
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
 }
 
 /** Stop a claude process and everything it started: its process group on POSIX (spawn it `detached`), taskkill /T on Windows. */
