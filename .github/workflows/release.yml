@@ -1,6 +1,8 @@
 name: Release
 
-# Set the version first (`pnpm bump 0.2.4`, commit, push to main), then push the matching tag (v0.2.4) to build:
+# Push a tag (v0.2.4) to build it. Every job builds with the tag's version, so the version files don't have to be
+# bumped first; when the tag is ahead of main, main gets a "Release v0.2.4" commit (`pnpm bump` does the same locally).
+# The tag builds:
 #   * desktop installers (macOS arm64 + x64, Windows x64, Linux x64 + arm64) with the core sidecar,
 #   * standalone `godmode` server binaries (web dashboard embedded) + .sha256 files,
 #   * the Docker image ghcr.io/codextde/godmode-bot,
@@ -46,20 +48,36 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
-      - name: Check that the tag matches the app version
+      - name: Read the version from the tag
         id: version
         run: |
           version="${TAG#v}"
-          desktop=$(node -p "require('./apps/desktop/package.json').version")
-          core=$(node -p "require('./packages/core/package.json').version")
-          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' apps/desktop/src-tauri/Cargo.toml | head -n1)
-          for v in "$desktop" "$core" "$cargo"; do
-            if [ "$v" != "$version" ]; then
-              echo "::error::tag $TAG does not match versions (desktop $desktop, core $core, Cargo.toml $cargo). Run 'pnpm bump $version', push it to main and tag that commit."
-              exit 1
-            fi
-          done
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::$TAG is not a version tag (vX.Y.Z)"
+            exit 1
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Bump main when the tag is ahead of it
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ "$VERSION" == *-* ]]; then exit 0; fi
+          git fetch --no-tags --depth=1 origin main
+          git checkout -q -B release-bump FETCH_HEAD
+          current=$(node -p "require('./apps/desktop/package.json').version")
+          newest=$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -n1)
+          if [ "$current" = "$VERSION" ] || [ "$newest" != "$VERSION" ]; then
+            echo "main is at $current, nothing to bump"
+            exit 0
+          fi
+          bun scripts/bump-version.ts "$VERSION"
+          git -c user.name="Daniel Ehrhardt" -c user.email="daniel.ehrhardt@codext.de" commit -qam "Release v$VERSION"
+          git push origin HEAD:main || echo "::warning::could not push the version bump to main, run 'pnpm bump $VERSION' there"
 
       - name: Check the updater signing key
         env:
@@ -134,6 +152,10 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential libssl-dev libxdo-dev
 
       - uses: ./.github/actions/setup
+
+      - name: Set the version from the tag
+        shell: bash
+        run: bun scripts/bump-version.ts "$TAG"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -242,6 +264,10 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      - name: Set the version from the tag
+        shell: bash
+        run: bun scripts/bump-version.ts "$TAG"
+
       - name: Build web UI
         run: pnpm --filter @godmode/desktop build
 
@@ -286,6 +312,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Set the version from the tag
+        run: bun scripts/bump-version.ts "$TAG"
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
