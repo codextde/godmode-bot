@@ -19,7 +19,7 @@ import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
 
 /** App-level secrets the UI always lists (set or not). */
-const WELL_KNOWN_SECRETS = ["anthropic_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key"];
+const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key"];
 const SECRET_KEY = /^[a-z0-9_]{2,64}$/;
 
 /**

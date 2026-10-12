@@ -155,6 +155,10 @@ export interface Invocation {
     GODMODE_TOKEN: string | null;
     CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: string | null;
     CLAUDE_CODE_PLUGIN_DIR_WATCH: string | null;
+    ANTHROPIC_BASE_URL: string | null;
+    ANTHROPIC_AUTH_TOKEN: string | null;
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: string | null;
+    CLAUDE_CONFIG_DIR: string | null;
   };
 }
 

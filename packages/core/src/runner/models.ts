@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import type { ClaudeModel, Effort, ModelCatalog } from "@godmode/shared";
-import { BUILTIN_MODELS, EFFORT_OPTIONS, ULTRACODE_EFFORT, effortForModel, findModel, isModelId } from "@godmode/shared";
+import { BUILTIN_MODELS, EFFORT_OPTIONS, GLM_CATALOG_MODELS, ULTRACODE_EFFORT, effortForModel, findModel, isModelId, modelProvider } from "@godmode/shared";
 import { config, ensureDir } from "../config";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -85,8 +85,13 @@ export function parseModels(raw: unknown, workflows = false): ClaudeModel[] {
   return models;
 }
 
+/** Claude's models first, then GLM for the special cases. */
+function withGlm(catalog: ModelCatalog): ModelCatalog {
+  return { ...catalog, models: [...catalog.models.filter((m) => modelProvider(m.id) === "anthropic"), ...GLM_CATALOG_MODELS] };
+}
+
 function builtinCatalog(error: string): ModelCatalog {
-  return { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: now(), error };
+  return withGlm({ models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: now(), error });
 }
 
 function isCatalog(data: unknown): data is ModelCatalog {
@@ -262,7 +267,7 @@ async function fetchCatalog(): Promise<ModelCatalog> {
     const models = parseModels(probed.models, probed.workflows === true);
     if (!models.length) throw new Error("Claude Code reported no models");
     ultracodeUnknown = probed.workflows === null;
-    return { models, source: "claude", claudeVersion: version, fetchedAt: now(), error: null };
+    return withGlm({ models, source: "claude", claudeVersion: version, fetchedAt: now(), error: null });
   } catch (err) {
     log.warn("could not read the model list from Claude Code", err);
     return builtinCatalog(err instanceof Error ? err.message : String(err));
@@ -278,7 +283,7 @@ function loadCached(): ModelCatalog | null {
     if (isCatalog(data)) {
       // A list from before Ultracode says nothing about it: it is served as it is, and asked for again right away.
       const complete = data.models.every((m) => typeof m.ultracode === "boolean");
-      cached = complete ? data : { ...data, models: data.models.map((m) => ({ ...m, ultracode: false })), fetchedAt: new Date(0).toISOString() };
+      cached = withGlm(complete ? data : { ...data, models: data.models.map((m) => ({ ...m, ultracode: false })), fetchedAt: new Date(0).toISOString() });
     }
   } catch (err) {
     log.debug("ignoring unreadable model cache", err);
@@ -312,7 +317,7 @@ function refresh(): Promise<ModelCatalog> {
   return inflight;
 }
 
-/** Models offered by the installed Claude Code. Serves the cache and refreshes it in the background when stale. */
+/** Models offered by the installed Claude Code, plus GLM. Serves the cache and refreshes it in the background when stale. */
 export async function getModelCatalog(opts: { refresh?: boolean } = {}): Promise<ModelCatalog> {
   const current = loadCached();
   if (opts.refresh || !current) return refresh();
@@ -323,7 +328,7 @@ export async function getModelCatalog(opts: { refresh?: boolean } = {}): Promise
 
 /** Effort to pass with `--model <model>`, per the cached catalog. Never spawns the CLI. */
 export function effortFor(model: string, effort: Effort | null): Effort | null {
-  if (!effort) return null;
+  if (!effort || modelProvider(model) === "zai") return null;
   const known = findModel(loadCached()?.models ?? [], model);
   return known ? effortForModel(known.efforts, effort) : effort;
 }
@@ -333,7 +338,7 @@ export function effortFor(model: string, effort: Effort | null): Effort | null {
  * CLI. A model the catalog doesn't list (a custom or provider id) gets it when this Claude Code has it for any model.
  */
 export function ultracodeFor(model: string, on: boolean): boolean {
-  if (!on) return false;
+  if (!on || modelProvider(model) === "zai") return false;
   const models = loadCached()?.models ?? [];
   return findModel(models, model)?.ultracode ?? models.some((m) => m.ultracode);
 }

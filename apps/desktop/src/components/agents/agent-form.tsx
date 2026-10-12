@@ -1565,7 +1565,7 @@ function SubagentsEditor({
                     </SelectTrigger>
                     <SelectContent position="popper">
                       <SelectItem value="__inherit">Same as agent</SelectItem>
-                      <ModelOptions models={catalog.models} current={s.model} />
+                      <ModelOptions models={catalog.models} current={s.model} claudeOnly />
                     </SelectContent>
                   </Select>
                 </div>

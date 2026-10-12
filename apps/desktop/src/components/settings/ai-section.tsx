@@ -62,7 +62,9 @@ export function ModelSelect({
   noneLabel?: string;
   disabled?: boolean;
 }) {
-  const { catalog, isPending } = useModelCatalog();
+  const { catalog: full, isPending } = useModelCatalog();
+  // Defaults and the fallback are Claude only: GLM is picked per agent or chat.
+  const catalog = { ...full, models: full.models.filter((m) => !m.provider) };
   const known = findModel(catalog.models, value);
   const [customMode, setCustom] = useState(false);
   const custom = customMode || (!isPending && !known && !(allowNone && !value));

@@ -162,7 +162,7 @@ export default function AgentSettings() {
           options={[
             { value: DEFAULT, label: "Default" },
             ...(agent.model && !findModel(models, agent.model) ? [{ value: agent.model, label: agent.model }] : []),
-            ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description })),
+            ...models.map((m) => ({ value: m.id, label: m.provider ? `${m.label} (special tasks)` : m.label, detail: m.description })),
           ]}
           onChange={(v) => save({ model: v === DEFAULT ? "" : v })}
         />

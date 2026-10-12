@@ -67,6 +67,10 @@ export interface PromptContext {
   savesLogins?: boolean;
   /** Who leads the agent, the line up to the built-in agent, and who reports to it ("Your team"). */
   team?: { lead: Agent | null; chain: Agent[]; reports: Agent[] };
+  /** The run's model is GLM on Z.ai (text only), not Claude. */
+  glm?: string | null;
+  /** A GLM model teammates' tasks can be handed to (a Z.ai key is saved); null = none. */
+  glmDelegation?: string | null;
   now?: Date;
 }
 
@@ -208,7 +212,11 @@ function teamSection(ctx: PromptContext, human: string): string {
           `- \`${p.id}\` — **${teamText(p.name, 100)}**${p.role ? `, ${teamText(p.role, 60)}` : ""}${p.id === team.lead?.id ? " (your lead)" : reportIds.has(p.id) ? " (reports to you)" : ""}${p.enabled ? "" : " (switched off)"}${p.description ? `: ${teamText(p.description)}` : ""}`,
       );
     out.push(`You can hand work to teammates with \`agent_delegate({ agentId, task, wait })\`. Pick the teammate whose role fits and write the task so it is self-contained (goal, inputs, expected output). With \`wait: true\` (default) you get their final answer back; with \`wait: false\` you get a run id and they work in the background (\`delegation_status\`). Use \`agents_list\` / \`agent_get\` to see who does what. Hand work over when a teammate owns the relevant logins, tools or expertise — do your own job yourself and don't delegate trivial work.
-${lines.length ? `Teammates you can hand work to:\n${lines.join("\n")}` : "There are currently no teammates you can hand work to."}`);
+${lines.length ? `Teammates you can hand work to:\n${lines.join("\n")}` : "There are currently no teammates you can hand work to."}${
+      ctx.glmDelegation
+        ? `\nEvery agent runs on Claude, which fits nearly every job best. Only when Claude declines a legitimate task or clearly can't do it (it refused twice, or the input needs more than Claude's context), hand that one task over with \`agent_delegate({ agentId, task, model: "${ctx.glmDelegation}" })\`: it runs on ${ctx.glmDelegation} (Z.ai), text only, no screenshots. Never for ordinary work.`
+        : ""
+    }`);
   } else if (reports.length) {
     out.push(`These agents report to you: ${reports.map(teammate).join(", ")}.`);
   }
@@ -252,6 +260,11 @@ ${workplace}`);
 
   out.push(`## Tools
 Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missing-login reports, notifications${ctx.apiTools?.length ? ", API tools" : ""}${perms.allowDelegation || perms.canManageAgents ? ", other agents" : ""}). Never ask ${human} to paste an API key or token into the chat: if a task needs an API you have no tool for, say which one and that ${human} can add it under Integrations → Tools.`);
+
+  if (ctx.glm) {
+    out.push(`### Model
+This run uses ${ctx.glm} on Z.ai, not Claude, for a task Claude couldn't do. It reads text only: you can't see images or screenshots and have no screen control (computer, VM screen, phones), so read pages with \`browser_get_state\` or \`browser_get_html\` and files as text. Vault secrets and API keys stay out of this run: Godmode fills logins into pages.`);
+  }
 
   if (ctx.browserAvailable) {
     const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
