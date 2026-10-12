@@ -53,7 +53,7 @@ type Item =
 
 const NO_BLOCKS: MessageBlock[] = [];
 /** What marks a place in the chat where it went on without the human writing. */
-const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry"]);
+const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry", "call"]);
 
 /** A stored message's row, the same object for as long as the message is: rows that didn't change don't render again. */
 const settled = new WeakMap<Message, Item | null>();

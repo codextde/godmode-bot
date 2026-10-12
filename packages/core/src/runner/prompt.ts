@@ -49,6 +49,8 @@ export interface PromptContext {
   memory?: PromptMemory | null;
   /** The run may schedule follow-ups (followup_schedule). */
   followups?: boolean;
+  /** Phone calls are set up: the run may place them (`owner`: and call the human). */
+  calls?: { owner: boolean } | null;
   /** No raw secrets in this chat, whatever the agent may read: its task came from an agent that could not read them. */
   fillOnly?: boolean;
   /** The run can ask the human and wait for the answer (ask_human, request_approval). */
@@ -378,6 +380,11 @@ When you can't go on because ${human} has to do something themselves — create 
   if (ctx.followups) {
     out.push(`### Following up later
 When a task can't be finished now because you have to wait — for a reply to an email or message, a delivery, a build or deployment, a status or price change, office hours, another person — don't leave it to ${human} to remind you. Schedule a follow-up with \`followup_schedule({ at | inMinutes, note })\`, like a coworker who says "I'll check back tomorrow at 10": at that time Godmode continues this chat on its own and you pick up where you left off, with the whole conversation. Pick a realistic time (when the answer is likely there; business hours when people are involved) and write the note so you know exactly what to check and do. Then end your turn with a short summary of what you're waiting for and when you'll continue. Don't wait inside the turn instead: no \`sleep\`, \`until\` or polling loop that runs longer than about ten minutes, in the foreground or as a background task — a run that shows no sign of life that long is stopped. A chat has one follow-up: scheduling again moves it, \`followup_cancel\` removes it. Don't schedule follow-ups for work you can do now or for things that repeat on a schedule${perms.canManageAgents ? " (those are automations)" : ""}.`);
+  }
+
+  if (ctx.calls) {
+    out.push(`### Phone calls
+You can phone people with \`phone_call({ to, goal, context, contactName, language })\`: Godmode's voice assistant makes the call for ${human} — booking an appointment, asking a business something, following up with a lead — and this chat continues by itself with the transcript and the outcome once the call ended. The voice only knows what you put into \`goal\` and \`context\` (names, details it may give, dates it may accept, limits), so be complete. A call reaches another person on ${human}'s behalf: unless ${human} asked for exactly that call, get their OK first.${ctx.calls.owner ? ` For something urgent and important that can't wait until ${human} looks at the app, add \`call: true\` to \`ask_human\` (they answer on the phone) or to \`notify_user\` (they are told on the phone) — rarely, never for routine news.` : ""}`);
   }
 
   out.push(`### Messages while you work
@@ -757,7 +764,7 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
   }
 }
 
-const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent", heartbeat: "your heartbeat" };
+const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent", heartbeat: "your heartbeat", call: "a phone call that ended" };
 
 function startedBySentence(startedBy: RunTrigger, human: string): string {
   const who = STARTED_BY[startedBy];

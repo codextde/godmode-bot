@@ -166,6 +166,8 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
           at={block.at}
         />
       );
+    case "call":
+      return <Marker icon="call" text={`Call with ${block.contactName || block.number || "a caller"} ended`} detail={block.outcome || block.summary} at={block.at} />;
     case "command":
       return (
         <View style={[styles.command, { backgroundColor: c.sunken }]}>
@@ -232,8 +234,8 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
   }
 });
 
-/** Where the chat went on without the human: a follow-up the agent set, or a turn that was picked up again. */
-function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh"; text: string; detail?: string; at: string }) {
+/** Where the chat went on without the human: a follow-up the agent set, a turn that was picked up again, or a call that ended. */
+function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh" | "call"; text: string; detail?: string; at: string }) {
   const c = useColors();
   return (
     <View style={styles.marker}>

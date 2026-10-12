@@ -73,6 +73,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   messaging: [qk.messaging, qk.bootstrap],
   tasks: [qk.tasks, qk.goals, qk.heartbeats],
   goals: [qk.goals],
+  // A call was placed, rang, ended or got its summary.
+  calls: [qk.calls],
   // A phone was paired, removed, or connected.
   mobile: [qk.mobile],
   // An app was connected, removed, or called a tool.

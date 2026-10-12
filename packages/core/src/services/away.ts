@@ -8,7 +8,7 @@ import { badRequest } from "../util";
 
 /** Chats the human talks in, and turns started for them (the same as unread chats). */
 const HUMAN_ORIGINS = ["chat", "api"];
-const HUMAN_TRIGGERS = ["chat", "manual", "api", "followup"];
+const HUMAN_TRIGGERS = ["chat", "manual", "api", "followup", "call"];
 const MAX_HIGHLIGHTS = 6;
 /** Looked at for highlights, newest first: enough for six lines, however busy the team was. */
 const MAX_CANDIDATES = 300;

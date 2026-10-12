@@ -26,6 +26,7 @@ import {
   MonitorSmartphone,
   MonitorUp,
   Moon,
+  Phone,
   Plug,
   Plus,
   Puzzle,
@@ -73,6 +74,7 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux" },
   { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device" },
   { id: "voice", label: "Voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
+  { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound" },
   { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
   { id: "backup", label: "Backup", icon: DatabaseBackup, words: "restore export import" },
@@ -337,6 +339,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="messaging slack telegram microsoft teams bots" onSelect={() => go("/messaging")}>
             <MessageCircle /> Messaging
+          </CommandItem>
+          <CommandItem value="calls phone calls elevenlabs voice transcripts" onSelect={() => go("/calls")}>
+            <Phone /> Calls
           </CommandItem>
           <CommandItem onSelect={() => go("/browser")}>
             <Globe /> Browser

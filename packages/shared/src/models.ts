@@ -1,4 +1,5 @@
 import type { AgentHeartbeat } from "./heartbeat";
+import type { CallStatus } from "./calls";
 import type { AttentionCounts } from "./attention";
 import type { AgentCharacter } from "./character";
 import type { Task } from "./tasks";
@@ -464,7 +465,8 @@ export type QuestionKind = "question" | "approval";
 export type QuestionStatus = "open" | "answered" | "approved" | "declined" | "withdrawn";
 
 /** Where the answer was given: the desktop app or dashboard, the phone app, the task's message box, or a chat platform. */
-export type AnswerVia = "app" | "phone" | "task" | "slack" | "telegram" | "teams";
+/** `phone`: the phone app · `call`: said on a phone call Godmode placed to the owner. */
+export type AnswerVia = "app" | "phone" | "task" | "slack" | "telegram" | "teams" | "call";
 
 /** An answer the agent suggests. `id` is its position, "1" for the first. */
 export interface QuestionOption {
@@ -584,6 +586,8 @@ export type MessageBlock =
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
   | { type: "followup"; note: string; dueAt: ISODate; setAt: ISODate; reason: FollowupReason }
+  /** A phone call the agent placed ended and the chat continued with its result (see PhoneCall). */
+  | { type: "call"; callId: ID; number: string; contactName: string; status: CallStatus; summary: string; outcome: string; at: ISODate }
   /** Where the human closed a task the agent gave them (see HumanTask) and the chat continued with it. */
   | { type: "human_task"; id: ID; number: number; title: string; outcome: "done" | "declined"; note: string; at: ISODate; kind?: "task" | "decision" | "approval" }
   /**
@@ -706,7 +710,7 @@ export type RunStatus = "queued" | "running" | "paused" | "succeeded" | "failed"
  * `dream`: the agent consolidated its memory in the background · `followup`: the agent continued a chat at the time it set ·
  * `task`: the agent worked on a board task.
  */
-export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task" | "heartbeat";
+export type RunTrigger = "chat" | "routine" | "check" | "dream" | "delegation" | "manual" | "api" | "followup" | "task" | "heartbeat" | "call";
 
 export interface RunUsage {
   inputTokens: number;
@@ -1398,6 +1402,37 @@ export interface AndroidSettings {
   adbPath: string;
 }
 
+/** Phone calls (see calls.ts). The voice runs on ElevenLabs Agents; the number is imported there (Twilio or SIP). */
+export interface PhoneSettings {
+  /** Agents may place calls and Godmode watches for incoming ones. */
+  enabled: boolean;
+  /** The ElevenLabs phone number calls go out from ("" = the first one in the account). */
+  numberId: string;
+  /** The owner's own phone (E.164): agents call it for urgent questions and news. "" = never. */
+  ownerNumber: string;
+  /** Agents may call the owner for urgent questions (`ask_human` with `call`) and news (`notify_user` with `call`). */
+  callOwner: boolean;
+  /** No calls to the owner from `quietFrom` to `quietTo` (HH:MM, local time); the question waits in the app. "" = none. */
+  quietFrom: string;
+  quietTo: string;
+  /** ElevenLabs voice ("" = ElevenLabs' default). */
+  voiceId: string;
+  /** Model that talks on the call (an ElevenLabs LLM id). */
+  llm: string;
+  /** Language a call starts in when the agent doesn't name one (ISO 639-1). */
+  language: string;
+  /** Longest call, in minutes. */
+  maxMinutes: number;
+  /** Godmode's voice answers calls to the number. */
+  answerInbound: boolean;
+  /** The agent that gets each incoming call afterwards (transcript, caller, request) to follow up. "" = default agent. */
+  inboundAgentId: string;
+  /** What the voice says when it picks up. */
+  inboundGreeting: string;
+  /** Who answers and how: the business, what to ask callers, what to promise. */
+  inboundInstructions: string;
+}
+
 /** The phone app: phones reach Godmode over Tailscale (see mobile.ts). */
 export interface MobileSettings {
   /** Paired phones may connect. */
@@ -1421,6 +1456,7 @@ export interface Settings {
   maintenance: MaintenanceSettings;
   selfRepair: SelfRepairSettings;
   mobile: MobileSettings;
+  phone: PhoneSettings;
   /** Godmode Cloud (see cloud.ts). The link secret is never part of the settings. */
   cloud: CloudSettings;
   onboardingComplete: boolean;

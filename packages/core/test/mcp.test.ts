@@ -1122,6 +1122,8 @@ describe("settings tools", () => {
         "voice.elevenlabsVoiceId",
         "voice.browserVoice",
         "voice.rate",
+        "phone.language",
+        "phone.voiceId",
         "memory.autoCommit",
         "memory.reflectAfterRun",
         "memory.injectMemory",

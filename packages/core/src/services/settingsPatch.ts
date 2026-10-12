@@ -1,5 +1,5 @@
 import type { Effort } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isModelId, isValidBranch, modelProvider, parseGitUrl } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { get } from "../db";
 import { badRequest } from "../util";
@@ -129,6 +129,7 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       throw badRequest("The phone port must be a whole number between 1024 and 65535");
     }
   }
+  checkPhonePatch(patch.phone);
   const cloud = patch.cloud as Record<string, unknown> | undefined;
   if (cloud !== undefined) {
     if (typeof cloud !== "object" || cloud === null || Array.isArray(cloud)) throw badRequest("Invalid cloud settings");
@@ -137,4 +138,35 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       if (typeof value !== "boolean") throw badRequest(`cloud.${key} must be true or false`);
     }
   }
+}
+
+function checkPhonePatch(value: unknown): void {
+  if (value === undefined) return;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw badRequest("Invalid phone call settings");
+  const phone = value as Record<string, unknown>;
+  for (const key of ["enabled", "callOwner", "answerInbound"] as const) {
+    if (phone[key] !== undefined && typeof phone[key] !== "boolean") throw badRequest(`phone.${key} must be true or false`);
+  }
+  const text = (key: string, max: number) => {
+    const v = phone[key];
+    if (v !== undefined && (typeof v !== "string" || v.length > max)) throw badRequest(`phone.${key} must be text of at most ${max} characters`);
+  };
+  for (const key of ["numberId", "voiceId", "llm", "inboundAgentId"]) text(key, 200);
+  text("inboundGreeting", 500);
+  text("inboundInstructions", 6000);
+  if (typeof phone.ownerNumber === "string" && phone.ownerNumber.trim()) {
+    const number = toE164(phone.ownerNumber);
+    if (!number) throw badRequest("Enter your phone number with the country code, e.g. +49 151 12345678");
+    phone.ownerNumber = number;
+  } else if (phone.ownerNumber !== undefined && phone.ownerNumber !== "") throw badRequest("Invalid phone number");
+  for (const key of ["quietFrom", "quietTo"]) {
+    const v = phone[key];
+    if (v !== undefined && (typeof v !== "string" || (v !== "" && !isClockTime(v)))) throw badRequest("Quiet hours are times like 22:00");
+  }
+  const lang = phone.language;
+  if (lang !== undefined && (typeof lang !== "string" || !/^[a-z]{2,3}$/.test(lang))) throw badRequest("phone.language must be a language code like en or de");
+  const max = phone.maxMinutes;
+  if (max !== undefined && !(typeof max === "number" && Number.isInteger(max) && max >= 1 && max <= 60)) throw badRequest("The longest call must be 1 to 60 minutes");
+  const agentId = phone.inboundAgentId;
+  if (typeof agentId === "string" && agentId && !get("SELECT 1 FROM agents WHERE id = ?", agentId)) throw badRequest("Pick an agent that exists");
 }

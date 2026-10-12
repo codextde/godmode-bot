@@ -33,14 +33,14 @@ const MAX_AGE_MS = 24 * 3_600_000;
 const FIRST_LOOK_BACK_MS = 15 * 60_000;
 /** Continued by itself this often in a row (a turn that restarts Godmode itself), it is left alone. */
 const MAX_IN_A_ROW = 3;
-const RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "delegation", "routine"]);
+const RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "delegation", "routine"]);
 const PLATFORMS = new Set(["slack", "telegram", "teams"]);
 /**
  * Claude Code's answer when Claude's API couldn't be reached at all, after its own retries. Handed-over work isn't in
  * the list: the run that handed it over got the failure and decides.
  */
 const NO_CONNECTION = /^API Error: [^\n]*(Can't reach the API server|Unable to connect|Connection error|Request timed out|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ECONNRESET|ETIMEDOUT)/i;
-const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "routine"]);
+const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine"]);
 /** Broke off longer ago than this, the turn waits for someone to continue it. */
 const OFFLINE_MAX_AGE_MS = 12 * 3_600_000;
 const OFFLINE_CHECK_MS = 60_000;
