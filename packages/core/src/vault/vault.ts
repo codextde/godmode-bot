@@ -172,7 +172,10 @@ export async function setRememberDevice(remember: boolean) {
     // keychain of the person running them.
     if (process.env.GODMODE_KEYCHAIN !== "0") {
       try {
-        await Bun.secrets.set({ service: KEYCHAIN_SERVICE, name: keychainName(), value });
+        // Unanswered (a macOS prompt): the key lands in the keychain once it is answered; meanwhile nothing waits for it.
+        if ((await keychainWithin(Bun.secrets.set({ service: KEYCHAIN_SERVICE, name: keychainName(), value }))) === NO_ANSWER) {
+          log.warn("the keychain didn't store the vault key in time (macOS may be asking for permission on this computer's screen)");
+        }
         stored = true;
         setMeta("vault.remember_method", "keychain");
       } catch (err) {
@@ -203,10 +206,17 @@ export async function setRememberDevice(remember: boolean) {
 }
 
 /**
- * How long startup waits for the keychain. A program signed differently than the one that stored the key (a release
+ * How long Godmode waits for the keychain. A program signed differently than the one that stored the key (a release
  * after a self-built one) makes macOS ask first, and on a runner nobody may be there to answer.
  */
 const KEYCHAIN_WAIT_MS = 10_000;
+const NO_ANSWER = Symbol("no answer");
+
+function keychainWithin<T>(call: Promise<T>, ms = KEYCHAIN_WAIT_MS): Promise<T | typeof NO_ANSWER> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const wait = new Promise<typeof NO_ANSWER>((resolve) => (timer = setTimeout(resolve, ms, NO_ANSWER)));
+  return Promise.race([call, wait]).finally(() => clearTimeout(timer));
+}
 
 /** Try to unlock from the OS keychain at startup. A keychain that answers later still unlocks the vault then. */
 export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boolean> {
@@ -217,19 +227,19 @@ export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boo
       if (existsSync(keyFilePath())) value = readFileSync(keyFilePath(), "utf8").trim();
     } else {
       const read = Bun.secrets.get({ service: KEYCHAIN_SERVICE, name: keychainName() });
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const late = Symbol("late");
-      const first = await Promise.race([read, new Promise<typeof late>((resolve) => (timer = setTimeout(resolve, opts.waitMs ?? KEYCHAIN_WAIT_MS, late)))]).finally(() => clearTimeout(timer));
-      if (first === late) {
+      const answer = await keychainWithin(read, opts.waitMs);
+      if (answer === NO_ANSWER) {
         log.warn("the keychain didn't hand out the vault key in time (macOS may be asking for permission on this computer's screen); the vault unlocks once it does");
+        const epoch = secretsForgotten;
+        // Only into the vault as it was: not after it was unlocked and locked again, not without a canary to check against.
         void read
-          .then((v) => {
-            if (v && !dek && getMeta("vault.remember_device") === "1") useRememberedKey(v);
+          .then((late) => {
+            if (late && !dek && epoch === secretsForgotten && getMeta("vault.remember_device") === "1" && getMeta("vault.canary")) useRememberedKey(late);
           })
           .catch((err) => log.warn("auto-unlock failed", err));
         return false;
       }
-      value = first;
+      value = answer;
     }
   } catch (err) {
     log.warn("auto-unlock failed", err);
@@ -239,6 +249,10 @@ export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boo
 
 function useRememberedKey(value: string): boolean {
   const candidate = Buffer.from(value, "base64");
+  if (candidate.length !== 32) {
+    log.warn("remembered vault key is invalid");
+    return false;
+  }
   // Verify the key by decrypting a canary.
   const canary = getMeta("vault.canary");
   if (canary) {

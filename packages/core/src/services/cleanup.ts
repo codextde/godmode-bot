@@ -694,7 +694,9 @@ function database(scan: Scan): Category {
           db.run("PRAGMA auto_vacuum = INCREMENTAL");
           db.run("VACUUM");
         }
-        // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file.
+        // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file. It waits for
+        // every reader, so not while the integrity check reads on its own connection.
+        await checking?.catch(() => undefined);
         db.run("PRAGMA wal_checkpoint(TRUNCATE)");
         db.run("PRAGMA optimize");
         return Math.max(0, before - size());
@@ -855,6 +857,10 @@ export function quickCheck(path: string): Promise<string[]> {
       done();
       reject(new Error(event.message));
     };
+    worker.addEventListener("close", () => {
+      done();
+      reject(new Error("The check stopped."));
+    });
     worker.postMessage(path);
   });
 }

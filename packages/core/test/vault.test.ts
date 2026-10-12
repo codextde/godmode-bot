@@ -252,8 +252,20 @@ describe("vault lifecycle", () => {
       expect(vault.isUnlocked()).toBe(true);
       expect(vault.open(sealed, "credentials.password:cred_a")).toBe("my-password");
 
-      get.mockResolvedValue(stored);
+      // A late answer doesn't unlock a vault that was unlocked and locked again meanwhile, nor with a wrong key.
       vault.lock();
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(false);
+      await vault.unlock("new passphrase 42");
+      vault.lock();
+      answer(stored);
+      await Bun.sleep(0);
+      expect(vault.isUnlocked()).toBe(false);
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(false);
+      answer(randomKey().toString("base64"));
+      await Bun.sleep(0);
+      expect(vault.isUnlocked()).toBe(false);
+
+      get.mockResolvedValue(stored);
       expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(true);
     } finally {
       await vault.setRememberDevice(false);
