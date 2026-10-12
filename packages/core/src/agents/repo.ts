@@ -153,6 +153,22 @@ export async function untrackInLock(dir: string, prefix: string): Promise<number
   return tracked.length;
 }
 
+/** Stop tracking every folder called `name`, at any depth (e.g. node_modules). Call within withRepoLock(dir, …). */
+export async function untrackFoldersNamedInLock(dir: string, name: string): Promise<number> {
+  if (!fs.existsSync(join(dir, ".git"))) return 0;
+  const folders = new Set<string>();
+  let count = 0;
+  for (const file of await git.listFiles({ fs, dir })) {
+    const parts = file.split("/");
+    const at = parts.indexOf(name);
+    if (at < 0 || at === parts.length - 1) continue;
+    folders.add(parts.slice(0, at + 1).join("/"));
+    count++;
+  }
+  for (const filepath of folders) await git.remove({ fs, dir, filepath });
+  return count;
+}
+
 type StatusRow = [string, number, number, number];
 
 /**

@@ -425,7 +425,7 @@ describe("gitignore", () => {
 
   test("older repositories get the rules and stop tracking committed uploads and run logs", async () => {
     const agent = await createAgent({ name: "Legacy" });
-    writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nnode_modules/");
+    writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nbuild/");
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
     mkdirSync(join(agent.repoPath, "runs", "2026-09-01"), { recursive: true });
@@ -434,17 +434,25 @@ describe("gitignore", () => {
     writeFileSync(join(agent.repoPath, ".omc", "state", "sessions", "s1.json"), "{}");
     mkdirSync(join(agent.repoPath, ".omc", "skills"), { recursive: true });
     writeFileSync(join(agent.repoPath, ".omc", "skills", "deploy.md"), "# Deploy");
+    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib"]) {
+      mkdirSync(join(agent.repoPath, pkg), { recursive: true });
+      writeFileSync(join(agent.repoPath, pkg, "index.js"), "1");
+    }
+    writeFileSync(join(agent.repoPath, "workspace", "check", "node_modules.md"), "# Notes");
     await repo.commitAll(agent.repoPath, "Legacy state");
     expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
     expect(await headFiles(agent.repoPath)).toContain("runs/2026-09-01/run_legacy.jsonl");
+    expect(await headFiles(agent.repoPath)).toContain("workspace/check/node_modules/left-pad/index.js");
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\n");
+    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
     expect(files.filter((f) => f.startsWith(".omc/"))).toEqual([".omc/skills/deploy.md"]);
+    expect(files.filter((f) => f.startsWith("workspace/check/") || f.startsWith("workspace/tool/"))).toEqual(["workspace/check/node_modules.md"]);
+    expect(readFileSync(join(agent.repoPath, "workspace/check/node_modules/left-pad/index.js"), "utf8")).toBe("1");
     expect(files).toContain(".gitignore");
     expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
     expect(readFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "utf8")).toBe("{}\n");

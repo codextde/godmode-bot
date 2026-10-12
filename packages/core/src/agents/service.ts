@@ -60,6 +60,7 @@ import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignment
 import {
   AGENT_GITIGNORE,
   AGENT_REPO_DIRS,
+  INSTALLED_FOLDERS,
   missingGitignoreRules,
   renderAgentState,
   renderClaudeMd,
@@ -462,6 +463,7 @@ async function syncGitignore(dir: string): Promise<void> {
   if (missing.includes("workspace/uploads/")) await repo.untrackInLock(dir, "workspace/uploads");
   if (missing.includes("/runs/")) await repo.untrackInLock(dir, "runs");
   if (missing.includes(".omc/state/")) await repo.untrackInLock(dir, ".omc/state");
+  for (const name of INSTALLED_FOLDERS) if (missing.includes(`${name}/`)) await repo.untrackFoldersNamedInLock(dir, name);
 }
 
 function gitignoreComplete(dir: string): boolean {
