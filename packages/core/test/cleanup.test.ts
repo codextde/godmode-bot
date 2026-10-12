@@ -13,7 +13,7 @@ import { closeDb, getDb, insert, openDb, run as sql, setDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
-import { __setTempDirForTests, lastCleanup, runCleanup, scanCleanup } from "../src/services/cleanup";
+import { __setTempDirForTests, lastCleanup, quickCheck, runCleanup, scanCleanup } from "../src/services/cleanup";
 import { __resetMaintenanceForTests, runMaintenance, stopMaintenance } from "../src/services/maintenance";
 import { createConversation } from "../src/services/conversations";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
@@ -467,6 +467,17 @@ suite("the database", () => {
     expect((db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count).toBe(0);
     expect(item(await scanCleanup(), "database").count).toBe(0);
     expect((await scanCleanup({ fresh: true })).checks.find((c) => c.id === "database")).toMatchObject({ status: "ok" });
+  });
+
+  test("the integrity check runs on its own connection in a worker", async () => {
+    expect(await quickCheck(config().dbPath)).toEqual(["ok"]);
+    const broken = join(tempDir, "broken.db");
+    writeFileSync(broken, randomBytes(8192));
+    try {
+      await expect(quickCheck(broken)).rejects.toThrow(/not a database/);
+    } finally {
+      rmSync(broken, { force: true });
+    }
   });
 
   test("a database without incremental vacuum switches once, then gives pages back in steps", async () => {

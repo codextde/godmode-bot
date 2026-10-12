@@ -694,7 +694,9 @@ function database(scan: Scan): Category {
           db.run("PRAGMA auto_vacuum = INCREMENTAL");
           db.run("VACUUM");
         }
-        // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file.
+        // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file. It waits for
+        // every reader, so not while the integrity check reads on its own connection.
+        await checking?.catch(() => undefined);
         db.run("PRAGMA wal_checkpoint(TRUNCATE)");
         db.run("PRAGMA optimize");
         return Math.max(0, before - size());
@@ -818,16 +820,61 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
 /* Self check                                                           */
 /* ------------------------------------------------------------------ */
 
-/** `quick_check` reads the whole database while everything else waits, so its answer is kept for an hour. */
+/** `quick_check` reads the whole database (seconds for a few GB), so its answer is kept for an hour. */
 let integrity: { at: number; problems: string[] } | null = null;
+let checking: Promise<unknown> | null = null;
 
-function databaseCheck(fresh: boolean): HealthCheck {
+const QUICK_CHECK_WORKER = `import { Database } from "bun:sqlite";
+self.onmessage = (event) => {
+  try {
+    const db = new Database(event.data, { readonly: true });
+    try {
+      postMessage({ rows: db.query("PRAGMA quick_check").values().map((row) => String(row[0])) });
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    postMessage({ error: err instanceof Error ? err.message : String(err) });
+  }
+};`;
+
+/** On its own connection in a worker: on the main thread the read blocked everything else for 1 to 4 s. */
+export function quickCheck(path: string): Promise<string[]> {
+  if (path === ":memory:") return Promise.resolve((getDb().query("PRAGMA quick_check").values() as unknown[][]).map((row) => String(row[0])));
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(new Blob([QUICK_CHECK_WORKER], { type: "application/javascript" }));
+    const worker = new Worker(url);
+    const done = () => {
+      worker.terminate();
+      URL.revokeObjectURL(url);
+    };
+    worker.onmessage = (event: MessageEvent<{ rows?: string[]; error?: string }>) => {
+      done();
+      if (event.data.rows) resolve(event.data.rows);
+      else reject(new Error(event.data.error ?? "The check stopped."));
+    };
+    worker.onerror = (event) => {
+      done();
+      reject(new Error(event.message));
+    };
+    worker.addEventListener("close", () => {
+      done();
+      reject(new Error("The check stopped."));
+    });
+    worker.postMessage(path);
+  });
+}
+
+async function databaseCheck(fresh: boolean): Promise<HealthCheck> {
   const base = { id: "database", name: "Database" } as const;
   try {
     if (fresh || !integrity || Date.now() - integrity.at > HOUR) {
-      const rows = getDb().query("PRAGMA quick_check").all() as Record<string, string>[];
-      integrity = { at: Date.now(), problems: rows.map((r) => String(Object.values(r)[0])).filter((p) => p !== "ok") };
+      checking ??= quickCheck(config().dbPath)
+        .then((rows) => (integrity = { at: Date.now(), problems: rows.filter((p) => p !== "ok") }))
+        .finally(() => (checking = null));
+      await checking;
     }
+    if (!integrity) throw new Error("The check stopped.");
     if (!integrity.problems.length) return { ...base, status: "ok", detail: `Intact · ${formatBytes(fileSize(config().dbPath))}` };
     return { ...base, status: "error", detail: `Damaged (${integrity.problems[0]}). Restore a backup from Settings → Backup.` };
   } catch (err) {
@@ -924,13 +971,13 @@ async function report(fresh: boolean): Promise<CleanupReport> {
         }),
     ),
   );
-  const [usage, found, worktrees] = await Promise.all([storage(look), categories, worktreeCheck()]);
+  const [usage, found, worktrees, database] = await Promise.all([storage(look), categories, worktreeCheck(), databaseCheck(fresh)]);
   return {
     checkedAt: now(),
     dataDir: config().dataDir,
     disk,
     storage: usage,
-    checks: [databaseCheck(fresh), diskCheck(disk), worktrees],
+    checks: [database, diskCheck(disk), worktrees],
     items: found.filter((c): c is Category => !!c).map(toItem),
     lastRun: lastCleanup(),
   };

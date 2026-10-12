@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -227,4 +227,53 @@ describe("vault lifecycle", () => {
     vault.lock();
     expect(vault.withoutSecrets(text)).toBe(text);
   });
+
+  test("startup doesn't wait for a keychain that asks first; the vault unlocks once it answers", async () => {
+    const env = process.env.GODMODE_KEYCHAIN;
+    delete process.env.GODMODE_KEYCHAIN;
+    let stored = "";
+    let answer: (value: string) => void = () => {};
+    const set = spyOn(Bun.secrets, "set").mockImplementation(async (opts: { value: string }) => void (stored = opts.value));
+    const get = spyOn(Bun.secrets, "get").mockImplementation(() => new Promise<string>((resolve) => (answer = resolve)));
+    const del = spyOn(Bun.secrets, "delete").mockResolvedValue(true);
+    try {
+      await vault.unlock("new passphrase 42");
+      await vault.setRememberDevice(true);
+      expect(stored).not.toBe("");
+      vault.lock();
+
+      const started = Date.now();
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(false);
+      expect(Date.now() - started).toBeLessThan(2000);
+      expect(vault.isUnlocked()).toBe(false);
+
+      answer(stored);
+      await Bun.sleep(0);
+      expect(vault.isUnlocked()).toBe(true);
+      expect(vault.open(sealed, "credentials.password:cred_a")).toBe("my-password");
+
+      // A late answer doesn't unlock a vault that was unlocked and locked again meanwhile, nor with a wrong key.
+      vault.lock();
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(false);
+      await vault.unlock("new passphrase 42");
+      vault.lock();
+      answer(stored);
+      await Bun.sleep(0);
+      expect(vault.isUnlocked()).toBe(false);
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(false);
+      answer(randomKey().toString("base64"));
+      await Bun.sleep(0);
+      expect(vault.isUnlocked()).toBe(false);
+
+      get.mockResolvedValue(stored);
+      expect(await vault.tryAutoUnlock({ waitMs: 50 })).toBe(true);
+    } finally {
+      await vault.setRememberDevice(false);
+      vault.lock();
+      set.mockRestore();
+      get.mockRestore();
+      del.mockRestore();
+      if (env !== undefined) process.env.GODMODE_KEYCHAIN = env;
+    }
+  }, SLOW);
 });
