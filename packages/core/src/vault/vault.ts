@@ -202,20 +202,42 @@ export async function setRememberDevice(remember: boolean) {
   emitStatus();
 }
 
-/** Try to unlock from the OS keychain at startup. */
-export async function tryAutoUnlock(): Promise<boolean> {
+/**
+ * How long startup waits for the keychain. A program signed differently than the one that stored the key (a release
+ * after a self-built one) makes macOS ask first, and on a runner nobody may be there to answer.
+ */
+const KEYCHAIN_WAIT_MS = 10_000;
+
+/** Try to unlock from the OS keychain at startup. A keychain that answers later still unlocks the vault then. */
+export async function tryAutoUnlock(opts: { waitMs?: number } = {}): Promise<boolean> {
   if (!isInitialized() || getMeta("vault.remember_device") !== "1") return false;
   let value: string | null = null;
   try {
     if (getMeta("vault.remember_method") === "file") {
       if (existsSync(keyFilePath())) value = readFileSync(keyFilePath(), "utf8").trim();
     } else {
-      value = await Bun.secrets.get({ service: KEYCHAIN_SERVICE, name: keychainName() });
+      const read = Bun.secrets.get({ service: KEYCHAIN_SERVICE, name: keychainName() });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const late = Symbol("late");
+      const first = await Promise.race([read, new Promise<typeof late>((resolve) => (timer = setTimeout(resolve, opts.waitMs ?? KEYCHAIN_WAIT_MS, late)))]).finally(() => clearTimeout(timer));
+      if (first === late) {
+        log.warn("the keychain didn't hand out the vault key in time (macOS may be asking for permission on this computer's screen); the vault unlocks once it does");
+        void read
+          .then((v) => {
+            if (v && !dek && getMeta("vault.remember_device") === "1") useRememberedKey(v);
+          })
+          .catch((err) => log.warn("auto-unlock failed", err));
+        return false;
+      }
+      value = first;
     }
   } catch (err) {
     log.warn("auto-unlock failed", err);
   }
-  if (!value) return false;
+  return value ? useRememberedKey(value) : false;
+}
+
+function useRememberedKey(value: string): boolean {
   const candidate = Buffer.from(value, "base64");
   // Verify the key by decrypting a canary.
   const canary = getMeta("vault.canary");
