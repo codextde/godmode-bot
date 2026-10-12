@@ -12,6 +12,7 @@ import { listRuns, waitForRun } from "../src/runner/runner";
 import { updateSettings } from "../src/services/settings";
 import { checkSettingsPatch } from "../src/services/settingsPatch";
 import * as vault from "../src/vault/vault";
+import { parseConversation } from "../src/calls/elevenlabs";
 import { __lookForInboundForTests, getCall, inQuietHours, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 
 let env: TestEnv;
@@ -144,6 +145,37 @@ describe("settings", () => {
     expect(ownerCallRefusal()).toMatch(/switched calls to them off/);
     updateSettings({ phone: { callOwner: true, ownerNumber: "" } });
     expect(ownerCallRefusal()).toMatch(/phone number/);
+  });
+});
+
+describe("reading a real call back", () => {
+  test("an ElevenLabs answer from a real call (trimmed) is read right", () => {
+    const c = parseConversation({
+      conversation_id: "conv_8001m4rwewzheyw9he8nmyd13r8f",
+      status: "done",
+      has_audio: true,
+      transcript: [
+        { role: "agent", message: "Hi Daniel, hier ist Godmode. Das ist mein erster echter...", time_in_call_secs: 0 },
+        { role: "user", message: "Sehe ich nach, ob diese Person verfügbar ist.", time_in_call_secs: 4 },
+        { role: "user", message: "Ja, die deutsche Nummer isch besser denn die.", time_in_call_secs: 50 },
+        { role: "agent", message: null, time_in_call_secs: 55 },
+      ],
+      metadata: {
+        start_time_unix_secs: 1791836519,
+        call_duration_secs: 61,
+        cost_fiat: 0.16877375757287988,
+        termination_reason: "end_call tool was called.",
+        phone_call: { direction: "outbound", external_number: "+4915161018772", call_result: "answered" },
+      },
+      analysis: {
+        call_successful: "success",
+        transcript_summary: "Daniel agreed, preferring the German number.",
+        data_collection_results: { answer: { value: "Ja, die deutsche Nummer isch besser denn die." }, callback_number: { value: null } },
+      },
+    });
+    expect(c).toMatchObject({ status: "done", direction: "outbound", callResult: "answered", durationSecs: 61, successful: true, hasAudio: true, externalNumber: "+4915161018772" });
+    expect(c.transcript).toHaveLength(3);
+    expect(c.data).toEqual({ answer: "Ja, die deutsche Nummer isch besser denn die." });
   });
 });
 
