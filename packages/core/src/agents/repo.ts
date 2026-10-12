@@ -93,9 +93,31 @@ export function commitAll(dir: string, message: string): Promise<string | null> 
   return withRepoLock(dir, () => commitAllInLock(dir, message));
 }
 
+/** A file listed a moment ago was gone when git read it (a lock or temp file another process just removed). */
+function isVanishedFileError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === "MultipleGitError") {
+    const errors = (err as Error & { errors?: unknown[] }).errors ?? [];
+    return errors.length > 0 && errors.every(isVanishedFileError);
+  }
+  if (err.name === "NotFoundError" || (err as NodeJS.ErrnoException).code === "ENOENT" || err.message.startsWith("ENOENT:")) return true;
+  // Gone between its stat and its read: isomorphic-git's walker gets null content and reads its length.
+  return err instanceof TypeError && /\bcontent\.length\b|reading 'length'/.test(err.message);
+}
+
 /** Same as commitAll, for callers that already hold the lock via withRepoLock(dir, …). */
 export async function commitAllInLock(dir: string, message: string): Promise<string | null> {
   await ensureGit(dir);
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await stageAndCommit(dir, message);
+    } catch (err) {
+      if (attempt >= 3 || !isVanishedFileError(err)) throw err;
+    }
+  }
+}
+
+async function stageAndCommit(dir: string, message: string): Promise<string | null> {
   const cache = {};
   const indexSecond = await stat(join(dir, ".git", "index")).then(
     (s) => Math.floor(s.mtimeMs / 1000),
@@ -129,8 +151,24 @@ export async function untrackInLock(dir: string, prefix: string): Promise<number
   if (!fs.existsSync(join(dir, ".git"))) return 0;
   const base = prefix.replace(/\/+$/, "");
   const tracked = (await git.listFiles({ fs, dir })).filter((f) => f === base || f.startsWith(`${base}/`));
-  for (const filepath of tracked) await git.remove({ fs, dir, filepath });
+  if (tracked.length) await git.remove({ fs, dir, filepath: base });
   return tracked.length;
+}
+
+/** Stop tracking every folder called `name`, at any depth (e.g. node_modules). Call within withRepoLock(dir, …). */
+export async function untrackFoldersNamedInLock(dir: string, name: string): Promise<number> {
+  if (!fs.existsSync(join(dir, ".git"))) return 0;
+  const folders = new Set<string>();
+  let count = 0;
+  for (const file of await git.listFiles({ fs, dir })) {
+    const parts = file.split("/");
+    const at = parts.indexOf(name);
+    if (at < 0 || at === parts.length - 1) continue;
+    folders.add(parts.slice(0, at + 1).join("/"));
+    count++;
+  }
+  for (const filepath of folders) await git.remove({ fs, dir, filepath });
+  return count;
 }
 
 type StatusRow = [string, number, number, number];

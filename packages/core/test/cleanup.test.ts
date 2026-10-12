@@ -7,8 +7,9 @@ import type { Agent, CleanupItem, CleanupReport, CleanupRun } from "@godmode/sha
 import { commitAll, log as gitLog } from "../src/agents/repo";
 import { createAgent } from "../src/agents/service";
 import { ensureDefaultProfile } from "../src/browser/manager";
+import { Database } from "bun:sqlite";
 import { config, loadConfig } from "../src/config";
-import { closeDb, getDb, insert, openDb, run as sql } from "../src/db";
+import { closeDb, getDb, insert, openDb, run as sql, setDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
@@ -466,6 +467,44 @@ suite("the database", () => {
     expect((db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count).toBe(0);
     expect(item(await scanCleanup(), "database").count).toBe(0);
     expect((await scanCleanup({ fresh: true })).checks.find((c) => c.id === "database")).toMatchObject({ status: "ok" });
+  });
+
+  test("a database without incremental vacuum switches once, then gives pages back in steps", async () => {
+    const db = getDb();
+    const autoVacuum = () => (db.query("PRAGMA auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum;
+    const freelist = () => (db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count;
+    expect(autoVacuum()).toBe(2);
+    db.run("PRAGMA auto_vacuum = NONE");
+    db.run("VACUUM");
+    expect(autoVacuum()).toBe(0);
+
+    bloat();
+    expect((await runCleanup(["database"])).results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(autoVacuum()).toBe(2);
+    expect(freelist()).toBe(0);
+
+    bloat();
+    expect(freelist()).toBeGreaterThan(512);
+    const result = await runCleanup(["database"]);
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(result.freedBytes).toBeGreaterThanOrEqual(3 * 1024 * 1024);
+    expect(freelist()).toBe(0);
+  });
+
+  test("opening the database next to a writer waits for its lock", () => {
+    const writer = new Database(config().dbPath);
+    writer.run("PRAGMA busy_timeout = 5000");
+    writer.run("BEGIN IMMEDIATE");
+    writer.run("CREATE TABLE IF NOT EXISTS held (x INTEGER)");
+    const main = getDb();
+    try {
+      const other = openDb(config().dbPath);
+      other.close();
+    } finally {
+      writer.run("ROLLBACK");
+      writer.close();
+      setDb(main);
+    }
   });
 
   test("waits for runs another Godmode process is working on", async () => {

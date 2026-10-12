@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -425,21 +425,34 @@ describe("gitignore", () => {
 
   test("older repositories get the rules and stop tracking committed uploads and run logs", async () => {
     const agent = await createAgent({ name: "Legacy" });
-    writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nnode_modules/");
+    writeFileSync(join(agent.repoPath, ".gitignore"), "# Managed by Godmode Bot\nworkspace/tmp/\n*.tmp\n.claude-mem/\nbuild/");
     mkdirSync(join(agent.repoPath, "workspace", "uploads"), { recursive: true });
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
     mkdirSync(join(agent.repoPath, "runs", "2026-09-01"), { recursive: true });
     writeFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "{}\n");
+    mkdirSync(join(agent.repoPath, ".omc", "state", "sessions"), { recursive: true });
+    writeFileSync(join(agent.repoPath, ".omc", "state", "sessions", "s1.json"), "{}");
+    mkdirSync(join(agent.repoPath, ".omc", "skills"), { recursive: true });
+    writeFileSync(join(agent.repoPath, ".omc", "skills", "deploy.md"), "# Deploy");
+    for (const pkg of ["workspace/check/node_modules/left-pad", "workspace/check/node_modules/.bin", "workspace/tool/.venv/lib"]) {
+      mkdirSync(join(agent.repoPath, pkg), { recursive: true });
+      writeFileSync(join(agent.repoPath, pkg, "index.js"), "1");
+    }
+    writeFileSync(join(agent.repoPath, "workspace", "check", "node_modules.md"), "# Notes");
     await repo.commitAll(agent.repoPath, "Legacy state");
     expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
     expect(await headFiles(agent.repoPath)).toContain("runs/2026-09-01/run_legacy.jsonl");
+    expect(await headFiles(agent.repoPath)).toContain("workspace/check/node_modules/left-pad/index.js");
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.DS_Store\n");
+    expect(gitignore).toContain("build/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\nnode_modules/\n.venv/\n__pycache__/\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
+    expect(files.filter((f) => f.startsWith(".omc/"))).toEqual([".omc/skills/deploy.md"]);
+    expect(files.filter((f) => f.startsWith("workspace/check/") || f.startsWith("workspace/tool/"))).toEqual(["workspace/check/node_modules.md"]);
+    expect(readFileSync(join(agent.repoPath, "workspace/check/node_modules/left-pad/index.js"), "utf8")).toBe("1");
     expect(files).toContain(".gitignore");
     expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
     expect(readFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "utf8")).toBe("{}\n");
@@ -507,6 +520,61 @@ describe("git helpers", () => {
       expect(new TextDecoder().decode(blob)).toBe(content);
     }
     expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
+  test("commitAll retries when a file vanishes while it reads the tree", async () => {
+    const dir = join(dataDir, "vanish-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "notes.md"), "1");
+    mkdirSync(join(dir, "state"), { recursive: true });
+    writeFileSync(join(dir, "state", "job.json.lock"), "");
+    const fs = await import("node:fs");
+    const original = fs.promises.lstat;
+    let vanished = 0;
+    const spy = spyOn(fs.promises, "lstat").mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (String(path).endsWith("job.json.lock") && existsSync(String(path))) {
+        rmSync(String(path));
+        vanished++;
+      }
+      return (original as (...args: unknown[]) => Promise<unknown>).call(fs.promises, path, ...rest);
+    }) as typeof fs.promises.lstat);
+    try {
+      expect(await repo.commitAll(dir, "with lock")).toMatch(/^[0-9a-f]{40}$/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vanished).toBe(1);
+    const git = (await import("isomorphic-git")).default;
+    expect(await git.listFiles({ fs, dir, ref: "HEAD" })).toEqual(["notes.md"]);
+    expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
+  test("commitAll retries when an untracked file vanishes between its stat and its read", async () => {
+    const dir = join(dataDir, "vanish-read-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "notes.md"), "1");
+    mkdirSync(join(dir, "state"), { recursive: true });
+    writeFileSync(join(dir, "state", "b.lock"), "held");
+    expect(await repo.commitAll(dir, "with lock")).not.toBeNull();
+    await repo.withRepoLock(dir, () => repo.untrackInLock(dir, "state"));
+    const fs = await import("node:fs");
+    const original = fs.promises.readFile;
+    let vanished = 0;
+    const spy = spyOn(fs.promises, "readFile").mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (String(path).endsWith("b.lock") && existsSync(String(path))) {
+        rmSync(String(path));
+        vanished++;
+      }
+      return (original as (...args: unknown[]) => Promise<unknown>).call(fs.promises, path, ...rest);
+    }) as typeof fs.promises.readFile);
+    try {
+      expect(await repo.commitAll(dir, "untrack")).not.toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vanished).toBe(1);
+    const git = (await import("isomorphic-git")).default;
+    expect(await git.listFiles({ fs, dir, ref: "HEAD" })).toEqual(["notes.md"]);
   });
 
   test("operations on the same repository are serialized", async () => {

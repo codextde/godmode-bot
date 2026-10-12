@@ -666,6 +666,9 @@ function pragma(name: string): number {
 }
 
 const freePages = () => pragma("freelist_count") * pragma("page_size");
+const INCREMENTAL = 2;
+/** Pages given back per step: a few milliseconds each, so nothing else waits for the whole database to be rewritten. */
+const VACUUM_STEP = 512;
 
 function database(scan: Scan): Category {
   const path = config().dbPath;
@@ -678,8 +681,20 @@ function database(scan: Scan): Category {
       clean: async () => {
         const before = size();
         const db = getDb();
-        // In WAL mode VACUUM writes the compacted pages to the WAL; only the checkpoint after it shrinks the file.
-        db.run("VACUUM");
+        if (pragma("auto_vacuum") === INCREMENTAL) {
+          for (let left = pragma("freelist_count"); left > 0; ) {
+            db.run(`PRAGMA incremental_vacuum(${VACUUM_STEP})`);
+            const after = pragma("freelist_count");
+            if (after >= left) break;
+            left = after;
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        } else {
+          // Once: a full VACUUM blocks for seconds on a large database, so it switches to giving pages back in steps.
+          db.run("PRAGMA auto_vacuum = INCREMENTAL");
+          db.run("VACUUM");
+        }
+        // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file.
         db.run("PRAGMA wal_checkpoint(TRUNCATE)");
         db.run("PRAGMA optimize");
         return Math.max(0, before - size());
