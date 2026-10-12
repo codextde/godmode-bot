@@ -9,6 +9,8 @@ import { getModelCatalog } from "../src/runner/models";
 import { waitForRun } from "../src/runner/runner";
 import { chatFillOnly, getConversation, sendMessage, startChat, updateConversation } from "../src/services/conversations";
 import { updateAgent } from "../src/agents/service";
+import { ensureDreamListener, getDream, startDream } from "../src/memory/dreaming";
+import { until } from "./fixtures/runner-harness";
 import { getSettings } from "../src/services/settings";
 import { checkSettingsPatch } from "../src/services/settingsPatch";
 
@@ -73,7 +75,7 @@ describe("GLM on Z.ai", () => {
     expect(inv.env.ANTHROPIC_BASE_URL).toBe(ZAI_ANTHROPIC_BASE_URL);
     expect(inv.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe(GLM);
     expect(argValue(inv, "--append-system-prompt")).toContain(`This run uses ${GLM} on Z.ai`);
-    expect(argValue(inv, "--append-system-prompt")).toContain("Raw secrets stay out of this run");
+    expect(argValue(inv, "--append-system-prompt")).toContain("Vault secrets and API keys stay out of this run");
     const hidden = argValue(inv, "--disallowedTools")!.split(",");
     for (const tool of ["mcp__computer", "mcp__cua", "mcp__android", "mcp__vm__screen", "WebSearch"]) expect(hidden).toContain(tool);
     expect(run.model).toBe(GLM);
@@ -81,18 +83,18 @@ describe("GLM on Z.ai", () => {
     expect(chatFillOnly(run.conversationId)).toBe(true);
   });
 
-  test("switching a chat between Claude and GLM starts a new session with a recap", async () => {
+  test("switching a chat between Claude and GLM goes on in a new session with a recap", async () => {
     const first = await chat(null);
     const sessionId = getConversation(first.conversationId).claudeSessionId;
     expect(chatFillOnly(first.conversationId)).toBe(false);
 
+    // GLM has a Claude Code config of its own: Claude's session isn't there, so the chat goes on with a recap.
     updateConversation(first.conversationId, { model: GLM });
     const { run: onGlm } = await sendMessage(first.conversationId, { content: "Second question" });
     expect((await waitForRun(onGlm.id, 20_000)).status).toBe("succeeded");
     let inv = invocations(env).at(-1)!;
-    expect(inv.args).not.toContain("--resume");
     expect(argValue(inv, "--session-id")).not.toBe(sessionId);
-    expect(inv.prompt).toContain("was on another model");
+    expect(inv.prompt).toContain("could not be restored");
     expect(inv.prompt).toContain("Hello there");
     expect(chatFillOnly(first.conversationId)).toBe(true);
 
@@ -100,14 +102,15 @@ describe("GLM on Z.ai", () => {
     await waitForRun(again.id, 20_000);
     inv = invocations(env).at(-1)!;
     expect(inv.args).toContain("--resume");
-    expect(inv.prompt).not.toContain("was on another model");
+    expect(inv.prompt).not.toContain("could not be restored");
 
     updateConversation(first.conversationId, { model: null });
     const { run: back } = await sendMessage(first.conversationId, { content: "Fourth question" });
-    await waitForRun(back.id, 20_000);
+    expect((await waitForRun(back.id, 20_000)).status).toBe("succeeded");
     inv = invocations(env).at(-1)!;
     expect(inv.args).not.toContain("--resume");
-    expect(inv.prompt).toContain("was on another model");
+    expect(inv.prompt).toContain("could not be restored");
+    expect(inv.prompt).toContain("Third question");
     expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
   }, 60_000);
 
@@ -140,6 +143,17 @@ describe("GLM on Z.ai", () => {
     expect(() => checkSettingsPatch({ runner: { fallbackModel: GLM } }, grant)).toThrow(/must be a Claude model/);
     expect(() => checkSettingsPatch({ runner: { model: DEFAULT_MODEL, fallbackModel: "" } }, grant)).not.toThrow();
   });
+
+  test("an agent on GLM still dreams on Claude", async () => {
+    ensureDreamListener();
+    const dreamer = await makeAgent({ name: "GLM Dreamer", model: GLM });
+    const dream = await startDream(dreamer.id);
+    await until(() => !!getDream(dream.id).runId, 10_000, "dream run");
+    await waitForRun(getDream(dream.id).runId!, 20_000);
+    const inv = invocations(env).findLast((i) => i.prompt.startsWith("Dream: consolidate"))!;
+    expect(modelProvider(argValue(inv, "--model"))).toBe("anthropic");
+    expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
+  }, 30_000);
 
   test("managers learn GLM only as the exception, and only with a key", () => {
     const prompt = (glmDelegation: string | null) =>

@@ -100,7 +100,9 @@ const argValue = (flag: string): string | null => {
 };
 
 const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(tmpdir(), "godmode-fake-claude");
-mkdirSync(join(stateDir, "sessions"), { recursive: true });
+// Each Claude Code config folder has its own sessions (GLM runs use one of their own).
+const sessionsDir = process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, "fake-sessions") : join(stateDir, "sessions");
+mkdirSync(sessionsDir, { recursive: true });
 
 if (args.includes("--version")) {
   process.stdout.write("9.9.9 (Claude Code)\n");
@@ -303,13 +305,13 @@ appendFileSync(
 const out = (event: unknown) => process.stdout.write(JSON.stringify(event) + "\n");
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-if (resume && !existsSync(join(stateDir, "sessions", resume))) {
+if (resume && !existsSync(join(sessionsDir, resume))) {
   const msg = `No conversation found with session ID: ${resume}`;
   out({ type: "result", subtype: "error_during_execution", is_error: true, num_turns: 0, duration_ms: 0, total_cost_usd: 0, session_id: resume, errors: [msg] });
   process.stderr.write(msg + "\n");
   process.exit(1);
 }
-writeFileSync(join(stateDir, "sessions", sessionId), "");
+writeFileSync(join(sessionsDir, sessionId), "");
 
 const init = { type: "system", subtype: "init", session_id: sessionId, model: "fake-model", tools: [], mcp_servers: [] };
 
@@ -1042,7 +1044,7 @@ if (slash?.[1] === "clear") {
   await replay("stream-workflow.jsonl");
 } else if (prompt.includes("SESSION_COST")) {
   out(init);
-  const costFile = join(stateDir, "sessions", `${sessionId}.cost`);
+  const costFile = join(sessionsDir, `${sessionId}.cost`);
   const total = (existsSync(costFile) ? Number(readFileSync(costFile, "utf8")) : 0) + 0.5;
   writeFileSync(costFile, String(total));
   textTurn("spent");

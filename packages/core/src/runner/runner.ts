@@ -1750,16 +1750,6 @@ function recordedModel(job: Job, acc: { model: string | null }): string | null {
   return job.model && modelProvider(job.model) === "zai" ? job.model : (acc.model ?? job.model ?? null);
 }
 
-/** Whose models the chat's session ran on so far, per its latest run that reached Claude Code; null = none yet. */
-function providerOfSession(job: Job): ReturnType<typeof modelProvider> | null {
-  const row = get<{ model: string | null }>(
-    "SELECT model FROM runs WHERE conversation_id = ? AND id != ? AND model IS NOT NULL AND num_turns > 0 ORDER BY created_at DESC, rowid DESC LIMIT 1",
-    job.conversationId,
-    job.runId,
-  );
-  return row?.model ? modelProvider(row.model) : null;
-}
-
 /** What a GLM run can't use: every tool that answers with an image, and Anthropic's server-side web search. */
 const GLM_HIDDEN_TOOLS = [
   `mcp__${BROWSER_MCP_NAME}__browser_screenshot`,
@@ -1775,7 +1765,7 @@ const GLM_HIDDEN_TOOLS = [
 /** Who wrote a user message, as a recap names them. */
 const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task" };
 
-function recapPrefix(job: Job, why = "could not be restored"): string {
+function recapPrefix(job: Job): string {
   // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
   const own = (id: string) => !job.resumed && (id === job.messageId || id === job.userMessageId || job.alsoAnswers.includes(id));
   const msgs = listMessages(job.conversationId)
@@ -1791,7 +1781,7 @@ function recapPrefix(job: Job, why = "could not be restored"): string {
     const text = content.length > max ? `${content.slice(0, max - 1)}…` : content;
     return `${m.role === "user" ? SOURCE_SPEAKER[m.source ?? "human"] : "Assistant"}: ${text}`;
   });
-  return `<godmode-context>\nThe previous Claude session of this conversation ${why}. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
+  return `<godmode-context>\nThe previous Claude session of this conversation could not be restored. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
 }
 
 function describeFailure(job: Job, attempt: Attempt): string {
@@ -2031,7 +2021,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   for (const [name, server] of Object.entries(mods?.mcpServers ?? {})) mcp.mcpServers[name] ??= server;
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
-  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  const chosen = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  // Dreams read every chat of the agent: on Claude, also for an agent that works on GLM.
+  const model = dreaming && modelProvider(chosen) === "zai" ? settings.runner.model?.trim() || DEFAULT_MODEL : chosen;
   const glm = modelProvider(model) === "zai";
   const fillOnly = conv.secret_access === "fill" || glm;
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
@@ -2133,7 +2125,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const zai = glm ? zaiKey() : null;
   if (glm && !zai) return { status: "failed", error: `${model} runs on Z.ai and needs a Z.ai API key: add it under Integrations → API keys (and unlock the vault).` };
   if (glm && !job.resumed) {
-    job.acc.addNotice("info", `This run uses ${model} on Z.ai, not Claude: text only, and raw secrets stay out of it.`);
+    job.acc.addNotice("info", `This run uses ${model} on Z.ai, not Claude: text only, without vault secrets or API keys.`);
     scheduleDelta(job);
   }
   // The fallback runs in the same process: only a model of the same provider can take over.
@@ -2200,7 +2192,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
       if (!s.name?.trim()) continue;
-      defs[s.name.trim()] = { description: s.description, prompt: s.prompt, ...(s.model ? { model: s.model } : {}) };
+      // In a GLM run every subagent is on GLM too: a Claude id would be sent to Z.ai.
+      defs[s.name.trim()] = { description: s.description, prompt: s.prompt, ...(s.model && !glm ? { model: s.model } : {}) };
     }
     if (Object.keys(defs).length) {
       const json = JSON.stringify(defs);
@@ -2247,10 +2240,6 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   try {
     let sessionId = conv.claude_session_id;
-    // A session belongs to one provider: after a switch between Claude and GLM the chat goes on in a new one, with a recap.
-    const before = sessionId && !job.resumed ? providerOfSession(job) : null;
-    const switched = !!before && before !== modelProvider(model);
-    if (switched) sessionId = null;
     const resuming = !!sessionId;
     if (!sessionId) {
       sessionId = randomUUID();
@@ -2285,7 +2274,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
           lateNote +
           body
-        : (switched && !command ? recapPrefix(job, "was on another model") : "") + lateNote + body;
+        : lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
     // A chat the human started runs although a monthly budget is used up — once a month the chat says so.

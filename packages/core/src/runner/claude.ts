@@ -2,6 +2,8 @@
 import { existsSync } from "node:fs";
 import { ZAI_ANTHROPIC_BASE_URL, ZAI_KEY_SECRET } from "@godmode/shared";
 import type { Subprocess } from "bun";
+import { join } from "node:path";
+import { config, ensureDir } from "../config";
 import { logger } from "../log";
 import { which } from "../util";
 import { getAppSecret, isUnlocked } from "../vault/vault";
@@ -99,10 +101,13 @@ const NON_ZAI_ENV = [
 /**
  * Points a run's Claude Code at Z.ai for a GLM model. Every credential Claude Code sends is the Z.ai key (the bearer
  * token and the x-api-key it would otherwise fill from a helper or a stored Console key), other providers are switched
- * off, and every model role (subagents, background calls) resolves to the GLM model.
+ * off, and every model role (subagents, background calls) resolves to the GLM model. GLM gets a Claude Code config of
+ * its own: Claude's login and sessions aren't there, so a chat that switches provider (even mid-pause) can't resume the
+ * other one's session and goes on in a new one with a recap.
  */
 export function applyZaiEnv(env: Record<string, string | undefined>, model: string, key: string) {
   for (const k of NON_ZAI_ENV) delete env[k];
+  env.CLAUDE_CONFIG_DIR = ensureDir(join(config().dataDir, "claude-zai"));
   env.ANTHROPIC_BASE_URL = ZAI_ANTHROPIC_BASE_URL;
   env.ANTHROPIC_AUTH_TOKEN = key;
   env.ANTHROPIC_API_KEY = key;
