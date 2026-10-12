@@ -21,8 +21,9 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
   computer: ["agentCursor", "liveViewFps", "screenshotMaxSize"],
   vm: ["onQuit", "idleStopMinutes"],
   voice: ["enabled", "autoSpeak", "language", "sttModel", "ttsModel", "ttsVoice", "elevenlabsVoiceId", "browserVoice", "rate"],
-  // Whether calls go out at all, to whom, and what the voice tells callers stay the human's.
-  phone: ["language", "voiceId"],
+  // Agents may set calls up (switch, number, the owner's phone); quiet hours, model, length and what the voice tells
+  // callers stay the human's.
+  phone: ["enabled", "numberId", "ownerNumber", "callOwner", "language", "voiceId"],
   memory: [
     "autoCommit",
     "reflectAfterRun",

@@ -126,6 +126,7 @@ describe("settings", () => {
     expect((patch.phone as { ownerNumber: string }).ownerNumber).toBe("+4915123456789");
     expect(() => checkSettingsPatch({ phone: { ownerNumber: "0151 234" } }, () => {})).toThrow(/country code/);
     expect(() => checkSettingsPatch({ phone: { quietFrom: "25:00" } }, () => {})).toThrow(/Quiet hours/);
+    expect(() => checkSettingsPatch({ phone: { ownerNumber: "+49 900 1234567" } }, () => {})).toThrow(/premium-rate/);
     expect(() => checkSettingsPatch({ phone: { maxMinutes: 0 } }, () => {})).toThrow(/1 to 60/);
   });
 

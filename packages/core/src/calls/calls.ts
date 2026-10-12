@@ -21,6 +21,7 @@ import { pauseOf } from "../services/pauses";
 import { answerQuestion, getQuestion, interpretReply } from "../services/questions";
 import { getSettings } from "../services/settings";
 import * as el from "./elevenlabs";
+import { isPremiumNumber } from "./numbers";
 
 const log = logger("calls");
 
@@ -362,8 +363,6 @@ function taskFirstMessage(language: string): string {
   return language === "de" ? `Hallo, hier ist der Assistent von ${ownerName()}.` : `Hello, this is ${ownerName()}'s assistant.`;
 }
 
-/** Premium-rate and service numbers that cost per minute: an agent talked into calling one would run up the bill. */
-const PREMIUM = [/^\+49(900|137|138|118|19)/, /^\+44(9|87|84|70)/, /^\+1(900|976)/, /^\+43(9|8[12])/, /^\+41(90|84)/];
 
 /** Calls being placed right now (their provider id isn't stored yet). */
 let placing = 0;
@@ -375,7 +374,7 @@ export async function placeCall(input: PlaceCall): Promise<PhoneCall> {
   const isOwner = input.purpose === "question" || input.purpose === "inform";
   const to = isOwner ? p.ownerNumber : toE164(input.to);
   if (!to) throw badRequest("Give the number with the country code, e.g. +49 30 1234567");
-  if (PREMIUM.some((re) => re.test(to))) throw badRequest("Premium-rate and service numbers can't be called");
+  if (isPremiumNumber(to)) throw badRequest("Premium-rate and service numbers can't be called");
   if (!isOwner) {
     const dayAgo = new Date(Date.now() - 24 * 3_600_000).toISOString();
     const recent = all<{ created_at: string }>("SELECT created_at FROM phone_calls WHERE number = ? AND direction = 'outbound' AND purpose = 'task' AND created_at > ? ORDER BY created_at DESC", to, dayAgo);
