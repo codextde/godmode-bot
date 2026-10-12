@@ -1495,4 +1495,12 @@ CREATE INDEX idx_phone_calls_status ON phone_calls(status);
 CREATE INDEX idx_phone_calls_conversation ON phone_calls(conversation_id);
 `,
   },
+  {
+    id: 91,
+    name: "phone_calls_from_owner",
+    sql: /* sql */ `
+-- An incoming call whose caller ID (as the phone line reported it, not a number the caller said) is the owner's number.
+ALTER TABLE phone_calls ADD COLUMN from_owner INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

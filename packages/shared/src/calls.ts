@@ -62,6 +62,8 @@ export interface PhoneCall {
   /** What the call cost at the provider, in US dollars (null = unknown). */
   costUsd: number | null;
   hasAudio: boolean;
+  /** An incoming call from the owner's own number (by caller ID, which can be spoofed). */
+  fromOwner: boolean;
   error: string | null;
   createdAt: ISODate;
   endedAt: ISODate | null;
