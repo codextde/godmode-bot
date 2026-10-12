@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -430,16 +430,21 @@ describe("gitignore", () => {
     writeFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "private");
     mkdirSync(join(agent.repoPath, "runs", "2026-09-01"), { recursive: true });
     writeFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "{}\n");
+    mkdirSync(join(agent.repoPath, ".omc", "state", "sessions"), { recursive: true });
+    writeFileSync(join(agent.repoPath, ".omc", "state", "sessions", "s1.json"), "{}");
+    mkdirSync(join(agent.repoPath, ".omc", "skills"), { recursive: true });
+    writeFileSync(join(agent.repoPath, ".omc", "skills", "deploy.md"), "# Deploy");
     await repo.commitAll(agent.repoPath, "Legacy state");
     expect(await headFiles(agent.repoPath)).toContain("workspace/uploads/old.pdf");
     expect(await headFiles(agent.repoPath)).toContain("runs/2026-09-01/run_legacy.jsonl");
 
     await ensureAgentRepo(agent);
     const gitignore = readFileSync(join(agent.repoPath, ".gitignore"), "utf8");
-    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.DS_Store\n");
+    expect(gitignore).toContain("node_modules/\n# Added by Godmode Bot\nworkspace/uploads/\n/runs/\n.omc/state/\n.DS_Store\n");
     const files = await headFiles(agent.repoPath);
     expect(files).not.toContain("workspace/uploads/old.pdf");
     expect(files.filter((f) => f.startsWith("runs/"))).toEqual([]);
+    expect(files.filter((f) => f.startsWith(".omc/"))).toEqual([".omc/skills/deploy.md"]);
     expect(files).toContain(".gitignore");
     expect(readFileSync(join(agent.repoPath, "workspace", "uploads", "old.pdf"), "utf8")).toBe("private");
     expect(readFileSync(join(agent.repoPath, "runs", "2026-09-01", "run_legacy.jsonl"), "utf8")).toBe("{}\n");
@@ -506,6 +511,33 @@ describe("git helpers", () => {
       const { blob } = await git.readBlob({ fs, dir, oid: await git.resolveRef({ fs, dir, ref: "HEAD" }), filepath: "state.json" });
       expect(new TextDecoder().decode(blob)).toBe(content);
     }
+    expect(await repo.commitAll(dir, "clean")).toBeNull();
+  });
+
+  test("commitAll retries when a file vanishes while it reads the tree", async () => {
+    const dir = join(dataDir, "vanish-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "notes.md"), "1");
+    mkdirSync(join(dir, "state"), { recursive: true });
+    writeFileSync(join(dir, "state", "job.json.lock"), "");
+    const fs = await import("node:fs");
+    const original = fs.promises.lstat;
+    let vanished = 0;
+    const spy = spyOn(fs.promises, "lstat").mockImplementation(((path: fs.PathLike, ...rest: unknown[]) => {
+      if (String(path).endsWith("job.json.lock") && fs.existsSync(String(path))) {
+        rmSync(String(path));
+        vanished++;
+      }
+      return (original as (...args: unknown[]) => Promise<fs.Stats>).call(fs.promises, path, ...rest);
+    }) as typeof fs.promises.lstat);
+    try {
+      expect(await repo.commitAll(dir, "with lock")).toMatch(/^[0-9a-f]{40}$/);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vanished).toBe(1);
+    const git = (await import("isomorphic-git")).default;
+    expect(await git.listFiles({ fs, dir, ref: "HEAD" })).toEqual(["notes.md"]);
     expect(await repo.commitAll(dir, "clean")).toBeNull();
   });
 

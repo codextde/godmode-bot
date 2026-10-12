@@ -18,9 +18,10 @@ export interface ClaudeMdContext {
  * Rules every agent repository's .gitignore must contain (re-added to existing repos when missing).
  * `workspace/uploads/` holds files the human attaches — possibly large or sensitive, so they stay out of git. `runs/`
  * holds raw run logs (screenshots and all): versioned they would fill the history for good, so they only live on disk
- * until the cleanup removes old ones.
+ * until the cleanup removes old ones. `.omc/state/` is a Claude Code plugin's session state and lock files, which come and
+ * go while a commit reads the tree.
  */
-export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "/runs/", "*.tmp", ".claude-mem/", ".DS_Store"] as const;
+export const AGENT_GITIGNORE_RULES = ["workspace/tmp/", "workspace/uploads/", "/runs/", "*.tmp", ".claude-mem/", ".omc/state/", ".DS_Store"] as const;
 
 export const AGENT_GITIGNORE = `# Managed by Godmode Bot\n${AGENT_GITIGNORE_RULES.join("\n")}\n`;
 

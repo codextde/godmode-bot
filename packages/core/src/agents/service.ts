@@ -461,6 +461,7 @@ async function syncGitignore(dir: string): Promise<void> {
   await writeFile(file, `${current}${separator}# Added by Godmode Bot\n${missing.join("\n")}\n`, "utf8");
   if (missing.includes("workspace/uploads/")) await repo.untrackInLock(dir, "workspace/uploads");
   if (missing.includes("/runs/")) await repo.untrackInLock(dir, "runs");
+  if (missing.includes(".omc/state/")) await repo.untrackInLock(dir, ".omc/state");
 }
 
 function gitignoreComplete(dir: string): boolean {
