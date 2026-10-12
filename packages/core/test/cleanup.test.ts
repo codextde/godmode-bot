@@ -468,6 +468,28 @@ suite("the database", () => {
     expect((await scanCleanup({ fresh: true })).checks.find((c) => c.id === "database")).toMatchObject({ status: "ok" });
   });
 
+  test("a database without incremental vacuum switches once, then gives pages back in steps", async () => {
+    const db = getDb();
+    const autoVacuum = () => (db.query("PRAGMA auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum;
+    const freelist = () => (db.query("PRAGMA freelist_count").get() as { freelist_count: number }).freelist_count;
+    expect(autoVacuum()).toBe(2);
+    db.run("PRAGMA auto_vacuum = NONE");
+    db.run("VACUUM");
+    expect(autoVacuum()).toBe(0);
+
+    bloat();
+    expect((await runCleanup(["database"])).results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(autoVacuum()).toBe(2);
+    expect(freelist()).toBe(0);
+
+    bloat();
+    expect(freelist()).toBeGreaterThan(512);
+    const result = await runCleanup(["database"]);
+    expect(result.results[0]).toMatchObject({ ok: true, removed: 1 });
+    expect(result.freedBytes).toBeGreaterThanOrEqual(3 * 1024 * 1024);
+    expect(freelist()).toBe(0);
+  });
+
   test("waits for runs another Godmode process is working on", async () => {
     const db = bloat();
     insert("runs", { id: "run_elsewhere0001", agent_id: agent.id, conversation_id: "cnv_elsewhere", trigger: "manual", status: "running", prompt: "x", created_at: new Date().toISOString() });

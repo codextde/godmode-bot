@@ -10,6 +10,8 @@ let db: Database | null = null;
 
 export function openDb(path: string): Database {
   const instance = new Database(path, { create: true, strict: true });
+  // Takes effect for a new database; an existing one switches with its next VACUUM (the database cleanup).
+  instance.run("PRAGMA auto_vacuum = INCREMENTAL;");
   instance.run("PRAGMA journal_mode = WAL;");
   instance.run("PRAGMA foreign_keys = ON;");
   instance.run("PRAGMA busy_timeout = 5000;");
