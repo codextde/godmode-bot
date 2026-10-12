@@ -22,7 +22,7 @@ import type {
   RunTrigger,
 } from "@godmode/shared";
 import type { ComputerTarget, ConversationPatch, ConversationWithMessages, MessagePage, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
-import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
+import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES, modelProvider } from "@godmode/shared";
 import { liteMessage } from "./liteMessage";
 import { all, bool, get, insert, int, run as sql, tx, update } from "../db";
 import { bus } from "../events/bus";
@@ -372,8 +372,12 @@ export function createConversation(
  * counts as fill-only too.
  */
 export function chatFillOnly(conversationId: string): boolean {
-  const row = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ?", conversationId);
-  return !row || row.secret_access === "fill";
+  const row = get<{ secret_access: string | null; model: string | null }>(
+    "SELECT c.secret_access, COALESCE(NULLIF(TRIM(c.model), ''), a.model) AS model FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = ?",
+    conversationId,
+  );
+  // A chat on GLM sends what it reads to Z.ai: raw secrets stay out of it.
+  return !row || row.secret_access === "fill" || modelProvider(row.model) === "zai";
 }
 
 /**

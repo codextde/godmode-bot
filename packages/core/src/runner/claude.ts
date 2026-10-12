@@ -1,6 +1,9 @@
 /** Resolving and launching the Claude Code CLI (owner: runner). Shared by agent runs and the model catalog. */
 import { existsSync } from "node:fs";
+import { ZAI_ANTHROPIC_BASE_URL, ZAI_KEY_SECRET } from "@godmode/shared";
 import type { Subprocess } from "bun";
+import { join } from "node:path";
+import { config, ensureDir } from "../config";
 import { logger } from "../log";
 import { which } from "../util";
 import { getAppSecret, isUnlocked } from "../vault/vault";
@@ -69,6 +72,50 @@ export function claudeEnv(): Record<string, string | undefined> {
     }
   }
   return env;
+}
+
+/** The Z.ai API key from the vault; null when none is saved or the vault is locked. */
+export function zaiKey(): string | null {
+  if (!isUnlocked()) return null;
+  try {
+    return getAppSecret(ZAI_KEY_SECRET) || null;
+  } catch (err) {
+    log.warn("could not read the Z.ai API key from the vault", err);
+    return null;
+  }
+}
+
+/** Other providers and credentials Claude Code would pick up: none of them may reach (or replace) Z.ai. */
+const NON_ZAI_ENV = [
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+  "ANTHROPIC_FOUNDRY_API_KEY",
+  "ANTHROPIC_FOUNDRY_BASE_URL",
+  "ANTHROPIC_FOUNDRY_RESOURCE",
+  "AWS_BEARER_TOKEN_BEDROCK",
+  "ANTHROPIC_CUSTOM_HEADERS",
+];
+
+/**
+ * Points a run's Claude Code at Z.ai for a GLM model. Every credential Claude Code sends is the Z.ai key (the bearer
+ * token and the x-api-key it would otherwise fill from a helper or a stored Console key), other providers are switched
+ * off, and every model role (subagents, background calls) resolves to the GLM model. GLM gets a Claude Code config of
+ * its own: Claude's login and sessions aren't there, so a chat that switches provider (even mid-pause) can't resume the
+ * other one's session and goes on in a new one with a recap.
+ */
+export function applyZaiEnv(env: Record<string, string | undefined>, model: string, key: string) {
+  for (const k of NON_ZAI_ENV) delete env[k];
+  env.CLAUDE_CONFIG_DIR = ensureDir(join(config().dataDir, "claude-zai"));
+  env.ANTHROPIC_BASE_URL = ZAI_ANTHROPIC_BASE_URL;
+  env.ANTHROPIC_AUTH_TOKEN = key;
+  env.ANTHROPIC_API_KEY = key;
+  env.API_TIMEOUT_MS = "3000000";
+  for (const k of ["ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL", "ANTHROPIC_SMALL_FAST_MODEL", "CLAUDE_CODE_SUBAGENT_MODEL"]) {
+    env[k] = model;
+  }
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
 }
 
 /** Stop a claude process and everything it started: its process group on POSIX (spawn it `detached`), taskkill /T on Windows. */

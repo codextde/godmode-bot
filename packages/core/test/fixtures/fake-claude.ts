@@ -100,7 +100,9 @@ const argValue = (flag: string): string | null => {
 };
 
 const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(tmpdir(), "godmode-fake-claude");
-mkdirSync(join(stateDir, "sessions"), { recursive: true });
+// GLM runs have a Claude Code config of their own, and so their own sessions.
+const sessionsDir = join(stateDir, process.env.CLAUDE_CONFIG_DIR?.endsWith("claude-zai") ? "sessions-zai" : "sessions");
+mkdirSync(sessionsDir, { recursive: true });
 
 if (args.includes("--version")) {
   process.stdout.write("9.9.9 (Claude Code)\n");
@@ -293,6 +295,10 @@ appendFileSync(
       GODMODE_TOKEN: process.env.GODMODE_TOKEN ?? null,
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: process.env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD ?? null,
       CLAUDE_CODE_PLUGIN_DIR_WATCH: process.env.CLAUDE_CODE_PLUGIN_DIR_WATCH ?? null,
+      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? null,
+      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ?? null,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
+      CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? null,
     },
   }) + "\n",
 );
@@ -300,13 +306,13 @@ appendFileSync(
 const out = (event: unknown) => process.stdout.write(JSON.stringify(event) + "\n");
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-if (resume && !existsSync(join(stateDir, "sessions", resume))) {
+if (resume && !existsSync(join(sessionsDir, resume))) {
   const msg = `No conversation found with session ID: ${resume}`;
   out({ type: "result", subtype: "error_during_execution", is_error: true, num_turns: 0, duration_ms: 0, total_cost_usd: 0, session_id: resume, errors: [msg] });
   process.stderr.write(msg + "\n");
   process.exit(1);
 }
-writeFileSync(join(stateDir, "sessions", sessionId), "");
+writeFileSync(join(sessionsDir, sessionId), "");
 
 const init = { type: "system", subtype: "init", session_id: sessionId, model: "fake-model", tools: [], mcp_servers: [] };
 
@@ -1039,7 +1045,7 @@ if (slash?.[1] === "clear") {
   await replay("stream-workflow.jsonl");
 } else if (prompt.includes("SESSION_COST")) {
   out(init);
-  const costFile = join(stateDir, "sessions", `${sessionId}.cost`);
+  const costFile = join(sessionsDir, `${sessionId}.cost`);
   const total = (existsSync(costFile) ? Number(readFileSync(costFile, "utf8")) : 0) + 0.5;
   writeFileSync(costFile, String(total));
   textTurn("spent");

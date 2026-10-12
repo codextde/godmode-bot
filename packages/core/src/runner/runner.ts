@@ -40,10 +40,14 @@ import type {
   TaskPriority,
 } from "@godmode/shared";
 import {
+  ANDROID_MCP_NAME,
   BROWSER_MCP_NAME,
+  COMPUTER_MCP_NAME,
   CUA_MCP_NAME,
+  VM_MCP_NAME,
   DEFAULT_MODEL,
   EFFORT_OPTIONS,
+  GLM_MODELS,
   RUN_CLI_MISSING,
   RUN_COST_LIMIT,
   RUN_INTERRUPTED,
@@ -54,6 +58,7 @@ import {
   WORKFLOW_TOOL,
   isModelId,
   memoryBudget,
+  modelProvider,
   parseSlashCommand,
   type ActivityNames,
 } from "@godmode/shared";
@@ -109,7 +114,7 @@ import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { modsForRun, removeRunMods } from "../mods/service";
 import { memoryDigest, memoryForPrompt } from "../memory/files";
-import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
+import { applyZaiEnv, claudeEnv, killTree, resolveClaudeCommand, zaiKey } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor, ultracodeFor } from "./models";
 import {
@@ -1740,6 +1745,23 @@ async function spawnClaude(
   return { exitCode, stderr, noise };
 }
 
+/** The model a run is recorded with: what Claude reported, but for GLM the requested id (Z.ai may name it otherwise). */
+function recordedModel(job: Job, acc: { model: string | null }): string | null {
+  return job.model && modelProvider(job.model) === "zai" ? job.model : (acc.model ?? job.model ?? null);
+}
+
+/** What a GLM run can't use: every tool that answers with an image, and Anthropic's server-side web search. */
+const GLM_HIDDEN_TOOLS = [
+  `mcp__${BROWSER_MCP_NAME}__browser_screenshot`,
+  `mcp__${COMPUTER_MCP_NAME}`,
+  `mcp__${CUA_MCP_NAME}`,
+  `mcp__${ANDROID_MCP_NAME}`,
+  `mcp__${VM_MCP_NAME}__screen`,
+  `mcp__${VM_MCP_NAME}__fill_login`,
+  `mcp__${VM_MCP_NAME}__fill_totp`,
+  "WebSearch",
+];
+
 /** Who wrote a user message, as a recap names them. */
 const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task" };
 
@@ -1766,6 +1788,9 @@ function describeFailure(job: Job, attempt: Attempt): string {
   const final = job.acc.final;
   const stderr = attempt.stderr.trim();
   const haystack = [final?.errors.join("\n") ?? "", final?.text ?? "", stderr, attempt.noise.join("\n")].join("\n");
+  if (AUTH_PROBLEM.test(haystack) && job.model && modelProvider(job.model) === "zai") {
+    return `Z.ai rejected the request for ${job.model} (API key invalid, or no balance or plan). Check the Z.ai API key under Integrations → API keys.`;
+  }
   if (AUTH_PROBLEM.test(haystack)) {
     return "Claude Code is not signed in (or the API key is invalid). Run `claude` in a terminal and log in, or add an Anthropic API key in Settings.";
   }
@@ -1999,7 +2024,11 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   for (const [name, server] of Object.entries(mods?.mcpServers ?? {})) mcp.mcpServers[name] ??= server;
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
   res.files.push(mcpPath);
-  const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  const chosen = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
+  // Dreams read every chat of the agent: on Claude, also for an agent that works on GLM.
+  const model = dreaming && modelProvider(chosen) === "zai" ? settings.runner.model?.trim() || DEFAULT_MODEL : chosen;
+  const glm = modelProvider(model) === "zai";
+  const fillOnly = conv.secret_access === "fill" || glm;
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
@@ -2038,7 +2067,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const workspace = workspaceId ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", workspaceId) : null;
   const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
-  const toolKeysInEnv = !dreaming && !(vm && settings.vm.isolateHostShell);
+  // GLM runs send what they read to Z.ai: no keys there.
+  const toolKeysInEnv = !dreaming && !glm && !(vm && settings.vm.isolateHostShell);
   const toolList = dreaming ? [] : apiToolsForAgent(agent);
   const envOwners = toolKeysInEnv && isUnlocked() ? apiToolEnvOwners(toolList) : new Map<string, string>();
   const apiTools: PromptApiTool[] = toolList.map((t) => ({
@@ -2068,7 +2098,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         vm: promptVm,
         ssh,
         android: phones,
-        androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && conv.secret_access !== "fill",
+        androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && !fillOnly,
         voice: job.voice,
         workingDirectory: folder,
         taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,
@@ -2078,7 +2108,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
-        fillOnly: conv.secret_access === "fill",
+        fillOnly,
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
         cards: !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
@@ -2087,12 +2117,21 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         settingsTools: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",
         team: teamFor(agent),
+        glm: glm ? model : null,
+        glmDelegation: !glm && config().role !== "runner" && zaiKey() ? GLM_MODELS[0]!.id : null,
       });
   const memoryNow = memoryDigest(agent.repoPath);
 
   const effort = effortFor(model, conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
+  const zai = glm ? zaiKey() : null;
+  if (glm && !zai) return { status: "failed", error: `${model} runs on Z.ai and needs a Z.ai API key: add it under Integrations → API keys (and unlock the vault).` };
+  if (glm && !job.acc.blocks.some((b) => b.type === "notice" && b.text.includes("on Z.ai, not Claude"))) {
+    job.acc.addNotice("info", `This run uses ${model} on Z.ai, not Claude: text only, without vault secrets or API keys.`);
+    scheduleDelta(job);
+  }
+  // The fallback runs in the same process: only a model of the same provider can take over.
   const fallback = settings.runner.fallbackModel?.trim();
   const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
   // cmd.exe cannot pass multi-line arguments: use the file variants for Windows .cmd shims.
@@ -2100,7 +2139,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   const baseArgs = ["-p", "--input-format", "text", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--model", model];
   if (effort) baseArgs.push("--effort", effort);
-  if (fallback && fallback !== model && isModelId(fallback)) baseArgs.push("--fallback-model", fallback);
+  if (fallback && fallback !== model && isModelId(fallback) && modelProvider(fallback) === modelProvider(model)) baseArgs.push("--fallback-model", fallback);
   // A run in a VM stays off the host: no bypass, so Claude Code's file tools only reach its folders (cwd + --add-dir).
   const hostLocked = !!vm && settings.vm.isolateHostShell;
   if (dreaming) {
@@ -2124,6 +2163,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // goes into a VM, so a VM's browser has none.
   if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
   if (mcp.mcpServers[CUA_MCP_NAME]) disallowed.push(...CUA_HIDDEN_TOOLS.map((t) => `mcp__${CUA_MCP_NAME}__${t}`));
+  // GLM reads text only (a screenshot would end the request), and Anthropic's server-side web search isn't on Z.ai.
+  if (glm) disallowed.push(...GLM_HIDDEN_TOOLS);
   // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
   // commands on this computer) can't be planted for later runs in the folders this run may write to.
   if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
@@ -2154,14 +2195,16 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
       if (!s.name?.trim()) continue;
-      defs[s.name.trim()] = { description: s.description, prompt: s.prompt, ...(s.model ? { model: s.model } : {}) };
+      // In a GLM run every subagent is on GLM too: a Claude id would be sent to Z.ai.
+      defs[s.name.trim()] = { description: s.description, prompt: s.prompt, ...(s.model && !glm ? { model: s.model } : {}) };
     }
     if (Object.keys(defs).length) {
       const json = JSON.stringify(defs);
       baseArgs.push("--agents", viaFiles ? writeTempFile(res, `godmode-agents-${job.runId}.json`, json) : json);
     }
   }
-  if (settings.memory.backend === "claude-mem" && !dreaming) {
+  // claude-mem's worker outlives the run: started from a GLM run it would keep Z.ai's endpoint for later Claude runs.
+  if (settings.memory.backend === "claude-mem" && !dreaming && !glm) {
     const pluginDir = claudeMemPluginDir();
     if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
     else {
@@ -2178,6 +2221,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
+  if (zai) applyZaiEnv(env, model, zai);
   // Scripts that drive the browser themselves (Playwright, puppeteer) get the run's own endpoint: its profile, its chat's tabs.
   const cdpUrl = !vm && mcp.mcpServers[BROWSER_MCP_NAME] ? chatLeaseUrl(job.runId) : null;
   if (cdpUrl) env[RUN_CDP_ENV] = cdpUrl;
@@ -2506,7 +2550,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
       spent.durationMs,
       spent.numTurns,
       spent.usage ? JSON.stringify(spent.usage) : null,
-      acc.model ?? job.model ?? null,
+      recordedModel(job, acc) ?? null,
       job.runId,
     );
     updateMessage(job.messageId, { content: text, blocks });
@@ -2587,7 +2631,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       spent.durationMs,
       spent.numTurns,
       spent.usage ? JSON.stringify(spent.usage) : null,
-      acc.model ?? job.model ?? (agent ? agent.model || getSettings().runner.model || null : null),
+      recordedModel(job, acc) ?? (agent ? agent.model || getSettings().runner.model || null : null),
       ts,
       job.runId,
     ),

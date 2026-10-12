@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, ShieldCheck, Trash2, Wrench } from "lucide-react";
+import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,6 +38,14 @@ export const KNOWN_KEYS: KeyMeta[] = [
     icon: BrainCircuit,
     link: { href: "https://console.anthropic.com/settings/keys", label: "console.anthropic.com" },
     placeholder: "sk-ant-…",
+    optional: true,
+  },
+  {
+    key: "zai_api_key",
+    label: "Z.ai API key",
+    description: "Optional — for GLM-5.3, only on tasks Claude declines or can't do. Claude stays the default for every agent.",
+    icon: Sparkles,
+    link: { href: "https://z.ai/manage-apikey/apikey-list", label: "z.ai" },
     optional: true,
   },
   {

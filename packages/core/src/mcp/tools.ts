@@ -26,6 +26,7 @@ import type {
 } from "@godmode/shared";
 import {
   AGENT_COLORS,
+  GLM_MODELS,
   AGENT_TEMPLATE_CATEGORIES,
   AGENT_TEMPLATE_CATEGORY_LABELS,
   cardExpired,
@@ -140,6 +141,7 @@ import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatB
 import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
+import { zaiKey } from "../runner/claude";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
@@ -1679,9 +1681,19 @@ const TOOLS: ToolDef[] = [
       task: z.string().min(1),
       wait: z.boolean().optional().describe("Wait for the result (default true)"),
       timeoutSeconds: z.number().int().min(10).max(3600).optional().describe("How long to wait (default 900)"),
+      model: z
+        .enum(GLM_MODELS.map((m) => m.id) as [string, ...string[]])
+        .optional()
+        .describe("Leave unset: the agent's Claude model fits nearly every job. A GLM model (Z.ai, text only, no raw secrets) only for a task Claude declines or can't do; managers only"),
     }),
     when: canDelegate,
-    run: async ({ agentId, task, wait, timeoutSeconds }, { agent, ctx }) => {
+    run: async ({ agentId, task, wait, timeoutSeconds, model }, { agent, ctx }) => {
+      if (model) {
+        if (!agent.permissions.canManageAgents) return fail(`Only a manager agent can hand a task to ${model}. Do it with Claude, or say in your answer why Claude can't.`);
+        if (!zaiKey()) {
+          return fail(`${model} needs a Z.ai API key and an unlocked vault: the human adds the key under Integrations → API keys. Do the task with Claude or say why it can't be done.`);
+        }
+      }
       if (agentId === agent.id) return fail("You cannot delegate to yourself.");
       if (ctx.depth + 1 > MAX_DELEGATION_DEPTH) {
         return fail(`Delegation depth limit (${MAX_DELEGATION_DEPTH}) reached — do this part yourself.`);
@@ -1695,7 +1707,8 @@ const TOOLS: ToolDef[] = [
       const refusal = computerTargetRefusal(agent, target, "hand it tasks");
       if (refusal) return fail(refusal);
       // A caller that reads no raw secrets itself gets none through the task: its chat is fill-only, for good.
-      const fillOnly = !revealsFor(agent, ctx, target);
+      // GLM work goes to Z.ai: never with raw secrets.
+      const fillOnly = !!model || !revealsFor(agent, ctx, target);
       // Unattended work doesn't spend past a used-up monthly budget by handing work on (a chat the human leads may).
       const stop = runExempt(ctx.runId) ? null : exhaustedBudget(target);
       if (stop) {
@@ -1724,7 +1737,9 @@ const TOOLS: ToolDef[] = [
         workspaceId,
         projectId,
         fillOnly,
+        model: model ?? null,
       });
+      if (model) audit(`agent:${agent.id}`, "agent.delegate_glm", target.id, { model, conversationId: conversation.id, runId: ctx.runId });
       // The chat shows the bare task under "From <agent>"; Claude also learns who asked and where its answer goes.
       const { run } = await sendMessage(conversation.id, {
         content: task,

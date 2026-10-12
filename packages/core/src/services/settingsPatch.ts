@@ -1,5 +1,5 @@
 import type { Effort } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isModelId, isValidBranch, parseGitUrl } from "@godmode/shared";
+import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isModelId, isValidBranch, modelProvider, parseGitUrl } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { get } from "../db";
 import { badRequest } from "../util";
@@ -28,6 +28,8 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
   for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {
     if (value !== undefined && (typeof value !== "string" || (value.trim() !== "" && !isModelId(value.trim())))) throw badRequest(`Invalid model id for runner.${key}`);
+    // Claude stays every agent's default: GLM is picked per agent, chat or delegated task.
+    if (typeof value === "string" && modelProvider(value) !== "anthropic") throw badRequest(`runner.${key} must be a Claude model; pick GLM per agent or chat`);
   }
   const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
   if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
@@ -56,6 +58,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     }
     if (dreaming.model !== undefined && (typeof dreaming.model !== "string" || (dreaming.model.trim() !== "" && !isModelId(dreaming.model.trim())))) {
       throw badRequest("Invalid model id for dreaming");
+    }
+    // Dreams read every chat of an agent: they stay on Claude.
+    if (typeof dreaming.model === "string" && modelProvider(dreaming.model) !== "anthropic") {
+      throw badRequest("The dreaming model must be a Claude model");
     }
   }
   const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;

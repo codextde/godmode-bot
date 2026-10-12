@@ -43,7 +43,8 @@ export default function ModelAndLimits() {
   }
 
   const r = s.runner;
-  const models = catalog.data?.models ?? [];
+  // Defaults and the fallback are Claude only: GLM is picked per agent or chat.
+  const models = (catalog.data?.models ?? []).filter((m) => !m.provider);
   const current = findModel(models, r.model);
   const fallback = findModel(models, r.fallbackModel);
   const options = [...(current ? [] : [{ value: r.model, label: r.model }]), ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description }))];

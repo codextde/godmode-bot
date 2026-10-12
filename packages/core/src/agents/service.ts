@@ -32,6 +32,7 @@ import {
   defaultCharacter,
   leadOf,
   leadProblem,
+  modelProvider,
   normalizeCharacter,
   normalizeHeartbeat,
   normalizeRole,
@@ -307,7 +308,8 @@ function normalizeSubagents(v: unknown): SubagentDefinition[] {
     const { name, description, prompt, model } = s as Record<string, unknown>;
     if (typeof name !== "string" || typeof description !== "string" || typeof prompt !== "string") continue;
     const def: SubagentDefinition = { name: name.trim(), description: description.trim(), prompt };
-    if (typeof model === "string" && model.trim()) def.model = model.trim();
+    // A subagent runs in its run's process, on its provider: a GLM id there is dropped (the subagent takes the run's model).
+    if (typeof model === "string" && model.trim() && modelProvider(model) === "anthropic") def.model = model.trim();
     if (def.name && def.description && def.prompt.trim()) out.push(def);
   }
   return out;

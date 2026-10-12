@@ -29,6 +29,23 @@ export const MODEL_OPTIONS: { id: string; label: string; hint: string }[] = [
 
 export const EFFORT_OPTIONS = ["low", "medium", "high", "xhigh", "max"] as const;
 
+/** Where a model runs: Claude (Anthropic, the default and what Godmode is tuned for) or Z.ai's GLM. */
+export type ModelProvider = "anthropic" | "zai";
+
+/** Z.ai's Anthropic-compatible endpoint: Claude Code drives GLM through it with every Godmode tool. */
+export const ZAI_ANTHROPIC_BASE_URL = "https://api.z.ai/api/anthropic";
+/** Vault app secret with the Z.ai API key. */
+export const ZAI_KEY_SECRET = "zai_api_key";
+
+/** Non-Claude models, for the few jobs Claude declines or can't do. Never a default. */
+export const GLM_MODELS: { id: string; label: string; hint: string }[] = [
+  { id: "glm-5.3", label: "GLM-5.3", hint: "Z.ai, text only. Only for tasks Claude can't do" },
+];
+
+export function modelProvider(model: string | null | undefined): ModelProvider {
+  return /^glm-/i.test(model?.trim() ?? "") ? "zai" : "anthropic";
+}
+
 export const BUILTIN_MODELS: ClaudeModel[] = MODEL_OPTIONS.map((m) => ({
   id: m.id,
   resolvedModel: m.id,
@@ -38,6 +55,18 @@ export const BUILTIN_MODELS: ClaudeModel[] = MODEL_OPTIONS.map((m) => ({
   // Only the installed Claude Code knows whether it has dynamic workflows.
   ultracode: false,
   latest: true,
+}));
+
+export const GLM_CATALOG_MODELS: ClaudeModel[] = GLM_MODELS.map((m) => ({
+  id: m.id,
+  resolvedModel: m.id,
+  label: m.label,
+  description: m.hint,
+  // Z.ai always thinks at its own level; Claude Code's effort flag doesn't reach it.
+  efforts: [],
+  ultracode: false,
+  latest: true,
+  provider: "zai",
 }));
 
 export const EFFORT_LABELS: Record<Effort, string> = {

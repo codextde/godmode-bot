@@ -20,7 +20,8 @@ export default function Memory() {
   const m = s?.memory;
   const d = m?.dreaming;
   const cron = d?.cron.trim().replace(/\s+/g, " ") ?? "";
-  const models = useModelCatalog().data?.models ?? [];
+  // Dreams stay on Claude.
+  const models = (useModelCatalog().data?.models ?? []).filter((m) => !m.provider);
   const dreamModel = findModel(models, d?.model)?.id ?? d?.model ?? "";
   const modelOptions = [
     { value: "agent", label: "Same as the agent" },

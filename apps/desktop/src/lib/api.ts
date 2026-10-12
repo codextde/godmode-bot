@@ -402,7 +402,7 @@ export const api = {
     remember: (remember: boolean, grant?: string) => request<VaultStatus>("POST", "/api/vault/remember", { remember }, withGrant(grant)),
     /** Re-enter the passphrase → short-lived grant for revealing secrets (the lock state doesn't change). */
     grant: (passphrase: string) => post<VaultGrant>("/api/vault/grant", { passphrase }),
-    /** App-level secrets (API keys): composio_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, browser_use_api_key */
+    /** App-level secrets (API keys): composio_api_key, openai_api_key, elevenlabs_api_key, anthropic_api_key, zai_api_key, browser_use_api_key */
     secrets: {
       list: () => get<{ key: string; set: boolean; updatedAt: string | null }[]>("/api/vault/secrets"),
       set: (key: string, value: string) => put<{ ok: true }>(`/api/vault/secrets/${encodeURIComponent(key)}`, { value }),
