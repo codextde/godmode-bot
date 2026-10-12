@@ -1788,6 +1788,9 @@ function describeFailure(job: Job, attempt: Attempt): string {
   const final = job.acc.final;
   const stderr = attempt.stderr.trim();
   const haystack = [final?.errors.join("\n") ?? "", final?.text ?? "", stderr, attempt.noise.join("\n")].join("\n");
+  if (AUTH_PROBLEM.test(haystack) && job.model && modelProvider(job.model) === "zai") {
+    return `Z.ai rejected the request for ${job.model} (API key invalid, or no balance or plan). Check the Z.ai API key under Integrations → API keys.`;
+  }
   if (AUTH_PROBLEM.test(haystack)) {
     return "Claude Code is not signed in (or the API key is invalid). Run `claude` in a terminal and log in, or add an Anthropic API key in Settings.";
   }
@@ -2124,7 +2127,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
   const zai = glm ? zaiKey() : null;
   if (glm && !zai) return { status: "failed", error: `${model} runs on Z.ai and needs a Z.ai API key: add it under Integrations → API keys (and unlock the vault).` };
-  if (glm && !job.resumed) {
+  if (glm && !job.acc.blocks.some((b) => b.type === "notice" && b.text.includes("on Z.ai, not Claude"))) {
     job.acc.addNotice("info", `This run uses ${model} on Z.ai, not Claude: text only, without vault secrets or API keys.`);
     scheduleDelta(job);
   }

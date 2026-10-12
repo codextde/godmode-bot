@@ -100,8 +100,8 @@ const argValue = (flag: string): string | null => {
 };
 
 const stateDir = process.env.FAKE_CLAUDE_STATE ?? join(tmpdir(), "godmode-fake-claude");
-// Each Claude Code config folder has its own sessions (GLM runs use one of their own).
-const sessionsDir = process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, "fake-sessions") : join(stateDir, "sessions");
+// GLM runs have a Claude Code config of their own, and so their own sessions.
+const sessionsDir = join(stateDir, process.env.CLAUDE_CONFIG_DIR?.endsWith("claude-zai") ? "sessions-zai" : "sessions");
 mkdirSync(sessionsDir, { recursive: true });
 
 if (args.includes("--version")) {
@@ -298,6 +298,7 @@ appendFileSync(
       ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? null,
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ?? null,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
+      CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? null,
     },
   }) + "\n",
 );

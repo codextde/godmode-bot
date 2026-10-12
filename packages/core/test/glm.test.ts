@@ -74,6 +74,7 @@ describe("GLM on Z.ai", () => {
     expect(inv.env.ANTHROPIC_AUTH_TOKEN).toBe("zai-test-key");
     expect(inv.env.ANTHROPIC_BASE_URL).toBe(ZAI_ANTHROPIC_BASE_URL);
     expect(inv.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe(GLM);
+    expect(inv.env.CLAUDE_CONFIG_DIR).toEndWith("claude-zai");
     expect(argValue(inv, "--append-system-prompt")).toContain(`This run uses ${GLM} on Z.ai`);
     expect(argValue(inv, "--append-system-prompt")).toContain("Vault secrets and API keys stay out of this run");
     const hidden = argValue(inv, "--disallowedTools")!.split(",");
@@ -134,6 +135,7 @@ describe("GLM on Z.ai", () => {
     expect(inv.env.ANTHROPIC_API_KEY).toBe("sk-ant-must-not-leak");
     expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
     expect(inv.env.ANTHROPIC_AUTH_TOKEN).toBeNull();
+    expect(inv.env.CLAUDE_CONFIG_DIR ?? "").not.toEndWith("claude-zai");
     expect(argValue(inv, "--append-system-prompt")).not.toContain("on Z.ai, not Claude");
   });
 
