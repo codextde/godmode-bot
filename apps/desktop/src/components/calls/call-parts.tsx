@@ -47,6 +47,18 @@ export function CallStatusPill({ status, className }: { status: CallStatus; clas
   );
 }
 
+/** An incoming call from the owner's own number. */
+export function OwnerCallBadge({ className }: { className?: string }) {
+  return (
+    <span
+      title="Came from your own number: its requests go to your agent as yours"
+      className={cn("inline-flex items-center rounded-[5px] border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-medium whitespace-nowrap text-sky-700 dark:text-sky-300", className)}
+    >
+      Owner call
+    </span>
+  );
+}
+
 /** Who the call was with: the contact's name, else the number. */
 export function callName(c: Pick<PhoneCall, "contactName" | "number" | "direction">): string {
   return c.contactName || c.number || (c.direction === "inbound" ? "Unknown caller" : "Unknown number");
