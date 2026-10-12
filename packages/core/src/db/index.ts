@@ -10,8 +10,9 @@ let db: Database | null = null;
 
 export function openDb(path: string): Database {
   const instance = new Database(path, { create: true, strict: true });
-  // Takes effect for a new database; an existing one switches with its next VACUUM (the database cleanup).
-  instance.run("PRAGMA auto_vacuum = INCREMENTAL;");
+  // Only for a new file: on an existing one it writes the header without waiting for a busy lock. Existing databases
+  // switch with their next VACUUM (the database cleanup).
+  if ((instance.query("PRAGMA page_count").get() as { page_count: number }).page_count === 0) instance.run("PRAGMA auto_vacuum = INCREMENTAL;");
   instance.run("PRAGMA journal_mode = WAL;");
   instance.run("PRAGMA foreign_keys = ON;");
   instance.run("PRAGMA busy_timeout = 5000;");

@@ -549,6 +549,34 @@ describe("git helpers", () => {
     expect(await repo.commitAll(dir, "clean")).toBeNull();
   });
 
+  test("commitAll retries when an untracked file vanishes between its stat and its read", async () => {
+    const dir = join(dataDir, "vanish-read-repo");
+    await repo.initRepo(dir);
+    writeFileSync(join(dir, "notes.md"), "1");
+    mkdirSync(join(dir, "state"), { recursive: true });
+    writeFileSync(join(dir, "state", "b.lock"), "held");
+    expect(await repo.commitAll(dir, "with lock")).not.toBeNull();
+    await repo.withRepoLock(dir, () => repo.untrackInLock(dir, "state"));
+    const fs = await import("node:fs");
+    const original = fs.promises.readFile;
+    let vanished = 0;
+    const spy = spyOn(fs.promises, "readFile").mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (String(path).endsWith("b.lock") && existsSync(String(path))) {
+        rmSync(String(path));
+        vanished++;
+      }
+      return (original as (...args: unknown[]) => Promise<unknown>).call(fs.promises, path, ...rest);
+    }) as typeof fs.promises.readFile);
+    try {
+      expect(await repo.commitAll(dir, "untrack")).not.toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+    expect(vanished).toBe(1);
+    const git = (await import("isomorphic-git")).default;
+    expect(await git.listFiles({ fs, dir, ref: "HEAD" })).toEqual(["notes.md"]);
+  });
+
   test("operations on the same repository are serialized", async () => {
     const dir = join(dataDir, "serial-repo");
     await repo.initRepo(dir);

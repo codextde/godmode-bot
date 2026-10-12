@@ -100,7 +100,9 @@ function isVanishedFileError(err: unknown): boolean {
     const errors = (err as Error & { errors?: unknown[] }).errors ?? [];
     return errors.length > 0 && errors.every(isVanishedFileError);
   }
-  return err.name === "NotFoundError" || (err as NodeJS.ErrnoException).code === "ENOENT" || err.message.startsWith("ENOENT:");
+  if (err.name === "NotFoundError" || (err as NodeJS.ErrnoException).code === "ENOENT" || err.message.startsWith("ENOENT:")) return true;
+  // Gone between its stat and its read: isomorphic-git's walker gets null content and reads its length.
+  return err instanceof TypeError && /\bcontent\.length\b|reading 'length'/.test(err.message);
 }
 
 /** Same as commitAll, for callers that already hold the lock via withRepoLock(dir, …). */
