@@ -249,12 +249,13 @@ describe("installing from a repository", () => {
       "server.json": JSON.stringify({
         name: "io.github.acme/rea",
         description: "Reverse engineer anything.",
-        repository: { url: "https://github.com/acme/rea", source: "github" },
         version: "6.4.0",
         packages: [{ registryType: "npm", identifier: "rea-agents", version: "6.4.0", transport: { type: "stdio" }, packageArguments: [{ type: "positional", value: "mcp" }] }],
       }),
       ".agents/skills/reverse-engineer-anything/SKILL.md": "---\nname: reverse-engineer-anything\ndescription: Reverse engineer\n---\nSee [native](references/native.md) and [the site](https://rea.tools/).\n",
       ".agents/skills/reverse-engineer-anything/references/native.md": "Native targets.\n",
+      // The same skill linked for Claude Code counts once.
+      ".claude/skills/reverse-engineer-anything/SKILL.md": "---\nname: reverse-engineer-anything\ndescription: Reverse engineer\n---\nSee [native](references/native.md).\n",
       // A skill for working on the repository itself: it leans on the repository's docs.
       ".agents/skills/rea-tool-design/SKILL.md": "---\nname: rea-tool-design\ndescription: Design tools\n---\nRead [the guide](../../../docs/tool-design.md).\n",
       "docs/tool-design.md": "Guide.\n",
@@ -268,8 +269,6 @@ describe("installing from a repository", () => {
       name: "app",
       version: "6.4.0",
       description: "Reverse engineer anything.",
-      repository: "https://github.com/acme/rea",
-      author: { name: "acme" },
       skills: ["./.agents/skills/reverse-engineer-anything"],
       mcpServers: { rea: { command: "npx", args: ["-y", "rea-agents@6.4.0", "mcp"] } },
     });
@@ -306,6 +305,8 @@ describe("installing from a repository", () => {
             registryType: "pypi",
             identifier: "acme-weather",
             transport: { type: "stdio" },
+            runtimeArguments: [{ type: "named", name: "--python", value: "3.12" }],
+            packageArguments: [{ type: "named", name: "--units-file", isRequired: false }],
             environmentVariables: [{ name: "WEATHER_KEY", description: "API key", isRequired: true, isSecret: true }, { name: "UNITS", default: "metric" }],
           },
         ],
@@ -313,9 +314,28 @@ describe("installing from a repository", () => {
     });
     const mod = await installMod({ source: server.url });
     const written = JSON.parse(readFileSync(join(checkoutPath(mod.id, mod.source!.commit), ".claude-plugin", "plugin.json"), "utf8"));
-    expect(written.mcpServers).toEqual({ weather: { command: "uvx", args: ["acme-weather==1.2.0"], env: { WEATHER_KEY: "${user_config.WEATHER_KEY}", UNITS: "metric" } } });
-    expect(written.userConfig).toEqual({ WEATHER_KEY: { type: "string", title: "WEATHER_KEY", description: "API key", sensitive: true } });
+    expect(written.mcpServers).toEqual({
+      weather: { command: "uvx", args: ["--python", "3.12", "acme-weather==1.2.0", "--units-file"], env: { WEATHER_KEY: "${user_config.WEATHER_KEY}", UNITS: "metric" } },
+    });
+    expect(written.userConfig).toEqual({ WEATHER_KEY: { type: "string", title: "WEATHER_KEY", description: "API key", required: true, sensitive: true } });
+    // The key is needed before it can be switched on.
+    expect(mod.enabled).toBe(false);
     deleteMod(mod.id);
+
+    // Nothing it could start as it stands: a package from another registry, an argument only the human can give, a remote that needs a token.
+    const unusable = repo({
+      "server.json": JSON.stringify({
+        name: "io.github.acme/private",
+        version: "1.0.0",
+        packages: [
+          { registryType: "npm", registryBaseUrl: "https://npm.acme.internal", identifier: "private-mcp", transport: { type: "stdio" } },
+          { registryType: "npm", identifier: "-c", transport: { type: "stdio" } },
+          { registryType: "npm", identifier: "needs-arg", transport: { type: "stdio" }, packageArguments: [{ type: "positional", valueHint: "dir", isRequired: true }] },
+        ],
+        remotes: [{ type: "streamable-http", url: "https://mcp.acme.dev/{tenant}/mcp" }, { type: "sse", url: "https://mcp.acme.dev/sse", headers: [{ name: "Authorization", isRequired: true }] }],
+      }),
+    });
+    expect(await status(installMod({ source: unusable.url }))).toBe(400);
 
     const remote = repo({ "server.json": JSON.stringify({ name: "io.github.acme/docs", remotes: [{ type: "streamable-http", url: "https://mcp.acme.dev/mcp" }] }) });
     const hosted = await installMod({ source: remote.url });
@@ -323,6 +343,32 @@ describe("installing from a repository", () => {
       docs: { type: "http", url: "https://mcp.acme.dev/mcp" },
     });
     deleteMod(hosted.id);
+  });
+
+  test("a plugin of its own keeps its own parts: no skills from .claude/skills, no server from server.json", async () => {
+    const server = repo({
+      "skills/lint/SKILL.md": "---\nname: lint\ndescription: Lint\n---\nLint.\n",
+      ".claude/skills/release/SKILL.md": "---\nname: release\ndescription: Release this repo\n---\nRelease.\n",
+      "server.json": JSON.stringify({ name: "io.github.acme/lint", version: "1.0.0", packages: [{ registryType: "npm", identifier: "lint-mcp", transport: { type: "stdio" } }] }),
+    });
+    const mod = await installMod({ source: server.url, enabled: false });
+    expect(mod.contents).toMatchObject({ skills: ["lint"], mcpServers: [] });
+    expect(JSON.parse(readFileSync(join(checkoutPath(mod.id, mod.source!.commit), ".claude-plugin", "plugin.json"), "utf8"))).toEqual({ name: "app" });
+    deleteMod(mod.id);
+  });
+
+  test("a restored checkout gets the manifest that was installed, even when the repository would read differently now", async () => {
+    const market = { name: "acme", plugins: [{ name: "docs", description: "Docs", source: "./plugins/docs", skills: ["./extra"] }] };
+    const server = repo({ ".claude-plugin/marketplace.json": JSON.stringify(market), "plugins/docs/extra/SKILL.md": "---\nname: extra\n---\nExtra.\n" });
+    const mod = await installMod({ source: server.url });
+    const file = () => join(checkoutPath(mod.id, mod.source!.commit), "plugins", "docs", ".claude-plugin", "plugin.json");
+    const installed = readFileSync(file(), "utf8");
+    expect(JSON.parse(installed)).toMatchObject({ name: "docs", skills: ["./extra"] });
+    rmSync(join(checkoutsRoot(), mod.id), { recursive: true, force: true });
+    const { run } = await chat(agent.id);
+    expect(run.status).toBe("succeeded");
+    expect(readFileSync(file(), "utf8")).toBe(installed);
+    deleteMod(mod.id);
   });
 
   test("a repository without a plugin is refused and leaves nothing behind", async () => {
