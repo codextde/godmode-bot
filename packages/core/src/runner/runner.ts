@@ -40,8 +40,11 @@ import type {
   TaskPriority,
 } from "@godmode/shared";
 import {
+  ANDROID_MCP_NAME,
   BROWSER_MCP_NAME,
+  COMPUTER_MCP_NAME,
   CUA_MCP_NAME,
+  VM_MCP_NAME,
   DEFAULT_MODEL,
   EFFORT_OPTIONS,
   GLM_MODELS,
@@ -1742,10 +1745,37 @@ async function spawnClaude(
   return { exitCode, stderr, noise };
 }
 
+/** The model a run is recorded with: what Claude reported, but for GLM the requested id (Z.ai may name it otherwise). */
+function recordedModel(job: Job, acc: { model: string | null }): string | null {
+  return job.model && modelProvider(job.model) === "zai" ? job.model : (acc.model ?? job.model ?? null);
+}
+
+/** Whose models the chat's session ran on so far, per its latest run that reached Claude Code; null = none yet. */
+function providerOfSession(job: Job): ReturnType<typeof modelProvider> | null {
+  const row = get<{ model: string | null }>(
+    "SELECT model FROM runs WHERE conversation_id = ? AND id != ? AND model IS NOT NULL AND num_turns > 0 ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    job.conversationId,
+    job.runId,
+  );
+  return row?.model ? modelProvider(row.model) : null;
+}
+
+/** What a GLM run can't use: every tool that answers with an image, and Anthropic's server-side web search. */
+const GLM_HIDDEN_TOOLS = [
+  `mcp__${BROWSER_MCP_NAME}__browser_screenshot`,
+  `mcp__${COMPUTER_MCP_NAME}`,
+  `mcp__${CUA_MCP_NAME}`,
+  `mcp__${ANDROID_MCP_NAME}`,
+  `mcp__${VM_MCP_NAME}__screen`,
+  `mcp__${VM_MCP_NAME}__fill_login`,
+  `mcp__${VM_MCP_NAME}__fill_totp`,
+  "WebSearch",
+];
+
 /** Who wrote a user message, as a recap names them. */
 const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task" };
 
-function recapPrefix(job: Job): string {
+function recapPrefix(job: Job, why = "could not be restored"): string {
   // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
   const own = (id: string) => !job.resumed && (id === job.messageId || id === job.userMessageId || job.alsoAnswers.includes(id));
   const msgs = listMessages(job.conversationId)
@@ -1761,7 +1791,7 @@ function recapPrefix(job: Job): string {
     const text = content.length > max ? `${content.slice(0, max - 1)}…` : content;
     return `${m.role === "user" ? SOURCE_SPEAKER[m.source ?? "human"] : "Assistant"}: ${text}`;
   });
-  return `<godmode-context>\nThe previous Claude session of this conversation could not be restored. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
+  return `<godmode-context>\nThe previous Claude session of this conversation ${why}. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
 }
 
 function describeFailure(job: Job, attempt: Attempt): string {
@@ -2003,6 +2033,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   res.files.push(mcpPath);
   const model = conv.model?.trim() || agent.model?.trim() || settings.runner.model?.trim() || DEFAULT_MODEL;
   const glm = modelProvider(model) === "zai";
+  const fillOnly = conv.secret_access === "fill" || glm;
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
@@ -2041,7 +2072,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const workspace = workspaceId ? get<{ name: string; instructions: string }>("SELECT name, instructions FROM workspaces WHERE id = ?", workspaceId) : null;
   const promptSources = (workspace || project) && sources.length ? { workspace: workspace?.name ?? null, project: project?.name ?? null, items: sources } : null;
   // Keys in the environment are only for Bash on this computer (and need an open vault).
-  const toolKeysInEnv = !dreaming && !(vm && settings.vm.isolateHostShell);
+  // GLM runs send what they read to Z.ai: no keys there.
+  const toolKeysInEnv = !dreaming && !glm && !(vm && settings.vm.isolateHostShell);
   const toolList = dreaming ? [] : apiToolsForAgent(agent);
   const envOwners = toolKeysInEnv && isUnlocked() ? apiToolEnvOwners(toolList) : new Map<string, string>();
   const apiTools: PromptApiTool[] = toolList.map((t) => ({
@@ -2071,7 +2103,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         vm: promptVm,
         ssh,
         android: phones,
-        androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && conv.secret_access !== "fill",
+        androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && !fillOnly,
         voice: job.voice,
         workingDirectory: folder,
         taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,
@@ -2081,7 +2113,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
-        fillOnly: conv.secret_access === "fill",
+        fillOnly,
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
         cards: !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
@@ -2100,6 +2132,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   if (!isModelId(model)) return { status: "failed", error: `Invalid model id "${model}"` };
   const zai = glm ? zaiKey() : null;
   if (glm && !zai) return { status: "failed", error: `${model} runs on Z.ai and needs a Z.ai API key: add it under Integrations → API keys (and unlock the vault).` };
+  if (glm && !job.resumed) {
+    job.acc.addNotice("info", `This run uses ${model} on Z.ai, not Claude: text only, and raw secrets stay out of it.`);
+    scheduleDelta(job);
+  }
   // The fallback runs in the same process: only a model of the same provider can take over.
   const fallback = settings.runner.fallbackModel?.trim();
   const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
@@ -2132,8 +2168,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // goes into a VM, so a VM's browser has none.
   if (mcp.mcpServers[BROWSER_MCP_NAME] && (vm || !browserLlmKey())) disallowed.push(...BROWSER_LLM_TOOLS.map((t) => `mcp__${BROWSER_MCP_NAME}__${t}`));
   if (mcp.mcpServers[CUA_MCP_NAME]) disallowed.push(...CUA_HIDDEN_TOOLS.map((t) => `mcp__${CUA_MCP_NAME}__${t}`));
-  // GLM reads text only: a screenshot would end the request.
-  if (glm && mcp.mcpServers[BROWSER_MCP_NAME]) disallowed.push(`mcp__${BROWSER_MCP_NAME}__browser_screenshot`);
+  // GLM reads text only (a screenshot would end the request), and Anthropic's server-side web search isn't on Z.ai.
+  if (glm) disallowed.push(...GLM_HIDDEN_TOOLS);
   // Shell work belongs in the VM: Claude Code's own Bash tool would run on the host. Settings files (hooks run shell
   // commands on this computer) can't be planted for later runs in the folders this run may write to.
   if (hostLocked) disallowed.push("Bash", "Edit(**/.claude/**)"); // Edit rules cover every file-editing tool
@@ -2171,7 +2207,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       baseArgs.push("--agents", viaFiles ? writeTempFile(res, `godmode-agents-${job.runId}.json`, json) : json);
     }
   }
-  if (settings.memory.backend === "claude-mem" && !dreaming) {
+  // claude-mem's worker outlives the run: started from a GLM run it would keep Z.ai's endpoint for later Claude runs.
+  if (settings.memory.backend === "claude-mem" && !dreaming && !glm) {
     const pluginDir = claudeMemPluginDir();
     if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
     else {
@@ -2210,6 +2247,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
 
   try {
     let sessionId = conv.claude_session_id;
+    // A session belongs to one provider: after a switch between Claude and GLM the chat goes on in a new one, with a recap.
+    const before = sessionId && !job.resumed ? providerOfSession(job) : null;
+    const switched = !!before && before !== modelProvider(model);
+    if (switched) sessionId = null;
     const resuming = !!sessionId;
     if (!sessionId) {
       sessionId = randomUUID();
@@ -2244,7 +2285,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         ? resumeContextPrefix(folder, agent.repoPath, { instructions: restate ? standing : undefined, memoryChanged, vm: promptVm, sources: promptSources, followup, humanTasks, apiTools, ssh, android: phones }) +
           lateNote +
           body
-        : lateNote + body;
+        : (switched && !command ? recapPrefix(job, "was on another model") : "") + lateNote + body;
     // What the run did before a pause, and what the chat's queue added to this stretch.
     const kept = job.acc.blocks.length;
     // A chat the human started runs although a monthly budget is used up — once a month the chat says so.
@@ -2517,7 +2558,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
       spent.durationMs,
       spent.numTurns,
       spent.usage ? JSON.stringify(spent.usage) : null,
-      acc.model ?? job.model ?? null,
+      recordedModel(job, acc) ?? null,
       job.runId,
     );
     updateMessage(job.messageId, { content: text, blocks });
@@ -2598,7 +2639,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
       spent.durationMs,
       spent.numTurns,
       spent.usage ? JSON.stringify(spent.usage) : null,
-      acc.model ?? job.model ?? (agent ? agent.model || getSettings().runner.model || null : null),
+      recordedModel(job, acc) ?? (agent ? agent.model || getSettings().runner.model || null : null),
       ts,
       job.runId,
     ),

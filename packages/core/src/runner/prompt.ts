@@ -261,7 +261,7 @@ Godmode tools come from the \`godmode\` MCP server (vault logins and 2FA, missin
 
   if (ctx.glm) {
     out.push(`### Model
-This run uses ${ctx.glm} on Z.ai, not Claude, for a task Claude couldn't do. It reads text only: you can't see images or screenshots, so read pages with \`browser_get_state\` or \`browser_get_html\` and files as text.`);
+This run uses ${ctx.glm} on Z.ai, not Claude, for a task Claude couldn't do. It reads text only: you can't see images or screenshots and have no screen control (computer, VM screen, phones), so read pages with \`browser_get_state\` or \`browser_get_html\` and files as text. Raw secrets stay out of this run: Godmode fills logins into pages.`);
   }
 
   if (ctx.browserAvailable) {

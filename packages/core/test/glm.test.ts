@@ -7,7 +7,8 @@ import { callTool } from "../src/mcp/tools";
 import { buildSystemPrompt } from "../src/runner/prompt";
 import { getModelCatalog } from "../src/runner/models";
 import { waitForRun } from "../src/runner/runner";
-import { getConversation, startChat } from "../src/services/conversations";
+import { chatFillOnly, getConversation, sendMessage, startChat, updateConversation } from "../src/services/conversations";
+import { updateAgent } from "../src/agents/service";
 import { getSettings } from "../src/services/settings";
 import { checkSettingsPatch } from "../src/services/settingsPatch";
 
@@ -66,11 +67,59 @@ describe("GLM on Z.ai", () => {
     expect(argValue(inv, "--model")).toBe(GLM);
     expect(inv.args).not.toContain("--effort");
     expect(inv.args).not.toContain("--fallback-model");
-    expect(inv.env.ANTHROPIC_API_KEY).toBeNull();
+    // Every credential Claude Code could send is the Z.ai key.
+    expect(inv.env.ANTHROPIC_API_KEY).toBe("zai-test-key");
     expect(inv.env.ANTHROPIC_AUTH_TOKEN).toBe("zai-test-key");
     expect(inv.env.ANTHROPIC_BASE_URL).toBe(ZAI_ANTHROPIC_BASE_URL);
     expect(inv.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe(GLM);
     expect(argValue(inv, "--append-system-prompt")).toContain(`This run uses ${GLM} on Z.ai`);
+    expect(argValue(inv, "--append-system-prompt")).toContain("Raw secrets stay out of this run");
+    const hidden = argValue(inv, "--disallowedTools")!.split(",");
+    for (const tool of ["mcp__computer", "mcp__cua", "mcp__android", "mcp__vm__screen", "WebSearch"]) expect(hidden).toContain(tool);
+    expect(run.model).toBe(GLM);
+    expect(getConversation(run.conversationId).messages.at(-1)!.blocks.some((b) => b.type === "notice" && b.text.includes("on Z.ai, not Claude"))).toBe(true);
+    expect(chatFillOnly(run.conversationId)).toBe(true);
+  });
+
+  test("switching a chat between Claude and GLM starts a new session with a recap", async () => {
+    const first = await chat(null);
+    const sessionId = getConversation(first.conversationId).claudeSessionId;
+    expect(chatFillOnly(first.conversationId)).toBe(false);
+
+    updateConversation(first.conversationId, { model: GLM });
+    const { run: onGlm } = await sendMessage(first.conversationId, { content: "Second question" });
+    expect((await waitForRun(onGlm.id, 20_000)).status).toBe("succeeded");
+    let inv = invocations(env).at(-1)!;
+    expect(inv.args).not.toContain("--resume");
+    expect(argValue(inv, "--session-id")).not.toBe(sessionId);
+    expect(inv.prompt).toContain("was on another model");
+    expect(inv.prompt).toContain("Hello there");
+    expect(chatFillOnly(first.conversationId)).toBe(true);
+
+    const { run: again } = await sendMessage(first.conversationId, { content: "Third question" });
+    await waitForRun(again.id, 20_000);
+    inv = invocations(env).at(-1)!;
+    expect(inv.args).toContain("--resume");
+    expect(inv.prompt).not.toContain("was on another model");
+
+    updateConversation(first.conversationId, { model: null });
+    const { run: back } = await sendMessage(first.conversationId, { content: "Fourth question" });
+    await waitForRun(back.id, 20_000);
+    inv = invocations(env).at(-1)!;
+    expect(inv.args).not.toContain("--resume");
+    expect(inv.prompt).toContain("was on another model");
+    expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
+  }, 60_000);
+
+  test("subagents and dreams stay on Claude", async () => {
+    const updated = await updateAgent(agent.id, {
+      subagents: [
+        { name: "a", description: "d", prompt: "p", model: GLM },
+        { name: "b", description: "d", prompt: "p", model: "sonnet" },
+      ],
+    });
+    expect(updated.subagents.map((s) => s.model ?? null)).toEqual([null, "sonnet"]);
+    expect(() => checkSettingsPatch({ memory: { dreaming: { model: GLM } } }, () => {})).toThrow(/dreaming model must be a Claude model/);
   });
 
   test("Claude runs are untouched by a saved Z.ai key", async () => {
@@ -113,6 +162,15 @@ describe("GLM on Z.ai", () => {
 
     const bad = await callTool(ctx, "agent_delegate", { agentId: agent.id, task: "Hello there", model: "claude-opus-5-5" });
     expect(bad.isError).toBe(true);
+
+    // Only managers route work to GLM.
+    const helper = await makeAgent({ name: "Helper", permissions: { allowDelegation: true } });
+    const own = await startChat({ agentId: helper.id, content: "Hello there" });
+    await waitForRun(own.run.id, 20_000);
+    const helperCtx = { runId: own.run.id, agentId: helper.id, conversationId: own.conversation.id, workspaceId: null, depth: 0 };
+    const refused = await callTool(helperCtx, "agent_delegate", { agentId: agent.id, task: "Hello there", model: GLM, wait: false });
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0]!.text).toContain("Only a manager agent");
 
     vault.setAppSecret("zai_api_key", null);
     const noKey = await callTool(ctx, "agent_delegate", { agentId: agent.id, task: "Hello there", model: GLM });

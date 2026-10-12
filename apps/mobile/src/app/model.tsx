@@ -42,8 +42,9 @@ export default function ModelSheet() {
 
   const models = catalog.data?.models ?? [];
   const listed = models.some((m) => m.id === current.id) ? models : [current, ...models];
-  const latest = listed.filter((m) => m.latest);
-  const older = listed.filter((m) => !m.latest);
+  const latest = listed.filter((m) => m.latest && !m.provider);
+  const older = listed.filter((m) => !m.latest && !m.provider);
+  const special = listed.filter((m) => m.provider);
   const overridden = choice.model !== null || choice.effort !== null || choice.ultracode !== null;
 
   const change = (patch: ModelChoicePatch) => {
@@ -109,6 +110,17 @@ export default function ModelSheet() {
                   </View>
                 ))
               : null}
+          </>
+        ) : null}
+        {special.length > 0 ? (
+          <>
+            <Hairline inset={space.lg} />
+            <T variant="footnote" muted style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
+              Special tasks
+            </T>
+            {special.map((m) => (
+              <Option key={m.id} model={m} selected={m.id === current.id} isDefault={m.id === base.id} onPress={() => pickModel(m)} />
+            ))}
           </>
         ) : null}
         {catalog.isLoading && models.length === 0 ? (

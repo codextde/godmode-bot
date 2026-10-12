@@ -59,6 +59,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     if (dreaming.model !== undefined && (typeof dreaming.model !== "string" || (dreaming.model.trim() !== "" && !isModelId(dreaming.model.trim())))) {
       throw badRequest("Invalid model id for dreaming");
     }
+    // Dreams read every chat of an agent: they stay on Claude.
+    if (typeof dreaming.model === "string" && modelProvider(dreaming.model) !== "anthropic") {
+      throw badRequest("The dreaming model must be a Claude model");
+    }
   }
   const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;
   if (diagnostics !== undefined && (typeof diagnostics !== "object" || diagnostics === null || Array.isArray(diagnostics))) throw badRequest("Invalid log settings");
