@@ -1,6 +1,7 @@
 import type { Effort } from "@godmode/shared";
 import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
+import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
 import { badRequest } from "../util";
 import { isValidDreamSchedule } from "../memory/dreaming";
@@ -157,6 +158,7 @@ function checkPhonePatch(value: unknown): void {
   if (typeof phone.ownerNumber === "string" && phone.ownerNumber.trim()) {
     const number = toE164(phone.ownerNumber);
     if (!number) throw badRequest("Enter your phone number with the country code, e.g. +49 151 12345678");
+    if (isPremiumNumber(number)) throw badRequest("A premium-rate or service number can't be your phone number");
     phone.ownerNumber = number;
   } else if (phone.ownerNumber !== undefined && phone.ownerNumber !== "") throw badRequest("Invalid phone number");
   for (const key of ["quietFrom", "quietTo"]) {
