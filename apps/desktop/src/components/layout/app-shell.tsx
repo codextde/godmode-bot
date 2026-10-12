@@ -22,6 +22,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  Phone,
   Plug,
   Puzzle,
   Search,
@@ -180,6 +181,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
+    { to: "/calls", label: "Calls", icon: <Phone /> },
     { to: "/plugins", label: "Plugins", icon: <Puzzle />, badge: modsWaiting || undefined },
   ];
   const accessNav: NavItem[] = [

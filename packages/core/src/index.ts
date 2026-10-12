@@ -51,6 +51,7 @@ import { startTasks, stopTasks } from "./tasks/service";
 import { runDoctor } from "./services/doctor";
 import { checkPermissions } from "./services/permissions";
 import { startHeartbeats, stopHeartbeats } from "./services/heartbeats";
+import { startCalls, stopCalls } from "./calls/calls";
 import { startWatchdog, stopWatchdog } from "./runner/watchdog";
 import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
@@ -201,6 +202,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startMessaging();
     startTasks();
     startHeartbeats();
+    startCalls();
     startModUpdates();
   }
   // Adopt VMs that kept running while Godmode was closed.
@@ -342,6 +344,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       stopTasks();
       stopModUpdates();
       stopHeartbeats();
+      stopCalls();
     }
     await shutdownRunner();
     await shutdownBrowsers();

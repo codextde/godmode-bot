@@ -60,6 +60,7 @@ const ICONS = {
   wifi: ["wifi.slash", "wifi_off"],
   pin: ["pin.fill", "push_pin"],
   phone: ["iphone", "smartphone"],
+  call: ["phone.fill", "call"],
   layers: ["square.stack.3d.up.fill", "layers"],
   tasks: ["checklist", "checklist"],
   branch: ["arrow.triangle.branch", "merge"],

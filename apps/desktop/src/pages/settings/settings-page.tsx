@@ -15,6 +15,7 @@ import {
   Info,
   KeySquare,
   MonitorUp,
+  Phone,
   RefreshCw,
   ScrollText,
   Settings2,
@@ -31,6 +32,7 @@ import { AndroidSection } from "@/components/settings/android-section";
 import { BackupSection } from "@/components/settings/backup-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
+import { CallsSection } from "@/components/settings/calls-section";
 import { CleanupSection } from "@/components/settings/cleanup-section";
 import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
@@ -60,6 +62,7 @@ const SECTIONS = [
   { id: "vms", label: "Virtual machines", icon: <Box />, group: "Preferences" },
   { id: "android", label: "Android phones", icon: <Smartphone />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
+  { id: "calls", label: "Phone calls", icon: <Phone />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
@@ -114,6 +117,7 @@ export default function SettingsPage() {
       vms: () => <VmSection settings={s} />,
       android: () => <AndroidSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,
+      calls: () => <CallsSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,

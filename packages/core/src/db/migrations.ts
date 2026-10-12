@@ -1455,4 +1455,44 @@ CREATE INDEX IF NOT EXISTS idx_human_tasks_question ON human_tasks(question_id);
 ALTER TABLE routines ADD COLUMN secret_access TEXT;
 `,
   },
+  {
+    id: 90,
+    name: "phone_calls",
+    sql: /* sql */ `
+-- Phone calls agents placed and calls Godmode's number answered. provider_call_id is the ElevenLabs conversation the
+-- call is read back from; reported_at is set once its chat continued with the result (or there was nothing to tell).
+CREATE TABLE phone_calls (
+  id TEXT PRIMARY KEY,
+  direction TEXT NOT NULL,          -- outbound | inbound
+  purpose TEXT NOT NULL,            -- task | question | inform | inbound
+  status TEXT NOT NULL,             -- calling | in_progress | processing | done | no_answer | failed
+  number TEXT NOT NULL DEFAULT '',
+  contact_name TEXT NOT NULL DEFAULT '',
+  goal TEXT NOT NULL DEFAULT '',
+  context TEXT NOT NULL DEFAULT '',
+  language TEXT NOT NULL DEFAULT '',
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+  run_id TEXT,
+  question_id TEXT,
+  provider_call_id TEXT UNIQUE,
+  summary TEXT NOT NULL DEFAULT '',
+  outcome TEXT NOT NULL DEFAULT '',
+  answer TEXT NOT NULL DEFAULT '',
+  successful INTEGER,
+  transcript TEXT NOT NULL DEFAULT '[]',
+  duration_secs INTEGER,
+  cost_usd REAL,
+  has_audio INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  reported_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  ended_at TEXT
+);
+CREATE INDEX idx_phone_calls_created ON phone_calls(created_at);
+CREATE INDEX idx_phone_calls_status ON phone_calls(status);
+CREATE INDEX idx_phone_calls_conversation ON phone_calls(conversation_id);
+`,
+  },
 ];

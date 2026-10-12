@@ -32,6 +32,7 @@ export const TRIGGER_LABEL: Record<RunTrigger, string> = {
   task: "Task",
   followup: "Follow-up",
   heartbeat: "Heartbeat",
+  call: "Phone call",
 };
 
 /** A run still ahead of its end: working, or waiting for its turn. */

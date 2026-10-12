@@ -20,6 +20,7 @@ import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
 import { registerVoiceRoutes } from "./routes/voice";
+import { registerCallRoutes } from "./routes/calls";
 import { registerFileRoutes } from "./routes/files";
 import { registerFolderRoutes } from "./routes/folders";
 import { isExpectedSlow, registerMcpRoutes } from "../mcp/http";
@@ -177,6 +178,7 @@ export function createApp() {
   registerModRoutes(app);
   registerBackupRoutes(app);
   registerVoiceRoutes(app);
+  registerCallRoutes(app);
   registerFolderRoutes(app);
   registerFileRoutes(app);
   registerLogRoutes(app);

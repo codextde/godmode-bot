@@ -23,6 +23,7 @@ import { useAllAgents, useBootstrap, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
+import { CallMarker, callBlock } from "@/components/calls/call-chat";
 import { liveMood } from "./conversation-mood";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
@@ -158,6 +159,8 @@ export function SystemMessage({ message }: { message: Message }) {
   if (followup) return <FollowupMarker block={followup} />;
   const done = humanTaskBlock(message);
   if (done) return <HumanTaskMarker block={done} />;
+  const call = callBlock(message);
+  if (call) return <CallMarker block={call} />;
   const retry = message.blocks.find((b) => b.type === "retry");
   if (retry) return <RetryMarker block={retry} at={message.createdAt} />;
   return (

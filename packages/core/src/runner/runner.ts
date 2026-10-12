@@ -125,6 +125,7 @@ import {
   type PromptVm,
 } from "./prompt";
 import { apiToolEnv, apiToolEnvOwners, apiToolsForAgent } from "../integrations/apiTools";
+import { elevenLabsKey } from "../calls/elevenlabs";
 import { attachComputer, computerLockKey, detachComputer } from "../computer/service";
 import { attachVm, detachVm, type RunVm } from "../vm/service";
 import { CUA_HIDDEN_TOOLS, currentVmPage, prepareGuest, type GuestTools } from "../vm/guest";
@@ -2078,6 +2079,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
+        calls:
+          job.trigger !== "check" && job.trigger !== "delegation" && config().role !== "runner" && settings.phone.enabled && elevenLabsKey() !== null
+            ? { owner: !!settings.phone.ownerNumber && settings.phone.callOwner }
+            : null,
         fillOnly: conv.secret_access === "fill",
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,

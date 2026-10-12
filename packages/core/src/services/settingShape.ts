@@ -11,6 +11,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "computer.screenshotMaxSize": [640, 1568],
   "vm.idleStopMinutes": [0, 1440],
   "voice.rate": [0.5, 2],
+  "phone.maxMinutes": [1, 60],
   "general.userName": [0, 80],
 };
 

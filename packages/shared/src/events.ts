@@ -187,6 +187,8 @@ export type EntityName =
   | "ssh-servers"
   /** Android phones: plugged in, unplugged, renamed, assigned. */
   | "android"
+  /** Phone calls: placed, ringing, ended, summarised. */
+  | "calls"
   | "mods"
   | "messaging"
   | "tasks"

@@ -40,6 +40,7 @@ import type {
   AppNotification,
   AuditEntry,
   AutomationEvent,
+  CallSetup,
   BackupExportInput,
   BackupImportResult,
   Bootstrap,
@@ -122,6 +123,9 @@ import type {
   ModelCatalog,
   PasswordImportPreview,
   PasswordImportResult,
+  PhoneCall,
+  PlaceCallInput,
+  ImportCallNumberInput,
   QueuedMessage,
   PermissionId,
   PermissionReport,
@@ -941,6 +945,18 @@ export const api = {
       return request<{ text: string }>("POST", "/api/voice/transcribe", form);
     },
     speak: (text: string) => request<Blob>("POST", "/api/voice/speak", { text }),
+  },
+
+  calls: {
+    list: (limit = 100) => get<PhoneCall[]>("/api/calls", { limit }),
+    get: (id: string) => get<PhoneCall>(`/api/calls/${id}`),
+    place: (input: PlaceCallInput) => post<PhoneCall>("/api/calls", input),
+    /** Asks ElevenLabs for numbers, voices and models: slow-ish, and fails when the key doesn't work. */
+    setup: () => get<CallSetup>("/api/calls/setup"),
+    importNumber: (input: ImportCallNumberInput) => post<CallSetup>("/api/calls/numbers", input),
+    /** Calls the owner's number (409 with the reason when it can't). */
+    test: () => post<PhoneCall>("/api/calls/test"),
+    audio: (id: string) => fetchBlob(`/api/calls/${id}/audio`),
   },
 };
 

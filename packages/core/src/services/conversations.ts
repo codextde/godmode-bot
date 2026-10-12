@@ -985,6 +985,7 @@ function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
   if (m?.source === "task") return "Task";
   if (runTrigger === "followup") return "Follow-up";
   if (runTrigger === "heartbeat") return "Heartbeat";
+  if (runTrigger === "call") return "Phone call";
   return getSettings().general.userName.trim() || "User";
 }
 

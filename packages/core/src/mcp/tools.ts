@@ -143,6 +143,7 @@ import { describeNow } from "../runner/prompt";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
+import { callOwnerWhenAsked, callsEnabled, getCall, listCalls, ownerCallRefusal, placeCall } from "../calls/calls";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
@@ -1363,17 +1364,27 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "notify_user",
-    description: "Send the human a notification (desktop + Godmode inbox). Use for important results or blockers, not routine progress.",
+    description:
+      "Send the human a notification (desktop + Godmode inbox). Use for important results or blockers, not routine progress. With `call: true` Godmode also phones them and tells them — only for something important that can't wait until they look at the app (an outage, money at risk, a deadline today).",
     schema: z.object({
       title: z.string().min(1).max(200),
       body: z.string().max(4000).optional(),
       level: z.enum(["info", "success", "warning", "error"]).optional(),
+      call: z.boolean().optional().describe("Also phone the human now and tell them (urgent news only)"),
     }),
-    run: ({ title, body, level }, { agent, ctx }) => {
+    run: async ({ title, body, level, call }, { agent, ctx }) => {
       const task = taskForConversation(ctx.conversationId);
       notify(level ?? "info", `${agent.name}: ${redact(title)}`, redact(body ?? ""), task ? `/tasks?task=${task.id}` : `/chat/${ctx.conversationId}`);
       if (ctx.runId) markRunNotifiedUser(ctx.runId);
-      return "Notification sent.";
+      if (!call) return "Notification sent.";
+      const refused = ownerCallRefusal();
+      if (refused) return `Notification sent. No call: ${refused}.`;
+      try {
+        await placeCall({ to: "", purpose: "inform", goal: title, context: body, agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId });
+        return "Notification sent, and Godmode is calling the human now. If they say something for you on the call, this chat continues with it.";
+      } catch (err) {
+        return `Notification sent. The call failed: ${err instanceof Error ? err.message : String(err)}`;
+      }
     },
   }),
 
@@ -1395,11 +1406,20 @@ const TOOLS: ToolDef[] = [
         .max(4)
         .optional()
         .describe("2–4 suggested answers. The human can always answer in their own words. Leave out for an open question."),
+      call: z
+        .boolean()
+        .optional()
+        .describe("Also phone the human and ask on the call — only when it is urgent and important (something breaks, money or a deadline is at stake today). Their answer on the phone answers the question."),
     }),
     when: canAsk,
-    run: ({ question, context, options }, { ctx }) => {
+    run: ({ question, context, options, call }, { ctx }) => {
       const out = askQuestion(ctx, { kind: "question", question, context, options });
-      return out.ok ? out.text : fail(out.text);
+      if (!out.ok) return fail(out.text);
+      if (!call || !out.id) return out.text;
+      const refused = ownerCallRefusal();
+      if (refused) return `${out.text} (No phone call: ${refused}.)`;
+      callOwnerWhenAsked(out.id);
+      return `${out.text} Godmode also phones them about it now.`;
     },
   }),
 
@@ -1484,6 +1504,41 @@ const TOOLS: ToolDef[] = [
     run: ({ id, reason }, { agent }) => {
       const t = withdrawHumanTask(findHumanTask(id).id, reason ?? "", { agentId: agent.id });
       return `${humanTaskRef(t)} is off the list.`;
+    },
+  }),
+
+  defineTool({
+    name: "phone_call",
+    description:
+      "Phone someone and let Godmode's voice assistant talk to them for you: book an appointment (hairdresser, doctor, workshop), ask a business something, follow up with a lead. The call runs on its own; when it ends, this chat continues with the transcript, a summary and the outcome — so end your turn after placing it. Calling someone reaches another person on the human's behalf: unless the human asked for exactly this call, get their OK first with request_approval. Put everything the voice may use into `context` (the human's name and details it may give, dates and times it may accept, price limits, what it must not agree to): it knows nothing else and can't ask you during the call.",
+    schema: z.object({
+      to: z.string().min(5).max(40).describe('Number with country code, e.g. "+49 7904 123456"'),
+      goal: z.string().min(1).max(2000).describe('What the call must achieve, e.g. "Book a men\'s haircut for Daniel Ehrhardt this week, ideally Thursday after 17:00"'),
+      context: z.string().max(8000).optional().describe("Everything the voice may use and its limits: names, details to give, acceptable dates/times, budget, what not to agree to"),
+      contactName: z.string().max(120).optional().describe('Who you call, e.g. "Salon Haarwerk"'),
+      language: z.string().regex(/^[a-z]{2,3}$/).optional().describe('Language to start in (ISO 639-1, e.g. "de"); default from Settings → Phone calls'),
+    }),
+    when: (agent, ctx) => canFollowUp(agent, ctx) && callsEnabled(),
+    run: async ({ to, goal, context, contactName, language }, { agent, ctx }) => {
+      const c = await placeCall({ to, goal, context, contactName, language, purpose: "task", agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId });
+      return `Calling ${c.contactName || c.number} now (call ${c.id}). End your turn with a short summary; when the call ends, this chat continues by itself with the transcript and the outcome. Don't poll and don't schedule a follow-up for it.`;
+    },
+  }),
+
+  defineTool({
+    name: "phone_calls",
+    description: "Your recent phone calls (status, summary, outcome), or one call with its full transcript (`id`).",
+    schema: z.object({ id: z.string().max(100).optional().describe("A call's id for its transcript") }),
+    when: () => callsEnabled(),
+    run: ({ id }, { agent }) => {
+      if (id) {
+        const c = getCall(id);
+        if (c.agentId !== agent.id && !isManager(agent)) return fail("That call isn't yours.");
+        return json(c);
+      }
+      const calls = listCalls({ agentId: isManager(agent) ? undefined : agent.id, limit: 20 });
+      if (!calls.length) return "No calls yet.";
+      return json(calls.map((c) => ({ id: c.id, direction: c.direction, purpose: c.purpose, status: c.status, number: c.number, contact: c.contactName || null, goal: c.goal, summary: c.summary || null, outcome: c.outcome || null, at: c.createdAt })));
     },
   }),
 

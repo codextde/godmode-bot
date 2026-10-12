@@ -16,7 +16,7 @@ const log = logger("notices");
 /** Chats the human talks in: unread marks and reply notices are for these. */
 const HUMAN_ORIGINS = new Set(["chat", "api"]);
 /** Turns the human started or asked for (a follow-up the agent promised them counts). */
-const HUMAN_TRIGGERS = new Set(["chat", "manual", "api", "followup"]);
+const HUMAN_TRIGGERS = new Set(["chat", "manual", "api", "followup", "call"]);
 
 /** The run stopped on a missing login, which notifies on its own. */
 function reportedMissingLogin(runId: string): boolean {

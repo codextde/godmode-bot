@@ -116,6 +116,14 @@ export const qk = {
   /** Not under ["mods"]: the gallery doesn't change when a mod does. */
   modTemplates: ["mod-templates"] as unknown[],
   modCatalog: ["mod-catalog"] as unknown[],
+  /** Phone calls, refreshed by `calls` events. */
+  calls: ["calls"] as unknown[],
+  callList: (limit: number) => ["calls", "list", limit],
+  call: (id: string) => ["calls", "detail", id],
+  /** Not under ["calls"]: it asks ElevenLabs, which shouldn't happen on every call event. */
+  callSetup: ["call-setup"] as unknown[],
+  /** A call's recording; its own root so call events don't download it again. */
+  callAudio: (id: string) => ["call-audio", id],
   /** Phone access: Tailscale status and paired phones. */
   mobile: ["mobile"] as unknown[],
   connectors: ["connectors"] as unknown[],

@@ -304,6 +304,7 @@ function speaker(trigger: RunTrigger, human: string): string {
   if (trigger === "api" || trigger === "manual") return "Request (API)";
   if (trigger === "followup") return "Follow-up (you continued on your own)";
   if (trigger === "heartbeat") return "Heartbeat (you woke up on your own rhythm)";
+  if (trigger === "call") return "Phone call (a call you placed ended)";
   return human;
 }
 
