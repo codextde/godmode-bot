@@ -1002,6 +1002,10 @@ async function ensureCheckout(row: ModRow): Promise<void> {
       busyCheckouts.add(staging);
       try {
         await cloneAt(source.url, source.commit, staging);
+        // A plugin that ships no manifest got one at install: exactly that one comes back, never one derived anew.
+        const recorded = parseJson<Record<string, unknown> | null>(filesOf(row)[MOD_MANIFEST_PATH], null);
+        const dir = pluginDirIn(staging, source.path);
+        if (recorded && !existsSync(join(dir, ...MOD_MANIFEST_PATH.split("/")))) writeManifest(dir, recorded);
         if (!existsSync(pluginDirIn(final, source.path))) {
           rmSync(final, { recursive: true, force: true });
           renameSync(staging, final);

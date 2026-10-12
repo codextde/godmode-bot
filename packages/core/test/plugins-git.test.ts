@@ -2,8 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
-import { modUpdateAvailable } from "@godmode/shared";
-import { invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { GLM_MODELS, modUpdateAvailable } from "@godmode/shared";
+import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import * as vault from "../src/vault/vault";
 import { startGitServer, type GitServer } from "./fixtures/git-server";
 import { getConversation, startChat } from "../src/services/conversations";
 import { listNotifications } from "../src/services/notifications";
@@ -50,8 +51,8 @@ async function status(promise: Promise<unknown>): Promise<number> {
   throw new Error("expected it to fail");
 }
 
-async function chat(agentId: string) {
-  const started = await startChat({ agentId, content: "hello" });
+async function chat(agentId: string, model: string | null = null) {
+  const started = await startChat({ agentId, content: "hello", model });
   const finished = await waitForRun(started.run.id, 20_000);
   const blocks = getConversation(started.conversation.id).messages.flatMap((m) => m.blocks);
   return { run: finished, blocks, invocation: invocations(env).at(-1)! };
@@ -240,6 +241,133 @@ describe("installing from a repository", () => {
     const { invocation, blocks } = await chat(agent.id);
     expect(pluginDirs(invocation.args)).toEqual([]);
     expect(blocks.some((b) => b.type === "notice" && b.text.includes("its record is damaged"))).toBe(true);
+    deleteMod(mod.id);
+  });
+
+  test("an MCP server with skills for agents (server.json, .agents/skills) installs as a plugin that runs on Claude and on GLM", async () => {
+    const server = repo({
+      "server.json": JSON.stringify({
+        name: "io.github.acme/rea",
+        description: "Reverse engineer anything.",
+        version: "6.4.0",
+        packages: [{ registryType: "npm", identifier: "rea-agents", version: "6.4.0", transport: { type: "stdio" }, packageArguments: [{ type: "positional", value: "mcp" }] }],
+      }),
+      ".agents/skills/reverse-engineer-anything/SKILL.md": "---\nname: reverse-engineer-anything\ndescription: Reverse engineer\n---\nSee [native](references/native.md) and [the site](https://rea.tools/).\n",
+      ".agents/skills/reverse-engineer-anything/references/native.md": "Native targets.\n",
+      // The same skill linked for Claude Code counts once.
+      ".claude/skills/reverse-engineer-anything/SKILL.md": "---\nname: reverse-engineer-anything\ndescription: Reverse engineer\n---\nSee [native](references/native.md).\n",
+      // A skill for working on the repository itself: it leans on the repository's docs.
+      ".agents/skills/rea-tool-design/SKILL.md": "---\nname: rea-tool-design\ndescription: Design tools\n---\nRead [the guide](../../../docs/tool-design.md).\n",
+      "docs/tool-design.md": "Guide.\n",
+    });
+    const mod = await installMod({ source: server.url });
+    expect(mod).toMatchObject({ name: "app", description: "Reverse engineer anything.", source: { version: "6.4.0" }, check: { ok: true, startsPrograms: true } });
+    expect(mod.contents).toMatchObject({ skills: ["reverse-engineer-anything"], mcpServers: ["rea"] });
+    const dir = checkoutPath(mod.id, mod.source!.commit);
+    const written = JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"));
+    expect(written).toEqual({
+      name: "app",
+      version: "6.4.0",
+      description: "Reverse engineer anything.",
+      skills: ["./.agents/skills/reverse-engineer-anything"],
+      mcpServers: { rea: { command: "npx", args: ["-y", "rea-agents@6.4.0", "mcp"] } },
+    });
+
+    const opus = await chat(agent.id, "opus");
+    expect(argValue(opus.invocation, "--model")).toBe("opus");
+    expect(pluginDirs(opus.invocation.args)).toContain(dir);
+    expect(opus.invocation.pluginServers["plugin_app_rea"]).toMatchObject({ command: "npx", args: ["-y", "rea-agents@6.4.0", "mcp"] });
+
+    await vault.setup("correct horse battery staple", false);
+    vault.setAppSecret("zai_api_key", "zai-test-key");
+    const glm = await chat(agent.id, GLM_MODELS[0]!.id);
+    expect(glm.run.status).toBe("succeeded");
+    expect(argValue(glm.invocation, "--model")).toBe(GLM_MODELS[0]!.id);
+    expect(pluginDirs(glm.invocation.args)).toContain(dir);
+    expect(glm.invocation.pluginServers["plugin_app_rea"]).toMatchObject({ command: "npx", args: ["-y", "rea-agents@6.4.0", "mcp"] });
+
+    // A checkout cloned again (a runner, a restored backup) gets its manifest back.
+    rmSync(join(checkoutsRoot(), mod.id), { recursive: true, force: true });
+    const again = await chat(agent.id, "opus");
+    expect(again.invocation.pluginServers["plugin_app_rea"]).toMatchObject({ command: "npx" });
+    expect(JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"))).toEqual(written);
+    deleteMod(mod.id);
+  });
+
+  test("an MCP server that needs a setting turns it into an option; a remote one connects by its address", async () => {
+    const server = repo({
+      "server.json": JSON.stringify({
+        name: "io.github.acme/weather",
+        version: "1.2.0",
+        packages: [
+          { registryType: "oci", identifier: "acme/weather", transport: { type: "stdio" } },
+          {
+            registryType: "pypi",
+            identifier: "acme-weather",
+            transport: { type: "stdio" },
+            runtimeArguments: [{ type: "named", name: "--python", value: "3.12" }],
+            packageArguments: [{ type: "named", name: "--units-file", isRequired: false }],
+            environmentVariables: [{ name: "WEATHER_KEY", description: "API key", isRequired: true, isSecret: true }, { name: "UNITS", default: "metric" }],
+          },
+        ],
+      }),
+    });
+    const mod = await installMod({ source: server.url });
+    const written = JSON.parse(readFileSync(join(checkoutPath(mod.id, mod.source!.commit), ".claude-plugin", "plugin.json"), "utf8"));
+    expect(written.mcpServers).toEqual({
+      weather: { command: "uvx", args: ["--python", "3.12", "acme-weather==1.2.0", "--units-file"], env: { WEATHER_KEY: "${user_config.WEATHER_KEY}", UNITS: "metric" } },
+    });
+    expect(written.userConfig).toEqual({ WEATHER_KEY: { type: "string", title: "WEATHER_KEY", description: "API key", required: true, sensitive: true } });
+    // The key is needed before it can be switched on.
+    expect(mod.enabled).toBe(false);
+    deleteMod(mod.id);
+
+    // Nothing it could start as it stands: a package from another registry, an argument only the human can give, a remote that needs a token.
+    const unusable = repo({
+      "server.json": JSON.stringify({
+        name: "io.github.acme/private",
+        version: "1.0.0",
+        packages: [
+          { registryType: "npm", registryBaseUrl: "https://npm.acme.internal", identifier: "private-mcp", transport: { type: "stdio" } },
+          { registryType: "npm", identifier: "-c", transport: { type: "stdio" } },
+          { registryType: "npm", identifier: "needs-arg", transport: { type: "stdio" }, packageArguments: [{ type: "positional", valueHint: "dir", isRequired: true }] },
+        ],
+        remotes: [{ type: "streamable-http", url: "https://mcp.acme.dev/{tenant}/mcp" }, { type: "sse", url: "https://mcp.acme.dev/sse", headers: [{ name: "Authorization", isRequired: true }] }],
+      }),
+    });
+    expect(await status(installMod({ source: unusable.url }))).toBe(400);
+
+    const remote = repo({ "server.json": JSON.stringify({ name: "io.github.acme/docs", remotes: [{ type: "streamable-http", url: "https://mcp.acme.dev/mcp" }] }) });
+    const hosted = await installMod({ source: remote.url });
+    expect(JSON.parse(readFileSync(join(checkoutPath(hosted.id, hosted.source!.commit), ".claude-plugin", "plugin.json"), "utf8")).mcpServers).toEqual({
+      docs: { type: "http", url: "https://mcp.acme.dev/mcp" },
+    });
+    deleteMod(hosted.id);
+  });
+
+  test("a plugin of its own keeps its own parts: no skills from .claude/skills, no server from server.json", async () => {
+    const server = repo({
+      "skills/lint/SKILL.md": "---\nname: lint\ndescription: Lint\n---\nLint.\n",
+      ".claude/skills/release/SKILL.md": "---\nname: release\ndescription: Release this repo\n---\nRelease.\n",
+      "server.json": JSON.stringify({ name: "io.github.acme/lint", version: "1.0.0", packages: [{ registryType: "npm", identifier: "lint-mcp", transport: { type: "stdio" } }] }),
+    });
+    const mod = await installMod({ source: server.url, enabled: false });
+    expect(mod.contents).toMatchObject({ skills: ["lint"], mcpServers: [] });
+    expect(JSON.parse(readFileSync(join(checkoutPath(mod.id, mod.source!.commit), ".claude-plugin", "plugin.json"), "utf8"))).toEqual({ name: "app" });
+    deleteMod(mod.id);
+  });
+
+  test("a restored checkout gets the manifest that was installed, even when the repository would read differently now", async () => {
+    const market = { name: "acme", plugins: [{ name: "docs", description: "Docs", source: "./plugins/docs", skills: ["./extra"] }] };
+    const server = repo({ ".claude-plugin/marketplace.json": JSON.stringify(market), "plugins/docs/extra/SKILL.md": "---\nname: extra\n---\nExtra.\n" });
+    const mod = await installMod({ source: server.url });
+    const file = () => join(checkoutPath(mod.id, mod.source!.commit), "plugins", "docs", ".claude-plugin", "plugin.json");
+    const installed = readFileSync(file(), "utf8");
+    expect(JSON.parse(installed)).toMatchObject({ name: "docs", skills: ["./extra"] });
+    rmSync(join(checkoutsRoot(), mod.id), { recursive: true, force: true });
+    const { run } = await chat(agent.id);
+    expect(run.status).toBe("succeeded");
+    expect(readFileSync(file(), "utf8")).toBe(installed);
     deleteMod(mod.id);
   });
 

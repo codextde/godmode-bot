@@ -204,6 +204,159 @@ function looksLikePlugin(dir: string): boolean {
   return isFile(join(dir, ...MOD_MANIFEST_PATH.split("/"))) || PLUGIN_PARTS.some((part) => existsSync(join(dir, ...part.split("/"))));
 }
 
+/** An MCP server's entry in the official MCP Registry, shipped in its repository. */
+const MCP_REGISTRY_PATH = "server.json";
+/** Where repositories keep skills for any agent (skills.sh) or for Claude Code in that repository. */
+const SHARED_SKILL_DIRS = [".agents/skills", ".claude/skills"];
+const SKILL_FILE_MAX_BYTES = 1_000_000;
+
+/**
+ * Does a skill work outside its repository? One that links to files beyond its own folder (the repository's docs,
+ * its contributing guide) is for working on that repository and stays behind.
+ */
+function portableSkill(skillDir: string): boolean {
+  const stack = [skillDir];
+  for (let seen = 0; stack.length && seen < 200; seen++) {
+    const dir = stack.pop()!;
+    for (const entry of list(dir)) {
+      const full = join(dir, entry);
+      if (isDir(full)) {
+        stack.push(full);
+        continue;
+      }
+      if (!/\.mdx?$/i.test(entry) || !contained(full)) continue;
+      let text: string;
+      try {
+        if (statSync(full).size > SKILL_FILE_MAX_BYTES) continue;
+        text = readFileSync(full, "utf8");
+      } catch {
+        continue;
+      }
+      for (const [, , target] of text.matchAll(/(\]\(\s*<?|^\s*\[[^\]]+\]:\s*<?)([^)\s>#]+)/gm)) {
+        if (/^[a-z][a-z0-9+.-]*:/i.test(target!)) continue;
+        // "/docs/x.md" is the repository's root on GitHub.
+        if (target!.startsWith("/")) return false;
+        const to = resolve(dir, target!);
+        if (to !== skillDir && !to.startsWith(skillDir + sep)) return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** The portable skills a repository keeps for agents, as manifest paths; one skill linked from two folders counts once. */
+function sharedSkills(dir: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const base of SHARED_SKILL_DIRS) {
+    const root = join(dir, ...base.split("/"));
+    for (const entry of list(root)) {
+      const skill = join(root, entry);
+      if (!PATH_SEGMENT.test(entry) || !contained(skill) || !isFile(join(skill, "SKILL.md"))) continue;
+      const real = realpathSync(skill);
+      const name = frontmatterName(join(skill, "SKILL.md")) ?? entry;
+      if (seen.has(real) || seen.has(`name:${name}`) || !portableSkill(skill)) continue;
+      seen.add(real).add(`name:${name}`);
+      out.push(`./${base}/${entry}`);
+    }
+  }
+  return out;
+}
+
+type RegistryArg = { type?: unknown; name?: unknown; value?: unknown; default?: unknown; isRequired?: unknown };
+
+/** The arguments as given; null when one needs input from the human (no value, or a {placeholder}). */
+function registryArgs(value: unknown): string[] | null {
+  const out: string[] = [];
+  for (const arg of Array.isArray(value) ? (value as RegistryArg[]).filter(isObj) : []) {
+    const v = typeof arg.value === "string" ? arg.value : typeof arg.default === "string" ? arg.default : null;
+    if (v !== null && /\{[^}]*\}/.test(v)) return null;
+    if (arg.type === "named" && typeof arg.name === "string") {
+      if (v === null && arg.isRequired === true) return null;
+      out.push(...(v === null ? [arg.name] : [arg.name, v]));
+    } else if (v !== null) out.push(v);
+    else if (arg.isRequired === true) return null;
+  }
+  return out;
+}
+
+/** How Claude Code starts a package the registry lists, by the registry it comes from: only from the public one. */
+const PACKAGE_RUNNERS: Record<string, { registry: string; id: RegExp; run: (pkg: string, version: string, runtime: string[]) => { command: string; args: string[] } }> = {
+  npm: { registry: "https://registry.npmjs.org", id: /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i, run: (pkg, version, runtime) => ({ command: "npx", args: ["-y", ...runtime, `${pkg}@${version}`] }) },
+  pypi: { registry: "https://pypi.org", id: /^[A-Za-z0-9][A-Za-z0-9._-]*$/, run: (pkg, version, runtime) => ({ command: "uvx", args: [...runtime, `${pkg}==${version}`] }) },
+};
+const VERSION_RE = /^[\w][\w.+-]{0,59}$/;
+
+/**
+ * The MCP server a repository's `server.json` (the MCP Registry's format) describes, for the manifest: a package Claude
+ * Code starts on this computer (npm via npx, PyPI via uvx) at the version the file names, else its remote address.
+ * Environment variables the server needs that have no default become the plugin's options.
+ */
+export function registryServer(dir: string): { name: string; description: string; version: string | null; server: Json; userConfig: Json } | null {
+  const entry = readJson(join(dir, MCP_REGISTRY_PATH));
+  if (!isObj(entry) || typeof entry.name !== "string") return null;
+  const derived = modNameFrom(entry.name.split("/").at(-1) ?? "");
+  const name = MOD_NAME_RE.test(derived) ? derived : "server";
+  const version = typeof entry.version === "string" && VERSION_RE.test(entry.version) ? entry.version : null;
+  let userConfig: Json = {};
+  let server: Json | null = null;
+  for (const pkg of Array.isArray(entry.packages) ? entry.packages.filter(isObj) : []) {
+    const runner = typeof pkg.registryType === "string" ? PACKAGE_RUNNERS[pkg.registryType] : undefined;
+    const transport = isObj(pkg.transport) ? pkg.transport.type : "stdio";
+    const base = typeof pkg.registryBaseUrl === "string" ? pkg.registryBaseUrl.replace(/\/+$/, "") : runner?.registry;
+    if (!runner || transport !== "stdio" || base !== runner.registry || typeof pkg.identifier !== "string" || !runner.id.test(pkg.identifier)) continue;
+    // Only a pinned version: what runs is what was reviewed.
+    const pinned = typeof pkg.version === "string" && VERSION_RE.test(pkg.version) ? pkg.version : version;
+    const runtime = registryArgs(pkg.runtimeArguments);
+    const packageArgs = registryArgs(pkg.packageArguments);
+    if (!pinned || !runtime || !packageArgs) continue;
+    const options: Json = {};
+    const env: Record<string, string> = {};
+    let usable = true;
+    for (const v of Array.isArray(pkg.environmentVariables) ? pkg.environmentVariables.filter(isObj) : []) {
+      if (typeof v.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(v.name)) continue;
+      const preset = typeof v.value === "string" ? v.value : typeof v.default === "string" ? v.default : null;
+      if (preset !== null && /\{[^}]*\}/.test(preset)) usable = false;
+      else if (preset !== null) env[v.name] = preset;
+      else if (v.isRequired === true) {
+        const description = typeof v.description === "string" ? v.description : v.name;
+        options[v.name] = { type: "string", title: v.name, description, required: true, ...(v.isSecret === true ? { sensitive: true } : {}) };
+        env[v.name] = `\${user_config.${v.name}}`;
+      }
+    }
+    if (!usable) continue;
+    const { command, args } = runner.run(pkg.identifier, pinned, runtime);
+    server = { command, args: [...args, ...packageArgs], ...(Object.keys(env).length ? { env } : {}) };
+    userConfig = options;
+    break;
+  }
+  if (!server) {
+    // A remote that needs headers or {placeholders} filled in can't be connected to as it stands.
+    const remote = (Array.isArray(entry.remotes) ? entry.remotes.filter(isObj) : []).find(
+      (r) => typeof r.url === "string" && /^https:\/\/[^{}$\s]+$/.test(r.url) && (r.type === "streamable-http" || r.type === "sse") && !(Array.isArray(r.headers) && r.headers.length),
+    );
+    if (remote) server = { type: remote.type === "sse" ? "sse" : "http", url: remote.url };
+  }
+  if (!server) return null;
+  return { name, description: typeof entry.description === "string" ? entry.description : "", version, server, userConfig };
+}
+
+/** A repository that is no Claude Code plugin but an MCP server and skills for agents: what its manifest says. */
+function repositoryManifest(dir: string): Json | null {
+  const registry = registryServer(dir);
+  const skills = sharedSkills(dir);
+  if (!registry && !skills.length) return null;
+  const out: Json = {};
+  if (registry?.version) out.version = registry.version;
+  if (registry?.description) out.description = registry.description;
+  if (skills.length) out.skills = skills;
+  if (registry) {
+    out.mcpServers = { [registry.name]: registry.server };
+    if (Object.keys(registry.userConfig).length) out.userConfig = registry.userConfig;
+  }
+  return out;
+}
+
 export interface ResolvedPlugin {
   /** Its folder in the repository; "" is the root. */
   path: string;
@@ -231,6 +384,8 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
   const pathOf = (dir: string) => (dir === checkout ? "" : dir.slice(checkout.length + 1).split(sep).join("/"));
 
   let chosen: { dir: string; path: string; listing: Json | null };
+  // Only a folder that is no plugin by itself: a plugin's own `.claude/skills` are for working on it.
+  let fromRepository: Json | null = null;
   if (plugin && ownName === plugin) {
     chosen = { dir: base, path, listing: listed.find((p) => p.name === plugin && relative(p) === base) ?? null };
   } else if (plugin && listed.some((p) => p.name === plugin)) {
@@ -253,8 +408,10 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
     throw badRequest("The plugins this repository lists live in other repositories: install them from there.");
   } else if (looksLikePlugin(base)) {
     chosen = { dir: base, path, listing: null };
+  } else if ((fromRepository = repositoryManifest(base))) {
+    chosen = { dir: base, path, listing: null };
   } else {
-    throw badRequest("No Claude Code plugin in this repository: it has no .claude-plugin/plugin.json, skills, commands or agents.");
+    throw badRequest("No Claude Code plugin in this repository: it has no .claude-plugin/plugin.json, skills, commands, agents or MCP server (server.json).");
   }
   if (!isDir(chosen.dir) || !contained(chosen.dir)) throw badRequest("No Claude Code plugin in that folder of the repository.");
 
@@ -262,11 +419,19 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
   const declared = isObj(manifest) && typeof manifest.name === "string" ? manifest.name : null;
   const name = declared ?? (typeof chosen.listing?.name === "string" ? chosen.listing.name : MOD_NAME_RE.test(fallbackName) ? fallbackName : modNameFrom(fallbackName));
   if (!MOD_NAME_RE.test(name)) throw badRequest(`The plugin calls itself "${name}", a name Claude Code can't load: lowercase letters, digits and dashes.`);
-  const description = isObj(manifest) && typeof manifest.description === "string" ? manifest.description : typeof chosen.listing?.description === "string" ? chosen.listing.description : "";
+  const description =
+    isObj(manifest) && typeof manifest.description === "string"
+      ? manifest.description
+      : typeof chosen.listing?.description === "string"
+        ? chosen.listing.description
+        : typeof fromRepository?.description === "string"
+          ? fromRepository.description
+          : "";
   let written: Json | null = null;
   if (declared === null) {
     // A plugin its marketplace describes, or one that is only folders: the manifest says what the entry says.
-    written = { name };
+    // A repository that is an MCP server with skills for agents: what its server.json and skills folders say.
+    written = { name, ...fromRepository };
     for (const field of LISTING_FIELDS) if (chosen.listing && chosen.listing[field] !== undefined) written[field] = chosen.listing[field];
     if (!looksLikePlugin(chosen.dir) && !["skills", "commands", "agents", "hooks", "mcpServers"].some((f) => written![f] !== undefined)) {
       throw badRequest("No Claude Code plugin in that folder of the repository.");

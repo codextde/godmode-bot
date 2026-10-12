@@ -985,7 +985,10 @@ oh-my-claudecode); small ones are **mods** whose files Godmode keeps itself.
   `…/tree/<ref>/<folder>`) or a clone URL. Godmode clones the newest commit of the branch or tag it follows with its
   hardened git (no prompts, no clone hooks; shallow where the server allows it) into
   `<data>/plugins/git/<mod-id>/<commit>/`, finds the plugin (the root's own, else the one the repository's
-  `marketplace.json` lists — with several, the answer is a 409 `pick_plugin` naming them), validates it in place and
+  `marketplace.json` lists — with several, the answer is a 409 `pick_plugin` naming them; a repository that is an MCP
+  server — a `server.json` in the MCP Registry's format — with skills in `.agents/skills` or `.claude/skills` gets a
+  manifest that starts its npm (npx) or PyPI (uvx) package at the version named there, or connects to its remote,
+  required settings become options, and only skills that don't link out of their own folder come along), validates it in place and
   reads what it brings from its folder (`ModContents`: skills, commands, subagents, hook events, MCP servers, size,
   and Claude Code's estimate of the tokens it adds to every session). The record keeps `source` (`ModSource`: URL, ref,
   folder, the commit that runs, its version) and, in `files`, only the manifest, `hooks.json` and `.mcp.json` — for its
@@ -996,7 +999,7 @@ oh-my-claudecode); small ones are **mods** whose files Godmode keeps itself.
   update (`POST /api/mods/:id/update`) lays the new commit down beside the old one and replaces it only when Claude
   Code accepts it — otherwise the plugin stays as it is (409). Runs under way keep the checkout they loaded; checkouts
   nothing points at are removed when the last run holding them ends, on uninstall and at startup. A checkout that is
-  missing (a restored backup, a runner) is fetched again at its commit before the next run or check.
+  missing (a restored backup, a runner) is fetched again at its commit, with the manifest Godmode wrote, before the next run or check.
 * **In runs**: the checkout itself is passed with `--plugin-dir` (no copy per run). Runs take MCP servers from
   Godmode's config alone (`--strict-mcp-config`), so the servers a loaded plugin declares are added to that file under
   the names Claude Code gives them (`plugin_<plugin>_<server>`, `${CLAUDE_PLUGIN_ROOT}` filled in) — the plugin's own
