@@ -18,7 +18,7 @@ const places: [file: string, pattern: RegExp][] = [
   ["apps/website/package.json", /("version": ")[^"]+/],
   ["packages/core/src/config.ts", /(export const VERSION = ")[^"]+/],
   ["apps/desktop/src-tauri/Cargo.toml", /(^version = ")[^"]+/m],
-  ["apps/desktop/src-tauri/Cargo.lock", /(name = "godmode-bot"\nversion = ")[^"]+/],
+  ["apps/desktop/src-tauri/Cargo.lock", /(name = "godmode-bot"\r?\nversion = ")[^"]+/],
   [".github/ISSUE_TEMPLATE/bug_report.yml", /(placeholder: ")\d+\.\d+\.\d+[^"]*/],
 ];
 
