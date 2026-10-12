@@ -219,6 +219,14 @@ describe("placing a call", () => {
     expect(getCall(c.id).status).toBe("no_answer");
   });
 
+  test("a busy line ends the call although ElevenLabs still says initiated", async () => {
+    const c = await placeCall({ to: "+4930888", goal: "Ask about opening hours", purpose: "task" });
+    fakeCall(c.providerCallId!, "initiated", [], {}, { phone_call: { direction: "outbound", external_number: "+4930888", call_result: "busy" } });
+    await tick();
+    expect(getCall(c.id).status).toBe("no_answer");
+    expect(getCall(c.id).endedAt).not.toBeNull();
+  });
+
   test("at most five calls per turn", async () => {
     for (let i = 0; i < 5; i++) await placeCall({ to: `+493099${i}`, goal: "x", purpose: "task", runId: "run_many" });
     await expect(placeCall({ to: "+4930995", goal: "x", purpose: "task", runId: "run_many" })).rejects.toThrow(/5 calls/);

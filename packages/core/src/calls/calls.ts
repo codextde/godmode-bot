@@ -516,6 +516,9 @@ async function callAboutQuestion(q: AgentQuestion): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 function statusOf(c: el.ProviderCall): CallStatus {
+  // A busy line or one that rang out stays "initiated" at ElevenLabs; only the phone line's result says it is over.
+  if (c.callResult === "busy" || c.callResult === "no_answer") return "no_answer";
+  if (c.callResult === "failed") return "failed";
   if (c.status === "initiated") return "calling";
   if (c.status === "in-progress") return "in_progress";
   if (c.status === "processing") return "processing";
