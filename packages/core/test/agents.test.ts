@@ -531,12 +531,12 @@ describe("git helpers", () => {
     const fs = await import("node:fs");
     const original = fs.promises.lstat;
     let vanished = 0;
-    const spy = spyOn(fs.promises, "lstat").mockImplementation(((path: fs.PathLike, ...rest: unknown[]) => {
-      if (String(path).endsWith("job.json.lock") && fs.existsSync(String(path))) {
+    const spy = spyOn(fs.promises, "lstat").mockImplementation(((path: string, ...rest: unknown[]) => {
+      if (String(path).endsWith("job.json.lock") && existsSync(String(path))) {
         rmSync(String(path));
         vanished++;
       }
-      return (original as (...args: unknown[]) => Promise<fs.Stats>).call(fs.promises, path, ...rest);
+      return (original as (...args: unknown[]) => Promise<unknown>).call(fs.promises, path, ...rest);
     }) as typeof fs.promises.lstat);
     try {
       expect(await repo.commitAll(dir, "with lock")).toMatch(/^[0-9a-f]{40}$/);
