@@ -1377,6 +1377,7 @@ const TOOLS: ToolDef[] = [
       notify(level ?? "info", `${agent.name}: ${redact(title)}`, redact(body ?? ""), task ? `/tasks?task=${task.id}` : `/chat/${ctx.conversationId}`);
       if (ctx.runId) markRunNotifiedUser(ctx.runId);
       if (!call) return "Notification sent.";
+      if (!canAsk(agent, ctx)) return "Notification sent. No call: this kind of run can't phone the human.";
       const refused = ownerCallRefusal();
       if (refused) return `Notification sent. No call: ${refused}.`;
       try {

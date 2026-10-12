@@ -139,7 +139,7 @@ export function claimPairing(input: MobilePairInput, address: string): MobilePai
   });
   const device = getDevice(id);
   audit("user", "mobile.pair", id, { name: device.name, platform: device.platform, model: device.model, ip: address });
-  notify("success", `${device.name} is connected`, "It can now control Godmode. Remove it anytime in Settings → Phone calls.", "/settings/phone");
+  notify("success", `${device.name} is connected`, "It can now control Godmode. Remove it anytime in Settings → Phone.", "/settings/phone");
   bus.emit({ type: "mobile.paired", device });
   bus.changed("mobile");
   return { token, device, instance: instanceInfo() };

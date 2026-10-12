@@ -214,9 +214,10 @@ interface NumberRow {
   assigned_agent?: { agent_id: string } | null;
 }
 
-export async function listNumbers(agentId: string | null): Promise<CallNumber[]> {
+export async function listNumbers(agentId: string | null): Promise<(CallNumber & { assignedAgentId: string | null })[]> {
   const rows = (await api<NumberRow[]>("GET", "/v1/convai/phone-numbers")) ?? [];
   return rows.map((r) => ({
+    assignedAgentId: r.assigned_agent?.agent_id ?? null,
     id: r.phone_number_id,
     number: r.phone_number,
     label: r.label ?? "",

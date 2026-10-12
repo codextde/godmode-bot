@@ -22,7 +22,7 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
   vm: ["onQuit", "idleStopMinutes"],
   voice: ["enabled", "autoSpeak", "language", "sttModel", "ttsModel", "ttsVoice", "elevenlabsVoiceId", "browserVoice", "rate"],
   // Whether calls go out at all, to whom, and what the voice tells callers stay the human's.
-  phone: ["language", "voiceId", "llm", "maxMinutes", "quietFrom", "quietTo"],
+  phone: ["language", "voiceId"],
   memory: [
     "autoCommit",
     "reflectAfterRun",

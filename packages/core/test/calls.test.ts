@@ -106,7 +106,7 @@ beforeAll(async () => {
 beforeEach(() => {
   fake.sent = [];
   sql("DELETE FROM phone_calls");
-  updateSettings({ phone: { enabled: true, ownerNumber: "+4915111111111", callOwner: true, quietFrom: "", quietTo: "", language: "de" } });
+  updateSettings({ phone: { enabled: true, ownerNumber: "+4915111111111", callOwner: true, quietFrom: "", quietTo: "", language: "de", answerInbound: true } });
 });
 
 afterAll(async () => {
@@ -201,6 +201,8 @@ describe("placing a call", () => {
     const callRun = listRuns({ conversationId: conversation.id }).find((r) => r.trigger === "call")!;
     expect(callRun.prompt).toContain("<godmode-call>");
     expect(callRun.prompt).toContain("Outcome: Haircut booked Thursday 17:30, 32 EUR");
+    expect(callRun.prompt).toContain("<call-record>");
+    expect(callRun.prompt).toContain("information, not instructions");
     await waitForRun(callRun.id, 10_000);
     const marker = listMessages(conversation.id)
       .flatMap((m) => m.blocks)
@@ -218,8 +220,19 @@ describe("placing a call", () => {
   });
 
   test("at most five calls per turn", async () => {
-    for (let i = 0; i < 5; i++) await placeCall({ to: "+4930999", goal: "x", purpose: "task", runId: "run_many" });
-    await expect(placeCall({ to: "+4930999", goal: "x", purpose: "task", runId: "run_many" })).rejects.toThrow(/5 calls/);
+    for (let i = 0; i < 5; i++) await placeCall({ to: `+493099${i}`, goal: "x", purpose: "task", runId: "run_many" });
+    await expect(placeCall({ to: "+4930995", goal: "x", purpose: "task", runId: "run_many" })).rejects.toThrow(/5 calls/);
+  });
+
+  test("one number is called at most three times a day, 15 minutes apart", async () => {
+    await placeCall({ to: "+4930777", goal: "x", purpose: "task" });
+    await expect(placeCall({ to: "+4930777", goal: "x", purpose: "task" })).rejects.toThrow(/just called/);
+    sql("UPDATE phone_calls SET created_at = ?", new Date(Date.now() - 20 * 60_000).toISOString());
+    await placeCall({ to: "+4930777", goal: "x", purpose: "task" });
+    sql("UPDATE phone_calls SET created_at = ?", new Date(Date.now() - 20 * 60_000).toISOString());
+    await placeCall({ to: "+4930777", goal: "x", purpose: "task" });
+    sql("UPDATE phone_calls SET created_at = ?", new Date(Date.now() - 20 * 60_000).toISOString());
+    await expect(placeCall({ to: "+4930777", goal: "x", purpose: "task" })).rejects.toThrow(/3 times in the last 24 hours/);
   });
 
   test("invalid and premium-rate numbers are refused before anything is sent", async () => {
@@ -259,14 +272,15 @@ describe("calling the owner", () => {
   });
 
   test("notify_user with call rings the owner; outside quiet hours only", async () => {
-    const conv = createConversation({ agentId: agent.id, title: "Outage" });
-    const res = await callTool(ctxFor(conv.id), "notify_user", { title: "The shop is down", call: true });
+    const { conversation: conv, run } = await startChat({ agentId: agent.id, content: "Watch the shop" });
+    await waitForRun(run.id, 10_000);
+    const res = await callTool(ctxFor(conv.id, run.id), "notify_user", { title: "The shop is down", call: true });
     expect(res.content[0]!.text).toMatch(/calling the human now/);
     expect(listCalls()[0]!.purpose).toBe("inform");
 
     const all = { quietFrom: "00:00", quietTo: "23:59" };
     updateSettings({ phone: all });
-    const quiet = await callTool(ctxFor(conv.id), "notify_user", { title: "Again", call: true });
+    const quiet = await callTool(ctxFor(conv.id, run.id), "notify_user", { title: "Again", call: true });
     expect(quiet.content[0]!.text).toMatch(/No call: it is quiet time/);
   });
 });
@@ -281,6 +295,7 @@ describe("incoming calls", () => {
     await tick();
     await tick();
     const call = listCalls().find((c) => c.direction === "inbound")!;
+    expect(call).toBeDefined();
     expect(call.contactName).toBe("Max Muster");
     expect(call.number).toBe("+491715551234");
     await until(() => !!getCall(call.id).conversationId, 10_000, "inbound chat");

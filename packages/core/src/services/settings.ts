@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
     llm: "claude-opus-5-5",
     language: "en",
     maxMinutes: 10,
-    answerInbound: true,
+    answerInbound: false,
     inboundAgentId: "",
     inboundGreeting: "",
     inboundInstructions: "",

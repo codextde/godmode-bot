@@ -751,7 +751,7 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
   }
 }
 
-const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent", heartbeat: "your heartbeat", call: "a phone call you placed that ended" };
+const STARTED_BY: Partial<Record<RunTrigger, string>> = { routine: "an automation", followup: "your own follow-up", delegation: "another agent", heartbeat: "your heartbeat", call: "a phone call that ended" };
 
 function startedBySentence(startedBy: RunTrigger, human: string): string {
   const who = STARTED_BY[startedBy];
