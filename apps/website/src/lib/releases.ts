@@ -14,18 +14,49 @@ const headers = (accept = 'application/vnd.github+json') => ({
   ...(env.GITHUB_TOKEN ? { authorization: `Bearer ${env.GITHUB_TOKEN}` } : {}),
 });
 
-/** Latest published release, cached at the edge for five minutes. */
+const cached = (body: string, seconds: number) => new Response(body, { headers: { 'cache-control': `max-age=${seconds}` } });
+
+/**
+ * Latest published release, cached at the edge for five minutes. Without a token the API allows 60 calls an hour
+ * per Cloudflare IP, so when it refuses, the last known release (kept a week) or the public release pages answer.
+ */
 export async function latestRelease(): Promise<Release> {
-  const api = `https://api.github.com/repos/${REPO}/releases/latest`;
   const cache = await caches.open('godmode-releases');
-  const cacheKey = new Request(`https://cache.internal/releases/latest`);
-  const hit = await cache.match(cacheKey);
+  const fresh = new Request(`https://cache.internal/releases/latest`);
+  const known = new Request(`https://cache.internal/releases/latest-known`);
+  const hit = await cache.match(fresh);
   if (hit) return hit.json();
-  const res = await fetch(api, { headers: headers() });
-  if (!res.ok) throw new Error(`GitHub releases: ${res.status}`);
-  const release = (await res.json()) as Release;
-  await cache.put(cacheKey, new Response(JSON.stringify(release), { headers: { 'cache-control': 'max-age=300' } }));
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: headers() }).catch(() => null);
+  if (res?.ok) {
+    const body = await res.text();
+    await Promise.all([cache.put(fresh, cached(body, 300)), cache.put(known, cached(body, 604800))]);
+    return JSON.parse(body);
+  }
+  const old = await cache.match(known);
+  if (old) return old.json();
+  const release = await releaseFromPages(await latestTag());
+  await cache.put(fresh, cached(JSON.stringify(release), 300));
   return release;
+}
+
+async function latestTag(): Promise<string> {
+  const res = await fetch(`https://github.com/${REPO}/releases/latest`, { redirect: 'manual' });
+  const tag = res.headers.get('location')?.match(/\/releases\/tag\/([^/?#]+)$/)?.[1];
+  if (!tag) throw new Error(`GitHub latest release: ${res.status}`);
+  return decodeURIComponent(tag);
+}
+
+/** A release read from github.com instead of the API: tag and asset names only. */
+async function releaseFromPages(tag: string): Promise<Release> {
+  const res = await fetch(`https://github.com/${REPO}/releases/expanded_assets/${encodeURIComponent(tag)}`);
+  if (!res.ok) throw new Error(`GitHub release page ${tag}: ${res.status}`);
+  const prefix = `/${REPO}/releases/download/${tag}/`;
+  const names = new Set([...(await res.text()).matchAll(/href="([^"]+)"/g)].map((m) => m[1]).filter((h) => h.startsWith(prefix)).map((h) => decodeURIComponent(h.slice(prefix.length))));
+  const assets = [...names].map((name, i) => {
+    const url = `https://github.com${prefix}${encodeURIComponent(name)}`;
+    return { id: -1 - i, name, url, browser_download_url: url };
+  });
+  return { tag_name: tag, name: `Godmode Bot ${tag}`, body: null, published_at: '', draft: false, prerelease: tag.includes('-'), assets };
 }
 
 /** Recent published releases for the changelog, cached at the edge for five minutes. */
@@ -45,14 +76,13 @@ export async function recentReleases(): Promise<Release[]> {
 export async function releaseFor(version: string | null): Promise<Release> {
   if (!version || version === 'latest') return latestRelease();
   const tag = version.startsWith('v') ? version : `v${version}`;
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(tag)}`, { headers: headers() });
-  if (!res.ok) throw new Error(`GitHub release ${tag}: ${res.status}`);
-  return res.json();
+  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(tag)}`, { headers: headers() }).catch(() => null);
+  return res?.ok ? res.json() : releaseFromPages(tag);
 }
 
 /** A redirect to a short-lived download URL for one release asset. */
 export async function assetRedirect(asset: Asset): Promise<Response> {
-  if (!env.GITHUB_TOKEN) return Response.redirect(asset.browser_download_url, 302);
+  if (!env.GITHUB_TOKEN || asset.id < 0) return Response.redirect(asset.browser_download_url, 302);
   const res = await fetch(asset.url, { headers: headers('application/octet-stream'), redirect: 'manual' });
   const location = res.headers.get('location');
   if (!location) throw new Error(`GitHub asset ${asset.name}: ${res.status}`);
@@ -60,7 +90,8 @@ export async function assetRedirect(asset: Asset): Promise<Response> {
 }
 
 export async function assetText(asset: Asset): Promise<string> {
-  const res = await fetch(asset.url, { headers: headers('application/octet-stream') });
+  // The public download URL needs no API call; GitHub redirects it to a signed storage URL.
+  const res = await fetch(asset.browser_download_url);
   if (!res.ok) throw new Error(`GitHub asset ${asset.name}: ${res.status}`);
   return res.text();
 }

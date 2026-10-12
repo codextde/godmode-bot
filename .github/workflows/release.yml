@@ -247,6 +247,24 @@ jobs:
           jq '.platforms | keys' latest.json
           exit "$missing"
 
+      - name: Point latest.json at the download URLs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          # tauri-action writes API asset URLs (a draft has no download URLs yet). Download URLs work once the release
+          # is published and use no API quota, which the website's update feed runs out of.
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100")
+          jq --argjson assets "$assets" --arg base "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/" '
+            ($assets | map({key: (.id | tostring), value: .name}) | from_entries) as $names
+            | .platforms |= map_values(.url |= (if test("/releases/assets/[0-9]+$") then $base + ($names[split("/") | last] | @uri) else . end))
+          ' latest.json > latest.rewritten.json
+          jq -r '.platforms[].url' latest.rewritten.json | sort -u
+          id=$(jq -r '.[] | select(.name == "latest.json") | .id' <<< "$assets")
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=latest.json" \
+            -H "Content-Type: application/json" --input latest.rewritten.json --jq .browser_download_url
+
   server:
     name: Server binaries (${{ matrix.os }})
     needs: create-release
