@@ -2748,7 +2748,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "plugin_install",
     description:
-      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: the human switches it on under Plugins — you can't. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
+      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. A repository that is an MCP server (server.json) with skills for agents (.agents/skills) installs too. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: the human switches it on under Plugins — you can't. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
     schema: z.object({
       source: z.string().min(1).max(500).describe('"owner/repo", a GitHub link or a clone URL'),
       ref: z.string().max(200).optional().describe("Branch or tag to follow; default: the repository's default branch"),
