@@ -1503,4 +1503,13 @@ CREATE INDEX idx_phone_calls_conversation ON phone_calls(conversation_id);
 ALTER TABLE phone_calls ADD COLUMN from_owner INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 92,
+    name: "agent_created_browser_profiles",
+    sql: /* sql */ `
+-- The agent that created the profile, empty, for an agent of its team. Only such a profile may be assigned by an agent;
+-- the human's profiles (their logins and cookies) stay theirs. NULL = created or filled by the human.
+ALTER TABLE browser_profiles ADD COLUMN created_by_agent_id TEXT;
+`,
+  },
 ];

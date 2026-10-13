@@ -578,6 +578,7 @@ the core, the desktop and the phone alike.
 | `vault_get_login({ credentialId })` | Reveal username/password — only when `secretAccess = "reveal"` |
 | `vault_get_totp({ totpId })` | Reveal current code — only in reveal mode |
 | `report_missing_login({ service, url, kind, reason })` | Tell the human a login/account/2FA is missing or broken |
+| `browser_profile_create_own()` | Create an empty browser profile in the agent's workspace and pin it to the calling agent; only while it has none, applies from its next run |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
 | `agent_create`, `templates_list`, `team_install`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`; `agent_create({ template })` starts from a role template (unset fields come from it, its schedule comes back as `templateSchedule`), `templates_list` shows the roles and structures (seats with their paths for `skip`), and `team_install` hires a structure as the calling agent (no secret access or management rights for the new agents; refused in a run kept in a VM). `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's or project's context follows the `agent_update` rules for every agent in it (reveal mode, computer use) |
@@ -618,7 +619,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
   and `tools/call` both check it; a `read` key is refused on `manage` tools. A read key still sees login names and
   usernames (`logins_overview`) and snippets of prompts and results (`runs_list`, `task_get`). The tools themselves
   are unchanged, so the agent rules hold: created agents are fill-only without management rights, computer use, a working folder or SSH
-  servers; workspace moves, browser profiles and out-of-scope MCP servers stay human-only. `agents_list` includes the
+  servers; workspace moves, the human's browser profiles and out-of-scope MCP servers stay human-only. `agents_list` includes the
   built-in agent for an app.
 * **Audit.** The tools audit as the built-in agent (`agent.create`, …); every `manage` call, and every call that was
   refused or failed, adds `connector.call` with actor `connector:<id>`, the tool as target, the app's name and `ok`.
@@ -735,6 +736,12 @@ whole list, at most once a second per run.
   (`PATCH /api/browser/profiles/:id { workspaceId }`) or picked in the workspace's settings (`browserProfileId`, which
   moves a global profile into the workspace); cookies and sessions travel with the profile. The global default always
   stays global.
+* Agents never assign the human's profiles (their logins). A profile an agent created is empty
+  (`browser_profiles.created_by_agent_id`, never a default) and may be assigned by agents: any agent with the browser on
+  and no pinned profile creates and pins one for itself with `browser_profile_create_own`, a manager creates one with
+  `browser_profile_create` and assigns it with `agent_create` / `agent_update` (global or of the agent's workspace).
+  Importing a Chrome session into it clears `created_by_agent_id`. The pinned profile applies from the agent's next run:
+  a run keeps the browser it started with.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
 * Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)

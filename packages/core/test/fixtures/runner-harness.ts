@@ -52,6 +52,7 @@ const fakeProfile: BrowserProfile = {
   importedFrom: null,
   importedAt: null,
   cookieCount: 0,
+  createdByAgentId: null,
   running: false,
   cdpUrl: null,
   headless: null,

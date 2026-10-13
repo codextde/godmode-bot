@@ -48,6 +48,7 @@ interface ProfileRow {
   imported_from: string | null;
   imported_at: string | null;
   cookie_count: number;
+  created_by_agent_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +64,7 @@ function toProfile(r: ProfileRow): BrowserProfile {
     importedFrom: r.imported_from,
     importedAt: r.imported_at,
     cookieCount: r.cookie_count,
+    createdByAgentId: r.created_by_agent_id ?? null,
     running: !!rb,
     cdpUrl: rb ? rb.httpUrl : null,
     headless: rb ? rb.headless : null,
@@ -152,7 +154,7 @@ export function ensureDefaultProfile(): BrowserProfile {
   return insertProfile("Default", null, true);
 }
 
-function insertProfile(name: string, workspaceId: string | null, isDefault: boolean): BrowserProfile {
+function insertProfile(name: string, workspaceId: string | null, isDefault: boolean, createdByAgentId: string | null = null): BrowserProfile {
   const id = newId("bpr");
   const userDataDir = join(config().browserDir, id);
   ensureDir(userDataDir);
@@ -164,6 +166,7 @@ function insertProfile(name: string, workspaceId: string | null, isDefault: bool
     user_data_dir: userDataDir,
     is_default: isDefault ? 1 : 0,
     cookie_count: 0,
+    created_by_agent_id: createdByAgentId,
     created_at: ts,
     updated_at: ts,
   });
@@ -177,14 +180,16 @@ export function getProfile(id: string): BrowserProfile {
   return toProfile(requireRow(id));
 }
 
-export function createProfile(input: { name: string; workspaceId: string | null }): BrowserProfile {
+/** `createdByAgentId`: an agent creates it, empty and never a default. */
+export function createProfile(input: { name: string; workspaceId: string | null; createdByAgentId?: string }): BrowserProfile {
   const name = input.name?.trim();
   if (!name) throw badRequest("Profile name is required");
   if (name.length > 80) throw badRequest("Profile name is too long (max 80 characters)");
   const workspaceId = input.workspaceId || null;
   assertWorkspace(workspaceId);
   // The first profile of a scope becomes its default.
-  const profile = insertProfile(name, workspaceId, !scopeDefaultId(workspaceId));
+  const createdBy = input.createdByAgentId ?? null;
+  const profile = insertProfile(name, workspaceId, !createdBy && !scopeDefaultId(workspaceId), createdBy);
   if (workspaceId && profile.isDefault) bus.changed("workspaces");
   return profile;
 }
@@ -1054,6 +1059,8 @@ export async function importChromeSession(profileId: string, input: ChromeImport
     );
   }
 
+  // The human's cookies go in (even if the import fails halfway): agents can't assign it anymore.
+  update("browser_profiles", profileId, { created_by_agent_id: null });
   // Import into the running browser, or start it headless just for the import and stop it afterwards
   // (Browser.close flushes the cookie store to disk).
   const rb = await ensureBrowser(profileId, { headless: true, transient: true });

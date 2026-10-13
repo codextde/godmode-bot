@@ -1067,6 +1067,8 @@ export interface BrowserProfile {
   importedFrom: string | null;
   importedAt: ISODate | null;
   cookieCount: number;
+  /** Agent that created it empty for its team; only such a profile can be assigned by agents. null = the human's */
+  createdByAgentId: ID | null;
   running: boolean;
   cdpUrl: string | null;
   /** How the running browser was started; null while it isn't running. */

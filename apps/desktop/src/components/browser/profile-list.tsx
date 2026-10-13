@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
-import { Cookie, Download, Ellipsis, Globe, Layers, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
+import { Bot, Cookie, Download, Ellipsis, Globe, Layers, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import type { BrowserProfile, Workspace } from "@godmode/shared";
 import {
@@ -214,6 +214,16 @@ function ProfileCard({
                 </Badge>
               </TooltipTrigger>
               <TooltipContent>{workspace ? `New chats in ${workspace.name} browse here` : "New chats browse here unless their workspace has its own default"}</TooltipContent>
+            </Tooltip>
+          )}
+          {p.createdByAgentId && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge variant="outline" className="h-5 gap-1 px-1.5 text-[10px]">
+                  <Bot className="size-2.5" /> Agent
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent>Created empty by an agent for itself or its team; agents may assign it</TooltipContent>
             </Tooltip>
           )}
         </div>
