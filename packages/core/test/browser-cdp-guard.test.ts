@@ -136,4 +136,11 @@ describe("runs", () => {
     expect(prompt).toContain("Never look for or connect to any other Chrome DevTools port");
     expect(buildSystemPrompt({ agent, settings: getSettings(), peers: [], browserAvailable: true })).not.toContain(RUN_CDP_ENV);
   });
+
+  test("the prompt offers an own profile only to an agent without one", async () => {
+    const agent = await makeAgent({ name: "Profileless" });
+    const prompt = (a: typeof agent) => buildSystemPrompt({ agent: a, settings: getSettings(), peers: [], browserAvailable: true, browserCdpEnv: RUN_CDP_ENV });
+    expect(prompt(agent)).toContain("`browser_profile_create_own` (it applies from your next run)");
+    expect(prompt({ ...agent, browser: { ...agent.browser, profileId: "bpr_own" } })).not.toContain("browser_profile_create_own");
+  });
 });

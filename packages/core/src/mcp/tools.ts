@@ -119,7 +119,7 @@ import {
   type CardField,
 } from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
-import { chatWorkspaceId, currentPage, fillIntoPage, resolveProfileForAgent } from "../browser/manager";
+import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, resolveProfileForAgent } from "../browser/manager";
 import { currentVmPage, fillIntoVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
@@ -450,9 +450,34 @@ function automationSecrets(caller: Agent, ctx: RunContext, target: Agent, what: 
 const fillOnlyNote = (target: Agent) =>
   `${target.name} may read secrets in plain text and you can't from here, so this automation runs without them: logins and 2FA codes are still filled into pages, vault_get_login / vault_get_totp are off in its runs. Only the human can lift that (Automations → this automation).`;
 
+function isAgentCreatedProfile(profileId: string): boolean {
+  return !!get<{ created_by_agent_id: string | null }>("SELECT created_by_agent_id FROM browser_profiles WHERE id = ?", profileId)?.created_by_agent_id;
+}
+
 /**
- * Settings of agents that only the human may change through the UI: workspace, browser profile, and MCP servers
- * outside the agent's scope (global / its workspace / pinned to it). `target` is null for a new agent.
+ * A browser profile an agent may give an agent of `workspaceId`: one an agent created empty, global or of that
+ * workspace. The human's profiles hold their logins and stay theirs.
+ */
+function assertAssignableProfile(profileId: string, workspaceId: string | null): void {
+  const profile = get<{ workspace_id: string | null; created_by_agent_id: string | null }>(
+    "SELECT workspace_id, created_by_agent_id FROM browser_profiles WHERE id = ?",
+    profileId,
+  );
+  if (!profile?.created_by_agent_id) {
+    throw new HttpError(403, `Agents cannot change an agent's browser profile; ${ASK_HUMAN}. A new, empty profile from browser_profile_create can be assigned.`);
+  }
+  if (profile.workspace_id && profile.workspace_id !== workspaceId) {
+    throw new HttpError(403, `Browser profile ${profileId} belongs to another workspace; give the agent a global profile or one of its own workspace.`);
+  }
+  // Its logins are that agent's.
+  const user = listAgents({ workspaceId: "all" }).find((a) => a.browser.profileId === profileId);
+  if (user) throw new HttpError(403, `Browser profile ${profileId} is ${user.name}'s; create a new one with browser_profile_create.`);
+}
+
+/**
+ * Settings of agents that only the human may change through the UI: workspace, browser profile (except one an agent
+ * created, see assertAssignableProfile), and MCP servers outside the agent's scope (global / its workspace / pinned to
+ * it). `target` is null for a new agent.
  */
 function assertAgentPatchAllowed(
   target: Agent | null,
@@ -462,7 +487,11 @@ function assertAgentPatchAllowed(
     throw new HttpError(403, `Agents cannot move agents between workspaces; ${ASK_HUMAN}.`);
   }
   const profileId = patch.browser?.profileId;
-  if (profileId !== undefined && (profileId ?? null) !== (target?.browser.profileId ?? null)) {
+  const currentProfileId = target?.browser.profileId ?? null;
+  if (profileId && profileId !== currentProfileId) {
+    assertAssignableProfile(profileId, target ? target.workspaceId : (patch.workspaceId ?? null));
+  } else if (profileId === null && currentProfileId && !isAgentCreatedProfile(currentProfileId)) {
+    // Off a profile the human picked onto the default: that would hand it the default's logins.
     throw new HttpError(403, `Agents cannot change an agent's browser profile; ${ASK_HUMAN}.`);
   }
   if (patch.mcpServerIds?.length) {
@@ -660,7 +689,13 @@ const agentFields = {
     .object({
       enabled: z.boolean().optional(),
       headless: z.boolean().nullable().optional(),
-      profileId: z.string().nullable().optional().describe("Browser profile — human-only; leave unset"),
+      profileId: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+          "Browser profile of its own: only one made with browser_profile_create (global or of the agent's workspace); the human's profiles can't be assigned. null = back to the default, only from a profile an agent made",
+        ),
     })
     .optional(),
   mcpServerIds: z.array(z.string()).optional().describe("Extra MCP server ids; only global servers or ones of the agent's workspace"),
@@ -1873,7 +1908,8 @@ const TOOLS: ToolDef[] = [
     description:
       "Create a new agent (bot) with its own git repo, instructions and optional recurring routine. Give it a role (its job title on the team), a clear description and concrete instructions, " +
       "plus a fitting emoji, colour, character (its little face in the app) and personality — each agent should be recognisable at a glance. It reports to you unless you set reportsTo. " +
-      "For a common job, start from a ready-made role (templates_list) with template and change only what differs.",
+      "For a common job, start from a ready-made role (templates_list) with template and change only what differs. " +
+      "An agent that needs a browser of its own (separate logins) gets a new, empty profile: create it with browser_profile_create and pass browser.profileId; existing profiles stay the human's.",
     schema: z.object({
       name: z.string().min(1).max(100).optional().describe("Required unless a template gives one"),
       template: z
@@ -2012,7 +2048,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "agent_update",
     description:
-      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope), subagents, heartbeat or project (within its workspace). Workspace, browser profile, secret access and login permissions can only be changed by the human in Settings.",
+      "Update an agent's name, role, who it reports to, look (emoji, colour, character), personality, description, instructions, model, delegation settings, browser on/off, MCP servers (within its scope), subagents, heartbeat or project (within its workspace). Browser profile: only a new, empty one from browser_profile_create (or null to put it back on the default from one); existing profiles stay the human's. Workspace, secret access and login permissions can only be changed by the human in Settings.",
     schema: z.object({ agentId: z.string(), name: z.string().min(1).max(100).optional(), ...agentFields }),
     when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
@@ -2043,6 +2079,93 @@ const TOOLS: ToolDef[] = [
       await deleteAgent(agentId);
       audit(`agent:${agent.id}`, "agent.delete", agentId, { name: target.name });
       return `Deleted agent "${target.name}".`;
+    },
+  }),
+
+  defineTool({
+    name: "browser_profile_create",
+    description:
+      "Create a new, empty browser profile (no logins, cookies or history) for an agent that needs a browser of its own, then assign it with agent_update({ agentId, browser: { profileId } }) or agent_create. " +
+      "Only profiles made this way can be assigned by agents; existing profiles hold the human's logins and stay theirs.",
+    schema: z.object({
+      name: z.string().trim().min(1).max(80).describe('e.g. "Scout browser"'),
+      workspaceId: z.string().nullable().optional().describe("Workspace id or name it belongs to; null = global (agents of every workspace may use it). Omitted = your workspace"),
+    }),
+    when: managesSetup,
+    run: ({ name, workspaceId }, { agent }) => {
+      let scope = agent.workspaceId;
+      if (workspaceId) {
+        const workspace = findWorkspace(workspaceId);
+        if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them.`);
+        scope = workspace.id;
+      } else if (workspaceId === null) {
+        scope = null;
+      }
+      if (agent.workspaceId && scope !== agent.workspaceId) return fail("You can only create browser profiles in your own workspace.");
+      const profile = createProfile({ name, workspaceId: scope, createdByAgentId: agent.id });
+      audit(`agent:${agent.id}`, "browser.profile.create", profile.id, { name: profile.name, workspaceId: profile.workspaceId });
+      return json({ id: profile.id, name: profile.name, workspaceId: profile.workspaceId });
+    },
+  }),
+
+  defineTool({
+    name: "browser_profiles_list",
+    description:
+      "List browser profiles: scope, whether it is a default, its cookie count, who uses it, and whether you may assign it (assignable: only empty profiles agents made with browser_profile_create that no agent uses yet). " +
+      "Agents without a profile of their own browse in their workspace's default, else the global default.",
+    schema: z.object({}),
+    when: isManager,
+    run: (_args, { agent }) => {
+      const names = workspaceNames();
+      const agents = listAgents({ workspaceId: "all" });
+      const profiles = listProfiles().filter((p) => !agent.workspaceId || !p.workspaceId || p.workspaceId === agent.workspaceId);
+      return json(
+        profiles.map((p) => {
+          const users = agents.filter((a) => a.browser.profileId === p.id);
+          return {
+            id: p.id,
+            name: p.name,
+            workspaceId: p.workspaceId,
+            workspace: scopeName(p.workspaceId, names),
+            isDefault: p.isDefault,
+            createdByAgent: !!p.createdByAgentId,
+            cookieCount: p.cookieCount,
+            assignable: !!p.createdByAgentId && !users.length,
+            usedBy: users.filter((a) => !agent.workspaceId || !a.workspaceId || a.workspaceId === agent.workspaceId).map((a) => ({ id: a.id, name: a.name })),
+          };
+        }),
+      );
+    },
+  }),
+
+  defineTool({
+    name: "browser_profile_create_own",
+    description:
+      "Give yourself a browser profile of your own: a new, empty one (no logins, cookies or history) in your workspace, so the logins you make stay apart from everyone else's. " +
+      "Only while you have none (you browse in the default profile). It applies from your next run: this run keeps its current browser, so do the work that needs it in a new run (e.g. followup_schedule).",
+    schema: z.object({}),
+    when: (agent) => agent.browser.enabled && getSettings().browser.enabled && config().role !== "runner",
+    run: async (_args, { agent }) => {
+      const self = getAgent(agent.id);
+      if (self.browser.profileId) {
+        const current = get<{ name: string }>("SELECT name FROM browser_profiles WHERE id = ?", self.browser.profileId);
+        return fail(`You already have a browser profile of your own: "${current?.name ?? "not found"}" (${self.browser.profileId}). Only the human can change it, in Settings → Agents → Browser.`);
+      }
+      const profile = createProfile({ name: `${self.name.slice(0, 72).trim()} browser`, workspaceId: self.workspaceId, createdByAgentId: self.id });
+      try {
+        await updateAgent(self.id, { browser: { profileId: profile.id } }, `agent:${self.id}`);
+      } catch (err) {
+        await deleteProfile(profile.id).catch(() => undefined);
+        throw err;
+      }
+      audit(`agent:${self.id}`, "browser.profile.create", profile.id, { name: profile.name, workspaceId: profile.workspaceId, assignedTo: self.id });
+      return json({
+        id: profile.id,
+        name: profile.name,
+        workspaceId: profile.workspaceId,
+        appliesFrom: "your next run",
+        note: "It is empty: log in there again (vault_fill_login, or ask the human for a login). This run keeps browsing in the profile it started with; continue in a new run, e.g. with followup_schedule. A chat with a browser profile of its own picked still uses that one.",
+      });
     },
   }),
 
@@ -2660,7 +2783,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Create a workspace: a group of agents, logins and integrations around one business, client or product, with the folders and git repositories its agents work with (repositories are cloned for it). " +
       "Give it a clear name, a one-line description, a fitting emoji and instructions with the context every run in it needs. Then add agents to it with agent_create({ workspaceId }) and file its tasks with task_create. " +
-      "VM, browser profile and auto-merge stay the human's, in Settings.",
+      "VM, the workspace's browser profile and auto-merge stay the human's, in Settings (an agent can get an empty profile of its own with browser_profile_create).",
     schema: z.object({
       name: z.string().min(1).max(100),
       ...scopeFields,

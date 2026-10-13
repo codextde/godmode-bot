@@ -15,7 +15,8 @@ import { addMessage, chatFillOnly, createConversation, getConversation, sendMess
 import { issueRunToken, resolveRunToken, revokeRunToken } from "../src/mcp/tokens";
 import { cancelRun, findRunLog, getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { redactBlock } from "../src/runner/stream";
-import { createProfile } from "../src/browser/manager";
+import { createProfile, getProfile, listProfiles } from "../src/browser/manager";
+import { update } from "../src/db";
 import { getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, getRoutine, listRoutines, updateRoutine } from "../src/services/routines";
 import { automationConversation } from "../src/automations/conversation";
@@ -905,7 +906,8 @@ describe("no privilege escalation through agent tools", () => {
     const move = await call(t, "agent_update", { agentId: target.id, workspaceId: ws.id });
     expect(move.isError).toBe(true);
     expect(move.content[0]!.text).toContain("ask the human to change this in Settings");
-    const profile = await call(t, "agent_update", { agentId: target.id, browser: { profileId: "bpr_other" } });
+    const human = createProfile({ name: "Human logins", workspaceId: null });
+    const profile = await call(t, "agent_update", { agentId: target.id, browser: { profileId: human.id } });
     expect(profile.isError).toBe(true);
     expect(profile.content[0]!.text).toContain("browser profile");
     const foreign = await createMcpServer({ workspaceId: ws.id, agentId: null, name: "WS secret tool", transport: "stdio", command: "npx" });
@@ -1132,6 +1134,231 @@ describe("no privilege escalation through agent tools", () => {
     revokeRunToken(own);
     expect(upd.isError).toBeUndefined();
     expect(getAgent(revealBoss.id).description).toBe("Still mine to change");
+  });
+});
+
+describe("agent-created browser profiles", () => {
+  const REFUSED = "Agents cannot change an agent's browser profile; ask the human to change this in Settings";
+  const created = (r: { content: { text: string }[] }) => JSON.parse(r.content[0]!.text) as { id: string; name: string; workspaceId: string | null };
+
+  test("only managers get the profile tools", async () => {
+    const list = (t: string) => rpc(t, "tools/list").then((r) => (r.result.tools as { name: string }[]).map((x) => x.name));
+    expect(await list(tokens[manager.id]!)).toEqual(expect.arrayContaining(["browser_profile_create", "browser_profiles_list"]));
+    const workerTools = await list(tokens[worker.id]!);
+    expect(workerTools).not.toContain("browser_profile_create");
+    expect(workerTools).not.toContain("browser_profiles_list");
+    const r = await call(tokens[worker.id]!, "browser_profile_create", { name: "Mine" });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("not available");
+  });
+
+  test("a manager creates an empty profile that is never a default", async () => {
+    const ws = createWorkspace({ name: "Fresh profiles WS" });
+    const r = await call(tokens[manager.id]!, "browser_profile_create", { name: "Scout browser", workspaceId: ws.id });
+    expect(r.isError).toBeUndefined();
+    const out = created(r);
+    expect(out).toEqual({ id: expect.stringMatching(/^bpr_/), name: "Scout browser", workspaceId: ws.id });
+    const p = getProfile(out.id);
+    expect(p).toMatchObject({ createdByAgentId: manager.id, isDefault: false, cookieCount: 0, importedFrom: null });
+    expect(getWorkspace(ws.id).browserProfileId).toBeNull();
+    const global = created(await call(tokens[manager.id]!, "browser_profile_create", { name: "Global scout" }));
+    expect(global.workspaceId).toBeNull();
+  });
+
+  test("agent_update and agent_create assign an agent-created profile, and null", async () => {
+    const t = tokens[manager.id]!;
+    const fresh = created(await call(t, "browser_profile_create", { name: "Assignable" }));
+    const target = await makeAgent({ name: "Profile Target" });
+    const set = await call(t, "agent_update", { agentId: target.id, browser: { profileId: fresh.id } });
+    expect(set.isError).toBeUndefined();
+    expect(getAgent(target.id).browser.profileId).toBe(fresh.id);
+    const cleared = await call(t, "agent_update", { agentId: target.id, browser: { profileId: null } });
+    expect(cleared.isError).toBeUndefined();
+    expect(getAgent(target.id).browser.profileId).toBeNull();
+    const made = await call(t, "agent_create", { name: "Own Browser Bot", browser: { profileId: fresh.id } });
+    expect(made.isError).toBeUndefined();
+    const id = (JSON.parse(made.content[0]!.text) as { created: { id: string } }).created.id;
+    expect(getAgent(id).browser.profileId).toBe(fresh.id);
+    await call(t, "agent_delete", { agentId: id });
+  });
+
+  test("an agent on a human profile may move to an agent-created one", async () => {
+    const t = tokens[manager.id]!;
+    const human = createProfile({ name: "Human work logins", workspaceId: null });
+    const target = await makeAgent({ name: "Pinned Human", browser: { profileId: human.id } });
+    const fresh = created(await call(t, "browser_profile_create", { name: "Clean slate" }));
+    expect((await call(t, "agent_update", { agentId: target.id, browser: { profileId: fresh.id } })).isError).toBeUndefined();
+    expect(getAgent(target.id).browser.profileId).toBe(fresh.id);
+  });
+
+  test("human, default and imported profiles are still refused", async () => {
+    const t = tokens[manager.id]!;
+    const human = createProfile({ name: "Human only", workspaceId: null });
+    const imported = createProfile({ name: "Imported", workspaceId: null });
+    update("browser_profiles", imported.id, { imported_from: "Chrome — Profile 1", cookie_count: 42 });
+    const def = listProfiles().find((p) => p.isDefault && !p.workspaceId)!;
+    const target = await makeAgent({ name: "Refused Target" });
+    for (const profileId of [human.id, imported.id, def.id, "bpr_missing"]) {
+      const r = await call(t, "agent_update", { agentId: target.id, browser: { profileId } });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain(REFUSED);
+      const c = await call(t, "agent_create", { name: "Refused Bot", browser: { profileId } });
+      expect(c.isError).toBe(true);
+      expect(c.content[0]!.text).toContain(REFUSED);
+    }
+    expect(getAgent(target.id).browser.profileId).toBeNull();
+    expect(listAgents().some((a) => a.name === "Refused Bot")).toBe(false);
+  });
+
+  test("workspace scope is enforced", async () => {
+    const t = tokens[manager.id]!;
+    const a = createWorkspace({ name: "Profiles A" });
+    const b = createWorkspace({ name: "Profiles B" });
+    const inA = created(await call(t, "browser_profile_create", { name: "A browser", workspaceId: a.id }));
+    const global = created(await call(t, "browser_profile_create", { name: "Shared browser", workspaceId: null }));
+    const agentA = await makeAgent({ name: "Agent A", workspaceId: a.id });
+    const agentB = await makeAgent({ name: "Agent B", workspaceId: b.id });
+    const globalAgent = await makeAgent({ name: "Global Agent" });
+    for (const target of [agentB, globalAgent]) {
+      const r = await call(t, "agent_update", { agentId: target.id, browser: { profileId: inA.id } });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("belongs to another workspace");
+    }
+    const wrongCreate = await call(t, "agent_create", { name: "B Bot", workspaceId: b.id, browser: { profileId: inA.id } });
+    expect(wrongCreate.isError).toBe(true);
+    expect((await call(t, "agent_update", { agentId: agentA.id, browser: { profileId: inA.id } })).isError).toBeUndefined();
+    expect((await call(t, "agent_update", { agentId: agentB.id, browser: { profileId: global.id } })).isError).toBeUndefined();
+    expect(getAgent(agentB.id).browser.profileId).toBe(global.id);
+
+    // A manager of one workspace creates profiles there only.
+    const wsBoss = await makeAgent({ name: "A Boss", workspaceId: a.id, permissions: { canManageAgents: true } });
+    const token = tokenFor(wsBoss);
+    try {
+      const own = created(await call(token, "browser_profile_create", { name: "A boss browser" }));
+      expect(own.workspaceId).toBe(a.id);
+      for (const workspaceId of [b.id, null]) {
+        const r = await call(token, "browser_profile_create", { name: "Elsewhere", workspaceId });
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain("your own workspace");
+      }
+      const seen = JSON.parse((await call(token, "browser_profiles_list")).content[0]!.text) as { id: string }[];
+      expect(seen.some((p) => p.id === own.id)).toBe(true);
+      expect(seen.some((p) => p.id === global.id)).toBe(true);
+    } finally {
+      revokeRunToken(token);
+    }
+  });
+
+  test("browser_profiles_list shows who may be assigned without paths", async () => {
+    const t = tokens[manager.id]!;
+    const human = createProfile({ name: "Listed human", workspaceId: null });
+    const fresh = created(await call(t, "browser_profile_create", { name: "Listed agent" }));
+    const user = await makeAgent({ name: "Listed User" });
+    await call(t, "agent_update", { agentId: user.id, browser: { profileId: fresh.id } });
+    const text = (await call(t, "browser_profiles_list")).content[0]!.text;
+    for (const p of listProfiles()) expect(text).not.toContain(p.userDataDir);
+    expect(text).not.toContain("userDataDir");
+    expect(text).not.toContain("cdpUrl");
+    const rows = JSON.parse(text) as { id: string; isDefault: boolean; createdByAgent: boolean; assignable: boolean; cookieCount: number; usedBy: { id: string; name: string }[] }[];
+    expect(rows.find((p) => p.id === human.id)).toMatchObject({ createdByAgent: false, assignable: false, cookieCount: 0, usedBy: [] });
+    expect(rows.find((p) => p.id === fresh.id)).toMatchObject({ createdByAgent: true, assignable: false, isDefault: false, usedBy: [{ id: user.id, name: "Listed User" }] });
+  });
+
+  test("a profile another agent is pinned to can't be handed on", async () => {
+    const t = tokens[manager.id]!;
+    const fresh = created(await call(t, "browser_profile_create", { name: "Taken" }));
+    const first = await makeAgent({ name: "First Owner" });
+    const second = await makeAgent({ name: "Second Owner" });
+    expect((await call(t, "agent_update", { agentId: first.id, browser: { profileId: fresh.id } })).isError).toBeUndefined();
+    const r = await call(t, "agent_update", { agentId: second.id, browser: { profileId: fresh.id } });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain("is First Owner's");
+    expect(getAgent(second.id).browser.profileId).toBeNull();
+  });
+
+  test("an agent pinned to a human profile can't be put back on the default by an agent", async () => {
+    const human = createProfile({ name: "Pinned by the human", workspaceId: null });
+    const target = await makeAgent({ name: "Human Pinned", browser: { profileId: human.id } });
+    const r = await call(tokens[manager.id]!, "agent_update", { agentId: target.id, browser: { profileId: null } });
+    expect(r.isError).toBe(true);
+    expect(r.content[0]!.text).toContain(REFUSED);
+    expect(getAgent(target.id).browser.profileId).toBe(human.id);
+  });
+
+  describe("browser_profile_create_own", () => {
+    const own = (r: { content: { text: string }[] }) => JSON.parse(r.content[0]!.text) as { id: string; name: string; workspaceId: string | null; appliesFrom: string };
+
+    test("is offered to any agent with the browser on", async () => {
+      const list = (t: string) => rpc(t, "tools/list").then((r) => (r.result.tools as { name: string }[]).map((x) => x.name));
+      expect(await list(tokens[worker.id]!)).toContain("browser_profile_create_own");
+      const noBrowser = await makeAgent({ name: "No Browser", browser: { enabled: false } });
+      const token = tokenFor(noBrowser);
+      try {
+        expect(await list(token)).not.toContain("browser_profile_create_own");
+      } finally {
+        revokeRunToken(token);
+      }
+    });
+
+    test("creates an empty profile in the agent's workspace and assigns it", async () => {
+      const ws = createWorkspace({ name: "Own profile WS" });
+      const self = await makeAgent({ name: "Self Service", workspaceId: ws.id, browser: { enabled: true } });
+      const token = tokenFor(self);
+      try {
+        const r = await call(token, "browser_profile_create_own");
+        expect(r.isError).toBeUndefined();
+        const out = own(r);
+        expect(out.id).toMatch(/^bpr_/);
+        expect(out).toMatchObject({ name: "Self Service browser", workspaceId: ws.id, appliesFrom: "your next run" });
+        expect(r.content[0]!.text).toContain("followup_schedule");
+        expect(getProfile(out.id)).toMatchObject({ createdByAgentId: self.id, isDefault: false, cookieCount: 0, importedFrom: null, workspaceId: ws.id });
+        expect(getWorkspace(ws.id).browserProfileId).toBeNull();
+        expect(getAgent(self.id).browser.profileId).toBe(out.id);
+        expect(listAudit(20, "browser.profile.create").some((a) => a.target === out.id && a.actor === `agent:${self.id}`)).toBe(true);
+
+        const again = await call(token, "browser_profile_create_own");
+        expect(again.isError).toBe(true);
+        expect(again.content[0]!.text).toContain(`"Self Service browser" (${out.id})`);
+        expect(listProfiles().filter((p) => p.createdByAgentId === self.id)).toHaveLength(1);
+      } finally {
+        revokeRunToken(token);
+      }
+    });
+
+    test("refuses an agent the human gave a profile", async () => {
+      const human = createProfile({ name: "Human gave this", workspaceId: null });
+      const pinned = await makeAgent({ name: "Already Pinned", browser: { enabled: true, profileId: human.id } });
+      const token = tokenFor(pinned);
+      try {
+        const before = listProfiles().length;
+        const r = await call(token, "browser_profile_create_own");
+        expect(r.isError).toBe(true);
+        expect(r.content[0]!.text).toContain(`already have a browser profile of your own: "Human gave this" (${human.id})`);
+        expect(listProfiles()).toHaveLength(before);
+        expect(getAgent(pinned.id).browser.profileId).toBe(human.id);
+      } finally {
+        revokeRunToken(token);
+      }
+    });
+
+    test("a long agent name still fits the profile name", async () => {
+      const long = await makeAgent({ name: "L".repeat(100), browser: { enabled: true } });
+      const token = tokenFor(long);
+      try {
+        const out = own(await call(token, "browser_profile_create_own"));
+        expect(out.name).toBe(`${"L".repeat(72)} browser`);
+      } finally {
+        revokeRunToken(token);
+      }
+    });
+
+    test("doesn't let a non-manager assign a human profile", async () => {
+      const human = createProfile({ name: "Still the human's", workspaceId: null });
+      const r = await call(tokens[worker.id]!, "agent_update", { agentId: worker.id, browser: { profileId: human.id } });
+      expect(r.isError).toBe(true);
+      expect(r.content[0]!.text).toContain("not available");
+      expect(getAgent(worker.id).browser.profileId).not.toBe(human.id);
+    });
   });
 });
 

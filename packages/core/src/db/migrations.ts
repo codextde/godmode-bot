@@ -1505,6 +1505,15 @@ ALTER TABLE phone_calls ADD COLUMN from_owner INTEGER NOT NULL DEFAULT 0;
   },
   {
     id: 92,
+    name: "agent_created_browser_profiles",
+    sql: /* sql */ `
+-- The agent that created the profile, empty, for an agent of its team. Only such a profile may be assigned by an agent;
+-- the human's profiles (their logins and cookies) stay theirs. NULL = created or filled by the human.
+ALTER TABLE browser_profiles ADD COLUMN created_by_agent_id TEXT;
+`,
+  },
+  {
+    id: 93,
     name: "project_context_writer",
     sql: /* sql */ `
 -- An agent wrote the project's context without raw secrets (fill_only: runs that get it get none either) or without
