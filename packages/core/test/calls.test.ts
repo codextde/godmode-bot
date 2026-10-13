@@ -14,7 +14,7 @@ import { checkSettingsPatch } from "../src/services/settingsPatch";
 import * as vault from "../src/vault/vault";
 import { agentBody, parseConversation } from "../src/calls/elevenlabs";
 import { callingCode } from "../src/calls/numbers";
-import { __lookForInboundForTests, callerNumber, getCall, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
+import { __lookForInboundForTests, callerNumber, getCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 import { getSettings } from "../src/services/settings";
 import { listNotifications } from "../src/services/notifications";
 
@@ -186,6 +186,13 @@ describe("the owner calling in", () => {
     } finally {
       updateSettings({ general: { userName: "Daniel Ehrhardt" } });
     }
+  });
+
+  test("the greeting is in the line's language unless the human wrote one", () => {
+    const p = getSettings().phone;
+    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "de" })).toBe("Hallo, hier ist die Assistenz von Daniel Ehrhardt. Wie kann ich helfen?");
+    expect(inboundGreeting({ ...p, inboundGreeting: "", language: "en" })).toBe("Hello, this is Daniel Ehrhardt's assistant. How can I help you?");
+    expect(inboundGreeting({ ...p, inboundGreeting: " Servus! ", language: "en" })).toBe("Servus!");
   });
 
   test("the run after an owner call starts on the request, outward steps still need an OK", () => {
