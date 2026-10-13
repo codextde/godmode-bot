@@ -1417,7 +1417,7 @@ export interface AndroidSettings {
 export interface PhoneSettings {
   /** Agents may place calls and Godmode watches for incoming ones. */
   enabled: boolean;
-  /** The ElevenLabs phone number calls go out from ("" = the first one in the account). */
+  /** The ElevenLabs phone number calls go out from ("" = the first one in the account); a number in the callee's country goes first. */
   numberId: string;
   /** The owner's own phone (E.164): agents call it for urgent questions and news. "" = never. */
   ownerNumber: string;
