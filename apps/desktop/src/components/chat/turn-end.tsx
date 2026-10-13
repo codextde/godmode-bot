@@ -44,6 +44,8 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     queryKey: qk.run(message.runId!),
     queryFn: () => api.runs.get(message.runId!),
     staleTime: 60_000,
+    // While it waits to go on by itself, the time it names stays current.
+    refetchInterval: (q) => (q.state.data?.retryAt ? 60_000 : false),
     retry: false,
   });
   const { data: tasks = [] } = useTasks("all");
@@ -75,6 +77,8 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
 
   if (!run || (run.status !== "failed" && run.status !== "cancelled")) return null;
   if (run.trigger === "dream" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
+  // The connection to Claude dropped: Godmode continues by itself, a little later.
+  const retryAt = run.retryAt ? new Date(run.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
 
   // A ticket's chat (also one whose ticket is archived) goes on from the ticket.
   if (conversation.origin === "task") {
@@ -97,7 +101,9 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     if (!routine) return null;
     return (
       <Row>
-        <span className="min-w-0">This was “{routine.name}” — run the automation again.</span>
+        <span className="min-w-0">
+          {retryAt ? `The connection to Claude dropped — “${routine.name}” goes on by itself around ${retryAt}.` : `This was “${routine.name}” — run the automation again.`}
+        </span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" disabled={runRoutine.isPending || !routine.enabled} aria-busy={runRoutine.isPending} onClick={() => runRoutine.mutate(routine)}>
             {runRoutine.isPending ? <Spinner /> : <Play className="fill-current" />} Run now
@@ -159,7 +165,9 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     <Row>
       {action(byHuman ? "ghost" : "outline")}
       <span className="min-w-0">
-        {mode === "continue"
+        {retryAt
+          ? `The connection to Claude dropped — ${name} picks it up by itself around ${retryAt}.`
+          : mode === "continue"
           ? byHuman
             ? `Changed your mind? ${name} picks up where you stopped it.`
             : `${name} picks up where it stopped, in this chat.`
