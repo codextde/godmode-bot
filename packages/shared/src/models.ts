@@ -747,6 +747,8 @@ export interface Run {
   createdAt: ISODate;
   /** In run lists: why a paused run stands still (and until when). */
   pause?: RunPause | null;
+  /** On a single run: when Godmode continues it by itself (it broke off without a connection to Claude). */
+  retryAt?: ISODate | null;
 }
 
 /* ------------------------------------------------------------------ */

@@ -8,7 +8,7 @@ import { all, get, insert, run as sql, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
-import { brokeOffOffline, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, resumeInterruptedWork } from "../src/services/resume";
+import { brokeOffOffline, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, offlineRetryAt, resumeInterruptedWork } from "../src/services/resume";
 import { createRoutine } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
@@ -301,6 +301,8 @@ describe("continuing once Claude can be reached again", () => {
   test("knows Claude Code's answer for a missing connection from other failures", () => {
     expect(brokeOffOffline(OFFLINE)).toBe(true);
     expect(brokeOffOffline("API Error: Connection error.")).toBe(true);
+    expect(brokeOffOffline("API Error: Connection dropped (ECONNRESET)")).toBe(true);
+    expect(brokeOffOffline("API Error: socket hang up")).toBe(true);
     expect(brokeOffOffline("API Error: 400 invalid_request_error")).toBe(false);
     expect(brokeOffOffline("The site answered ENOTFOUND, so I stopped")).toBe(false);
     expect(brokeOffOffline(null)).toBe(false);
@@ -328,6 +330,42 @@ describe("continuing once Claude can be reached again", () => {
     const cut = cutOff(agent, conv, { status: "failed", error: OFFLINE });
     expect(await continueAfterOutage(online)).toBe(1);
     expect((await waitForRun(next(conv, cut)!.id, 10_000)).status).toBe("succeeded");
+  }, 20_000);
+
+  test("a connection that drops again waits a little longer before each try, then gives up", async () => {
+    const conv = chat(agent);
+    let last = cutOff(agent, conv, { status: "failed", error: "API Error: Connection dropped (ECONNRESET)" });
+    for (const waitMin of [2, 5, 15, 30]) {
+      expect(await continueAfterOutage(online)).toBe(1);
+      const run = next(conv, last)!;
+      await waitForRun(run.id, 10_000);
+      sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", "API Error: Connection dropped (ECONNRESET)", now(), run.id);
+      last = run.id;
+      expect(await continueAfterOutage(online)).toBe(0);
+      expect(Date.parse(offlineRetryAt(last)!)).toBeGreaterThan(Date.now() + (waitMin - 1) * 60_000);
+      sql("UPDATE runs SET finished_at = ? WHERE id = ?", ago(waitMin * 60_000 + 1000), last);
+    }
+    expect(await continueAfterOutage(online)).toBe(1);
+    const fifth = next(conv, last)!;
+    await waitForRun(fifth.id, 10_000);
+    sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", OFFLINE, ago(HOUR), fifth.id);
+    expect(offlineRetryAt(fifth.id)).toBeNull();
+    expect(await continueAfterOutage(online)).toBe(0);
+  }, 60_000);
+
+  test("work handed over without waiting continues; work someone waited for is left to them", async () => {
+    const parentChat = chat(agent);
+    const parent = cutOff(agent, parentChat, { status: "succeeded", error: "", finishedAt: ago(60_000) });
+    const handed = chat(helper);
+    const cut = cutOff(helper, handed, { status: "failed", error: OFFLINE, trigger: "delegation", parent });
+    const waited = cutOff(agent, chat(agent), { status: "failed", error: OFFLINE, finishedAt: now() });
+    cutOff(helper, chat(helper), { status: "failed", error: OFFLINE, trigger: "delegation", parent: waited, finishedAt: ago(60_000) });
+    sql("UPDATE runs SET status = 'succeeded', error = NULL WHERE id = ?", waited);
+    expect(offlineRetryAt(cut)).not.toBeNull();
+    expect(await continueAfterOutage(online)).toBe(1);
+    const run = next(handed, cut)!;
+    expect(run).toMatchObject({ trigger: "delegation", agentId: helper.id, parentRunId: parent });
+    await waitForRun(run.id, 10_000);
   }, 20_000);
 
   test("leaves other failures, handed-over work, tickets, old turns and automations that came round again", async () => {
