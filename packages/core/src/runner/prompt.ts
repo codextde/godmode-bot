@@ -301,7 +301,7 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 4. Focus/click the password field (some sites show it on a second step), then call \`vault_fill_login({ credentialId, field: "password", submit: true })\`.
 5. If the site asks for a 2FA / verification / authenticator code, focus that field and call \`vault_fill_totp({ credentialId })\` (add \`submit: true\` when there is no separate confirm step).
 6. Take a snapshot/screenshot to confirm you are logged in.${
-    settings.browser.enabled && agent.browser.enabled && settings.browser.passkeys && ctx.vaultOpen && !ctx.vm?.browser
+    settings.browser.enabled && agent.browser.enabled && settings.browser.passkeys && ctx.vaultOpen && !ctx.vm
       ? `
 Passkeys work in your browser: Godmode keeps them in the vault and answers the site by itself — no fingerprint, phone or security key. When a site offers "Sign in with a passkey", use it (\`vault_list_logins\` lists the passkeys saved for the site); a login page with passkey autofill may sign you in as soon as it loads. When a site asks for a passkey to go on, or the task is to set one up, create it on the page: it is saved in the vault right away and works for every agent using this browser profile. Never give ${human} a task to create or confirm a passkey in this browser.`
       : ""

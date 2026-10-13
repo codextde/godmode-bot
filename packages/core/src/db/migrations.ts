@@ -1549,6 +1549,7 @@ CREATE TABLE passkeys (
 );
 CREATE UNIQUE INDEX idx_passkeys_credential ON passkeys(rp_id, credential_id);
 CREATE INDEX idx_passkeys_workspace ON passkeys(workspace_id);
+CREATE INDEX idx_passkeys_profile ON passkeys(profile_id);
 `,
   },
 ];

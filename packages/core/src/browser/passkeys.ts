@@ -16,7 +16,7 @@ import { onSettingsApplied } from "../services/runtime";
 import * as vault from "../vault/vault";
 import { forgetPasskey, passkeysForBrowser, recordPasskeyUse, renamePasskeyUser, savePasskey, type Credential } from "../vault/passkeys";
 import { CdpClient, type CdpParams } from "./cdp";
-import { allRunning, onBrowserState, type RunningBrowser } from "./state";
+import { allRunning, getRegistered, onBrowserState, type RunningBrowser } from "./state";
 
 const log = logger("passkeys");
 
@@ -114,7 +114,7 @@ class PasskeyBridge {
       this.sessions.set(sessionId, { targetId: targetInfo.targetId, authenticatorId });
       for (const credential of this.loaded.values()) await this.add(sessionId, credential);
       // Paused (idle check) or stopped while this tab was being set up: let go of it like of the others.
-      if (this.idle) {
+      if (this.idle || !this.live.has(sessionId)) {
         this.sessions.delete(sessionId);
         await release();
         await detach();
@@ -273,11 +273,13 @@ function wanted(): boolean {
 function startFor(rb: RunningBrowser) {
   if (bridges.has(rb.profileId) || rb.stopping) return;
   const bridge: PasskeyBridge = new PasskeyBridge(rb, () => {
-    // The bridge's own connection dropped while the browser runs on: start a new one.
+    // The bridge's own connection dropped while the browser runs on: start a new one after a pause.
     if (bridges.get(rb.profileId) !== bridge) return;
     bridges.delete(rb.profileId);
     bridge.stop();
-    if (wanted() && !rb.stopping && !rb.client.closed) startFor(rb);
+    setTimeout(() => {
+      if (wanted() && !rb.stopping && !rb.client.closed && getRegistered(rb.profileId) === rb) startFor(rb);
+    }, 2000).unref?.();
   });
   bridges.set(rb.profileId, bridge);
   bridge.start().catch((err) => {

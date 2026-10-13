@@ -127,6 +127,11 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     const wrapped = JSON.stringify({ id: 1, method: "WebAuthn.getCredentials", params: { authenticatorId: "x" } });
     await expect(agentClient.send("Target.sendMessageToTarget", { sessionId, message: wrapped })).rejects.toThrow("only reaches its own chat");
     await expect(agentClient.send("Target.exposeDevToolsProtocol", { targetId })).rejects.toThrow("only reaches its own chat");
+    await expect(agentClient.send("Target.createTarget", { url: "devtools://devtools/bundled/inspector.html" })).rejects.toThrow("only reaches its own chat");
+    const before = rb().lastUsedAt;
+    await Bun.sleep(5);
+    await evaluate<number>("1");
+    expect(rb().lastUsedAt).toBeGreaterThan(before);
   }, 30_000);
 
   test("another tab signs in with it", async () => {

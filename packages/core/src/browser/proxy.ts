@@ -73,6 +73,7 @@ class ChatConnection {
   private upstream: WebSocket | null = null;
   private browser: CdpClient | null = null;
   private tabs: TabRegistry | null = null;
+  private rb: RunningBrowser | null = null;
   private outbox: string[] = [];
   private sessions = new Map<string, string>();
   private shown = new Set<string>();
@@ -107,6 +108,7 @@ class ChatConnection {
     if (this.closed) return;
     this.browser = rb.client;
     this.tabs = rb.tabs;
+    this.rb = rb;
     const up = new WebSocket(rb.wsUrl);
     this.upstream = up;
     up.addEventListener("open", () => {
@@ -135,6 +137,8 @@ class ChatConnection {
     if (refusal) return this.reply(id, sessionId, refusal);
 
     this.tabs?.touch(this.chat);
+    // Whatever an agent sends counts as use, also scripts that keep to one page (the idle sweep stops unused browsers).
+    if (this.rb) this.rb.lastUsedAt = Date.now();
     if (sessionId && FOCUS.has(method)) this.tabs?.focus(this.chat, this.sessions.get(sessionId)!);
     else if (method === "Target.activateTarget") this.tabs?.focus(this.chat, params.targetId);
     if (NO_FRONT.has(method)) return this.send(JSON.stringify({ id, result: {}, ...(sessionId ? { sessionId } : {}) }));
@@ -172,6 +176,9 @@ class ChatConnection {
     if (BLOCKED.has(method)) return NOT_ALLOWED;
     // The vault's passkeys sit in the tabs' virtual authenticators (passkeys.ts), also when wrapped for a non-flat session.
     if (method.startsWith("WebAuthn.")) return NOT_ALLOWED;
+    // A DevTools frontend page would open its own connection to the raw browser port.
+    const url = method === "Target.createTarget" || method === "Page.navigate" ? String(params.url ?? "") : "";
+    if (/^\s*devtools:/i.test(url)) return NOT_ALLOWED;
     if (method === "Target.sendMessageToTarget") {
       let inner: { method?: unknown; params?: Record<string, any> } | null = null;
       try {
