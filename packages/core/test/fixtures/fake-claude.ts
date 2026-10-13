@@ -298,6 +298,7 @@ appendFileSync(
       ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? null,
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ?? null,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
+      ENABLE_TOOL_SEARCH: process.env.ENABLE_TOOL_SEARCH ?? null,
       CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? null,
     },
   }) + "\n",

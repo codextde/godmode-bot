@@ -512,7 +512,8 @@ export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
   );
 }
 
-export async function updateMod(id: string, patch: ModPatch, actor = "user"): Promise<Mod> {
+/** `agentMaySwitch`: a manager agent's plugin_update, which the human allowed to switch plugins on and off. */
+export async function updateMod(id: string, patch: ModPatch, actor = "user", opts: { agentMaySwitch?: boolean } = {}): Promise<Mod> {
   let row = getRow(id);
   if (!patch || typeof patch !== "object") throw badRequest("Invalid plugin update");
   const byAgent = actor.startsWith("agent:");
@@ -577,7 +578,7 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
     }
   }
 
-  if (patch.enabled !== undefined && !byAgent) {
+  if (patch.enabled !== undefined && (!byAgent || opts.agentMaySwitch)) {
     if (patch.enabled) {
       // The human's OK is for the code they read: an agent may have saved another version since the page loaded.
       if (patch.digest !== undefined && patch.digest !== codeDigest(row, files)) {

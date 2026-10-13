@@ -2871,7 +2871,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "plugin_install",
     description:
-      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. A repository that is an MCP server (server.json) with skills for agents (.agents/skills) installs too. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: the human switches it on under Plugins — you can't. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
+      "Install a Claude Code plugin from a git repository for the human to review: `source` is \"owner/repo\", a GitHub link (also `…/tree/<branch>/<folder>`) or a clone URL. A repository that is an MCP server (server.json) with skills for agents (.agents/skills) installs too. Godmode clones it, checks it with Claude Code's validator and lists what it brings (skills, subagents, commands, hooks, MCP servers). It arrives switched off: switch it on with plugin_update once you have looked at what it brings, and keep it to the agents that need it. When the repository's marketplace lists several plugins, the answer names them: install again with `plugin`.",
     schema: z.object({
       source: z.string().min(1).max(500).describe('"owner/repo", a GitHub link or a clone URL'),
       ref: z.string().max(200).optional().describe("Branch or tag to follow; default: the repository's default branch"),
@@ -2890,7 +2890,66 @@ const TOOLS: ToolDef[] = [
         throw err;
       }
       notify("info", `${agent.name} installed the plugin ${saved.title}`, "It is switched off. Look at what it brings and switch it on under Plugins.", `/plugins?plugin=${saved.id}`);
-      return json({ ...modSummary(saved), next: "Installed switched off. Tell the human to review it under Plugins and switch it on." });
+      return json({ ...modSummary(saved), next: "Installed switched off. Switch it on with plugin_update (runsFor: the agents that need it) when it is what the task needs." });
+    },
+  }),
+
+  defineTool({
+    name: "plugin_update",
+    description:
+      "Switch an installed plugin on or off and choose whose runs load it — the same as the switch and \"Runs for\" on the Plugins page. `runsFor` is \"all\" (every agent) or the agents (ids or names) that should load it. Keep plugins with many tools or programs to the agents that need them. A plugin switches on only when Claude Code's check passed and its required options are set; the human is told what you changed.",
+    schema: z.object({
+      plugin: z.string().min(1).max(100).describe("The plugin's id or name (plugins_list)"),
+      enabled: z.boolean().optional().describe("Switch it on (true) or off (false)"),
+      runsFor: z
+        .union([z.literal("all"), z.array(z.string().min(1).max(100)).min(1).max(100)])
+        .optional()
+        .describe('"all", or the ids or names of the agents whose runs load it'),
+    }),
+    when: managesSetup,
+    run: async ({ plugin, enabled, runsFor }, { agent, ctx }) => {
+      if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and plugins load into every agent's runs there — only the human changes them.");
+      const refusal = setupOffHostRefusal(ctx);
+      if (refusal) return fail(refusal);
+      if (enabled === undefined && runsFor === undefined) return fail("Say what to change: `enabled`, `runsFor` or both.");
+      const mod = findMod(plugin);
+      if (!mod) return fail(`There is no plugin "${plugin}". Call plugins_list to see them.`);
+      // Hook code an agent wrote runs inside every turn: the human reads it before it does.
+      if (enabled && mod.origin === "agent" && mod.needsReview) {
+        return fail(`"${mod.title}" is a draft an agent wrote: ${getSettings().general.userName || "the human"} reads its code and switches it on under Plugins.`);
+      }
+      let agentIds: string[] | undefined;
+      if (Array.isArray(runsFor)) {
+        const team = listAgents({ workspaceId: "all" });
+        agentIds = [];
+        for (const ref of runsFor) {
+          const key = ref.trim().toLowerCase();
+          const found = team.find((a) => a.id === ref.trim()) ?? team.filter((a) => a.name.toLowerCase() === key)[0];
+          if (!found) return fail(`There is no agent "${ref}". agents_list shows them.`);
+          if (team.filter((a) => a.name.toLowerCase() === key).length > 1 && found.id !== ref.trim()) return fail(`Several agents are called "${ref}": name it by id.`);
+          if (!agentIds.includes(found.id)) agentIds.push(found.id);
+        }
+      }
+      let saved: Mod;
+      try {
+        saved = await updateMod(
+          mod.id,
+          {
+            ...(enabled !== undefined ? { enabled, ...(enabled ? { digest: mod.digest } : {}) } : {}),
+            ...(runsFor === "all" ? { scope: "all" as const } : agentIds ? { scope: "agents" as const, agentIds } : {}),
+          },
+          `agent:${agent.id}`,
+          { agentMaySwitch: true },
+        );
+      } catch (err) {
+        if (err instanceof HttpError) return fail(err.message);
+        throw err;
+      }
+      const names = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
+      const who = saved.scope === "all" ? "every agent" : saved.agentIds.map((id) => names.get(id) ?? id).join(", ");
+      const changed = [enabled !== undefined ? (saved.enabled ? "switched it on" : "switched it off") : null, runsFor !== undefined ? `it runs for ${who}` : null].filter(Boolean).join(", ");
+      notify("info", `${agent.name} changed the plugin ${saved.title}`, `${changed[0]!.toUpperCase()}${changed.slice(1)}.`, `/plugins?plugin=${saved.id}`);
+      return json(modSummary(saved));
     },
   }),
 

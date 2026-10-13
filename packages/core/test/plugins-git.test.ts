@@ -14,6 +14,7 @@ import { checkoutPath, checkoutsRoot, gitTarget } from "../src/mods/git";
 import { checkModUpdates, deleteMod, getMod, installMod, listModCatalog, listMods, updateGitMod, updateMod } from "../src/mods/service";
 import { run as sql } from "../src/db";
 import { HttpError } from "../src/util";
+import { blankModFiles } from "../src/mods/templates";
 import type { RunContext } from "../src/types";
 
 let env: TestEnv;
@@ -460,6 +461,27 @@ describe("agents", () => {
     expect(listNotifications(1)[0]).toMatchObject({ title: "Boss installed the plugin Demo plugin", link: `/plugins?plugin=${mod.id}` });
     // The plugin_save tool doesn't write over it.
     expect((await callTool(ctx, "plugin_save", { plugin: mod.id, title: "x", files: mod.files })).isError).toBe(true);
+    // A manager switches it on itself, for the agents that need it, and the human is told.
+    expect((await callTool(ctx, "plugin_update", { plugin: mod.name, runsFor: ["nobody"] })).isError).toBe(true);
+    const on = await callTool(ctx, "plugin_update", { plugin: mod.name, enabled: true, runsFor: ["Coder"] });
+    expect(on.isError).toBeFalsy();
+    expect(getMod(mod.id)).toMatchObject({ enabled: true, needsReview: false, scope: "agents", agentIds: [agent.id] });
+    expect(listNotifications(1)[0]).toMatchObject({ title: "Boss changed the plugin Demo plugin", body: "Switched it on, it runs for Coder." });
+    expect(pluginDirs((await chat(agent.id)).invocation.args)).toContain(checkoutPath(mod.id, mod.source!.commit));
+    expect(pluginDirs((await chat(manager.id)).invocation.args)).not.toContain(checkoutPath(mod.id, mod.source!.commit));
+    expect((await callTool(ctx, "plugin_update", { plugin: mod.id, runsFor: "all" })).isError).toBeFalsy();
+    expect(getMod(mod.id).scope).toBe("all");
+    expect((await callTool(ctx, "plugin_update", { plugin: mod.id, enabled: false })).isError).toBeFalsy();
+    expect(getMod(mod.id).enabled).toBe(false);
+    // Hook code an agent wrote still waits for the human.
+    const draft = JSON.parse((await callTool(ctx, "plugin_save", { title: "Guard", files: blankModFiles("guard", "Guard") })).content[0]!.text) as { id: string };
+    const refused = await callTool(ctx, "plugin_update", { plugin: draft.id, enabled: true });
+    expect(refused.isError).toBe(true);
+    expect(getMod(draft.id).enabled).toBe(false);
+    deleteMod(draft.id);
+    // A plain agent has no such tool.
+    const plain: RunContext = { ...ctx, runId: "run_plugins_coder", agentId: agent.id };
+    expect((await callTool(plain, "plugin_update", { plugin: mod.id, enabled: true })).isError).toBe(true);
     // Switching it on is the human's OK for that commit.
     expect((await updateMod(mod.id, { enabled: true, digest: mod.digest })).needsReview).toBe(false);
     deleteMod(mod.id);

@@ -1000,7 +1000,8 @@ oh-my-claudecode); small ones are **mods** whose files Godmode keeps itself.
   and Claude Code's estimate of the tokens it adds to every session). The record keeps `source` (`ModSource`: URL, ref,
   folder, the commit that runs, its version) and, in `files`, only the manifest, `hooks.json` and `.mcp.json` — for its
   options and for reading. A human's install is on at once when the check passes; an agent's (`plugin_install`) is off
-  and marked for review. `digest` is `git:<commit>`, so switching it on is the OK for that commit.
+  and marked for review. Managers switch plugins on and off and set whose runs load them with `plugin_update` (the human
+  is notified); hook code an agent drafted itself still waits for the human. `digest` is `git:<commit>`, so switching it on is the OK for that commit.
 * **Updates**: a minute after start and every six hours `git ls-remote` looks up the newest commit of each such plugin
   (`POST /api/mods/updates` does it on request); on GitHub the new version number is read from the raw manifest. An
   update (`POST /api/mods/:id/update`) lays the new commit down beside the old one and replaces it only when Claude
