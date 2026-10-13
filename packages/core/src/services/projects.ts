@@ -3,7 +3,7 @@
  * Chats, tickets and agents may belong to one; their runs get the workspace's setup plus the project's.
  */
 import type { Agent, Project, ProjectInput, WorkspaceSource } from "@godmode/shared";
-import { all, get, insert, run, tx, update } from "../db";
+import { all, get, insert, int, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, newId, notFound, now, slugify } from "../util";
@@ -21,6 +21,8 @@ interface ProjectRow {
   icon: string;
   instructions: string;
   browser_profile_id: string | null;
+  fill_only: number;
+  off_computer: number;
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +41,8 @@ function toModel(r: ProjectRow, sources: WorkspaceSource[] = listSources(r.works
     instructions: r.instructions,
     browserProfileId: r.browser_profile_id ?? null,
     sources,
+    fillOnly: !!r.fill_only,
+    offComputer: !!r.off_computer,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -99,7 +103,13 @@ function changed() {
   bus.changed("workspaces");
 }
 
-export function createProject(input: ProjectInput): Project {
+/** What the writer of a project's context could not do (`Project.fillOnly` / `Project.offComputer`); unset keeps the marker. */
+export interface ContextWriter {
+  fillOnly?: boolean;
+  offComputer?: boolean;
+}
+
+export function createProject(input: ProjectInput, writer: ContextWriter = {}): Project {
   const workspaceId = input.workspaceId?.trim();
   if (!workspaceId || !get("SELECT id FROM workspaces WHERE id = ?", workspaceId)) throw badRequest("Workspace not found");
   const name = cleanName(input.name);
@@ -114,6 +124,8 @@ export function createProject(input: ProjectInput): Project {
     icon: input.icon?.trim() || DEFAULT_ICON,
     instructions: input.instructions?.trim() ?? "",
     browser_profile_id: cleanProfile(workspaceId, input.browserProfileId) ?? null,
+    fill_only: int(!!writer.fillOnly)!,
+    off_computer: int(!!writer.offComputer)!,
     created_at: ts,
     updated_at: ts,
   };
@@ -126,7 +138,7 @@ export function createProject(input: ProjectInput): Project {
   return getProject(row.id);
 }
 
-export function updateProject(id: string, patch: Partial<Omit<ProjectInput, "workspaceId">>): Project {
+export function updateProject(id: string, patch: Partial<Omit<ProjectInput, "workspaceId">>, writer: ContextWriter = {}): Project {
   const current = getProject(id);
   const name = patch.name !== undefined ? cleanName(patch.name) : undefined;
   const apply = tx(() => {
@@ -138,6 +150,8 @@ export function updateProject(id: string, patch: Partial<Omit<ProjectInput, "wor
       icon: patch.icon !== undefined ? patch.icon.trim() || DEFAULT_ICON : undefined,
       instructions: patch.instructions?.trim(),
       browser_profile_id: cleanProfile(current.workspaceId, patch.browserProfileId),
+      fill_only: int(writer.fillOnly),
+      off_computer: int(writer.offComputer),
       updated_at: now(),
     });
     return patch.sources ? setSources(current.workspaceId, patch.sources, id) : undefined;
@@ -186,6 +200,8 @@ export interface RunProject {
   description: string;
   instructions: string;
   browserProfileId: string | null;
+  fillOnly: boolean;
+  offComputer: boolean;
 }
 
 /**
@@ -205,6 +221,8 @@ export function projectOfChat(conversationId: string | null | undefined, agent: 
       description: row.description,
       instructions: row.instructions,
       browserProfileId: row.browser_profile_id ?? null,
+      fillOnly: !!row.fill_only,
+      offComputer: !!row.off_computer,
     };
   }
   return null;

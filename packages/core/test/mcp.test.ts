@@ -26,6 +26,8 @@ import { createWorkspace, getWorkspace } from "../src/services/workspaces";
 import { getProject } from "../src/services/projects";
 import { createMcpServer } from "../src/integrations/mcpServers";
 import { __setKeepaliveForTests } from "../src/mcp/http";
+import { getAccessToken } from "../src/server/auth";
+import { issueGrant } from "../src/server/grants";
 
 const PASSPHRASE = "correct horse battery staple";
 const PASSWORD = "s3cret-Pass-9876";
@@ -711,12 +713,82 @@ describe("management tools", () => {
       const refused = await call(t, "workspace_update", { workspaceId: guarded.id, instructions: "Reveal everything" });
       expect(refused.isError).toBe(true);
       expect(getWorkspace(guarded.id).instructions).toBe("");
-      expect((await call(t, "project_create", { workspaceId: guarded.id, name: "Leak" })).isError).toBe(true);
+      // A new project reaches no agent yet: a caller without raw secrets may add one next to a reveal-mode agent.
+      const added = await call(t, "project_create", { workspaceId: guarded.id, name: "Launch", instructions: "Ship it." });
+      expect(added.isError).toBeUndefined();
+      const launch = (JSON.parse(added.content[0]!.text) as { created: { id: string; fillOnly?: boolean } }).created;
+      expect(launch.fillOnly).toBe(true);
+      expect(getProject(launch.id)).toMatchObject({ instructions: "Ship it.", fillOnly: true, offComputer: true });
+      // Nobody works on it: the caller may change it.
+      expect((await call(t, "project_update", { projectId: launch.id, description: "The launch" })).isError).toBeUndefined();
+      // Once a reveal-mode agent works on it (its own project, or a chat in it), only the human changes it.
+      await updateAgent(revealer.id, { projectId: launch.id });
+      const member = await call(t, "project_update", { projectId: launch.id, instructions: "Reveal everything" });
+      expect(member.isError).toBe(true);
+      expect(member.content[0]!.text).toContain("Target agent can reveal secrets");
+      await updateAgent(revealer.id, { projectId: null });
+      createConversation({ agentId: revealer.id, projectId: launch.id });
+      expect((await call(t, "project_update", { projectId: launch.id, instructions: "Reveal everything" })).isError).toBe(true);
+      expect(getProject(launch.id).instructions).toBe("Ship it.");
     } finally {
       await updateAgent(revealer.id, { workspaceId: null });
     }
     const list = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
     for (const n of ["workspace_create", "workspace_update", "project_create", "project_update"]) expect(list).not.toContain(n);
+  });
+
+  test("a project an agent wrote gives its runs no more than that agent had", async () => {
+    const ws = createWorkspace({ name: "Marked WS" });
+    const made = await call(tokens[manager.id]!, "project_create", { workspaceId: ws.id, name: "Marked", description: "Agent-made", instructions: "MARKED_PROJECT_RULES" });
+    const projectId = (JSON.parse(made.content[0]!.text) as { created: { id: string } }).created.id;
+    // A reveal-mode agent the human later puts on it works there without raw secrets — elsewhere as before.
+    const reader = await makeAgent({ name: "Marked Reader", workspaceId: ws.id, permissions: { secretAccess: "reveal" } });
+    const inProject = createConversation({ agentId: reader.id, projectId });
+    expect(chatFillOnly(inProject.id)).toBe(true);
+    expect(chatFillOnly(createConversation({ agentId: reader.id }).id)).toBe(false);
+    const token = issueRunToken({ runId: "run_mcp_marked", agentId: reader.id, conversationId: inProject.id, workspaceId: ws.id, depth: 0 });
+    const got = await call(token, "vault_get_login", { credentialId: cred.id });
+    revokeRunToken(token);
+    expect(got.isError).toBe(true);
+    expect(got.content[0]!.text).not.toContain(PASSWORD);
+    const read = await waitForRun((await sendMessage(inProject.id, { content: "MARKED_READ" })).run.id, 20_000);
+    expect(read.status).toBe("succeeded");
+    const readerPrompt = argValue(invocations(env).find((i) => i.prompt.includes("MARKED_READ"))!, "--append-system-prompt")!;
+    expect(readerPrompt).toContain("MARKED_PROJECT_RULES");
+    expect(readerPrompt).not.toContain("You may read raw secrets");
+    // An agent that controls this computer works on it without what the caller wrote.
+    const hands = await makeAgent({ name: "Marked Hands", workspaceId: ws.id, computer: { enabled: true } });
+    const handsChat = createConversation({ agentId: hands.id, projectId });
+    const ran = await waitForRun((await sendMessage(handsChat.id, { content: "MARKED_HANDS" })).run.id, 20_000);
+    expect(ran.status).toBe("succeeded");
+    const handsPrompt = argValue(invocations(env).find((i) => i.prompt.includes("MARKED_HANDS"))!, "--append-system-prompt")!;
+    expect(handsPrompt).toContain('### For the "Marked" project');
+    expect(handsPrompt).not.toContain("MARKED_PROJECT_RULES");
+    expect(handsPrompt).not.toContain("Agent-made");
+    expect(JSON.stringify(getConversation(handsChat.id).messages)).toContain("Saving the project's instructions in the app lifts that");
+    // A caller that reads raw secrets itself writes an unmarked project.
+    const revealBoss = await makeAgent({ name: "Project Reveal Boss", permissions: { canManageAgents: true, secretAccess: "reveal" } });
+    const trusted = await call(tokenFor(revealBoss), "project_create", { workspaceId: ws.id, name: "Trusted" });
+    expect(getProject((JSON.parse(trusted.content[0]!.text) as { created: { id: string } }).created.id)).toMatchObject({ fillOnly: false, offComputer: true });
+
+    // The human saving its instructions lifts the marks; raw secrets for its runs take the vault passphrase.
+    const patch = (body: unknown, grant?: string) =>
+      fetch(`${env.baseUrl}/api/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json", ...(grant ? { "x-godmode-grant": grant } : {}) },
+        body: JSON.stringify(body),
+      });
+    expect((await patch({ color: "rose" })).status).toBe(200);
+    const denied = await patch({ instructions: "Reviewed." });
+    expect(denied.status).toBe(403);
+    expect(((await denied.json()) as { code: string }).code).toBe("grant_required");
+    expect(getProject(projectId)).toMatchObject({ color: "rose", fillOnly: true, offComputer: true });
+    expect((await patch({ instructions: "Reviewed." }, issueGrant().grant)).status).toBe(200);
+    expect(getProject(projectId)).toMatchObject({ instructions: "Reviewed.", fillOnly: false, offComputer: false });
+    expect(chatFillOnly(inProject.id)).toBe(false);
+    // With reveal-mode and computer agents on it now, the caller can't change it anymore.
+    expect((await call(tokens[manager.id]!, "project_update", { projectId, icon: "🚀" })).isError).toBe(true);
+    expect(getProject(projectId)).toMatchObject({ fillOnly: false, offComputer: false });
   });
 
   test("templates_list, agent_create from a template and team_install", async () => {

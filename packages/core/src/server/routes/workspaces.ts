@@ -6,6 +6,8 @@ import { createProject, deleteProject, getProject, listProjects, updateProject }
 import { get } from "../../db";
 import { conflict } from "../../util";
 import { requestDevice } from "../auth";
+import { requireGrant } from "../grants";
+import { isInitialized } from "../../vault/vault";
 import { body, z } from "../validate";
 
 const sourceSchema = z.discriminatedUnion("kind", [
@@ -50,7 +52,14 @@ export function registerWorkspaceRoutes(app: Hono): void {
     c.json(createProject(await body(c, projectSchema.extend({ workspaceId: z.string().trim().min(1).max(100) }))), 201),
   );
 
-  app.patch("/api/projects/:id", async (c) => c.json(updateProject(c.req.param("id"), await body(c, projectSchema.partial()))));
+  app.patch("/api/projects/:id", async (c) => {
+    const id = c.req.param("id");
+    const patch = await body(c, projectSchema.partial());
+    if (patch.instructions === undefined) return c.json(updateProject(id, patch));
+    // The human saved its instructions: what an agent wrote there is theirs now. Raw secrets for its runs take the passphrase.
+    if (getProject(id).fillOnly && isInitialized()) requireGrant(c);
+    return c.json(updateProject(id, patch, { fillOnly: false, offComputer: false }));
+  });
 
   app.post("/api/projects/:id/sources/:sourceId/sync", (c) => {
     const project = getProject(c.req.param("id"));
