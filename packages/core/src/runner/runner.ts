@@ -2029,7 +2029,17 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // Dreams read every chat of the agent: on Claude, also for an agent that works on GLM.
   const model = dreaming && modelProvider(chosen) === "zai" ? settings.runner.model?.trim() || DEFAULT_MODEL : chosen;
   const glm = modelProvider(model) === "zai";
-  const fillOnly = conv.secret_access === "fill" || glm;
+  // A project an agent wrote without raw secrets (or without control of this computer) gets no more from its runs.
+  const projectFillOnly = !!project?.fillOnly && agent.permissions.secretAccess === "reveal";
+  const projectHidden = !!project?.offComputer && agent.computer.enabled;
+  const fillOnly = conv.secret_access === "fill" || glm || projectFillOnly;
+  if (projectFillOnly || projectHidden) {
+    const limits = [projectFillOnly && "gets no raw secrets (logins are still filled into pages)", projectHidden && "leaves out its description and instructions"];
+    job.acc.addNotice(
+      "info",
+      `An agent without the access this run has wrote the "${project!.name}" project's context, so this run ${limits.filter(Boolean).join(" and ")}. Saving the project's instructions in the app lifts that.`,
+    );
+  }
   // Ultracode: the chat's choice, else the agent's, else the setting — with a model this Claude Code has it for. Dreams
   // and condition checks are small jobs with a fixed shape: never.
   const wantsUltracode = (conv.ultracode === null ? null : conv.ultracode === 1) ?? agent.ultracode ?? settings.runner.ultracode;
@@ -2082,7 +2092,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const standing = instructionsSection(settings, {
     workspace: workspace ? { name: workspace.name, text: workspace.instructions } : null,
     project: project
-      ? { name: project.name, workspace: workspace?.name ?? "", description: project.description, text: project.instructions }
+      ? { name: project.name, workspace: workspace?.name ?? "", description: projectHidden ? "" : project.description, text: projectHidden ? "" : project.instructions }
       : null,
     chat: conv.instructions ?? "",
   });

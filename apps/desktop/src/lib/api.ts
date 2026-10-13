@@ -463,7 +463,7 @@ export const api = {
 
   projects: {
     create: (input: ProjectInput) => post<Project>("/api/projects", input),
-    update: (id: string, input: Partial<Omit<ProjectInput, "workspaceId">>) => patch<Project>(`/api/projects/${id}`, input),
+    update: (id: string, input: Partial<Omit<ProjectInput, "workspaceId">>, grant?: string) => request<Project>("PATCH", `/api/projects/${id}`, input, withGrant(grant)),
     delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/projects/${id}/sources/${sourceId}/sync`),
   },

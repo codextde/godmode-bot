@@ -38,6 +38,7 @@ import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
 import { normalizeWorkingDirectory } from "./folders";
+import { projectOfChat } from "./projects";
 import { parseComputerTarget } from "../computer/targets";
 import { audit } from "./audit";
 import { getSettings } from "./settings";
@@ -368,16 +369,17 @@ export function createConversation(
 
 /**
  * The chat works without raw secrets even when its agent may read them: its task was handed over by an agent that
- * could not read them itself. It stays that way for everything that happens in the chat later. A chat that is gone
- * counts as fill-only too.
+ * could not read them itself, or it works on a project such an agent wrote. It stays that way for everything that
+ * happens in the chat later. A chat that is gone counts as fill-only too.
  */
 export function chatFillOnly(conversationId: string): boolean {
-  const row = get<{ secret_access: string | null; model: string | null }>(
-    "SELECT c.secret_access, COALESCE(NULLIF(TRIM(c.model), ''), a.model) AS model FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = ?",
+  const row = get<{ secret_access: string | null; model: string | null; workspace_id: string | null; project_id: string | null }>(
+    "SELECT c.secret_access, COALESCE(NULLIF(TRIM(c.model), ''), a.model) AS model, a.workspace_id, a.project_id FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = ?",
     conversationId,
   );
   // A chat on GLM sends what it reads to Z.ai: raw secrets stay out of it.
-  return !row || row.secret_access === "fill" || modelProvider(row.model) === "zai";
+  if (!row || row.secret_access === "fill" || modelProvider(row.model) === "zai") return true;
+  return !!projectOfChat(conversationId, { workspaceId: row.workspace_id, projectId: row.project_id })?.fillOnly;
 }
 
 /**
