@@ -871,6 +871,22 @@ export interface Credential {
   updatedAt: ISODate;
 }
 
+/** A passkey the Godmode browser created or used on a site; its private key never leaves the vault and the browser. */
+export interface Passkey {
+  id: ID;
+  workspaceId: ID | null;
+  /** The site it belongs to (WebAuthn relying party id), e.g. "github.com" */
+  rpId: string;
+  userName: string;
+  userDisplayName: string;
+  /** Browser profile it was created in */
+  profileId: ID | null;
+  createdByAgentId: ID | null;
+  lastUsedAt: ISODate | null;
+  createdAt: ISODate;
+  updatedAt: ISODate;
+}
+
 export type TotpAlgorithm = "SHA1" | "SHA256" | "SHA512";
 
 export interface TotpEntry {
@@ -1274,6 +1290,8 @@ export interface BrowserSettings {
   stealth: boolean;
   /** Start browsers with audio muted so pages agents open stay silent (applies when a browser launches). */
   muteAudio: boolean;
+  /** The browser creates and signs in with passkeys stored in the vault instead of Chrome's own passkey dialogs. */
+  passkeys: boolean;
 }
 
 export interface ComputerSettings {

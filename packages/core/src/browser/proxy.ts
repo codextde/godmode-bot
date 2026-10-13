@@ -168,7 +168,8 @@ class ChatConnection {
   }
 
   private refusal(method: string, params: Record<string, any>): typeof NO_TARGET | null {
-    if (BLOCKED.has(method)) return NOT_ALLOWED;
+    // The vault's passkeys sit in the tabs' virtual authenticators (passkeys.ts): their private keys stay out of reach.
+    if (BLOCKED.has(method) || method.startsWith("WebAuthn.")) return NOT_ALLOWED;
     if (method === "Target.disposeBrowserContext" && !this.contexts.has(params.browserContextId)) return NOT_ALLOWED;
     const targetId = params.targetId;
     if (typeof targetId === "string" && (method.startsWith("Target.") || method === "Browser.getWindowForTarget")) {

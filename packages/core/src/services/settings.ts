@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS: Settings = {
     liveView: true,
     stealth: true,
     muteAudio: true,
+    passkeys: true,
   },
   computer: {
     enabled: true,

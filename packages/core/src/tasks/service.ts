@@ -1215,7 +1215,7 @@ function taskPrompt(task: TaskRow, worktree: Worktree | null, restarted: boolean
     ...partOfBrief(task),
     ...partsBrief(task),
     TYPE_BRIEF[task.type],
-    "If you need a decision or an OK to go on, ask with `ask_human` or `request_approval` — the task waits and continues with the answer. If the human has to do something you can't (a passkey, a CAPTCHA, a login only they have, a signature, a payment), give it to them with `human_task_create` and end your turn — the task waits and continues once they mark it done. If you can't finish at all because something is missing (access, an account, information nobody can give you now), call `task_report_blocked` with what you need, then stop.",
+    "If you need a decision or an OK to go on, ask with `ask_human` or `request_approval` — the task waits and continues with the answer. If the human has to do something you can't (a CAPTCHA, a login only they have, a signature, a payment), give it to them with `human_task_create` and end your turn — the task waits and continues once they mark it done. If you can't finish at all because something is missing (access, an account, information nobody can give you now), call `task_report_blocked` with what you need, then stop.",
     "On long work, leave a short progress note with the `task_note` tool at milestones — the human reads it on the task. If you have to wait for something (a reply, a build, office hours), schedule a follow-up: the task shows when you continue, and it goes to review once you finish.",
   ];
   return lines.join("\n");

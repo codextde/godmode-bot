@@ -1523,4 +1523,32 @@ ALTER TABLE projects ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE projects ADD COLUMN off_computer INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 94,
+    name: "passkeys",
+    sql: /* sql */ `
+-- Passkeys the Godmode browser created on sites (Chrome's virtual authenticator, browser/passkeys.ts). The private key
+-- is sealed with the vault key (context passkeys.private_key:<id>); the rest is in clear so lists work while locked.
+CREATE TABLE passkeys (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE,
+  rp_id TEXT NOT NULL,
+  credential_id TEXT NOT NULL,
+  user_handle TEXT,
+  user_name TEXT NOT NULL DEFAULT '',
+  user_display_name TEXT NOT NULL DEFAULT '',
+  private_key_enc TEXT NOT NULL,
+  sign_count INTEGER NOT NULL DEFAULT 0,
+  backup_eligible INTEGER NOT NULL DEFAULT 1,
+  backup_state INTEGER NOT NULL DEFAULT 1,
+  profile_id TEXT,
+  created_by_agent_id TEXT,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX idx_passkeys_credential ON passkeys(rp_id, credential_id);
+CREATE INDEX idx_passkeys_workspace ON passkeys(workspace_id);
+`,
+  },
 ];

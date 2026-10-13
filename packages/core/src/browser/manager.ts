@@ -26,6 +26,7 @@ import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
 import { initFocusGuard } from "./focusGuard";
+import { initPasskeys, pausePasskeys, resumePasskeys } from "./passkeys";
 import { TabRegistry } from "./tabs";
 import { leasedChats, openChatLease, releaseChatLease, stopChatProxy } from "./proxy";
 import * as importer from "./importer";
@@ -138,6 +139,7 @@ export function listProfiles(): BrowserProfile[] {
 export function ensureDefaultProfile(): BrowserProfile {
   initLiveView();
   initFocusGuard();
+  initPasskeys();
   if (!idleTimer) void adoptOrphans();
   startIdleWatcher();
   const existing = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1 ORDER BY created_at LIMIT 1");
@@ -615,14 +617,20 @@ export async function sweepIdleBrowsers(): Promise<void> {
     // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
     const previewing = hasBrowserSubscribers(rb.profileId);
     if (previewing) await pauseLiveViews(rb.profileId);
+    // The passkey authenticators keep every tab attached too.
+    await pausePasskeys(rb.profileId);
     // An error means the browser is going away — the exit handler cleans up.
     const inUse = await browserInUse(rb).catch(() => true);
     if (inUse) {
       rb.lastUsedAt = Date.now();
       if (previewing) resumeLiveViews(rb.profileId);
+      await resumePasskeys(rb.profileId);
       continue;
     }
-    if ((handedOut.get(rb.profileId) ?? 0) >= checkedAt) continue;
+    if ((handedOut.get(rb.profileId) ?? 0) >= checkedAt) {
+      await resumePasskeys(rb.profileId);
+      continue;
+    }
     log.info(`stopping idle browser for profile ${rb.profileId} (${reason})`);
     await stopBrowser(rb.profileId).catch((err) => log.warn("idle stop failed", err));
   }
