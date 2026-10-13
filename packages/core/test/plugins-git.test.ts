@@ -15,6 +15,7 @@ import { checkModUpdates, deleteMod, getMod, installMod, listModCatalog, listMod
 import { run as sql } from "../src/db";
 import { HttpError } from "../src/util";
 import { blankModFiles } from "../src/mods/templates";
+import { deleteAgent } from "../src/agents/service";
 import type { RunContext } from "../src/types";
 
 let env: TestEnv;
@@ -473,6 +474,20 @@ describe("agents", () => {
     expect(getMod(mod.id).scope).toBe("all");
     expect((await callTool(ctx, "plugin_update", { plugin: mod.id, enabled: false })).isError).toBeFalsy();
     expect(getMod(mod.id).enabled).toBe(false);
+    // An agent that reads raw secrets only gets plugin code from a caller that may set it up.
+    const vaultAgent = await makeAgent({ name: "Vault keeper", permissions: { secretAccess: "reveal" } });
+    for (const args of [{ enabled: true, runsFor: ["Vault keeper"] }, { enabled: true, runsFor: "all" }, { enabled: true }]) {
+      const res = await callTool(ctx, "plugin_update", { plugin: mod.id, ...args });
+      expect(res.isError).toBe(true);
+      expect(res.content[0]!.text).toContain("reveal secrets");
+    }
+    expect(getMod(mod.id).enabled).toBe(false);
+    deleteAgent(vaultAgent.id);
+    // Nothing to change, nothing told.
+    const before = listNotifications(1)[0]!.id;
+    expect((await callTool(ctx, "plugin_update", { plugin: mod.id, enabled: false })).isError).toBeFalsy();
+    expect(listNotifications(1)[0]!.id).toBe(before);
+    expect((await callTool(ctx, "plugin_update", { plugin: mod.id })).isError).toBe(true);
     // Hook code an agent wrote still waits for the human.
     const draft = JSON.parse((await callTool(ctx, "plugin_save", { title: "Guard", files: blankModFiles("guard", "Guard") })).content[0]!.text) as { id: string };
     const refused = await callTool(ctx, "plugin_update", { plugin: draft.id, enabled: true });

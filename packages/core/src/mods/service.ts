@@ -580,6 +580,10 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user", opt
 
   if (patch.enabled !== undefined && (!byAgent || opts.agentMaySwitch)) {
     if (patch.enabled) {
+      // Hook code an agent wrote itself runs inside every turn: the human reads it before it does.
+      if (byAgent && !source && !row.template_id && row.created_by.startsWith("agent:") && bool(row.needs_review)) {
+        throw new HttpError(403, "This plugin is a draft an agent wrote: the human reads its code and switches it on under Plugins.", "forbidden");
+      }
       // The human's OK is for the code they read: an agent may have saved another version since the page loaded.
       if (patch.digest !== undefined && patch.digest !== codeDigest(row, files)) {
         throw conflict("The code changed since you opened this plugin. Read it again, then switch it on.");
