@@ -5,8 +5,8 @@
  *
  * Never log or return the text: results only describe *which* field was filled.
  *
- * Fills are bound to the login's sites: the document that owns the target field (main page, same-origin
- * iframe or out-of-process iframe) must be https on one of `allowedHosts` (or plain http on one of
+ * Fills are bound to the login's sites: the document that owns the target field (main page or any iframe,
+ * same-origin, cross-origin in process or out of process) must be https on one of `allowedHosts` (or plain http on one of
  * `httpHosts`, i.e. the login's own http:// URL) — checked when the field is found and again right before
  * typing — so a prompt-injected page cannot get a secret typed into a foreign site.
  */
@@ -93,6 +93,8 @@ interface LocateResult {
   desc?: string;
   /** Origin of the document that owns the field (or the first box). */
   origin?: string;
+  /** Focus sits in an iframe this frame's scripts can't look into. */
+  focusInFrame?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -100,7 +102,9 @@ interface LocateResult {
 /* ------------------------------------------------------------------ */
 
 const LOCATE = String.raw`(args) => {
-  const { kind, selector, stateKey, allowFocused } = args;
+  const { kind, selector, stateKey } = args;
+  // In a subframe the focused element only counts while that frame has the focus.
+  const allowFocused = args.allowFocused === "frame" ? document.hasFocus() : !!args.allowFocused;
   const TEXT_TYPES = new Set(["", "text", "email", "password", "tel", "number", "search", "url"]);
   const USER_RE = /user|e-?mail|login|account|identifier|benutzer|nutzer|anmelde|usuario|utilisateur/;
   const OTP_RE = /one[-_ ]?time|otp|totp|2fa|mfa|two[-_ ]?factor|verification|verify|security[-_ ]?code|auth(entication)?[-_ ]?code|\bcode\b|token|\bpin\b/;
@@ -198,6 +202,11 @@ const LOCATE = String.raw`(args) => {
     }
     return a;
   };
+  const focusInFrame = (() => {
+    if (!allowFocused) return false;
+    const a = deepActive();
+    return !!a && (a.tagName === "IFRAME" || a.tagName === "FRAME");
+  })();
   const found = (el, via) => {
     globalThis[stateKey] = { el, boxes: null };
     const placeholder = (el.getAttribute("placeholder") || "") + " " + attrText(el);
@@ -209,6 +218,7 @@ const LOCATE = String.raw`(args) => {
       origin: originOf(el),
       maxLength: typeof el.maxLength === "number" ? el.maxLength : -1,
       fullYear: /yyyy|jjjj|aaaa/i.test(placeholder),
+      focusInFrame,
     };
   };
 
@@ -250,7 +260,7 @@ const LOCATE = String.raw`(args) => {
     const boxes = splitBoxes();
     if (boxes) {
       globalThis[stateKey] = { el: boxes[0], boxes };
-      return { status: "ok", mode: "split", count: boxes.length, via: "auto", desc: describe(boxes[0]), origin: originOf(boxes[0]) };
+      return { status: "ok", mode: "split", count: boxes.length, via: "auto", desc: describe(boxes[0]), origin: originOf(boxes[0]), focusInFrame };
     }
   }
 
@@ -260,7 +270,7 @@ const LOCATE = String.raw`(args) => {
     const selects = SELECTABLE.has(kind) ? all("select").filter((e) => !e.disabled && isVisible(e)) : [];
     const candidates = selects.concat(inputs).filter((e) => kindOk(e, kind));
     const el = candidates.find((e) => cardMatch(e, kind) === 2) || candidates.find((e) => cardMatch(e, kind) === 1) || null;
-    return el ? found(el, "auto") : { status: "not_found" };
+    return el ? found(el, "auto") : { status: "not_found", focusInFrame };
   }
 
   if (allowFocused) {
@@ -296,9 +306,9 @@ const LOCATE = String.raw`(args) => {
       all("input[autocomplete='one-time-code']").find((e) => isEditable(e)) ||
       null;
   } else {
-    return { status: "nothing_focused" };
+    return { status: "nothing_focused", focusInFrame };
   }
-  return el ? found(el, "auto") : { status: "not_found" };
+  return el ? found(el, "auto") : { status: "not_found", focusInFrame };
 }`;
 
 /** Scroll the target into view; report its centre in top-level viewport CSS pixels and whether it is hit-testable. */
@@ -352,7 +362,7 @@ const FOCUS_CLEAR = String.raw`(args) => {
   }
   let a = el.ownerDocument.activeElement;
   while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
-  return { focused: a === el, origin };
+  return { focused: a === el && el.ownerDocument.hasFocus(), origin };
 }`;
 
 /** Fire change events, compare lengths (never values) and forget the target. `mask` shows the field as dots, like a password. */
@@ -426,24 +436,70 @@ function call<T>(ctx: FrameContext, fn: string, args: Record<string, unknown>): 
   return ctx.session.evaluate<T>(`(${fn})(${JSON.stringify(args)})`, { contextId: ctx.contextId, timeoutMs: 10_000 });
 }
 
-/** Sessions for cross-origin iframes (out-of-process frames) of the page, via flattened auto-attach. */
-async function childFrameSessions(page: PageSession): Promise<PageSession[]> {
-  const client: CdpClient = page.client;
+/** Sessions for out-of-process iframes of `session` (and theirs), via flattened auto-attach. */
+async function childFrameSessions(session: PageSession, depth = 0): Promise<PageSession[]> {
+  const client: CdpClient = session.client;
   const sessions: PageSession[] = [];
   const off = client.on("Target.attachedToTarget", (params, parentSessionId) => {
-    if (parentSessionId !== page.sessionId) return;
+    if (parentSessionId !== session.sessionId) return;
     const info = params.targetInfo as { type: string; targetId: string };
     if (info.type === "iframe") sessions.push(new PageSession(client, params.sessionId as string, info.targetId));
   });
   try {
-    await page.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
+    await session.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true });
     await new Promise((r) => setTimeout(r, 150));
   } catch {
     /* not supported */
   } finally {
     off();
   }
-  return sessions;
+  if (depth >= 2 || sessions.length === 0) return sessions;
+  const nested = await Promise.all(sessions.map((s) => childFrameSessions(s, depth + 1)));
+  return [...sessions, ...nested.flat()];
+}
+
+/**
+ * Isolated worlds of the iframes rendered in `session`'s own process, root excluded. A cross-origin frame of the same
+ * site (e.g. idmsa.apple.com in appstoreconnect.apple.com) lives here: no target of its own, and the page can't reach in.
+ */
+async function subframeContexts(session: PageSession): Promise<FrameContext[]> {
+  type Tree = { frame: { id: string }; childFrames?: Tree[] };
+  const ids: string[] = [];
+  try {
+    const { frameTree } = await session.send<{ frameTree: Tree }>("Page.getFrameTree");
+    const walk = (t: Tree) => {
+      for (const c of t.childFrames ?? []) {
+        ids.push(c.frame.id);
+        walk(c);
+      }
+    };
+    walk(frameTree);
+  } catch {
+    return [];
+  }
+  const out: FrameContext[] = [];
+  // Frames rendered by another process (out-of-process iframes) have no world here; they are searched via their own session.
+  for (const frameId of ids.slice(0, 40)) {
+    const contextId = await session.isolatedWorld("godmode", frameId);
+    if (contextId) out.push({ session, contextId, isChildFrame: true });
+  }
+  return out;
+}
+
+/** Every iframe of the page: in-process ones first, then out-of-process ones with their own subframes. */
+async function frameContexts(page: PageSession): Promise<FrameContext[]> {
+  const out = await subframeContexts(page);
+  for (const child of await childFrameSessions(page)) {
+    await child.send("Emulation.setFocusEmulationEnabled", { enabled: true }).catch(() => {});
+    const contextId = await child.isolatedWorld();
+    if (contextId) out.push({ session: child, contextId, isChildFrame: true });
+    out.push(...(await subframeContexts(child)));
+  }
+  return out;
+}
+
+function forget(ctx: FrameContext, stateKey: string): Promise<unknown> {
+  return ctx.session.evaluate(`delete globalThis[${JSON.stringify(stateKey)}]`, { contextId: ctx.contextId, timeoutMs: 3000 }).catch(() => {});
 }
 
 function locateFailure(loc: LocateResult, opts: FillOptions): string {
@@ -479,31 +535,40 @@ export async function fillOnPage(page: PageSession, opts: FillOptions): Promise<
   let ctx: FrameContext = main;
   let loc = await call<LocateResult>(main, LOCATE, { kind, selector: opts.selector ?? null, stateKey, allowFocused: true });
 
-  if (loc.status === "not_found" || loc.status === "nothing_focused") {
-    // The field may live in a cross-origin iframe (separate renderer) — search those too. A card's fields can sit in
-    // several frames next to unrelated ones: skip a match on a site the secret may not go to and keep looking.
+  // The field may live in an iframe the page can't look into (cross-origin, in or out of process). Search those when the
+  // page has no match, or when the focus sits in such a frame (a focused field there beats a guess on the page).
+  const inFrame = loc.status === "not_found" || loc.status === "nothing_focused" ? "any" : loc.via === "auto" && loc.focusInFrame ? "focused" : null;
+  if (inFrame) {
+    // A card's fields can sit in several frames next to unrelated ones: skip a match on a site the secret may not go to
+    // and keep looking. A frame holding the focus wins over the first match.
+    let hit: { ctx: FrameContext; loc: LocateResult } | null = null;
     let refused: { ctx: FrameContext; loc: LocateResult } | null = null;
-    for (const child of await childFrameSessions(page)) {
-      const childCtx: FrameContext = { session: child, contextId: await child.isolatedWorld(), isChildFrame: true };
+    for (const childCtx of await frameContexts(page)) {
       try {
-        const res = await call<LocateResult>(childCtx, LOCATE, { kind, selector: opts.selector ?? null, stateKey, allowFocused: false });
+        const res = await call<LocateResult>(childCtx, LOCATE, { kind, selector: opts.selector ?? null, stateKey, allowFocused: "frame" });
         if (res.status !== "ok") continue;
-        if (CARD_KINDS.has(kind) && originRefusal(res.origin ?? "", opts)) {
-          await call(childCtx, FINISH, { stateKey, length: 0, split: false }).catch(() => {});
-          refused ??= { ctx: childCtx, loc: res };
+        if ((inFrame === "focused" && res.via !== "focused") || (hit && res.via !== "focused")) {
+          await forget(childCtx, stateKey);
           continue;
         }
-        ctx = childCtx;
-        loc = res;
-        refused = null;
-        break;
+        if (CARD_KINDS.has(kind) && originRefusal(res.origin ?? "", opts)) {
+          if (refused) await forget(childCtx, stateKey);
+          else refused = { ctx: childCtx, loc: res };
+          continue;
+        }
+        if (hit) await forget(hit.ctx, stateKey);
+        hit = { ctx: childCtx, loc: res };
+        if (res.via === "focused") break;
       } catch {
         /* frame navigated away */
       }
     }
-    if (refused) {
-      ctx = refused.ctx;
-      loc = refused.loc;
+    const pick = hit ?? (inFrame === "any" ? refused : null);
+    if (refused && pick !== refused) await forget(refused.ctx, stateKey);
+    if (pick) {
+      if (loc.status === "ok") await forget(main, stateKey);
+      ctx = pick.ctx;
+      loc = pick.loc;
     }
   }
 
