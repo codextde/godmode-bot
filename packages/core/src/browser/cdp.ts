@@ -385,14 +385,14 @@ export class PageSession {
   }
 
   /**
-   * Execution context of a fresh isolated world in the main frame: page scripts cannot see or
-   * tamper with code running there, while the DOM is shared.
+   * Execution context of a fresh isolated world in the main frame (or the in-process frame `frameId`):
+   * page scripts cannot see or tamper with code running there, while the DOM is shared.
    */
-  async isolatedWorld(worldName = "godmode"): Promise<number | undefined> {
+  async isolatedWorld(worldName = "godmode", frameId?: string): Promise<number | undefined> {
     try {
-      const { frameTree } = await this.send<{ frameTree: { frame: { id: string } } }>("Page.getFrameTree");
+      frameId ??= (await this.send<{ frameTree: { frame: { id: string } } }>("Page.getFrameTree")).frameTree.frame.id;
       const { executionContextId } = await this.send<{ executionContextId: number }>("Page.createIsolatedWorld", {
-        frameId: frameTree.frame.id,
+        frameId,
         worldName,
         grantUniveralAccess: false,
       });
