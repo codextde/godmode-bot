@@ -12,8 +12,9 @@ import { listRuns, waitForRun } from "../src/runner/runner";
 import { updateSettings } from "../src/services/settings";
 import { checkSettingsPatch } from "../src/services/settingsPatch";
 import * as vault from "../src/vault/vault";
-import { parseConversation } from "../src/calls/elevenlabs";
-import { __lookForInboundForTests, getCall, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
+import { agentBody, parseConversation } from "../src/calls/elevenlabs";
+import { callingCode } from "../src/calls/numbers";
+import { __lookForInboundForTests, callerNumber, getCall, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 import { getSettings } from "../src/services/settings";
 import { listNotifications } from "../src/services/notifications";
 
@@ -35,6 +36,7 @@ const fake = {
   calls: new Map<string, Record<string, unknown>>(),
   list: [] as { conversation_id: string; direction: string; status: string }[],
   next: 0,
+  numbers: [{ phone_number: "+4930111222", label: "Main", phone_number_id: "pn_1", provider: "twilio" }],
 };
 
 function fakeCall(id: string, status: string, turns: [string, string][], data: Record<string, string> = {}, extra: Record<string, unknown> = {}) {
@@ -61,10 +63,10 @@ function respond(method: string, path: string, json: Record<string, unknown> | n
   if (method === "GET" && path.startsWith("/v1/convai/agents/")) return ok({ agent_id: path.split("/").pop() });
   if (method === "PATCH" && path.startsWith("/v1/convai/agents/")) return ok({});
   if (method === "GET" && path === "/v1/convai/phone-numbers") {
-    return ok([{ phone_number: "+4930111222", label: "Main", phone_number_id: "pn_1", provider: "twilio", assigned_agent: fake.assigned ? { agent_id: fake.assigned } : null }]);
+    return ok(fake.numbers.map((n) => ({ ...n, assigned_agent: n.phone_number_id === "pn_1" && fake.assigned ? { agent_id: fake.assigned } : null })));
   }
-  if (method === "PATCH" && path === "/v1/convai/phone-numbers/pn_1") {
-    fake.assigned = (json?.agent_id as string | null) ?? null;
+  if (method === "PATCH" && path.startsWith("/v1/convai/phone-numbers/")) {
+    if (path.endsWith("/pn_1")) fake.assigned = (json?.agent_id as string | null) ?? null;
     return ok({});
   }
   if (method === "POST" && path === "/v1/convai/twilio/outbound-call") {
@@ -294,7 +296,10 @@ describe("placing a call", () => {
     expect(override.prompt.prompt).toContain("Book a men's haircut this week");
     expect(override.prompt.prompt).toContain("Max 40 EUR.");
     expect(override.prompt.prompt).toContain("Never claim to be Daniel Ehrhardt");
-    expect(override.first_message).toBe("Hallo, hier ist der Assistent von Daniel Ehrhardt.");
+    expect(override.first_message).toBe("");
+    expect(override.prompt.prompt).toContain("The other person picks up and speaks first");
+    expect(override.prompt.prompt).toContain("Guten Tag, hier ist das Büro von Daniel Ehrhardt.");
+    expect(override.prompt.prompt).toContain('say only "Hallo?"');
     expect(override.language).toBe("de");
 
     const [call] = listCalls();
@@ -355,6 +360,41 @@ describe("placing a call", () => {
     await placeCall({ to: "+4930777", goal: "x", purpose: "task" });
     sql("UPDATE phone_calls SET created_at = ?", new Date(Date.now() - 20 * 60_000).toISOString());
     await expect(placeCall({ to: "+4930777", goal: "x", purpose: "task" })).rejects.toThrow(/3 times in the last 24 hours/);
+  });
+
+  test("the voice waits for the callee and says a short hello after 3 s of silence", async () => {
+    const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
+    expect(body.conversation_config.turn.initial_wait_time).toBe(3);
+    await placeCall({ to: "+4930555", goal: "Ask about opening hours", language: "en", purpose: "task" });
+    const agentOverride = (sentTo("/v1/convai/twilio/outbound-call")[0]!.json!.conversation_initiation_client_data as { conversation_config_override: { agent: { first_message: string; prompt: { prompt: string } } } }).conversation_config_override.agent;
+    expect(agentOverride.first_message).toBe("");
+    expect(agentOverride.prompt.prompt).toContain("Good day, this is Daniel Ehrhardt's office.");
+    expect(agentOverride.prompt.prompt).toContain('say only "Hello?"');
+  });
+
+  test("a call goes out from a number in the callee's country, else from the chosen one", async () => {
+    expect([callingCode("+4991181527"), callingCode("+18576781485"), callingCode("+43123456"), callingCode("+352123456"), callingCode("+79001234567")]).toEqual(["49", "1", "43", "352", "7"]);
+    const us = { id: "pn_us", number: "+18576781485" };
+    const de = { id: "pn_de", number: "+4930111222" };
+    const de2 = { id: "pn_de2", number: "+4989123456" };
+    expect(callerNumber([us, de], "+499118152759", "pn_us")).toBe(de);
+    expect(callerNumber([us, de, de2], "+499118152759", "pn_de2")).toBe(de2);
+    expect(callerNumber([us, de], "+12125550100", "pn_de")).toBe(us);
+    expect(callerNumber([us, de], "+33123456789", "pn_de")).toBe(de);
+    expect(callerNumber([us, de], "+33123456789", "")).toBe(us);
+    expect(callerNumber([us], "+33123456789", "pn_gone")).toBeNull();
+
+    const saved = fake.numbers;
+    fake.numbers = [{ phone_number: "+18576781485", label: "US", phone_number_id: "pn_us", provider: "twilio" }, ...saved];
+    updateSettings({ phone: { numberId: "pn_us" } });
+    try {
+      await placeCall({ to: "+49 911 8152759", goal: "x", purpose: "task" });
+      await placeCall({ to: "+1 212 555 0100", goal: "x", purpose: "task" });
+      expect(sentTo("/v1/convai/twilio/outbound-call").map((s) => s.json!.agent_phone_number_id)).toEqual(["pn_1", "pn_us"]);
+    } finally {
+      fake.numbers = saved;
+      updateSettings({ phone: { numberId: "" } });
+    }
   });
 
   test("invalid and premium-rate numbers are refused before anything is sent", async () => {

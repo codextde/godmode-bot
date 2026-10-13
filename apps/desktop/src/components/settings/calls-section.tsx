@@ -235,7 +235,7 @@ function NumberGroup({ settings, setup, loading }: { settings: Settings; setup: 
     <SettingsGroup
       title="Number"
       icon={<Hash />}
-      description="The number your agents call from, and the one people call to reach Godmode."
+      description="The number your agents call from, and the one people call to reach Godmode. Calls go out from a number in the callee's country when you have one."
       actions={
         !adding && (
           <Button size="sm" variant="outline" onClick={() => setAdding(true)}>

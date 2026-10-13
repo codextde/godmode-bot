@@ -167,7 +167,7 @@ export function agentBody(c: AgentConfig) {
       },
       tts: { model_id: TTS_MODEL, ...(c.voiceId ? { voice_id: c.voiceId } : {}) },
       conversation: { max_duration_seconds: c.maxSeconds },
-      turn: { turn_eagerness: "normal", silence_end_call_timeout: 30 },
+      turn: { turn_eagerness: "normal", silence_end_call_timeout: 30, initial_wait_time: 3 },
     },
     platform_settings: {
       overrides: {

@@ -21,7 +21,7 @@ import { pauseOf } from "../services/pauses";
 import { answerQuestion, getQuestion, interpretReply } from "../services/questions";
 import { getSettings } from "../services/settings";
 import * as el from "./elevenlabs";
-import { isPremiumNumber } from "./numbers";
+import { callingCode, isPremiumNumber } from "./numbers";
 
 const log = logger("calls");
 
@@ -250,7 +250,7 @@ export function ensureProviderAgent(): Promise<string> {
   ensuring ??= (async () => {
     const p = settings();
     const config = agentConfig(p);
-    const want = digest({ config, numberId: p.numberId, answerInbound: p.answerInbound });
+    const want = digest({ body: el.agentBody(config), numberId: p.numberId, answerInbound: p.answerInbound });
     let id = getMeta(META_AGENT);
     if (id && getMeta(META_AGENT_DIGEST) === want) return id;
     if (id && !(await el.agentExists(id))) id = null;
@@ -280,6 +280,13 @@ export function ensureProviderAgent(): Promise<string> {
 
 function pickNumber<T extends { id: string }>(numbers: T[], wanted: string): T | null {
   return numbers.find((n) => n.id === wanted) ?? (wanted ? null : (numbers[0] ?? null));
+}
+
+/** The number a call to `to` goes out from: one from the same country first (people hang up on foreign numbers), else the chosen one. */
+export function callerNumber<T extends { id: string; number: string }>(numbers: T[], to: string, wanted: string): T | null {
+  const code = callingCode(to);
+  const local = numbers.filter((n) => callingCode(n.number) === code);
+  return local.find((n) => n.id === wanted) ?? local[0] ?? pickNumber(numbers, wanted);
 }
 
 export async function callSetup(): Promise<CallSetup> {
@@ -333,7 +340,12 @@ export interface PlaceCall {
 
 function taskPrompt(c: { goal: string; context: string; contactName: string; number: string; language: string }): string {
   const owner = ownerName();
+  const de = c.language === "de";
   return `You are on a phone call you placed on behalf of ${owner}. You are ${owner}'s assistant.
+
+# How the call starts
+- The other person picks up and speaks first, usually with their name or company. Wait for that, then greet them back in one or two calm sentences: who you are and why you call, for example "${de ? `Guten Tag, hier ist das Büro von ${owner}. Ich rufe an wegen ...` : `Good day, this is ${owner}'s office. I'm calling about ...`}". If the facts below name the company you call for, add it ("${de ? `das Büro von ${owner}, <Firma>` : `${owner}'s office at <company>`}"). Use their name if they said it.
+- If nobody says anything after picking up, say only "${de ? "Hallo?" : "Hello?"}" and wait again.
 
 # Your goal on this call
 ${c.goal}
@@ -381,10 +393,6 @@ function ownerFirstMessage(purpose: "question" | "inform", agentName: string): s
     return purpose === "question" ? `Hi ${owner}, hier ist Godmode. ${agentName} braucht kurz eine Entscheidung von dir. Hast du eine Minute?` : `Hi ${owner}, hier ist Godmode mit Neuigkeiten von ${agentName}.`;
   }
   return purpose === "question" ? `Hi ${owner}, it's Godmode. ${agentName} needs a quick decision from you. Do you have a minute?` : `Hi ${owner}, it's Godmode with news from ${agentName}.`;
-}
-
-function taskFirstMessage(language: string): string {
-  return language === "de" ? `Hallo, hier ist der Assistent von ${ownerName()}.` : `Hello, this is ${ownerName()}'s assistant.`;
 }
 
 
@@ -445,13 +453,14 @@ async function dial(a: {
   const { input, p, to, goal, context, language, contactName, agentName, isOwner } = a;
   const providerAgentId = await ensureProviderAgent();
   const numbers = await el.listNumbers(providerAgentId);
-  const from = pickNumber(numbers, p.numberId);
+  const from = callerNumber(numbers, to, p.numberId);
   if (!from) throw new HttpError(409, "There is no phone number to call from. Import one in Settings → Phone calls.", "calls_no_number");
 
   const prompt = isOwner
     ? ownerPrompt({ purpose: input.purpose as "question" | "inform", agentName, goal, context, question: input.question ?? null })
     : taskPrompt({ goal, context, contactName, number: to, language });
-  const firstMessage = isOwner ? ownerFirstMessage(input.purpose as "question" | "inform", agentName) : taskFirstMessage(language);
+  // Empty: the voice waits for the callee to answer instead of talking into the pickup.
+  const firstMessage = isOwner ? ownerFirstMessage(input.purpose as "question" | "inform", agentName) : "";
   const ts = now();
   const id = newId("call");
   insert("phone_calls", {
