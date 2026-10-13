@@ -125,7 +125,7 @@ import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers"
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
 import { chatSources, createProject, getProject, projectOfChat, updateProject } from "../services/projects";
-import { get } from "../db";
+import { all, get } from "../db";
 import { config } from "../config";
 import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
@@ -271,7 +271,14 @@ function agentSummary(a: Agent, names: Map<string, string>, team: Agent[] = list
 
 const sourceSummary = (s: WorkspaceSource) => ({ kind: s.kind, name: s.name, path: s.path, url: s.url, branch: s.branch, status: s.status });
 
-const projectSummary = (p: Project) => ({ id: p.id, name: p.name, description: p.description, sources: p.sources.map(sourceSummary) });
+const projectSummary = (p: Project) => ({
+  id: p.id,
+  name: p.name,
+  description: p.description,
+  sources: p.sources.map(sourceSummary),
+  ...(p.fillOnly ? { fillOnly: true } : {}),
+  ...(p.offComputer ? { offComputer: true } : {}),
+});
 
 const workspaceSummary = (w: Workspace) => ({
   id: w.id,
@@ -315,14 +322,34 @@ function setupOffHostRefusal(ctx: RunContext): string | null {
   return "This task runs in a virtual machine and is kept off the human's computer, and workspaces and projects reach agents that work on the computer — only the human can set them up.";
 }
 
-/** Changing a workspace's (or one of its projects') context is changing what its agents follow: the agent_update rules hold for each. */
-function memberRefusal(caller: Agent, ctx: RunContext, workspaceId: string, projectId: string | null, what: string): string | null {
-  const members = listAgents({ workspaceId: "all" }).filter((a) => a.id !== caller.id && (a.workspaceId === workspaceId || (projectId && a.projectId === projectId)));
-  for (const m of members) {
+/** Changing context is changing what the agents that get it follow: the agent_update rules hold for each. */
+function memberRefusal(caller: Agent, ctx: RunContext, members: (a: Agent) => boolean, what: string): string | null {
+  for (const m of listAgents({ workspaceId: "all" })) {
+    if (m.id === caller.id || !members(m)) continue;
     const refusal = revealTargetRefusal(caller, ctx, m, what) ?? computerTargetRefusal(caller, m, what);
     if (refusal) return refusal;
   }
   return null;
+}
+
+/** Agents that get a project's context today: its own, and those with a chat or a ticket in it. */
+function projectAgentIds(projectId: string): Set<string> {
+  const rows = all<{ id: string }>(
+    "SELECT id FROM agents WHERE project_id = ? UNION SELECT agent_id FROM conversations WHERE project_id = ? UNION SELECT agent_id FROM tasks WHERE project_id = ? AND agent_id IS NOT NULL",
+    projectId,
+    projectId,
+    projectId,
+  );
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * What a project's context gets marked with when the caller writes it: runs that get it later read no more secrets
+ * than the caller, and agents that control this computer don't follow it unless the caller may too.
+ */
+function contextWriter(caller: Agent, ctx: RunContext, workspaceId: string): { fillOnly?: true; offComputer?: true } {
+  const reveals = revealsHere(caller, ctx) && (!caller.workspaceId || caller.workspaceId === workspaceId);
+  return { ...(reveals ? {} : { fillOnly: true }), ...(caller.computer.enabled ? {} : { offComputer: true }) };
 }
 
 /** "[Delegated by Lena (Head of finance), your lead. Your final answer goes back to Lena.]" — what the delegate is told about who asked. */
@@ -2788,7 +2815,7 @@ const TOOLS: ToolDef[] = [
     run: ({ workspaceId, addSources, ...patch }, { agent, ctx }) => {
       const workspace = findWorkspace(workspaceId);
       if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them.`);
-      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, workspace.id, null, "change its workspace");
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, (a) => a.workspaceId === workspace.id, "change its workspace");
       if (refusal) return fail(refusal);
       if (patch.name) {
         const taken = findWorkspace(patch.name);
@@ -2804,7 +2831,8 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "project_create",
     description:
-      "Create a project inside a workspace: one product, client or initiative with its own context, folders and git repositories. Chats, tasks (task_create({ projectId })) and agents (agent_create({ projectId })) can belong to it; their runs get the workspace's setup plus the project's.",
+      "Create a project inside a workspace: one product, client or initiative with its own context, folders and git repositories. Chats, tasks (task_create({ projectId })) and agents (agent_create({ projectId })) can belong to it; their runs get the workspace's setup plus the project's. " +
+      "What you write there reaches no further than you: if you can't read raw secrets, runs that get it get none either (fillOnly), and if you can't control this computer, agents that do get it without its description and instructions (offComputer) — until the human saves it in the app.",
     schema: z.object({
       workspaceId: z.string().describe("Workspace id or name"),
       name: z.string().min(1).max(100),
@@ -2815,12 +2843,13 @@ const TOOLS: ToolDef[] = [
     run: ({ workspaceId, sources, ...input }, { agent, ctx }) => {
       const workspace = findWorkspace(workspaceId);
       if (!workspace) return fail(`There is no workspace "${workspaceId}". workspaces_list shows them, workspace_create adds one.`);
-      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, workspace.id, null, "add a project to its workspace");
+      // A new project reaches no agent yet; whoever works on it later gets its context only as far as the caller could reach them.
+      const refusal = setupOffHostRefusal(ctx);
       if (refusal) return fail(refusal);
       const name = input.name.trim().toLowerCase();
       const taken = workspace.projects.find((p) => p.name.toLowerCase() === name);
       if (taken) return fail(`${workspace.name} already has a project "${taken.name}" (${taken.id}).`);
-      const created = createProject({ ...input, workspaceId: workspace.id, sources });
+      const created = createProject({ ...input, workspaceId: workspace.id, sources }, contextWriter(agent, ctx, workspace.id));
       audit(`agent:${agent.id}`, "project.create", created.id, { name: created.name, workspaceId: workspace.id });
       return json({ created: { ...projectSummary(created), workspace: { id: workspace.id, name: workspace.name } } });
     },
@@ -2829,7 +2858,8 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "project_update",
     description:
-      "Change a project's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Projects stay in their workspace; removing sources and deleting a project is the human's.",
+      "Change a project's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Projects stay in their workspace; removing sources and deleting a project is the human's. " +
+      "Refused while an agent you couldn't hand work to (it reads secrets, or controls this computer) works on it; your changes are marked like project_create's.",
     schema: z.object({
       projectId: z.string(),
       name: z.string().min(1).max(100).optional(),
@@ -2844,10 +2874,11 @@ const TOOLS: ToolDef[] = [
       } catch {
         return fail(`There is no project "${projectId}". workspaces_list shows them.`);
       }
-      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, project.workspaceId, project.id, "change its project");
+      const ids = projectAgentIds(project.id);
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, (a) => ids.has(a.id), "change its project");
       if (refusal) return fail(refusal);
       const sources = addSources?.length ? [...project.sources.map(asInput), ...addSources] : undefined;
-      const updated = updateProject(project.id, { ...patch, sources });
+      const updated = updateProject(project.id, { ...patch, sources }, contextWriter(agent, ctx, project.workspaceId));
       audit(`agent:${agent.id}`, "project.update", project.id, { fields: Object.keys({ ...patch, ...(sources ? { sources } : {}) }) });
       return json(projectSummary(updated));
     },

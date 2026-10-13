@@ -1512,4 +1512,15 @@ ALTER TABLE phone_calls ADD COLUMN from_owner INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE browser_profiles ADD COLUMN created_by_agent_id TEXT;
 `,
   },
+  {
+    id: 93,
+    name: "project_context_writer",
+    sql: /* sql */ `
+-- An agent wrote the project's context without raw secrets (fill_only: runs that get it get none either) or without
+-- control of this computer (off_computer: agents that control it get it without description and instructions).
+-- Saving the instructions in the app clears both.
+ALTER TABLE projects ADD COLUMN fill_only INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE projects ADD COLUMN off_computer INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

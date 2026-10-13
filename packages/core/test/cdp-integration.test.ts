@@ -83,10 +83,20 @@ const PAY_FRAME = `<!doctype html><title>Pay frame</title>
 const PAY_OUTER = (frameOrigin: string) => `<!doctype html><title>Pay outer</title>
 <input id="coupon" name="coupon"><iframe id="pay" src="${frameOrigin}/pay-frame" width="400" height="120"></iframe>`;
 
+/** Like Apple's sign-in widget: a frame of another origin on the same site, so it runs in the page's own process. */
+const SIGNIN_OUTER = (frameOrigin: string) => `<!doctype html><title>Signin outer</title>
+<input id="top-search" name="q"><iframe id="aid" src="${frameOrigin}/signin-frame" width="500" height="300"></iframe>`;
+
+const SIGNIN_FRAME = `<!doctype html><title>Signin frame</title>
+<input type="email" id="recovery_email" name="recovery_email">
+<input type="text" id="account_name_text_field" aria-label="Email or Phone Number">
+<input type="password" id="password_text_field" aria-label="Password">`;
+
 /** Fill binding for the local test server (http://127.0.0.1:<port>), as for a login saved with an http:// URL. */
 const LOCAL = { allowedHosts: ["127.0.0.1"], httpHosts: ["127.0.0.1"] };
 
 let server: ReturnType<typeof Bun.serve>;
+let frameServer: ReturnType<typeof Bun.serve>;
 let origin = "";
 let dataDir = "";
 
@@ -126,6 +136,19 @@ async function evalOn<T>(profileId: string, needle: string, expr: string): Promi
   const s = await pageSession(profileId, needle);
   try {
     return await s.evaluate<T>(expr);
+  } finally {
+    await s.detach();
+  }
+}
+
+/** Evaluate in the isolated world of the page's in-process subframe whose URL contains `frameNeedle`. */
+async function evalInFrame<T>(profileId: string, needle: string, frameNeedle: string, expr: string): Promise<T> {
+  const s = await pageSession(profileId, needle);
+  try {
+    const { frameTree } = await s.send<{ frameTree: { childFrames?: { frame: { id: string; url: string } }[] } }>("Page.getFrameTree");
+    const frame = (frameTree.childFrames ?? []).find((c) => c.frame.url.includes(frameNeedle));
+    if (!frame) throw new Error(`no frame ${frameNeedle}`);
+    return await s.evaluate<T>(expr, { contextId: await s.isolatedWorld("test", frame.frame.id) });
   } finally {
     await s.detach();
   }
@@ -199,10 +222,17 @@ suite("managed Chromium (CDP integration)", () => {
             return html(PAY_OUTER(`http://localhost:${server.port}`));
           case "/pay-frame":
             return html(PAY_FRAME);
+          case "/signin-outer":
+            return html(SIGNIN_OUTER(`${url.protocol}//${url.hostname}:${frameServer.port}`));
           default:
             return new Response("not found", { status: 404 });
         }
       },
+    });
+    frameServer = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response(SIGNIN_FRAME, { headers: { "content-type": "text/html; charset=utf-8" } }),
     });
     origin = `http://127.0.0.1:${server.port}`;
     manager.ensureDefaultProfile();
@@ -213,6 +243,7 @@ suite("managed Chromium (CDP integration)", () => {
   afterAll(async () => {
     await manager.shutdownBrowsers();
     server?.stop(true);
+    frameServer?.stop(true);
     closeDb();
     rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
   }, 60_000);
@@ -390,6 +421,72 @@ suite("managed Chromium (CDP integration)", () => {
     }
     const values = await evalOn<string>(profileId, "localhost", "[...document.querySelectorAll('input, textarea')].map((e) => e.value).join('')");
     expect(values).toBe("");
+  }, 30_000);
+
+  test("fills a login into a cross-origin frame of the same site (in process, like Apple's sign-in widget)", async () => {
+    await openPage(profileId, "/signin-outer");
+    await waitFor(() => evalInFrame<boolean>(profileId, "/signin-outer", "/signin-frame", "document.readyState === 'complete'"));
+    // Same site, other port: no separate iframe target, and the page's scripts can't reach into it.
+    const rb = getRunning(profileId)!;
+    const { targetInfos } = await rb.client.send<{ targetInfos: { type: string; url: string }[] }>("Target.getTargets");
+    expect(targetInfos.some((t) => t.type === "iframe" && t.url.includes("/signin-frame"))).toBe(false);
+    expect(await evalOn<boolean>(profileId, "/signin-outer", "document.getElementById('aid').contentDocument === null")).toBe(true);
+
+    // Focus on the page: the password field is still found in the frame and gets the focus for typing.
+    await evalOn(profileId, "/signin-outer", "document.getElementById('top-search').focus()");
+    const auto = await manager.fillIntoPage(profileId, { text: "first-pass", kind: "password", ...LOCAL });
+    expect(auto).toMatchObject({ ok: true });
+    expect(auto.detail).toContain("auto-detected, inside an embedded frame");
+    expect(await evalInFrame<string>(profileId, "/signin-outer", "/signin-frame", "password_text_field.value")).toBe("first-pass");
+
+    // The human clicked into the account field: it wins over the frame's email input the auto-detection would pick.
+    const box = await evalOn<{ x: number; y: number }>(
+      profileId,
+      "/signin-outer",
+      "(() => { const r = document.getElementById('aid').getBoundingClientRect(); return { x: r.left, y: r.top }; })()",
+    );
+    const field = await evalInFrame<{ x: number; y: number }>(
+      profileId,
+      "/signin-outer",
+      "/signin-frame",
+      "(() => { const r = document.getElementById('account_name_text_field').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()",
+    );
+    const s = await pageSession(profileId, "/signin-outer");
+    try {
+      await s.click(box.x + 2 + field.x, box.y + 2 + field.y);
+    } finally {
+      await s.detach();
+    }
+    await waitFor(() => evalInFrame<boolean>(profileId, "/signin-outer", "/signin-frame", "document.activeElement?.id === 'account_name_text_field'"));
+
+    const user = await manager.fillIntoPage(profileId, { text: "dev@example.com", kind: "username", ...LOCAL });
+    expect(user).toMatchObject({ ok: true });
+    expect(user.detail).toContain("focused field, inside an embedded frame");
+    const pass = await manager.fillIntoPage(profileId, { text: "frame-pass-1", kind: "password", selector: "#password_text_field", ...LOCAL });
+    expect(pass).toMatchObject({ ok: true });
+    expect(pass.detail).toContain("matched by selector");
+    expect(await manager.fillIntoPage(profileId, { text: "x", selector: "#nowhere", ...LOCAL })).toMatchObject({ ok: false });
+    expect(
+      await evalInFrame<Record<string, string>>(
+        profileId,
+        "/signin-outer",
+        "/signin-frame",
+        "({ user: account_name_text_field.value, pass: password_text_field.value, other: recovery_email.value })",
+      ),
+    ).toEqual({ user: "dev@example.com", pass: "frame-pass-1", other: "" });
+    expect(await evalOn<string>(profileId, "/signin-outer", "document.getElementById('top-search').value")).toBe("");
+  }, 30_000);
+
+  test("refuses a same-site frame whose own origin is not the login's", async () => {
+    await manager.navigate(profileId, `http://localhost:${server.port}/signin-outer`);
+    await waitFor(() => evalInFrame<boolean>(profileId, "localhost", "/signin-frame", "document.readyState === 'complete'"));
+    for (const selector of [undefined, "#password_text_field"]) {
+      const res = await manager.fillIntoPage(profileId, { text: "leak-frame-pass", kind: "password", selector, ...LOCAL });
+      expect(res.ok).toBe(false);
+      expect(res.detail).toContain(`http://localhost:${frameServer.port}`);
+      expect(res.detail).not.toContain("leak-frame-pass");
+    }
+    expect(await evalInFrame<string>(profileId, "localhost", "/signin-frame", "password_text_field.value")).toBe("");
   }, 30_000);
 
   test("requires https unless the login's saved URL is http", async () => {

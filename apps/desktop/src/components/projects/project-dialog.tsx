@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSepa
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/integrations/confirm-dialog";
+import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ColorRadios, ICONS, IconPicker } from "@/components/workspaces/icon-picker";
 import { WorkspaceSourcesField, toSourceInput } from "@/components/workspaces/workspace-sources";
@@ -95,7 +96,9 @@ export function ProjectDialog({
   const save = useMutation({
     mutationFn: (_key: string) => {
       const input = { name: name.trim(), icon, color, description: description.trim(), instructions: instructions.trim(), browserProfileId, sources };
-      return project ? api.projects.update(project.id, input) : api.projects.create({ ...input, workspaceId: workspace.id });
+      if (!project) return api.projects.create({ ...input, workspaceId: workspace.id });
+      // Asked for only when an agent wrote the project's context: its runs read secrets again once the human saved it.
+      return withGrant((grant) => api.projects.update(project.id, input, grant), `Let runs in ${project.name}, whose context an agent wrote, read secrets again`);
     },
     onSuccess: (saved, key) => {
       const created = key === newKey;
@@ -110,7 +113,7 @@ export function ProjectDialog({
         });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, editing ? "Could not update the project" : "Could not create the project", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, editing ? "Could not update the project" : "Could not create the project", qc),
   });
 
   const remove = useMutation({

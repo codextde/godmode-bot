@@ -64,6 +64,13 @@ export interface Project {
   browserProfileId: ID | null;
   /** Folders and git repositories of the project, on top of the workspace's. */
   sources: WorkspaceSource[];
+  /**
+   * An agent that could not read raw secrets wrote its context: runs that get it get no raw secrets either (logins are
+   * still filled into pages). Saving its instructions in the app clears it.
+   */
+  fillOnly: boolean;
+  /** An agent that could not control this computer wrote its context: agents that do get it without its description and instructions. Cleared like `fillOnly`. */
+  offComputer: boolean;
   createdAt: ISODate;
   updatedAt: ISODate;
 }
