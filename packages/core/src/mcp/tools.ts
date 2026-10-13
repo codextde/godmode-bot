@@ -102,6 +102,7 @@ import {
   updateCredential,
 } from "../vault/credentials";
 import { passkeysForHost } from "../vault/passkeys";
+import { passkeysEnabled } from "../browser/passkeys";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import {
   CARD_FIELDS,
@@ -1022,10 +1023,14 @@ const TOOLS: ToolDef[] = [
     description:
       'List the website logins saved in the Godmode vault that you may use (never includes passwords). Pass the site\'s domain or URL to filter: results match by domain first, then fall back to a best-effort guess by the login\'s name (marked "match": "name") — sanity-check a name guess before relying on it. Use the returned id with vault_fill_login / vault_fill_totp.',
     schema: z.object({ domain: z.string().optional().describe('Domain or URL of the site, e.g. "github.com"') }),
-    run: ({ domain }, { agent }) => {
+    run: ({ domain }, { agent, ctx }) => {
       const query = domain?.trim() ? hostnameOf(domain) : "";
       const creds = query ? findCredentialsForAgent(agent, domain!) : credentialsForAgent(agent);
-      const passkeys = query && getSettings().browser.passkeys ? passkeysForHost(query, agent.workspaceId) : [];
+      // Passkeys belong to the browser profile this run browses with (not to a VM's Chrome).
+      const passkeys =
+        query && agent.browser.enabled && passkeysEnabled() && !vmOfRun(ctx.runId)
+          ? passkeysForHost(query, runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id)
+          : [];
       const passkeyNote = passkeys.length
         ? `Passkeys saved for this site (the browser signs in with them by itself; choose "Sign in with a passkey" on the page): ${passkeys.map((p) => `${p.userName || p.userDisplayName || "unnamed account"} on ${p.rpId}`).join(", ")}.`
         : "";

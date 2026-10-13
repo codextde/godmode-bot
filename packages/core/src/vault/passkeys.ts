@@ -2,10 +2,13 @@
  * Passkeys of the Godmode browser (browser/passkeys.ts). The private key is sealed with
  * vault.seal(value, `passkeys.private_key:<id>`); site, user and dates stay in clear so lists work while the vault is locked.
  * A passkey is keyed by its site (rp id) and WebAuthn credential id: a site that registers the same credential again updates it.
+ * It belongs to the browser profile it was created in, like the profile's cookies: an agent's own profile and the human's
+ * never sign in with each other's accounts. Its workspace (the profile's) only sorts the vault's list.
  */
 import type { Passkey } from "@godmode/shared";
 import { all, bool, get, insert, run, update } from "../db";
 import { bus } from "../events/bus";
+import { audit } from "../services/audit";
 import { locked, newId, notFound, now } from "../util";
 import { matchesSearch, scopeCondition, type ScopeFilter } from "./credentials";
 import * as vault from "./vault";
@@ -43,6 +46,8 @@ export interface WebAuthnCredential {
   userDisplayName?: string;
 }
 
+export type Credential = WebAuthnCredential & { rpId: string };
+
 const keyContext = (id: string) => `passkeys.private_key:${id}`;
 
 function toModel(r: PasskeyRow): Passkey {
@@ -58,11 +63,6 @@ function toModel(r: PasskeyRow): Passkey {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
-}
-
-/** Global passkeys plus, for a workspace's browser profile, the workspace's own. */
-function browserScope(workspaceId: string | null): { sql: string; params: string[] } {
-  return workspaceId ? { sql: "(workspace_id IS NULL OR workspace_id = ?)", params: [workspaceId] } : { sql: "workspace_id IS NULL", params: [] };
 }
 
 export function listPasskeys(opts: { workspaceId?: ScopeFilter; search?: string } = {}): Passkey[] {
@@ -83,35 +83,44 @@ export function deletePasskey(id: string): void {
   bus.changed("passkeys");
 }
 
-/** Passkeys whose site is the host or one of its parents (a passkey for github.com works on gist.github.com). */
-export function passkeysForHost(host: string, workspaceId: string | null): Passkey[] {
+/** The profile's passkeys whose site is the host or one of its parents (a passkey for github.com works on gist.github.com). */
+export function passkeysForHost(host: string, profileId: string): Passkey[] {
   const h = host.toLowerCase();
-  const scope = browserScope(workspaceId);
-  return all<PasskeyRow>(`SELECT * FROM passkeys WHERE ${scope.sql} ORDER BY last_used_at DESC`, ...scope.params)
+  return all<PasskeyRow>("SELECT * FROM passkeys WHERE profile_id = ? ORDER BY last_used_at DESC", profileId)
     .filter((r) => h === r.rp_id || h.endsWith(`.${r.rp_id}`))
     .map(toModel);
 }
 
 /**
- * What a browser of the scope loads into its virtual authenticators, most recently used first (with several accounts
- * on one site, the authenticator answers with the first). Null while the vault is locked.
+ * What the profile's browser loads into its virtual authenticators, most recently used first (with several accounts
+ * on one site, the authenticator answers with the first). Null while the vault is locked; a row that can't be opened
+ * (sealed by another vault) is skipped.
  */
-export function passkeysForBrowser(workspaceId: string | null): (WebAuthnCredential & { rpId: string })[] | null {
+export function passkeysForBrowser(profileId: string): Credential[] | null {
   if (!vault.isUnlocked()) return null;
-  const scope = browserScope(workspaceId);
-  const rows = all<PasskeyRow>(`SELECT * FROM passkeys WHERE ${scope.sql} ORDER BY last_used_at DESC, created_at DESC`, ...scope.params);
-  return rows.map((r) => ({
-    credentialId: r.credential_id,
-    isResidentCredential: true,
-    rpId: r.rp_id,
-    privateKey: vault.open(r.private_key_enc, keyContext(r.id)),
-    ...(r.user_handle ? { userHandle: r.user_handle } : {}),
-    signCount: r.sign_count,
-    backupEligibility: bool(r.backup_eligible),
-    backupState: bool(r.backup_state),
-    userName: r.user_name,
-    userDisplayName: r.user_display_name,
-  }));
+  const rows = all<PasskeyRow>("SELECT * FROM passkeys WHERE profile_id = ? ORDER BY last_used_at DESC, created_at DESC", profileId);
+  const out: Credential[] = [];
+  for (const r of rows) {
+    let privateKey: string;
+    try {
+      privateKey = vault.open(r.private_key_enc, keyContext(r.id));
+    } catch {
+      continue;
+    }
+    out.push({
+      credentialId: r.credential_id,
+      isResidentCredential: true,
+      rpId: r.rp_id,
+      privateKey,
+      ...(r.user_handle ? { userHandle: r.user_handle } : {}),
+      signCount: r.sign_count,
+      backupEligibility: bool(r.backup_eligible),
+      backupState: bool(r.backup_state),
+      userName: r.user_name,
+      userDisplayName: r.user_display_name,
+    });
+  }
+  return out;
 }
 
 function rowOf(rpId: string, credentialId: string): PasskeyRow | null {
@@ -120,7 +129,7 @@ function rowOf(rpId: string, credentialId: string): PasskeyRow | null {
 
 /** A site registered a passkey in the browser: keep it (or update the one it replaced). Returns its id. */
 export function savePasskey(
-  credential: WebAuthnCredential & { rpId: string },
+  credential: Credential,
   meta: { workspaceId: string | null; profileId: string | null; agentId: string | null },
 ): string {
   if (!vault.isUnlocked()) throw locked();
@@ -167,9 +176,12 @@ export function recordPasskeyUse(rpId: string, credentialId: string, signCount: 
 
 /** A site said it no longer knows the passkey (WebAuthn signalUnknownCredential): drop it like a passkey manager would. */
 export function forgetPasskey(rpId: string, credentialId: string): boolean {
-  const changed = run("DELETE FROM passkeys WHERE rp_id = ? AND credential_id = ?", rpId, credentialId).changes > 0;
-  if (changed) bus.changed("passkeys");
-  return changed;
+  const row = rowOf(rpId, credentialId);
+  if (!row) return false;
+  run("DELETE FROM passkeys WHERE id = ?", row.id);
+  audit("browser", "passkey.forget", row.id, { rpId, userName: row.user_name, reason: "the site no longer knows it" });
+  bus.changed("passkeys");
+  return true;
 }
 
 /** A site updated the account's name on the passkey (WebAuthn signalCurrentUserDetails). */

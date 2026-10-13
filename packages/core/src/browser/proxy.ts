@@ -50,7 +50,8 @@ const FOCUS = new Set([
  * here instead: the agent's tab is the only one of its background window, and the live view follows it (`FOCUS`).
  */
 const NO_FRONT = new Set(["Target.activateTarget", "Page.bringToFront"]);
-const BLOCKED = new Set(["Browser.close", "Browser.crash", "Browser.crashGpuProcess", "Target.attachToBrowserTarget"]);
+// exposeDevToolsProtocol would hand the page a DevTools connection past this endpoint.
+const BLOCKED = new Set(["Browser.close", "Browser.crash", "Browser.crashGpuProcess", "Target.attachToBrowserTarget", "Target.exposeDevToolsProtocol"]);
 const NO_TARGET = { code: -32602, message: "No target with given id found" };
 const NO_SESSION = { code: -32001, message: "Session with given id not found." };
 const NOT_ALLOWED = { code: -32000, message: "Not available here: this connection only reaches its own chat's tabs." };
@@ -168,8 +169,20 @@ class ChatConnection {
   }
 
   private refusal(method: string, params: Record<string, any>): typeof NO_TARGET | null {
-    // The vault's passkeys sit in the tabs' virtual authenticators (passkeys.ts): their private keys stay out of reach.
-    if (BLOCKED.has(method) || method.startsWith("WebAuthn.")) return NOT_ALLOWED;
+    if (BLOCKED.has(method)) return NOT_ALLOWED;
+    // The vault's passkeys sit in the tabs' virtual authenticators (passkeys.ts), also when wrapped for a non-flat session.
+    if (method.startsWith("WebAuthn.")) return NOT_ALLOWED;
+    if (method === "Target.sendMessageToTarget") {
+      let inner: { method?: unknown; params?: Record<string, any> } | null = null;
+      try {
+        inner = JSON.parse(String(params.message ?? ""));
+      } catch {
+        return NOT_ALLOWED;
+      }
+      if (typeof inner?.method !== "string") return NOT_ALLOWED;
+      const refused = this.refusal(inner.method, inner.params ?? {});
+      if (refused) return refused;
+    }
     if (method === "Target.disposeBrowserContext" && !this.contexts.has(params.browserContextId)) return NOT_ALLOWED;
     const targetId = params.targetId;
     if (typeof targetId === "string" && (method.startsWith("Target.") || method === "Browser.getWindowForTarget")) {

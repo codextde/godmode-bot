@@ -192,6 +192,8 @@ suite("managed Chromium (CDP integration)", () => {
     dataDir = mkdtempSync(join(tmpdir(), "godmode-cdp-test-"));
     const cfg = loadConfig({ dataDir });
     openDb(cfg.dbPath);
+    // These tests count attached tabs as other CDP clients; passkeys (browser-passkeys.test.ts) keep their own sessions.
+    updateSettings({ browser: { passkeys: false } });
     server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,

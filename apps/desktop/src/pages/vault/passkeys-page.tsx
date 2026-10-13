@@ -14,7 +14,7 @@ import { Favicon } from "@/components/vault/favicon";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
-import { useAllAgents, useSettings } from "@/lib/hooks";
+import { useAllAgents, useSettings, useVaultStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
@@ -29,11 +29,15 @@ export default function PasskeysPage() {
   useEffect(() => setScope(sidebarScope), [sidebarScope]);
   const [search, setSearch] = useState("");
   const { data: settings } = useSettings();
+  const { data: vaultStatus } = useVaultStatus();
   const enabled = !!settings && settings.browser.enabled && settings.browser.passkeys;
+  const vaultLocked = vaultStatus?.unlocked === false;
 
   const list = useQuery({ queryKey: qk.passkeyList(scope), queryFn: () => api.passkeys.list({ workspaceId: scope }) });
   const agents = useAllAgents();
   const agentName = useMemo(() => new Map((agents.data ?? []).map((a) => [a.id, a.name])), [agents.data]);
+  const profiles = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
+  const profileName = useMemo(() => new Map((profiles.data ?? []).map((p) => [p.id, p.name])), [profiles.data]);
 
   const passkeys = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -58,20 +62,22 @@ export default function PasskeysPage() {
       <PageHeader
         icon={<Fingerprint />}
         title="Passkeys"
-        description="Passkeys sites created in Godmode's browser. Agents sign in with them on their own — no phone, fingerprint or security key."
+        description="Passkeys sites created in Godmode's browser. Each belongs to the browser profile it was made in, like its cookies, and agents sign in with it on their own — no phone, fingerprint or security key."
         actions={
           settings && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/settings/browser">
-                    <StatusDot status={enabled ? "ok" : "idle"} className="size-1.5" />
-                    {enabled ? "On in the browser" : "Off"}
+                    <StatusDot status={enabled && !vaultLocked ? "ok" : enabled ? "warn" : "idle"} className="size-1.5" />
+                    {!enabled ? "Off" : vaultLocked ? "Paused, vault locked" : "On in the browser"}
                     <Settings2 className="text-muted-foreground" />
                   </Link>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{enabled ? "Sites in Godmode's browser use these passkeys" : "Chrome's own passkey dialogs are used instead"}</TooltipContent>
+              <TooltipContent>
+                {!enabled ? "Chrome's own passkey dialogs are used instead" : vaultLocked ? "Unlock the vault to use passkeys in the browser" : "Each browser profile signs in with its own passkeys"}
+              </TooltipContent>
             </Tooltip>
           )
         }
@@ -159,7 +165,14 @@ export default function PasskeysPage() {
             </div>
             <ul>
               {passkeys.map((p, i) => (
-                <PasskeyRow key={p.id} passkey={p} createdBy={p.createdByAgentId ? agentName.get(p.createdByAgentId) : undefined} first={i === 0} onDelete={() => setToDelete(p)} />
+                <PasskeyRow
+                  key={p.id}
+                  passkey={p}
+                  createdBy={p.createdByAgentId ? agentName.get(p.createdByAgentId) : undefined}
+                  profile={p.profileId ? profileName.get(p.profileId) : undefined}
+                  first={i === 0}
+                  onDelete={() => setToDelete(p)}
+                />
               ))}
             </ul>
           </div>
@@ -189,7 +202,19 @@ export default function PasskeysPage() {
   );
 }
 
-function PasskeyRow({ passkey: p, createdBy, first, onDelete }: { passkey: Passkey; createdBy?: string; first: boolean; onDelete: () => void }) {
+function PasskeyRow({
+  passkey: p,
+  createdBy,
+  profile,
+  first,
+  onDelete,
+}: {
+  passkey: Passkey;
+  createdBy?: string;
+  profile?: string;
+  first: boolean;
+  onDelete: () => void;
+}) {
   const lastUsed = p.lastUsedAt ? formatDistanceToNow(new Date(p.lastUsedAt), { addSuffix: true }) : null;
   const created = formatDistanceToNow(new Date(p.createdAt), { addSuffix: true });
   return (
@@ -201,6 +226,7 @@ function PasskeyRow({ passkey: p, createdBy, first, onDelete }: { passkey: Passk
           <div className="truncate text-xs text-muted-foreground">
             Created {created}
             {createdBy ? ` by ${createdBy}` : ""}
+            {profile ? ` · ${profile} profile` : ""}
           </div>
           <div className="mt-0.5 truncate text-xs text-muted-foreground @3xl:hidden">{p.userName || p.userDisplayName || "Unnamed account"}</div>
         </div>

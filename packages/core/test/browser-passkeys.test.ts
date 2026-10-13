@@ -73,6 +73,7 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     dataDir = mkdtempSync(join(tmpdir(), "godmode-passkeys-"));
     openDb(loadConfig({ dataDir }).dbPath);
     await vault.setup("correct horse battery staple", false);
+    updateSettings({ browser: { passkeys: true } });
     site = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response(PAGE, { headers: { "content-type": "text/html; charset=utf-8" } }) });
     // An IP can't be a passkey's site; localhost is a secure context over http.
     origin = `http://localhost:${site.port}`;
@@ -114,7 +115,7 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     expect(created.attachment).toBe("platform");
     const [saved] = await waitFor(() => (listPasskeys().length ? listPasskeys() : null));
     expect(saved).toMatchObject({ rpId: "localhost", userName: "dana@example.com", userDisplayName: "DANA@EXAMPLE.COM", profileId, workspaceId: null });
-    expect(passkeysForHost("app.localhost", null).map((p) => p.id)).toEqual([saved!.id]);
+    expect(passkeysForHost("app.localhost", profileId).map((p) => p.id)).toEqual([saved!.id]);
 
     const [row] = all<{ private_key_enc: string; credential_id: string }>("SELECT private_key_enc, credential_id FROM passkeys");
     expect(b64url(row!.credential_id)).toBe(created.id);
@@ -123,6 +124,9 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
     // The agent's endpoint never reaches the authenticators (they hold the private keys).
     await expect(agentClient.send("WebAuthn.enable", {}, sessionId)).rejects.toThrow("only reaches its own chat");
     await expect(agentClient.send("WebAuthn.getCredentials", { authenticatorId: "x" }, sessionId)).rejects.toThrow("only reaches its own chat");
+    const wrapped = JSON.stringify({ id: 1, method: "WebAuthn.getCredentials", params: { authenticatorId: "x" } });
+    await expect(agentClient.send("Target.sendMessageToTarget", { sessionId, message: wrapped })).rejects.toThrow("only reaches its own chat");
+    await expect(agentClient.send("Target.exposeDevToolsProtocol", { targetId })).rejects.toThrow("only reaches its own chat");
   }, 30_000);
 
   test("another tab signs in with it", async () => {
@@ -136,6 +140,22 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
       await page.detach();
     }
   }, 30_000);
+
+  test("another browser profile doesn't get it", async () => {
+    const other = manager.createProfile({ name: "Other", workspaceId: null }).id;
+    await manager.launchBrowser(other, { headless: true });
+    try {
+      await waitFor(() => passkeysActive(other));
+      const browser = getRunning(other)!;
+      const { targetId } = await browser.client.send<{ targetId: string }>("Target.createTarget", { url: `${origin}/` });
+      const page = await attachToPage(browser.client, targetId);
+      await waitFor(() => page.evaluate<boolean>("document.readyState === 'complete' && typeof signIn === 'function'", { timeoutMs: 1000 }));
+      expect((await page.evaluate<{ error?: string }>("signIn()", { timeoutMs: 15_000 })).error).toBe("NotAllowedError");
+      await page.detach();
+    } finally {
+      await manager.deleteProfile(other);
+    }
+  }, 60_000);
 
   test("a restarted browser signs in from the vault", async () => {
     releaseChatLease("run_pk");
@@ -167,6 +187,30 @@ describe.skipIf(!chrome)("passkeys in the browser", () => {
       await page.detach();
     }
   }, 30_000);
+
+  test("an idle browser still stops, unless an agent is attached", async () => {
+    updateSettings({ browser: { keepAliveMinutes: 1 } });
+    try {
+      const running = rb();
+      const external = await CdpClient.connect(running.wsUrl);
+      const page = (await running.client.send<{ targetInfos: { targetId: string; type: string }[] }>("Target.getTargets")).targetInfos.find((t) => t.type === "page")!;
+      const { sessionId } = await external.send<{ sessionId: string }>("Target.attachToTarget", { targetId: page.targetId, flatten: true });
+      running.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBe(running);
+      expect(passkeysActive(profileId)).toBe(true);
+      await external.send("Target.detachFromTarget", { sessionId });
+      external.close();
+      running.lastUsedAt = Date.now() - 5 * 60_000;
+      await manager.sweepIdleBrowsers();
+      expect(getRunning(profileId)).toBeNull();
+      expect(passkeysActive(profileId)).toBe(false);
+    } finally {
+      updateSettings({ browser: { keepAliveMinutes: 15 } });
+    }
+    await manager.launchBrowser(profileId, { headless: true });
+    await waitFor(() => passkeysActive(profileId));
+  }, 60_000);
 
   test("a passkey deleted in the vault is gone from open tabs", async () => {
     const page = await openTab();
