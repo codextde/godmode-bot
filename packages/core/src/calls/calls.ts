@@ -220,8 +220,9 @@ The caller's number is {{system__caller_id}}. Only if it is exactly ${ownerNumbe
 ${stranger.replace(/^# /gm, "## ")}`;
 }
 
-function inboundGreeting(p: PhoneSettings): string {
-  return p.inboundGreeting.trim() || `Hello, this is ${ownerName()}'s assistant. How can I help you?`;
+export function inboundGreeting(p: Pick<PhoneSettings, "inboundGreeting" | "language">): string {
+  if (p.inboundGreeting.trim()) return p.inboundGreeting.trim();
+  return p.language === "de" ? `Hallo, hier ist die Assistenz von ${ownerName()}. Wie kann ich helfen?` : `Hello, this is ${ownerName()}'s assistant. How can I help you?`;
 }
 
 function agentConfig(p: PhoneSettings): el.AgentConfig {
