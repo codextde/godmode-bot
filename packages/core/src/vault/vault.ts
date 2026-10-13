@@ -441,6 +441,13 @@ function loadKnownSecrets() {
         /* ignore */
       }
     }
+    for (const row of all<{ id: string; private_key_enc: string }>("SELECT id, private_key_enc FROM passkeys")) {
+      try {
+        rememberSecret(decrypt(dek, row.private_key_enc, `passkeys.private_key:${row.id}`));
+      } catch {
+        /* ignore */
+      }
+    }
     for (const row of all<{ id: string; number_enc: string }>("SELECT id, number_enc FROM payment_cards")) {
       try {
         rememberCardNumber(decrypt(dek, row.number_enc, `payment_cards.number:${row.id}`));

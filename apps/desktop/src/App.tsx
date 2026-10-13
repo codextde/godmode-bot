@@ -33,6 +33,7 @@ const HumanTasksPage = lazy(() => import("@/pages/human-tasks/human-tasks-page")
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const CardsPage = lazy(() => import("@/pages/vault/cards-page"));
+const PasskeysPage = lazy(() => import("@/pages/vault/passkeys-page"));
 const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
 const MessagingPage = lazy(() => import("@/pages/messaging/messaging-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
@@ -213,6 +214,7 @@ export function App() {
           <Route path="/vault/logins" element={<LoginsPage />} />
           <Route path="/vault/2fa" element={<TotpPage />} />
           <Route path="/vault/cards" element={<CardsPage />} />
+          <Route path="/vault/passkeys" element={<PasskeysPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
           <Route path="/messaging" element={<MessagingPage />} />
           <Route path="/browser" element={<BrowserPage />} />

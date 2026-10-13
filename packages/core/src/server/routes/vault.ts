@@ -9,6 +9,7 @@ import {
   listCredentials,
   updateCredential,
 } from "../../vault/credentials";
+import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
 import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../vault/passwordImport";
 import { audit } from "../../services/audit";
@@ -290,6 +291,19 @@ export function registerVaultRoutes(app: Hono): void {
     const credential = getCredential(c.req.param("id"));
     deleteCredential(credential.id);
     audit("user", "credential.delete", credential.id, { name: credential.name });
+    return c.json({ ok: true as const });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /* Passkeys (created by sites in the Godmode browser)                */
+  /* ---------------------------------------------------------------- */
+
+  app.get("/api/passkeys", (c) => c.json(listPasskeys({ workspaceId: scopeParam(c), search: c.req.query("search") || undefined })));
+
+  app.delete("/api/passkeys/:id", (c) => {
+    const passkey = getPasskey(c.req.param("id"));
+    deletePasskey(passkey.id);
+    audit("user", "passkey.delete", passkey.id, { rpId: passkey.rpId, userName: passkey.userName });
     return c.json({ ok: true as const });
   });
 

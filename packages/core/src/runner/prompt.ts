@@ -65,6 +65,8 @@ export interface PromptContext {
   settingsTools?: boolean;
   /** The run can save logins to the vault (vault_save_login); not on a runner, whose vault is its controller's. */
   savesLogins?: boolean;
+  /** The vault is unlocked, so the browser has its passkeys. */
+  vaultOpen?: boolean;
   /** Who leads the agent, the line up to the built-in agent, and who reports to it ("Your team"). */
   team?: { lead: Agent | null; chain: Agent[]; reports: Agent[] };
   /** The run's model is GLM on Z.ai (text only), not Claude. */
@@ -298,7 +300,12 @@ Never ask ${human} for a password and never type a password or 2FA code yourself
 3. Focus/click the username (or email) field, then call \`vault_fill_login({ credentialId, field: "username" })\`.
 4. Focus/click the password field (some sites show it on a second step), then call \`vault_fill_login({ credentialId, field: "password", submit: true })\`.
 5. If the site asks for a 2FA / verification / authenticator code, focus that field and call \`vault_fill_totp({ credentialId })\` (add \`submit: true\` when there is no separate confirm step).
-6. Take a snapshot/screenshot to confirm you are logged in.
+6. Take a snapshot/screenshot to confirm you are logged in.${
+    settings.browser.enabled && agent.browser?.enabled && settings.browser.passkeys && ctx.vaultOpen && !ctx.vm
+      ? `
+Passkeys work in your browser: Godmode keeps them in the vault and answers the site by itself — no fingerprint, phone or security key. When a site offers "Sign in with a passkey", use it (\`vault_list_logins\` lists the passkeys saved for the site); a login page with passkey autofill may sign you in as soon as it loads. When a site asks for a passkey to go on, or the task is to set one up, create it on the page: it is saved in the vault right away and works for every agent using this browser profile. Never give ${human} a task to create or confirm a passkey in this browser.`
+      : ""
+  }
 If there is no saved login for the site, the login is rejected, a 2FA code is needed but none is linked, or the account does not exist, call \`report_missing_login({ service, url, kind, reason })\` (kind: "missing_credential" | "invalid_credential" | "missing_totp" | "missing_account" | "other"). Then continue with any other part of the task you can still do, and mention the missing login in your final summary. Do not retry a rejected password more than once (accounts get locked).${
     ctx.savesLogins
       ? `
@@ -374,7 +381,7 @@ This task was handed to you by another agent, so you can't ask ${human} from her
 
   if (ctx.asking && ctx.followups) {
     out.push(`### Tasks for ${human}
-When you can't go on because ${human} has to do something themselves — create a passkey or solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, give you access — don't just mention it in your summary: give it to them with \`human_task_create({ title, instructions, url })\`. It lands on ${human}'s task list (My tasks) with a notification. Write the title as an imperative, the instructions as exact steps plus what you need back, and link the page where they do it. Finish whatever doesn't depend on it, then end your turn saying what you're waiting for. When ${human} marks it done — or says they can't — this chat continues by itself with their note, in a note from Godmode in \`<godmode-human-task>\` tags; don't poll for it or schedule a follow-up. A board task waits in Blocked meanwhile. One task per thing to do; \`human_tasks_list\` shows yours, \`human_task_cancel\` takes one back once you no longer need it. For a decision or an OK, ask instead.`);
+When you can't go on because ${human} has to do something themselves — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, give you access — don't just mention it in your summary: give it to them with \`human_task_create({ title, instructions, url })\`. It lands on ${human}'s task list (My tasks) with a notification. Write the title as an imperative, the instructions as exact steps plus what you need back, and link the page where they do it. Finish whatever doesn't depend on it, then end your turn saying what you're waiting for. When ${human} marks it done — or says they can't — this chat continues by itself with their note, in a note from Godmode in \`<godmode-human-task>\` tags; don't poll for it or schedule a follow-up. A board task waits in Blocked meanwhile. One task per thing to do; \`human_tasks_list\` shows yours, \`human_task_cancel\` takes one back once you no longer need it. For a decision or an OK, ask instead.`);
   }
 
   if (ctx.followups) {

@@ -50,7 +50,8 @@ const FOCUS = new Set([
  * here instead: the agent's tab is the only one of its background window, and the live view follows it (`FOCUS`).
  */
 const NO_FRONT = new Set(["Target.activateTarget", "Page.bringToFront"]);
-const BLOCKED = new Set(["Browser.close", "Browser.crash", "Browser.crashGpuProcess", "Target.attachToBrowserTarget"]);
+// exposeDevToolsProtocol would hand the page a DevTools connection past this endpoint.
+const BLOCKED = new Set(["Browser.close", "Browser.crash", "Browser.crashGpuProcess", "Target.attachToBrowserTarget", "Target.exposeDevToolsProtocol"]);
 const NO_TARGET = { code: -32602, message: "No target with given id found" };
 const NO_SESSION = { code: -32001, message: "Session with given id not found." };
 const NOT_ALLOWED = { code: -32000, message: "Not available here: this connection only reaches its own chat's tabs." };
@@ -72,6 +73,7 @@ class ChatConnection {
   private upstream: WebSocket | null = null;
   private browser: CdpClient | null = null;
   private tabs: TabRegistry | null = null;
+  private rb: RunningBrowser | null = null;
   private outbox: string[] = [];
   private sessions = new Map<string, string>();
   private shown = new Set<string>();
@@ -106,6 +108,7 @@ class ChatConnection {
     if (this.closed) return;
     this.browser = rb.client;
     this.tabs = rb.tabs;
+    this.rb = rb;
     const up = new WebSocket(rb.wsUrl);
     this.upstream = up;
     up.addEventListener("open", () => {
@@ -134,6 +137,8 @@ class ChatConnection {
     if (refusal) return this.reply(id, sessionId, refusal);
 
     this.tabs?.touch(this.chat);
+    // Whatever an agent sends counts as use, also scripts that keep to one page (the idle sweep stops unused browsers).
+    if (this.rb) this.rb.lastUsedAt = Date.now();
     if (sessionId && FOCUS.has(method)) this.tabs?.focus(this.chat, this.sessions.get(sessionId)!);
     else if (method === "Target.activateTarget") this.tabs?.focus(this.chat, params.targetId);
     if (NO_FRONT.has(method)) return this.send(JSON.stringify({ id, result: {}, ...(sessionId ? { sessionId } : {}) }));
@@ -169,6 +174,22 @@ class ChatConnection {
 
   private refusal(method: string, params: Record<string, any>): typeof NO_TARGET | null {
     if (BLOCKED.has(method)) return NOT_ALLOWED;
+    // The vault's passkeys sit in the tabs' virtual authenticators (passkeys.ts), also when wrapped for a non-flat session.
+    if (method.startsWith("WebAuthn.")) return NOT_ALLOWED;
+    // A DevTools frontend page would open its own connection to the raw browser port.
+    const url = method === "Target.createTarget" || method === "Page.navigate" ? String(params.url ?? "") : "";
+    if (/^\s*devtools:/i.test(url)) return NOT_ALLOWED;
+    if (method === "Target.sendMessageToTarget") {
+      let inner: { method?: unknown; params?: Record<string, any> } | null = null;
+      try {
+        inner = JSON.parse(String(params.message ?? ""));
+      } catch {
+        return NOT_ALLOWED;
+      }
+      if (typeof inner?.method !== "string") return NOT_ALLOWED;
+      const refused = this.refusal(inner.method, inner.params ?? {});
+      if (refused) return refused;
+    }
     if (method === "Target.disposeBrowserContext" && !this.contexts.has(params.browserContextId)) return NOT_ALLOWED;
     const targetId = params.targetId;
     if (typeof targetId === "string" && (method.startsWith("Target.") || method === "Browser.getWindowForTarget")) {

@@ -101,6 +101,8 @@ import {
   revealForAgent,
   updateCredential,
 } from "../vault/credentials";
+import { passkeysForHost } from "../vault/passkeys";
+import { passkeysEnabled } from "../browser/passkeys";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
 import {
   CARD_FIELDS,
@@ -1021,10 +1023,19 @@ const TOOLS: ToolDef[] = [
     description:
       'List the website logins saved in the Godmode vault that you may use (never includes passwords). Pass the site\'s domain or URL to filter: results match by domain first, then fall back to a best-effort guess by the login\'s name (marked "match": "name") — sanity-check a name guess before relying on it. Use the returned id with vault_fill_login / vault_fill_totp.',
     schema: z.object({ domain: z.string().optional().describe('Domain or URL of the site, e.g. "github.com"') }),
-    run: ({ domain }, { agent }) => {
+    run: ({ domain }, { agent, ctx }) => {
       const query = domain?.trim() ? hostnameOf(domain) : "";
       const creds = query ? findCredentialsForAgent(agent, domain!) : credentialsForAgent(agent);
+      // Passkeys belong to the browser profile this run browses with (not to a VM's Chrome).
+      const passkeys =
+        query && agent.browser.enabled && passkeysEnabled() && !vmOfRun(ctx.runId)
+          ? passkeysForHost(query, runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id)
+          : [];
+      const passkeyNote = passkeys.length
+        ? `Passkeys saved for this site (the browser signs in with them by itself; choose "Sign in with a passkey" on the page): ${passkeys.map((p) => `${p.userName || p.userDisplayName || "unnamed account"} on ${p.rpId}`).join(", ")}.`
+        : "";
       if (!creds.length) {
+        if (passkeyNote) return `No saved password login for ${query}. ${passkeyNote}`;
         return domain
           ? `No saved login for ${query || domain}. If the task needs one, call report_missing_login and continue with other work.`
           : "No saved logins are available to you.";
@@ -1042,7 +1053,7 @@ const TOOLS: ToolDef[] = [
           has2fa: c.totpId !== null,
           ...(query ? { match: matchedByDomain(c) ? "domain" : "name" } : {}),
         })),
-      );
+      ) + (passkeyNote ? `\n${passkeyNote}` : "");
     },
   }),
 
@@ -1514,7 +1525,7 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "human_task_create",
-    description: `Give the human a task: something you can't do yourself and they have to — create a passkey or solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes on their task list ("My tasks") with a notification. Write \`title\` as an imperative ("Create a passkey for Google Ads"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). For a decision or an OK use ask_human / request_approval instead.`,
+    description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes on their task list ("My tasks") with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). For a decision or an OK use ask_human / request_approval instead.`,
     schema: z.object({
       title: z.string().min(1).max(200).describe("What to do, as an imperative, self-contained — also shown in a notification"),
       instructions: z.string().max(6000).optional().describe("How: exact steps, where, what you found, and what you need back. Markdown, short."),

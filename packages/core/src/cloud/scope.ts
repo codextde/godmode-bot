@@ -97,6 +97,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/totp/import", S],
   ["PATCH", "/api/totp/:id", S],
   ["DELETE", "/api/totp/:id", A],
+  ["GET", "/api/passkeys", A],
+  ["DELETE", "/api/passkeys/:id", A],
   ["GET", "/api/cards", A],
   ["POST", "/api/cards", S],
   ["GET", "/api/cards/:id", A],

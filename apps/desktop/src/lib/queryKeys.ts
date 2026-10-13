@@ -22,6 +22,8 @@ export const qk = {
   appSecrets: ["vault", "secrets"] as unknown[],
   credentials: ["credentials"] as unknown[],
   credentialList: (workspaceId: string, search: string) => ["credentials", "list", workspaceId, search],
+  passkeys: ["passkeys"] as unknown[],
+  passkeyList: (workspaceId: string) => ["passkeys", "list", workspaceId],
   totp: ["totp"] as unknown[],
   totpList: (workspaceId: string) => ["totp", "list", workspaceId],
   totpCodes: ["totp", "codes"] as unknown[],

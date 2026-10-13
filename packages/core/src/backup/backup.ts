@@ -99,6 +99,7 @@ const ALL_ENTITIES: EntityName[] = [
   "routines",
   "credentials",
   "totp",
+  "passkeys",
   "payment-cards",
   "mcp-servers",
   "composio",

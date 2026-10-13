@@ -169,6 +169,7 @@ export type EntityName =
   | "routines"
   | "credentials"
   | "totp"
+  | "passkeys"
   /** Payment cards and their purchases. */
   | "payment-cards"
   | "mcp-servers"

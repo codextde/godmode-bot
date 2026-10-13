@@ -174,6 +174,7 @@ import type {
   ToolUpdateResult,
   TotpCode,
   TotpEntry,
+  Passkey,
   TotpImportInput,
   TotpImportResult,
   TotpInput,
@@ -444,6 +445,10 @@ export const api = {
     updatePurchase: (id: string, input: CardPurchasePatch, grant?: string) => request<CardPurchase>("PATCH", `/api/card-purchases/${id}`, input, withGrant(grant)),
   },
 
+  passkeys: {
+    list: (q: { workspaceId?: ScopeFilter; search?: string } = {}) => get<Passkey[]>("/api/passkeys", q),
+    delete: (id: string) => del<{ ok: true }>(`/api/passkeys/${id}`),
+  },
   totp: {
     list: (q: { workspaceId?: ScopeFilter; search?: string } = {}) => get<TotpEntry[]>("/api/totp", q),
     codes: (ids?: string[]) => get<TotpCode[]>("/api/totp/codes", { ids: ids?.join(",") }),

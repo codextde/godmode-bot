@@ -48,6 +48,21 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           <Switch id="mute-audio" checked={b.muteAudio} disabled={!b.enabled} onCheckedChange={(muteAudio) => patch({ browser: { muteAudio } })} />
         </SettingRow>
         <SettingRow
+          label="Passkeys from the vault"
+          htmlFor="passkeys"
+          disabled={!b.enabled}
+          description={
+            <>
+              Sites create and use passkeys stored in the vault, so agents sign in without a phone, fingerprint or security key. Off: Chrome's own passkey dialogs.{" "}
+              <Link to="/vault/passkeys" className="font-medium text-foreground underline-offset-4 hover:underline">
+                Saved passkeys
+              </Link>
+            </>
+          }
+        >
+          <Switch id="passkeys" checked={b.passkeys} disabled={!b.enabled} onCheckedChange={(passkeys) => patch({ browser: { passkeys } })} />
+        </SettingRow>
+        <SettingRow
           label="Keep browser alive"
           htmlFor="keep-alive"
           disabled={!b.enabled}

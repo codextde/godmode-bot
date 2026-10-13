@@ -26,6 +26,7 @@ import { botCheckReport } from "./botCheck";
 import { allRunning, getRegistered, getRunning, registerBrowser, touchBrowser, unregisterBrowser, type RunningBrowser } from "./state";
 import { initLiveView, pauseLiveViews, resumeLiveViews } from "./screencast";
 import { initFocusGuard } from "./focusGuard";
+import { initPasskeys, pausePasskeys, resumePasskeys } from "./passkeys";
 import { TabRegistry } from "./tabs";
 import { leasedChats, openChatLease, releaseChatLease, stopChatProxy } from "./proxy";
 import * as importer from "./importer";
@@ -138,6 +139,7 @@ export function listProfiles(): BrowserProfile[] {
 export function ensureDefaultProfile(): BrowserProfile {
   initLiveView();
   initFocusGuard();
+  initPasskeys();
   if (!idleTimer) void adoptOrphans();
   startIdleWatcher();
   const existing = get<ProfileRow>("SELECT * FROM browser_profiles WHERE workspace_id IS NULL AND is_default = 1 ORDER BY created_at LIMIT 1");
@@ -255,12 +257,16 @@ export async function deleteProfile(id: string): Promise<void> {
   if (!r.workspace_id && r.is_default) throw badRequest("The global default profile can't be deleted. Make another global profile the default first.");
   await stopBrowser(id);
   let projects = 0;
+  let passkeys = 0;
   tx(() => {
     run("DELETE FROM browser_profiles WHERE id = ?", id);
+    // A profile's passkeys live and die with it, like its cookies.
+    passkeys = run("DELETE FROM passkeys WHERE profile_id = ?", id).changes;
     run("UPDATE conversations SET browser_profile_id = NULL WHERE browser_profile_id = ?", id);
     projects = run("UPDATE projects SET browser_profile_id = NULL WHERE browser_profile_id = ?", id).changes;
   });
   if (projects) bus.changed("workspaces");
+  if (passkeys) bus.changed("passkeys");
   // Only ever delete directories Godmode created.
   const cfg = config();
   for (const dir of [r.user_data_dir, join(cfg.dataDir, "browser-use", id)]) {
@@ -426,12 +432,18 @@ async function startBrowser(profileId: string, opts: { headless?: boolean; trans
     borrowers: 0,
   };
 
-  // Navigation / new tabs count as activity (this is how browser-use usage keeps the browser alive).
-  const activity = (params: { targetInfo?: { type: string; url: string } }) => {
-    if (params.targetInfo && isUserPage(params.targetInfo)) rb.lastUsedAt = Date.now();
+  // Navigation / new tabs count as activity (this is how browser-use usage keeps the browser alive). A client attaching
+  // or detaching (the passkey authenticators around every idle check) changes a tab's info too, but isn't activity.
+  const urls = new Map<string, string>();
+  const activity = (params: { targetInfo?: { targetId: string; type: string; url: string } }) => {
+    const info = params.targetInfo;
+    if (!info || !isUserPage(info) || urls.get(info.targetId) === info.url) return;
+    urls.set(info.targetId, info.url);
+    rb.lastUsedAt = Date.now();
   };
   client.on("Target.targetCreated", activity);
   client.on("Target.targetInfoChanged", activity);
+  client.on("Target.targetDestroyed", (params) => urls.delete(params.targetId));
   tabs.onChange((conversationId) => conversationId && emitProfileSoon(profileId));
   client.onClose(() => void onBrowserGone(rb, "CDP connection closed"));
   proc?.exited.then((code) => onBrowserGone(rb, code === null ? "killed by a signal" : `exited with code ${code}`));
@@ -615,14 +627,20 @@ export async function sweepIdleBrowsers(): Promise<void> {
     // Passive previews attach our own screencast to the tab; pause it so it doesn't look like another CDP client.
     const previewing = hasBrowserSubscribers(rb.profileId);
     if (previewing) await pauseLiveViews(rb.profileId);
+    // The passkey authenticators keep every tab attached too.
+    await pausePasskeys(rb.profileId).catch((err) => log.warn("could not pause passkeys", err));
     // An error means the browser is going away — the exit handler cleans up.
     const inUse = await browserInUse(rb).catch(() => true);
     if (inUse) {
       rb.lastUsedAt = Date.now();
       if (previewing) resumeLiveViews(rb.profileId);
+      await resumePasskeys(rb.profileId).catch((err) => log.warn("could not resume passkeys", err));
       continue;
     }
-    if ((handedOut.get(rb.profileId) ?? 0) >= checkedAt) continue;
+    if ((handedOut.get(rb.profileId) ?? 0) >= checkedAt) {
+      await resumePasskeys(rb.profileId).catch((err) => log.warn("could not resume passkeys", err));
+      continue;
+    }
     log.info(`stopping idle browser for profile ${rb.profileId} (${reason})`);
     await stopBrowser(rb.profileId).catch((err) => log.warn("idle stop failed", err));
   }

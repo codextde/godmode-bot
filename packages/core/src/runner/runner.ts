@@ -2131,6 +2131,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         mods: config().role !== "runner",
         settingsTools: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",
+        vaultOpen: isUnlocked(),
         team: teamFor(agent),
         glm: glm ? model : null,
         glmDelegation: !glm && config().role !== "runner" && zaiKey() ? GLM_MODELS[0]!.id : null,
