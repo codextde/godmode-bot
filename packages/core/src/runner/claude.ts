@@ -116,6 +116,9 @@ export function applyZaiEnv(env: Record<string, string | undefined>, model: stri
     env[k] = model;
   }
   env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+  // Claude Code loads MCP tools on demand only for Anthropic's own API unless told otherwise. Z.ai supports it, and
+  // without it every MCP tool's schema goes into each request: a plugin with many tools fills GLM's window by itself.
+  env.ENABLE_TOOL_SEARCH = "true";
 }
 
 /** Stop a claude process and everything it started: its process group on POSIX (spawn it `detached`), taskkill /T on Windows. */

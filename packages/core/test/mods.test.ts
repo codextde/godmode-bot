@@ -415,7 +415,7 @@ describe("agents", () => {
 
   test("only the manager sees the mod tools, and is told how to write a mod", () => {
     const names = (a: Agent) => listToolsFor(a, ctx(a)).map((t) => t.name);
-    expect(names(manager)).toEqual(expect.arrayContaining(["plugins_list", "plugin_save", "plugin_install"]));
+    expect(names(manager)).toEqual(expect.arrayContaining(["plugins_list", "plugin_save", "plugin_install", "plugin_update"]));
     expect(names(agent)).not.toContain("plugins_list");
     expect(names(agent)).not.toContain("plugin_save");
     expect(names(agent)).not.toContain("plugin_install");

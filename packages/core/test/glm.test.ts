@@ -75,6 +75,8 @@ describe("GLM on Z.ai", () => {
     expect(inv.env.ANTHROPIC_BASE_URL).toBe(ZAI_ANTHROPIC_BASE_URL);
     expect(inv.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe(GLM);
     expect(inv.env.CLAUDE_CONFIG_DIR).toEndWith("claude-zai");
+    // MCP tools load on demand: a plugin with many tools would fill GLM's window otherwise.
+    expect(inv.env.ENABLE_TOOL_SEARCH).toBe("true");
     expect(argValue(inv, "--append-system-prompt")).toContain(`This run uses ${GLM} on Z.ai`);
     expect(argValue(inv, "--append-system-prompt")).toContain("Vault secrets and API keys stay out of this run");
     const hidden = argValue(inv, "--disallowedTools")!.split(",");
@@ -136,6 +138,7 @@ describe("GLM on Z.ai", () => {
     expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
     expect(inv.env.ANTHROPIC_AUTH_TOKEN).toBeNull();
     expect(inv.env.CLAUDE_CONFIG_DIR ?? "").not.toEndWith("claude-zai");
+    expect(inv.env.ENABLE_TOOL_SEARCH).toBeNull();
     expect(argValue(inv, "--append-system-prompt")).not.toContain("on Z.ai, not Claude");
   });
 

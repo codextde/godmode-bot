@@ -512,7 +512,8 @@ export async function createMod(input: ModInput, actor = "user"): Promise<Mod> {
   );
 }
 
-export async function updateMod(id: string, patch: ModPatch, actor = "user"): Promise<Mod> {
+/** `agentMaySwitch`: a manager agent's plugin_update, which the human allowed to switch plugins on and off. */
+export async function updateMod(id: string, patch: ModPatch, actor = "user", opts: { agentMaySwitch?: boolean } = {}): Promise<Mod> {
   let row = getRow(id);
   if (!patch || typeof patch !== "object") throw badRequest("Invalid plugin update");
   const byAgent = actor.startsWith("agent:");
@@ -577,8 +578,12 @@ export async function updateMod(id: string, patch: ModPatch, actor = "user"): Pr
     }
   }
 
-  if (patch.enabled !== undefined && !byAgent) {
+  if (patch.enabled !== undefined && (!byAgent || opts.agentMaySwitch)) {
     if (patch.enabled) {
+      // Hook code an agent wrote itself runs inside every turn: the human reads it before it does.
+      if (byAgent && !source && !row.template_id && row.created_by.startsWith("agent:") && bool(row.needs_review)) {
+        throw new HttpError(403, "This plugin is a draft an agent wrote: the human reads its code and switches it on under Plugins.", "forbidden");
+      }
       // The human's OK is for the code they read: an agent may have saved another version since the page loaded.
       if (patch.digest !== undefined && patch.digest !== codeDigest(row, files)) {
         throw conflict("The code changed since you opened this plugin. Read it again, then switch it on.");
