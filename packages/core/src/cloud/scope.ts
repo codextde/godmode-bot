@@ -210,6 +210,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/browser/profiles/:id/input", A],
   ["POST", "/api/browser/profiles/:id/import", S],
   ["GET", "/api/browser/chrome-profiles", A],
+  ["GET", "/api/browser/captcha", A],
+  ["POST", "/api/browser/captcha/balance", A],
   ["GET", "/api/browser/profile-use", A],
   ["POST", "/api/browser/profile-use/install", A],
   ["POST", "/api/browser/profile-use/sync", S],
