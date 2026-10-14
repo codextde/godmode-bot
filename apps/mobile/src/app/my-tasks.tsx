@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useMemo } from "react";
 import { RefreshControl, SectionList, View } from "react-native";
-import type { HumanTask } from "@godmode/shared";
+import { isHumanTaskActive, type HumanTask } from "@godmode/shared";
 import { HumanTaskRow } from "@/components/human-task-row";
 import { EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
@@ -24,10 +24,11 @@ export default function MyTasks() {
   const sections = useMemo(() => {
     const all = list.data ?? [];
     const urgentFirst = (a: HumanTask, b: HumanTask) => Number(b.priority === "high") - Number(a.priority === "high") || (a.createdAt < b.createdAt ? 1 : -1);
-    const closed = all.filter((t) => t.status !== "open" && t.status !== "doing").sort((a, b) => ((a.closedAt ?? a.updatedAt) < (b.closedAt ?? b.updatedAt) ? 1 : -1));
+    const closed = all.filter((t) => !isHumanTaskActive(t)).sort((a, b) => ((a.closedAt ?? a.updatedAt) < (b.closedAt ?? b.updatedAt) ? 1 : -1));
     return [
       { title: "To do", data: all.filter((t) => t.status === "open").sort(urgentFirst) },
       { title: "Doing", data: all.filter((t) => t.status === "doing").sort(urgentFirst) },
+      { title: "Backlog", data: all.filter((t) => t.status === "backlog").sort(urgentFirst) },
       { title: "Done", data: closed.slice(0, DONE_SHOWN) },
     ].filter((s) => s.data.length);
   }, [list.data]);

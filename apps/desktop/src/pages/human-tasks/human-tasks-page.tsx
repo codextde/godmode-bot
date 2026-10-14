@@ -16,9 +16,9 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CircleCheck, CircleDashed, ListTodo, Plus, Search, Timer } from "lucide-react";
-import type { Agent, HumanTask } from "@godmode/shared";
-import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive } from "@godmode/shared";
+import { Circle, CircleCheck, CircleDashed, ListTodo, Plus, Search, Timer } from "lucide-react";
+import type { Agent, HumanTask, HumanTaskLane } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive, isHumanTaskWaiting } from "@godmode/shared";
 import { EmptyState, PageHeader } from "@/components/common";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
@@ -34,22 +34,28 @@ import { useAllAgents, useBootstrap, useHumanTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
-type ColumnId = "open" | "doing" | "closed";
+type ColumnId = HumanTaskLane | "closed";
 type Columns = Record<ColumnId, string[]>;
 
 const COLUMN_ID = "col:";
 const COLUMNS: { id: ColumnId; label: string; hint: string; icon: ReactNode }[] = [
-  { id: "open", label: "To do", hint: "What your agents need from you shows up here: things to do, questions, decisions.", icon: <CircleDashed className="size-3.5 text-muted-foreground" /> },
+  {
+    id: "backlog",
+    label: "Backlog",
+    hint: "Park what can wait. It stays open for its agent but doesn't count as waiting for you.",
+    icon: <CircleDashed className="size-3.5 text-muted-foreground/70" />,
+  },
+  { id: "open", label: "To do", hint: "What your agents need from you shows up here: things to do, questions, decisions.", icon: <Circle className="size-3.5 text-muted-foreground" /> },
   { id: "doing", label: "Doing", hint: "Drag a task here while you work on it.", icon: <Timer className="size-3.5 text-brand-strong" /> },
   { id: "closed", label: "Done", hint: "Drop a task here to close or answer it — its agent picks up from there.", icon: <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> },
 ];
 
 function columnOfTask(t: HumanTask): ColumnId {
-  return t.status === "open" || t.status === "doing" ? t.status : "closed";
+  return isHumanTaskActive(t) ? (t.status as HumanTaskLane) : "closed";
 }
 
 function group(tasks: HumanTask[]): Columns {
-  const cols: Columns = { open: [], doing: [], closed: [] };
+  const cols: Columns = { backlog: [], open: [], doing: [], closed: [] };
   const active = tasks.filter(isHumanTaskActive).sort((a, b) => a.position - b.position || a.number - b.number);
   for (const t of active) cols[columnOfTask(t)].push(t.id);
   cols.closed = tasks
@@ -74,7 +80,7 @@ export default function HumanTasksPage() {
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const [search, setSearch] = useState("");
   const [focusNote, setFocusNote] = useState(false);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState<"backlog" | "open" | null>(null);
   const { update } = useHumanTaskActions();
 
   const tasks = useMemo(() => {
@@ -98,13 +104,14 @@ export default function HumanTasksPage() {
   };
 
   const create = useMutation({
-    mutationFn: (title: string) => api.humanTasks.create({ title }),
+    mutationFn: ({ title, status }: { title: string; status: "backlog" | "open" }) => api.humanTasks.create({ title, status }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.humanTasks }),
     onError: (e) => toastApiError(e, "Couldn't add the task", qc),
   });
 
   const waiting = data.filter((t) => t.status === "open").length;
-  const agentsWaiting = new Set(data.filter((t) => isHumanTaskActive(t) && t.agentId).map((t) => t.agentId)).size;
+  const agentsWaiting = new Set(data.filter((t) => isHumanTaskWaiting(t) && t.agentId).map((t) => t.agentId)).size;
+  const parked = data.filter((t) => t.status === "backlog").length;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -113,11 +120,13 @@ export default function HumanTasksPage() {
         title="My tasks"
         description={
           waiting
-            ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}. Close or answer one and its agent picks up where it left off.`
-            : "What your agents can't settle without you — a passkey, a CAPTCHA, a question, a decision. Close or answer it and the agent picks up where it left off."
+            ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Close or answer one and its agent picks up where it left off.`
+            : parked
+              ? `Nothing waits for you right now · ${parked} in the backlog for later. Close or answer one and its agent picks up where it left off.`
+              : "What your agents can't settle without you — a passkey, a CAPTCHA, a question, a decision. Close or answer it and the agent picks up where it left off."
         }
         actions={
-          <Button onClick={() => setAdding(true)} disabled={tasksQ.isError && !tasksQ.data}>
+          <Button onClick={() => setAdding("open")} disabled={tasksQ.isError && !tasksQ.data}>
             <Plus /> New task
           </Button>
         }
@@ -158,7 +167,7 @@ export default function HumanTasksPage() {
             title="Nothing waits for you"
             description="When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself."
             action={
-              <Button variant="outline" onClick={() => setAdding(true)}>
+              <Button variant="outline" onClick={() => setAdding("open")}>
                 <Plus /> Add one of your own
               </Button>
             }
@@ -168,10 +177,10 @@ export default function HumanTasksPage() {
         <Board
           tasks={tasks}
           agents={agentById}
-          loading={tasksQ.isPending ? { open: Math.min(boot?.counts.attention?.todo ?? 2, 4), doing: 0, closed: 2 } : undefined}
+          loading={tasksQ.isPending ? { backlog: 0, open: Math.min(boot?.counts.attention?.todo ?? 2, 4), doing: 0, closed: 2 } : undefined}
           adding={adding}
           onAdding={setAdding}
-          onAdd={(title) => create.mutateAsync(title)}
+          onAdd={(title, status) => create.mutateAsync({ title, status })}
           onOpen={(t) => open(t)}
           onMove={(t, status, beforeId) => update.mutate({ id: t.id, patch: { status, beforeId } })}
           onDropDone={(t) => open(t, true)}
@@ -198,11 +207,11 @@ function Board({
   agents: Map<string, Agent>;
   /** The list isn't here yet: placeholder cards per column (as many to do as the sidebar counts). */
   loading?: Record<ColumnId, number>;
-  adding: boolean;
-  onAdding: (on: boolean) => void;
-  onAdd: (title: string) => Promise<unknown>;
+  adding: "backlog" | "open" | null;
+  onAdding: (to: "backlog" | "open" | null) => void;
+  onAdd: (title: string, status: "backlog" | "open") => Promise<unknown>;
   onOpen: (t: HumanTask) => void;
-  onMove: (t: HumanTask, status: "open" | "doing", beforeId: string | null) => void;
+  onMove: (t: HumanTask, status: HumanTaskLane, beforeId: string | null) => void;
   onDropDone: (t: HumanTask) => void;
 }) {
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
@@ -272,9 +281,9 @@ function Board({
             dragging={!!drag}
             activeId={drag?.id ?? null}
             onOpen={onOpen}
-            adding={col.id === "open" && adding}
-            onAdding={col.id === "open" ? onAdding : undefined}
-            onAdd={onAdd}
+            adding={adding === col.id}
+            onAdding={col.id === "open" || col.id === "backlog" ? (on: boolean) => onAdding(on ? (col.id as "backlog" | "open") : null) : undefined}
+            onAdd={(title) => onAdd(title, col.id === "backlog" ? "backlog" : "open")}
           />
         ))}
       </div>

@@ -193,7 +193,30 @@ describe("the human's own tasks", () => {
     expect((await api("GET", `/api/human-tasks/${bId}`)).status).toBe(404);
   });
 
-  test("an agent's words stay as they were", async () => {
+  test("the backlog: parked for later, still open for the agent, but not waiting for you", async () => {
+    const own = await api("POST", "/api/human-tasks", { title: "Sort the receipts", status: "backlog" });
+    expect(own.status).toBe(201);
+    expect(own.json).toMatchObject({ status: "backlog" });
+    expect(listAttention().some((i) => i.id === `todo:${own.json.id}`)).toBe(false);
+
+    const { conversationId, run, task } = await chatWithTask();
+    const parked = await api("PATCH", `/api/human-tasks/${task.id}`, { status: "backlog" });
+    expect(parked.json).toMatchObject({ status: "backlog" });
+    expect(listHumanTasks({ status: "active", conversationId }).map((t) => t.id)).toContain(task.id);
+    expect(listAttention().some((i) => i.id === `todo:${task.id}`)).toBe(false);
+    expect(listNotifications().find((n) => n.link === `/my-tasks?task=${task.id}`)?.read).toBe(true);
+
+    expect((await api("PATCH", `/api/human-tasks/${task.id}`, { status: "open" })).json).toMatchObject({ status: "open" });
+    expect(listAttention().some((i) => i.id === `todo:${task.id}`)).toBe(true);
+    await api("PATCH", `/api/human-tasks/${task.id}`, { status: "backlog" });
+    const out = await closeHumanTask(task.id, { outcome: "done", note: "Did it after all" });
+    expect(out.task.status).toBe("done");
+    let next: string | undefined;
+    await until(() => !!(next = listRuns({ conversationId }).find((r) => r.id !== run.id)?.id), 10_000, "the chat to continue");
+    await waitForRun(next!, 10_000);
+  }, 30_000);
+
+    test("an agent's words stay as they were", async () => {
     const { task } = await chatWithTask();
     const res = await api("PATCH", `/api/human-tasks/${task.id}`, { title: "Something else" });
     expect(res.status).toBe(400);
