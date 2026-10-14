@@ -369,9 +369,24 @@ function outcomeOf(status: QuestionStatus, optionId: string | null): ContinueAns
  * the question as answered and that run. 409 when it was answered or withdrawn already, or the run can't continue (the
  * question is open again then).
  */
+/** Answers to questions of chats that work on another computer go there (remote/devices.ts sets it). */
+let remoteAnswer: ((runnerId: string, questionId: string, input: AnswerQuestionInput) => void) | null = null;
+
+export function setRemoteAnswerer(fn: typeof remoteAnswer): void {
+  remoteAnswer = fn;
+}
+
 export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answerer): { question: AgentQuestion; run: Run } {
   const r = row(id);
   if (!r) throw notFound("Question");
+  const elsewhere = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", r.conversation_id)?.runner_id ?? null;
+  if (elsewhere && remoteAnswer) {
+    if (r.status !== "open") throw new HttpError(409, "This was answered already.", "question_closed");
+    // The run waits on that computer: it takes the answer, and its next update settles this copy.
+    remoteAnswer(elsewhere, r.id, input);
+    audit(by.actor, "question.answer.forward", r.id, { via: by.via });
+    return { question: toQuestion(r), run: getRun(r.run_id) };
+  }
   if (r.status !== "open") {
     throw new HttpError(409, r.status === "withdrawn" ? "This was withdrawn — the run was stopped." : "This was answered already.", "question_closed");
   }
@@ -541,7 +556,8 @@ export function withdrawQuestion(runId: string, reason: string): void {
 /** After a restart or a restore: every open question has a run that stands still for it, and the other way round. */
 export function repairQuestions(): void {
   const orphans = all<QuestionRow>(
-    "SELECT * FROM questions WHERE status = 'open' AND run_id NOT IN (SELECT run_id FROM paused_runs WHERE reason = 'question')",
+    `SELECT * FROM questions WHERE status = 'open' AND run_id NOT IN (SELECT run_id FROM paused_runs WHERE reason = 'question')
+       AND conversation_id NOT IN (SELECT id FROM conversations WHERE runner_id IS NOT NULL)`,
   );
   const why = "Godmode restarted before this was answered.";
   for (const r of orphans) {

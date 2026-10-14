@@ -824,6 +824,19 @@ export function promptWithFiles(prompt: string, agent: Agent, attachments: Attac
   return `${prompt}${prompt ? "\n\n" : ""}Attached files: ${attachments.map((a) => join(agent.repoPath, a.path)).join(", ")}`;
 }
 
+type RemoteSend = (
+  conversationId: string,
+  runnerId: string,
+  input: { content: string; prompt?: string; marker?: MessageBlock[]; trigger?: RunTrigger },
+) => Promise<SendMessageResult>;
+
+/** Turns in a chat that works on another computer start there (remote/devices.ts sets it). */
+let remoteSend: RemoteSend | null = null;
+
+export function setRemoteSender(fn: RemoteSend | null): void {
+  remoteSend = fn;
+}
+
 /** Store the user message (+attachments) and start a run for it. */
 export async function sendMessage(
   conversationId: string,
@@ -846,6 +859,9 @@ export async function sendMessage(
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
+  if (conv.runner_id && remoteSend && !input.attachments?.length && !input.files?.length) {
+    return remoteSend(conversationId, conv.runner_id, { content: input.content ?? "", prompt: input.prompt, marker: input.marker, trigger: input.trigger });
+  }
   // Before anything is stored: a refused run leaves no message or upload behind.
   requireLicense();
   const content = (input.content ?? "").trim();

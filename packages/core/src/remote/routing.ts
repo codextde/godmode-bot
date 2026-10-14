@@ -151,7 +151,8 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     if (method === "PATCH") {
       const patch = await jsonBody(c);
       if (!patch) throw badRequest("Invalid JSON body");
-      if (patch.workingDirectory !== undefined || patch.computerTarget !== undefined) {
+      // Another computer of the group names its own folders and screens (its app picked them); a runner has neither.
+      if ((patch.workingDirectory !== undefined || patch.computerTarget !== undefined) && get<{ kind: string }>("SELECT kind FROM runners WHERE id = ?", runnerId)?.kind !== "device") {
         throw badRequest("Folders and shared screens of this computer aren't available for chats on a runner");
       }
       const { pinned, archived, ...remote } = patch;

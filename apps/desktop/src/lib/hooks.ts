@@ -300,6 +300,11 @@ export function useRunners() {
   return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });
 }
 
+/** This computer's device group; `role` null when it isn't part of one. Kept live by `devices.updated` events. */
+export function useDeviceGroup() {
+  return useQuery({ queryKey: qk.devices, queryFn: api.devices.get, staleTime: 30_000 });
+}
+
 export function useAgentTemplates() {
   return useQuery({ queryKey: qk.agentTemplates, queryFn: api.agents.templates, staleTime: 5 * 60_000 });
 }

@@ -13,7 +13,15 @@ import { audit } from "../../services/audit";
 import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
-import { badRequest, childEnv, notFound } from "../../util";
+import { HttpError, badRequest, childEnv, notFound } from "../../util";
+import { acceptJoin, adoptPushedChat, deviceIdOf, groupForSecondary, makeInvite, peerLeft } from "../../remote/devices";
+import { isSecondary } from "../../remote/group";
+import { callForDevice } from "../../remote/deviceTools";
+import { welcomeFor } from "../ws";
+import { get } from "../../db";
+import { getConversationSummary, sendMessage } from "../../services/conversations";
+import type { MessageBlock, RunTrigger } from "@godmode/shared";
+import { cancelRun } from "../../runner/runner";
 import { body, z } from "../validate";
 
 const log = logger("link");
@@ -112,6 +120,77 @@ export function registerLinkRoutes(app: Hono): void {
   app.get("/api/link/updates", async (c) => c.json(await checkUpdates(c.req.query("refresh") === "1")));
 
   app.post("/api/link/updates/install", async (c) => c.json(await installUpdates()));
+
+  /* ---------------- Device groups (remote/devices.ts) ---------------- */
+
+  // The group as the primary sees it, for a secondary's Settings → Devices.
+  app.get("/api/link/devices/list", (c) => c.json(groupForSecondary()));
+
+  // A secondary hands out its primary's invite: whoever joins pairs with the primary.
+  app.post("/api/link/devices/invite", async (c) => {
+    if (isSecondary()) throw new HttpError(409, "Invites come from the primary.", "not_primary");
+    return c.json(await makeInvite());
+  });
+
+  // A computer that paired with this one's invite gives its own code, so this one pairs back with it.
+  app.post("/api/link/devices/join", async (c) => {
+    const { code } = await body(c, z.object({ code: z.string().min(10).max(4000) }));
+    return c.json(await acceptJoin(code));
+  });
+
+  app.get("/api/link/devices/whoami", (c) => c.json({ id: deviceIdOf(viaLink(c) ?? "") }));
+
+  app.post("/api/link/devices/leave", (c) => {
+    peerLeft(viaLink(c) ?? "");
+    return c.json({ ok: true as const });
+  });
+
+  // A chat another computer of the group hands over: it becomes this computer's own.
+  app.post("/api/link/devices/adopt-chat", async (c) => {
+    const input = (await c.req.json()) as Record<string, unknown>;
+    return c.json(adoptPushedChat({ conversation: input.conversation, messages: input.messages, runs: input.runs, handover: input.handover, followup: input.followup }));
+  });
+
+  // What a new window of a secondary needs to show what works right now (server/ws.ts).
+  app.get("/api/link/devices/welcome", (c) => c.json(welcomeFor()));
+
+  // A Godmode tool an agent on a secondary calls about what is shared (remote/deviceTools.ts).
+  app.post("/api/link/devices/tool", async (c) => {
+    const input = await body(
+      c,
+      z.object({ name: z.string().min(1).max(100), args: z.unknown(), runId: z.string().max(100), agentId: z.string().max(100), conversationId: z.string().max(100), depth: z.number().int().min(0).max(50) }),
+    );
+    return c.json(await callForDevice(viaLink(c) ?? "", input));
+  });
+
+  // A run of this computer stops because its chat moves to another computer: the chat says why.
+  app.post("/api/link/runs/:id/stop", async (c) => {
+    const { reason } = await body(c, z.object({ reason: z.string().min(1).max(300) }));
+    await cancelRun(c.req.param("id"), reason, { byHuman: true });
+    return c.json({ ok: true as const });
+  });
+
+  // A turn in one of this computer's chats that another computer starts (a moved chat continuing, a human task's answer).
+  const TRIGGERS: readonly RunTrigger[] = ["chat", "followup", "manual", "api", "task", "delegation"];
+  app.post("/api/link/conversations/:id/send", async (c) => {
+    const input = await body(
+      c,
+      z.object({ content: z.string().max(200_000), prompt: z.string().max(400_000).optional(), marker: z.array(z.record(z.string(), z.unknown())).max(20).optional(), trigger: z.string().optional() }),
+    );
+    const id = c.req.param("id");
+    const row = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", id);
+    if (!row) throw notFound("Conversation");
+    // Never handed on again: a chat this computer only mirrors is answered by the computer it lives on.
+    if (row.runner_id) throw new HttpError(409, "This chat works on another computer.", "not_here");
+    const trigger = TRIGGERS.includes(input.trigger as RunTrigger) ? (input.trigger as RunTrigger) : "chat";
+    const result = await sendMessage(id, {
+      content: input.content,
+      ...(input.prompt ? { prompt: input.prompt } : {}),
+      ...(input.marker?.length ? { marker: input.marker as unknown as MessageBlock[] } : {}),
+      trigger,
+    });
+    return c.json({ ...result, conversation: getConversationSummary(id) });
+  });
 
   app.post("/api/link/forget", (c) => {
     const controllerId = viaLink(c);

@@ -60,3 +60,9 @@ export function requireGrant(c: Context): void {
 export function clearGrants(): void {
   grants.clear();
 }
+
+/** A grant the primary of this computer's device group issued: valid here too until it expires (remote/deviceRouting.ts). */
+export function adoptGrant(grant: string, expiresAt: string): void {
+  const expires = Math.min(Date.parse(expiresAt), Date.now() + GRANT_TTL_MS);
+  if (grant && Number.isFinite(expires) && expires > Date.now()) grants.set(sha256(grant), expires);
+}

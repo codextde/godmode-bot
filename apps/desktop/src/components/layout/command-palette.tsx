@@ -6,6 +6,7 @@ import {
   Archive,
   AudioLines,
   ArrowLeft,
+  ArrowRightFromLine,
   Bot,
   Box,
   BrainCircuit,
@@ -19,6 +20,7 @@ import {
   Keyboard,
   KeyRound,
   KeySquare,
+  Laptop,
   Layers,
   Lock,
   MessageCircle,
@@ -64,6 +66,7 @@ import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
 import { modKey } from "@/lib/desktop";
 import { AgentAvatar } from "@/components/common";
+import { useHandoff } from "@/components/devices/device-parts";
 
 /** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
 const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[] = [
@@ -79,6 +82,7 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
   { id: "backup", label: "Backup", icon: DatabaseBackup, words: "restore export import" },
   { id: "phone", label: "Phone", icon: Smartphone, words: "mobile iphone android pair app" },
+  { id: "devices", label: "Devices", icon: Laptop, words: "device group computers macs sync primary secondary hand off handoff lid invite join" },
   { id: "system", label: "System", icon: HeartPulse, words: "health permissions claude code install sign in login doctor updates tools" },
   { id: "logs", label: "Logs", icon: Activity, words: "diagnostics debug" },
   { id: "about", label: "About", icon: Info, words: "version updates" },
@@ -112,6 +116,7 @@ export function CommandPalette() {
   const setScope = useUi((s) => s.setWorkspace);
   const projectScope = useUi((s) => s.project);
   const startChat = useStartAgentChat();
+  const devices = useHandoff();
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
   const searching = query.length > 0;
@@ -280,6 +285,20 @@ export function CommandPalette() {
           >
             {resolved === "dark" ? <Sun /> : <Moon />} Toggle theme
           </CommandItem>
+          {devices.targets.map((d) => (
+            <CommandItem
+              key={`handoff-${d.id ?? "primary"}`}
+              value={unique(`hand off running work to ${d.name} handoff move chats close lid device`, d.id ?? "primary")}
+              disabled={devices.pending}
+              onSelect={() => {
+                setOpen(false);
+                devices.handoff(d);
+              }}
+            >
+              <ArrowRightFromLine /> Hand off running work to {d.name}
+              {devices.working > 0 && <span className="ml-2 text-xs text-muted-foreground tabular-nums">{devices.working} working</span>}
+            </CommandItem>
+          ))}
           {cloudContext && (
             <CommandItem value="all computers godmode cloud devices" onSelect={() => window.location.assign(cloudContext!.home)}>
               <ArrowLeft /> All computers

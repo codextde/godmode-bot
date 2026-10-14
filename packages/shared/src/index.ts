@@ -28,3 +28,4 @@ export * from "./heartbeat";
 export * from "./humanTasks";
 export * from "./cards";
 export * from "./calls";
+export * from "./devices";

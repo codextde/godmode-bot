@@ -62,6 +62,7 @@ import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
+import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { LicenseBanner } from "@/components/license/license-banner";
@@ -262,6 +263,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarFooter className="px-3 pb-3">
           <ClaudeUpdateButton />
           <UpdateButton />
+          <DeviceIndicator />
           {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>
@@ -272,6 +274,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <MobileBar attention={inboxCount > 0} />
         <DesktopDragStrip />
         {cloudContext && boot && <CloudVersionNote coreVersion={boot.version} uiVersion={cloudContext.uiVersion} />}
+        <PrimaryOfflineBanner />
         <LicenseBanner />
         <div ref={setScrollEl} className="@container min-h-0 flex-1 overflow-y-auto">
           <PageScrollContext value={scrollEl}>{children}</PageScrollContext>

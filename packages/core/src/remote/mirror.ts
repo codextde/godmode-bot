@@ -50,6 +50,7 @@ import {
   type RunnerChatState,
 } from "../services/conversations";
 import { HttpError, now, truncate } from "../util";
+import { getQuestion } from "../services/questions";
 import { clearRemoteRun, clearRunner, remoteRuns, setRemoteRun } from "./activeRuns";
 
 const log = logger("mirror");
@@ -175,6 +176,8 @@ interface Chat {
   archived: boolean;
   createdAt: string;
   state: RunnerChatState;
+  /** Its folder and shared screen there: kept only for another computer of the group, whose app shows them. */
+  place: { working_directory: string | null; computer_target: string | null };
   /** The columns that stay the runner's: written when the chat is adopted and on every update. */
   columns: {
     title: string;
@@ -215,6 +218,10 @@ function readConversation(v: unknown): Chat | null {
     archived: c.archived === true,
     createdAt,
     state,
+    place: {
+      working_directory: typeof c.workingDirectory === "string" && c.workingDirectory.startsWith("/") ? text(c.workingDirectory, 4096) : null,
+      computer_target: record(c.computerTarget) ? JSON.stringify(c.computerTarget).slice(0, 4000) : null,
+    },
     columns: {
       title: title.trim() || DEFAULT_CONVERSATION_TITLE,
       claude_session_id: typeof c.claudeSessionId === "string" && SESSION_ID.test(c.claudeSessionId) ? c.claudeSessionId : null,
@@ -383,13 +390,18 @@ function viewOf(conversationId: string): string | null {
 /* Writing the copy                                                    */
 /* ------------------------------------------------------------------ */
 
+function isDevice(runnerId: string): boolean {
+  return get<{ kind: string }>("SELECT kind FROM runners WHERE id = ?", runnerId)?.kind === "device";
+}
+
 /** Adopt a chat the runner reports for the first time, or bring its copy up to date. False: it isn't this runner's to write. */
 function writeConversation(runnerId: string, chat: Chat): boolean {
   const row = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", chat.id);
+  const place = isDevice(runnerId) ? chat.place : {};
   if (row) {
     if (row.runner_id !== runnerId) return false;
     // `pinned` and `archived` stay as they are: the human files chats on this computer.
-    update("conversations", chat.id, chat.columns);
+    update("conversations", chat.id, { ...chat.columns, ...place });
     return true;
   }
   if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId) || hooks.released?.(runnerId, chat.id)) return false;
@@ -405,6 +417,7 @@ function writeConversation(runnerId: string, chat: Chat): boolean {
     archived: chat.archived ? 1 : 0,
     created_at: chat.createdAt,
     ...chat.columns,
+    ...place,
   });
   return true;
 }
@@ -779,6 +792,71 @@ function onComputer(runnerId: string, type: "computer.frame" | "computer.action"
   return true;
 }
 
+const QUESTION_KINDS = ["question", "approval"] as const;
+const QUESTION_STATUSES = ["open", "answered", "approved", "declined", "withdrawn"] as const;
+const ANSWER_VIA = ["app", "phone", "task", "slack", "telegram", "teams", "call"] as const;
+
+/**
+ * What an agent asked in a runner's chat: kept here so the human answers it from this computer's inbox and My tasks.
+ * The answer goes to the runner, where the run waits (routing.ts); the runner's next update settles the copy.
+ */
+function onQuestion(runnerId: string, type: "question.created" | "question.updated", raw: unknown): boolean {
+  const q = record(raw);
+  const id = safeId(q?.id);
+  const runId = safeId(q?.runId);
+  const conversationId = safeId(q?.conversationId);
+  const messageId = safeId(q?.messageId);
+  const kind = oneOf(q?.kind, QUESTION_KINDS);
+  const status = oneOf(q?.status, QUESTION_STATUSES);
+  const createdAt = isoDate(q?.createdAt);
+  const updatedAt = isoDate(q?.updatedAt);
+  const title = text(q?.title, 500);
+  const chat = conversationId ? ownChat(runnerId, conversationId) : null;
+  if (!q || !id || !runId || !conversationId || !messageId || !kind || !status || !createdAt || !updatedAt || title === null || !chat) return false;
+  const stored = get<{ conversation_id: string }>("SELECT conversation_id FROM questions WHERE id = ?", id);
+  if (stored && stored.conversation_id !== conversationId) return false;
+  const answer = record(q.answer);
+  const options = list(q.options).flatMap((o) => {
+    const opt = record(o);
+    const oid = text(opt?.id, 20);
+    const label = text(opt?.label, 500);
+    return opt && oid && label !== null
+      ? [{ id: oid, label, ...(typeof opt.description === "string" ? { description: text(opt.description, 2000) } : {}), ...(opt.recommended === true ? { recommended: true } : {}) }]
+      : [];
+  });
+  const fields = {
+    kind,
+    agent_id: chat.agent_id,
+    run_id: runId,
+    conversation_id: conversationId,
+    message_id: messageId,
+    task_id: null,
+    routine_id: null,
+    workspace_id: safeId(q.workspaceId),
+    title,
+    body: text(q.body, 20_000) ?? "",
+    affects: text(q.affects, 4000) ?? "",
+    options: JSON.stringify(options),
+    status,
+    option_id: answer ? text(answer.optionId, 20) : null,
+    answer: answer ? text(answer.text, 20_000) : null,
+    answer_attachments: JSON.stringify(answer ? readAttachments(answer.attachments) : []),
+    answered_via: answer ? oneOf(answer.via, ANSWER_VIA) : null,
+    answered_at: answer ? isoDate(answer.at) : null,
+    closed_reason: text(q.closedReason, 2000),
+    updated_at: updatedAt,
+  };
+  if (stored) update("questions", id, fields);
+  else {
+    // A run waits for one question at a time: an older open one of the same run was settled there meanwhile.
+    if (status === "open") sql("UPDATE questions SET status = 'withdrawn', updated_at = ? WHERE run_id = ? AND status = 'open' AND id != ?", updatedAt, runId, id);
+    insert("questions", { id, ...fields, created_at: createdAt });
+  }
+  bus.emit({ type: stored ? "question.updated" : type, question: getQuestion(id) });
+  bus.changed("questions");
+  return true;
+}
+
 function apply(runnerId: string, raw: unknown): boolean {
   const e = record(raw);
   if (!e || !runnerId) return false;
@@ -804,6 +882,9 @@ function apply(runnerId: string, raw: unknown): boolean {
     case "missing-login.created":
     case "missing-login.updated":
       return onMissingLogin(runnerId, e.item);
+    case "question.created":
+    case "question.updated":
+      return onQuestion(runnerId, type, e.question);
     case "notification":
       return onNotification(e.notification);
     case "browser.frame":
@@ -1023,4 +1104,63 @@ export function chatMovedHere(runnerId: string, conversationId: string): void {
 export function runnerDisconnected(runnerId: string): void {
   for (const [runId, r] of live) if (r.runnerId === runnerId) forgetLive(runId);
   clearRunner(runnerId);
+}
+
+/**
+ * A chat another computer of the group hands over becomes this computer's own (remote/devices.ts): read like a runner's
+ * chat, field by field, and stored without a runner. Runs that were still open there end here; the agent continues in
+ * a new turn. A copy this computer kept of the chat (it mirrored it) is replaced.
+ */
+export function importChat(conversation: unknown, messages: unknown, runs: unknown): { id: string; agentId: string } {
+  const chat = readConversation(conversation);
+  if (!chat) throw new HttpError(400, "That chat couldn't be read", "bad_request");
+  if (!get<{ id: string }>("SELECT id FROM agents WHERE id = ?", chat.agentId)) {
+    throw new HttpError(409, "This computer doesn't have the chat's agent yet. Wait until the setup is copied, then try again.", "agent_missing");
+  }
+  const stored = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", chat.id);
+  if (stored && stored.runner_id === null) throw new HttpError(409, "This chat already works on this computer.", "chat_here");
+  const ts = now();
+  tx(() => {
+    if (stored) {
+      sql("DELETE FROM messages WHERE conversation_id = ?", chat.id);
+      sql("DELETE FROM conversations WHERE id = ?", chat.id);
+    }
+    for (const r of remoteRuns()) if (r.conversationId === chat.id) clearRemoteRun(r.runId);
+    insert("conversations", {
+      id: chat.id,
+      agent_id: chat.agentId,
+      origin: chat.origin,
+      working_directory: null,
+      computer_target: null,
+      runner_id: null,
+      pinned: 0,
+      archived: chat.archived ? 1 : 0,
+      created_at: chat.createdAt,
+      ...chat.columns,
+      vm_id: null,
+      ssh_server_ids: "[]",
+      runner_state: null,
+    });
+    const seen = new Set<string>();
+    for (const item of list(messages)) {
+      const row = readMessage(item);
+      if (!row || row.conversation_id !== chat.id || seen.has(row.id) || get<{ id: string }>("SELECT id FROM messages WHERE id = ?", row.id)) continue;
+      seen.add(row.id);
+      insert("messages", row);
+    }
+    for (const item of list(runs)) {
+      const row = readRun(item);
+      if (!row || row.conversation_id !== chat.id || row.agent_id !== chat.agentId) continue;
+      const open = !TERMINAL.has(row.status);
+      const next: RunRow = { ...row, parent_run_id: null, ...(open ? { status: "failed" as const, error: "Ended: the chat moved to another computer", finished_at: ts } : {}) };
+      if (get<{ id: string }>("SELECT id FROM runs WHERE id = ?", row.id)) {
+        const { id, conversation_id: _chat, ...rest } = next;
+        update("runs", id, rest);
+      } else insert("runs", next);
+    }
+  });
+  for (const [runId, r] of live) if (r.conversationId === chat.id) forgetLive(runId);
+  emitConversationUpdated(chat.id);
+  bus.changed("runs");
+  return { id: chat.id, agentId: chat.agentId };
 }

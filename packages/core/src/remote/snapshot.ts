@@ -133,9 +133,13 @@ function keptFields(section: string): string[] {
 /* Build (controller)                                                   */
 /* ------------------------------------------------------------------ */
 
-function collect(): Parts {
+/** VMs are machines on the computer they were made on: another full Godmode of the group keeps its own. */
+const DEVICE_SKIPPED = new Set(["vms"]);
+
+function collect(opts: SnapshotOptions = {}): Parts {
   const tables: Record<string, Row[]> = {};
   for (const spec of TABLES) {
+    if (opts.device && DEVICE_SKIPPED.has(spec.table)) continue;
     const columns = columnsOf(spec.table);
     const pk = columns.find((c) => c.pk)?.name;
     if (!pk) continue;
@@ -175,16 +179,21 @@ function digestOf(parts: Parts): string {
   return sha256(JSON.stringify(canonical({ v: 1, tables, settings: parts.settings, vault: parts.vault })));
 }
 
-export function buildSnapshot(): ConfigSnapshot {
+export interface SnapshotOptions {
+  /** For another computer of the device group rather than a runner. */
+  device?: boolean;
+}
+
+export function buildSnapshot(opts: SnapshotOptions = {}): ConfigSnapshot {
   // The key first: reading it gives a vault from before canaries its canary, which the snapshot has to carry.
   const dek = vault.isUnlocked() ? vault.exportKeyForBackup().toString("base64") : null;
-  const parts = collect();
+  const parts = collect(opts);
   return { v: 1, digest: digestOf(parts), tables: parts.tables, settings: parts.settings, vault: { ...parts.vault, dek } };
 }
 
 /** The digest `buildSnapshot()` would carry, without touching the vault key. */
-export function snapshotDigest(): string {
-  return digestOf(collect());
+export function snapshotDigest(opts: SnapshotOptions = {}): string {
+  return digestOf(collect(opts));
 }
 
 /** Digest of the snapshot this runner applied last; null = never synced. */
@@ -257,6 +266,19 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
     // Never pull an agent out from under a run.
     const busy = new Set(listActiveRuns().map((r) => r.agentId));
     const workspaces = Array.isArray(s.tables.workspaces) ? new Set(s.tables.workspaces.map((r) => (isObject(r) ? r.id : null))) : null;
+
+    // An agent this computer had before it was paired, with the same folder as one of the copy's (the default agent of
+    // each install is "godmode"): its chats and runs move to the copy's agent instead of going with the old one.
+    if (Array.isArray(s.tables.agents)) {
+      const incomingAgents = new Map<string, string>();
+      for (const r of s.tables.agents as unknown[]) if (isObject(r) && typeof r.slug === "string" && typeof r.id === "string") incomingAgents.set(r.slug, r.id);
+      for (const local of all<{ id: string; slug: string }>("SELECT id, slug FROM agents")) {
+        const next = incomingAgents.get(local.slug);
+        if (!next || next === local.id || busy.has(local.id)) continue;
+        run("UPDATE conversations SET agent_id = ? WHERE agent_id = ?", next, local.id);
+        run("UPDATE runs SET agent_id = ? WHERE agent_id = ?", next, local.id);
+      }
+    }
 
     // Children before parents: by the time a workspace or an agent the controller no longer has is deleted, every row
     // that stays points at its new parent — the delete cascades to nothing that should survive (an agent that moved to

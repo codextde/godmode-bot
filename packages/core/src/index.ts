@@ -61,6 +61,9 @@ import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
 import { startLinkServer, stopLinkServer } from "./remote/linkServer";
+import { startDevices, stopDevices } from "./remote/devices";
+import { isSecondary, onGroupChange } from "./remote/group";
+import { deliverForwarded } from "./server/ws";
 import { RESTART_EXIT_CODE, executableDigest, setRestartHandler, settleUpdate } from "./remote/selfUpdate";
 import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
@@ -186,15 +189,19 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
   if (runner) startKeepAwake();
-  else startScheduler();
   startFollowups();
   startPauses();
   // After the pauses: a question whose run no longer waits is withdrawn there, and its ticket goes with it.
   startHumanTasks();
   startBudgets();
   startWatchdog();
-  if (!runner) {
+  // What only the Godmode that holds the shared setup does: on a secondary of a device group, its primary does it.
+  let sharedOn = false;
+  const startShared = () => {
+    if (sharedOn) return;
+    sharedOn = true;
     // A runner's runs are told by the computer it works for (they arrive there as its own runs).
+    startScheduler();
     startRunNotices();
     startDreaming();
     startAutomationEvents();
@@ -203,7 +210,27 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startTasks();
     startHeartbeats();
     startCalls();
+  };
+  const stopShared = async () => {
+    if (!sharedOn) return;
+    sharedOn = false;
+    stopScheduler();
+    stopRunNotices();
+    stopDreaming();
+    stopAppTriggers();
+    stopAutomationEvents();
+    await stopMessaging();
+    stopTasks();
+    stopHeartbeats();
+    stopCalls();
+  };
+  if (!runner) {
+    if (!isSecondary()) startShared();
     startModUpdates();
+    onGroupChange(() => {
+      if (isSecondary()) void stopShared().catch((err) => log.warn("could not hand the shared work to the primary", err));
+      else startShared();
+    });
   }
   // Adopt VMs that kept running while Godmode was closed.
   startVms().catch((err) => log.warn("could not check VMs", err));
@@ -276,7 +303,9 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   } else {
     startMobileAccess({ app, websocket: websocketHandler });
     onSettingsApplied(() => void refreshMobileAccess());
-    // Connect to the runners this Godmode works with.
+    // The other computers of its device group, if it has one: they reach this one at its link port.
+    startDevices({ app, websocket: websocketHandler }, deliverForwarded);
+    // Connect to the runners this Godmode works with (and the computers of its group).
     startRunners();
     // Only a linked computer dials its cloud; it follows settings changes by itself. A runner never does: it works
     // for another computer, which is the one people reach.
@@ -318,7 +347,6 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     log.info(`received ${signal}, shutting down`, resourceSnapshot());
     stopDiagnostics();
     stopMaintenance();
-    if (!runner) stopScheduler();
     stopFollowups();
     stopHumanTasks();
     stopPauses();
@@ -331,20 +359,15 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
       stopOutageRecovery();
-      stopRunNotices();
-      stopDreaming();
-      stopAppTriggers();
-      stopAutomationEvents();
+      await stopShared();
       stopMobileAccess();
+      stopDevices();
       stopRunners();
+      stopLinkServer();
       stopCloudLink();
       stopLicense();
       removeCoreFile(cfg.dataDir);
-      await stopMessaging();
-      stopTasks();
       stopModUpdates();
-      stopHeartbeats();
-      stopCalls();
     }
     await shutdownRunner();
     await shutdownBrowsers();
