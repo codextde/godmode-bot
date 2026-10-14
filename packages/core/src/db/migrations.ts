@@ -1552,4 +1552,13 @@ CREATE INDEX idx_passkeys_workspace ON passkeys(workspace_id);
 CREATE INDEX idx_passkeys_profile ON passkeys(profile_id);
 `,
   },
+  {
+    id: 95,
+    name: "device_groups",
+    sql: /* sql */ `
+-- "device": another full Godmode of this computer's device group (remote/devices.ts), paired both ways, instead of a
+-- headless runner. Its chats are mirrored like a runner's; it gets no Godmode updates and no runner health checks.
+ALTER TABLE runners ADD COLUMN kind TEXT NOT NULL DEFAULT 'runner';
+`,
+  },
 ];

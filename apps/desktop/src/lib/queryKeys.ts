@@ -132,6 +132,8 @@ export const qk = {
   connectors: ["connectors"] as unknown[],
   /** Runners (other computers that work for this one); the list is patched in place by `runner.updated` events. */
   runners: ["runners"] as unknown[],
+  /** This computer's device group (kept live by `devices.updated`). */
+  devices: ["devices"] as unknown[],
   /** Not under ["runners"]: refreshing the list must not re-run a runner's checks. */
   runnerHealth: (id: string) => ["runner-health", id],
   runnerSources: (id: string) => ["runner-sources", id],

@@ -4,6 +4,7 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management. A connected app
  * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
+import { callOnPrimary, runsOnPrimary } from "../remote/deviceTools";
 import { join } from "node:path";
 import { z } from "zod";
 import type {
@@ -3486,6 +3487,8 @@ export function toolErrorMessage(err: unknown): string {
 export async function callTool(ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const tool = BY_NAME.get(name);
   if (!tool) throw new UnknownToolError(`Unknown tool: ${name}`);
+  // On a secondary of a device group, what is shared lives on the primary: the call runs there.
+  if (runsOnPrimary(ctx, name)) return callOnPrimary(ctx, name, args);
   const out = await runTool(tool, ctx, name, args);
   if (ctx.connector) {
     noteConnectorCall(ctx.connector.id, name);

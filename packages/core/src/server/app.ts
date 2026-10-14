@@ -40,6 +40,8 @@ import { registerConnectorRoutes } from "./routes/connectors";
 import { registerRunnerRoutes } from "./routes/runners";
 import { registerLinkRoutes } from "./routes/link";
 import { forwardedRoute, remoteRouting } from "../remote/routing";
+import { deviceRouting } from "../remote/deviceRouting";
+import { registerDeviceRoutes } from "./routes/devices";
 import { registerCloudRoutes } from "./routes/cloud";
 import { registerLicenseRoutes } from "./routes/license";
 
@@ -154,6 +156,8 @@ export function createApp() {
     if (path === "/api/health" || path.startsWith("/api/auth/") || path === "/api/mobile/pair") return next();
     return requireAuth(c, next);
   });
+  // A secondary of a device group shows its primary's Godmode: what isn't about this computer goes there.
+  app.use("/api/*", deviceRouting);
   // Requests about a chat that works on a runner (and the runner's screen) are answered by the runner.
   app.use("/api/*", remoteRouting);
 
@@ -185,6 +189,7 @@ export function createApp() {
   registerMobileRoutes(app);
   registerConnectorRoutes(app);
   registerRunnerRoutes(app);
+  registerDeviceRoutes(app);
   registerLinkRoutes(app);
   registerCloudRoutes(app);
   registerLicenseRoutes(app);

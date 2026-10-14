@@ -31,6 +31,8 @@ export interface WsData {
   android?: Map<string, "video" | "frames">;
   /** Phones whose video frames this client missed: it waits for the next keyframe. */
   androidNeedsKey?: Set<string>;
+  /** A computer at the other end of an encrypted link (remote/linkServer.ts): it always gets this computer's own events. */
+  link?: boolean;
 }
 
 /** Chats someone has open right now: they read what happens there, so it isn't unread and doesn't notify. */
@@ -58,6 +60,13 @@ export interface HubSocket {
 }
 
 const clients = new Set<HubSocket>();
+
+/** Who an event goes to while it is being delivered (null = every client). */
+let audienceFilter: ((ws: HubSocket) => boolean) | null = null;
+
+function* audience(): Generator<HubSocket> {
+  for (const ws of clients) if (!audienceFilter || audienceFilter(ws)) yield ws;
+}
 /** Live view subscribers per view (`browserView`: a profile's active tab, or one chat's tab). */
 const browserSubscribers = new Map<string, number>();
 const browserWatchers = new Map<string, number>();
@@ -124,6 +133,123 @@ export function setRemoteViewHandlers(handlers: {
   remoteComputer = handlers.computer;
 }
 
+/**
+ * A secondary of a device group whose primary is connected: its windows show the primary's Godmode (remote/devices.ts).
+ * They get the primary's events instead of this computer's — except what is about this computer itself (its screens,
+ * phones, VMs, the browser tabs of chats that live here) — and their live views of other chats go to the primary.
+ */
+export interface ForwardingHooks {
+  active(): boolean;
+  /** A browser view of a chat that lives on this computer (or of no chat) is watched here. */
+  localBrowser(ref: BrowserViewRef): boolean;
+  browser(ref: BrowserViewRef, subscribed: boolean, passive: boolean): void;
+  computer(view: string, subscribed: boolean): void;
+  /** Which chat a window shows, and a run a window needs whole again: told to the primary. */
+  send(event: ClientEvent): void;
+  /** What a new window needs from the primary to show what works right now. */
+  welcome(): Promise<{ activeRunIds: string[]; events: ServerEvent[] }>;
+}
+
+let forwarding: ForwardingHooks | null = null;
+
+export function setForwarding(hooks: ForwardingHooks | null) {
+  forwarding = hooks;
+}
+
+function forwarded(): boolean {
+  try {
+    return !!forwarding?.active();
+  } catch {
+    return false;
+  }
+}
+
+/** Entities that are about this computer itself: their changes are told here also while the primary is shown. */
+const LOCAL_ENTITIES = new Set(["vms", "android", "computer", "mobile", "cloud", "license", "system", "models", "devices"]);
+
+/** An event of this computer's own that its windows still get while they show the primary. */
+function ownEvent(event: ServerEvent): boolean {
+  switch (event.type) {
+    case "devices.updated":
+    case "android.video":
+    case "android.action":
+    case "vm.updated":
+    case "vm.deleted":
+      return true;
+    case "computer.frame":
+    case "computer.action":
+      return !event.view.startsWith("runner:");
+    case "browser.frame":
+      return !event.conversationId || !!forwarding?.localBrowser({ profileId: event.profileId, conversationId: event.conversationId });
+    case "entity.changed":
+      return LOCAL_ENTITIES.has(event.entity);
+    default:
+      return false;
+  }
+}
+
+/** One of the primary's events, for the windows of this secondary. */
+export function deliverForwarded(event: ServerEvent): void {
+  if (!forwarded() || event.type === "hello") return;
+  // Its own screens and phones are told by this computer.
+  if (event.type === "android.video" || event.type === "android.action" || event.type === "vm.updated" || event.type === "vm.deleted") return;
+  deliver(event, (ws) => !ws.data.link);
+}
+
+/** What the primary gives a secondary's new window (GET /api/link/devices/welcome): the same as a window of its own. */
+export function welcomeFor(): { activeRunIds: string[]; events: ServerEvent[] } {
+  const welcome = welcomeEvents();
+  const events: ServerEvent[] = [...welcome, ...snapshots({})];
+  for (const more of moreWelcomeEvents) {
+    try {
+      events.push(...more());
+    } catch (err) {
+      log.warn("welcome events failed", err);
+    }
+  }
+  return { activeRunIds: welcome.flatMap((e) => (e.type === "run.started" ? [e.run.id] : [])), events };
+}
+
+function welcomeLocal(ws: HubSocket) {
+  const welcome = welcomeEvents();
+  // The runs active right now: the app drops whatever else it still shows as live (they ended while it was away).
+  const activeRunIds = welcome.flatMap((e) => (e.type === "run.started" ? [e.run.id] : []));
+  send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
+  for (const event of welcome) send(ws, event);
+  // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
+  if (ws.data.auth !== "device") for (const event of snapshots({})) send(ws, event);
+  for (const more of moreWelcomeEvents) {
+    try {
+      for (const event of more()) send(ws, event);
+    } catch (err) {
+      log.warn("welcome events failed", err);
+    }
+  }
+}
+
+function welcomeForwarded(ws: HubSocket) {
+  void forwarding!
+    .welcome()
+    .then(({ activeRunIds, events }) => {
+      if (!clients.has(ws)) return;
+      send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
+      for (const event of events) if (event.type !== "run.delta" || ws.data.auth !== "device") send(ws, event);
+    })
+    .catch((err) => {
+      log.info("could not get the primary's welcome; showing this computer's", { error: err instanceof Error ? err.message : String(err) });
+      if (clients.has(ws)) welcomeLocal(ws);
+    });
+}
+
+/** Whose Godmode the windows show changed: every window starts over with what works there now. */
+export function welcomeAll(): void {
+  for (const ws of clients) {
+    if (ws.data.link) continue;
+    if (forwarded()) welcomeForwarded(ws);
+    else welcomeLocal(ws);
+  }
+}
+
 /** Hooks invoked when the first/last UI subscribes to a browser live view. */
 let onBrowserSubscribe: ((view: BrowserViewRef, subscribed: boolean) => void) | null = null;
 /** Hooks invoked when the first/last UI subscribes to a computer live view. */
@@ -170,7 +296,7 @@ function changeAndroidSubscription(ws: HubSocket, deviceId: string, mode: "video
 /** Video frames depend on the ones before: a client that missed one waits for a keyframe. */
 function sendAndroid(event: Extract<ServerEvent, { type: "android.video" | "android.action" }>) {
   const payload = JSON.stringify(event);
-  for (const ws of clients) {
+  for (const ws of audience()) {
     const mode = ws.data.android?.get(event.deviceId);
     if (!mode) continue;
     if (event.type === "android.video") {
@@ -259,14 +385,30 @@ function congested(ws: HubSocket): boolean {
 }
 
 bus.on((event) => {
+  // The windows show the primary's: this computer's own events still go to the computers linked to it.
+  if (forwarded() && !ownEvent(event)) deliver(event, (ws) => !!ws.data.link);
+  else deliver(event, null);
+});
+
+function deliver(event: ServerEvent, only: ((ws: HubSocket) => boolean) | null) {
+  const before = audienceFilter;
+  audienceFilter = only;
+  try {
+    deliverNow(event);
+  } finally {
+    audienceFilter = before;
+  }
+}
+
+function deliverNow(event: ServerEvent) {
   if (event.type === "browser.frame") {
     const key = `browser:${browserView(event.profileId, event.conversationId)}`;
-    for (const ws of clients) if (ws.data.subscriptions.has(key) && !congested(ws)) send(ws, event);
+    for (const ws of audience()) if (ws.data.subscriptions.has(key) && !congested(ws)) send(ws, event);
     return;
   }
   if (event.type === "computer.frame" || event.type === "computer.action") {
     const payload = JSON.stringify(event);
-    for (const ws of clients) {
+    for (const ws of audience()) {
       if (!ws.data.subscriptions.has(`computer:${event.view}`)) continue;
       if (event.type === "computer.frame" && congested(ws)) continue;
       try {
@@ -282,14 +424,14 @@ bus.on((event) => {
   if (event.type === "message.created" || event.type === "message.updated") return sendMessage(event);
   if (event.type === "run.finished" || event.type === "run.paused") forgetWhole(event.run.id);
   const payload = timedSync(`send ${event.type}`, () => JSON.stringify(event));
-  for (const ws of clients) {
+  for (const ws of audience()) {
     try {
       ws.send(payload);
     } catch {
       /* ignore */
     }
   }
-});
+}
 
 /** Streaming replies are frequent; phones only get them for the chats they have open. */
 function wantsDeltas(ws: HubSocket, conversationId: string): boolean {
@@ -342,7 +484,7 @@ function sendWhole(runId: string) {
 function sendDelta(event: RunDelta) {
   let payload: string | null = null;
   let others = false;
-  for (const ws of clients) {
+  for (const ws of audience()) {
     if (!wantsDeltas(ws, event.conversationId)) continue;
     // A delta that carries the whole list suits every client.
     if (!ws.data.patches && !event.blocks) {
@@ -366,7 +508,7 @@ function sendDelta(event: RunDelta) {
 function sendMessage(event: Extract<ServerEvent, { type: "message.created" | "message.updated" }>) {
   let full: string | null = null;
   let lite: string | null = null;
-  for (const ws of clients) {
+  for (const ws of audience()) {
     const device = ws.data.auth === "device";
     if (device && !ws.data.conversations?.has(event.message.conversationId)) continue;
     const payload = device
@@ -421,7 +563,8 @@ function changeSubscription(ws: HubSocket, ref: BrowserViewRef, subscribe: boole
   const count = bump(browserSubscribers, view, subscribe ? 1 : -1);
   if (!count && !browserWatchers.has(view)) browserViews.delete(view);
   if ((subscribe && count === 1) || (!subscribe && count === 0)) {
-    if (!remoteBrowser?.(ref, subscribe, passive)) onBrowserSubscribe?.(ref, subscribe);
+    if (forwarded() && ref.conversationId && !forwarding!.localBrowser(ref)) forwarding!.browser(ref, subscribe, passive);
+    else if (!remoteBrowser?.(ref, subscribe, passive)) onBrowserSubscribe?.(ref, subscribe);
   }
 }
 
@@ -443,7 +586,8 @@ function changeComputerSubscription(ws: HubSocket, view: string, subscribe: bool
   const count = bump(computerSubscribers, view, subscribe ? 1 : -1);
   if ((subscribe && count === 1) || (!subscribe && count === 0)) {
     // A runner's screen is never this computer's to capture, whether or not a runner handles it.
-    if (view.startsWith("runner:")) remoteComputer?.(view, subscribe);
+    if (view.startsWith("runner:") && forwarded()) forwarding!.computer(view, subscribe);
+    else if (view.startsWith("runner:")) remoteComputer?.(view, subscribe);
     else onComputerSubscribe?.(view, subscribe);
   }
 }
@@ -452,20 +596,8 @@ export const websocketHandler = {
   open(ws: HubSocket) {
     const wasOnline = ws.data.deviceId ? deviceOnline(ws.data.deviceId) : true;
     clients.add(ws);
-    const welcome = welcomeEvents();
-    // The runs active right now: the app drops whatever else it still shows as live (they ended while it was away).
-    const activeRunIds = welcome.flatMap((e) => (e.type === "run.started" ? [e.run.id] : []));
-    send(ws, { type: "hello", version: VERSION, serverTime: new Date().toISOString(), activeRunIds });
-    for (const event of welcome) send(ws, event);
-    // What runs have written so far: the stored message lags behind, and later deltas only say what changed.
-    if (ws.data.auth !== "device") for (const event of snapshots({})) send(ws, event);
-    for (const more of moreWelcomeEvents) {
-      try {
-        for (const event of more()) send(ws, event);
-      } catch (err) {
-        log.warn("welcome events failed", err);
-      }
-    }
+    if (forwarded() && !ws.data.link) welcomeForwarded(ws);
+    else welcomeLocal(ws);
     if (!wasOnline) bus.changed("mobile");
   },
   message(ws: HubSocket, raw: string | Buffer) {
@@ -510,6 +642,7 @@ export const websocketHandler = {
       case "conversation.view": {
         const id = typeof msg.conversationId === "string" && msg.conversationId.length <= 100 ? msg.conversationId : null;
         ws.data.viewing = id;
+        if (forwarded() && !ws.data.link) forwarding!.send({ type: "conversation.view", conversationId: id });
         if (id) {
           try {
             onView?.(id);
@@ -524,6 +657,10 @@ export const websocketHandler = {
         break;
       case "run.resync":
         if (typeof msg.runId !== "string" || msg.runId.length > 100) break;
+        if (forwarded() && !ws.data.link) {
+          forwarding!.send({ type: "run.resync", runId: msg.runId });
+          break;
+        }
         for (const event of snapshots({ runId: msg.runId })) if (wantsDeltas(ws, event.conversationId)) send(ws, event);
         break;
     }

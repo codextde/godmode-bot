@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -163,6 +163,8 @@ export function SystemMessage({ message }: { message: Message }) {
   if (call) return <CallMarker block={call} />;
   const retry = message.blocks.find((b) => b.type === "retry");
   if (retry) return <RetryMarker block={retry} at={message.createdAt} />;
+  const moved = message.blocks.find((b) => b.type === "moved");
+  if (moved) return <MovedMarker block={moved} />;
   return (
     <div className="flex justify-center">
       <span className="max-w-[80%] rounded-md border bg-card px-3 py-1 text-center text-xs text-muted-foreground">{message.content}</span>
@@ -194,6 +196,26 @@ function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retr
           · {timeOf(at)}
         </time>
         {block.masked && <span>· saved secrets stay masked</span>}
+      </span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
+/** Where the chat went to another computer of the device group; `continued`: the run working then picks up there. */
+function MovedMarker({ block }: { block: Extract<MessageBlock, { type: "moved" }> }) {
+  return (
+    <div role="note" className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
+      <span className="h-px flex-1 bg-border" />
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        <ArrowRightLeft className="size-3 shrink-0" aria-hidden />
+        <span className="truncate">
+          Moved from <span className="font-medium text-foreground">{block.from}</span> to <span className="font-medium text-foreground">{block.to}</span>
+        </span>
+        <time dateTime={block.at} className="shrink-0 tabular-nums">
+          · {timeOf(block.at)}
+        </time>
+        {block.continued && <span className="shrink-0">· continued there</span>}
       </span>
       <span className="h-px flex-1 bg-border" />
     </div>

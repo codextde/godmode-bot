@@ -1687,6 +1687,63 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
 * **Removing a runner** tells it to forget this computer, fails its working runs and turns its chats into chats of this
   computer. Backups carry no runners, controllers or `link.*` meta, and restored chats lose their runner.
 
+## Device groups
+
+Several full Godmode apps on different computers that work as one (`packages/core/src/remote/devices.ts`, shared
+types in `packages/shared/src/devices.ts`). One computer is the **primary**: it holds what is shared — agents,
+workspaces, logins, settings, the task board, automations, My tasks, questions — and runs the schedules. Every other
+computer is a **secondary**. Each chat lives on one computer of the group and can move between them, also while it
+works. The use case: work on a laptop, hand the running work to the always-on Mac before the lid closes, open the lid
+and see everything it did.
+
+* **Built on runners.** A secondary and its primary are paired both ways with the runner link (pairing codes, pinned
+  keys, the encrypted channel): each has a `runners` row for the other with `kind = 'device'` (migration 95) and is a
+  controller of the other. Both listen on their link port (`startLinkServer` also in the desktop app once it is in a
+  group). Meta `link.group.role` (`primary` | `secondary`), `link.group.primary` (the primary's row on a secondary),
+  `link.group.self` (the secondary's id in the primary's list) and `link.group.defaultRunOn`; `link.*` meta stays out
+  of backups. `remote/group.ts` answers "what am I" without importing the links.
+* **Joining.** The primary (or a computer that becomes one with its first member) makes an invite: its runner pairing
+  code as `gmd1.…` (`POST /api/devices/invite`; a secondary asks its primary for one). The computer that joins pairs
+  with it (`kind: device`), becomes a secondary before its link starts, makes its own pairing code and sends it over
+  the link (`POST /api/link/devices/join`); the primary pairs back. Star topology: secondaries don't link to each other.
+  Leaving (`/api/devices/leave`) removes both pairings; the primary removing a device or leaving dissolves it.
+* **Primary → secondary** is a runner link with less: the setup copy (`snapshot.ts`, without VMs, which are machines of
+  the computer they were made on), memory merges, cookies, the mirror of the chats that live on the secondary
+  (`mirror.ts`, now also its questions and, for devices, a chat's folder and shared screen there), and forwarding of
+  what concerns them (`routing.ts`). No Godmode updates (each app updates itself) and no runner health checks. Only the
+  primary sends the setup; agents with the slug of a copied agent (each install's "godmode") hand their chats and runs
+  to the copy's agent when the first copy arrives.
+* **Secondary → primary** carries the app. While the primary is connected (`forwarding()`), `deviceRouting.ts` sends
+  every API request there except what is about this computer (doctor, computer, VMs, Android, folders, logs, phone
+  pairing, cloud, licence, voice, devices, a chat-less browser view). Settings are merged: `server`, `mobile`, `cloud`,
+  `diagnostics`, `maintenance`, `android`, `vm` and the program paths stay this computer's. A vault grant from the
+  primary is adopted locally. The hub (`server/ws.ts`, `setForwarding`) gives this computer's windows the primary's
+  events (`deliverForwarded`) and new windows the primary's welcome (`GET /api/link/devices/welcome`); this computer's
+  own events still go to the computers linked to it (`WsData.link`), and windows still get what is about this machine
+  (its screens, phones, VMs, the browser tab of a chat that lives here). Live views of other chats and `runner:` screens
+  subscribe through the primary. Nothing that arrives over a link is forwarded again.
+* **While the primary is away** a secondary answers from its own data: its chats work, the setup copy is read only,
+  and changes to what is shared are refused with `409 primary_offline`. The desktop shows a banner.
+* **Shared services** (scheduler, automations, app triggers, messaging, the board, heartbeats, dreaming, run notices,
+  calls) run on the primary only; `index.ts` stops them when a computer becomes a secondary and starts them again when
+  it leaves.
+* **Agents on a secondary** call the Godmode tools about shared things on the primary (`deviceTools.ts`,
+  `SHARED_TOOLS`, `POST /api/link/devices/tool` in the run's name: the primary has the run as a copy). A turn the core
+  starts by itself in a chat that lives elsewhere (a human task closes, a ticket answers a question) starts there
+  (`setRemoteSender` in `conversations.ts`, `POST /api/link/conversations/:id/send`); answers to mirrored questions go
+  to the computer where the run waits (`setRemoteAnswerer`).
+* **Moving a chat** (`POST /api/conversations/:id/move { to, force }`, done by the primary): a chat on another device is
+  first moved to the primary (`moveChatHere`, with its Claude session), then pushed to the target with its messages,
+  runs, session, transcript and follow-up (`POST /api/link/devices/adopt-chat`, `importChat`); the primary keeps a
+  mirror. With `force` a working or paused run is stopped first, queued messages are folded in, and the target starts a
+  turn that continues the work (`moved` marker block, `continued: true`). **Hand-off** (`POST /api/devices/handoff`)
+  moves every chat of a computer that works, stands still, has queued messages or a follow-up.
+* **New chats** start where this computer sends them by default (`defaultRunOn`: this Mac, another device, or
+  `"primary"`), picked otherwise in the composer's "Run on". A chat started for this Mac from a secondary keeps its
+  folder, shared screen, VM and phones: they are this computer's.
+* **Desktop:** Settings → Devices, the sidebar indicator, the offline banner, `lib/places.ts` (what "This Mac" means on
+  each computer), the "Run on" chip, the chat pill and the move dialog. The runners page lists runners only.
+
 ## Memory
 
 Default: file-based (`MEMORY.md` + `memory/` in the agent repo, committed to git). Optional:

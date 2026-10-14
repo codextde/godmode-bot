@@ -56,7 +56,7 @@ export function ConversationHeader({
   onVoiceMode?: () => void;
   browserToggle?: ReactNode;
   /** A runner's chat: move it to this computer, unless `blocked` says why not now. */
-  move?: { onSelect: () => void; blocked: string | null };
+  move?: { onSelect: () => void; blocked: string | null; label?: string };
 }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -238,7 +238,7 @@ export function ConversationHeader({
             </DropdownMenuItem>
             {move && (
               <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
-                <Laptop /> Move to {THIS_COMPUTER_INLINE}
+                <Laptop /> {move.label ?? `Move to ${THIS_COMPUTER_INLINE}`}
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />

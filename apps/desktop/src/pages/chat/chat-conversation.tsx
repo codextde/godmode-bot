@@ -31,7 +31,8 @@ import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
 import { PhonePanel, PhoneToggle, useChatPhones } from "@/components/android/phone-panel";
 import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
-import { MoveChatDialog, moveBlocker } from "@/components/runners/move-chat";
+import { MoveChatDialog } from "@/components/runners/move-chat";
+import { usePlaces, type Place } from "@/lib/places";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
@@ -102,11 +103,19 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const { setArchived } = useArchiveChat();
   // A chat that lives on a runner does its work there: this computer's folders, shared screens and VMs aren't part of
   // it, and nothing can be sent while the runner is away.
-  const onRunner = !!conv?.runnerId;
-  const { data: runners } = useRunners();
-  const runner = conv?.runnerId ? (runners?.find((r) => r.id === conv.runnerId) ?? null) : null;
-  const runnerAway = !!runner && runner.state !== "online";
+  // In a device group every chat works on one of its computers; "here" is the one this app runs on.
+  const { inGroup, hereId, places, placeOf } = usePlaces();
+  const onRunner = !!conv && (conv.runnerId ?? null) !== hereId;
+  const chatPlace = conv ? placeOf(conv.runnerId ?? null) : null;
+  const runner = onRunner ? (chatPlace?.runner ?? null) : null;
+  const runnerAway = onRunner && !!chatPlace && chatPlace.state !== "online";
   const [moving, setMoving] = useState(false);
+  const [moveTo, setMoveTo] = useState<Place | null>(null);
+  const moveTargets = useMemo(() => places.filter((p) => p.runnerId !== (conv?.runnerId ?? null) && p.state === "online"), [places, conv?.runnerId]);
+  const openMove = (to: Place | null) => {
+    setMoveTo(to);
+    setMoving(true);
+  };
   const computerTarget = onRunner ? null : (conv?.computerTarget ?? null);
   const computerPanel = useUi((s) => s.computerPanel);
   const setComputerPanel = useUi((s) => s.setComputerPanel);
@@ -142,8 +151,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
   // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
   const paused = (conv?.paused && conv.paused.runId !== activeRunId && conv.paused) || null;
-  // While the runner is away nothing is known to work there: the chat can always move then.
-  const moveBlocked = onRunner && !runnerAway && runner ? moveBlocker({ running: !!activeRunId || !!conv?.running, paused: !!paused }) : null;
+  // While the other computer is away nothing is known to work there; while a run works the move stops it and the agent continues.
+  const moveWorking = !runnerAway && (!!activeRunId || !!conv?.running || !!paused);
   const liveMood = useConversationMood(conversationId, messages, live);
   // The run waits for the human's answer to a question or an approval (the card in the thread asks it).
   const waiting = paused?.reason === "question" ? paused : null;
@@ -470,7 +479,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           agent={agent}
           mood={mood}
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
-          move={onRunner ? { onSelect: () => setMoving(true), blocked: moveBlocked } : undefined}
+          move={(onRunner || inGroup) && moveTargets.length ? { onSelect: () => openMove(onRunner ? (placeOf(hereId) ?? moveTargets[0]!) : moveTargets[0]!), blocked: null, label: onRunner ? undefined : "Move to another computer" } : undefined}
           browserToggle={
             chatVm ? (
               !showVmPanel && <VmToggle working={!!activeRunId} onClick={() => (wide ? setVmPanel(true) : setVmFocus(true))} />
@@ -497,7 +506,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           }
         />
 
-        <MoveChatDialog conversation={conv} runner={runner} agentName={agent?.name ?? "The agent"} open={moving} onOpenChange={setMoving} />
+        <MoveChatDialog
+          conversation={conv}
+          from={chatPlace}
+          targets={moveTargets}
+          initial={moveTo}
+          working={moveWorking}
+          agentName={agent?.name ?? "The agent"}
+          open={moving}
+          onOpenChange={setMoving}
+        />
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
@@ -571,7 +589,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} agentId={agent?.id} queued={queue.length} />
                   </motion.div>
                 )}
-                {runnerAway && (
+                {runnerAway && runner && (
                   <motion.div
                     key="runner-away"
                     initial={{ opacity: 0, height: 0 }}
@@ -580,7 +598,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <RunnerOfflineBar runner={runner} onMove={() => setMoving(true)} />
+                    <RunnerOfflineBar runner={runner} onMove={() => openMove(placeOf(hereId))} />
                   </motion.div>
                 )}
                 {conv.followup && (
@@ -596,7 +614,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   </motion.div>
                 )}
               </AnimatePresence>
-              {!conv.runnerId && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? "The agent"} />}
+              {(!conv.runnerId || inGroup) && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? "The agent"} />}
               <QueueTray
                 ref={queueRef}
                 conversationId={conversationId}
@@ -618,9 +636,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 onRecall={() => queueRef.current?.editLast() ?? false}
                 leading={
                   <>
-                    {onRunner ? (
-                      <RunnerPill runner={runner} onMove={() => setMoving(true)} blocked={moveBlocked} />
-                    ) : (
+                    {(onRunner || inGroup) && <RunnerPill place={chatPlace} targets={moveTargets} onMove={openMove} />}
+                    {!onRunner && (
                       <FolderChip
                         chatFolder={conv.workingDirectory}
                         agentFolder={agent?.workingDirectory ?? null}
@@ -688,10 +705,10 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 }
                 sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" || paused.reason === "budget" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
-                  runnerAway
-                    ? runner.state === "connecting"
-                      ? `Connecting to ${runner.name}…`
-                      : `${runner.name} ${runner.state === "offline" ? "is offline" : "needs an update"}`
+                  runnerAway && chatPlace
+                    ? chatPlace.state === "connecting"
+                      ? `Connecting to ${chatPlace.name}…`
+                      : `${chatPlace.name} ${chatPlace.state === "offline" ? "is offline" : "needs an update"}`
                     : !agent
                     ? "Message…"
                     : !agent.enabled

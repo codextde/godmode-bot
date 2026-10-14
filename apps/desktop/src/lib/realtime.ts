@@ -1,5 +1,5 @@
 import type { InvalidateQueryFilters, QueryClient } from "@tanstack/react-query";
-import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type EntityName, type Message, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
+import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type DeviceGroup, type EntityName, type Message, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { withPending } from "./pending-queue";
@@ -82,6 +82,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   connectors: [qk.connectors],
   // A runner was paired, removed, or its chats changed.
   runners: [qk.runners],
+  devices: [qk.devices],
   // Cloud link state, plan or billing changed (linking approved, link up or down, notice from the cloud).
   cloud: [qk.cloud, qk.cloudBilling],
   // Key added or removed, a new answer from the licence server, runs refused or allowed again.
@@ -386,6 +387,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "runner.updated":
       void upsertRunner(qc, event.runner);
+      if (event.runner.kind === "device") refreshSoon(qc, qk.devices);
       break;
     case "runner.deleted":
       qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => (Array.isArray(old) ? old.filter((r) => r.id !== event.id) : old));
@@ -395,7 +397,16 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "runner.paired":
       qc.invalidateQueries({ queryKey: qk.runners });
+      qc.invalidateQueries({ queryKey: qk.devices });
       break;
+    case "devices.updated": {
+      const before = qc.getQueryData<DeviceGroup>(qk.devices);
+      qc.setQueryData(qk.devices, event.group);
+      // A secondary shows its primary's Godmode while it is there, its own while it isn't: everything else changed too.
+      const showing = (g: DeviceGroup | undefined) => (g ? `${g.role}:${g.role === "secondary" && g.primaryOnline}` : null);
+      if (before && showing(before) !== showing(event.group)) void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "devices" });
+      break;
+    }
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) {
         if (key === qk.bootstrap) refreshSoon(qc, key);

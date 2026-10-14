@@ -202,6 +202,7 @@ describe("a fresh installation", () => {
       "created_at",
       "updated_at",
       "auto_update",
+      "kind",
     ]);
     expect(columns("link_controllers")).toEqual(["id", "name", "public_key", "last_seen_at", "last_address", "created_at"]);
     expect(columns("runner_memory")).toEqual(["runner_id", "agent_id", "digest", "snapshot", "updated_at"]);
