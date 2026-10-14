@@ -625,7 +625,7 @@ export function resumeContextPrefix(
     ? `\n\nYou scheduled a follow-up in this chat for ${describeNow(new Date(followup.dueAt))}: "${oneLine(followup.note, 300)}". If this message settles or changes that, move it with followup_schedule or remove it with followup_cancel.`
     : "";
   const waiting = humanTasks?.length
-    ? `\n\nStill open on the human's task list from this chat: ${humanTasks.map((t) => `H-${t.number} "${oneLine(t.title, 120)}"${t.status === "doing" ? " (they are on it)" : ""}`).join(", ")}. If this message settles one, take it back with human_task_cancel.`
+    ? `\n\nStill open on the human's task list from this chat: ${humanTasks.map((t) => `H-${t.number} "${oneLine(t.title, 120)}"${t.status === "doing" ? " (they are on it)" : t.status === "backlog" ? " (parked in their backlog)" : ""}`).join(", ")}. If this message settles one, take it back with human_task_cancel.`
     : "";
   return `<godmode-context>Current date/time: ${describeNow(now)}\n${where}${attached}${tools}${machine}${remote}${phones}${update}${memory}${pending}${waiting}</godmode-context>\n\n`;
 }

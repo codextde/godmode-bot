@@ -18,10 +18,11 @@ const createSchema = z.object({
   url: z.string().max(2000).nullable().optional(),
   priority: z.enum(["normal", "high"]).optional(),
   workspaceId: z.string().max(100).nullable().optional(),
+  status: z.enum(["backlog", "open"]).optional(),
 });
 
 const patchSchema = z.object({
-  status: z.enum(["open", "doing"]).optional(),
+  status: z.enum(["backlog", "open", "doing"]).optional(),
   beforeId: z.string().max(100).nullable().optional(),
   title: z.string().min(1).max(200).optional(),
   body: z.string().max(6000).optional(),

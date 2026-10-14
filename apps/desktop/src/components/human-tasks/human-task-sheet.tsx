@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
-import { ArrowUpRight, Check, CircleSlash, EllipsisVertical, Flag, MessagesSquare, Paperclip, Play, SendHorizontal, SquareKanban, Trash2, Undo2, X } from "lucide-react";
+import { ArrowUpRight, Check, CircleDashed, CircleSlash, EllipsisVertical, Flag, MessagesSquare, Paperclip, Play, SendHorizontal, SquareKanban, Trash2, Undo2, X } from "lucide-react";
 import type { Agent, HumanTask, HumanTaskCloseResult, HumanTaskPatch } from "@godmode/shared";
 import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
@@ -147,6 +147,11 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
                 </DropdownMenuItem>
               )}
               {active && (
+                <DropdownMenuItem onClick={() => update.mutate({ id: task.id, patch: { status: task.status === "backlog" ? "open" : "backlog" } })}>
+                  {task.status === "backlog" ? <Undo2 /> : <CircleDashed />} {task.status === "backlog" ? "Move to To do" : "Move to backlog"}
+                </DropdownMenuItem>
+              )}
+              {active && (
                 <DropdownMenuItem onClick={() => update.mutate({ id: task.id, patch: { priority: task.priority === "high" ? "normal" : "high" } })}>
                   <Flag /> {task.priority === "high" ? "Not urgent" : "Mark urgent"}
                 </DropdownMenuItem>
@@ -270,6 +275,7 @@ const BODY_HEADING: Record<HumanTask["kind"], string> = { task: "What to do", de
 function StatusPill({ task }: { task: HumanTask }) {
   const words = HUMAN_TASK_WORDS[task.kind];
   const meta: Record<HumanTask["status"], { label: string; className: string }> = {
+    backlog: { label: "Backlog", className: "bg-foreground/[0.04] text-muted-foreground" },
     open: { label: "To do", className: "bg-foreground/[0.06] text-foreground/80" },
     doing: { label: "Doing", className: "bg-brand-soft text-brand-strong" },
     done: { label: words.wasDone, className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },

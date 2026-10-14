@@ -510,7 +510,7 @@ export function noteHumanTask(
  */
 function waitingHumanTasks(conversationId: string): { number: number; title: string }[] {
   return all<{ number: number; title: string }>(
-    "SELECT number, title FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') AND question_id IS NULL AND from_answer = 0 ORDER BY number",
+    "SELECT number, title FROM human_tasks WHERE conversation_id = ? AND status IN ('backlog', 'open', 'doing') AND question_id IS NULL AND from_answer = 0 ORDER BY number",
     conversationId,
   );
 }

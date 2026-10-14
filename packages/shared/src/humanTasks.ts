@@ -7,22 +7,32 @@
  * Whatever else an agent needs from the human lands on the same board (`kind`): a question it asked (`ask_human`), a
  * step it wants an OK for (`request_approval`), and a decision it left open in the answer it finished with.
  *
+ * - `backlog`: the human parked it for later (still open for the agent, but not counted as waiting)
  * - `open`: waits for the human · `doing`: the human is on it · `done`: they did it (answered, approved)
  * - `declined`: they can't or won't (declined the step, dismissed the decision)
  * - `withdrawn`: the agent took it back, its chat is gone, or the run that asked was stopped.
  */
 import type { Attachment, ID, ISODate, QuestionOption } from "./models";
 
-export type HumanTaskStatus = "open" | "doing" | "done" | "declined" | "withdrawn";
+export type HumanTaskStatus = "backlog" | "open" | "doing" | "done" | "declined" | "withdrawn";
 export type HumanTaskPriority = "normal" | "high";
 /** `task`: something to do · `decision`: a question to answer · `approval`: one step to approve or decline. */
 export type HumanTaskKind = "task" | "decision" | "approval";
 
-export const HUMAN_TASK_ACTIVE: readonly HumanTaskStatus[] = ["open", "doing"];
+export const HUMAN_TASK_ACTIVE: readonly HumanTaskStatus[] = ["backlog", "open", "doing"];
 
+/** Not closed yet: in the backlog, to do or doing. The agent still waits for it. */
 export function isHumanTaskActive(t: Pick<HumanTask, "status">): boolean {
+  return HUMAN_TASK_ACTIVE.includes(t.status);
+}
+
+/** Waits for the human right now: to do or doing (a parked backlog task doesn't count). */
+export function isHumanTaskWaiting(t: Pick<HumanTask, "status">): boolean {
   return t.status === "open" || t.status === "doing";
 }
+
+/** Where the human can move an active task. */
+export type HumanTaskLane = "backlog" | "open" | "doing";
 
 export interface HumanTaskResponse {
   /** What the human wrote when they closed it ("" = nothing). Saved secrets masked. */
@@ -80,11 +90,13 @@ export interface HumanTaskInput {
   url?: string | null;
   priority?: HumanTaskPriority;
   workspaceId?: ID | null;
+  /** The human's own tasks: straight into the backlog instead of To do. */
+  status?: "backlog" | "open";
 }
 
-/** The human moves a task (to Doing, back to To do, within a column) or edits their own. */
+/** The human moves a task (to the backlog, To do, Doing, within a column) or edits their own. */
 export interface HumanTaskPatch {
-  status?: "open" | "doing";
+  status?: HumanTaskLane;
   /** Lands before this task in its column (null = at the end). */
   beforeId?: ID | null;
   title?: string;
