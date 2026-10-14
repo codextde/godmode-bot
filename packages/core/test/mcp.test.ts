@@ -1060,6 +1060,35 @@ describe("no privilege escalation through agent tools", () => {
     expect(getRoutine(existing.id)).toMatchObject({ prompt: "Daily report", fillOnly: false });
   });
 
+  test("an agent switches its own automations off and on, never another agent's", async () => {
+    const own = createRoutine({ agentId: worker.id, name: "Nightly ship", cron: "30 5 * * *", prompt: "Ship main", timezone: "UTC" });
+    const other = createRoutine({ agentId: revealer.id, name: "Not yours", cron: "0 8 * * *", prompt: "Daily report", timezone: "UTC" });
+    const listFor = async (a: Agent) => ((await rpc(tokens[a.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
+    expect(await listFor(worker)).toEqual(expect.arrayContaining(["my_routines", "my_routine_set_enabled"]));
+    expect(await listFor(manager)).not.toContain("my_routine_set_enabled");
+
+    const mine = JSON.parse((await call(tokens[worker.id]!, "my_routines")).content[0]!.text).automations;
+    expect(mine.map((r: { id: string }) => r.id)).toContain(own.id);
+    expect(mine.map((r: { id: string }) => r.id)).not.toContain(other.id);
+
+    const off = await call(tokens[worker.id]!, "my_routine_set_enabled", { routineId: own.id, enabled: false, reason: "Asked not to auto-update" });
+    expect(off.isError).toBeUndefined();
+    expect(getRoutine(own.id)).toMatchObject({ enabled: false, prompt: "Ship main", fillOnly: false });
+    const on = await call(tokens[worker.id]!, "my_routine_set_enabled", { routineId: own.id, enabled: true });
+    expect(on.isError).toBeUndefined();
+    expect(getRoutine(own.id).enabled).toBe(true);
+
+    await Bun.sleep(5);
+    updateRoutine(own.id, { enabled: false });
+    const humanPaused = await call(tokens[worker.id]!, "my_routine_set_enabled", { routineId: own.id, enabled: true });
+    expect(humanPaused.isError).toBe(true);
+    expect(getRoutine(own.id).enabled).toBe(false);
+
+    const foreign = await call(tokens[worker.id]!, "my_routine_set_enabled", { routineId: other.id, enabled: false });
+    expect(foreign.isError).toBe(true);
+    expect(getRoutine(other.id).enabled).toBe(true);
+  });
+
   test("orchestrators respect delegateTo and never reach other workspaces' reveal agents", async () => {
     const limited = await makeAgent({ name: "Limited Boss", permissions: { canManageAgents: true, delegateTo: [worker.id] } });
     const ws = createWorkspace({ name: "Other WS" });
