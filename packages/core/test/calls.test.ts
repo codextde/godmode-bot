@@ -408,6 +408,16 @@ describe("placing a call", () => {
     expect(c.transcript).toHaveLength(1);
     const unfilled = parseConversation({ conversation_id: "x", status: "done", transcript: [{ role: "agent", message: null, tool_results: [{ tool_name: "voicemail_detection", result: { voicemail_message: "{{voicemail_message}}" } }] }] });
     expect(unfilled.voicemailLeft).toBe("");
+    const said = parseConversation({
+      conversation_id: "y",
+      status: "done",
+      transcript: [
+        { role: "agent", message: "Hallo, hier ist ein Test.  Die Wäsche ist fertig.", time_in_call_secs: 3 },
+        { role: "agent", message: null, time_in_call_secs: 3, tool_results: [{ tool_name: "voicemail_detection", result_value: '{"voicemail_message":"Hallo, hier ist ein Test. Die Wäsche ist fertig."}' }] },
+      ],
+    });
+    expect(said.voicemailLeft).toBe("Hallo, hier ist ein Test. Die Wäsche ist fertig.");
+    expect(said.transcript).toHaveLength(1);
     const placed = await placeCall({ to: "+4930446", goal: "x", purpose: "task" });
     fakeCall(placed.providerCallId!, "done", [["user", "Hinterlasse eine Nachricht nach dem Signalton."]], {}, { phone_call: { direction: "outbound", external_number: "+4930446", call_result: "voicemail" } });
     await tick();

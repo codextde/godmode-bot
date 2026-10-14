@@ -390,7 +390,8 @@ export function parseConversation(c: ConversationJson): ProviderCall {
     }
   }
   // The tool plays the message, so the transcript may not show it as said.
-  if (voicemailLeft && !transcript.some((t) => t.speaker === "agent" && t.text === voicemailLeft)) transcript.push({ speaker: "agent", text: voicemailLeft, at: leftAt });
+  const plain = (text: string) => text.replace(/\s+/g, " ").trim();
+  if (voicemailLeft && !transcript.some((t) => t.speaker === "agent" && plain(t.text) === plain(voicemailLeft))) transcript.push({ speaker: "agent", text: voicemailLeft, at: leftAt });
   return {
     id: c.conversation_id,
     status: c.status,
