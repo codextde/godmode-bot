@@ -145,7 +145,7 @@ import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, 
 import { describeNow } from "../runner/prompt";
 import { zaiKey } from "../runner/claude";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
-import { continueCutOffRun, latestContinuation, offlineRetryAt } from "../services/resume";
+import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
 import { callOwnerWhenAsked, callsEnabled, getCall, listCalls, ownerCallRefusal, placeCall } from "../calls/calls";
 import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
@@ -3351,8 +3351,11 @@ function delegationReport(agentName: string, r: Run): ToolOutput {
       : "";
     return `${agentName} finished the task ${ids}:\n\n${r.result ?? "(no answer)"}${noted}`;
   }
-  const retryAt = r.status === "failed" ? offlineRetryAt(r.id) : null;
-  if (retryAt) return `${agentName}'s connection to Claude dropped ${ids}. Godmode continues the work by itself around ${retryAt}; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;
+  const retry = r.status === "failed" ? autoRetryOf(r.id) : null;
+  if (retry) {
+    const what = retry.cause === "offline" ? `${agentName}'s connection to Claude dropped` : `${agentName}'s turn stopped with an error (${r.error})`;
+    return `${what} ${ids}. Godmode continues the work by itself around ${retry.at}; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;
+  }
   if (r.status === "failed") return fail(`${agentName} failed ${ids}: ${r.error ?? "unknown error"}${r.result ? `\n\n${r.result}` : ""}`);
   if (r.status === "cancelled") return fail(`The task for ${agentName} was cancelled ${ids}${r.error ? `: ${r.error}` : ""}.`);
   if (r.status === "paused") return `${agentName}'s work on the task is paused ${ids} — by the human, or until Claude's usage limit resets. It continues where it stopped; don't hand the task over again. Check later with delegation_status({ runId: "${r.id}" }).`;

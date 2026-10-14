@@ -28,7 +28,7 @@ import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
 import { awaySummary } from "../../services/away";
 import { retryRun } from "../../services/retries";
-import { offlineRetryAt } from "../../services/resume";
+import { autoRetryOf } from "../../services/resume";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
@@ -283,7 +283,8 @@ export function registerChatRoutes(app: Hono): void {
 
   app.get("/api/runs/:id", (c) => {
     const run = getRun(c.req.param("id"));
-    return c.json({ ...run, logPath: findRunLog(run), retryAt: offlineRetryAt(run.id) });
+    const retry = autoRetryOf(run.id);
+    return c.json({ ...run, logPath: findRunLog(run), retryAt: retry?.at ?? null, retryCause: retry?.cause ?? null });
   });
 
   app.post("/api/runs/:id/cancel", async (c) => {

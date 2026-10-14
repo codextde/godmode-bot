@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { arch, platform } from "node:os";
 import { join } from "node:path";
-import type { Agent, ComputerTarget, PauseReason, QuestionKind, Settings, RunEnd, RunTrigger } from "@godmode/shared";
+import type { Agent, ComputerTarget, PauseReason, QuestionKind, RetryCause, Settings, RunEnd, RunTrigger } from "@godmode/shared";
 import { computerTargetLabel, memoryBudget, withinReach } from "@godmode/shared";
 import type { PromptMemory } from "../memory/files";
 import type { RunSource } from "../services/workspaceSources";
@@ -799,11 +799,11 @@ function answerGoesTo(startedBy: RunTrigger): string {
   return who ? `That turn was started by ${who}; your answer goes where it would have gone.` : "";
 }
 
-/** What cut a turn off: Godmode stopping, or Claude's API out of reach (no internet, DNS down). */
-export type CutOffCause = "restart" | "offline";
+/** What cut a turn off: Godmode stopping, Claude's API out of reach (no internet, DNS down), or Claude Code failing on its own. */
+export type CutOffCause = RetryCause;
 
 /** The note a turn gets that Godmode continues by itself after a restart or a lost connection cut it off (`continue`). */
-export function restartContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; handoffs: CutOffHandoff[]; cause?: CutOffCause }): string {
+export function restartContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; handoffs: CutOffHandoff[]; cause?: CutOffCause; error?: string }): string {
   const human = opts.userName.trim() || "the user";
   const goesTo = answerGoesTo(opts.startedBy);
   const handoffs = opts.handoffs.length
@@ -815,6 +815,8 @@ export function restartContext(opts: { userName: string; endedAt: string; starte
   const what =
     opts.cause === "offline"
       ? `Your last turn in this chat broke off on ${when} because Claude's API couldn't be reached (no internet connection). The connection is back and Godmode continues the turn by itself — this is not a new task.`
+      : opts.cause === "error"
+      ? `Your last turn in this chat broke off on ${when} because Claude Code stopped with an error${opts.error ? ` (${opts.error})` : ""}. Godmode continues the turn by itself — this is not a new task.`
       : `Godmode restarted on ${when} while you were working on your last turn in this chat, and now continues it by itself — this is not a new task.`;
   return `<godmode-continue>
 ${what}${goesTo ? ` ${goesTo}` : ""}
@@ -826,8 +828,14 @@ Then finish the task and end with your answer${opts.startedBy === "delegation" ?
 /** Put in front of a prompt that Godmode sends again by itself: a restart or a lost connection came before the turn got it (`again`). */
 export function restartAgainNote(opts: { endedAt: string; cause?: CutOffCause }): string {
   const when = describeNow(new Date(opts.endedAt));
+  const why =
+    opts.cause === "offline"
+      ? `Claude's API couldn't be reached on ${when} (no internet connection) before you got this turn`
+      : opts.cause === "error"
+      ? `Claude Code stopped with an error on ${when} before you got this turn`
+      : `Godmode restarted on ${when} before you got this turn`;
   return `<godmode-context>
-${opts.cause === "offline" ? `Claude's API couldn't be reached on ${when} (no internet connection) before you got this turn, so it is sent again now.` : `Godmode restarted on ${when} before you got this turn, so it is sent again now.`}
+${why}, so it is sent again now.
 </godmode-context>
 
 `;
