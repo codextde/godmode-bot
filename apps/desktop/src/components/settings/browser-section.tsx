@@ -4,6 +4,7 @@ import type { Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { BotCheck } from "./bot-check";
+import { CaptchaSolving } from "./captcha-solving";
 import { CommitInput, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 export function BrowserSection({ settings }: { settings: Settings }) {
@@ -96,11 +97,13 @@ export function BrowserSection({ settings }: { settings: Settings }) {
         <BotCheck browser={b} />
       </SettingsGroup>
 
+      <CaptchaSolving browser={b} />
+
       <SettingsGroup title="Live view" icon={<Eye />}>
         <SettingRow
           label="Stream live view"
           htmlFor="live-view"
-          description="Watch what agents do in real time and take over to solve CAPTCHAs or log in manually. Frames are only sent while you're watching."
+          description="Watch what agents do in real time and take over to solve a CAPTCHA or log in yourself. Frames are only sent while you're watching."
         >
           <Switch id="live-view" checked={b.liveView} onCheckedChange={(liveView) => patch({ browser: { liveView } })} />
         </SettingRow>

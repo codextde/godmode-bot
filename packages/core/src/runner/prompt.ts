@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { Agent, ComputerTarget, PauseReason, QuestionKind, RetryCause, Settings, RunEnd, RunTrigger } from "@godmode/shared";
 import { computerTargetLabel, memoryBudget, withinReach } from "@godmode/shared";
 import type { PromptMemory } from "../memory/files";
+import { captchaSolverReady } from "../browser/captcha";
 import type { RunSource } from "../services/workspaceSources";
 import type { PromptSshServer } from "../ssh/service";
 import type { PromptAndroidDevice } from "../android/service";
@@ -272,7 +273,11 @@ This run uses ${ctx.glm} on Z.ai, not Claude, for a task Claude couldn't do. It 
     const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
     const takeover = ctx.vm ? "on the VM's screen" : "in Godmode's live browser view";
     out.push(`### Browser
-Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).${
+Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. ${
+      captchaSolverReady(settings)
+        ? `If a CAPTCHA blocks you (reCAPTCHA, Cloudflare Turnstile, a picture with distorted text), call \`captcha_solve\`: ${human}'s solving service solves it and Godmode puts the answer into the page; never try to solve a CAPTCHA yourself. When it can't (hCaptcha, a "Just a moment" page, another kind of puzzle, the daily limit) or another human check blocks you, tell ${human} (they can take over ${takeover}).`
+        : `If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).`
+    }${
       ctx.browserCdpEnv
         ? ` The browser runs in the browser profile set for this chat, agent or workspace — only there do the logins work. A script that needs the browser itself (Playwright, puppeteer) connects to \`$${ctx.browserCdpEnv}\` (e.g. \`chromium.connectOverCDP(process.env.${ctx.browserCdpEnv})\`), the same profile and tabs as your browser tools. Never look for or connect to any other Chrome DevTools port: those are other profiles with other logins.${agent.browser.profileId ? "" : " If you need logins of your own, apart from the default profile, create your own empty profile with `browser_profile_create_own` (it applies from your next run)."}`
         : ""

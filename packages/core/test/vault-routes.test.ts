@@ -182,6 +182,9 @@ describe("app secret routes", () => {
       "elevenlabs_api_key",
       "composio_api_key",
       "browser_use_api_key",
+      "twocaptcha_api_key",
+      "capsolver_api_key",
+      "anticaptcha_api_key",
     ]);
     expect(initial.data.every((s) => !s.set && s.updatedAt === null)).toBe(true);
 

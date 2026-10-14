@@ -14,6 +14,7 @@ import {
 } from "../../browser/manager";
 import { dispatchInput, initLiveView } from "../../browser/screencast";
 import { installProfileUse, profileUseStatus, syncWithProfileUse } from "../../browser/profileUse";
+import { captchaStatus, solverBalance } from "../../browser/captcha";
 import { body, z } from "../validate";
 import { expectSlow } from "../../mcp/http";
 import { conversationExists } from "../../services/conversations";
@@ -98,6 +99,10 @@ export function registerBrowserRoutes(app: Hono): void {
     await dispatchInput(c.req.param("id"), event, conversationId ?? null);
     return c.json({ ok: true });
   });
+
+  app.get("/api/browser/captcha", (c) => c.json(captchaStatus()));
+
+  app.post("/api/browser/captcha/balance", async (c) => c.json({ balance: await solverBalance() }));
 
   app.get("/api/browser/profile-use", (c) => c.json(profileUseStatus()));
 

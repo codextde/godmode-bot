@@ -121,8 +121,9 @@ import {
   type CardField,
 } from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
-import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, resolveProfileForAgent } from "../browser/manager";
-import { currentVmPage, fillIntoVm } from "../vm/guest";
+import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
+import { SOLVERS, activeSolver, captchaSolverReady } from "../browser/captcha";
+import { currentVmPage, fillIntoVm, solveCaptchaInVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
@@ -1419,6 +1420,33 @@ const TOOLS: ToolDef[] = [
       return outcome === "paid"
         ? `Recorded: ${price} paid to ${p.merchant}${p.recurrence === "once" ? "" : ` (renews ${p.recurrence})`}. Mention it in your final summary.`
         : `Recorded as failed.${before.filledAt ? " The card was typed in, so the amount keeps counting toward the card's limits until the human confirms nothing was charged." : ""} Mention it in your final summary.`;
+    },
+  }),
+
+  defineTool({
+    name: "captcha_solve",
+    description:
+      "Solve the CAPTCHA that blocks you on your browser tab: Godmode finds it (reCAPTCHA v2/v3, Cloudflare Turnstile), has the human's CAPTCHA solving service solve it and puts the answer into the page — you never solve a CAPTCHA yourself. Call it when a CAPTCHA appears, then submit the form (the answer expires in about 2 minutes). For a picture with distorted text pass imageSelector (the image) and inputSelector (its text field). hCaptcha, Cloudflare \"Just a moment\" pages and puzzles of other kinds can't be solved this way: give the human a task (live view). Each call counts against a daily limit, so don't call it when no CAPTCHA is visible.",
+    schema: z.object({
+      kind: z.enum(["recaptcha_v2", "recaptcha_v3", "hcaptcha", "turnstile", "image"]).optional().describe("Only this kind; default: what is on the page"),
+      imageSelector: z.string().max(500).optional().describe("Image CAPTCHA: CSS selector of the picture"),
+      inputSelector: z.string().max(500).optional().describe("Image CAPTCHA: CSS selector of the field its text goes into"),
+      caseSensitive: z.boolean().optional().describe("Image CAPTCHA: upper and lower case matter"),
+      urlContains: z.string().max(500).optional().describe("Use your tab whose URL contains this, if you have several"),
+    }),
+    when: (agent, ctx) => agent.browser.enabled && !isCheckRun(ctx) && captchaSolverReady(),
+    run: async (args, { agent, ctx }) => {
+      if (!getSettings().browser.enabled) return fail("The browser is turned off in Settings.");
+      const vmId = vmOfRun(ctx.runId);
+      const result = vmId
+        ? await solveCaptchaInVm(vmId, args)
+        : await solveCaptchaInPage(runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id, { ...args, conversationId: ctx.conversationId });
+      const solver = result.solver ?? activeSolver();
+      audit(`agent:${agent.id}`, "captcha.solve", solver, { kind: result.kind ?? args.kind ?? null, site: hostnameOf(result.url) || null, ok: result.ok, runId: ctx.runId });
+      if (!result.ok && solver && /API key is wrong|no balance/.test(result.detail)) {
+        notify("warning", `CAPTCHA solving: ${SOLVERS[solver].label} needs you`, result.detail, "/settings/browser");
+      }
+      return result.ok ? result.detail : fail(result.detail);
     },
   }),
 

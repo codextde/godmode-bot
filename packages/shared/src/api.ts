@@ -7,6 +7,7 @@ import type {
   Agent,
   AgentBrowserConfig,
   AgentPermissions,
+  CaptchaSolver,
   AgentQuestion,
   Attachment,
   Conversation,
@@ -595,6 +596,22 @@ export interface ProfileUseStatus {
   lastSyncAt: string | null;
   /** Human-readable next step / state, e.g. how to install or that the API key is missing. */
   detail: string;
+}
+
+/** GET /api/browser/captcha — the CAPTCHA solver agents use. */
+export interface CaptchaStatus {
+  solver: CaptchaSolver;
+  /** The selected solver's API key is stored in the vault. */
+  hasApiKey: boolean;
+  /** Vault app secret that holds the selected solver's key, or null when the solver is off. */
+  secretKey: string | null;
+  solvedToday: number;
+  dailyLimit: number;
+}
+
+/** POST /api/browser/captcha/balance */
+export interface CaptchaBalance {
+  balance: number;
 }
 
 /** POST /api/browser/profile-use/sync */
