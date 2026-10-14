@@ -148,7 +148,10 @@ export interface AgentConfig {
   maxSeconds: number;
 }
 
-const systemTool = (name: string) => ({ name, description: "", params: { system_tool_type: name } });
+const systemTool = (name: string, params: Record<string, string> = {}) => ({ name, description: "", params: { system_tool_type: name, ...params } as Record<string, string> });
+
+/** Dynamic variable with what the voice leaves on a mailbox; empty (inbound calls) hangs up without a message. */
+export const VOICEMAIL_VARIABLE = "voicemail_message";
 
 export function agentBody(c: AgentConfig) {
   return {
@@ -158,11 +161,16 @@ export function agentBody(c: AgentConfig) {
       agent: {
         first_message: c.firstMessage,
         language: c.language,
+        dynamic_variables: { dynamic_variable_placeholders: { [VOICEMAIL_VARIABLE]: "" } },
         prompt: {
           prompt: c.prompt,
           llm: c.llm,
           temperature: 0.4,
-          built_in_tools: { end_call: systemTool("end_call"), voicemail_detection: systemTool("voicemail_detection"), play_keypad_touch_tone: systemTool("play_keypad_touch_tone") },
+          built_in_tools: {
+            end_call: systemTool("end_call"),
+            voicemail_detection: systemTool("voicemail_detection", { voicemail_message: `{{${VOICEMAIL_VARIABLE}}}` }),
+            play_keypad_touch_tone: systemTool("play_keypad_touch_tone"),
+          },
         },
       },
       tts: { model_id: TTS_MODEL, ...(c.voiceId ? { voice_id: c.voiceId } : {}) },
@@ -276,6 +284,8 @@ export interface OutboundCall {
   llm: string;
   voiceId: string;
   maxSeconds: number;
+  /** Said once when a mailbox answers, then the call ends. */
+  voicemail: string;
 }
 
 /** Starts the call; returns the ElevenLabs conversation it is read back from. */
@@ -292,6 +302,7 @@ export async function placeOutbound(c: OutboundCall): Promise<string> {
         ...(c.voiceId ? { tts: { voice_id: c.voiceId } } : {}),
         conversation: { max_duration_seconds: c.maxSeconds },
       },
+      dynamic_variables: { [VOICEMAIL_VARIABLE]: c.voicemail },
     },
   });
   if (!out?.success || !out.conversation_id) throw new HttpError(502, `The call couldn't be placed: ${out?.message || "no answer from ElevenLabs"}`, "calls_failed");
@@ -317,13 +328,21 @@ export interface ProviderCall {
   data: Record<string, string>;
   terminationReason: string;
   hasAudio: boolean;
+  /** What the voice left on a mailbox ("" = no message was left). */
+  voicemailLeft: string;
+}
+
+interface ToolResultJson {
+  tool_name?: string;
+  result_value?: string;
+  result?: { voicemail_message?: string | null } | null;
 }
 
 interface ConversationJson {
   conversation_id: string;
   status: ProviderStatus;
   has_audio?: boolean;
-  transcript?: { role: "user" | "agent"; message?: string | null; time_in_call_secs?: number }[];
+  transcript?: { role: "user" | "agent"; message?: string | null; time_in_call_secs?: number; tool_results?: ToolResultJson[] | null }[];
   metadata?: {
     start_time_unix_secs?: number;
     call_duration_secs?: number;
@@ -339,21 +358,47 @@ interface ConversationJson {
   } | null;
 }
 
+function leftMessage(r: ToolResultJson): string {
+  if (r.tool_name !== "voicemail_detection") return "";
+  let said = r.result?.voicemail_message;
+  if (said === undefined && r.result_value) {
+    try {
+      said = (JSON.parse(r.result_value) as { voicemail_message?: string | null }).voicemail_message;
+    } catch {
+      /* not JSON */
+    }
+  }
+  // An unfilled {{variable}} wasn't said.
+  return typeof said === "string" && !/^\{\{.*\}\}$/.test(said.trim()) ? said.trim() : "";
+}
+
 export function parseConversation(c: ConversationJson): ProviderCall {
   const data: Record<string, string> = {};
   for (const [k, v] of Object.entries(c.analysis?.data_collection_results ?? {})) {
     if (v?.value !== undefined && v.value !== null && String(v.value).trim()) data[k] = String(v.value).trim();
   }
   const ok = c.analysis?.call_successful;
+  const transcript: CallTurn[] = [];
+  let voicemailLeft = "";
+  let leftAt = 0;
+  for (const t of c.transcript ?? []) {
+    const at = t.time_in_call_secs ?? 0;
+    if (typeof t.message === "string" && t.message.trim()) transcript.push({ speaker: t.role === "agent" ? "agent" : "other", text: t.message.trim(), at });
+    for (const r of t.tool_results ?? []) {
+      const said = leftMessage(r);
+      if (said) [voicemailLeft, leftAt] = [said, at];
+    }
+  }
+  // The tool plays the message, so the transcript may not show it as said.
+  const plain = (text: string) => text.replace(/\s+/g, " ").trim();
+  if (voicemailLeft && !transcript.some((t) => t.speaker === "agent" && plain(t.text) === plain(voicemailLeft))) transcript.push({ speaker: "agent", text: voicemailLeft, at: leftAt });
   return {
     id: c.conversation_id,
     status: c.status,
     direction: c.metadata?.phone_call?.direction ?? null,
     externalNumber: c.metadata?.phone_call?.external_number ?? "",
     callResult: c.metadata?.phone_call?.call_result ?? null,
-    transcript: (c.transcript ?? [])
-      .filter((t) => typeof t.message === "string" && t.message.trim())
-      .map((t) => ({ speaker: t.role === "agent" ? "agent" : "other", text: t.message!.trim(), at: t.time_in_call_secs ?? 0 })),
+    transcript,
     durationSecs: c.metadata?.call_duration_secs ?? 0,
     startedAt: c.metadata?.start_time_unix_secs ?? 0,
     costUsd: typeof c.metadata?.cost_fiat === "number" ? c.metadata.cost_fiat : null,
@@ -363,6 +408,7 @@ export function parseConversation(c: ConversationJson): ProviderCall {
     data,
     terminationReason: c.metadata?.termination_reason ?? "",
     hasAudio: !!c.has_audio,
+    voicemailLeft,
   };
 }
 

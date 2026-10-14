@@ -10,6 +10,7 @@ const placeSchema = z.object({
   context: z.string().max(8000).optional(),
   contactName: z.string().max(120).optional(),
   language: z.string().regex(/^[a-z]{2,3}$/).optional(),
+  voicemail: z.string().max(1000).optional(),
 });
 
 const importSchema = z.object({

@@ -1465,7 +1465,7 @@ CREATE TABLE phone_calls (
   id TEXT PRIMARY KEY,
   direction TEXT NOT NULL,          -- outbound | inbound
   purpose TEXT NOT NULL,            -- task | question | inform | inbound
-  status TEXT NOT NULL,             -- calling | in_progress | processing | done | no_answer | failed
+  status TEXT NOT NULL,             -- calling | in_progress | processing | done | no_answer | voicemail | failed
   number TEXT NOT NULL DEFAULT '',
   contact_name TEXT NOT NULL DEFAULT '',
   goal TEXT NOT NULL DEFAULT '',
