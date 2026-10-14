@@ -92,7 +92,9 @@ const SELECT = `SELECT h.*, a.name AS agent_name, c.title AS conversation_title,
   LEFT JOIN conversations c ON c.id = h.conversation_id
   LEFT JOIN tasks t ON t.id = h.task_id`;
 
-const ACTIVE_SQL = "('open', 'doing')";
+const ACTIVE_SQL = "('backlog', 'open', 'doing')";
+
+const isActive = (status: string) => status === "backlog" || status === "open" || status === "doing";
 
 function toHumanTask(r: Row): HumanTask {
   const closed = r.status === "done" || r.status === "declined";
@@ -152,7 +154,7 @@ export function findHumanTask(ref: string): HumanTask {
   return toHumanTask(found);
 }
 
-/** `active` = open or doing; `closed` = done, declined or withdrawn (the latest ones). */
+/** `active` = in the backlog, open or doing; `closed` = done, declined or withdrawn (the latest ones). */
 export type HumanTaskFilter = "active" | "closed" | "all";
 
 export function listHumanTasks(opts: { status?: HumanTaskFilter; conversationId?: string; agentId?: string } = {}): HumanTask[] {
@@ -260,6 +262,7 @@ function add(fields: {
   taskId?: string | null;
   workspaceId?: string | null;
   createdAt?: string;
+  status?: "backlog" | "open";
 }): string {
   const id = newId("htk");
   const ts = now();
@@ -270,7 +273,7 @@ function add(fields: {
     body: fields.body,
     url: fields.url ?? null,
     priority: fields.priority === "high" ? "high" : "normal",
-    status: "open",
+    status: fields.status ?? "open",
     kind: fields.kind ?? "task",
     options: JSON.stringify(fields.options ?? []),
     question_id: fields.questionId ?? null,
@@ -280,7 +283,7 @@ function add(fields: {
     run_id: fields.runId ?? null,
     task_id: fields.taskId ?? null,
     workspace_id: fields.workspaceId ?? null,
-    position: topPosition("open"),
+    position: topPosition(fields.status ?? "open"),
     created_at: fields.createdAt ?? ts,
     updated_at: ts,
   });
@@ -330,7 +333,7 @@ export function createAgentHumanTask(origin: HumanTaskOrigin, input: HumanTaskIn
 export function createOwnHumanTask(input: HumanTaskInput): HumanTask {
   const title = redact(input.title ?? "").trim().slice(0, 200);
   if (!title) throw badRequest("Say what to do");
-  const id = add({ title, body: redact(input.body ?? "").slice(0, 6000), url: cleanUrl(input.url), priority: input.priority, workspaceId: input.workspaceId ?? null });
+  const id = add({ title, body: redact(input.body ?? "").slice(0, 6000), url: cleanUrl(input.url), priority: input.priority, workspaceId: input.workspaceId ?? null, status: input.status === "backlog" ? "backlog" : "open" });
   changed();
   return getHumanTask(id);
 }
@@ -540,7 +543,7 @@ function answerFromTicket(r: Row, input: HumanTaskCloseInput, by: Answerer): Hum
 
 export function updateHumanTask(id: string, patch: HumanTaskPatch): HumanTask {
   const r = requireRow(id);
-  const active = r.status === "open" || r.status === "doing";
+  const active = isActive(r.status);
   const sets: Record<string, string | number | null> = {};
   if (patch.status !== undefined || patch.beforeId !== undefined) {
     if (!active) throw conflict("This task is closed already");
@@ -548,6 +551,8 @@ export function updateHumanTask(id: string, patch: HumanTaskPatch): HumanTask {
     sets.status = status;
     sets.position = patch.beforeId === undefined && status !== r.status ? topPosition(status, id) : positionIn(status, patch.beforeId ?? null, id);
     if (status === "doing" && !r.started_at) sets.started_at = now();
+    // Parked for later: its notification no longer waits to be read.
+    if (status === "backlog" && r.status !== "backlog" && r.notification_id) markRead([r.notification_id]);
   }
   const own = !r.agent_id && !r.run_id;
   if (patch.title !== undefined || patch.body !== undefined || patch.url !== undefined) {
@@ -570,7 +575,7 @@ export function updateHumanTask(id: string, patch: HumanTaskPatch): HumanTask {
 
 export function deleteHumanTask(id: string): void {
   const r = requireRow(id);
-  if (r.question_id && (r.status === "open" || r.status === "doing")) throw badRequest("The agent stands still for this question. Answer it, or stop the agent in its chat.");
+  if (r.question_id && isActive(r.status)) throw badRequest("The agent stands still for this question. Answer it, or stop the agent in its chat.");
   sql("DELETE FROM human_tasks WHERE id = ?", id);
   if (r.notification_id) markRead([r.notification_id]);
   audit("user", "human_task.delete", id, { title: r.title });
@@ -588,7 +593,7 @@ export function deleteHumanTask(id: string): void {
  */
 export async function closeHumanTask(id: string, input: HumanTaskCloseInput, by: Answerer = { actor: "user", via: "app" }): Promise<HumanTaskCloseResult> {
   const r = requireRow(id);
-  if (r.status !== "open" && r.status !== "doing") throw conflict(r.status === "withdrawn" ? "The agent took this task back already." : "This task is closed already.");
+  if (!isActive(r.status)) throw conflict(r.status === "withdrawn" ? "The agent took this task back already." : "This task is closed already.");
   if (r.question_id) return answerFromTicket(r, input, by);
   const note = (input.note ?? "").trim().slice(0, 20_000);
   const files = input.attachments ?? [];
@@ -698,7 +703,7 @@ ${
 export function withdrawHumanTask(id: string, reason: string, by: { agentId: string }): HumanTask {
   const r = requireRow(id);
   if (r.agent_id !== by.agentId) throw badRequest(`${humanTaskRef(r)} isn't one you gave`);
-  if (r.status !== "open" && r.status !== "doing") throw conflict(`${humanTaskRef(r)} is ${r.status} already`);
+  if (!isActive(r.status)) throw conflict(`${humanTaskRef(r)} is ${r.status} already`);
   if (r.question_id) throw badRequest(`${humanTaskRef(r)} is your question to the human: it waits for their answer`);
   const why = clean(reason, 500) || null;
   withdraw(r, why);

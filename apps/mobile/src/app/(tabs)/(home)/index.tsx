@@ -37,7 +37,7 @@ export default function Home() {
   const projects = useProjectIndex();
   const openForYou = useOpenHumanTasks();
   // Scoped like the rest of Home: the workspace's tasks and the ones without a workspace.
-  const mine = { data: openForYou.data?.filter((t) => !workspaceId || !t.workspaceId || t.workspaceId === workspaceId) };
+  const mine = { data: openForYou.data?.filter((t) => t.status !== "backlog").filter((t) => !workspaceId || !t.workspaceId || t.workspaceId === workspaceId) };
   const recent = useQuery(chatListQuery(workspaceId));
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });

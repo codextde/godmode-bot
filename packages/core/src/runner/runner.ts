@@ -2279,7 +2279,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const memoryChanged = resuming && !dreaming && conv.memory_digest != null && conv.memory_digest !== memoryNow;
     const followup = get<{ dueAt: string; note: string }>("SELECT due_at AS dueAt, note FROM followups WHERE conversation_id = ?", job.conversationId);
     const humanTasks = all<{ number: number; title: string; status: string }>(
-      "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('open', 'doing') AND question_id IS NULL ORDER BY number",
+      "SELECT number, title, status FROM human_tasks WHERE conversation_id = ? AND status IN ('backlog', 'open', 'doing') AND question_id IS NULL ORDER BY number",
       job.conversationId,
     );
     // The human answered a question, but the run that took the answer broke off before Claude read it.

@@ -35,7 +35,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { isHumanTaskActive, modState, modUpdateAvailable } from "@godmode/shared";
+import { isHumanTaskWaiting, modState, modUpdateAvailable } from "@godmode/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
   // Counted from the list the board shows, so the two can't disagree (and the board is loaded before it is opened).
   const humanTasks = useHumanTasks();
-  const myTasks = humanTasks.data && !humanTasks.isError ? humanTasks.data.filter(isHumanTaskActive).length : attention?.todo;
+  const myTasks = humanTasks.data && !humanTasks.isError ? humanTasks.data.filter(isHumanTaskWaiting).length : attention?.todo;
   const { data: mods = [] } = useMods();
   // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;

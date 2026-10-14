@@ -17,6 +17,7 @@ import type {
   Conversation,
   HumanTask,
   HumanTaskCloseResult,
+  HumanTaskLane,
   ConversationWithMessages,
   MessagePage,
   MissingLogin,
@@ -548,7 +549,7 @@ export const api = {
     /** What agents handed over to the human: open and doing, or with `closed` the finished ones too. */
     list: (q: { status?: "active" | "closed" | "all"; conversationId?: string } = {}) => get<HumanTask[]>("/api/human-tasks", q),
     /** The human is on it (`doing`) or puts it back (`open`). */
-    move: (id: string, status: "open" | "doing") => patch<HumanTask>(`/api/human-tasks/${id}`, { status }),
+    move: (id: string, status: HumanTaskLane) => patch<HumanTask>(`/api/human-tasks/${id}`, { status }),
     /** Done or can't do it; the note goes to the agent and its chat continues. */
     close: (id: string, outcome: "done" | "declined", note?: string, optionId?: string) =>
       post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, { outcome, ...(note ? { note } : {}), ...(optionId ? { optionId } : {}) }),

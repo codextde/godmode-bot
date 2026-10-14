@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask, type HumanTaskLane } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { humanStatus } from "@/components/human-task-row";
 import { Icon } from "@/components/icon";
@@ -42,7 +42,7 @@ export default function HumanTaskSheet() {
     void queryClient.invalidateQueries({ queryKey: qk.tasks });
   };
   const move = useMutation({
-    mutationFn: (status: "open" | "doing") => api.humanTasks.move(id, status),
+    mutationFn: (status: HumanTaskLane) => api.humanTasks.move(id, status),
     onSuccess: settle,
     onError: (err) => Alert.alert("Couldn't move the task", errorText(err)),
   });
@@ -195,11 +195,11 @@ export default function HumanTaskSheet() {
           <Button title={words.done} icon="check" size="lg" loading={close.isPending && close.variables === "done"} disabled={busy || !ready} onPress={() => close.mutate("done")} />
           <Row style={{ gap: space.sm }}>
             <Button
-              title={task.status === "doing" ? "Back to To do" : decision || approval ? "Thinking about it" : "I'm on it"}
+              title={task.status === "open" ? (decision || approval ? "Thinking about it" : "I'm on it") : "Back to To do"}
               variant="secondary"
-              loading={move.isPending}
+              loading={move.isPending && move.variables !== "backlog"}
               disabled={busy}
-              onPress={() => move.mutate(task.status === "doing" ? "open" : "doing")}
+              onPress={() => move.mutate(task.status === "open" ? "doing" : "open")}
               style={{ flex: 1 }}
             />
             {decision && task.questionId ? null : (
@@ -213,6 +213,21 @@ export default function HumanTaskSheet() {
               />
             )}
           </Row>
+          {task.status !== "backlog" && (
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy}
+              onPress={() => {
+                tap();
+                move.mutate("backlog");
+              }}
+              style={({ pressed }) => [{ alignSelf: "center", paddingVertical: space.xs, paddingHorizontal: space.md }, pressed && { opacity: 0.5 }]}
+            >
+              <T variant="subhead" muted>
+                {move.isPending && move.variables === "backlog" ? "Moving…" : "Later: move to backlog"}
+              </T>
+            </Pressable>
+          )}
           {task.agentId ? (
             <T variant="footnote" muted style={{ textAlign: "center" }}>
               {task.questionId

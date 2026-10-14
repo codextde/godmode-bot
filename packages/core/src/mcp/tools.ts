@@ -1556,8 +1556,8 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "human_tasks_list",
     description:
-      "Tasks you gave the human (human_task_create) and whether they are still open, being worked on, done or declined, with their note. Also lists a decision (kind: decision) Godmode found open in one of your final answers and put on their list.",
-    schema: z.object({ status: z.enum(["active", "closed", "all"]).optional().describe("active (default) = open or being worked on") }),
+      "Tasks you gave the human (human_task_create) and whether they are still open, parked in their backlog (status backlog: they will get to it later, it still counts as open), being worked on, done or declined, with their note. Also lists a decision (kind: decision) Godmode found open in one of your final answers and put on their list.",
+    schema: z.object({ status: z.enum(["active", "closed", "all"]).optional().describe("active (default) = open, in their backlog or being worked on") }),
     when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
     run: ({ status }, { agent }) => {
       const tasks = listHumanTasks({ status: status ?? "active", agentId: isManager(agent) ? undefined : agent.id }).filter((t) => !t.questionId);

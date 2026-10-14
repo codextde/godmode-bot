@@ -17,6 +17,8 @@ export function openHumanTask(id: string, fromChat?: string | null) {
 export function humanStatus(task: Pick<HumanTask, "status" | "kind">): { label: string; tone: "neutral" | "brand" | "warning" | "danger" } {
   const words = HUMAN_TASK_WORDS[task.kind];
   switch (task.status) {
+    case "backlog":
+      return { label: "Backlog", tone: "neutral" };
     case "open":
       return { label: task.kind === "decision" ? "Decision" : task.kind === "approval" ? "Needs your OK" : "To do", tone: "warning" };
     case "doing":

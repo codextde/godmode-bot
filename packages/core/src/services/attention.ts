@@ -43,6 +43,8 @@ export function listAttention(): AttentionItem[] {
     // A ticket that stands for a question shows as the question.
     if (h.questionId) continue;
     if (h.taskId && !h.fromAnswer) waitingTickets.add(h.taskId);
+    // Parked in the backlog by the human: not something that needs them now.
+    if (h.status === "backlog") continue;
     items.push({
       id: `todo:${h.id}`,
       kind: "todo",
