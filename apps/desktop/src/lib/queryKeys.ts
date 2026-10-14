@@ -98,6 +98,7 @@ export const qk = {
   messagingChats: (id: string) => ["messaging", "chats", id],
   browserProfiles: ["browser-profiles"] as unknown[],
   botCheck: ["browser-bot-check"] as unknown[],
+  captcha: ["browser-captcha"] as unknown[],
   computer: ["computer"] as unknown[],
   computerStatus: ["computer", "status"] as unknown[],
   computerSources: ["computer", "sources"] as unknown[],

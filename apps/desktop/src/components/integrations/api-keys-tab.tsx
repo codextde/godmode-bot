@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import type { LucideIcon } from "lucide-react";
-import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
+import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, Puzzle, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,6 +71,11 @@ export const KNOWN_KEYS: KeyMeta[] = [
     link: { href: "https://cloud.browser-use.com", label: "cloud.browser-use.com" },
     placeholder: "bu_…",
   },
+  ...[
+    { key: "twocaptcha_api_key", label: "2Captcha API key", link: { href: "https://2captcha.com/enterpage", label: "2captcha.com" } },
+    { key: "capsolver_api_key", label: "CapSolver API key", link: { href: "https://dashboard.capsolver.com", label: "capsolver.com" }, placeholder: "CAP-…" },
+    { key: "anticaptcha_api_key", label: "Anti-Captcha API key", link: { href: "https://anti-captcha.com/clients/settings/apisetup", label: "anti-captcha.com" } },
+  ].map((k) => ({ ...k, description: "CAPTCHA solving for agents, when picked in Settings → Browser.", icon: Puzzle, optional: true })),
   {
     key: "composio_api_key",
     label: "Composio API key",
@@ -153,6 +158,7 @@ function KeyRow({ meta, state, onOpenComposio }: { meta: KeyMeta; state: SecretR
     void qc.invalidateQueries({ queryKey: qk.appSecrets });
     if (meta.key === "composio_api_key") void qc.invalidateQueries({ queryKey: qk.composio });
     if (meta.key === "browser_use_api_key") void qc.invalidateQueries({ queryKey: ["browser", "profile-use"] });
+    if (meta.key.endsWith("captcha_api_key") || meta.key === "capsolver_api_key") void qc.invalidateQueries({ queryKey: qk.captcha });
   };
 
   const save = useMutation({

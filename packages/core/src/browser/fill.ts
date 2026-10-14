@@ -437,7 +437,7 @@ function call<T>(ctx: FrameContext, fn: string, args: Record<string, unknown>): 
 }
 
 /** Sessions for out-of-process iframes of `session` (and theirs), via flattened auto-attach. */
-async function childFrameSessions(session: PageSession, depth = 0): Promise<PageSession[]> {
+export async function childFrameSessions(session: PageSession, depth = 0): Promise<PageSession[]> {
   const client: CdpClient = session.client;
   const sessions: PageSession[] = [];
   const off = client.on("Target.attachedToTarget", (params, parentSessionId) => {

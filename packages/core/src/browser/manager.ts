@@ -20,6 +20,7 @@ import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
+import { solveInBrowser, type SolveOptions, type SolveResult } from "./captcha";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { stealthArgs, stopProbes, windowedUserAgent } from "./stealth";
 import { botCheckReport } from "./botCheck";
@@ -816,6 +817,20 @@ export async function fillIntoPage(
       { client: rb.client, port: rb.port, ...(chat ? { chatPage: (urlContains?: string) => chatPage(rb, chat, urlContains) } : {}) },
       opts,
     );
+  } finally {
+    rb.lastUsedAt = Date.now();
+  }
+}
+
+/** Solve the CAPTCHA on the chat's page (without a chat: the active page) through the selected solving service. */
+export async function solveCaptchaInPage(profileId: string, opts: SolveOptions & { conversationId?: string }): Promise<SolveResult> {
+  requireRow(profileId);
+  const rb = getRunning(profileId);
+  if (!rb) return { ok: false, url: "", detail: "The browser is not running. Open the page with the browser tools first." };
+  rb.lastUsedAt = Date.now();
+  try {
+    const chat = opts.conversationId;
+    return await solveInBrowser({ client: rb.client, port: rb.port, ...(chat ? { chatPage: (urlContains?: string) => chatPage(rb, chat, urlContains) } : {}) }, opts);
   } finally {
     rb.lastUsedAt = Date.now();
   }

@@ -1,5 +1,5 @@
-import type { Effort } from "@godmode/shared";
-import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import type { CaptchaSolver, Effort } from "@godmode/shared";
+import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
@@ -68,6 +68,14 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;
   if (diagnostics !== undefined && (typeof diagnostics !== "object" || diagnostics === null || Array.isArray(diagnostics))) throw badRequest("Invalid log settings");
   if (diagnostics?.verbose !== undefined && typeof diagnostics.verbose !== "boolean") throw badRequest("diagnostics.verbose must be true or false");
+  const browser = patch.browser as { captchaSolver?: unknown; captchaDailyLimit?: unknown } | undefined;
+  if (browser?.captchaSolver !== undefined && !CAPTCHA_SOLVERS.includes(browser.captchaSolver as CaptchaSolver)) {
+    throw badRequest(`browser.captchaSolver must be one of ${CAPTCHA_SOLVERS.join(", ")}`);
+  }
+  const captchaLimit = browser?.captchaDailyLimit;
+  if (captchaLimit !== undefined && !(typeof captchaLimit === "number" && Number.isInteger(captchaLimit) && captchaLimit >= 0 && captchaLimit <= 10_000)) {
+    throw badRequest("The daily CAPTCHA limit must be a whole number between 0 and 10000");
+  }
   const vm = patch.vm as Record<string, unknown> | undefined;
   if (vm !== undefined) {
     if (typeof vm !== "object" || vm === null || Array.isArray(vm)) throw badRequest("Invalid virtual machine settings");

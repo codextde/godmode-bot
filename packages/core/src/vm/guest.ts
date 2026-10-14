@@ -23,6 +23,7 @@ import { BROWSER_USE_PYTHON, BROWSER_USE_SPEC, BROWSER_USE_VERSION, browserUseCo
 import { CdpClient, pickActivePage, probeCdp } from "../browser/cdp";
 import { findFreePort } from "../browser/chrome";
 import { fillIntoActivePage, fillPrecheck, type FillOptions, type FillResult } from "../browser/fill";
+import { solveInBrowser, type SolveOptions, type SolveResult } from "../browser/captcha";
 import { stealthArgs } from "../browser/stealth";
 import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION } from "../computer/cua";
 import { logger } from "../log";
@@ -520,6 +521,22 @@ export async function fillIntoVm(vmId: string, opts: FillOptions & { urlContains
   if (!browser) return { ok: false, url: "", detail: "The browser in the VM is not running. Open the login page with the browser tools first." };
   try {
     return await fillIntoActivePage(browser, opts);
+  } finally {
+    browser.client.close();
+  }
+}
+
+/** Solve the CAPTCHA on the page the VM's Chrome shows through the selected solving service. */
+export async function solveCaptchaInVm(vmId: string, opts: SolveOptions): Promise<SolveResult> {
+  let browser: Awaited<ReturnType<typeof guestBrowser>>;
+  try {
+    browser = await guestBrowser(vmId);
+  } catch (err) {
+    return { ok: false, url: "", detail: `Could not reach the browser in the VM: ${err instanceof Error ? err.message : String(err)}` };
+  }
+  if (!browser) return { ok: false, url: "", detail: "The browser in the VM is not running. Open the page with the browser tools first." };
+  try {
+    return await solveInBrowser(browser, opts);
   } finally {
     browser.client.close();
   }

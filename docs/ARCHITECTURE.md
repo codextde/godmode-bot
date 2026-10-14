@@ -796,6 +796,15 @@ whole list, at most once a second per run.
   detection does (pass / warn / fail per signal). A browser started just for the check (or for a session import) is
   *transient*: it's stopped again afterwards unless someone else got it meanwhile (`ensureBrowser` / `touchBrowser`
   claim it).
+* **CAPTCHA solving** (`browser/captcha.ts`, MCP tool `captcha_solve`, `GET /api/browser/captcha`, Settings → Browser): when
+  `browser.captchaSolver` names a service (2Captcha, CapSolver, Anti-Captcha; one createTask / getTaskResult JSON API,
+  task type names differ) and its key is a vault app secret, agents get `captcha_solve`. It finds reCAPTCHA v2/v3,
+  Turnstile, hCaptcha and Cloudflare challenge pages in the chat's tab and its out-of-process frames (main world, so the
+  page's `grecaptcha` / `turnstile` are reachable), sends site key + URL (or a screenshot of an image CAPTCHA, only an
+  img/canvas/svg up to 600x300) to the service and puts the token in: response fields, `data-callback` and
+  `___grecaptcha_cfg` callbacks, `execute()` / `getResponse()` answering with it. hCaptcha and challenge pages are
+  refused before anything is sent. `browser.captchaDailyLimit` caps solves per local day (meta `captcha.solved.<date>`,
+  counted right before a task is created). Both settings are the human's. The agent never sees the key or the token.
 * **Live view**: CDP `Page.startScreencast` frames streamed to subscribed UIs; the human can take over
   (click/type) e.g. to solve a CAPTCHA. A view shows the profile's active tab, or with `conversationId` the tab one chat
   works in (`browser.subscribe { profileId, conversationId }`, frames carry `conversationId`; navigate and input take

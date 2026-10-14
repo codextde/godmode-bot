@@ -13,6 +13,7 @@ import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
 import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../vault/passwordImport";
 import { audit } from "../../services/audit";
+import { CAPTCHA_SECRETS } from "../../browser/captcha";
 import { updateSettings } from "../../services/settings";
 import { clientIp as relayedClientIp, isRelayed, rateLimitLogin, resetLoginAttempts, setDashboardPassword, type CloudRelayEnv } from "../auth";
 import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
@@ -20,7 +21,7 @@ import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
 
 /** App-level secrets the UI always lists (set or not). */
-const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key"];
+const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key", ...CAPTCHA_SECRETS];
 const SECRET_KEY = /^[a-z0-9_]{2,64}$/;
 
 /**
