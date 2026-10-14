@@ -332,11 +332,30 @@ export interface PlaceCall {
   context?: string;
   contactName?: string;
   language?: string;
+  /** What the voice says when a mailbox answers; default: who called and that the owner gets back to them. */
+  voicemail?: string;
   purpose: Exclude<CallPurpose, "inbound">;
   agentId?: string | null;
   conversationId?: string | null;
   runId?: string | null;
   question?: AgentQuestion | null;
+}
+
+const VOICEMAIL_RULE =
+  "If a mailbox or answering machine picks up, let its greeting finish until the beep, then call voicemail_detection: it leaves the message prepared for this call and hangs up. Don't speak a message of your own.";
+
+/** The message left on a mailbox when the caller didn't write one: who called and that the owner gets back to them. */
+export function defaultVoicemail(c: { purpose: Exclude<CallPurpose, "inbound">; language: string; agentName: string }): string {
+  const owner = ownerName();
+  const first = owner.split(/\s+/)[0];
+  const de = c.language === "de";
+  if (c.purpose === "question") {
+    return de ? `Hi ${first}, hier ist Godmode. ${c.agentName} braucht eine Entscheidung von dir, die Frage wartet in der Godmode-App.` : `Hi ${first}, it's Godmode. ${c.agentName} needs a decision from you; the question waits in the Godmode app.`;
+  }
+  if (c.purpose === "inform") return de ? `Hi ${first}, hier ist Godmode mit Neuigkeiten von ${c.agentName}. Die Details stehen in der Godmode-App.` : `Hi ${first}, it's Godmode with news from ${c.agentName}. The details are in the Godmode app.`;
+  return de
+    ? `Guten Tag, hier ist das Büro von ${owner}. ${owner} meldet sich bald noch einmal bei Ihnen. Vielen Dank und auf Wiederhören.`
+    : `Hello, this is ${owner}'s office. ${owner} will get back to you soon. Thank you, goodbye.`;
 }
 
 function taskPrompt(c: { goal: string; context: string; contactName: string; number: string; language: string }): string {
@@ -363,7 +382,8 @@ ${c.contactName || "Unknown"} at ${c.number}.
 - Say you are calling as ${owner}'s assistant. Never claim to be ${owner}. If asked whether you are an AI or a computer, say honestly that you are ${owner}'s digital assistant.
 - Stick to the goal and the facts above. Never make up details (dates, times, prices, addresses, names, numbers, payment data). If you are asked something you don't know, say ${owner} will get back to them.
 - Don't agree to costs, contracts or anything beyond the goal unless the facts above clearly allow it. When several options are offered, choose within what the facts allow.
-- If you get an automated menu, use the keypad tones to reach a person. If you reach a voicemail, leave a short message with what you need and that ${owner} will call back, then end the call.
+- If you get an automated menu, use the keypad tones to reach a person.
+- ${VOICEMAIL_RULE}
 - Before you end, repeat what was agreed (date, time, name, price) and get it confirmed. Then say goodbye and end the call.
 - Now is ${describeNow()}.`;
 }
@@ -384,6 +404,7 @@ ${ask || `# Why you call\n${c.goal}\n${c.context ? `\n# Background\n${c.context}
 - ${owner} knows Godmode; get to the point at once. Short, natural sentences. No lists, no markdown, no emojis.
 - Speak ${languageName(settings().language)}, or the language ${owner} answers in.
 - ${c.purpose === "question" ? `Ask the question, answer their questions about it from what is written above, and get a clear answer. Repeat the answer in one sentence to confirm it.` : `Tell them the news. If they react with an instruction or a question for ${c.agentName}, repeat it to confirm.`} Never make things up.
+- ${VOICEMAIL_RULE}
 - If ${owner} can't talk now, say the ${c.purpose === "question" ? "question waits in the Godmode app" : "details are in the Godmode app"} and end the call.
 - Then say goodbye and end the call.`;
 }
@@ -420,6 +441,7 @@ export async function placeCall(input: PlaceCall): Promise<PhoneCall> {
   }
   const goal = redact(input.goal.trim()).slice(0, 2000);
   const context = redact((input.context ?? "").trim()).slice(0, 8000);
+  const voicemail = redact((input.voicemail ?? "").trim()).slice(0, 1000);
   if (!goal) throw badRequest("Say what the call is for");
   const language = (input.language || p.language || "en").toLowerCase().slice(0, 3);
   const contactName = (input.contactName ?? "").trim().slice(0, 120) || (isOwner ? ownerName() : "");
@@ -434,7 +456,7 @@ export async function placeCall(input: PlaceCall): Promise<PhoneCall> {
 
   placing++;
   try {
-    return await dial({ input, p, to, goal, context, language, contactName, agentName, isOwner });
+    return await dial({ input, p, to, goal, context, voicemail, language, contactName, agentName, isOwner });
   } finally {
     placing--;
   }
@@ -446,12 +468,14 @@ async function dial(a: {
   to: string;
   goal: string;
   context: string;
+  voicemail: string;
   language: string;
   contactName: string;
   agentName: string;
   isOwner: boolean;
 }): Promise<PhoneCall> {
   const { input, p, to, goal, context, language, contactName, agentName, isOwner } = a;
+  const voicemail = a.voicemail || defaultVoicemail({ purpose: input.purpose, language: isOwner ? p.language : language, agentName });
   const providerAgentId = await ensureProviderAgent();
   const numbers = await el.listNumbers(providerAgentId);
   const from = callerNumber(numbers, to, p.numberId);
@@ -495,6 +519,7 @@ async function dial(a: {
       llm: p.llm,
       voiceId: p.voiceId,
       maxSeconds: p.maxMinutes * 60,
+      voicemail,
     });
     sql("UPDATE phone_calls SET provider_call_id = ?, updated_at = ? WHERE id = ?", providerCallId, now(), id);
   } catch (err) {
@@ -556,6 +581,7 @@ function statusOf(c: el.ProviderCall): CallStatus {
   if (c.status === "in-progress") return "in_progress";
   if (c.status === "processing") return "processing";
   if (c.status === "failed") return c.transcript.some((t) => t.speaker === "other") ? "failed" : "no_answer";
+  if (c.voicemailLeft) return "voicemail";
   const unanswered = c.callResult && c.callResult !== "answered";
   if (unanswered || !c.transcript.some((t) => t.speaker === "other")) return "no_answer";
   return "done";
@@ -688,7 +714,9 @@ ${
 function statusWords(c: PhoneCall): string {
   switch (c.status) {
     case "no_answer":
-      return "Nobody picked up (or a voicemail answered).";
+      return "Nobody picked up (or a mailbox answered and no message was left).";
+    case "voicemail":
+      return "Nobody picked up; a mailbox answered and the voice left the message in the transcript.";
     case "failed":
       return `The call failed: ${c.error ?? "unknown reason"}.`;
     default:
