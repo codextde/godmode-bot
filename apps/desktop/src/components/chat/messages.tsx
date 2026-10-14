@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
-import type { Agent, Conversation, Message, MessageBlock } from "@godmode/shared";
+import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
 import { ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -170,13 +170,17 @@ export function SystemMessage({ message }: { message: Message }) {
   );
 }
 
-/** Where a turn that ended early was picked up: by the human, or by Godmode after it restarted. */
+const AUTO_LABELS: Record<RetryCause, Record<RetryMode, string>> = {
+  restart: { continue: "Continued after Godmode restarted", again: "Sent again after Godmode restarted" },
+  offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
+  error: { continue: "Continued after an error", again: "Sent again after an error" },
+};
+
+/** Where a turn that ended early was picked up: by the human, or by Godmode after a restart, a lost connection or an error. */
 function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retry" }>; at: string }) {
   const Icon = block.mode === "continue" ? Play : RotateCcw;
   const label = block.auto
-    ? block.mode === "continue"
-      ? "Continued after Godmode restarted"
-      : "Sent again after Godmode restarted"
+    ? AUTO_LABELS[block.cause ?? "restart"][block.mode]
     : block.mode === "continue"
       ? "Continued where it stopped"
       : "Tried again";

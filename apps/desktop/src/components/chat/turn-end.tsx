@@ -77,8 +77,9 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
 
   if (!run || (run.status !== "failed" && run.status !== "cancelled")) return null;
   if (run.trigger === "dream" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
-  // The connection to Claude dropped: Godmode continues by itself, a little later.
+  // The connection to Claude dropped, or Claude Code stopped with an error: Godmode continues by itself, a little later.
   const retryAt = run.retryAt ? new Date(run.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
+  const why = run.retryCause === "error" ? "Claude Code stopped with an error" : "The connection to Claude dropped";
 
   // A ticket's chat (also one whose ticket is archived) goes on from the ticket.
   if (conversation.origin === "task") {
@@ -102,7 +103,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     return (
       <Row>
         <span className="min-w-0">
-          {retryAt ? `The connection to Claude dropped — “${routine.name}” goes on by itself around ${retryAt}.` : `This was “${routine.name}” — run the automation again.`}
+          {retryAt ? `${why} — “${routine.name}” goes on by itself around ${retryAt}.` : `This was “${routine.name}” — run the automation again.`}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" disabled={runRoutine.isPending || !routine.enabled} aria-busy={runRoutine.isPending} onClick={() => runRoutine.mutate(routine)}>
@@ -166,7 +167,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
       {action(byHuman ? "ghost" : "outline")}
       <span className="min-w-0">
         {retryAt
-          ? `The connection to Claude dropped — ${name} picks it up by itself around ${retryAt}.`
+          ? `${why} — ${name} picks it up by itself around ${retryAt}.`
           : mode === "continue"
           ? byHuman
             ? `Changed your mind? ${name} picks up where you stopped it.`

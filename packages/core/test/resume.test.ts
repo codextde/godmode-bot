@@ -8,7 +8,7 @@ import { all, get, insert, run as sql, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
-import { brokeOffOffline, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, offlineRetryAt, resumeInterruptedWork } from "../src/services/resume";
+import { brokeOffOffline, brokeOffOnError, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, offlineRetryAt, resumeInterruptedWork } from "../src/services/resume";
 import { createRoutine } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
@@ -352,6 +352,39 @@ describe("continuing once Claude can be reached again", () => {
     expect(offlineRetryAt(fifth.id)).toBeNull();
     expect(await continueAfterOutage(online)).toBe(0);
   }, 60_000);
+
+  test("knows the errors Claude Code drops a turn with", () => {
+    expect(brokeOffOnError("Claude Code exited without a result")).toBe(true);
+    expect(brokeOffOnError("Claude Code exited with code 1")).toBe(true);
+    expect(brokeOffOnError('API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}')).toBe(true);
+    expect(brokeOffOnError("API Error: 529 Overloaded")).toBe(true);
+    expect(brokeOffOnError("API Error: 400 invalid_request_error")).toBe(false);
+    expect(brokeOffOnError("Timed out after 60 minutes")).toBe(false);
+    expect(brokeOffOnError(null)).toBe(false);
+  });
+
+  test("a turn Claude Code dropped goes on without waiting for the connection, three times at most", async () => {
+    const conv = chat(agent);
+    let last = cutOff(agent, conv, { status: "failed", error: "Claude Code exited without a result" });
+    expect(offlineRetryAt(last)).not.toBeNull();
+    for (const waitMin of [2, 5]) {
+      expect(await continueAfterOutage(offline)).toBe(1);
+      const run = next(conv, last)!;
+      expect(run.prompt).toContain("Claude Code stopped with an error");
+      expect(marker(run.id)).toMatchObject({ type: "retry", runId: last, auto: true, cause: "error" });
+      await waitForRun(run.id, 10_000);
+      sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", "Claude Code exited with code 1", now(), run.id);
+      last = run.id;
+      expect(await continueAfterOutage(offline)).toBe(0);
+      sql("UPDATE runs SET finished_at = ? WHERE id = ?", ago(waitMin * 60_000 + 1000), last);
+    }
+    expect(await continueAfterOutage(offline)).toBe(1);
+    const third = next(conv, last)!;
+    await waitForRun(third.id, 10_000);
+    sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", "Claude Code exited without a result", ago(HOUR), third.id);
+    expect(offlineRetryAt(third.id)).toBeNull();
+    expect(await continueAfterOutage(offline)).toBe(0);
+  }, 40_000);
 
   test("work handed over without waiting continues; work someone waited for is left to them", async () => {
     const parentChat = chat(agent);

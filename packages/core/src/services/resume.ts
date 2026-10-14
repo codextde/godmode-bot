@@ -5,7 +5,9 @@
  * their own (tasks/service.ts); dreams, condition checks and heartbeats simply come again.
  *
  * A turn that broke off because Claude's API couldn't be reached (no internet, DNS down, a dropped connection)
- * continues the same way once the API answers again, waiting a little longer after each try that broke off again.
+ * continues the same way once the API answers again, waiting a little longer after each try that broke off again. So
+ * does a turn Claude Code dropped on its own (it exited without a result, crashed, or Claude's API answered with a
+ * server error or "overloaded"), a few times at most.
  */
 import type { AutomationEventSource, MessageBlock, RetryMode, Run, RunTrigger } from "@godmode/shared";
 import { RUN_INTERRUPTED, RUN_SHUT_DOWN, retryModeOf } from "@godmode/shared";
@@ -38,14 +40,23 @@ const PLATFORMS = new Set(["slack", "telegram", "teams"]);
 /** Claude Code's answer when Claude's API couldn't be reached or the connection dropped, after its own retries. */
 const NO_CONNECTION =
   /^API Error: [^\n]*(Can't reach the API server|Unable to connect|Connection error|Connection dropped|Request timed out|socket hang up|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT)/i;
+/** Claude Code dropped the turn on its own, or Claude's API failed on its side: trying again usually helps. */
+const ERRORED =
+  /^(?:Claude Code exited (?:without a result|with code \d+)$|API Error: (?:5\d\d\b|[^\n]*(?:overloaded|Internal server error|"type":"api_error")))/i;
 const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine", "delegation"]);
 /** Minutes to wait before each try in a row: a connection that just dropped often drops again right away. */
 const OFFLINE_BACKOFF_MIN = [0, 2, 5, 15, 30];
+/** An error that comes back each time is no passing hiccup: fewer tries. */
+const ERROR_BACKOFF_MIN = [0, 2, 5];
 /** Broke off longer ago than this, the turn waits for someone to continue it. */
 const OFFLINE_MAX_AGE_MS = 12 * 3_600_000;
 const OFFLINE_CHECK_MS = 60_000;
 const PROBE_TIMEOUT_MS = 5_000;
-const LABELS: Record<CutOffCause, string> = { restart: "Continued after Godmode restarted", offline: "Continued once Claude could be reached again" };
+const LABELS: Record<CutOffCause, string> = {
+  restart: "Continued after Godmode restarted",
+  offline: "Continued once Claude could be reached again",
+  error: "Tried again after Claude Code stopped with an error",
+};
 
 interface RunRow {
   id: string;
@@ -206,7 +217,7 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string |
   const endedAt = r.finished_at ?? r.created_at;
   const prompt =
     mode === "continue"
-      ? restartContext({ userName: getSettings().general.userName, endedAt, startedBy: r.trigger, handoffs, cause })
+      ? restartContext({ userName: getSettings().general.userName, endedAt, startedBy: r.trigger, handoffs, cause, error: r.error ?? undefined })
       : restartAgainNote({ endedAt, cause }) + r.prompt;
   const masked = mode === "again" && /•{4,}/.test(r.prompt);
   // The work it hands on waits for the turn that continues the one that handed it over.
@@ -214,7 +225,7 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string |
   const { run } = await sendMessage(r.conversation_id, {
     content: LABELS[cause],
     prompt,
-    marker: [{ type: "retry", mode, runId: r.id, at: now(), auto: true, ...(masked ? { masked: true } : {}) }],
+    marker: [{ type: "retry", mode, runId: r.id, at: now(), auto: true, cause, ...(masked ? { masked: true } : {}) }],
     trigger: r.trigger,
     routineId: r.routine_id,
     parentRunId,
@@ -302,34 +313,49 @@ function agentName(agentId: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Turns that broke off without a connection to Claude                  */
+/* Turns that broke off without a connection to Claude, or on an error  */
 /* ------------------------------------------------------------------ */
 
 export function brokeOffOffline(error: string | null | undefined): boolean {
   return !!error && NO_CONNECTION.test(error);
 }
 
-/** Turns that failed because Claude's API couldn't be reached and nothing went on in their chat since. */
+export function brokeOffOnError(error: string | null | undefined): boolean {
+  return !!error && ERRORED.test(error.trim());
+}
+
+/** Why Godmode tries a failed turn again by itself, or null when it doesn't. */
+function causeOf(error: string | null | undefined): "offline" | "error" | null {
+  return brokeOffOffline(error) ? "offline" : brokeOffOnError(error) ? "error" : null;
+}
+
+function backoffOf(r: RunRow): number[] {
+  return causeOf(r.error) === "offline" ? OFFLINE_BACKOFF_MIN : ERROR_BACKOFF_MIN;
+}
+
+/** Turns that failed because Claude's API couldn't be reached or Claude Code dropped them, and nothing went on in their chat since. */
 function offlineFailures(): RunRow[] {
   const since = new Date(Date.now() - OFFLINE_MAX_AGE_MS).toISOString();
   return all<RunRow>(
     `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
-     WHERE r.status = 'failed' AND r.error LIKE 'API Error:%' AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
+     WHERE r.status = 'failed' AND (r.error LIKE 'API Error:%' OR r.error LIKE 'Claude Code exited%')
+       AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
      ORDER BY r.created_at, r.rowid`,
     since,
   ).filter(continuesOffline);
 }
 
 function continuesOffline(r: RunRow): boolean {
+  const tries = backoffOf(r).length;
   return (
     OFFLINE_RESUMABLE.has(r.trigger) &&
-    brokeOffOffline(r.error) &&
+    !!causeOf(r.error) &&
     !taskForConversation(r.conversation_id) &&
     // Work handed over while the one who handed it over waited: that run got the failure and decides.
     (r.trigger !== "delegation" || handedOverWithoutWaiting(r)) &&
     // An automation that came round again meanwhile did the work already.
     !(r.trigger === "routine" && r.routine_id && get("SELECT 1 FROM runs WHERE routine_id = ? AND created_at > ? LIMIT 1", r.routine_id, r.created_at)) &&
-    continuedInARow(r, OFFLINE_BACKOFF_MIN.length) < OFFLINE_BACKOFF_MIN.length &&
+    continuedInARow(r, tries) < tries &&
     !blocked(r)
   );
 }
@@ -341,12 +367,13 @@ function handedOverWithoutWaiting(r: RunRow): boolean {
 }
 
 function retryDueAt(r: RunRow): number {
-  const delay = OFFLINE_BACKOFF_MIN[continuedInARow(r, OFFLINE_BACKOFF_MIN.length)] ?? 0;
+  const backoff = backoffOf(r);
+  const delay = backoff[continuedInARow(r, backoff.length)] ?? 0;
   return Date.parse(r.finished_at ?? r.created_at) + delay * 60_000;
 }
 
-/** When Godmode continues this turn by itself (it broke off without a connection to Claude), or null. */
-export function offlineRetryAt(runId: string): string | null {
+/** When and why Godmode continues this turn by itself (it broke off without a connection to Claude, or on an error), or null. */
+export function autoRetryOf(runId: string): { at: string; cause: "offline" | "error" } | null {
   if (!getSettings().runner.resumeAfterRestart) return null;
   const r = get<RunRow>(
     `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
@@ -356,7 +383,11 @@ export function offlineRetryAt(runId: string): string | null {
   );
   if (!r || !continuesOffline(r)) return null;
   // The next check after it is due.
-  return new Date(Math.max(retryDueAt(r), Date.now()) + OFFLINE_CHECK_MS).toISOString();
+  return { at: new Date(Math.max(retryDueAt(r), Date.now()) + OFFLINE_CHECK_MS).toISOString(), cause: causeOf(r.error)! };
+}
+
+export function offlineRetryAt(runId: string): string | null {
+  return autoRetryOf(runId)?.at ?? null;
 }
 
 /** Any answer from the API's host counts: only a connection that can't be made means it is still out of reach. */
@@ -371,11 +402,11 @@ async function apiReachable(): Promise<boolean> {
 
 let offlineTimer: ReturnType<typeof setInterval> | null = null;
 let stopListening: (() => void) | null = null;
-/** A turn may be waiting for the connection: set at the start and by every turn that broke off offline. */
+/** A turn may be waiting to go on: set at the start and by every turn that broke off offline or on an error. */
 let watching = false;
 let checking = false;
 
-/** Continue what broke off offline, once Claude's API answers again. Returns how many turns went on. */
+/** Continue what broke off offline once Claude's API answers again, and what Claude Code dropped. Returns how many turns went on. */
 export async function continueAfterOutage(probe: () => Promise<boolean> = apiReachable): Promise<number> {
   if (checking || !getSettings().runner.resumeAfterRestart) return 0;
   checking = true;
@@ -385,10 +416,13 @@ export async function continueAfterOutage(probe: () => Promise<boolean> = apiRea
       watching = false;
       return 0;
     }
-    const runs = failed.filter((r) => retryDueAt(r) <= Date.now());
-    if (!runs.length || !(await probe())) return 0;
-    const started = await continueAll(runs, false, "offline");
-    if (started.length) log.info(`continued ${started.length} run(s) that broke off without a connection to Claude`);
+    const due = failed.filter((r) => retryDueAt(r) <= Date.now());
+    if (!due.length) return 0;
+    const offline = due.filter((r) => causeOf(r.error) === "offline");
+    const errored = due.filter((r) => causeOf(r.error) === "error");
+    const started = [...(errored.length ? await continueAll(errored, false, "error") : [])];
+    if (offline.length && (await probe())) started.push(...(await continueAll(offline, false, "offline")));
+    if (started.length) log.info(`continued ${started.length} run(s) that broke off without a connection to Claude or on an error`);
     return started.length;
   } finally {
     checking = false;
@@ -399,10 +433,10 @@ export function startOutageRecovery(): void {
   if (offlineTimer) return;
   watching = true;
   stopListening = bus.on((e) => {
-    if (e.type === "run.finished" && e.run.status === "failed" && brokeOffOffline(e.run.error)) watching = true;
+    if (e.type === "run.finished" && e.run.status === "failed" && causeOf(e.run.error)) watching = true;
   });
   offlineTimer = setInterval(() => {
-    if (watching) void continueAfterOutage().catch((err) => log.warn("could not continue the work a lost connection cut off", err));
+    if (watching) void continueAfterOutage().catch((err) => log.warn("could not continue the work a lost connection or an error cut off", err));
   }, OFFLINE_CHECK_MS);
   offlineTimer.unref?.();
 }

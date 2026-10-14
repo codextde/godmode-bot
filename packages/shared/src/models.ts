@@ -437,6 +437,9 @@ export type PauseReason = "user" | "limit" | "question" | "budget";
 /** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
 export type RetryMode = "continue" | "again";
 
+/** What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, or Claude Code failing on its own. */
+export type RetryCause = "restart" | "offline" | "error";
+
 /** Whose monthly budget holds a run: the agent's own, or the whole team's. */
 export interface PauseBudget {
   scope: "agent" | "team";
@@ -601,7 +604,7 @@ export type MessageBlock =
    * A turn that ended early was picked up: `continue` where it stopped, or `again` from its prompt. By the human, or
    * (`auto`) by Godmode after it restarted in the middle of the turn.
    */
-  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean; auto?: boolean }
+  | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean; auto?: boolean; cause?: RetryCause }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
@@ -747,8 +750,10 @@ export interface Run {
   createdAt: ISODate;
   /** In run lists: why a paused run stands still (and until when). */
   pause?: RunPause | null;
-  /** On a single run: when Godmode continues it by itself (it broke off without a connection to Claude). */
+  /** On a single run: when Godmode continues it by itself (it broke off without a connection to Claude, or on an error). */
   retryAt?: ISODate | null;
+  /** Why it continues by itself at `retryAt`. */
+  retryCause?: RetryCause | null;
 }
 
 /* ------------------------------------------------------------------ */

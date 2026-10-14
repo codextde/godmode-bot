@@ -162,7 +162,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
       return (
         <Marker
           icon="refresh"
-          text={block.auto ? "Picked up again after a restart" : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
+          text={block.auto ? (block.cause === "error" ? "Picked up again after an error" : block.cause === "offline" ? "Picked up again once Claude was reachable" : "Picked up again after a restart") : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
           at={block.at}
         />
       );
