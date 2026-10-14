@@ -399,6 +399,8 @@ const GODMODE_TOOLS = new Set([
   "routine_create",
   "routine_update",
   "routine_delete",
+  "my_routines",
+  "my_routine_set_enabled",
   "automation_triggers_list",
   "automation_events_list",
   "automation_check_result",
@@ -526,6 +528,10 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: Workflow, title: "Updated an automation", detail: automationDetail(input) };
     case "routine_delete":
       return { kind: "agents", icon: Trash2, title: "Deleted an automation" };
+    case "my_routines":
+      return { kind: "agents", icon: Workflow, title: "Looked at its automations" };
+    case "my_routine_set_enabled":
+      return { kind: "agents", icon: Workflow, title: input.enabled === false ? "Paused one of its automations" : "Switched one of its automations on", detail: truncate(str(input.reason), 120) || undefined };
     case "automation_triggers_list":
       return { kind: "agents", icon: Workflow, title: "Looked up app events it can react to" };
     case "automation_events_list":
