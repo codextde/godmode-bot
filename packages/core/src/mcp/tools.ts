@@ -450,6 +450,16 @@ function automationSecrets(caller: Agent, ctx: RunContext, target: Agent, what: 
   return { fillOnly: true };
 }
 
+/** The agent paused this automation itself and nobody changed it since: switching it back on undoes only its own step. */
+function pausedItself(agentId: string, r: Routine): boolean {
+  const pause = get<{ details: string }>(
+    "SELECT details FROM audit_log WHERE actor = ? AND action = 'routine.pause' AND target = ? ORDER BY ts DESC LIMIT 1",
+    `agent:${agentId}`,
+    r.id,
+  );
+  return !!pause && (JSON.parse(pause.details) as { updatedAt?: string }).updatedAt === r.updatedAt;
+}
+
 const fillOnlyNote = (target: Agent) =>
   `${target.name} may read secrets in plain text and you can't from here, so this automation runs without them: logins and 2FA codes are still filled into pages, vault_get_login / vault_get_totp are off in its runs. Only the human can lift that (Automations → this automation).`;
 
@@ -2362,6 +2372,47 @@ const TOOLS: ToolDef[] = [
       deleteRoutine(routineId);
       audit(`agent:${agent.id}`, "routine.delete", routineId, {});
       return "Automation deleted.";
+    },
+  }),
+
+  defineTool({
+    name: "my_routines",
+    description: "Your own automations (routines): what starts each one, whether it is on, when it ran last and runs next.",
+    schema: z.object({}),
+    when: (a) => !managesSetup(a) && config().role !== "runner",
+    run: (_args, { agent }) => json({ automations: listRoutines({ agentId: agent.id }).map((r) => routineSummary(r, 300)) }),
+  }),
+
+  defineTool({
+    name: "my_routine_set_enabled",
+    description:
+      "Switch one of your own automations off (enabled false), e.g. when the human asked you to stop doing something on a schedule, or back on when you paused it yourself. It keeps its trigger and prompt; the human sees it paused under Automations. Say why in `reason`.",
+    schema: z.object({
+      routineId: z.string(),
+      enabled: z.boolean(),
+      reason: z.string().max(500).optional(),
+    }),
+    when: (a) => !managesSetup(a) && config().role !== "runner",
+    run: ({ routineId, enabled, reason }, { agent, ctx }) => {
+      const current = listRoutines({ agentId: agent.id }).find((r) => r.id === routineId);
+      if (!current) return fail(`${routineId} is not one of your automations (my_routines lists them). Only the human can change another agent's.`);
+      const offHost = offHostRefusal(ctx, agent, "change its automations");
+      if (offHost) return fail(offHost);
+      if (current.enabled === enabled) return json(routineSummary(current, 300));
+      let fillOnly = false;
+      if (enabled) {
+        if (!pausedItself(agent.id, current)) return fail(`${current.name} wasn't paused by you since its last change: only the human switches it back on (Automations).`);
+        const secrets = automationSecrets(agent, ctx, agent, "switch its automations on");
+        if (typeof secrets === "string") return fail(secrets);
+        fillOnly = secrets.fillOnly && !current.fillOnly;
+      }
+      const r = updateRoutine(routineId, { enabled, ...(fillOnly ? { fillOnly } : {}) });
+      audit(`agent:${agent.id}`, enabled ? "routine.resume" : "routine.pause", routineId, {
+        ...(reason ? { reason } : {}),
+        ...(fillOnly ? { fillOnly } : {}),
+        ...(enabled ? {} : { updatedAt: r.updatedAt }),
+      });
+      return json(routineSummary(r, 300));
     },
   }),
 
