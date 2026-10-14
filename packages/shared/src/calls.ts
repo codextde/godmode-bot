@@ -11,9 +11,10 @@ export type CallDirection = "outbound" | "inbound";
 export type CallPurpose = "task" | "question" | "inform" | "inbound";
 /**
  * `calling` → `in_progress` → `processing` (the call ended, the summary is being made) → `done`.
- * `no_answer`: nobody picked up (busy, voicemail, rang out) · `failed`: the call couldn't be placed or broke off.
+ * `no_answer`: nobody picked up (busy, rang out, a mailbox without a message left) · `voicemail`: a mailbox answered and
+ * the voice left its message · `failed`: the call couldn't be placed or broke off.
  */
-export type CallStatus = "calling" | "in_progress" | "processing" | "done" | "no_answer" | "failed";
+export type CallStatus = "calling" | "in_progress" | "processing" | "done" | "no_answer" | "voicemail" | "failed";
 
 export const CALL_ACTIVE: readonly CallStatus[] = ["calling", "in_progress", "processing"];
 
