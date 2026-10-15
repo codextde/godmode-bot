@@ -3,14 +3,16 @@
  * session, a process that ends more than once, deltas that carry only what changed, and the row saved while it works.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
 import { applyRunDelta, type Agent, type ClientEvent, type MessageBlock, type RunDelta, type RunDeltaState, type ServerEvent } from "@godmode/shared";
-import { captureEvents, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get } from "../src/db";
 import { getConversation, getMessage, listMessagePage, messageImage, sendMessage, startChat } from "../src/services/conversations";
 import { __setPersistForTests, findRunLog, waitForRun } from "../src/runner/runner";
 import { rememberSecret } from "../src/vault/vault";
+import { getFollowup, scheduleFollowup } from "../src/services/followups";
 import { websocketHandler, type WsData } from "../src/server/ws";
 
 let env: TestEnv;
@@ -84,6 +86,58 @@ describe("what a run costs", () => {
     expect(run.durationMs).toBeLessThanOrEqual(Date.now() - startedAt);
     expect(run.numTurns).toBe(4);
     expect(run.usage).toEqual({ inputTokens: 11, outputTokens: 22, cacheReadTokens: 33, cacheWriteTokens: 44 });
+  });
+});
+
+describe("a /goal that waits on something outside the run", () => {
+  const checks = () => {
+    const file = join(env.stateDir, "goal-checks");
+    return existsSync(file) ? readFileSync(file, "utf8").split("\n").filter(Boolean).length : 0;
+  };
+  const notices = (blocks: MessageBlock[]) => blocks.flatMap((b) => (b.type === "notice" ? [b.text] : []));
+
+  test("the second idle continuation in a row ends the run: succeeded, one note, the follow-up and the session stay", async () => {
+    const started = await startChat({ agentId: agent.id, content: "hello" });
+    await waitForRun(started.run.id, 20_000);
+    const conversationId = started.conversation.id;
+    const sessionId = getConversation(conversationId).claudeSessionId;
+    const due = new Date(Date.now() + 86_400_000);
+    scheduleFollowup({ conversationId, agentId: agent.id, dueAt: due, note: "Check the App Store review" });
+    rmSync(join(env.stateDir, "goal-checks"), { force: true });
+
+    const run = await waitForRun((await sendMessage(conversationId, { content: "GOAL_LOOP" })).run.id, 20_000);
+    expect(run.status).toBe("succeeded");
+    expect(run.error).toBeNull();
+    // Claude Code would have gone on to its own cap of 9 verdicts; the third ends it.
+    expect(checks()).toBeLessThanOrEqual(3);
+    expect(run.result).toContain("Still waiting on Apple's review");
+    expect(run.result).not.toMatch(/no response requested/i);
+
+    const message = getConversation(conversationId).messages.at(-1)!;
+    expect(message.content).toBe(run.result!);
+    const goal = notices(message.blocks).filter((t) => t.startsWith("Goal still open"));
+    expect(goal).toHaveLength(1);
+    expect(goal[0]).toStartWith("Goal still open: Not satisfied. Evidence in transcript: the Google Play listing is live");
+    expect(goal[0]).toEndWith("… Paused until the next follow-up or message.");
+    expect(goal[0]!.length).toBeLessThanOrEqual("Goal still open: ".length + 200 + " Paused until the next follow-up or message.".length);
+    expect(message.blocks.some((b) => b.type === "text" && /no response requested/i.test(b.text))).toBe(false);
+    expect(getFollowup(conversationId)?.dueAt).toBe(due.toISOString());
+
+    // The next message continues the same Claude session.
+    expect(getConversation(conversationId).claudeSessionId).toBe(sessionId);
+    const next = await waitForRun((await sendMessage(conversationId, { content: "hello again" })).run.id, 20_000);
+    expect(next.status).toBe("succeeded");
+    expect(argValue(invocations(env).at(-1)!, "--resume")).toBe(sessionId);
+  });
+
+  test("continuations that call a tool keep the run going until the goal is met", async () => {
+    rmSync(join(env.stateDir, "goal-checks"), { force: true });
+    const started = await startChat({ agentId: agent.id, content: "GOAL_LOOP_WORKING" });
+    const run = await waitForRun(started.run.id, 20_000);
+    expect(run.status).toBe("succeeded");
+    expect(checks()).toBe(4);
+    expect(run.result).toBe("Published on both stores.");
+    expect(notices(getConversation(started.conversation.id).messages.at(-1)!.blocks).some((t) => t.startsWith("Goal still open"))).toBe(false);
   });
 });
 

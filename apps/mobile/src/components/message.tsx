@@ -6,7 +6,7 @@ import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import type { Attachment, Message, MessageBlock } from "@godmode/shared";
-import { toolActivity } from "@godmode/shared";
+import { isPlaceholderReply, toolActivity } from "@godmode/shared";
 import { FileChip } from "./attachments";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
@@ -33,6 +33,7 @@ function group(blocks: MessageBlock[]): Part[] {
   }
   for (const block of blocks) {
     if ("parentToolUseId" in block && block.parentToolUseId) continue;
+    if (block.type === "text" && isPlaceholderReply(block.text)) continue;
     if (block.type === "tool_use" && isSubagent(block)) parts.push({ kind: "subagent", block, children: children.get(block.id) ?? [] });
     else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
