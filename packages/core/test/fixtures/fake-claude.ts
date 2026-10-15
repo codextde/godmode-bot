@@ -1112,7 +1112,8 @@ if (slash?.[1] === "clear") {
       parent_tool_use_id: null,
       session_id: sessionId,
     });
-    await pause(3);
+    // A real step takes a while: the runner sees the steps arrive over several looks at the output.
+    await pause(30);
   }
   const key = /THEN_WAIT:([\w-]+)/.exec(prompt)?.[1];
   if (key) {

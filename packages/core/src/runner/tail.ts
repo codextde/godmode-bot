@@ -16,7 +16,7 @@ export interface Tail {
  * The lines of a file another process writes, as they arrive, until `ended` settles and everything it wrote is read.
  * Writing to a file never fails or blocks the writer, and nothing is lost when it exits: unlike a pipe nobody drains.
  */
-export function tailLines(path: string, ended: Promise<unknown>, onLine: (line: string) => void, everyMs = 100): Tail {
+export function tailLines(path: string, ended: Promise<unknown>, onLine: (line: string) => void, everyMs = 50): Tail {
   let fd: number | null = null;
   const decoder = new TextDecoder();
   const chunk = Buffer.alloc(CHUNK_BYTES);
