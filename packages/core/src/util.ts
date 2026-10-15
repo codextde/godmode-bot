@@ -60,6 +60,24 @@ export function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * A timeout that counts only the time the computer was awake. Timers also count sleep and fire right after waking up;
+ * the monotonic clock stops while the computer sleeps. Returns the function that cancels it.
+ */
+export function awakeTimeout(fn: () => void, ms: number, clock: () => number = () => performance.now()): () => void {
+  const end = clock() + ms;
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = (wait: number) => {
+    timer = setTimeout(() => {
+      const left = end - clock();
+      if (left > 0) arm(left);
+      else fn();
+    }, wait);
+  };
+  arm(ms);
+  return () => clearTimeout(timer);
+}
+
 /** Normalize a url or domain to a bare hostname (lowercase, no www.). */
 export function hostnameOf(input: string): string {
   if (!input) return "";

@@ -238,7 +238,7 @@ async function target(scan: Scan, path: string, name: string, opts: { kept?: str
   return { entry: { name, path, bytes: size.bytes, modifiedAt: iso(size.modified), kept }, clean: kept ? null : (opts.clean ?? (() => remove(path))) };
 }
 
-const RUN_FILE = /^godmode-(?:mcp|prompt|agents|settings)-(run_[A-Za-z0-9]+)\.(?:json|md)$/;
+const RUN_FILE = /^godmode-(?:mcp|prompt|agents|settings|out)-(run_[A-Za-z0-9]+)\.(?:json|md|jsonl)$/;
 const SCRATCH = /^godmode-(?:pr|claude-mem|ua|import)-/;
 const CLONING = /\.cloning-[a-z0-9]+$/;
 
