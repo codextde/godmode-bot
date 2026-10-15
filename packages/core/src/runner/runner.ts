@@ -67,7 +67,7 @@ import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
 import { setRunSnapshots, setWelcomeEvents } from "../server/ws";
 import { excerpt, logger } from "../log";
-import { HttpError, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
+import { HttpError, awakeTimeout, badRequest, conflict, hostnameOf, newId, notFound, now, parseJson } from "../util";
 import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { hasCardsForAgent } from "../vault/cards";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
@@ -143,6 +143,7 @@ import { forgetAndroidRun } from "../android/tools";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
 import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock } from "./stream";
+import { tailLines } from "./tail";
 import { requireLicense } from "../license/license";
 
 const log = logger("runner");
@@ -349,6 +350,8 @@ interface Job {
   status: "queued" | "running";
   acc: StreamAccumulator;
   proc: Subprocess | null;
+  /** Reads what Claude wrote so far right away. */
+  catchUpOutput?: () => void;
   cancelReason: string | null;
   /** Stopped to make way for the chat's queue: it starts when this run is gone (other stops leave it waiting). */
   thenQueue?: boolean;
@@ -705,6 +708,11 @@ function applyPause(job: Job) {
  * Claude Code asks between two steps of a run (PostToolBatch hook): the reason the run is being stopped here (it is
  * being paused, or it waits for the human's answer), or null to go on.
  */
+/** A tool call or hook of the run came in: what Claude wrote before it is in the chat first. */
+export function catchUpRun(runId: string): void {
+  jobs.get(runId)?.catchUpOutput?.();
+}
+
 export function pauseAtStep(runId: string): PauseReason | null {
   const job = jobs.get(runId);
   if (!job?.pause || job.cancelReason) return null;
@@ -1301,7 +1309,7 @@ function browserHolder(job: Job): Job | null {
 interface Resources {
   token: string | null;
   files: string[];
-  timer: ReturnType<typeof setTimeout> | null;
+  cancelTimeout: (() => void) | null;
 }
 
 function writeTempFile(res: Resources, name: string, content: string): string {
@@ -1695,12 +1703,15 @@ async function spawnClaude(
   logSink: RunLog,
 ): Promise<Attempt> {
   const noise: string[] = [];
+  // A file, not a pipe: a pipe that stopped being drained lost everything Claude wrote after it, the result too.
+  const outPath = join(tmpdir(), `godmode-out-${job.runId}-${randomUUID().slice(0, 8)}.jsonl`);
+  writeFileSync(outPath, "", { mode: 0o600 });
   const proc = Bun.spawn({
     cmd: [...cmd, ...args],
     cwd,
     env,
     stdin: "pipe",
-    stdout: "pipe",
+    stdout: Bun.file(outPath),
     stderr: "pipe",
     // Own process group on POSIX so cancel/timeout can kill the whole tree.
     detached: process.platform !== "win32",
@@ -1716,7 +1727,7 @@ async function spawnClaude(
     log.warn(`could not write the prompt to claude (run ${job.runId})`, err);
   }
   const stderrP = readTail(proc.stderr, STDERR_TAIL_BYTES);
-  await readLines(proc.stdout, (raw) => {
+  const tail = tailLines(outPath, proc.exited, (raw) => {
     const line = raw.trim();
     job.lastOutputAt = Date.now();
     if (!line) return;
@@ -1740,6 +1751,13 @@ async function spawnClaude(
     }
     emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel(activityNames(job)));
   });
+  job.catchUpOutput = tail.catchUp;
+  try {
+    await tail.done;
+  } finally {
+    job.catchUpOutput = undefined;
+    rmSync(outPath, { force: true });
+  }
   const exitCode = await proc.exited;
   const stderr = await stderrP;
   job.proc = null;
@@ -2250,7 +2268,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     ? Math.min(settings.runner.runTimeoutMinutes || DREAM_TIMEOUT_MINUTES, DREAM_TIMEOUT_MINUTES)
     : settings.runner.runTimeoutMinutes;
   if (timeoutMinutes > 0) {
-    res.timer = setTimeout(() => {
+    res.cancelTimeout = awakeTimeout(() => {
       job.timedOut = true;
       log.warn(`run ${job.runId} timed out after ${timeoutMinutes} min`);
       if (job.proc) killTree(job.proc);
@@ -2379,7 +2397,7 @@ async function execute(job: Job): Promise<void> {
   emitConversationUpdated(job.conversationId);
   emitActivity(job, "Starting…");
 
-  const res: Resources = { token: null, files: [], timer: null };
+  const res: Resources = { token: null, files: [], cancelTimeout: null };
   let outcome: Outcome;
   let agent: Agent | null = null;
   try {
@@ -2391,7 +2409,7 @@ async function execute(job: Job): Promise<void> {
     log.error(`run ${job.runId} failed to start`, err);
     outcome = { status: "failed", error: errorText(err) };
   } finally {
-    if (res.timer) clearTimeout(res.timer);
+    res.cancelTimeout?.();
     if (res.token) revokeRunToken(res.token);
     releaseChatBrowser(job.runId);
     for (const f of res.files) removeMcpConfigFile(f);

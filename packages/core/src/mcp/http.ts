@@ -15,7 +15,7 @@ import type { RunContext } from "../types";
 import { resolveRunToken } from "./tokens";
 import { connectorContext } from "../connect/connectors";
 import { CONNECT_INSTRUCTIONS } from "../connect/instructions";
-import { deliverQueued, pauseAtStep } from "../runner/runner";
+import { catchUpRun, deliverQueued, pauseAtStep } from "../runner/runner";
 import { hasQueued } from "../services/messageQueue";
 import { denyReason, foreignBrowserCall } from "../browser/cdpGuard";
 import { chatLeaseUrl } from "../browser/proxy";
@@ -157,6 +157,7 @@ export async function handleRpc(ctx: RunContext, msg: unknown, server: McpServer
       const started = performance.now();
       const tool = `${server.name}.${name}`;
       try {
+        catchUpRun(ctx.runId);
         const result = await server.call(ctx, name, params.arguments ?? {});
         const ms = Math.round(performance.now() - started);
         if (isObj(result) && result.isError === true) log.info("tool call returned an error", { tool, ms, runId: ctx.runId, error: toolResultText(result) });
@@ -309,6 +310,7 @@ export function registerMcpRoutes(app: Hono): void {
     const input: unknown = await c.req.json().catch(() => null);
     // A subagent's steps: the pause and the message are for the agent itself, at its own next step.
     if (isObj(input) && input.agent_id) return c.body(null, 204);
+    catchUpRun(ctx.runId);
     const stop = pauseAtStep(ctx.runId);
     if (stop) return c.json({ continue: false, stopReason: stop === "question" ? "Waiting for the human's answer" : "Paused" });
     if (!hasQueued(ctx.conversationId)) return c.body(null, 204);
