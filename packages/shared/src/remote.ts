@@ -12,6 +12,8 @@ export const RUNNER_DEFAULT_PORT = 7788;
 export const LINK_PROTOCOL = 1;
 /** Pairing code a runner shows: `gmr1.<base64url(JSON RunnerPairingCode)>`. */
 export const RUNNER_CODE_PREFIX = "gmr1.";
+/** Invite to join a device group (devices.ts): the primary's pairing code under its own prefix. */
+export const DEVICE_INVITE_PREFIX = "gmd1.";
 /** Pairing offer Godmode puts into the install command: `gmo1.<base64url(JSON RunnerPairingOfferPayload)>`. */
 export const RUNNER_OFFER_PREFIX = "gmo1.";
 /** Live views of a runner's screen are named `runner:<runner id>:<view>` on the controller. */
@@ -61,7 +63,11 @@ export interface RemoteRunner {
   /** Copy the browser sessions (cookies) of the profile a chat uses before it starts. */
   syncBrowser: boolean;
   update: RunnerUpdate;
+  /** "device": another full Godmode of the same device group (devices.ts), not a headless runner. */
+  kind: RunnerKind;
 }
+
+export type RunnerKind = "runner" | "device";
 
 export interface RunnerPatch {
   name?: string;
@@ -329,6 +335,18 @@ export function parseRunnerCode(text: string): RunnerPairingCode | null {
   if (!isText(name) || !isText(hostname) || !isTextList(addresses) || !isPort(port)) return null;
   if (!isText(key) || !isText(id) || !isText(secret) || !isTime(exp)) return null;
   return { v: 1, name, hostname, addresses, port, key, id, secret, exp };
+}
+
+/** A device group invite: the primary's pairing code, `gmd1.<base64url(JSON)>`. */
+export function encodeDeviceInvite(code: RunnerPairingCode): string {
+  return encode(DEVICE_INVITE_PREFIX, code);
+}
+
+/** Reads a pasted device invite; null when it isn't one. Expiry is for the caller to check (`exp`). */
+export function parseDeviceInvite(text: string): RunnerPairingCode | null {
+  const compact = text.replace(/\s+/g, "");
+  if (!compact.startsWith(DEVICE_INVITE_PREFIX)) return null;
+  return parseRunnerCode(RUNNER_CODE_PREFIX + compact.slice(DEVICE_INVITE_PREFIX.length));
 }
 
 export function encodeRunnerOffer(offer: RunnerPairingOfferPayload): string {

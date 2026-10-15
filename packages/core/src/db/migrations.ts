@@ -1465,7 +1465,7 @@ CREATE TABLE phone_calls (
   id TEXT PRIMARY KEY,
   direction TEXT NOT NULL,          -- outbound | inbound
   purpose TEXT NOT NULL,            -- task | question | inform | inbound
-  status TEXT NOT NULL,             -- calling | in_progress | processing | done | no_answer | failed
+  status TEXT NOT NULL,             -- calling | in_progress | processing | done | no_answer | voicemail | failed
   number TEXT NOT NULL DEFAULT '',
   contact_name TEXT NOT NULL DEFAULT '',
   goal TEXT NOT NULL DEFAULT '',
@@ -1550,6 +1550,15 @@ CREATE TABLE passkeys (
 CREATE UNIQUE INDEX idx_passkeys_credential ON passkeys(rp_id, credential_id);
 CREATE INDEX idx_passkeys_workspace ON passkeys(workspace_id);
 CREATE INDEX idx_passkeys_profile ON passkeys(profile_id);
+`,
+  },
+  {
+    id: 95,
+    name: "device_groups",
+    sql: /* sql */ `
+-- "device": another full Godmode of this computer's device group (remote/devices.ts), paired both ways, instead of a
+-- headless runner. Its chats are mirrored like a runner's; it gets no Godmode updates and no runner health checks.
+ALTER TABLE runners ADD COLUMN kind TEXT NOT NULL DEFAULT 'runner';
 `,
   },
 ];

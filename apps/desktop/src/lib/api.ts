@@ -1,4 +1,4 @@
-import type {
+import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput,
   AndroidAssignInput,
   AndroidConnectInput,
   AndroidConnectResult,
@@ -603,6 +603,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** A chat on a runner moves to this computer, with its Claude session; the runner drops its copy. */
     moveHere: (id: string) => post<Conversation>(`/api/conversations/${id}/move-here`),
+    /** To another computer of the group or a runner (`to`; null = the primary / this computer). `force`: also while it works. */
+    move: (id: string, input: MoveChatInput) => post<Conversation>(`/api/conversations/${id}/move`, input),
     /** While the agent works in the chat the message joins its queue (`queued`) instead of starting a run. */
     send: (id: string, input: SendMessageInput) => post<SendMessageOutcome>(`/api/conversations/${id}/messages`, { ...input, queue: true }),
     queue: {
@@ -774,6 +776,20 @@ export const api = {
     fixInCode: (id: string, input: SelfRepairInput = {}) => post<SelfRepairResult>(`/api/runners/${id}/fix-in-code`, input),
     /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */
     proxy: <T>(id: string, method: string, path: string, body?: unknown) => request<T>(method, `/api/runners/${id}/proxy${path}`, body),
+  },
+
+  /** This computer's device group: several full Godmode apps that work as one (remote/devices.ts in the core). */
+  devices: {
+    get: () => get<DeviceGroup>("/api/devices"),
+    update: (input: DeviceGroupPatch) => patch<DeviceGroup>("/api/devices", input),
+    /** A `gmd1.` invite another computer pastes to join (from a secondary: the primary's). */
+    invite: () => post<DeviceInvite>("/api/devices/invite"),
+    join: (code: string) => post<DeviceGroup>("/api/devices/join", { code } satisfies JoinGroupInput),
+    /** A secondary leaves; the primary dissolves the group. */
+    leave: () => post<DeviceGroup>("/api/devices/leave"),
+    remove: (id: string) => del<DeviceGroup>(`/api/devices/${id}`),
+    /** Every working chat of `from` continues on `to` (null = the primary). */
+    handoff: (input: HandoffInput) => post<HandoffResult>("/api/devices/handoff", input),
   },
 
   /** Godmode Cloud link of this computer. Answered only on the computer itself, never through the cloud. */

@@ -3,6 +3,7 @@ import type { Task, TaskEvent } from "./tasks";
 import type { Vm } from "./vm";
 import type { MobileDevice } from "./mobile";
 import type { RemoteRunner } from "./remote";
+import type { DeviceGroup } from "./devices";
 import type {
   Agent,
   AgentQuestion,
@@ -161,6 +162,11 @@ export type ServerEvent =
   | { type: "runner.deleted"; id: ID }
   /** A runner was paired (its code arrived, or was entered by hand). */
   | { type: "runner.paired"; runner: RemoteRunner }
+  /**
+   * This computer's device group changed: joined, left, or the primary came or went. On a secondary the app then shows
+   * the primary's Godmode (or its own while the primary is away), so everything it shows is fetched again.
+   */
+  | { type: "devices.updated"; group: DeviceGroup }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =
@@ -205,6 +211,8 @@ export type EntityName =
   | "connectors"
   | "system"
   | "runners"
+  /** The device group and its computers. */
+  | "devices"
   /** The cloud link: state, account, plan or billing changed. */
   | "cloud"
   /** The licence: key, verification or whether runs are refused changed. */

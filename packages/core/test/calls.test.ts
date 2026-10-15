@@ -14,7 +14,7 @@ import { checkSettingsPatch } from "../src/services/settingsPatch";
 import * as vault from "../src/vault/vault";
 import { agentBody, parseConversation } from "../src/calls/elevenlabs";
 import { callingCode } from "../src/calls/numbers";
-import { __lookForInboundForTests, callerNumber, getCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
+import { __lookForInboundForTests, callerNumber, defaultVoicemail, getCall, inboundGreeting, inboundPrompt, inboundResultPrompt, inQuietHours, isOwnerNumber, listCalls, ownerCallRefusal, placeCall, startCalls, stopCalls, tick } from "../src/calls/calls";
 import { getSettings } from "../src/services/settings";
 import { listNotifications } from "../src/services/notifications";
 
@@ -343,6 +343,85 @@ describe("placing a call", () => {
     fakeCall(c.providerCallId!, "done", [["agent", "Hallo, hier ist der Assistent"]], {}, { phone_call: { direction: "outbound", external_number: "+4930999", call_result: "no_answer" } });
     await tick();
     expect(getCall(c.id).status).toBe("no_answer");
+  });
+
+  test("a mailbox gets the message the agent wrote, and the call ends as voicemail left", async () => {
+    const body = agentBody({ name: "x", prompt: "p", firstMessage: "", language: "de", llm: "m", voiceId: "", maxSeconds: 60 });
+    expect(body.conversation_config.agent.prompt.built_in_tools.voicemail_detection.params).toEqual({ system_tool_type: "voicemail_detection", voicemail_message: "{{voicemail_message}}" });
+    expect(body.conversation_config.agent.dynamic_variables.dynamic_variable_placeholders).toEqual({ voicemail_message: "" });
+
+    const { conversation, run } = await startChat({ agentId: agent.id, content: "Tell Sandra the laundry is done" });
+    await waitForRun(run.id, 10_000);
+    const message = "Hallo Sandra, hier im Auftrag von Daniel. Die Wäsche ist fertig. Melde dich gern bei ihm.";
+    const res = await callTool(ctxFor(conversation.id, run.id), "phone_call", { to: "+49 151 4444", goal: "Tell Sandra the laundry is done", contactName: "Sandra", voicemail: message });
+    expect(res.isError).toBeUndefined();
+    const out = sentTo("/v1/convai/twilio/outbound-call")[0]!.json!;
+    const client = out.conversation_initiation_client_data as { dynamic_variables: Record<string, string>; conversation_config_override: { agent: { prompt: { prompt: string } } } };
+    expect(client.dynamic_variables).toEqual({ voicemail_message: message });
+    expect(client.conversation_config_override.agent.prompt.prompt).toContain("let its greeting finish until the beep, then call voicemail_detection");
+
+    const [call] = listCalls();
+    const greeting = "Die gewünschte Gesprächsperson ist nicht zu erreichen. Hinterlasse eine Nachricht nach dem Signalton.";
+    fakeCall(call!.providerCallId!, "done", [["user", greeting]], { outcome: "Mailbox erreicht." }, { phone_call: { direction: "outbound", external_number: "+491514444", call_result: "voicemail" } });
+    const conv = fake.calls.get(call!.providerCallId!)! as { transcript: Record<string, unknown>[] };
+    conv.transcript.push({
+      role: "agent",
+      message: null,
+      time_in_call_secs: 9,
+      tool_results: [{ tool_name: "voicemail_detection", result_value: JSON.stringify({ result_type: "voicemail_detection_success", voicemail_message: message }), result: { result_type: "voicemail_detection_success", voicemail_message: message } }],
+    });
+    await tick();
+    const done = getCall(call!.id);
+    expect(done.status).toBe("voicemail");
+    expect(done.transcript).toEqual([
+      { speaker: "other", text: greeting, at: 0 },
+      { speaker: "agent", text: message, at: 9 },
+    ]);
+    await until(() => listRuns({ conversationId: conversation.id }).some((r) => r.trigger === "call"), 10_000, "call run");
+    const callRun = listRuns({ conversationId: conversation.id }).find((r) => r.trigger === "call")!;
+    expect(callRun.prompt).toContain("a mailbox answered and the voice left the message");
+    expect(callRun.prompt).toContain(`You: ${message}`);
+    await waitForRun(callRun.id, 10_000);
+  });
+
+  test("without a message of its own a short default is left, in the call's language", async () => {
+    await placeCall({ to: "+4930444", goal: "Ask about opening hours", purpose: "task" });
+    await placeCall({ to: "+4930445", goal: "Ask about opening hours", language: "en", purpose: "task" });
+    const left = sentTo("/v1/convai/twilio/outbound-call").map((s) => (s.json!.conversation_initiation_client_data as { dynamic_variables: Record<string, string> }).dynamic_variables.voicemail_message);
+    expect(left).toEqual([defaultVoicemail({ purpose: "task", language: "de", agentName: "x" }), defaultVoicemail({ purpose: "task", language: "en", agentName: "x" })]);
+    expect(left[0]).toBe("Guten Tag, hier ist das Büro von Daniel Ehrhardt. Daniel Ehrhardt meldet sich bald noch einmal bei Ihnen. Vielen Dank und auf Wiederhören.");
+    expect(left[1]).not.toContain("opening hours");
+    expect(defaultVoicemail({ purpose: "question", language: "de", agentName: "Caller" })).toBe("Hi Daniel, hier ist Godmode. Caller braucht eine Entscheidung von dir, die Frage wartet in der Godmode-App.");
+  });
+
+  test("a mailbox that got no message (the tool had none) stays no_answer", async () => {
+    const c = parseConversation({
+      conversation_id: "conv_2701",
+      status: "done",
+      transcript: [
+        { role: "user", message: "Hinterlasse eine Nachricht nach dem Signalton.", time_in_call_secs: 2 },
+        { role: "agent", message: null, time_in_call_secs: 13, tool_results: [{ tool_name: "voicemail_detection", result_value: '{"status":"success","voicemail_message":null}', result: { voicemail_message: null } }] },
+      ],
+      metadata: { termination_reason: "voicemail_detection tool was called.", phone_call: { direction: "outbound", external_number: "+4915144", call_result: "voicemail" } },
+    });
+    expect(c.voicemailLeft).toBe("");
+    expect(c.transcript).toHaveLength(1);
+    const unfilled = parseConversation({ conversation_id: "x", status: "done", transcript: [{ role: "agent", message: null, tool_results: [{ tool_name: "voicemail_detection", result: { voicemail_message: "{{voicemail_message}}" } }] }] });
+    expect(unfilled.voicemailLeft).toBe("");
+    const said = parseConversation({
+      conversation_id: "y",
+      status: "done",
+      transcript: [
+        { role: "agent", message: "Hallo, hier ist ein Test.  Die Wäsche ist fertig.", time_in_call_secs: 3 },
+        { role: "agent", message: null, time_in_call_secs: 3, tool_results: [{ tool_name: "voicemail_detection", result_value: '{"voicemail_message":"Hallo, hier ist ein Test. Die Wäsche ist fertig."}' }] },
+      ],
+    });
+    expect(said.voicemailLeft).toBe("Hallo, hier ist ein Test. Die Wäsche ist fertig.");
+    expect(said.transcript).toHaveLength(1);
+    const placed = await placeCall({ to: "+4930446", goal: "x", purpose: "task" });
+    fakeCall(placed.providerCallId!, "done", [["user", "Hinterlasse eine Nachricht nach dem Signalton."]], {}, { phone_call: { direction: "outbound", external_number: "+4930446", call_result: "voicemail" } });
+    await tick();
+    expect(getCall(placed.id).status).toBe("no_answer");
   });
 
   test("a busy line ends the call although ElevenLabs still says initiated", async () => {

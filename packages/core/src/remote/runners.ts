@@ -24,7 +24,9 @@ import {
   type RunnerHealthSummary,
   type RunnerInfo,
   type RunnerPairingOffer,
+  type RunnerKind,
   type RunnerPatch,
+  type RunnerUpdate,
   type Run,
   type StartChatInput,
   type StartChatResult,
@@ -64,6 +66,8 @@ import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
 import { requireLicense } from "../license/license";
+import { VERSION, BUILD } from "../config";
+import { isPrimary, isSecondary, primaryRunnerId } from "./group";
 
 const log = logger("runners");
 
@@ -76,7 +80,7 @@ const MAX_ADDRESSES = 10;
 const AUTO_UPDATE_EVERY_MS = 15 * 60_000;
 const ADDRESS = /^(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}[A-Za-z0-9])?)*$|^[0-9a-fA-F:]{2,45}$/;
 
-interface RunnerRow {
+export interface RunnerRow {
   id: string;
   name: string;
   hostname: string;
@@ -95,7 +99,50 @@ interface RunnerRow {
   sync_error: string | null;
   created_at: string;
   updated_at: string;
+  kind: RunnerKind;
 }
+
+/** What a device link is told about events and states (remote/devices.ts sets it). */
+export interface DeviceLinkHooks {
+  /** An event of this secondary's primary: the app here shows it. */
+  primaryEvent(event: import("@godmode/shared").ServerEvent): void;
+  /** The link to this secondary's primary came up or went down. */
+  primaryState(state: LinkState): void;
+  /** A device of the group connected or went away (on either side). */
+  deviceState(id: string, state: LinkState): void;
+  /** A device went away while these chats worked there (told before the copies forget what worked). */
+  deviceLost(id: string, conversationIds: string[]): void;
+}
+
+let deviceHooks: DeviceLinkHooks | null = null;
+
+export function setDeviceLinkHooks(h: DeviceLinkHooks | null): void {
+  deviceHooks = h;
+}
+
+/**
+ * The link from a secondary to its primary only carries the app's requests and the primary's events: the secondary
+ * neither mirrors the primary's chats nor copies its own setup there.
+ */
+function toPrimary(r: Pick<RunnerRow, "id" | "kind">): boolean {
+  return r.kind === "device" && isSecondary() && r.id === primaryRunnerId();
+}
+
+/** The setup goes from the primary to the other computers of its group, and from any Godmode to its own runners. */
+function maySendSetup(r: Pick<RunnerRow, "kind">): boolean {
+  return r.kind !== "device" || isPrimary();
+}
+
+const DEVICE_UPDATE = (r: RunnerRow): RunnerUpdate => ({
+  state: "current",
+  target: { version: r.version ?? VERSION, build: BUILD },
+  source: null,
+  progress: null,
+  detail: "Godmode keeps itself up to date on each computer of the group.",
+  autoUpdate: false,
+  tools: [],
+  command: null,
+});
 
 const links = new Map<string, RemoteLink>();
 /** What each runner said about itself at its last connect (or after a sync). */
@@ -106,7 +153,7 @@ const syncing = new Set<string>();
 const chains = new Map<string, Promise<unknown>>();
 /** Live view subscriptions this computer holds on each runner, re-sent after a reconnect. */
 const subscriptions = new Map<string, Map<string, ClientEvent>>();
-let digestCache: string | null = null;
+const digestCache = new Map<RunnerKind, string>();
 let syncTimer: ReturnType<typeof setTimeout> | null = null;
 let forceNextSync = false;
 let offBus: (() => void) | null = null;
@@ -116,6 +163,10 @@ let autoUpdateTimer: ReturnType<typeof setInterval> | null = null;
 /* ------------------------------------------------------------------ */
 /* Registry                                                             */
 /* ------------------------------------------------------------------ */
+
+export function runnerRow(id: string): RunnerRow | null {
+  return row(id);
+}
 
 function row(id: string): RunnerRow | null {
   return get<RunnerRow>("SELECT * FROM runners WHERE id = ?", id);
@@ -127,10 +178,11 @@ function requireRow(id: string): RunnerRow {
   return r;
 }
 
-/** The setup's digest as a runner would report it after a sync; cached until the setup changes. */
-function currentDigest(): string {
-  digestCache ??= snapshotDigest();
-  return digestCache;
+/** The setup's digest as a runner (or a device) would report it after a sync; cached until the setup changes. */
+function currentDigest(kind: RunnerKind = "runner"): string {
+  let digest = digestCache.get(kind);
+  if (!digest) digestCache.set(kind, (digest = snapshotDigest({ device: kind === "device" })));
+  return digest;
 }
 
 function summary(health: RunnerHealth): RunnerHealthSummary {
@@ -146,7 +198,7 @@ function toRunner(r: RunnerRow): RemoteRunner {
   const state: LinkState = links.get(r.id)?.state ?? { state: "offline", error: null, address: null, info: null, latencyMs: null };
   let digest: string | null = null;
   try {
-    digest = currentDigest();
+    digest = currentDigest(r.kind);
   } catch (err) {
     log.warn("could not compute the setup digest", err);
   }
@@ -178,7 +230,8 @@ function toRunner(r: RunnerRow): RemoteRunner {
     activeRuns: remoteRuns(r.id).filter((x) => x.status !== "paused").length,
     conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id = ?", r.id)?.c ?? 0,
     syncBrowser: r.sync_browser === 1,
-    update: runnerUpdate(r, state.state),
+    update: r.kind === "device" ? DEVICE_UPDATE(r) : runnerUpdate(r, state.state),
+    kind: r.kind === "device" ? "device" : "runner",
   };
 }
 
@@ -260,20 +313,31 @@ export async function removeRunner(id: string): Promise<void> {
   runnerDisconnected(id);
   const ts = now();
   const chats = all<{ id: string }>("SELECT id FROM conversations WHERE runner_id = ?", id).map((c) => c.id);
-  sql(
-    "UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE status IN ('queued', 'running', 'paused') AND conversation_id IN (SELECT id FROM conversations WHERE runner_id = ?)",
-    `${r.name} was removed`,
-    ts,
-    id,
-  );
-  // What servers and VMs a released chat may use is the runner's word: this computer's copy starts without any.
-  sql("UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', android_device_ids = '[]', vm_id = NULL WHERE runner_id = ?", id);
+  if (r.kind === "device") {
+    // A computer that leaves the group keeps its chats: the copies here go, and come back should it join again.
+    tx(() => {
+      sql("DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE runner_id = ?)", id);
+      sql("DELETE FROM conversations WHERE runner_id = ?", id);
+    });
+  } else {
+    sql(
+      "UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE status IN ('queued', 'running', 'paused') AND conversation_id IN (SELECT id FROM conversations WHERE runner_id = ?)",
+      `${r.name} was removed`,
+      ts,
+      id,
+    );
+    // What servers and VMs a released chat may use is the runner's word: this computer's copy starts without any.
+    sql("UPDATE conversations SET runner_id = NULL, runner_state = NULL, ssh_server_ids = '[]', android_device_ids = '[]', vm_id = NULL WHERE runner_id = ?", id);
+  }
   sql("UPDATE conversations SET runner_tools_id = NULL WHERE runner_tools_id = ?", id);
   sql("DELETE FROM runners WHERE id = ?", id);
   for (const key of all<{ key: string }>("SELECT key FROM meta WHERE key LIKE ?", `link.cookies.${id}.%`)) sql("DELETE FROM meta WHERE key = ?", key.key);
   deleteMeta(releaseKey(id));
-  audit("user", "runner.remove", id, { name: r.name });
-  for (const chat of chats) emitConversationUpdated(chat);
+  audit("user", r.kind === "device" ? "device.remove" : "runner.remove", id, { name: r.name });
+  for (const chat of chats) {
+    if (r.kind === "device") bus.emit({ type: "conversation.deleted", id: chat });
+    else emitConversationUpdated(chat);
+  }
   bus.emit({ type: "runner.deleted", id });
   bus.changed("runners");
   bus.changed("runs");
@@ -287,7 +351,12 @@ export async function removeRunner(id: string): Promise<void> {
  * Pair with a runner from its pairing code (pasted, or delivered by `godmode runner install --pair`). `via`: the
  * address the code was delivered from, dialed first (it proved to reach this computer, e.g. over Tailscale).
  */
-export async function pairWithCode(text: string, via: string | null = null): Promise<RemoteRunner> {
+export async function pairWithCode(
+  text: string,
+  via: string | null = null,
+  opts: { kind?: RunnerKind; /** Called with the row's id before its link starts. */ prepared?: (id: string) => void } = {},
+): Promise<RemoteRunner> {
+  const kind = opts.kind ?? "runner";
   const code = parseRunnerCode(text);
   if (!code) throw badRequest("That isn't a runner's pairing code. It starts with gmr1.");
   let key: string;
@@ -304,7 +373,7 @@ export async function pairWithCode(text: string, via: string | null = null): Pro
   let id: string;
   if (existing) {
     id = existing.id;
-    update("runners", id, { addresses: JSON.stringify(addresses), port: code.port, hostname: code.hostname, platform: info.platform, arch: info.arch, version: info.version, updated_at: ts });
+    update("runners", id, { addresses: JSON.stringify(addresses), port: code.port, hostname: code.hostname, platform: info.platform, arch: info.arch, version: info.version, kind, updated_at: ts });
     links.get(id)?.stop();
     links.delete(id);
   } else {
@@ -320,6 +389,7 @@ export async function pairWithCode(text: string, via: string | null = null): Pro
       arch: info.arch,
       version: info.version,
       sync_browser: 1,
+      kind,
       last_address: address,
       last_seen_at: ts,
       created_at: ts,
@@ -328,8 +398,9 @@ export async function pairWithCode(text: string, via: string | null = null): Pro
   }
   infos.set(id, info);
   const runner = requireRow(id);
-  audit("user", "runner.pair", id, { name: runner.name, address });
-  notify("success", `${runner.name} is connected`, "Give it a chat with “Run on” in the message box. Godmode copies your setup there first.", "/runners");
+  audit("user", kind === "device" ? "device.pair" : "runner.pair", id, { name: runner.name, address });
+  if (kind === "runner") notify("success", `${runner.name} is connected`, "Give it a chat with “Run on” in the message box. Godmode copies your setup there first.", "/runners");
+  opts.prepared?.(id);
   if (started) startLink(runner);
   const model = getRunner(id);
   bus.emit({ type: "runner.paired", runner: model });
@@ -362,11 +433,17 @@ function startLink(r: RunnerRow) {
     port: r.port,
     name: r.name,
     ownName: computerName(),
-    onEvent: (event) => applyRunnerEvent(id, event),
+    onEvent: (event) => {
+      if (toPrimary(r)) deviceHooks?.primaryEvent(event);
+      else applyRunnerEvent(id, event);
+    },
     onState: (state) => {
+      if (r.kind === "device") deviceHooks?.deviceState(id, state);
+      if (toPrimary(r)) deviceHooks?.primaryState(state);
       const online = state.state === "online";
       if (online && !wasOnline) void connected(id, state);
       if (!online && wasOnline) {
+        if (r.kind === "device") deviceHooks?.deviceLost(id, [...new Set(remoteRuns(id).map((x) => x.conversationId))]);
         runnerDisconnected(id);
         update("runners", id, { last_seen_at: now() });
         bus.changed("runs");
@@ -403,19 +480,34 @@ async function connected(id: string, state: LinkState) {
   // What changed in a run, not its whole block list each time: a long run's list is tens of megabytes.
   l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
+  const r = row(id);
+  if (!r || toPrimary(r)) return;
   await releaseChats(id);
-  try {
-    await catchUp(id, l);
-  } catch (err) {
-    if (dropped()) return;
-    log.warn(`could not catch up with runner ${id}`, err);
+  const catchUpNow = async () => {
+    try {
+      await catchUp(id, l);
+    } catch (err) {
+      if (!dropped()) log.warn(`could not catch up with runner ${id}`, err);
+    }
+  };
+  const syncNow = async () => {
+    try {
+      await syncRunner(id);
+    } catch (err) {
+      if (!dropped()) log.warn(`could not copy the setup to runner ${id}`, err instanceof Error ? err.message : err);
+    }
+  };
+  // A computer that just joined the group knows this setup's agents only after the copy: its chats come after it.
+  if (r.kind === "device") {
+    await syncNow();
+    if (!dropped()) await catchUpNow();
+  } else {
+    await catchUpNow();
+    if (!dropped()) await syncNow();
   }
-  try {
-    await syncRunner(id);
-  } catch (err) {
-    if (dropped()) return;
-    log.warn(`could not copy the setup to runner ${id}`, err instanceof Error ? err.message : err);
-  }
+  if (dropped()) return;
+  // Another computer of the group is a full Godmode: the runner checks and updates are not for it.
+  if (r.kind === "device") return;
   try {
     await runnerHealth(id, false);
   } catch (err) {
@@ -469,7 +561,10 @@ export function startRunners(): void {
   started = true;
   wireHub();
   setUpdateHost({
-    row,
+    row: (id) => {
+      const r = row(id);
+      return r && r.kind !== "device" ? r : null;
+    },
     link: (id) => links.get(id) ?? null,
     info: (id) => infos.get(id),
     setInfo: (id, info) => {
@@ -502,6 +597,8 @@ export function startRunners(): void {
   });
   offBus = bus.on((event) => {
     if (event.type === "entity.changed" && SETUP_ENTITIES.has(event.entity)) scheduleSync(false);
+    // An agent's own edits come as these (its status too: the digest tells a real change from that).
+    else if (event.type === "agent.updated" || event.type === "agent.deleted") scheduleSync(false);
     else if (event.type === "vault.status" && event.status.unlocked) scheduleSync(true);
   });
 }
@@ -532,7 +629,7 @@ export function connectRunner(id: string): RemoteRunner {
 
 /** The setup changed: copy it to every connected runner once the edits settle. The vault key needs a forced sync (it isn't in the digest). */
 function scheduleSync(force: boolean) {
-  digestCache = null;
+  digestCache.clear();
   forceNextSync ||= force;
   if (syncTimer) clearTimeout(syncTimer);
   syncTimer = setTimeout(() => {
@@ -540,6 +637,8 @@ function scheduleSync(force: boolean) {
     const forced = forceNextSync;
     forceNextSync = false;
     for (const [id, l] of links) {
+      const r = row(id);
+      if (!r || !maySendSetup(r)) continue;
       if (l.state.state !== "online") {
         emit(id);
         continue;
@@ -594,15 +693,15 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
     let memory = false;
     let cookies = false;
 
-    const digest = currentDigest();
+    const digest = currentDigest(r.kind);
     const info = infos.get(id);
     // The digest leaves the vault key out: a runner whose vault is still locked while this one's is open gets it now.
     const needsKey = vault.isUnlocked() && !!info && !info.vault.unlocked;
-    if (opts.force || needsKey || r.sync_digest !== digest) {
+    if (maySendSetup(r) && (opts.force || needsKey || r.sync_digest !== digest)) {
       syncing.add(id);
       emit(id);
       try {
-        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot(), { timeoutMs: SYNC_TIMEOUT_MS });
+        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot({ device: r.kind === "device" }), { timeoutMs: SYNC_TIMEOUT_MS });
         for (const w of result.warnings ?? []) log.warn(`${r.name}: ${w}`);
         const complete = result.digest === digest;
         update("runners", id, {
@@ -745,8 +844,10 @@ export async function startRemoteChat(runnerId: string, input: StartChatInput): 
     }
   }
   await syncRunner(runnerId, { agentId, profileId });
-  const { runnerId: _runner, workingDirectory: _folder, computerTarget: _screen, vmId: _vm, ...rest } = input;
-  const result = await l.json<StartChatResult>("POST", "/api/chat", { ...rest, agentId }, { timeoutMs: 120_000 });
+  const { runnerId: _runner, workingDirectory, computerTarget, vmId, androidDeviceIds, ...rest } = input;
+  // Another computer of the group is where the app that asked runs: its folders, screen, VMs and phones are named there.
+  const own = row(runnerId)?.kind === "device" ? { workingDirectory, computerTarget, vmId, androidDeviceIds } : {};
+  const result = await l.json<StartChatResult>("POST", "/api/chat", { ...rest, ...own, agentId }, { timeoutMs: 120_000 });
   const conversation = adoptChat(runnerId, result);
   return { ...result, conversation };
 }

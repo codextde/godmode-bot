@@ -23,6 +23,10 @@ import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
+import { usePlaces } from "@/lib/places";
+
+/** The new chat's place was never picked: it goes where this computer sends new chats. */
+const DEFAULT_PLACE = "__default";
 import { liveActivityLabel, useNow } from "@/components/chat/messages";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { formatElapsed } from "@/components/runs/run-status";
@@ -103,8 +107,8 @@ export default function ChatHome() {
   const [sshServerIds, setSshServerIds, sshDraft] = useDraft<string[]>(`${SETUP_DRAFT}ssh`, NO_SSH_SERVERS);
   /** Android phones for the new chat, on top of the agent's. */
   const [androidDeviceIds, setAndroidDeviceIds, androidDraft] = useDraft<string[]>(`${SETUP_DRAFT}android`, NO_ANDROID_DEVICES);
-  /** The runner the new chat works on; null = this computer. */
-  const [runnerId, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, null);
+  /** Where the new chat works, as the API names it (null = the computer the API belongs to); unpicked = the default. */
+  const [runnerPick, setRunnerId, runnerDraft] = useDraft<string | null>(`${SETUP_DRAFT}runner`, DEFAULT_PLACE);
   const { data: workspaces = [] } = useWorkspaces();
   const scopeWorkspaceId = useScopeWorkspace()?.id ?? null;
   const scopeProject = useScopeProject();
@@ -134,19 +138,24 @@ export default function ChatHome() {
   const projectId = projectPick !== undefined ? projectPick : sidebarProject;
 
   const runners = useRunners();
-  const runner = runnerId ? (runners.data?.find((r) => r.id === runnerId) ?? null) : null;
-  // A runner picked earlier that was removed since (or a list that can't be loaded): back to this computer, visibly —
+  const { group, hereId, placeOf } = usePlaces();
+  // In a device group this computer picks where its new chats run by default (Settings → Devices).
+  const defaultRunnerId = !group?.role ? null : group.defaultRunOn === null ? hereId : group.defaultRunOn === "primary" ? null : group.defaultRunOn;
+  const runnerId = runnerPick === DEFAULT_PLACE ? defaultRunnerId : runnerPick;
+  const target = placeOf(runnerId);
+  // A computer picked earlier that is gone since (or a list that can't be loaded): back to this computer, visibly —
   // the chat must never start somewhere other than where the composer says.
-  const runnerGone = !!runnerId && ((runners.isError && !runners.data) || (!!runners.data && !runner));
+  const runnerGone = runnerId !== hereId && ((runners.isError && !runners.data) || (!!runners.data && !target));
   useEffect(() => {
-    if (runnerGone) setRunnerId(null);
-  }, [runnerGone, setRunnerId]);
-  const onRunner = !!runnerId && !runnerGone;
-  // A folder, a shared screen, a VM and the phones belong to this computer: a chat on a runner starts without them.
+    if (runnerGone) setRunnerId(hereId);
+  }, [runnerGone, setRunnerId, hereId]);
+  const onRunner = runnerId !== hereId && !runnerGone;
+  // A folder, a shared screen, a VM and the phones belong to this computer: a chat elsewhere starts without them.
   const place = (): Pick<StartChatInput, "runnerId" | "workingDirectory" | "computerTarget" | "vmId" | "androidDeviceIds"> =>
     onRunner
-      ? { runnerId }
+      ? { runnerId: runnerId ?? undefined }
       : {
+          ...(hereId ? { runnerId: hereId } : {}),
           workingDirectory: folder ?? undefined,
           computerTarget: shared ?? undefined,
           vmId: vmId ?? undefined,
@@ -230,7 +239,7 @@ export default function ChatHome() {
               ) : (
                 <>
                   <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
-                  <RunnerChip value={onRunner ? runnerId : null} onChange={setRunnerId} />
+                  <RunnerChip value={onRunner ? runnerId : hereId} onChange={setRunnerId} />
                   {!onRunner && (
                     <FolderChip
                       chatFolder={folder}
@@ -285,7 +294,7 @@ export default function ChatHome() {
                 transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                 className="overflow-hidden"
               >
-                <RunnerNote runner={runner} />
+                <RunnerNote place={target} />
               </motion.div>
             )}
           </AnimatePresence>

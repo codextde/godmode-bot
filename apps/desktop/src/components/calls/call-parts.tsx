@@ -34,6 +34,7 @@ export const CALL_STATUS: Record<CallStatus, { label: string; dot: string; text:
   processing: { label: "Wrapping up", dot: "bg-warning animate-pulse", text: "text-muted-foreground" },
   done: { label: "Done", dot: "bg-success", text: "text-foreground/80" },
   no_answer: { label: "No answer", dot: "bg-muted-foreground/45", text: "text-muted-foreground" },
+  voicemail: { label: "Voicemail left", dot: "bg-sky-500", text: "text-foreground/80" },
   failed: { label: "Failed", dot: "bg-destructive", text: "text-destructive" },
 };
 

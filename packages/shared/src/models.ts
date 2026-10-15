@@ -605,6 +605,11 @@ export type MessageBlock =
    * (`auto`) by Godmode after it restarted in the middle of the turn.
    */
   | { type: "retry"; mode: RetryMode; runId: ID; at: ISODate; masked?: boolean; auto?: boolean; cause?: RetryCause }
+  /**
+   * The chat moved to another computer of the device group. `continued`: a run was working and stopped for the move;
+   * the agent picks up there in the turn after this marker.
+   */
+  | { type: "moved"; from: string; to: string; at: ISODate; continued: boolean }
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */

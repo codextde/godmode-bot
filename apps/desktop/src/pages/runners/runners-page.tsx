@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { MonitorSmartphone, Plus, RefreshCw } from "lucide-react";
@@ -18,7 +18,8 @@ import { useRunners } from "@/lib/hooks";
 export default function RunnersPage() {
   const [params, setParams] = useSearchParams();
   const list = useRunners();
-  const runners = list.data ?? [];
+  // The other computers of a device group are in Settings → Devices.
+  const runners = useMemo(() => (list.data ?? []).filter((r) => r.kind !== "device"), [list.data]);
   const actions = useRunnerActions();
   const [addOpen, setAddOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);

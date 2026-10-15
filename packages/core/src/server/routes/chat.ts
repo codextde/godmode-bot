@@ -33,6 +33,7 @@ import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
 import { startRemoteChat } from "../../remote/runners";
+import { selfDeviceId } from "../../remote/group";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -263,6 +264,8 @@ export function registerChatRoutes(app: Hono): void {
         ...modelChoice,
       }),
     );
+    // A secondary names itself by its id in the primary's list: a chat for it starts here.
+    if (input.runnerId && input.runnerId === selfDeviceId()) input.runnerId = null;
     if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);
     // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
     const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;

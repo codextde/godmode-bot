@@ -14,6 +14,7 @@ import {
   HeartPulse,
   Info,
   KeySquare,
+  Laptop,
   MonitorUp,
   Phone,
   RefreshCw,
@@ -37,6 +38,7 @@ import { CleanupSection } from "@/components/settings/cleanup-section";
 import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { ConnectSection } from "@/components/settings/connect-section";
+import { DevicesSection } from "@/components/settings/devices-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
 import { LicenseSection } from "@/components/settings/license-section";
@@ -67,6 +69,7 @@ const SECTIONS = [
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
   { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
+  { id: "devices", label: "Devices", icon: <Laptop />, group: "App" },
   { id: "connect", label: "Claude Code & MCP", icon: <SquareTerminal />, group: "App" },
   { id: "cloud", label: "Cloud", icon: <Cloud />, group: "App" },
   { id: "license", label: "License", icon: <KeySquare />, group: "App" },
@@ -80,7 +83,7 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["backup", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
+const STANDALONE: SectionId[] = ["backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -122,6 +125,7 @@ export default function SettingsPage() {
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       phone: () => <PhoneSection settings={s} />,
+      devices: () => <DevicesSection />,
       connect: () => <ConnectSection />,
       cloud: () => <CloudSection />,
       license: () => <LicenseSection />,

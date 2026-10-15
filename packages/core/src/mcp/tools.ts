@@ -4,6 +4,7 @@
  * delegation, and — for the orchestrator (`canManageAgents`) — agent/routine/run management. A connected app
  * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
+import { callOnPrimary, runsOnPrimary } from "../remote/deviceTools";
 import { join } from "node:path";
 import { z } from "zod";
 import type {
@@ -1631,10 +1632,15 @@ const TOOLS: ToolDef[] = [
       context: z.string().max(8000).optional().describe("Everything the voice may use and its limits: names, details to give, acceptable dates/times, budget, what not to agree to"),
       contactName: z.string().max(120).optional().describe('Who you call, e.g. "Salon Haarwerk"'),
       language: z.string().regex(/^[a-z]{2,3}$/).optional().describe('Language to start in (ISO 639-1, e.g. "de"); default from Settings → Phone calls'),
+      voicemail: z
+        .string()
+        .max(1000)
+        .optional()
+        .describe("The exact words to leave if a mailbox answers, in the call's language: said once after the beep, then the call ends. Default: who called and that the human gets back to them. Anyone with access to the mailbox may hear it, so no limits or private details"),
     }),
     when: (agent, ctx) => canFollowUp(agent, ctx) && callsEnabled(),
-    run: async ({ to, goal, context, contactName, language }, { agent, ctx }) => {
-      const c = await placeCall({ to, goal, context, contactName, language, purpose: "task", agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId });
+    run: async ({ to, goal, context, contactName, language, voicemail }, { agent, ctx }) => {
+      const c = await placeCall({ to, goal, context, contactName, language, voicemail, purpose: "task", agentId: agent.id, conversationId: ctx.conversationId, runId: ctx.runId });
       return `Calling ${c.contactName || c.number} now (call ${c.id}). End your turn with a short summary; when the call ends, this chat continues by itself with the transcript and the outcome. Don't poll and don't schedule a follow-up for it.`;
     },
   }),
@@ -3486,6 +3492,8 @@ export function toolErrorMessage(err: unknown): string {
 export async function callTool(ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
   const tool = BY_NAME.get(name);
   if (!tool) throw new UnknownToolError(`Unknown tool: ${name}`);
+  // On a secondary of a device group, what is shared lives on the primary: the call runs there.
+  if (runsOnPrimary(ctx, name)) return callOnPrimary(ctx, name, args);
   const out = await runTool(tool, ctx, name, args);
   if (ctx.connector) {
     noteConnectorCall(ctx.connector.id, name);
