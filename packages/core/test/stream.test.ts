@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MessageBlock } from "@godmode/shared";
+import { isPlaceholderReply } from "@godmode/shared";
 import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent } from "../src/runner/stream";
 
 function events(name: string): unknown[] {
@@ -468,6 +469,75 @@ describe("StreamAccumulator — a process that ends more than once", () => {
     acc.push(result({ result: "answer", total_cost_usd: 0.4, duration_ms: 1000, num_turns: 2, usage: { input_tokens: 1, output_tokens: 1, cache_read_input_tokens: 1, cache_creation_input_tokens: 1 } }));
     acc.push(result({ result: "again" }));
     expect(acc.final).toMatchObject({ costUsd: 0.4, durationMs: 1000, numTurns: 2, usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 1, cacheWriteTokens: 1 } });
+  });
+});
+
+describe("StreamAccumulator — a /goal whose Stop hook keeps the turn going", () => {
+  const feedback = (e: unknown) => JSON.stringify(e).includes("Stop hook feedback:");
+  const texts = (acc: StreamAccumulator) => acc.blocks.flatMap((b) => (b.type === "text" && b.text ? [b.text] : []));
+
+  test("each continuation without a tool call counts; the verdict comes without the goal it restates", () => {
+    const acc = new StreamAccumulator();
+    const idle: number[] = [];
+    for (const e of events("stream-goal-loop.jsonl")) {
+      acc.push(e);
+      if (feedback(e)) idle.push(acc.goalIdle);
+    }
+    expect(idle).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(acc.goalFeedback).toStartWith("Not satisfied. Evidence in transcript:");
+    expect(acc.goalFeedback).not.toContain("\n");
+    expect(acc.goalFeedback).not.toContain("publish the app");
+  });
+
+  test("Claude Code's placeholder is no reply: its blocks are empty, streamed or not, and the answer leaves it out", () => {
+    const acc = feed(events("stream-goal-loop.jsonl"));
+    expect(texts(acc)).toEqual([
+      "Instagram is live. The App Store review is still pending; I check again tomorrow at 10:00.",
+      "Still waiting on Apple's review and on H-77/H-78. Nothing else is open on my side until then.",
+    ]);
+    expect(acc.finalText()).toBe(texts(acc).join("\n\n"));
+  });
+
+  test("a continuation with a tool call starts the count over", () => {
+    const acc = new StreamAccumulator();
+    const idle: number[] = [];
+    for (const e of events("stream-goal-working.jsonl")) {
+      acc.push(e);
+      if (feedback(e)) idle.push(acc.goalIdle);
+    }
+    expect(idle).toEqual([0, 0, 0, 0]);
+    expect(acc.finalText()).toBe("Published on both stores.");
+  });
+
+  test("background work counts as progress, and a subagent's hook feedback is none of the run's", () => {
+    const acc = new StreamAccumulator();
+    const check = (parent: string | null = null) =>
+      acc.push({ type: "user", message: { role: "user", content: [{ type: "text", text: "Stop hook feedback:\n[goal]: Not met" }] }, parent_tool_use_id: parent });
+    acc.push({ type: "assistant", message: { id: "m1", role: "assistant", content: [{ type: "tool_use", id: "t1", name: "Agent", input: {} }] }, parent_tool_use_id: null });
+    acc.push({ type: "system", subtype: "task_started", task_id: "task_1", tool_use_id: "t1", task_type: "local_agent", is_backgrounded: true });
+    check();
+    check();
+    check();
+    expect(acc.goalIdle).toBe(0);
+    acc.push({ type: "system", subtype: "task_notification", task_id: "task_1", status: "completed" });
+    check();
+    check("t1");
+    expect(acc.goalIdle).toBe(1);
+    expect(acc.goalFeedback).toBe("Not met");
+  });
+
+  test("a result that is only the placeholder is no answer", () => {
+    const acc = new StreamAccumulator();
+    acc.push({ type: "assistant", message: { id: "m1", role: "assistant", content: [{ type: "text", text: "Waiting for the review." }] }, parent_tool_use_id: null });
+    acc.push({ type: "assistant", message: { id: "m2", role: "assistant", content: [{ type: "text", text: "no response requested" }] }, parent_tool_use_id: null });
+    acc.push({ type: "result", subtype: "success", is_error: false, result: " No response requested. " });
+    expect(acc.final!.text).toBe("");
+    expect(acc.finalText()).toBe("Waiting for the review.");
+  });
+
+  test("isPlaceholderReply", () => {
+    for (const t of ["No response requested.", "no response requested", "  NO RESPONSE REQUESTED.\n"]) expect(isPlaceholderReply(t)).toBe(true);
+    for (const t of ["No response requested yet, but the review is pending.", "", "No response."]) expect(isPlaceholderReply(t)).toBe(false);
   });
 });
 

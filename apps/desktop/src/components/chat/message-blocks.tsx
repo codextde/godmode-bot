@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
-import { WORKFLOW_TOOL } from "@godmode/shared";
+import { WORKFLOW_TOOL, isPlaceholderReply } from "@godmode/shared";
 import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, Puzzle, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgentAvatar } from "@/components/common";
@@ -117,6 +117,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
       items.push({ kind: "thinking", key, text: b.text });
       return;
     }
+    if (b.type === "text" && isPlaceholderReply(b.text)) return;
     group = null;
     if (b.type === "text") {
       if (b.text.trim()) items.push({ kind: "text", key, text: b.text });

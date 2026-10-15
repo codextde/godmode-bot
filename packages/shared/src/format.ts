@@ -10,3 +10,8 @@ export function formatBytes(n: number): string {
   }
   return `${value >= 100 || unit === 0 ? Math.round(value) : value.toFixed(1).replace(/\.0$/, "")} ${units[unit]}`;
 }
+
+/** What Claude Code answers when the model has nothing to say ("No response requested."): no reply to show. */
+export function isPlaceholderReply(text: string): boolean {
+  return /^no response requested\.?$/i.test(text.trim());
+}

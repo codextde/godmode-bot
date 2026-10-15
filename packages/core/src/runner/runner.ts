@@ -184,6 +184,8 @@ export function __setPersistForTests(intervalMs: number, backoff: number) {
 const KILL_GRACE_MS = 5000;
 /** A pause lets the step in progress finish for this long before it cuts it off. */
 const PAUSE_GRACE_MS = 8000;
+/** Continuations a Stop hook (`/goal`) forces in a row without a tool call before Godmode ends the run. */
+const GOAL_IDLE_LIMIT = 2;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
 const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low/i;
 /** Built-in Claude Code tools of a dream run: reading and editing the memory files, nothing else. */
@@ -392,6 +394,8 @@ interface Job {
   answersSettled?: boolean;
   /** The human stopped it (from a chat, the board or a chat platform), not Godmode. */
   stoppedByHuman?: boolean;
+  /** Godmode ended it because a `/goal` kept it going with nothing to do: it succeeded. */
+  goalPaused?: boolean;
   /** Resolves ids in tool input for the activity label (memoized per run). */
   names?: ActivityNames;
   /** The human started or let it run: a used-up monthly budget doesn't hold it. */
@@ -1762,6 +1766,7 @@ async function spawnClaude(
     const logged = logLineOf(event, line);
     if (logged !== null) logSink.write(`${redact(logged)}\n`);
     if (job.acc.push(event)) scheduleDelta(job);
+    if (job.acc.goalIdle >= GOAL_IDLE_LIMIT && !job.goalPaused && !job.pause && !halted(job) && !job.timedOut && !job.stalled) pauseGoal(job, proc);
     // Claude has read the human's answer the moment it starts replying: settle it now, so a crash later in the run
     // can't hand the same answer (an approval: "Do it now") to the next turn again.
     if (job.acc.answered && !job.answersSettled) {
@@ -1784,6 +1789,20 @@ async function spawnClaude(
   const stderr = await stderrP;
   job.proc = null;
   return { exitCode, stderr, noise };
+}
+
+/**
+ * The `/goal` of the chat waits on something outside the run (a review, the human): every end of the turn is blocked
+ * again and the agent has nothing to do. The run ends here; the next follow-up or message continues the session.
+ */
+function pauseGoal(job: Job, proc: Subprocess) {
+  job.goalPaused = true;
+  const said = job.acc.goalFeedback ?? "";
+  const short = said.length > 200 ? `${said.slice(0, 199).trimEnd()}…` : said;
+  job.acc.addNotice("info", `Goal still open${short ? `: ${short}${/[.!?…]$/.test(short) ? "" : "."}` : "."} Paused until the next follow-up or message.`);
+  scheduleDelta(job);
+  log.info(`run ${job.runId}: the goal loop has nothing to do, ending the run`);
+  killTree(proc);
 }
 
 /** The model a run is recorded with: what Claude reported, but for GLM the requested id (Z.ai may name it otherwise). */
@@ -2352,6 +2371,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const lostSession =
       resuming &&
       !halted(job) &&
+      !job.goalPaused &&
       !job.timedOut &&
       !job.stalled &&
       (!job.acc.final || job.acc.final.isError) &&
@@ -2388,6 +2408,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const ended = halted(job);
     // A run that finished while it was being stopped for a pause is finished (stopped between two steps, it never is).
     if (ended && !(ended.status === "paused" && !job.pause?.atStep && answer && !limited)) return ended;
+    if (job.goalPaused) return { status: "succeeded", error: null };
     if (job.stalled) return { status: "failed", error: job.stalled };
     if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
     if (answer && !limited) return { status: "succeeded", error: null };
