@@ -71,6 +71,10 @@
  *              the second ending counts its own time, turns and tokens, and reports the running total of the cost
  *   MOD_NOTES   for every --plugin-dir plugin, post what a mod posts: a log line with the options the --settings file
  *              gives it, a status (twice, then cleared) and a toast; MOD_NOTES_FLOOD adds 300 log lines of one mod
+ *   GOAL_LOOP   replay stream-goal-loop.jsonl: a `/goal` whose Stop hook blocks every end of the turn while the agent has
+ *              nothing to do (a status line, then "No response requested." until Claude Code's cap of 9). Each hook
+ *              verdict is counted in the state dir's `goal-checks` and followed by a pause, as the model's request takes.
+ *              GOAL_LOOP_WORKING replays stream-goal-working.jsonl instead: a tool call after every verdict, met after four
  *   SLOW_STREAM  stream "one two three four five six" word by word as partial messages, 120 ms apart
  *   SLOW_TASK   a tool call whose background task reports progress three times, 150 ms apart, then completes
  *   SHOTS:<n>   run <n> tool steps that each answer with a screenshot and a line of text, then answer "shots done".
@@ -317,13 +321,14 @@ writeFileSync(join(sessionsDir, sessionId), "");
 
 const init = { type: "system", subtype: "init", session_id: sessionId, model: "fake-model", tools: [], mcp_servers: [] };
 
-async function replay(fixture: string) {
+async function replay(fixture: string, after?: (event: Record<string, unknown>) => Promise<void>) {
   const lines = readFileSync(join(import.meta.dir, fixture), "utf8").split("\n").filter((l) => l.trim());
   for (const line of lines) {
     const event = JSON.parse(line) as Record<string, unknown>;
     if ("session_id" in event) event.session_id = sessionId;
     out(event);
     await pause(3);
+    await after?.(event);
   }
 }
 
@@ -1042,6 +1047,12 @@ if (slash?.[1] === "clear") {
   const text = `GUEST ${JSON.stringify(summary)}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("GOAL_LOOP")) {
+  await replay(prompt.includes("GOAL_LOOP_WORKING") ? "stream-goal-working.jsonl" : "stream-goal-loop.jsonl", async (event) => {
+    if (event.type !== "user" || !JSON.stringify(event).includes("Stop hook feedback:")) return;
+    appendFileSync(join(stateDir, "goal-checks"), "check\n");
+    await pause(150);
+  });
 } else if (prompt.includes("USE_WORKFLOW")) {
   await replay("stream-workflow.jsonl");
 } else if (prompt.includes("SESSION_COST")) {

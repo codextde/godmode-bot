@@ -1,4 +1,4 @@
-import { toolActivity, type ActivityNames } from "@godmode/shared";
+import { isPlaceholderReply, toolActivity, type ActivityNames } from "@godmode/shared";
 /**
  * Pure parser for Claude Code `--output-format stream-json` events.
  *
@@ -80,6 +80,9 @@ export interface StreamLimit {
 export const LIMIT_TEXT = /you['’]ve hit your [^\n]{0,80}|\busage limit reached\b/i;
 
 const TOOL_USE_TYPES = new Set(["tool_use", "server_tool_use", "mcp_tool_use"]);
+
+/** How Claude Code hands a blocking Stop hook's verdict back to the model (a `/goal` that isn't met yet). */
+const STOP_HOOK_FEEDBACK = "Stop hook feedback:";
 
 function isObj(v: unknown): v is Json {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -199,7 +202,13 @@ export class StreamAccumulator {
   contextCleared = false;
   /** The session was compacted: earlier turns are only a summary now. */
   compacted = false;
+  /** A Stop hook (`/goal`) kept the turn going this many times in a row while the agent did nothing (no tool call). */
+  goalIdle = 0;
+  /** The hook's latest verdict, without the goal it restates. */
+  goalFeedback: string | null = null;
   private compacting = false;
+  private toolCalls = 0;
+  private toolCallsAtGoalCheck = 0;
 
   private streams = new Map<string, StreamState>();
   private messages = new Map<string, BlockRef[]>();
@@ -462,7 +471,10 @@ export class StreamAccumulator {
     if (messageId && (block.type === "text" || block.type === "thinking" || block.type === "tool_use")) {
       this.refs(messageId).push({ blockIdx: idx, type: block.type, confirmed });
     }
-    if (block.type === "tool_use") this.toolsCalled.add(block.name);
+    if (block.type === "tool_use") {
+      this.toolsCalled.add(block.name);
+      if (!block.parentToolUseId) this.toolCalls++;
+    }
     return idx;
   }
 
@@ -618,6 +630,10 @@ export class StreamAccumulator {
           changed = true;
         }
         open.confirmed = true;
+        if (type === "text" && isPlaceholderReply(block.text)) {
+          block.text = "";
+          changed = true;
+        }
         continue;
       }
       // Older CLIs repeat the cumulative content of the message: skip blocks we already confirmed.
@@ -625,8 +641,10 @@ export class StreamAccumulator {
         (r) => r.type === type && r.confirmed && (this.blocks[r.blockIdx] as TextLikeBlock).text === text,
       );
       if (duplicate) continue;
-      this.addBlock({ type, text, ...(parent ? { parentToolUseId: parent } : {}) }, messageId, true);
-      if (type === "text" && !parent) this.pendingTextDelta += text;
+      // The block stays (indexes hold), empty: Claude Code's placeholder is no reply.
+      const shown = type === "text" && isPlaceholderReply(text) ? "" : text;
+      this.addBlock({ type, text: shown, ...(parent ? { parentToolUseId: parent } : {}) }, messageId, true);
+      if (type === "text" && !parent) this.pendingTextDelta += shown;
       changed = true;
     }
     return changed;
@@ -634,7 +652,13 @@ export class StreamAccumulator {
 
   private onUser(e: Json): boolean {
     const msg = isObj(e.message) ? e.message : null;
-    if (!msg || !Array.isArray(msg.content)) return false;
+    if (!msg) return false;
+    if (!str(e.parent_tool_use_id)) {
+      const parts = typeof msg.content === "string" ? [msg.content] : Array.isArray(msg.content) ? msg.content.map((c) => (isObj(c) && c.type === "text" ? (str(c.text) ?? "") : "")) : [];
+      const feedback = parts.find((t) => t.startsWith(STOP_HOOK_FEEDBACK));
+      if (feedback !== undefined) this.onGoalCheck(feedback);
+    }
+    if (!Array.isArray(msg.content)) return false;
     let changed = false;
     for (const c of msg.content) {
       if (!isObj(c) || c.type !== "tool_result") continue;
@@ -653,6 +677,20 @@ export class StreamAccumulator {
       changed = true;
     }
     return changed;
+  }
+
+  /**
+   * A Stop hook blocked the end of the turn and Claude Code continues it. The continuation since the previous block was
+   * idle when the agent called no tool and no background work runs.
+   */
+  private onGoalCheck(text: string): void {
+    const busy = [...this.tasks.values()].some((t) => t.status === "running");
+    if (this.goalFeedback !== null) this.goalIdle = this.toolCalls > this.toolCallsAtGoalCheck || busy ? 0 : this.goalIdle + 1;
+    this.toolCallsAtGoalCheck = this.toolCalls;
+    // "[<the goal>]: Not satisfied. …": the verdict is what tells.
+    const body = text.slice(STOP_HOOK_FEEDBACK.length).trim();
+    const at = body.startsWith("[") ? body.indexOf("]: ") : -1;
+    this.goalFeedback = (at > 0 ? body.slice(at + 3) : body).replace(/\s+/g, " ").trim();
   }
 
   /** Over MAX_MESSAGE_IMAGE_BASE64 the oldest screenshots go (their steps stay), never the one just added. */
@@ -678,7 +716,7 @@ export class StreamAccumulator {
     const prev = this.final;
     this.results++;
     this.final = {
-      text: resultText ?? this.lastTurnText(),
+      text: resultText !== null && isPlaceholderReply(resultText) ? "" : (resultText ?? this.lastTurnText()),
       isError: e.is_error === true || (subtype !== null && subtype !== "success"),
       subtype,
       costUsd: num(e.total_cost_usd) ?? prev?.costUsd ?? null,
