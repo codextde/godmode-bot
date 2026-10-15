@@ -142,6 +142,7 @@ suite("leftovers of interrupted work", () => {
     const stale = file(join(tempDir, "godmode-mcp-run_aaaaaaaaaaaaaaaa.json"), 1024, 2 * DAY);
     const sameDay = file(join(tempDir, "godmode-mcp-run_hhhhhhhhhhhhhhhh.json"), 1024, 2 * HOUR);
     const fresh = file(join(tempDir, "godmode-prompt-run_bbbbbbbbbbbbbbbb.md"), 1024);
+    const output = file(join(tempDir, "godmode-out-run_eeeeeeeeeeeeeeee.jsonl"), 4096, 2 * DAY);
     const importDir = join(tempDir, "godmode-import-x1");
     file(join(importDir, "Cookies"), 4096);
     age(importDir, 2 * DAY);
@@ -169,12 +170,12 @@ suite("leftovers of interrupted work", () => {
 
     const leftovers = item(await scanCleanup(), "temp-files");
     expect(leftovers.recommended).toBe(true);
-    expect(paths(leftovers).sort()).toEqual([stale, importDir, oldRun, goneProfile, clone].sort());
+    expect(paths(leftovers).sort()).toEqual([stale, output, importDir, oldRun, goneProfile, clone].sort());
 
     const result = await runCleanup(["temp-files"]);
-    expect(result.results).toMatchObject([{ id: "temp-files", ok: true, removed: 5 }]);
+    expect(result.results).toMatchObject([{ id: "temp-files", ok: true, removed: 6 }]);
     expect(result.freedBytes).toBeGreaterThan(0);
-    for (const gone of [stale, importDir, oldRun, goneProfile, clone]) expect(existsSync(gone)).toBe(false);
+    for (const gone of [stale, output, importDir, oldRun, goneProfile, clone]) expect(existsSync(gone)).toBe(false);
     for (const kept of [fresh, sameDay, recentImport, foreign, newRun, helper]) expect(existsSync(kept)).toBe(true);
   });
 });

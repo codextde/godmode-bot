@@ -17,7 +17,7 @@ export interface Tail {
  * Writing to a file never fails or blocks the writer, and nothing is lost when it exits: unlike a pipe nobody drains.
  */
 export function tailLines(path: string, ended: Promise<unknown>, onLine: (line: string) => void, everyMs = 100): Tail {
-  let fd: number | null = openSync(path, "r");
+  let fd: number | null = null;
   const decoder = new TextDecoder();
   const chunk = Buffer.alloc(CHUNK_BYTES);
   let buf = "";
@@ -45,6 +45,7 @@ export function tailLines(path: string, ended: Promise<unknown>, onLine: (line: 
 
   const done = (async () => {
     try {
+      fd = openSync(path, "r");
       for (;;) {
         const last = finished;
         if (readSome(MAX_BYTES_PER_TURN) >= MAX_BYTES_PER_TURN) await sleep(0);

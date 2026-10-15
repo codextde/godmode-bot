@@ -688,6 +688,7 @@ export async function pauseRun(runId: string): Promise<void> {
     return;
   }
   emitActivity(job, "Pausing…");
+  catchUpRun(job.runId);
   if (job.proc && job.hooked && stepRunning(job)) job.pauseTimer = setTimeout(() => applyPause(job), PAUSE_GRACE_MS);
   else applyPause(job);
 }
@@ -699,8 +700,18 @@ function applyPause(job: Job) {
   job.pause.applied = true;
   // A job still in setup (no process yet) checks `halted` before spawning.
   if (job.proc) {
+    catchUpRun(job.runId);
     job.pause.killed = stepRunning(job);
     killTree(job.proc);
+  }
+}
+
+/** A tool call or hook of the run came in: what Claude wrote before it is in the chat first. */
+export function catchUpRun(runId: string): void {
+  try {
+    jobs.get(runId)?.catchUpOutput?.();
+  } catch (err) {
+    log.warn(`could not read the output of run ${runId}`, err);
   }
 }
 
@@ -708,11 +719,6 @@ function applyPause(job: Job) {
  * Claude Code asks between two steps of a run (PostToolBatch hook): the reason the run is being stopped here (it is
  * being paused, or it waits for the human's answer), or null to go on.
  */
-/** A tool call or hook of the run came in: what Claude wrote before it is in the chat first. */
-export function catchUpRun(runId: string): void {
-  jobs.get(runId)?.catchUpOutput?.();
-}
-
 export function pauseAtStep(runId: string): PauseReason | null {
   const job = jobs.get(runId);
   if (!job?.pause || job.cancelReason) return null;
@@ -1704,18 +1710,31 @@ async function spawnClaude(
 ): Promise<Attempt> {
   const noise: string[] = [];
   // A file, not a pipe: a pipe that stopped being drained lost everything Claude wrote after it, the result too.
-  const outPath = join(tmpdir(), `godmode-out-${job.runId}-${randomUUID().slice(0, 8)}.jsonl`);
+  const outPath = join(tmpdir(), `godmode-out-${job.runId}.jsonl`);
   writeFileSync(outPath, "", { mode: 0o600 });
-  const proc = Bun.spawn({
-    cmd: [...cmd, ...args],
-    cwd,
-    env,
-    stdin: "pipe",
-    stdout: Bun.file(outPath),
-    stderr: "pipe",
-    // Own process group on POSIX so cancel/timeout can kill the whole tree.
-    detached: process.platform !== "win32",
-  });
+  const removeOut = () => {
+    try {
+      rmSync(outPath, { force: true });
+    } catch {
+      /* still open elsewhere: the cleanup takes it later */
+    }
+  };
+  let proc;
+  try {
+    proc = Bun.spawn({
+      cmd: [...cmd, ...args],
+      cwd,
+      env,
+      stdin: "pipe",
+      stdout: Bun.file(outPath),
+      stderr: "pipe",
+      // Own process group on POSIX so cancel/timeout can kill the whole tree.
+      detached: process.platform !== "win32",
+    });
+  } catch (err) {
+    removeOut();
+    throw err;
+  }
   job.proc = proc;
   job.spawnedAt ??= Date.now();
   job.lastOutputAt = Date.now();
@@ -1754,9 +1773,12 @@ async function spawnClaude(
   job.catchUpOutput = tail.catchUp;
   try {
     await tail.done;
+  } catch (err) {
+    killTree(proc);
+    throw err;
   } finally {
     job.catchUpOutput = undefined;
-    rmSync(outPath, { force: true });
+    removeOut();
   }
   const exitCode = await proc.exited;
   const stderr = await stderrP;
