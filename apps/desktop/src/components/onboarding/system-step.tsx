@@ -20,7 +20,7 @@ export function SystemStep({ onNext, onBack }: { onNext: () => void; onBack: () 
       <StepHeader
         eyebrow="System check"
         title="Let's make sure your machine is ready."
-        description="Godmode uses Claude Code as its brain and browser-use for web tasks. Anything missing can usually be installed with one click."
+        description="Godmode uses Claude Code as its brain and browser-use for web tasks. Anything missing installs by itself, then you sign in to Claude in your browser."
       />
       <StepCard>
         {report && (
@@ -48,7 +48,7 @@ export function SystemStep({ onNext, onBack }: { onNext: () => void; onBack: () 
             </p>
           </motion.div>
         )}
-        <DoctorChecklist ids={["claude", "claude-auth", "uv", "browser-use", "chrome", "git"]} onReport={onReport} />
+        <DoctorChecklist ids={["claude", "claude-auth", "uv", "browser-use", "chrome", "git"]} onReport={onReport} auto />
         <MacPermissionsSummary className="mt-4" />
         <StepFooter onBack={onBack}>
           {allGood ? (

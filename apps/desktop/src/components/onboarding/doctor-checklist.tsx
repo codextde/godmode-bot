@@ -27,6 +27,9 @@ const DEFAULT_HINTS: Partial<Record<DependencyId, string>> = {
   git: "Optional — agent memory is versioned with a built-in git implementation.",
 };
 
+/** Installed one after another without a click (uv before what needs it). */
+const AUTO_INSTALL: DependencyId[] = ["claude", "uv", "browser-use", "chrome"];
+
 export function useDoctor() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: qk.doctor, queryFn: () => api.doctor.get(false), staleTime: 60_000 });
@@ -41,20 +44,25 @@ export function useDoctor() {
 /**
  * Dependency checklist (claude, claude-auth, uv, browser-use, chrome, git) with one-click installs.
  * Used by onboarding (system check step) and Settings → System.
+ * With `auto`, missing required tools install by themselves and the Claude sign-in starts once Claude Code is there.
  */
 export function DoctorChecklist({
   ids,
   hints,
   className,
   onReport,
+  auto = false,
 }: {
   /** Order + filter. Defaults to every dependency in the report. */
   ids?: DependencyId[];
   hints?: Partial<Record<DependencyId, string>>;
   className?: string;
   onReport?: (report: DoctorReport) => void;
+  auto?: boolean;
 }) {
   const { data, isLoading, isError, error, refresh, refetch } = useDoctor();
+  const [tried, setTried] = useState<DependencyId[]>([]);
+  const attempt = (id: DependencyId) => setTried((t) => (t.includes(id) ? t : [...t, id]));
   useEffect(() => {
     if (data) onReport?.(data);
   }, [data, onReport]);
@@ -80,6 +88,10 @@ export function DoctorChecklist({
 
   const deps = ids ? ids.map((id) => data.dependencies.find((d) => d.id === id)).filter((d): d is DependencyStatus => !!d) : data.dependencies;
   const mergedHints = { ...DEFAULT_HINTS, ...hints };
+  const missing = (id: DependencyId) => data.dependencies.find((d) => d.id === id && d.required && !d.ok);
+  const autoTarget =
+    auto && !refresh.isPending ? AUTO_INSTALL.find((id) => missing(id)?.installable && !tried.includes(id) && deps.some((d) => d.id === id)) : undefined;
+  const autoSignIn = auto && !refresh.isPending && !autoTarget && !missing("claude") && !tried.includes("claude-auth");
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -93,14 +105,33 @@ export function DoctorChecklist({
       </div>
       {deps.map((dep, i) => (
         <motion.div key={dep.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-          <DependencyRow dep={dep} hint={mergedHints[dep.id]} onInstalled={() => refresh.mutate()} />
+          <DependencyRow
+            dep={dep}
+            hint={mergedHints[dep.id]}
+            onInstalled={() => refresh.mutate()}
+            auto={dep.id === "claude-auth" ? autoSignIn : dep.id === autoTarget}
+            onAuto={() => attempt(dep.id)}
+          />
         </motion.div>
       ))}
     </div>
   );
 }
 
-function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint?: string; onInstalled: () => void }) {
+function DependencyRow({
+  dep,
+  hint,
+  onInstalled,
+  auto = false,
+  onAuto,
+}: {
+  dep: DependencyStatus;
+  hint?: string;
+  onInstalled: () => void;
+  /** Start the install (or the Claude sign-in) without a click. */
+  auto?: boolean;
+  onAuto?: () => void;
+}) {
   const [log, setLog] = useState<{ ok: boolean; output: string } | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const install = useMutation({
@@ -115,8 +146,17 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
     onError: (e) => {
       setLog({ ok: false, output: errorMessage(e) });
       setLogOpen(true);
+      onInstalled();
     },
   });
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!auto || autoStarted.current || dep.id === "claude-auth" || dep.ok) return;
+    autoStarted.current = true;
+    onAuto?.();
+    install.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
 
   const state: "ok" | "warn" | "error" = dep.ok ? "ok" : dep.required ? "error" : "warn";
   const Icon = state === "ok" ? CircleCheck : state === "error" ? CircleX : CircleAlert;
@@ -151,7 +191,7 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
           </div>
           {dep.detail && <p className="mt-0.5 text-xs text-muted-foreground">{dep.detail}</p>}
           {dep.path && dep.ok && <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">{dep.path}</p>}
-          {!dep.ok && dep.id === "claude-auth" && <ClaudeSignIn onDone={onInstalled} />}
+          {!dep.ok && dep.id === "claude-auth" && <ClaudeSignIn onDone={onInstalled} auto={auto} onAuto={onAuto} />}
           {!dep.ok && dep.id !== "claude-auth" && (dep.installHint || FIX_FALLBACK[dep.id]) && (
             <p className="mt-1.5 text-xs leading-relaxed text-foreground/85">
               <InlineCode text={dep.installHint || FIX_FALLBACK[dep.id]!} />
@@ -201,7 +241,7 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
 }
 
 /** Signs Claude Code in from Godmode: the browser opens, the person approves, the row turns green by itself. */
-function ClaudeSignIn({ onDone }: { onDone: () => void }) {
+function ClaudeSignIn({ onDone, auto = false, onAuto }: { onDone: () => void; auto?: boolean; onAuto?: () => void }) {
   const qc = useQueryClient();
   const key = ["doctor", "claude-login"];
   const [code, setCode] = useState("");
@@ -223,6 +263,14 @@ function ClaudeSignIn({ onDone }: { onDone: () => void }) {
   });
 
   const state = data?.state ?? "idle";
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!auto || !data || autoStarted.current) return;
+    autoStarted.current = true;
+    onAuto?.();
+    if (data.state === "idle") start.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, data]);
   const prev = useRef(state);
   useEffect(() => {
     if (prev.current === "waiting" && state === "done") {
