@@ -7,6 +7,7 @@ import { parseJson } from "../util";
 export const DEFAULT_SETTINGS: Settings = {
   general: {
     theme: "light",
+    mode: "pro",
     accent: "violet",
     userName: "",
     launchAtLogin: false,

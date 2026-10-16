@@ -14,17 +14,19 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SquareSlash, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { useVoicePrefs, useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
+import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
@@ -66,6 +68,8 @@ interface ComposerProps {
   leading?: ReactNode;
   /** Rendered before the voice and send buttons (e.g. model picker) */
   trailing?: ReactNode;
+  /** Setup chips (folder, machines, profile…): in the tray after `leading`; Easy mode keeps them and `trailing` behind one Options button. */
+  options?: ReactNode;
   size?: "md" | "lg";
   /** Keep the unsent text and files as a draft under this key */
   draftKey?: string;
@@ -95,6 +99,7 @@ export function Composer({
   onRecall,
   leading,
   trailing,
+  options,
   size = "md",
   draftKey,
   agentId,
@@ -102,6 +107,7 @@ export function Composer({
   ref,
 }: ComposerProps) {
   const navigate = useNavigate();
+  const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
   const filesKey = draftKey ? `chat:${draftKey}:files` : undefined;
   const [text, setText, textDraft] = useDraft(textKey, "");
@@ -492,7 +498,7 @@ export function Composer({
             )}
           </AnimatePresence>
 
-          {trailing}
+          {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}
 
           <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode} disabled={disabled}>
             <AudioLines />
@@ -523,12 +529,35 @@ export function Composer({
       </div>
 
       {/* Context tray: who works on this and with what, kept apart from the input actions so neither row gets crowded. */}
-      {leading && (
+      {(leading || (options && !easy)) && (
         <div className="flex min-w-0 flex-wrap items-center gap-1 rounded-b-[calc(var(--radius-2xl)-1px)] border-t border-border/60 bg-muted/40 px-2 py-1.5">
           {leading}
+          {!easy && options}
         </div>
       )}
     </div>
+  );
+}
+
+/** Easy mode: the model, folder and machine pickers in one place, each still working as it does inline. */
+function OptionsButton({ children }: { children: ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Options"
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground transition outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent data-[state=open]:text-foreground"
+        >
+          <SlidersHorizontal className="size-4" />
+          <span className="@max-sm/composer:hidden">Options</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-auto max-w-[min(26rem,calc(100vw-2rem))] p-2">
+        <div className="eyebrow px-1.5 pt-1 pb-2">Options for this chat</div>
+        <div className="flex flex-wrap items-center gap-1">{children}</div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

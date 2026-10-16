@@ -1,3 +1,4 @@
+import { INTERFACE_MODES } from "@godmode/shared";
 import { HttpError } from "../util";
 import { audit } from "./audit";
 import { applyRuntimeSettings } from "./runtime";
@@ -15,7 +16,7 @@ type Sections = Record<string, unknown>;
  * for good, or brakes and caps agents. A new setting is closed until it is added here.
  */
 const AGENT_SETTINGS: Record<string, readonly string[]> = {
-  general: ["theme", "minimizeToTray"],
+  general: ["theme", "mode", "minimizeToTray"],
   runner: ["model", "fallbackModel", "effort", "ultracode", "maxConcurrentRuns", "runTimeoutMinutes", "autoContinueOnLimit", "resumeAfterRestart", "stallMinutes", "loopRepeats"],
   browser: ["headless", "keepAliveMinutes", "stealth", "muteAudio"],
   computer: ["agentCursor", "liveViewFps", "screenshotMaxSize"],
@@ -42,6 +43,7 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
 
 const CHOICES: Record<string, readonly string[]> = {
   "general.theme": ["dark", "light", "system"],
+  "general.mode": INTERFACE_MODES,
 };
 const FRACTIONS = new Set(["voice.rate"]);
 /** 0 switches the limit off: that is the human's call. */

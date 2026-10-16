@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
 import { motion } from "motion/react";
 import { Bot, KeyRound, Workflow } from "lucide-react";
-import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR, type InterfaceMode } from "@godmode/shared";
+import { ModePicker } from "@/components/settings/mode-picker";
 import { Character, SpeechBubble } from "@/components/character";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +27,19 @@ const FEATURES = [
   },
 ];
 
-export function WelcomeStep({ userName, onUserName, onNext }: { userName: string; onUserName: (v: string) => void; onNext: () => void }) {
+export function WelcomeStep({
+  userName,
+  onUserName,
+  mode,
+  onMode,
+  onNext,
+}: {
+  userName: string;
+  onUserName: (v: string) => void;
+  mode: InterfaceMode;
+  onMode: (mode: InterfaceMode) => void;
+  onNext: () => void;
+}) {
   const first = userName.trim().split(/\s+/)[0];
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -86,6 +99,12 @@ export function WelcomeStep({ userName, onUserName, onNext }: { userName: string
             className="h-10 text-[15px]"
             maxLength={60}
           />
+        </div>
+
+        <div className="mt-7 space-y-2">
+          <p className="text-sm font-medium">How should Godmode look?</p>
+          <ModePicker value={mode} onChange={onMode} />
+          <p className="text-xs text-muted-foreground">Same features either way. You can switch any time in Settings.</p>
         </div>
 
         <StepFooter>

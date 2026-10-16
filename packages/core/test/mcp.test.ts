@@ -1421,6 +1421,7 @@ describe("settings tools", () => {
     expect(agentSettingKeys().sort()).toEqual(
       [
         "general.theme",
+        "general.mode",
         "general.minimizeToTray",
         "runner.model",
         "runner.fallbackModel",

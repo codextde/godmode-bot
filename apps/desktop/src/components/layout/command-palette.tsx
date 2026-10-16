@@ -13,6 +13,7 @@ import {
   Cloud,
   CreditCard,
   DatabaseBackup,
+  Gauge,
   Globe,
   HeartPulse,
   Inbox,
@@ -67,10 +68,11 @@ import { cloudContext } from "@/lib/core";
 import { modKey } from "@/lib/desktop";
 import { AgentAvatar } from "@/components/common";
 import { useHandoff } from "@/components/devices/device-parts";
+import { EASY_PAGES, MODE_LABEL, useInterfaceMode, useSetInterfaceMode } from "@/lib/mode";
 
 /** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
 const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[] = [
-  { id: "general", label: "General", icon: SlidersHorizontal, words: "name startup tray notifications desktop" },
+  { id: "general", label: "General", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple" },
   { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode monthly budget team cost limit" },
   { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
@@ -109,6 +111,11 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { resolved, setTheme } = useTheme();
+  const mode = useInterfaceMode();
+  const { setMode } = useSetInterfaceMode();
+  // In Easy mode pages go by their plain names; both names always find them.
+  const named = (path: string, pro: string) => (mode === "easy" ? (EASY_PAGES[path]?.title ?? pro) : pro);
+  const alias = (path: string, pro: string) => (mode === "easy" && EASY_PAGES[path]?.title ? [pro, EASY_PAGES[path]!.title!] : undefined);
   const { data: agents = [] } = useAllAgents();
   const { data: conversations = [] } = useConversations();
   const { data: workspaces = [] } = useWorkspaces();
@@ -285,6 +292,15 @@ export function CommandPalette() {
           >
             {resolved === "dark" ? <Sun /> : <Moon />} Toggle theme
           </CommandItem>
+          <CommandItem
+            value={`switch to ${MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode interface simple advanced beginner expert`}
+            onSelect={() => {
+              setMode(mode === "easy" ? "pro" : "easy");
+              setOpen(false);
+            }}
+          >
+            <Gauge /> Switch to {MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode
+          </CommandItem>
           {devices.targets.map((d) => (
             <CommandItem
               key={`handoff-${d.id ?? "primary"}`}
@@ -320,8 +336,8 @@ export function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Navigate">
-          <CommandItem value="tasks board kanban tickets issues" onSelect={() => go("/tasks")}>
-            <SquareKanban /> Tasks
+          <CommandItem value="tasks board kanban tickets issues" keywords={alias("/tasks", "Tasks")} onSelect={() => go("/tasks")}>
+            <SquareKanban /> {named("/tasks", "Tasks")}
           </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
             <Bot /> Agents
@@ -329,11 +345,11 @@ export function CommandPalette() {
           <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
             <Workflow /> Automations
           </CommandItem>
-          <CommandItem value="plugins claude code mods skills hooks guardrails github install" onSelect={() => go("/plugins")}>
-            <Puzzle /> Plugins
+          <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
+            <Puzzle /> {named("/plugins", "Plugins")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/activity")}>
-            <Activity /> Activity
+          <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
+            <Activity /> {named("/activity", "Activity")}
           </CommandItem>
           <CommandItem onSelect={() => go("/inbox")}>
             <Inbox /> Inbox
@@ -344,38 +360,38 @@ export function CommandPalette() {
           <CommandItem value="archived tasks board tickets" onSelect={() => go("/tasks?view=archived")}>
             <Archive /> Archived tasks
           </CommandItem>
-          <CommandItem onSelect={() => go("/vault/logins")}>
-            <KeyRound /> Logins
+          <CommandItem keywords={alias("/vault/logins", "Logins")} onSelect={() => go("/vault/logins")}>
+            <KeyRound /> {named("/vault/logins", "Logins")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/vault/2fa")}>
-            <ShieldCheck /> 2FA codes
+          <CommandItem keywords={alias("/vault/2fa", "2FA codes")} onSelect={() => go("/vault/2fa")}>
+            <ShieldCheck /> {named("/vault/2fa", "2FA codes")}
           </CommandItem>
-          <CommandItem value="cards payment credit cards purchases subscriptions" onSelect={() => go("/vault/cards")}>
-            <CreditCard /> Cards
+          <CommandItem value="cards payment credit cards purchases subscriptions" keywords={alias("/vault/cards", "Cards")} onSelect={() => go("/vault/cards")}>
+            <CreditCard /> {named("/vault/cards", "Cards")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/integrations")}>
-            <Plug /> Integrations
+          <CommandItem keywords={alias("/integrations", "Integrations")} onSelect={() => go("/integrations")}>
+            <Plug /> {named("/integrations", "Integrations")}
           </CommandItem>
-          <CommandItem value="messaging slack telegram microsoft teams bots" onSelect={() => go("/messaging")}>
-            <MessageCircle /> Messaging
+          <CommandItem value="messaging slack telegram microsoft teams bots" keywords={alias("/messaging", "Messaging")} onSelect={() => go("/messaging")}>
+            <MessageCircle /> {named("/messaging", "Messaging")}
           </CommandItem>
-          <CommandItem value="calls phone calls elevenlabs voice transcripts" onSelect={() => go("/calls")}>
-            <Phone /> Calls
+          <CommandItem value="calls phone calls elevenlabs voice transcripts" keywords={alias("/calls", "Calls")} onSelect={() => go("/calls")}>
+            <Phone /> {named("/calls", "Calls")}
           </CommandItem>
           <CommandItem onSelect={() => go("/browser")}>
             <Globe /> Browser
           </CommandItem>
-          <CommandItem onSelect={() => go("/computer")}>
-            <MonitorUp /> Computer
+          <CommandItem keywords={alias("/computer", "Computer")} onSelect={() => go("/computer")}>
+            <MonitorUp /> {named("/computer", "Computer")}
           </CommandItem>
           <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
             <Box /> Virtual machines
           </CommandItem>
-          <CommandItem value="ssh servers remote linux" onSelect={() => go("/ssh")}>
-            <Server /> SSH servers
+          <CommandItem value="ssh servers remote linux" keywords={alias("/ssh", "SSH servers")} onSelect={() => go("/ssh")}>
+            <Server /> {named("/ssh", "SSH servers")}
           </CommandItem>
-          <CommandItem value="runners remote computer mac mini" onSelect={() => go("/runners")}>
-            <MonitorSmartphone /> Runners
+          <CommandItem value="runners remote computer mac mini" keywords={alias("/runners", "Runners")} onSelect={() => go("/runners")}>
+            <MonitorSmartphone /> {named("/runners", "Runners")}
           </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces

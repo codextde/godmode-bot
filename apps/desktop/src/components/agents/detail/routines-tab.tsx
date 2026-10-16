@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Blocks, CalendarDays, Plus, Radar, Sun, Workflow } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { useRoutines } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { errorMessage } from "@/lib/api";
 import { EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ const QUICK_STARTS: { icon: typeof Sun; label: string; draft: Partial<RoutineDra
 
 export function RoutinesTab({ agent }: { agent: Agent }) {
   const q = useRoutines(agent.id);
+  const easy = useEasyMode();
   const [dialog, setDialog] = useState<{ key: string; open: boolean; routine: Routine | null; initial?: Partial<RoutineDraft> } | null>(null);
   const routines = [...(q.data ?? [])].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name));
 
@@ -28,8 +30,9 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Automations put {agent.name} to work on a schedule, when something happens in your apps, when a condition is met or when a webhook is
-          called.
+          {easy
+            ? `Automations put ${agent.name} to work on its own: on a schedule, when something happens in one of your apps or when a condition is true.`
+            : `Automations put ${agent.name} to work on a schedule, when something happens in your apps, when a condition is met or when a webhook is called.`}
         </p>
         <Button onClick={() => openNew()} disabled={!agent.enabled}>
           <Plus /> New automation

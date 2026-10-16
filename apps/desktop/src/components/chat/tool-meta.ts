@@ -668,6 +668,127 @@ export function describeTool(name: string, rawInput: unknown, ctx: ToolContext =
   return { kind: "mcp", icon: Plug, title: humanize(tool), detail: server, server, tool };
 }
 
+/** Kinds whose secondary line is already plain language (a reason, a task title); the rest show paths, commands or ids. */
+const EASY_DETAIL_KINDS = new Set<ToolKind>(["vault", "missing-login", "delegate", "notify", "agents"]);
+
+const MEMORY_FILE = /(^|[\\/])(MEMORY\.md$|memory[\\/])/i;
+
+/** Easy-mode wording for the calls whose regular title names a file, a command, a coordinate or an element number. */
+function easyMeta(meta: ToolMeta, input: Input, ctx: ToolContext): { title: string; detail?: string } | null {
+  const { server, tool, kind } = meta;
+  const path = str(input.file_path ?? input.path ?? input.notebook_path ?? input.remotePath ?? input.remote_path);
+  const memory = MEMORY_FILE.test(path);
+  const credId = str(input.credentialId);
+  const credLabel = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
+  const forSite = credLabel ? ` for ${credLabel}` : "";
+
+  if (kind === "browser") {
+    switch (tool.replace(/^browser_/, "")) {
+      case "click":
+        return { title: "Clicked on the page" };
+      case "type":
+      case "input_text":
+        return { title: "Typed text" };
+      case "get_state":
+      case "state":
+      case "get_html":
+        return { title: "Looked at the page" };
+      case "extract_content":
+      case "extract":
+        return { title: "Read the page", detail: meta.detail };
+      case "scroll":
+        return { title: "Scrolled the page" };
+      case "send_keys":
+        return { title: "Pressed a key" };
+      case "list_tabs":
+        return { title: "Checked the open tabs" };
+      case "switch_tab":
+        return { title: "Switched tabs" };
+      case "close_tab":
+        return { title: "Closed a tab" };
+      case "retry_with_browser_use_agent":
+        return { title: "Asked a browser helper", detail: meta.detail };
+      default:
+        return null;
+    }
+  }
+  if (kind === "computer") {
+    const action = str(input.action) || tool;
+    if (/screenshot/.test(action)) return { title: "Looked at the screen" };
+    if (/drag|mouse_move|move_(cursor|mouse|pointer)/.test(action)) return { title: "Moved the pointer" };
+    if (/click/.test(action)) return { title: /double/.test(action) ? "Double-clicked on the screen" : /right/.test(action) ? "Right-clicked on the screen" : "Clicked on the screen" };
+    if (/key/.test(action)) return { title: "Pressed a key" };
+    if (/type|set_value/.test(action)) return { title: "Typed text" };
+    if (/scroll/.test(action)) return { title: "Scrolled" };
+    return null;
+  }
+  if (kind === "shell") return { title: tool === "BashOutput" || tool === "Monitor" ? "Checked on a command" : "Ran a command" };
+  if (kind === "file") {
+    if (/^(Read|read_file)$/.test(tool)) return { title: memory ? "Checked its memory" : "Read a file" };
+    if (/^(Write|write_file)$/.test(tool)) return { title: memory ? "Updated its memory" : "Saved a file" };
+    if (/^(Edit|MultiEdit|NotebookEdit|edit_file)$/.test(tool)) return { title: memory ? "Updated its memory" : "Changed a file" };
+    if (tool === "Glob") return { title: "Looked for files" };
+    if (tool === "Grep") return { title: "Searched through files" };
+    if (tool === "LS") return { title: "Looked through a folder" };
+    if (tool === "upload") return { title: "Uploaded a file" };
+    if (tool === "download") return { title: "Downloaded a file" };
+    if (tool === "push_file") return { title: "Copied a file to the phone" };
+    if (tool === "pull_file") return { title: "Copied a file from the phone" };
+    return { title: "Worked with a file" };
+  }
+  if (tool === "WebFetch") {
+    const host = hostOf(input.url);
+    return { title: host ? `Looked at ${host}` : "Looked at a web page" };
+  }
+  if (tool === "WebSearch") return { title: "Searched the web", detail: truncate(str(input.query), 80) || undefined };
+  if (kind === "plan") return { title: "Updated its to-do list" };
+  if (tool === "Task" || tool === "Agent") return { title: str(input.description) || "Asked a helper" };
+  if (tool === "Workflow") return { title: "Started a team task" };
+  if (server === "android") {
+    if (tool === "tap") return { title: "Tapped the screen" };
+    if (tool === "long_press") return { title: "Pressed and held on the screen" };
+    if (tool === "open_app" && str(input.package)) return { title: "Opened an app" };
+  }
+  switch (tool) {
+    case "vault_fill_login":
+    case "fill_login":
+      return { title: `Filled in your login${forSite}`, detail: meta.detail };
+    case "vault_fill_totp":
+    case "fill_totp":
+      return { title: `Entered your sign-in code${forSite}`, detail: meta.detail };
+    case "vault_get_login":
+      return { title: `Looked up a saved login${forSite}` };
+    case "vault_get_totp":
+      return { title: "Looked up a sign-in code" };
+    case "agents_list":
+      return { title: "Looked up its teammates" };
+    case "agent_delegate": {
+      const agentId = str(input.agentId);
+      const name = agentId ? (ctx.agentName?.(agentId) ?? "") : "";
+      return { title: name ? `Asked ${name} for help` : "Asked a teammate", detail: meta.detail };
+    }
+    case "runs_list":
+      return { title: "Checked recent work" };
+    case "run_continue":
+      return { title: "Picked up where it left off" };
+    case "routine_create":
+    case "routine_update":
+      // The detail is the cron line or the trigger's name.
+      return { title: meta.title };
+    default:
+      return null;
+  }
+}
+
+/** Easy mode: what a call did in everyday words, without tool names, commands, paths or ids. Icon and kind stay. */
+export function describeToolEasy(name: string, rawInput: unknown, ctx: ToolContext = {}): ToolMeta {
+  const meta = describeTool(name, rawInput, ctx);
+  const input: Input = rawInput && typeof rawInput === "object" ? (rawInput as Input) : {};
+  const plain = easyMeta(meta, input, ctx);
+  if (plain) return { ...meta, title: plain.title, detail: plain.detail };
+  return { ...meta, detail: EASY_DETAIL_KINDS.has(meta.kind) ? meta.detail : undefined };
+}
+
 /** Plan items from TodoWrite input, if present. */
 export function todoItems(input: unknown): { content: string; status: string }[] | null {
   if (!input || typeof input !== "object") return null;

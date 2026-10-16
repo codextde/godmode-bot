@@ -25,6 +25,7 @@ import {
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useSettings } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
@@ -125,6 +126,7 @@ function Hero({
   const navigate = useNavigate();
   const now = useNow(hb.enabled, 30_000);
   const live = hb.enabled && agent.enabled;
+  const easy = useEasyMode();
 
   const beat = useMutation({
     mutationFn: () => api.agents.beat(agent.id),
@@ -164,10 +166,12 @@ function Hero({
         </div>
         <div className="min-w-0 flex-1 basis-64">
           <h2 id={titleId} className="text-sm font-medium tracking-[-0.01em]">
-            Heartbeat
+            {easy ? "Check-ins" : "Heartbeat"}
           </h2>
           <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
-            Wakes {agent.name} on its own rhythm to move its tickets forward and run its checklist — and leaves a trail.
+            {easy
+              ? `Wakes ${agent.name} regularly to move its tasks forward and go through its checklist, and keeps a note of every check-in.`
+              : `Wakes ${agent.name} on its own rhythm to move its tickets forward and run its checklist — and leaves a trail.`}
           </p>
           {error ? (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-destructive">

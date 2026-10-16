@@ -2,17 +2,19 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
-import { CircleCheck } from "lucide-react";
+import { ChevronRight, CircleCheck } from "lucide-react";
 import type { ComposioConnection, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useModelCatalog } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
+import { useEasyMode } from "@/lib/mode";
 import { clearDraft, useDraft } from "@/lib/drafts";
 import { AgentAvatar, DraftStatus, Kbd } from "@/components/common";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,7 +31,7 @@ import {
   type AppTriggerDraft,
 } from "@/components/automations/app-trigger-fields";
 import { configValue } from "@/components/automations/json-schema-form";
-import { isEventTrigger, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
+import { EASY_TRIGGER_TEXT, isEventTrigger, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
 import { TriggerPicker } from "@/components/automations/trigger-picker";
 import { WebhookPanel } from "@/components/automations/webhook-panel";
 import { CronBuilder } from "./cron-builder";
@@ -141,6 +143,11 @@ export function RoutineDialog({
   const [reuseChosen, setReuseChosen] = useState(reusePreset || draft.reuseConversation !== defaultReuse(draft.triggerType));
   /** An automation that just became a webhook: its URL is shown before the dialog closes. */
   const [created, setCreated] = useState<Routine | null>(null);
+  const easy = useEasyMode();
+  /** Easy mode: the cron expression, start window and check model wait behind "Advanced". */
+  const [advanced, setAdvanced] = useState(false);
+  /** Bumped when the expression is typed by hand, so the friendly picker reads it again. */
+  const [cronKey, setCronKey] = useState(0);
   const set = <K extends keyof RoutineDraft>(k: K, v: RoutineDraft[K]) => setDraft((d) => ({ ...d, [k]: v }));
   const setTriggerType = (t: RoutineTriggerType) =>
     setDraft((d) => ({ ...d, triggerType: t, reuseConversation: reuseChosen ? d.reuseConversation : defaultReuse(t) }));
@@ -174,6 +181,7 @@ export function RoutineDialog({
       : type === "condition"
         ? (validateCron(draft.checkCron) ?? checkProblem)
         : null;
+  const advancedProblem = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
   const appProblems = type === "app" ? appTriggerProblems(draft.app, appSchema) : null;
   /** The event's settings can't be checked until its schema is known: no saving meanwhile (the fields say why). */
   const schemaBlocked = !!appProblems?.schema;
@@ -247,8 +255,46 @@ export function RoutineDialog({
 
   const submit = () => {
     setTouched(true);
+    if (easy && advancedProblem) setAdvanced(true);
     if (!invalid && !save.isPending) save.mutate();
   };
+
+  const checkModelField = (
+    <div className="space-y-1.5">
+      <Label htmlFor="routine-check-model" className="text-xs text-muted-foreground">
+        Model for checks
+      </Label>
+      <Select
+        value={findModel(catalog.models, draft.checkModel)?.id ?? (draft.checkModel || "__agent")}
+        onValueChange={(v) => set("checkModel", v === "__agent" ? null : v)}
+      >
+        <SelectTrigger id="routine-check-model" className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem value="__agent">Agent's model</SelectItem>
+          <SelectSeparator />
+          <ModelOptions models={catalog.models} current={draft.checkModel ?? undefined} />
+        </SelectContent>
+      </Select>
+    </div>
+  );
+  const checkModelHint = <p className="text-xs text-muted-foreground">A smaller, faster model keeps frequent checks cheap; the work itself uses the agent's model.</p>;
+  const startWindowField = (
+    <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+  );
+  const typeCron = (c: string) => {
+    set(type === "condition" ? "checkCron" : "cron", c);
+    setCronKey((k) => k + 1);
+  };
+  const advancedSummary =
+    type === "schedule"
+      ? draft.runs <= 1
+        ? "random start, cron expression"
+        : "cron expression"
+      : type === "condition"
+        ? "model for checks, cron expression"
+        : null;
 
   const selectableAgents = agents.filter((a) => a.enabled || a.id === draft.agentId);
   const Icon = created ? CircleCheck : meta.icon;
@@ -273,9 +319,13 @@ export function RoutineDialog({
               </AnimatePresence>
             </div>
             <div className="min-w-0">
-              <DialogTitle>{created ? "Your webhook is ready" : editing ? "Edit automation" : "New automation"}</DialogTitle>
+              <DialogTitle>{created ? (easy ? "Your link is ready" : "Your webhook is ready") : editing ? "Edit automation" : "New automation"}</DialogTitle>
               <DialogDescription>
-                {created ? `POST to this URL and “${created.name}” gets to work.` : "When it happens, the agent gets to work — even while you're away."}
+                {created
+                  ? easy
+                    ? `Send a request to this link and “${created.name}” gets to work.`
+                    : `POST to this URL and “${created.name}” gets to work.`
+                  : "When it happens, the agent gets to work — even while you're away."}
               </DialogDescription>
             </div>
           </div>
@@ -358,11 +408,12 @@ export function RoutineDialog({
             </div>
 
             <fieldset className="space-y-3 rounded-xl border bg-paper-2 p-4">
-              <legend className="eyebrow px-1">{meta.label}</legend>
+              <legend className="eyebrow px-1">{easy ? EASY_TRIGGER_TEXT[type].title : meta.label}</legend>
               <motion.div key={type} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-3">
                 {type === "schedule" && (
                   <>
                     <CronBuilder
+                      key={cronKey}
                       value={draft.cron}
                       onChange={(c) => set("cron", c)}
                       idPrefix="routine-cron"
@@ -371,8 +422,9 @@ export function RoutineDialog({
                       onWindowChange={(w) => setDraft((d) => ({ ...d, startWindow: w.startWindowMinutes, runs: w.runsPerWindow }))}
                       onProblemChange={setScheduleProblem}
                       problem={windowProblem}
+                      simple={easy}
                     >
-                      <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+                      {!easy && startWindowField}
                     </CronBuilder>
                     <TimezoneField value={draft.timezone} onChange={(tz) => set("timezone", tz)} />
                   </>
@@ -413,44 +465,35 @@ export function RoutineDialog({
                     </div>
                     <div className="space-y-2">
                       <div className="text-xs font-medium">How often to check</div>
-                      <CronBuilder value={draft.checkCron} onChange={(c) => set("checkCron", c)} idPrefix="routine-check" onProblemChange={setCheckProblem} />
+                      <CronBuilder
+                        key={cronKey}
+                        value={draft.checkCron}
+                        onChange={(c) => set("checkCron", c)}
+                        idPrefix="routine-check"
+                        onProblemChange={setCheckProblem}
+                        simple={easy}
+                      />
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <TimezoneField value={draft.timezone} onChange={(tz) => set("timezone", tz)} />
-                      <div className="space-y-1.5">
-                        <Label htmlFor="routine-check-model" className="text-xs text-muted-foreground">
-                          Model for checks
-                        </Label>
-                        <Select
-                          value={findModel(catalog.models, draft.checkModel)?.id ?? (draft.checkModel || "__agent")}
-                          onValueChange={(v) => set("checkModel", v === "__agent" ? null : v)}
-                        >
-                          <SelectTrigger id="routine-check-model" className="w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent position="popper">
-                            <SelectItem value="__agent">Agent's model</SelectItem>
-                            <SelectSeparator />
-                            <ModelOptions models={catalog.models} current={draft.checkModel ?? undefined} />
-                          </SelectContent>
-                        </Select>
-                      </div>
+                      {!easy && checkModelField}
                     </div>
-                    <p className="text-xs text-muted-foreground">A smaller, faster model keeps frequent checks cheap; the work itself uses the agent's model.</p>
+                    {!easy && checkModelHint}
                   </>
                 )}
 
                 {type === "webhook" && (
                   <>
                     <p className="text-sm text-muted-foreground">
-                      Godmode gives this automation a secret URL. Whenever a service calls it — a shop checkout, a form, a CI job, Zapier — the
-                      agent runs with the request body.
+                      {easy
+                        ? "Godmode gives this automation a secret link. Whenever another tool calls it, like a shop checkout, a form or Zapier, the agent gets to work with what was sent."
+                        : "Godmode gives this automation a secret URL. Whenever a service calls it — a shop checkout, a form, a CI job, Zapier — the agent runs with the request body."}
                     </p>
                     {routine?.trigger.type === "webhook" ? (
                       <WebhookPanel routine={routine} />
                     ) : (
                       <p className="rounded-lg border border-dashed bg-card/60 px-3 py-2.5 text-xs text-muted-foreground">
-                        You'll get the URL right after {editing ? "saving" : "creating it"}.
+                        You'll get the {easy ? "link" : "URL"} right after {editing ? "saving" : "creating it"}.
                       </p>
                     )}
                   </>
@@ -472,6 +515,32 @@ export function RoutineDialog({
                       In plain language. Events that don't match are skipped; leave empty to act on every event.
                     </p>
                   </div>
+                )}
+
+                {easy && advancedSummary && (
+                  <Collapsible open={advanced} onOpenChange={setAdvanced}>
+                    <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                      <ChevronRight className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" /> Advanced
+                      <span className="truncate font-normal text-muted-foreground/80">· {advancedSummary}</span>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="-mx-1 overflow-hidden px-1 pb-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
+                      <div className="space-y-3 pt-3">
+                        {type === "schedule" && draft.runs <= 1 && startWindowField}
+                        <RawCronField
+                          id="routine-cron-raw"
+                          label={type === "condition" ? "Check schedule as a cron expression" : "Schedule as a cron expression"}
+                          value={type === "condition" ? draft.checkCron : draft.cron}
+                          onChange={typeCron}
+                        />
+                        {type === "condition" && (
+                          <>
+                            {checkModelField}
+                            {checkModelHint}
+                          </>
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 )}
               </motion.div>
             </fieldset>
@@ -578,6 +647,33 @@ export function RoutineDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** The expression behind a schedule, for the rare one the friendly picker can't express. */
+function RawCronField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (cron: string) => void }) {
+  const problem = validateCron(value);
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label} <span className="font-normal">(minute hour day month weekday)</span>
+      </Label>
+      <Input
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0 9 * * 1-5"
+        spellCheck={false}
+        aria-invalid={!!problem}
+        aria-describedby={problem ? `${id}-error` : undefined}
+        className="font-mono"
+      />
+      {problem && (
+        <p id={`${id}-error`} className="text-xs text-destructive">
+          {problem}
+        </p>
+      )}
+    </div>
   );
 }
 
