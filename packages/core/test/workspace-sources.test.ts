@@ -9,7 +9,7 @@ import { closeDb, openDb, run } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../src/services/workspaces";
-import { __setRunSyncWaitForTests, gitFailure, prepareSources, reposDir, syncSource } from "../src/services/workspaceSources";
+import { __setOfflineRetryForTests, __setRunSyncWaitForTests, gitFailure, prepareSources, reposDir, syncSource } from "../src/services/workspaceSources";
 import { buildSystemPrompt, resumeContextPrefix } from "../src/runner/prompt";
 import { getSettings } from "../src/services/settings";
 import { HttpError } from "../src/util";
@@ -210,6 +210,27 @@ describe("workspace repositories", () => {
     const again: string[] = [];
     await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: (l) => again.push(l), signal: new AbortController().signal });
     expect(again).toEqual([]);
+  });
+
+  test("an update that can't resolve the host yet (just woken up) tries again before the run starts", async () => {
+    const ws = createWorkspace({ name: "Waking", sources: [{ kind: "git", url: server.url }] });
+    const source = await settled(ws.id, ws.sources[0]!.id);
+    Bun.spawnSync(["git", "remote", "set-url", "origin", "http://godmode-offline.invalid/app.git"], { cwd: source.path });
+    run("UPDATE workspace_sources SET synced_at = ? WHERE id = ?", "2020-01-01T00:00:00.000Z", source.id);
+    const next = server.commit("WOKE.md", "woke\n");
+    __setOfflineRetryForTests([1500]);
+    // The network is back before the next try.
+    const back = setTimeout(() => Bun.spawnSync(["git", "remote", "set-url", "origin", server.url], { cwd: source.path }), 700);
+    try {
+      await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
+      const updated = getWorkspace(ws.id).sources[0]!;
+      expect(updated.error).toBeNull();
+      expect(updated.commit).toBe(next);
+      expect(existsSync(join(source.path, "WOKE.md"))).toBe(true);
+    } finally {
+      clearTimeout(back);
+      __setOfflineRetryForTests([3_000, 8_000]);
+    }
   });
 
   test("a run doesn't wait for a slow update: the fetch finishes behind it without touching the checkout", async () => {

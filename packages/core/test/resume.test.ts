@@ -358,6 +358,8 @@ describe("continuing once Claude can be reached again", () => {
     expect(brokeOffOnError("Claude Code exited with code 1")).toBe(true);
     expect(brokeOffOnError('API Error: 500 {"type":"error","error":{"type":"api_error","message":"Internal server error"}}')).toBe(true);
     expect(brokeOffOnError("API Error: 529 Overloaded")).toBe(true);
+    expect(brokeOffOnError("Failed to authenticate. API Error: 403 Request not allowed")).toBe(true);
+    expect(brokeOffOnError("Failed to authenticate. API Error: 401 Invalid bearer token")).toBe(false);
     expect(brokeOffOnError("API Error: 400 invalid_request_error")).toBe(false);
     expect(brokeOffOnError("Timed out after 60 minutes")).toBe(false);
     expect(brokeOffOnError(null)).toBe(false);
@@ -385,6 +387,16 @@ describe("continuing once Claude can be reached again", () => {
     expect(offlineRetryAt(third.id)).toBeNull();
     expect(await continueAfterOutage(offline)).toBe(0);
   }, 40_000);
+
+  test("a turn Claude's API refused with a 403 right after waking goes on", async () => {
+    const conv = chat(agent, "routine");
+    const last = cutOff(agent, conv, { status: "failed", error: "Failed to authenticate. API Error: 403 Request not allowed", trigger: "routine" });
+    expect(offlineRetryAt(last)).not.toBeNull();
+    expect(await continueAfterOutage(offline)).toBe(1);
+    const run = next(conv, last)!;
+    expect(marker(run.id)).toMatchObject({ type: "retry", runId: last, auto: true, cause: "error" });
+    await waitForRun(run.id, 10_000);
+  }, 20_000);
 
   test("work handed over without waiting continues; work someone waited for is left to them", async () => {
     const parentChat = chat(agent);

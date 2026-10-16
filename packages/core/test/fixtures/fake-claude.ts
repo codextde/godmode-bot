@@ -9,6 +9,7 @@
  *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   LOGIN_FAIL  answer with a login-failure sentence
+ *   AUTH_403    fail like Claude Code when Claude's API refuses the sign-in ("Failed to authenticate. API Error: 403 …")
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
  *   CALL_COMPUTER  call the `computer` MCP server from --mcp-config (initialize, tools/list, computer_info) and answer
  *              with a JSON summary; "no computer server" when the run has none
@@ -846,6 +847,12 @@ if (slash?.[1] === "clear") {
   const text = "I drafted the newsletter and scheduled nothing yet.\n\nShould I send it to the whole list on Monday?";
   textTurn(text);
   result(text);
+} else if (prompt.includes("AUTH_403")) {
+  out(init);
+  const text = "Failed to authenticate. API Error: 403 Request not allowed";
+  out({ type: "assistant", message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "result", subtype: "success", is_error: true, api_error_status: 403, result: text, session_id: sessionId, total_cost_usd: 0, duration_ms: 7, num_turns: 1 });
+  process.exit(1);
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);
   const text = "I opened the dashboard. I couldn't log in to example.com because there are no saved credentials for it.";

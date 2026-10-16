@@ -33,6 +33,12 @@ const RUN_UPDATE_WAIT_MS = 45_000;
 export function __setRunSyncWaitForTests(ms: number) {
   runSyncWaitMs = ms;
 }
+/** Right after the computer wakes, DNS isn't up for a few seconds: a fetch that can't resolve the host tries again. */
+let offlineRetryMs = [3_000, 8_000];
+export function __setOfflineRetryForTests(ms: number[]) {
+  offlineRetryMs = ms;
+}
+const UNRESOLVED_HOST = /could not resolve host|name or service not known|nodename nor servname/i;
 /** How long a run waits for a first clone; it goes on without it after that (the clone continues). */
 const RUN_CLONE_WAIT_MS = 90_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
@@ -419,7 +425,7 @@ export function gitFailure(res: Pick<GitResult, "stderr" | "timedOut">, url: str
   if (res.timedOut) return `Timed out talking to ${host}.`;
   const text = res.stderr;
   if (/remote branch .* not found|couldn't find remote ref/i.test(text)) return `The branch "${branch}" doesn't exist in this repository.`;
-  if (/could not resolve host|name or service not known|nodename nor servname/i.test(text)) return `Can't reach ${host} — check the URL and your internet connection.`;
+  if (UNRESOLVED_HOST.test(text)) return `Can't reach ${host} — check the URL and your internet connection.`;
   if (/host key verification failed/i.test(text)) return `${host}'s SSH host key doesn't match the one this computer knows (~/.ssh/known_hosts).`;
   if (/repository not found|not found|could not read username|authentication failed|permission denied|terminal prompts disabled|access denied|403/i.test(text)) {
     return `Git couldn't open the repository on ${host}. Check the URL — for a private repository, sign in to git on this computer first (an SSH key for git@ URLs, or a credential helper such as \`gh auth login\`).`;
@@ -484,7 +490,13 @@ async function cloneRepo(row: SourceRow, signal: AbortSignal): Promise<void> {
 async function pullRepo(row: SourceRow, timeoutMs: number, signal: AbortSignal, mayUpdate: () => boolean = () => true): Promise<void> {
   const path = clonePath(row);
   if (!isClone(path) || !row.url) throw new Error("The repository isn't cloned yet.");
-  const fetched = await git(["fetch", "--quiet", "--prune", "origin"], { cwd: path, timeoutMs, signal });
+  const fetchOrigin = () => git(["fetch", "--quiet", "--prune", "origin"], { cwd: path, timeoutMs, signal });
+  let fetched = await fetchOrigin();
+  for (const waitMs of offlineRetryMs) {
+    if (fetched.ok || signal.aborted || fetched.timedOut || !UNRESOLVED_HOST.test(fetched.stderr)) break;
+    await settle(Bun.sleep(waitMs), signal, waitMs);
+    if (!signal.aborted) fetched = await fetchOrigin();
+  }
   if (signal.aborted) return;
   if (!fetched.ok) throw new GitError("fetch", fetched, row.url, row.branch);
   if (!mayUpdate() && !updateAsked.has(row.id)) {

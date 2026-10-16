@@ -2774,8 +2774,10 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   pump();
 
   if (!wasRunning || !finished || !agent) return;
-  // A dream's summary may talk about past login trouble — that is no new missing login.
-  if (outcome.status !== "cancelled" && job.trigger !== "dream") await detectMissingLogin(job, agent, text);
+  // A dream's summary may talk about past login trouble — that is no new missing login. Neither is Claude Code's own
+  // error ("Failed to authenticate. API Error: 403") standing in for the answer.
+  const claudeError = outcome.status === "failed" && (text.trim() === error?.trim() || /^(?:Failed to authenticate\.|API Error:)/.test(text.trim()));
+  if (outcome.status !== "cancelled" && job.trigger !== "dream" && !claudeError) await detectMissingLogin(job, agent, text);
 
   // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their
   // memory changes themselves (memory/dreaming.ts).
