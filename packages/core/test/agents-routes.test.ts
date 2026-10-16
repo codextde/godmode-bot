@@ -148,6 +148,10 @@ describe("agent routes", () => {
     expect(stale.data.code).toBe("memory_changed");
     expect(stale.data.details.content).toBe("# Memory\n- likes tea\n");
 
+    const fresh = (await call<Mem>("GET", `/api/agents/${agent.id}/memory`)).data.digest;
+    const race = await Promise.all(["phone", "desktop"].map((who) => call("PUT", `/api/agents/${agent.id}/memory`, { content: who, digest: fresh })));
+    expect(race.map((r) => r.status).sort()).toEqual([200, 409]);
+
     const forced = await call<Mem>("PUT", `/api/agents/${agent.id}/memory`, { content: "mine" });
     expect(forced.data.content).toBe("mine");
     expect((await call<{ content: string }>("GET", `/api/agents/${agent.id}/file?path=MEMORY.md`)).data.content).toBe("mine");

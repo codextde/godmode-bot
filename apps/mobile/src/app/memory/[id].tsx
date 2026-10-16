@@ -2,7 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
 import * as Haptics from "expo-haptics";
 import { Stack, useLocalSearchParams, useNavigation } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { usePreventRemove } from "expo-router/react-navigation";
+import { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Agent, AgentMemory } from "@godmode/shared";
@@ -11,7 +12,7 @@ import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Row, T } from "@/components/ui";
-import { api, ApiError, errorText } from "@/lib/api";
+import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { alpha, fonts, radius, space, useColors } from "@/lib/theme";
@@ -43,14 +44,20 @@ export default function MemoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const agents = useAgents();
   const agent = agents.byId.get(id);
-  const memory = useQuery({ queryKey: qk.agentMemory(id), queryFn: () => api.agents.memory(id), refetchOnMount: "always" });
+  const memory = useQuery({
+    queryKey: qk.agentMemory(id),
+    queryFn: () => api.agents.memory(id),
+    refetchOnMount: "always",
+    retry: (count, err) => !(err instanceof ApiError && (err.status === 403 || err.status === 404)) && count < 2,
+  });
+  const tooOld = memory.error instanceof ApiError && (memory.error.code === "device_forbidden" || memory.error.status === 404) && !!agent;
 
   if (!memory.data || !agent) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
         <Stack.Screen options={{ title: "Memory", headerLargeTitleEnabled: false }} />
         {memory.isError ? (
-          <ErrorState title="Couldn't open the memory" error={errorText(memory.error)} onRetry={() => void memory.refetch()} />
+          <ErrorState title="Couldn't open the memory" error={tooOld ? UPDATE_DESKTOP_MESSAGE : errorText(memory.error)} onRetry={tooOld ? undefined : () => void memory.refetch()} />
         ) : !agent && !agents.isLoading ? (
           <ErrorState title="Agent not found" error="It may have been deleted on your computer." />
         ) : (
@@ -72,9 +79,10 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
   // On iOS the content scrolls under the glass header.
   const insets = useSafeAreaInsets();
   const headerInset = process.env.EXPO_OS === "ios" ? insets.top + 52 : 0;
-  const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
+  /** The edit, and the version (digest and text) it started from. */
+  const [draft, setDraft] = useState<{ text: string; base: string; baseText: string } | null>(null);
   const editing = draft !== null;
-  const dirty = editing && draft.text !== memory.content;
+  const dirty = editing && draft.text !== draft.baseText;
   const sections = useMemo(() => splitSections(memory.content), [memory.content]);
   const titled = sections.filter((s) => s.title);
 
@@ -105,23 +113,19 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
     },
   });
 
-  useEffect(() => {
-    if (!dirty) return;
-    return navigation.addListener("beforeRemove", (e) => {
-      e.preventDefault();
-      Alert.alert("Discard your changes?", "Your edits to the memory haven't been saved.", [
-        { text: "Keep editing", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: () => navigation.dispatch(e.data.action) },
-      ]);
-    });
-  }, [dirty, navigation]);
+  usePreventRemove(dirty, ({ data }) => {
+    Alert.alert("Discard your changes?", "Your edits to the memory haven't been saved.", [
+      { text: "Keep editing", style: "cancel" },
+      { text: "Discard", style: "destructive", onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
 
   const startEdit = () => {
     if (memory.dreaming) {
       Alert.alert(`${agent.name} is dreaming`, "It is tidying up its memory right now. Edit it when the dream has ended.");
       return;
     }
-    setDraft({ text: memory.content, base: memory.digest });
+    setDraft({ text: memory.content, base: memory.digest, baseText: memory.content });
   };
   const discard = () => {
     if (!dirty) return setDraft(null);
@@ -143,10 +147,10 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
       refreshControl={editing ? undefined : <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} />}
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={{ title: "Memory", headerLargeTitleEnabled: false, gestureEnabled: !dirty }} />
+      <Stack.Screen options={{ title: "Memory", headerLargeTitleEnabled: false }} />
       {editing ? (
         <HeaderActions
-          actions={[{ icon: "check", label: "Save", prominent: true, onPress: () => draft && save.mutate({ text: draft.text, base: draft.base }) }]}
+          actions={[{ icon: "check", label: "Save", prominent: true, onPress: () => draft && !save.isPending && save.mutate({ text: draft.text, base: draft.base }) }]}
           menu={[{ icon: "close", title: dirty ? "Discard changes" : "Stop editing", onPress: discard, destructive: dirty }]}
         />
       ) : (
@@ -189,6 +193,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
             multiline
             scrollEnabled={false}
             autoFocus
+            editable={!save.isPending}
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}

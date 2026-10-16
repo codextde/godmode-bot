@@ -25,12 +25,20 @@ export function memorySections(text: string): MemorySection[] {
   return out;
 }
 
+function decodePath(path: string): string {
+  try {
+    return decodeURI(path);
+  } catch {
+    return path;
+  }
+}
+
 /** Relative links to memory/ notes that don't exist. */
 export function brokenMemoryLinks(text: string, topics: string[]): string[] {
   const known = new Set(topics);
   const out = new Set<string>();
   for (const m of text.matchAll(/\]\(\s*(?:\.\/)?(memory\/[^)\s#?]+)/g)) {
-    const path = decodeURI(m[1]!);
+    const path = decodePath(m[1]!);
     if (!known.has(path)) out.add(path);
   }
   return [...out];
@@ -39,7 +47,7 @@ export function brokenMemoryLinks(text: string, topics: string[]): string[] {
 /** A memory/ note a clicked link points at, or null for any other link. */
 export function memoryLinkTarget(href: string | null): string | null {
   if (!href || /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("/")) return null;
-  const path = decodeURI(href.replace(/^\.\//, "").split(/[#?]/)[0]!);
+  const path = decodePath(href.replace(/^\.\//, "").split(/[#?]/)[0]!);
   return path.startsWith("memory/") && !path.includes("..") ? path : null;
 }
 

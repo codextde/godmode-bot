@@ -330,7 +330,8 @@ function FileEditor({
     const offset = value.split("\n").slice(0, section.line).reduce((n, l) => n + l.length + 1, 0);
     el.focus();
     el.setSelectionRange(offset, offset);
-    el.scrollTop = Math.max(0, section.line * parseFloat(getComputedStyle(el).lineHeight || "20") - 12);
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 21;
+    el.scrollTop = Math.max(0, section.line * lineHeight - 12);
   };
 
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
