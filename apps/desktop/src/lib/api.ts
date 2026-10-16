@@ -51,6 +51,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   ChromeImportInput,
   ChromeImportResult,
   ClaudeUpdateResult,
+  ClaudeLoginStatus,
   ClaudeUpdateStatus,
   CleanupId,
   CleanupReport,
@@ -382,6 +383,10 @@ export const api = {
   doctor: {
     get: (refresh = false) => get<DoctorReport>("/api/doctor", { refresh: refresh ? 1 : undefined }),
     install: (id: DependencyId) => post<{ ok: boolean; output: string }>("/api/doctor/install", { id }),
+    claudeLogin: () => get<ClaudeLoginStatus>("/api/doctor/claude-login"),
+    startClaudeLogin: () => post<ClaudeLoginStatus>("/api/doctor/claude-login"),
+    submitClaudeLoginCode: (code: string) => post<ClaudeLoginStatus>("/api/doctor/claude-login/code", { code }),
+    cancelClaudeLogin: () => del<ClaudeLoginStatus>("/api/doctor/claude-login"),
     claudeUpdate: (refresh = false) => get<ClaudeUpdateStatus>("/api/doctor/claude-update", { refresh: refresh ? 1 : undefined }),
     updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
     permissions: () => get<PermissionReport>("/api/doctor/permissions"),
