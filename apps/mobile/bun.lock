@@ -5,6 +5,7 @@
     "": {
       "name": "@godmode/mobile",
       "dependencies": {
+        "@bsky.app/react-native-uitextview": "^2.7.1",
         "@expo-google-fonts/geist": "^0.4.2",
         "@expo-google-fonts/geist-mono": "^0.4.3",
         "@expo/ui": "~57.0.21",
@@ -196,6 +197,8 @@
     "@babel/traverse": ["@babel/traverse@7.29.8", "", { "dependencies": { "@babel/code-frame": "^7.29.7", "@babel/generator": "^7.29.8", "@babel/helper-globals": "^7.29.7", "@babel/parser": "^7.29.8", "@babel/template": "^7.29.7", "@babel/types": "^7.29.8", "debug": "^4.3.1" } }, "sha512-I5z7H3bf/41ktsNVLtpN0wAa336HkqIHQ5BuPLEhTkt1jVSyZpeNKIzTgEWmlxjdg81R0IgUCcaE+Ok3NvrfZg=="],
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
+
+    "@bsky.app/react-native-uitextview": ["@bsky.app/react-native-uitextview@2.7.1", "", { "peerDependencies": { "react": "*", "react-native": ">=0.81.5" } }, "sha512-hy1UCDFwBJc+GAzezaLx5Xl++lqRoN4/Y38VbUQ27htYfGXSSUl9UAc1hmaiFxKwRD4KZjclo6JQuB5cRWbVPg=="],
 
     "@egjs/hammerjs": ["@egjs/hammerjs@2.0.17", "", { "dependencies": { "@types/hammerjs": "^2.0.36" } }, "sha512-XQsZgjm2EcVUiZQf11UBJQfmZeEmOW8DpI1gsFeln6w0ae0ii4dMQEQ0kjl6DspdWX1aGY1/loyXnP0JS06e/A=="],
 

@@ -78,14 +78,14 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
           {caption}
         </T>
       ) : null}
-      <Pressable onLongPress={() => copy(message.content)} style={[styles.user, { backgroundColor: caption ? c.sunken : c.primary }]}>
+      <View style={[styles.user, { backgroundColor: caption ? c.sunken : c.primary }]}>
         <Files attachments={message.attachments} spaced={!!message.content} color={fg} />
         {message.content ? (
           <T variant="body" color={fg} selectable>
             {message.content}
           </T>
         ) : null}
-      </Pressable>
+      </View>
     </View>
   );
 });
@@ -95,7 +95,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
   const parts = useMemo(() => group(blocks.length || !content ? blocks : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
   return (
-    <Pressable onLongPress={content ? () => copy(content) : undefined} style={styles.assistant}>
+    <View style={styles.assistant}>
       {parts.length === 0 && streaming ? <Thinking /> : null}
       {parts.map((p, i) =>
         p.kind === "steps" ? (
@@ -108,9 +108,39 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       )}
       {streaming ? <BackgroundAgents parts={parts} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-    </Pressable>
+      {!streaming && content?.trim() ? <CopyReply text={content} /> : null}
+    </View>
   );
 });
+
+/** Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply". */
+function CopyReply({ text }: { text: string }) {
+  const c = useColors();
+  const [copied, setCopied] = useRecyclingState(false, [text]);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1400);
+    return () => clearTimeout(timer);
+  }, [copied, setCopied]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={copied ? "Copied" : "Copy reply"}
+      hitSlop={10}
+      onPress={() => {
+        void Clipboard.setStringAsync(text);
+        tap();
+        setCopied(true);
+      }}
+      style={({ pressed }) => [styles.copy, pressed && { backgroundColor: c.sunken }]}
+    >
+      <Icon name={copied ? "check" : "copy"} size={13} color={copied ? c.success : c.textFaint} />
+      <T variant="caption" color={copied ? c.success : c.textFaint}>
+        {copied ? "Copied" : "Copy"}
+      </T>
+    </Pressable>
+  );
+}
 
 function Files({ attachments, spaced, color }: { attachments: Attachment[]; spaced: boolean; color: string }) {
   if (!attachments.length) return null;
@@ -121,12 +151,6 @@ function Files({ attachments, spaced, color }: { attachments: Attachment[]; spac
       ))}
     </View>
   );
-}
-
-function copy(text: string) {
-  if (!text) return;
-  void Clipboard.setStringAsync(text);
-  tap();
 }
 
 const Block = memo(function Block({ block, streaming }: { block: MessageBlock; streaming: boolean }) {
@@ -617,6 +641,18 @@ const styles = StyleSheet.create({
   assistant: {
     gap: 12,
     paddingRight: 8,
+  },
+  copy: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 5,
+    marginTop: -4,
+    marginLeft: -8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
   },
   question: {
     gap: 6,
