@@ -1338,6 +1338,9 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   const env = claudeEnv();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
+  // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
+  // hears back from them. The watchdog and the run timeout decide when a run has gone quiet for too long instead.
+  env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ??= "0";
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   // API tools that hand their key to runs (Integrations → Tools).
   if (apiKeys) Object.assign(env, apiToolEnv(agent));

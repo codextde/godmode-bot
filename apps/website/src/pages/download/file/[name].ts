@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { assetRedirect, releaseFor } from '@/lib/releases';
+import { assetRedirect, assetText, releaseFor } from '@/lib/releases';
 import { entitled } from '@/lib/entitlement';
 import { allowed } from '@/lib/limit';
 
@@ -19,8 +19,12 @@ export const GET: APIRoute = async ({ params, url, cookies, request }) => {
   try {
     const release = await releaseFor(url.searchParams.get('version'));
     const asset = release.assets.find((a) => a.name === name);
-    if (!asset) return new Response(`${name} is not part of ${release.tag_name}`, { status: 404 });
-    return await assetRedirect(asset);
+    if (asset) return await assetRedirect(asset);
+    // Newer releases keep the checksums in one SHA256SUMS file instead of one .sha256 file per binary.
+    const sums = name.endsWith('.sha256') && release.assets.find((a) => a.name === 'SHA256SUMS');
+    const line = sums && (await assetText(sums)).split('\n').find((l) => l.split(/\s+/)[1] === name.slice(0, -7));
+    if (line) return new Response(`${line.trim()}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+    return new Response(`${name} is not part of ${release.tag_name}`, { status: 404 });
   } catch (e) {
     console.error('file download failed', e);
     return new Response('Download temporarily unavailable', { status: 502 });

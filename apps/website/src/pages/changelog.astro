@@ -24,7 +24,8 @@ const inline = (s: string) =>
 function render(md: string) {
   const out: string[] = [];
   let list = false;
-  for (const raw of md.replace(/\r/g, '').split('\n')) {
+  const notes = md.replace(/\r/g, '').replace(/<!-- downloads -->[\s\S]*?<!-- \/downloads -->/, '');
+  for (const raw of notes.split('\n')) {
     const line = raw.trimEnd();
     const bullet = /^\s*[-*]\s+(.*)$/.exec(line);
     if (bullet) {
