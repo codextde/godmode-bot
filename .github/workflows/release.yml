@@ -4,9 +4,10 @@ name: Release
 # bumped first; when the tag is ahead of main, main gets a "Release v0.2.4" commit (`pnpm bump` does the same locally).
 # The tag builds:
 #   * desktop installers (macOS arm64 + x64, Windows x64, Linux x64 + arm64) with the core sidecar,
-#   * standalone `godmode` server binaries (web dashboard embedded) + .sha256 files,
+#   * standalone `godmode` server binaries (web dashboard embedded),
 #   * the Docker image ghcr.io/codextde/godmode-bot,
-# all attached to a draft GitHub release that a maintainer publishes after a quick check.
+# all attached to a draft GitHub release that a maintainer publishes after a quick check. The last job drops the .sig
+# files (latest.json carries the signatures), adds SHA256SUMS and puts a download table on top of the notes.
 #
 # Optional secrets for signed/notarized macOS builds: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
 # APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID.
@@ -300,14 +301,6 @@ jobs:
             bun run scripts/build.ts --target="$target" --smoke
           done
 
-      - name: Checksums
-        working-directory: packages/core/bin
-        run: |
-          for f in godmode-*; do
-            if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256"; else shasum -a 256 "$f" > "$f.sha256"; fi
-          done
-          ls -la
-
       - name: Upload to the draft release
         working-directory: packages/core/bin
         env:
@@ -321,6 +314,37 @@ jobs:
             gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$f" \
               -H "Content-Type: application/octet-stream" --input "$f" --jq .browser_download_url
           done
+
+  downloads:
+    name: Download table
+    needs: [create-release, updater-manifest, server]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.2"
+
+      - name: Tidy the assets and put the download table on top of the notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          release="repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"
+          gh api "$release/assets?per_page=100" --jq '.[] | select(.name | test("\\.(sig|sha256)$") or . == "SHA256SUMS") | .id' |
+            while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"; done
+          gh api "$release/assets?per_page=100" > assets.json
+          bun scripts/release-downloads.ts sums assets.json > SHA256SUMS
+          gh api -X POST "https://uploads.github.com/$release/assets?name=SHA256SUMS" \
+            -H "Content-Type: text/plain" --input SHA256SUMS --jq .browser_download_url
+          gh api "$release/assets?per_page=100" > assets.json
+          gh api "$release" --jq '.body // ""' > body.md
+          bun scripts/release-downloads.ts notes "$TAG" assets.json body.md > notes.md
+          gh api -X PATCH "$release" -F body=@notes.md --jq .html_url
+          jq -r '.[].name' assets.json
 
   docker:
     name: Docker image
