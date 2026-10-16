@@ -236,6 +236,22 @@ function modSummary(mod: Mod) {
 }
 const fail = (text: string): ToolOutput => ({ text, isError: true });
 
+/**
+ * A login without its own 2FA can use the one of another login for the same account on the same site (the human
+ * linked the code to a duplicate login). The code is still only typed on the site of the login it is linked to.
+ */
+function sameAccountTotp(agent: Agent, cred: Credential): string | null {
+  const user = cred.username.trim().toLowerCase();
+  if (!user) return null;
+  const hostsOf = (c: Credential) => [...c.domains, ...(c.url ? [hostnameOf(c.url)] : [])].filter(Boolean);
+  const hosts = hostsOf(cred);
+  const usable = new Set(totpForAgent(agent).map((t) => t.id));
+  const twin = credentialsForAgent(agent).find(
+    (c) => c.id !== cred.id && c.totpId && usable.has(c.totpId) && c.username.trim().toLowerCase() === user && hostsOf(c).some((d) => hosts.some((h) => domainMatches(h, d))),
+  );
+  return twin?.totpId ?? null;
+}
+
 function snippet(s: string | null | undefined, max: number): string | null {
   if (!s) return null;
   const t = s.trim();
@@ -1118,10 +1134,10 @@ const TOOLS: ToolDef[] = [
         const cred = credentialsForAgent(agent).find((c) => c.id === credentialId);
         if (!cred) return fail(`Login ${credentialId} is not available to you.`);
         site = cred;
-        id ??= cred.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? null;
+        id ??= cred.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? sameAccountTotp(agent, cred) ?? null;
         if (!id) {
           return fail(
-            `No 2FA code is linked to "${cred.name}". Call report_missing_login with kind "missing_totp" so the human can add it, then continue with other work.`,
+            `No 2FA code is linked to "${cred.name}". Call report_missing_login with kind "missing_totp" and the site's URL: the human can pick the code if it is already in the vault or add it. Don't give the human a task to type the code; continue with other work.`,
           );
         }
       }
@@ -1249,7 +1265,7 @@ const TOOLS: ToolDef[] = [
       let id = totpId ?? null;
       if (!id && credentialId) {
         const cred = credentialsForAgent(agent).find((c) => c.id === credentialId);
-        id = cred?.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? null;
+        id = cred?.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? (cred ? sameAccountTotp(agent, cred) : null);
       }
       if (!id) return fail("No 2FA entry found. Pass a totpId or a credentialId with linked 2FA.");
       const code = codeForAgent(agent, id);

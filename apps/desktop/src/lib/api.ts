@@ -111,6 +111,9 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   MessagingVerifyResult,
   MissingLogin,
   MissingLoginPatch,
+  MissingLoginTotpChoices,
+  MissingLoginTotpLinkInput,
+  MissingLoginTotpLinkResult,
   MobileDevice,
   MobilePairingOffer,
   MobileStatus,
@@ -882,6 +885,8 @@ export const api = {
   missingLogins: {
     list: (q: { status?: string } = {}) => get<MissingLogin[]>("/api/missing-logins", q),
     update: (id: string, input: MissingLoginPatch) => patch<MissingLogin>(`/api/missing-logins/${id}`, input),
+    totpChoices: (id: string) => get<MissingLoginTotpChoices>(`/api/missing-logins/${id}/totp-choices`),
+    linkTotp: (id: string, input: MissingLoginTotpLinkInput) => post<MissingLoginTotpLinkResult>(`/api/missing-logins/${id}/link-totp`, input),
   },
 
   mcpServers: {

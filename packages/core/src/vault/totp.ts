@@ -320,7 +320,7 @@ const compact = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Does a TOTP issuer (e.g. "GitHub", "github.com", "Google") refer to this credential's site? */
-function issuerMatchesCredential(issuer: string, cred: { name: string; url: string; domains: string }): boolean {
+export function issuerMatchesCredential(issuer: string, cred: { name: string; url: string; domains: string }): boolean {
   const iss = issuer.trim().toLowerCase();
   const key = compact(iss);
   if (key.length < 2) return false;

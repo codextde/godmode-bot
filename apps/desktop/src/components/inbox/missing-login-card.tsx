@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
@@ -14,6 +15,7 @@ import { api } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { LinkTotpDialog } from "./link-totp-dialog";
 
 export const KIND_META: Record<MissingLoginKind, { label: string; icon: typeof KeyRound; className: string }> = {
   missing_credential: { label: "Missing login", icon: KeyRound, className: "bg-warning/12 text-warning" },
@@ -59,13 +61,16 @@ export function MissingLoginCard({
   agent,
   onStatus,
   pending,
+  autoOpenLink = false,
 }: {
   item: MissingLogin;
   agent: Agent | undefined;
   onStatus: (status: MissingLoginStatus) => void;
   pending: boolean;
+  autoOpenLink?: boolean;
 }) {
   const navigate = useNavigate();
+  const [linkOpen, setLinkOpen] = useState(autoOpenLink && item.kind === "missing_totp" && item.status === "open");
   const meta = KIND_META[item.kind] ?? KIND_META.other;
   const KindIcon = meta.icon;
   const domain = domainFromUrl(item.url);
@@ -81,7 +86,6 @@ export function MissingLoginCard({
     const q = new URLSearchParams({ new: "1", domain, service: item.service, missingLoginId: item.id });
     navigate(`/vault/logins?${q.toString()}`);
   };
-  const addTotp = () => navigate("/vault/2fa?import=1");
 
   const open = item.status === "open";
   const failed = item.kind === "invalid_credential";
@@ -156,7 +160,7 @@ export function MissingLoginCard({
                   <Check /> Mark resolved
                 </Button>
                 {item.kind === "missing_totp" ? (
-                  <Button size="sm" onClick={addTotp}>
+                  <Button size="sm" onClick={() => setLinkOpen(true)}>
                     <ShieldPlus /> Add 2FA
                   </Button>
                 ) : (
@@ -179,6 +183,7 @@ export function MissingLoginCard({
           </div>
         </div>
       </div>
+      {item.kind === "missing_totp" && <LinkTotpDialog item={item} open={linkOpen} onOpenChange={setLinkOpen} />}
     </article>
   );
 }

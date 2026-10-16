@@ -814,7 +814,7 @@ function MissingLoginCard({ block }: { block: ToolUseBlock }) {
           <div className="mt-3 flex flex-wrap gap-2">
             {kind === "missing_totp" ? (
               <Button asChild size="sm">
-                <Link to="/vault/2fa?import=1">Add 2FA code</Link>
+                <Link to={`/inbox?link2fa=${encodeURIComponent(domain)}`}>Add 2FA code</Link>
               </Button>
             ) : (
               <Button asChild size="sm">

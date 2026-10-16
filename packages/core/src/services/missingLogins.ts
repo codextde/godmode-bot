@@ -1,11 +1,24 @@
 /**
  * Missing / broken login reports raised by agents (report_missing_login) and handled by the human in the inbox.
  */
-import type { MissingLogin, MissingLoginKind, MissingLoginPatch, MissingLoginStatus } from "@godmode/shared";
-import { all, get, insert, run, update } from "../db";
+import type {
+  Credential,
+  MissingLogin,
+  MissingLoginKind,
+  MissingLoginPatch,
+  MissingLoginStatus,
+  MissingLoginTotpChoices,
+  MissingLoginTotpLinkInput,
+  MissingLoginTotpLinkOutcome,
+  MissingLoginTotpLinkResult,
+} from "@godmode/shared";
+import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
+import { addCredentialDomain, getCredential, linkCredentialTotp, listCredentials } from "../vault/credentials";
+import { getTotp, issuerMatchesCredential, listTotp } from "../vault/totp";
+import { audit } from "./audit";
 import { notify } from "./notifications";
-import { badRequest, hostnameOf, newId, notFound, now, truncate } from "../util";
+import { badRequest, domainMatches, hostnameOf, newId, notFound, now, truncate } from "../util";
 
 interface MissingLoginRow {
   id: string;
@@ -152,4 +165,106 @@ export function updateMissingLogin(id: string, patch: MissingLoginPatch): Missin
   const item = toModel(getRow(id));
   bus.emit({ type: "missing-login.updated", item });
   return item;
+}
+
+/* ------------------------------------------------------------------ */
+/* Link a 2FA entry that is already in the vault                        */
+/* ------------------------------------------------------------------ */
+
+const hostsOf = (c: Pick<Credential, "domains" | "url">) => [...c.domains, ...(c.url ? [hostnameOf(c.url)] : [])].filter(Boolean);
+const covers = (c: Pick<Credential, "domains" | "url">, host: string) => hostsOf(c).some((d) => domainMatches(host, d));
+const sameUser = (a: string, b: string) => !!a.trim() && a.trim().toLowerCase() === b.trim().toLowerCase();
+
+function siteOf(row: MissingLoginRow): string {
+  const host = hostnameOf(row.url) || hostnameOf(row.service);
+  if (!host) throw badRequest("This report has no website address, so Godmode can't tell which login the 2FA belongs to");
+  return host;
+}
+
+/** The site's logins, the report's workspace first, then global, then the rest. */
+function siteLogins(row: MissingLoginRow, host: string): Credential[] {
+  const rank = (c: Credential) => (c.workspaceId === row.workspace_id ? 0 : c.workspaceId === null ? 1 : 2);
+  return listCredentials({ workspaceId: "all" })
+    .filter((c) => covers(c, host))
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+export function totpChoicesForMissingLogin(id: string): MissingLoginTotpChoices {
+  const row = getRow(id);
+  const host = siteOf(row);
+  const logins = siteLogins(row, host);
+  const credentials = new Map(listCredentials({ workspaceId: "all" }).map((c) => [c.id, c]));
+  const site = { name: row.service, url: row.url || `https://${host}`, domains: JSON.stringify([host]) };
+  const scored = listTotp({ workspaceId: "all" })
+    .map((t) => {
+      const linked = t.credentialId ? credentials.get(t.credentialId) : undefined;
+      let score = 0;
+      if (t.issuer && issuerMatchesCredential(t.issuer, site)) score += 3;
+      if (logins.some((l) => sameUser(l.username, t.accountName))) score += 3;
+      if (linked && logins.some((l) => sameUser(l.username, linked.username))) score += 2;
+      if (linked && covers(linked, host)) score += 2;
+      if (linked && linked.name.trim().toLowerCase() === row.service.trim().toLowerCase()) score += 1;
+      return { id: t.id, score };
+    })
+    .filter((s) => s.score >= 3)
+    .sort((a, b) => b.score - a.score);
+  // A strong match (site and account) hides codes that only share the account.
+  const floor = Math.max(3, (scored[0]?.score ?? 0) - 2);
+  return {
+    host,
+    logins: logins.map(({ id, name, username, url, workspaceId, totpId }) => ({ id, name, username, url, workspaceId, totpId })),
+    suggestedTotpIds: scored.filter((s) => s.score >= floor).map((s) => s.id),
+  };
+}
+
+/**
+ * The human picked a 2FA entry that is already in the vault for this report's site: make it usable there and
+ * resolve the report. A free entry goes to the site's login. One linked to a login of the same account stays there
+ * and that login gets the site (vault_fill_totp then finds it through the same account); one linked to another
+ * account's login moves here.
+ */
+export function linkTotpToMissingLogin(id: string, input: MissingLoginTotpLinkInput): MissingLoginTotpLinkResult {
+  const row = getRow(id);
+  const host = siteOf(row);
+  const totp = getTotp(input.totpId);
+  const logins = siteLogins(row, host);
+  let login: Credential | undefined;
+  if (input.credentialId) {
+    login = getCredential(input.credentialId);
+    if (!covers(login, host)) throw badRequest(`"${login.name}" is not a login for ${host}`);
+  } else {
+    login =
+      logins.find((l) => l.totpId === totp.id) ??
+      logins.find((l) => sameUser(l.username, totp.accountName)) ??
+      (logins.length === 1 ? logins[0] : undefined);
+  }
+  if (!login) {
+    throw badRequest(
+      logins.length ? `Pick which login for ${host} this 2FA belongs to` : `No login is saved for ${host} yet. Add the login first, then link its 2FA.`,
+    );
+  }
+  const site = login;
+  const owner = totp.credentialId && totp.credentialId !== site.id ? getCredential(totp.credentialId) : null;
+
+  let outcome: MissingLoginTotpLinkOutcome;
+  let credentialId = site.id;
+  tx(() => {
+    if (totp.credentialId === site.id) {
+      outcome = "already";
+    } else if (owner && (covers(owner, host) || sameUser(owner.username, site.username))) {
+      outcome = addCredentialDomain(owner.id, host) ? "domain_added" : "already";
+      credentialId = owner.id;
+    } else {
+      linkCredentialTotp(site.id, totp.id);
+      outcome = owner ? "moved" : "linked";
+    }
+    update("missing_logins", id, { status: "resolved", updated_at: now() });
+    run("UPDATE missing_logins SET credential_id = ? WHERE id = ?", credentialId, id);
+  });
+  bus.changed("totp");
+  bus.changed("credentials");
+  audit("user", "totp.link", totp.id, { credentialId, missingLoginId: id, outcome: outcome!, host });
+  const item = toModel(getRow(id));
+  bus.emit({ type: "missing-login.updated", item });
+  return { item, credentialId, outcome: outcome! };
 }

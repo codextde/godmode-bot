@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, CircleCheck, Inbox, PartyPopper, RefreshCw } from "lucide-react";
 import type { Agent, AgentQuestion, MissingLogin, MissingLoginStatus } from "@godmode/shared";
@@ -11,7 +12,7 @@ import { Character } from "@/components/character";
 import { MissingLoginCard, useMissingLoginStatus } from "@/components/inbox/missing-login-card";
 import { NotificationList } from "@/components/inbox/notification-list";
 import { InboxQuestion } from "@/components/inbox/question-item";
-import { isVaultLocked } from "@/components/vault/vault-utils";
+import { domainFromUrl, isVaultLocked } from "@/components/vault/vault-utils";
 import { errorMessage } from "@/lib/api";
 import { useAllAgents, useAttention, useMissingLogins, useQuestions, useWorkspaces } from "@/lib/hooks";
 import { useScopedAttention } from "@/components/workspaces/workspace-activity";
@@ -54,6 +55,8 @@ export default function InboxPage() {
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map<string, Agent>(agents.map((a) => [a.id, a])), [agents]);
   const update = useMissingLoginStatus(tab);
+  const [params] = useSearchParams();
+  const link2fa = params.get("link2fa")?.toLowerCase() ?? "";
 
   const items = useMemo<Entry[]>(
     () =>
@@ -167,6 +170,7 @@ export default function InboxPage() {
                           agent={entry.item.agentId ? agentById.get(entry.item.agentId) : undefined}
                           onStatus={(status) => update.mutate({ id: entry.item.id, status })}
                           pending={update.isPending && update.variables?.id === entry.item.id}
+                          autoOpenLink={!!link2fa && (domainFromUrl(entry.item.url) === link2fa || entry.item.service.toLowerCase() === link2fa)}
                         />
                       )}
                     </motion.div>
