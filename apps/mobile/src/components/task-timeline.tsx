@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { formatDistanceToNowStrict } from "date-fns";
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { fileNameSummary, taskEventText, type Agent, type Task, type TaskEvent, type TaskEventKind } from "@godmode/shared";
@@ -6,41 +7,38 @@ import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { Skeleton, T, tap } from "./ui";
 import { ApiError, api } from "@/lib/api";
-import { shortTime, whenText } from "@/lib/format";
+import { whenText } from "@/lib/format";
 import { qk } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
-type Tone = "neutral" | "brand" | "warning" | "danger";
-
+/** The desktop's timeline icons (task-timeline.tsx), all quiet. */
 const ICONS: Record<TaskEventKind, IconName> = {
-  status: "tasks",
-  assigned: "person",
+  status: "move",
+  assigned: "user",
   archived: "archive",
   started: "play",
   waiting: "clock",
-  delivered: "check",
-  blocked: "warning",
-  feedback: "chats",
-  note: "pencil",
-  pr_opened: "branch",
-  pr_merged: "branch",
-  pr_closed: "close",
-  asked: "bell",
-  answered: "chats",
+  delivered: "package",
+  blocked: "octagon",
+  feedback: "reply",
+  note: "note",
+  pr_opened: "pullRequest",
+  pr_merged: "merge",
+  pr_closed: "closeCircle",
+  asked: "question",
+  answered: "checkCircle",
 };
-
-const TONES: Partial<Record<TaskEventKind, Tone>> = { delivered: "brand", pr_merged: "brand", blocked: "danger", asked: "warning" };
 
 /** Kinds whose text is shown under the line; a move or a start only when it carries one. */
 const BODIED: readonly TaskEventKind[] = ["feedback", "note", "asked", "answered", "blocked", "waiting", "status", "started"];
 
-const SHOWN = 30;
+const SHOWN = 50;
 const CLIP = 132;
 const SKELETON = ["72%", "56%", "64%"] as const;
 
 /**
  * What happened on a ticket, oldest first: who filed it, moves, starts, deliveries, blocks with their reason, the
- * human's feedback, notes agents left, pull requests, questions and answers. The latest 30, earlier ones on request.
+ * human's feedback, notes agents left, pull requests, questions and answers. The latest 50, earlier ones on request.
  */
 export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task: Task; agents: Agent[] | undefined }) {
   const events = useQuery({ queryKey: qk.taskEvents(task.id), queryFn: () => api.tasks.events(task.id) });
@@ -74,7 +72,7 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
             }}
             style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
           >
-            <T variant="footnote" style={{ fontWeight: "600" }}>
+            <T variant="footnote" style={{ fontWeight: "500" }}>
               Try again
             </T>
           </Pressable>
@@ -92,7 +90,7 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
 
   return (
     <View accessibilityRole="list" style={{ paddingHorizontal: 4 }}>
-      <Line icon="plus" text={`${filer} filed it`} at={task.createdAt} last={!shown.length && !hidden} />
+      <Line icon="dot" text={filer === "You" ? "You filed this" : `${filer} filed this`} at={task.createdAt} last={!shown.length && !hidden} />
       {hidden > 0 && (
         <Line icon="more">
           <Pressable
@@ -105,8 +103,8 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
             }}
             style={({ pressed }) => [styles.earlier, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <T variant="subhead" muted style={{ fontWeight: "600" }}>
-              Show earlier ({hidden})
+            <T variant="subhead" muted style={{ fontWeight: "500" }}>
+              Show earlier activity ({hidden})
             </T>
           </Pressable>
         </Line>
@@ -122,7 +120,6 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
 const EventRow = memo(function EventRow({ event: e, current, last }: { event: TaskEvent; current: boolean; last: boolean }) {
   const [open, setOpen] = useState(false);
   const text = taskEventText(e, { you: "You", youObject: "you", when: whenText });
-  const tone = TONES[e.kind];
 
   if (e.kind === "delivered") {
     const meta = [
@@ -133,7 +130,7 @@ const EventRow = memo(function EventRow({ event: e, current, last }: { event: Ta
       .filter(Boolean)
       .join(" · ");
     return (
-      <Line icon={ICONS[e.kind]} tone={tone} text={text} strong at={e.createdAt} last={last}>
+      <Line icon={ICONS[e.kind]} text={text} strong at={e.createdAt} last={last}>
         {meta ? (
           <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
             {meta}
@@ -146,7 +143,7 @@ const EventRow = memo(function EventRow({ event: e, current, last }: { event: Ta
   }
 
   return (
-    <Line icon={ICONS[e.kind] ?? "tasks"} tone={tone} text={text} strong={e.kind === "feedback" || e.kind === "asked"} at={e.createdAt} last={last}>
+    <Line icon={ICONS[e.kind] ?? "dot"} text={text} strong={e.kind === "feedback" || e.kind === "asked"} danger={e.kind === "blocked"} at={e.createdAt} last={last}>
       {e.body && BODIED.includes(e.kind) ? (
         <Body text={e.body} note={e.kind === "feedback" && e.data.files.length > 0 ? `Files: ${fileNameSummary(e.data.files)}` : undefined} />
       ) : null}
@@ -155,31 +152,44 @@ const EventRow = memo(function EventRow({ event: e, current, last }: { event: Ta
 });
 
 /** One step on the rail: its dot, what happened and when, and what belongs under it. */
-function Line({ icon, tone = "neutral", text, strong, at, last, children }: { icon: IconName; tone?: Tone; text?: string; strong?: boolean; at?: string; last?: boolean; children?: ReactNode }) {
+function Line({
+  icon,
+  text,
+  strong,
+  danger,
+  at,
+  last,
+  children,
+}: {
+  icon: IconName;
+  text?: string;
+  strong?: boolean;
+  /** Only a block reads in rose, like the desktop. */
+  danger?: boolean;
+  at?: string;
+  last?: boolean;
+  children?: ReactNode;
+}) {
   const c = useColors();
-  const tones = {
-    neutral: { bg: c.sunken, fg: c.textMuted },
-    brand: { bg: c.brandSoft, fg: c.brandStrong },
-    warning: { bg: c.warningSoft, fg: c.warning },
-    danger: { bg: c.dangerSoft, fg: c.danger },
-  }[tone];
   return (
     <View style={styles.line}>
       <View style={styles.rail}>
-        <View style={[styles.dot, { backgroundColor: tones.bg }]}>
-          <Icon name={icon} size={11} color={tones.fg} weight="semibold" />
+        <View style={[styles.dot, { backgroundColor: c.background }]}>
+          <Icon name={icon} size={14} color={c.textMuted} />
         </View>
-        {!last && <View style={[styles.thread, { backgroundColor: c.borderStrong }]} />}
+        {!last && <View style={[styles.thread, { backgroundColor: c.border }]} />}
       </View>
       <View style={[styles.step, !last && { paddingBottom: space.lg }]}>
         {text ? (
           <View style={styles.head}>
-            <T variant="subhead" style={[{ flex: 1 }, strong && { fontWeight: "600" }]}>
+            <T variant="subhead" color={danger ? c.rose : c.text} style={[{ flex: 1 }, strong && { fontWeight: "500" }]}>
               {text}
             </T>
-            <T variant="caption" muted style={styles.time}>
-              {shortTime(at)}
-            </T>
+            {at ? (
+              <T variant="caption" muted style={styles.time}>
+                {formatDistanceToNowStrict(new Date(at), { addSuffix: true })}
+              </T>
+            ) : null}
           </View>
         ) : null}
         {children}
@@ -223,7 +233,7 @@ function Toggle({ open, onPress, more, less }: { open: boolean; onPress: () => v
       }}
       style={({ pressed }) => [styles.toggle, { opacity: pressed ? 0.6 : 1 }]}
     >
-      <T variant="footnote" muted style={{ fontWeight: "600" }}>
+      <T variant="footnote" muted style={{ fontWeight: "500" }}>
         {open ? less : more}
       </T>
       <Icon name={open ? "up" : "down"} size={10} color={c.textMuted} weight="semibold" />
@@ -266,7 +276,7 @@ const styles = StyleSheet.create({
   },
   thread: {
     flex: 1,
-    width: 1.5,
+    width: 1,
     marginVertical: 3,
     borderRadius: 1,
   },

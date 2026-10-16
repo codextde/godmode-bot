@@ -332,7 +332,7 @@ export function ticketList(numbers: readonly number[]): string {
 
 /** In Todo, not started: it waits for tickets that aren't finished yet. */
 export function waitsForTickets(t: Pick<Task, "status" | "waitsFor">): boolean {
-  return t.status === "todo" && t.waitsFor.some((w) => !w.finished);
+  return t.status === "todo" && (t.waitsFor ?? []).some((w) => !w.finished);
 }
 
 /** In progress, nothing running: the ticket waits until its sub-tickets are done (then its agent continues). */

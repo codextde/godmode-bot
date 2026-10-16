@@ -3,13 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { isToday } from "date-fns";
 import { Stack } from "expo-router";
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
-import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { RefreshControl, StyleSheet, View } from "react-native";
 import { useShallow } from "zustand/react/shallow";
-import type { Run } from "@godmode/shared";
+import type { Run, RunStatus } from "@godmode/shared";
+import { FilterChips } from "@/components/filter-chips";
 import { Icon } from "@/components/icon";
 import { isLiveRun, RunRow } from "@/components/run-row";
-import { Card, EmptyState, ErrorState, Hairline, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
+import { Button, Card, EmptyState, ErrorState, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
+import { runDayLabel } from "@/lib/desktop-parity";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk } from "@/lib/query";
@@ -18,21 +20,20 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
-const LIMIT = 60;
+const LIMIT = 100;
 
-type Filter = "all" | "failed" | "running";
+type Filter = "all" | RunStatus;
+type Item = { kind: "header"; key: string; title: string } | { kind: "run"; key: string; run: Run; divided: boolean };
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "failed", label: "Failed" },
   { id: "running", label: "Running" },
+  { id: "paused", label: "Paused" },
+  { id: "succeeded", label: "Succeeded" },
+  { id: "failed", label: "Failed" },
+  { id: "cancelled", label: "Cancelled" },
+  { id: "queued", label: "Queued" },
 ];
-
-const EMPTY: Record<Filter, { title: string; body?: string }> = {
-  all: { title: "Nothing ran yet", body: "When your agents chat, run automations or hand over work, every run shows up here." },
-  failed: { title: "No failed runs" },
-  running: { title: "Nothing is running right now" },
-};
 
 interface Stats {
   working: number;
@@ -42,12 +43,15 @@ interface Stats {
 
 const ended = (run: Run) => run.status === "succeeded" || run.status === "failed" || run.status === "cancelled";
 const endedToday = (run: Run) => isToday(new Date(run.finishedAt ?? run.createdAt));
+const startOf = (run: Run) => run.startedAt ?? run.createdAt;
 
-/** The latest runs of the picked workspace's agents (or project's), with the ones working right now. */
+/** The latest runs of the picked workspace's agents (or project's), with the ones working right now, by day. */
 export default function Activity() {
   const [filter, setFilter] = useState<Filter>("all");
   const { id: workspaceId, projectId } = useWorkspace();
-  const list = useQuery({ queryKey: qk.recentRuns, queryFn: () => api.runs.list({ limit: LIMIT }) });
+  const all = useQuery({ queryKey: [...qk.recentRuns, "all"], queryFn: () => api.runs.list({ limit: LIMIT }) });
+  const filtered = useQuery({ queryKey: [...qk.recentRuns, filter], queryFn: () => api.runs.list({ limit: LIMIT, status: filter }), enabled: filter !== "all" });
+  const list = filter === "all" ? all : filtered;
   const agents = useAgents();
   const { byId } = agents;
   // The runs themselves, not what they are doing: an activity label of one run doesn't re-render the list.
@@ -56,56 +60,85 @@ export default function Activity() {
   // A workspace's runs are known once its agents are.
   const loading = list.isLoading || (!!workspaceId && agents.isLoading);
 
-  const runs = useMemo(() => {
-    const merged = new Map((list.data ?? []).map((run) => [run.id, run]));
-    // A live run is fresher than the fetched one, unless the list already knows how it ended.
-    for (const run of liveRuns) {
-      const fetched = merged.get(run.id);
-      if (!fetched || !ended(fetched)) merged.set(run.id, run);
-    }
-    return [...merged.values()]
-      .filter((run) => {
+  const scope = useCallback(
+    (runs: Run[]) =>
+      runs.filter((run) => {
         if (!workspaceId) return true;
         const agent = byId.get(run.agentId);
         if (!agent) return false;
         return projectId ? agent.projectId === projectId : !agent.workspaceId || agent.workspaceId === workspaceId;
-      })
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-  }, [list.data, liveRuns, workspaceId, projectId, byId]);
-
-  const stats = useMemo<Stats>(
-    () => ({
-      working: runs.filter(isLiveRun).length,
-      done: runs.filter((run) => run.status === "succeeded" && endedToday(run)).length,
-      failed: runs.filter((run) => run.status === "failed" && endedToday(run)).length,
-    }),
-    [runs],
+      }),
+    [workspaceId, projectId, byId],
   );
-  const data = useMemo(() => (filter === "all" ? runs : runs.filter((run) => (filter === "failed" ? run.status === "failed" : isLiveRun(run)))), [runs, filter]);
 
-  const renderItem: ListRenderItem<Run> = useCallback(({ item }) => <RunRow run={item} agent={byId.get(item.agentId)} />, [byId]);
+  const runs = useMemo(() => {
+    const merged = new Map((list.data ?? []).map((run) => [run.id, run]));
+    // A live run is fresher than the fetched one, unless the list already knows how it ended.
+    for (const run of liveRuns) {
+      if (filter !== "all" && run.status !== filter) continue;
+      const fetched = merged.get(run.id);
+      if (!fetched || !ended(fetched)) merged.set(run.id, run);
+    }
+    return scope([...merged.values()]).sort((a, b) => startOf(b).localeCompare(startOf(a)));
+  }, [list.data, liveRuns, filter, scope]);
+
+  const stats = useMemo<Stats>(() => {
+    const today = scope(all.data ?? []);
+    return {
+      working: scope(liveRuns).filter(isLiveRun).length,
+      done: today.filter((run) => run.status === "succeeded" && endedToday(run)).length,
+      failed: today.filter((run) => run.status === "failed" && endedToday(run)).length,
+    };
+  }, [all.data, liveRuns, scope]);
+
+  const items = useMemo(() => {
+    const out: Item[] = [];
+    let day = "";
+    for (const run of runs) {
+      const label = runDayLabel(new Date(startOf(run)));
+      if (label !== day) out.push({ kind: "header", key: `h-${label}`, title: label });
+      out.push({ kind: "run", key: run.id, run, divided: label === day });
+      day = label;
+    }
+    return out;
+  }, [runs]);
+
+  const renderItem: ListRenderItem<Item> = useCallback(
+    ({ item }) =>
+      item.kind === "header" ? (
+        <DayTitle title={item.title} />
+      ) : (
+        <>
+          {item.divided && <Hairline inset={72} />}
+          <RunRow run={item.run} agent={byId.get(item.run.agentId)} />
+        </>
+      ),
+    [byId],
+  );
 
   return (
     <>
       <Stack.Title>Activity</Stack.Title>
       <FlashList
-        data={loading ? [] : data}
-        keyExtractor={(run) => run.id}
+        data={loading ? [] : items}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
         renderItem={renderItem}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 80 }}
         refreshControl={<RefreshControl {...pull} />}
-        ListHeaderComponent={!loading && runs.length > 0 ? <ActivityHeader stats={stats} filter={filter} onFilter={setFilter} /> : null}
-        ItemSeparatorComponent={Separator}
+        ListHeaderComponent={<ActivityHeader stats={stats} filter={filter} onFilter={setFilter} />}
         ListEmptyComponent={
           loading ? (
             <View style={{ paddingTop: space.md }}>
               <SkeletonRows count={8} avatar={40} />
             </View>
           ) : list.isError ? (
-            <ErrorState title="Couldn't load the activity" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title="Couldn't load activity" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+          ) : filter !== "all" ? (
+            <EmptyState icon="pulse" title="No runs match these filters" action={<Button title="Clear filters" variant="secondary" onPress={() => setFilter("all")} />} />
           ) : (
-            <EmptyState icon="pulse" title={EMPTY[runs.length ? filter : "all"].title} body={EMPTY[runs.length ? filter : "all"].body} />
+            <EmptyState icon="pulse" title="No activity yet" body="When your agents chat, run automations or delegate work, every run shows up here — live." />
           )
         }
       />
@@ -113,7 +146,13 @@ export default function Activity() {
   );
 }
 
-const Separator = () => <Hairline inset={72} />;
+function DayTitle({ title }: { title: string }) {
+  return (
+    <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
+      <SectionTitle title={title} />
+    </View>
+  );
+}
 
 /** Three numbers of the fetched runs, then what to show of them. */
 const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }: { stats: Stats; filter: Filter; onFilter: (filter: Filter) => void }) {
@@ -126,11 +165,7 @@ const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }:
         <Stat label="Done today" value={stats.done} mark={<Icon name="check" size={11} color={c.textMuted} weight="semibold" />} />
         <Stat label="Failed today" value={stats.failed} mark={<Icon name="warning" size={11} color={stats.failed > 0 ? c.danger : c.textFaint} />} />
       </Row>
-      <Row style={{ gap: space.sm }}>
-        {FILTERS.map((f) => (
-          <Chip key={f.id} label={f.label} active={f.id === filter} onPress={() => onFilter(f.id)} />
-        ))}
-      </Row>
+      <FilterChips filters={FILTERS} value={filter} onChange={onFilter} bleed={space.lg} />
     </View>
   );
 });
@@ -152,26 +187,6 @@ function Stat({ label, value, mark }: { label: string; value: number; mark: Reac
   );
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  const c = useColors();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected: active }}
-      hitSlop={4}
-      onPress={() => {
-        tap();
-        onPress();
-      }}
-      style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
-    >
-      <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
-        {label}
-      </T>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: space.sm,
@@ -184,11 +199,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.md,
     gap: 2,
     borderRadius: radius.md,
-  },
-  chip: {
-    justifyContent: "center",
-    height: 32,
-    paddingHorizontal: 14,
-    borderRadius: radius.pill,
   },
 });

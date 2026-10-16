@@ -2,15 +2,16 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask, type HumanTaskLane } from "@godmode/shared";
+import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask, type HumanTaskLane, type HumanTaskPriority } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
+import { MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { humanStatus } from "@/components/human-task-row";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
 import { Badge, Button, Card, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
-import { api, errorText } from "@/lib/api";
+import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
 import { hostOf, shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -34,6 +35,8 @@ export default function HumanTaskSheet() {
   const { byId } = useAgents();
   const [note, setNote] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [editing, setEditing] = useState<{ title: string; body: string } | null>(null);
 
   const settle = (next: HumanTask) => {
     setSettled(next);
@@ -44,7 +47,24 @@ export default function HumanTaskSheet() {
   const move = useMutation({
     mutationFn: (status: HumanTaskLane) => api.humanTasks.move(id, status),
     onSuccess: settle,
-    onError: (err) => Alert.alert("Couldn't move the task", errorText(err)),
+    onError: (err) => Alert.alert("Couldn't move the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+  });
+  const update = useMutation({
+    mutationFn: (patch: { priority?: HumanTaskPriority; title?: string; body?: string }) => api.humanTasks.update(id, patch),
+    onSuccess: (next) => {
+      settle(next);
+      setEditing(null);
+    },
+    onError: (err) => Alert.alert("Couldn't update the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+  });
+  const remove = useMutation({
+    mutationFn: () => api.humanTasks.remove(id),
+    onSuccess: () => {
+      queryClient.setQueriesData<HumanTask[]>({ queryKey: qk.humanTasks }, (old) => (Array.isArray(old) ? old.filter((t) => t.id !== id) : old));
+      void queryClient.invalidateQueries({ queryKey: qk.humanTasks });
+      router.back();
+    },
+    onError: (err) => Alert.alert("Couldn't delete the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
   });
   const close = useMutation({
     mutationFn: (outcome: "done" | "declined") => api.humanTasks.close(id, outcome, note.trim() || undefined, outcome === "done" ? (picked ?? undefined) : undefined),
@@ -73,7 +93,27 @@ export default function HumanTaskSheet() {
   const agent = task.agentId ? byId.get(task.agentId) : undefined;
   const active = isHumanTaskActive(task);
   const status = humanStatus(task);
-  const busy = move.isPending || close.isPending;
+  const busy = move.isPending || close.isPending || update.isPending || remove.isPending;
+  // The human's own task: its words are theirs to change, and it can go. A closed one can go too.
+  const own = !task.agentId && !task.runId;
+  const actions: HeaderMenuItem[] = [
+    ...(active ? [{ icon: "warning" as const, title: task.priority === "high" ? "Not urgent" : "Mark urgent", onPress: () => update.mutate({ priority: task.priority === "high" ? "normal" : "high" }) }] : []),
+    ...(own && active ? [{ icon: "pencil" as const, title: "Edit", onPress: () => setEditing({ title: task.title, body: task.body }) }] : []),
+    ...(own || !active
+      ? [
+          {
+            icon: "trash" as const,
+            title: "Delete",
+            destructive: true,
+            onPress: () =>
+              Alert.alert(`Delete ${humanTaskRef(task)}?`, "It's removed on your computer too.", [
+                { text: "Cancel", style: "cancel" },
+                { text: "Delete", style: "destructive", onPress: () => remove.mutate() },
+              ]),
+          },
+        ]
+      : []),
+  ];
   const words = HUMAN_TASK_WORDS[task.kind];
   const decision = task.kind === "decision";
   const approval = task.kind === "approval";
@@ -97,8 +137,35 @@ export default function HumanTaskSheet() {
           </T>
           <Badge label={status.label} tone={status.tone} live={task.status === "doing"} />
           {task.priority === "high" && active ? <Badge label="Urgent" tone="danger" /> : null}
+          {actions.length ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="More"
+              hitSlop={10}
+              disabled={busy}
+              onPress={() => {
+                tap();
+                setMenu(true);
+              }}
+              style={({ pressed }) => [styles.more, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Icon name="more" size={15} color={c.text} />
+            </Pressable>
+          ) : null}
         </Row>
-        <T variant="title">{task.title}</T>
+        {editing ? (
+          <TextInput
+            value={editing.title}
+            onChangeText={(title) => setEditing({ ...editing, title })}
+            placeholder="What do you need to do?"
+            placeholderTextColor={c.textFaint}
+            autoFocus
+            maxLength={200}
+            style={[styles.editTitle, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
+          />
+        ) : (
+          <T variant="title">{task.title}</T>
+        )}
         <Row style={{ gap: space.sm }}>
           {agent ? <CharacterAvatar agent={agent} size={22} /> : <Icon name="person" size={15} color={c.textMuted} />}
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
@@ -131,7 +198,29 @@ export default function HumanTaskSheet() {
         </Pressable>
       ) : null}
 
-      {task.body.trim() ? (
+      {editing ? (
+        <View style={{ gap: space.sm }}>
+          <TextInput
+            value={editing.body}
+            onChangeText={(body) => setEditing({ ...editing, body })}
+            placeholder="Note (optional)"
+            placeholderTextColor={c.textFaint}
+            multiline
+            style={[styles.note, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
+          />
+          <Row style={{ gap: space.sm }}>
+            <Button title="Cancel" variant="secondary" disabled={update.isPending} onPress={() => setEditing(null)} style={{ flex: 1 }} />
+            <Button
+              title="Save"
+              icon="check"
+              loading={update.isPending}
+              disabled={!editing.title.trim()}
+              onPress={() => update.mutate({ title: editing.title.trim(), body: editing.body.trim() })}
+              style={{ flex: 1 }}
+            />
+          </Row>
+        </View>
+      ) : task.body.trim() ? (
         <Card style={{ padding: space.lg }}>
           <Markdown text={task.body} />
         </Card>
@@ -255,6 +344,7 @@ export default function HumanTaskSheet() {
           ) : null}
         </Card>
       )}
+      <MenuSheet items={actions} open={menu} onClose={() => setMenu(false)} />
     </ScrollView>
   );
 }
@@ -288,6 +378,22 @@ function LinkChip({ icon, label, onPress }: { icon: "tasks" | "chats"; label: st
 }
 
 const styles = StyleSheet.create({
+  more: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    marginLeft: "auto",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editTitle: {
+    fontSize: 20,
+    fontWeight: "600",
+    padding: space.md,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   fill: {
     flex: 1,
     justifyContent: "center",

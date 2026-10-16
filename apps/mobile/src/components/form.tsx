@@ -4,7 +4,7 @@ import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Icon, type IconName } from "./icon";
 import { Card, Hairline, SectionTitle, T, tap } from "./ui";
 import { useAutosave, useEditable, type SaveState } from "@/lib/setup";
-import { radius, space, useColors } from "@/lib/theme";
+import { fonts, radius, space, useColors } from "@/lib/theme";
 
 /** A titled card of rows with hairlines between them, and an optional note below. */
 export function Group({
@@ -567,6 +567,7 @@ const styles = StyleSheet.create({
   },
   field: {
     flex: 1,
+    fontFamily: fonts.regular,
     fontSize: 15,
     paddingVertical: 4,
   },
@@ -577,6 +578,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   editorInput: {
+    fontFamily: fonts.regular,
     fontSize: 15,
     lineHeight: 21,
     paddingHorizontal: space.lg,

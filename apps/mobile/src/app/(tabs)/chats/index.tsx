@@ -6,15 +6,28 @@ import { Alert, RefreshControl, View } from "react-native";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { ConversationRow } from "@/components/rows";
-import { EmptyState, ErrorState, Hairline, SkeletonRows } from "@/components/ui";
+import { FilterChips } from "@/components/filter-chips";
+import type { IconName } from "@/components/icon";
+import { EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { chatBucket, chatDayLabel, continuesAt, type ChatBucket } from "@/lib/desktop-parity";
 import { CHAT_LIST_LIMIT, useAgents } from "@/lib/hooks";
 import { useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { inProject, useProjectIndex, useWorkspace, chatProject } from "@/lib/workspace";
 import { space } from "@/lib/theme";
+
+type Tab = "all" | ChatBucket;
+type Item = { kind: "header"; key: string; title: string } | { kind: "chat"; key: string; conversation: Conversation; divided: boolean };
+
+const EMPTY: Record<Tab, { icon: IconName; title: string; body: string }> = {
+  all: { icon: "chats", title: "No chats yet", body: "New chats you start land in this list, on your computer too." },
+  running: { icon: "bolt", title: "Nothing running", body: "Chats that work or wait for you show up here." },
+  scheduled: { icon: "clock", title: "Nothing scheduled", body: "When an agent plans to check back later, the chat waits here." },
+  done: { icon: "check", title: "Nothing finished yet", body: "Finished chats land here." },
+};
 
 export default function Chats() {
   const [search, setSearch] = useState("");
@@ -26,6 +39,7 @@ export default function Chats() {
     const timer = setTimeout(() => setQ(next), 300);
     return () => clearTimeout(timer);
   }, [search]);
+  const [tab, setTab] = useState<Tab>("all");
   const { id: workspaceId, workspace, projectId, project } = useWorkspace();
   const projects = useProjectIndex();
   const list = useQuery({
@@ -36,14 +50,56 @@ export default function Chats() {
   const { byId } = useAgents();
   const pull = usePullRefresh(list.refetch);
   const running = useRunningChats();
-  const data = useMemo(() => inProject(list.data ?? [], projectId, byId).filter((conv) => conv.origin !== "dream"), [list.data, projectId, byId]);
-  const renderItem: ListRenderItem<Conversation> = useCallback(
+  const visible = useMemo(() => inProject(list.data ?? [], projectId, byId).filter((conv) => conv.origin !== "dream" && !conv.archived), [list.data, projectId, byId]);
+  const counts = useMemo(() => {
+    const n = { running: 0, scheduled: 0 };
+    for (const conv of visible) {
+      const bucket = chatBucket(conv, running.has(conv.id));
+      if (bucket !== "done") n[bucket]++;
+    }
+    return n;
+  }, [visible, running]);
+
+  const items = useMemo(() => {
+    const matching = visible
+      .filter((conv) => tab === "all" || chatBucket(conv, running.has(conv.id)) === tab)
+      .sort((a, b) =>
+        q
+          ? 0
+          : tab === "scheduled"
+            ? continuesAt(a).localeCompare(continuesAt(b))
+            : Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
+      );
+    // Long lists read by day; the running and scheduled tabs are short and ordered by what comes next.
+    const dated = !q && (tab === "all" || tab === "done");
+    const now = new Date();
+    const out: Item[] = [];
+    let day: string | null = null;
+    for (const conversation of matching) {
+      const label = dated ? (conversation.pinned ? "Pinned" : chatDayLabel(conversation.lastMessageAt ?? conversation.createdAt, now)) : null;
+      if (label && label !== day) out.push({ kind: "header", key: `h-${label}`, title: label });
+      out.push({ kind: "chat", key: conversation.id, conversation, divided: out.length > 0 && out[out.length - 1]!.kind === "chat" });
+      day = label;
+    }
+    return out;
+  }, [visible, tab, running, q]);
+
+  const renderItem: ListRenderItem<Item> = useCallback(
     ({ item }) => {
-      const id = projectId ? null : chatProject(item, byId);
-      return <ChatItem conversation={item} agent={byId.get(item.agentId)} running={running.has(item.id)} project={id ? projects.get(id)?.project : undefined} />;
+      if (item.kind === "header") return <DayTitle title={item.title} />;
+      const conv = item.conversation;
+      const id = projectId ? null : chatProject(conv, byId);
+      return (
+        <>
+          {item.divided && <Hairline inset={76} />}
+          <ChatItem conversation={conv} agent={byId.get(conv.agentId)} running={running.has(conv.id)} project={id ? projects.get(id)?.project : undefined} />
+        </>
+      );
     },
     [byId, running, projectId, projects],
   );
+  const scopeName = project?.name ?? workspace?.name ?? null;
+  const empty = tab === "all" && scopeName ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, body: "New chats you start here land in this list." } : EMPTY[tab];
 
   return (
     <>
@@ -56,16 +112,31 @@ export default function Chats() {
         ]}
       />
       <FlashList
-        data={data}
-        keyExtractor={(conv) => conv.id}
+        data={items}
+        keyExtractor={(item) => item.key}
+        getItemType={(item) => item.kind}
         renderItem={renderItem}
         extraData={running}
         contentInsetAdjustmentBehavior="automatic"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 140 }}
         refreshControl={<RefreshControl {...pull} />}
-        ListHeaderComponent={Header}
-        ItemSeparatorComponent={Separator}
+        ListHeaderComponent={
+          <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.md }}>
+            <WorkspaceChip />
+            <FilterChips
+              bleed={space.lg}
+              value={tab}
+              onChange={setTab}
+              filters={[
+                { id: "all", label: "All" },
+                { id: "running", label: "Running", count: counts.running },
+                { id: "scheduled", label: "Scheduled", count: counts.scheduled },
+                { id: "done", label: "Done" },
+              ]}
+            />
+          </View>
+        }
         ListEmptyComponent={
           list.isLoading ? (
             <SkeletonRows count={8} />
@@ -74,17 +145,7 @@ export default function Chats() {
           ) : q ? (
             <EmptyState icon="search" title="Nothing found" body={`No chat mentions “${q}”.`} />
           ) : (
-            <EmptyState
-              icon="chats"
-              title="No chats yet"
-              body={
-                project
-                  ? `Chats in ${project.name} show up here. Start one and it works with the project's context.`
-                  : workspace
-                  ? `Chats in ${workspace.name} show up here. Start one and it runs with this workspace's context.`
-                  : "Ask Godmode something and the conversation shows up here, on your computer too."
-              }
-            />
+            <EmptyState icon={empty.icon} title={empty.title} body={empty.body} />
           )
         }
       />
@@ -92,13 +153,13 @@ export default function Chats() {
   );
 }
 
-const Separator = () => <Hairline inset={76} />;
-
-const Header = () => (
-  <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm }}>
-    <WorkspaceChip />
-  </View>
-);
+function DayTitle({ title }: { title: string }) {
+  return (
+    <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
+      <SectionTitle title={title} />
+    </View>
+  );
+}
 
 function changeChat(id: string, patch: { pinned?: boolean; archived?: boolean }) {
   api.conversations

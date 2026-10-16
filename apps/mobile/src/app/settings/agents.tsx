@@ -13,7 +13,7 @@ export default function Agents() {
   const { data: agents } = useAgents();
   const { workspaces, id: picked } = useWorkspace();
   const groups = [
-    { key: "global", title: "Everywhere", agents: (agents ?? []).filter((a) => !a.workspaceId) },
+    { key: "global", title: "Global", agents: (agents ?? []).filter((a) => !a.workspaceId) },
     ...workspaces.map((w) => ({ key: w.id, title: w.name, agents: (agents ?? []).filter((a) => a.workspaceId === w.id) })),
   ].filter((g) => g.agents.length);
 

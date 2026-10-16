@@ -36,7 +36,7 @@ export default function ModelAndLimits() {
   if (!s) {
     return (
       <View style={styles.loading}>
-        <Stack.Screen options={{ title: "Model & limits" }} />
+        <Stack.Screen options={{ title: "AI & Claude" }} />
         <ActivityIndicator />
       </View>
     );
@@ -62,7 +62,7 @@ export default function ModelAndLimits() {
       automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={{ title: "Model & limits" }} />
+      <Stack.Screen options={{ title: "AI & Claude" }} />
       <CloseButton />
 
       <Group title="Default model" footer="Agents without a model of their own use this one. Change it per agent, or per chat from the composer.">

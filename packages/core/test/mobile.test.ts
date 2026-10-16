@@ -13,7 +13,7 @@ import {
   type ServerEvent,
 } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, openDb } from "../src/db";
+import { closeDb, openDb, run } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
@@ -23,6 +23,7 @@ import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { mobileUrls, refreshMobileAccess, startMobileAccess, stopMobileAccess } from "../src/mobile/access";
 import { PAIRING_TTL_MS } from "../src/mobile/devices";
 import { deviceMayCall } from "../src/mobile/scope";
+import { reportMissingLogin } from "../src/services/missingLogins";
 import { parseTailscaleStatus, setTailscaleOverride } from "../src/mobile/tailscale";
 
 let dataDir: string;
@@ -178,6 +179,23 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/conversations/conv_1/queue/send")).toBe(true);
     expect(deviceMayCall("PATCH", "/api/agents/a1")).toBe(true);
     expect(deviceMayCall("PUT", "/api/agents/a1/file")).toBe(false);
+  });
+
+  test("reads calls, never places them", () => {
+    expect(deviceMayCall("GET", "/api/calls")).toBe(true);
+    expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a")).toBe(true);
+    expect(deviceMayCall("GET", "/api/calls/call_4f9Kd81LmQ2xYz0a/audio")).toBe(false);
+    expect(deviceMayCall("GET", "/api/calls/setup")).toBe(false);
+    expect(deviceMayCall("GET", "/api/calls/numbers")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/test")).toBe(false);
+    expect(deviceMayCall("POST", "/api/calls/numbers")).toBe(false);
+    expect(deviceMayCall("GET", "/api/agent-templates")).toBe(true);
+    expect(deviceMayCall("POST", "/api/notifications/read")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/notifications")).toBe(false);
+    expect(deviceMayCall("PATCH", "/api/missing-logins/ml_1")).toBe(true);
+    expect(deviceMayCall("POST", "/api/human-tasks")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/human-tasks/htk_1")).toBe(true);
   });
 });
 
@@ -406,6 +424,53 @@ describe("phone access", () => {
     const read = await phone(attachment.url, { bearer: device });
     expect(read.status).toBe(200);
     expect(await read.text()).toBe("screenshot");
+  });
+
+  test("phones read calls, keep up with the inbox and add their own tasks", async () => {
+    const { token: device } = await pair("Inbox");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+
+    expect((await phone("/api/calls?limit=50", { bearer: device })).status).toBe(200);
+    expect((await phone("/api/calls/call_0000000000000000", { bearer: device })).status).toBe(404);
+    expect((await phone("/api/calls/setup", { bearer: device })).status).toBe(403);
+    expect((await phone("/api/calls/numbers", { bearer: device })).status).toBe(403);
+    expect((await phone("/api/calls/call_0000000000000000/audio", { bearer: device })).status).toBe(403);
+    expect((await phone("/api/calls", json("POST", { to: "+4915112345678", goal: "Book a table" }))).status).toBe(403);
+    expect((await phone("/api/calls/test", json("POST", {}))).status).toBe(403);
+
+    const templates = await phone("/api/agent-templates", { bearer: device });
+    expect(templates.status).toBe(200);
+    expect(((await templates.json()) as unknown[]).length).toBeGreaterThan(0);
+    const ws = (await (await desktop("/api/workspaces", { method: "POST", body: JSON.stringify({ name: "Hired" }) })).json()) as { id: string };
+    const hired = await phone("/api/agents", json("POST", { name: "Bookkeeper", workspaceId: ws.id, avatar: "📒", color: "amber", character: { body: "kitty" } }));
+    expect(hired.status).toBe(200);
+    expect((await phone("/api/agents", json("POST", { name: "Sneaky", workspaceId: ws.id, permissions: { secretAccess: "reveal" } }))).status).toBe(403);
+
+    expect((await phone("/api/notifications/read", json("POST", { ids: "all" }))).status).toBe(200);
+    expect((await phone("/api/notifications/read", json("POST", { ids: "all", clear: true }))).status).toBe(403);
+    expect((await phone("/api/notifications", { bearer: device, method: "DELETE" })).status).toBe(403);
+
+    const login = reportMissingLogin({ agentId: null, runId: null, workspaceId: null, kind: "missing_credential", service: "Acme Portal" });
+    expect((await phone(`/api/missing-logins/${login.id}`, json("PATCH", { credentialId: "crd_1" }))).status).toBe(403);
+    expect((await phone(`/api/missing-logins/${login.id}`, json("PATCH", { status: "resolved", credentialId: "crd_1" }))).status).toBe(403);
+    const dismissed = await phone(`/api/missing-logins/${login.id}`, json("PATCH", { status: "dismissed" }));
+    expect(((await dismissed.json()) as { status: string }).status).toBe("dismissed");
+    expect((await phone(`/api/missing-logins/${login.id}`, json("PATCH", { status: "open" }))).status).toBe(200);
+
+    const created = await phone("/api/human-tasks", json("POST", { title: "Call the bank", priority: "high", status: "backlog" }));
+    expect(created.status).toBe(201);
+    const task = (await created.json()) as { id: string; status: string; priority: string };
+    expect(task).toMatchObject({ status: "backlog", priority: "high" });
+    expect((await phone("/api/human-tasks", json("POST", { title: "With a file", attachments: [] }))).status).toBe(403);
+    const edited = await phone(`/api/human-tasks/${task.id}`, json("PATCH", { title: "Call the bank today", body: "About the card", priority: "normal" }));
+    expect(((await edited.json()) as { title: string }).title).toBe("Call the bank today");
+    expect((await phone(`/api/human-tasks/${task.id}`, json("PATCH", { agentId: "agt_1" }))).status).toBe(403);
+    expect((await phone(`/api/human-tasks/${task.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
+
+    // A ticket an agent stands still for stays until it is answered.
+    const waiting = (await (await phone("/api/human-tasks", json("POST", { title: "Pick a color" }))).json()) as { id: string };
+    run("UPDATE human_tasks SET question_id = 'qst_waiting' WHERE id = ?", waiting.id);
+    expect((await phone(`/api/human-tasks/${waiting.id}`, { bearer: device, method: "DELETE" })).status).toBe(400);
   });
 
   test("the phones' listener refuses everything but paired phones", async () => {

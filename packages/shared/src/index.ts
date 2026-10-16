@@ -10,6 +10,7 @@ export * from "./mods";
 export * from "./git";
 export * from "./messaging";
 export * from "./schedule";
+export * from "./cron";
 export * from "./tasks";
 export * from "./mobile";
 export * from "./connect";
