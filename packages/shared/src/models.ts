@@ -1485,6 +1485,16 @@ export interface PhoneSettings {
   inboundInstructions: string;
 }
 
+/** Keeping a MacBook working with its lid closed (see power.ts). Local to each computer. */
+export interface PowerSettings {
+  /** Closing the lid doesn't put the Mac to sleep (`pmset disablesleep`), so agents keep working. */
+  lidClosedAwake: boolean;
+  /** Only while an agent works: the Mac may sleep again a few minutes after the last run ended. */
+  onlyWhileWorking: boolean;
+  /** Let the Mac sleep again on battery at or below this charge, in percent. 0 = never. */
+  minBattery: number;
+}
+
 /** The phone app: phones reach Godmode over Tailscale (see mobile.ts). */
 export interface MobileSettings {
   /** Paired phones may connect. */
@@ -1509,6 +1519,7 @@ export interface Settings {
   selfRepair: SelfRepairSettings;
   mobile: MobileSettings;
   phone: PhoneSettings;
+  power: PowerSettings;
   /** Godmode Cloud (see cloud.ts). The link secret is never part of the settings. */
   cloud: CloudSettings;
   onboardingComplete: boolean;

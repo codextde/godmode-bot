@@ -64,6 +64,7 @@ import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
+import { LidModeButton } from "@/components/layout/lid-mode";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { LicenseBanner } from "@/components/license/license-banner";
@@ -612,6 +613,7 @@ function FooterBar() {
         </TooltipTrigger>
         <TooltipContent>Lock vault</TooltipContent>
       </Tooltip>
+      <LidModeButton />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant={location.pathname.startsWith("/settings") ? "secondary" : "ghost"} size="icon" className="size-8" asChild>

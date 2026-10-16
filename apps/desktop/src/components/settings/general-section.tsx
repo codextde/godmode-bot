@@ -10,6 +10,7 @@ import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
 import { ModePicker } from "./mode-picker";
+import { PowerGroup } from "./power-group";
 import { CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 type Theme = Settings["general"]["theme"];
@@ -123,6 +124,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           />
         </SettingRow>
       </SettingsGroup>
+
+      <PowerGroup settings={settings} />
 
       <SettingsGroup title="Notifications" icon={<Bell />}>
         <SettingRow

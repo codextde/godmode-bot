@@ -147,6 +147,11 @@ export const DEFAULT_SETTINGS: Settings = {
     enabled: false,
     port: MOBILE_DEFAULT_PORT,
   },
+  power: {
+    lidClosedAwake: false,
+    onlyWhileWorking: false,
+    minBattery: 20,
+  },
   cloud: { ...DEFAULT_CLOUD_SETTINGS },
   onboardingComplete: false,
 };

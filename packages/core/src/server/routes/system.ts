@@ -20,6 +20,7 @@ import { disableIdleTimeout } from "../../mcp/http";
 import { getModelCatalog } from "../../runner/models";
 import { getDefaultAgentId } from "../../agents/service";
 import { applyRuntimeSettings } from "../../services/runtime";
+import { powerStatus, setLidClosedAwake } from "../../services/power";
 import { hasDashboardPassword } from "../auth";
 import { requireGrant } from "../grants";
 import { body, z } from "../validate";
@@ -138,6 +139,17 @@ export function registerSystemRoutes(app: Hono) {
     return c.json(await installUpdates(id));
   });
   app.get("/api/doctor/maintenance", (c) => c.json(maintenanceStatus()));
+
+  /** Lid-closed mode: whether this Mac keeps working with its lid closed. */
+  app.get("/api/power", async (c) => c.json(await powerStatus()));
+  app.post("/api/power/lid", async (c) => {
+    const { enabled } = await body(c, z.object({ enabled: z.boolean() }));
+    // The first switch waits for the human at macOS's password dialog.
+    disableIdleTimeout(c);
+    const status = await setLidClosedAwake(enabled);
+    audit("user", "power.lid", null, { enabled });
+    return c.json(status);
+  });
 
   /** What takes up space, what can go, and a check of the data folder. */
   app.get("/api/cleanup", async (c) => {
