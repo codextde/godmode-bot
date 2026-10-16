@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
 import { withPending } from "./pending-queue";
+import { cloudContext } from "./core";
 import { qk } from "./queryKeys";
 import { useUi } from "@/stores/ui";
 
@@ -303,6 +304,11 @@ export function useRunners() {
 /** This computer's device group; `role` null when it isn't part of one. Kept live by `devices.updated` events. */
 export function useDeviceGroup() {
   return useQuery({ queryKey: qk.devices, queryFn: api.devices.get, staleTime: 30_000 });
+}
+
+/** Lid-closed mode of the computer this app shows. `supported` is false on anything but a Mac with a lid. */
+export function usePower() {
+  return useQuery({ queryKey: qk.power, queryFn: api.power.get, staleTime: 60_000, refetchInterval: 120_000, enabled: !cloudContext });
 }
 
 export function useAgentTemplates() {

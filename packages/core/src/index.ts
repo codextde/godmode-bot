@@ -68,6 +68,7 @@ import { RESTART_EXIT_CODE, executableDigest, setRestartHandler, settleUpdate } 
 import { startRunners, stopRunners } from "./remote/runners";
 import { bootstrapDependencies } from "./remote/health";
 import { startKeepAwake, stopKeepAwake } from "./remote/keepAwake";
+import { startPower, stopPower } from "./services/power";
 import { startCloudLink, stopCloudLink } from "./cloud/link";
 import { licenseState, setLicenseKey, startLicense, stopLicense } from "./license/license";
 import { removeCoreFile, runConnectCli, USAGE as CONNECT_USAGE, writeCoreFile } from "./connect/cli";
@@ -189,6 +190,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
   if (runner) startKeepAwake();
+  else void startPower();
   startFollowups();
   startPauses();
   // After the pauses: a question whose run no longer waits is withdrawn there, and its ticket goes with it.
@@ -359,6 +361,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
       stopOutageRecovery();
+      await stopPower();
       await stopShared();
       stopMobileAccess();
       stopDevices();

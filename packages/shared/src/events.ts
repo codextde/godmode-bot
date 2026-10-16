@@ -207,6 +207,8 @@ export type EntityName =
   /** Heartbeat beats and watchdog interventions. */
   | "heartbeats"
   | "mobile"
+  /** Lid-closed mode: switched, held, paused for the battery, lid opened or closed. */
+  | "power"
   /** A connected app (Claude Code, another MCP client) was added, removed or used. */
   | "connectors"
   | "system"

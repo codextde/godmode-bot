@@ -13,6 +13,7 @@ export * from "./schedule";
 export * from "./cron";
 export * from "./tasks";
 export * from "./mobile";
+export * from "./power";
 export * from "./connect";
 export * from "./remote";
 export * from "./character";

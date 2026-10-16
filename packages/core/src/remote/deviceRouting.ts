@@ -39,6 +39,7 @@ const LOCAL: RegExp[] = [
   /^\/api\/logs(\/|$)/,
   /^\/api\/mobile(\/|$)/,
   /^\/api\/cloud(\/|$)/,
+  /^\/api\/power(\/|$)/,
   /^\/api\/license(\/|$)/,
   /^\/api\/voice\//,
   /^\/api\/ssh\/local-keys$/,
@@ -50,7 +51,7 @@ const LOCAL: RegExp[] = [
 const BROWSER_INPUT = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigate)$/;
 
 /** Settings that describe this computer: kept and changed here, never the primary's. */
-const OWN_SECTIONS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "android", "vm"]);
+const OWN_SECTIONS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "android", "vm", "power"]);
 
 /** While the primary is away: what this computer can still do with its own chats and copy. */
 const OFFLINE_WRITES: RegExp[] = [

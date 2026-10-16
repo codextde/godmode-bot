@@ -97,6 +97,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   LogLevel,
   LogOverview,
   MaintenanceStatus,
+  PowerStatus,
   McpServer,
   McpServerInput,
   MessagingChat,
@@ -395,6 +396,12 @@ export const api = {
     /** Update one tool, or (without an id) every tool that has an update. */
     update: (id?: ToolId) => post<ToolUpdateResult[]>("/api/doctor/updates", { id }),
     maintenance: () => get<MaintenanceStatus>("/api/doctor/maintenance"),
+  },
+
+  power: {
+    get: () => get<PowerStatus>("/api/power"),
+    /** The first time, macOS asks for the password on the Mac before this returns. */
+    setLid: (enabled: boolean) => post<PowerStatus>("/api/power/lid", { enabled }),
   },
 
   cleanup: {

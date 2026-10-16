@@ -94,6 +94,8 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   heartbeats: [qk.heartbeats],
   // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.
   system: [qk.doctor, qk.cleanup],
+  // Lid-closed mode switched, paused for the battery, or the lid opened or closed.
+  power: [qk.power],
 };
 
 export function startRealtime(queryClient: QueryClient) {

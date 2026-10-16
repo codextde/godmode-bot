@@ -712,6 +712,26 @@ With `settings.maintenance.autoCleanup` (default on) the background upkeep clean
 day while no agent works. Unasked, worktrees go a week after their task finished, and folders without a task once
 nothing touched them for a week. The last run is kept in `meta` (`cleanup.lastRun`, `cleanup.lastAutomatic`).
 
+## Lid-closed mode
+
+A MacBook keeps working with its lid closed (`services/power.ts`, `GET /api/power`, `POST /api/power/lid { enabled }`,
+the laptop button in the sidebar footer and Settings → General). `caffeinate` can't hold a Mac awake once the lid
+closes; `pmset -a disablesleep 1` can, as root. The first switch opens macOS's password dialog (`osascript ... with
+administrator privileges`), which installs `/etc/sudoers.d/godmode-power-<user>` allowing that user exactly
+`/usr/bin/pmset -a disablesleep 0` and `1`; every switch after that runs `sudo -n`. The rule is written next to its
+place under a dotted name sudo skips (only root can write there), checked with `visudo -cf` and moved in one step.
+`sudo rm /etc/sudoers.d/godmode-power-<user>` takes the permission back.
+
+`settings.power` is local to each computer (not synced to runners or device groups; the cloud may read the state but
+not switch it). Sleep comes back when Godmode quits, on battery at or below `minBattery` (default 20 %, resumes 5 %
+above it or on power, with a notification), and with `onlyWhileWorking` three minutes after the last run ended. A
+marker file `power-sleep-disabled` in the data directory says Godmode owns `disablesleep`. It is written before sleep
+is turned off (turning the mode on takes over one set by hand), so after a crash or a quit at the password dialog
+(which closes the dialog) the next start gives sleep back unless the mode is still wanted; without a marker a
+`disablesleep` set by hand is never touched. A run that waits for an answer, or for a usage limit that resets within an hour, counts as working; one paused by hand or held by a budget doesn't. A release that fails
+shows the mode as needing attention and sends a notification. While on, a poll every minute follows the
+battery and the lid (`entity.changed` `power`).
+
 ## WebSocket (`/api/ws`)
 
 Server → UI events are defined in `packages/shared/src/events.ts`. The UI keeps React Query caches in sync

@@ -1,5 +1,5 @@
 import type { CaptchaSolver, Effort, InterfaceMode } from "@godmode/shared";
-import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, INTERFACE_MODES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, INTERFACE_MODES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
@@ -141,6 +141,16 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     }
   }
   checkPhonePatch(patch.phone);
+  const power = patch.power as Record<string, unknown> | undefined;
+  if (power !== undefined) {
+    if (typeof power !== "object" || power === null || Array.isArray(power)) throw badRequest("Invalid power settings");
+    // Needs macOS's password dialog the first time: POST /api/power/lid switches it.
+    if (power.lidClosedAwake !== undefined) throw badRequest("Turn lid-closed mode on or off with POST /api/power/lid");
+    if (power.onlyWhileWorking !== undefined && typeof power.onlyWhileWorking !== "boolean") throw badRequest("power.onlyWhileWorking must be true or false");
+    if (power.minBattery !== undefined && !POWER_MIN_BATTERY_OPTIONS.includes(power.minBattery as never)) {
+      throw badRequest(`power.minBattery must be one of ${POWER_MIN_BATTERY_OPTIONS.join(", ")}`);
+    }
+  }
   const cloud = patch.cloud as Record<string, unknown> | undefined;
   if (cloud !== undefined) {
     if (typeof cloud !== "object" || cloud === null || Array.isArray(cloud)) throw badRequest("Invalid cloud settings");

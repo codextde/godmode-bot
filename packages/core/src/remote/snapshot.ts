@@ -90,7 +90,8 @@ const TABLES: TableSpec[] = [
 // selfRepair: fixes are filed and merged from this computer, never from a runner.
 // android: the phones plugged into this computer and the adb that reaches them.
 // phone: calls are placed and read back by this computer only.
-const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "onboardingComplete"]);
+// power: whether this Mac stays awake with its lid closed.
+const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "power", "onboardingComplete"]);
 /** A runner's vault is opened by a sync, not by a human with the passphrase: it must not lock itself in between. */
 const RUNNER_SETTINGS: Record<string, string[]> = { security: ["autoLockMinutes"] };
 /** VM ids become Tart VM names and folder names. */
