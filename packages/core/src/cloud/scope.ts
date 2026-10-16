@@ -63,6 +63,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/models", A],
   ["POST", "/api/doctor/install", A],
   ["GET|POST", "/api/doctor/claude-update", A],
+  // Signing Claude Code in picks the account every agent on the computer runs on.
+  ["GET", "/api/doctor/claude-login", A],
+  ["POST|DELETE", "/api/doctor/claude-login", refused(COMPUTER_ONLY)],
+  ["POST", "/api/doctor/claude-login/code", refused(COMPUTER_ONLY)],
   // Settings → System: reading the state is fine from anywhere; changing macOS permissions or the machine's tools
   // happens on the computer itself.
   ["GET", "/api/doctor/permissions", A],

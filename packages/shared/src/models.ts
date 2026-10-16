@@ -1586,6 +1586,14 @@ export interface DependencyStatus {
   installHint: string;
 }
 
+/** `claude auth login` started from Godmode: waiting for the person to approve in the browser. */
+export interface ClaudeLoginStatus {
+  state: "idle" | "waiting" | "done" | "failed";
+  /** Sign-in link for when the browser didn't open by itself (the page then shows a code to paste). */
+  url: string | null;
+  message: string | null;
+}
+
 export interface DoctorReport {
   ok: boolean;
   platform: string;

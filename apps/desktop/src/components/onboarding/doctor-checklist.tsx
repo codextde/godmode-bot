@@ -1,20 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronDown, CircleAlert, CircleCheck, CircleX, Download, RefreshCw, Terminal } from "lucide-react";
-import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shared";
+import { ChevronDown, CircleAlert, CircleCheck, CircleX, Download, ExternalLink, LogIn, RefreshCw, Terminal } from "lucide-react";
+import type { ClaudeLoginStatus, DependencyId, DependencyStatus, DoctorReport } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
+import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 /** "How to fix" fallbacks when the core doesn't send an install hint. */
 const FIX_FALLBACK: Partial<Record<DependencyId, string>> = {
-  "claude-auth": "Run `claude` once in a terminal to sign in.",
   "browser-use": "Install it with uv: `uv tool install browser-use`.",
 };
 
@@ -25,6 +26,9 @@ const DEFAULT_HINTS: Partial<Record<DependencyId, string>> = {
   chrome: "Used to import your existing sign-ins into Godmode's browser.",
   git: "Optional — agent memory is versioned with a built-in git implementation.",
 };
+
+/** Installed one after another without a click (uv before what needs it). */
+const AUTO_INSTALL: DependencyId[] = ["claude", "uv", "browser-use", "chrome"];
 
 export function useDoctor() {
   const qc = useQueryClient();
@@ -40,20 +44,25 @@ export function useDoctor() {
 /**
  * Dependency checklist (claude, claude-auth, uv, browser-use, chrome, git) with one-click installs.
  * Used by onboarding (system check step) and Settings → System.
+ * With `auto`, missing required tools install by themselves and the Claude sign-in starts once Claude Code is there.
  */
 export function DoctorChecklist({
   ids,
   hints,
   className,
   onReport,
+  auto = false,
 }: {
   /** Order + filter. Defaults to every dependency in the report. */
   ids?: DependencyId[];
   hints?: Partial<Record<DependencyId, string>>;
   className?: string;
   onReport?: (report: DoctorReport) => void;
+  auto?: boolean;
 }) {
   const { data, isLoading, isError, error, refresh, refetch } = useDoctor();
+  const [tried, setTried] = useState<DependencyId[]>([]);
+  const attempt = (id: DependencyId) => setTried((t) => (t.includes(id) ? t : [...t, id]));
   useEffect(() => {
     if (data) onReport?.(data);
   }, [data, onReport]);
@@ -79,6 +88,10 @@ export function DoctorChecklist({
 
   const deps = ids ? ids.map((id) => data.dependencies.find((d) => d.id === id)).filter((d): d is DependencyStatus => !!d) : data.dependencies;
   const mergedHints = { ...DEFAULT_HINTS, ...hints };
+  const missing = (id: DependencyId) => data.dependencies.find((d) => d.id === id && d.required && !d.ok);
+  const autoTarget =
+    auto && !refresh.isPending ? AUTO_INSTALL.find((id) => missing(id)?.installable && !tried.includes(id) && deps.some((d) => d.id === id)) : undefined;
+  const autoSignIn = auto && !refresh.isPending && !autoTarget && !missing("claude") && !tried.includes("claude-auth");
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -92,14 +105,33 @@ export function DoctorChecklist({
       </div>
       {deps.map((dep, i) => (
         <motion.div key={dep.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-          <DependencyRow dep={dep} hint={mergedHints[dep.id]} onInstalled={() => refresh.mutate()} />
+          <DependencyRow
+            dep={dep}
+            hint={mergedHints[dep.id]}
+            onInstalled={() => refresh.mutate()}
+            auto={dep.id === "claude-auth" ? autoSignIn : dep.id === autoTarget}
+            onAuto={() => attempt(dep.id)}
+          />
         </motion.div>
       ))}
     </div>
   );
 }
 
-function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint?: string; onInstalled: () => void }) {
+function DependencyRow({
+  dep,
+  hint,
+  onInstalled,
+  auto = false,
+  onAuto,
+}: {
+  dep: DependencyStatus;
+  hint?: string;
+  onInstalled: () => void;
+  /** Start the install (or the Claude sign-in) without a click. */
+  auto?: boolean;
+  onAuto?: () => void;
+}) {
   const [log, setLog] = useState<{ ok: boolean; output: string } | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const install = useMutation({
@@ -114,8 +146,17 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
     onError: (e) => {
       setLog({ ok: false, output: errorMessage(e) });
       setLogOpen(true);
+      onInstalled();
     },
   });
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!auto || autoStarted.current || dep.id === "claude-auth" || dep.ok) return;
+    autoStarted.current = true;
+    onAuto?.();
+    install.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
 
   const state: "ok" | "warn" | "error" = dep.ok ? "ok" : dep.required ? "error" : "warn";
   const Icon = state === "ok" ? CircleCheck : state === "error" ? CircleX : CircleAlert;
@@ -150,7 +191,8 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
           </div>
           {dep.detail && <p className="mt-0.5 text-xs text-muted-foreground">{dep.detail}</p>}
           {dep.path && dep.ok && <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">{dep.path}</p>}
-          {!dep.ok && (dep.installHint || FIX_FALLBACK[dep.id]) && (
+          {!dep.ok && dep.id === "claude-auth" && <ClaudeSignIn onDone={onInstalled} auto={auto} onAuto={onAuto} />}
+          {!dep.ok && dep.id !== "claude-auth" && (dep.installHint || FIX_FALLBACK[dep.id]) && (
             <p className="mt-1.5 text-xs leading-relaxed text-foreground/85">
               <InlineCode text={dep.installHint || FIX_FALLBACK[dep.id]!} />
             </p>
@@ -194,6 +236,109 @@ function DependencyRow({ dep, hint, onInstalled }: { dep: DependencyStatus; hint
           </AnimatePresence>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Signs Claude Code in from Godmode: the browser opens, the person approves, the row turns green by itself. */
+function ClaudeSignIn({ onDone, auto = false, onAuto }: { onDone: () => void; auto?: boolean; onAuto?: () => void }) {
+  const qc = useQueryClient();
+  const key = ["doctor", "claude-login"];
+  const [code, setCode] = useState("");
+  const { data } = useQuery({
+    queryKey: key,
+    queryFn: api.doctor.claudeLogin,
+    refetchInterval: (q) => ((q.state.data as ClaudeLoginStatus | undefined)?.state === "waiting" ? 1500 : false),
+  });
+  const set = (s: ClaudeLoginStatus) => qc.setQueryData(key, s);
+  const start = useMutation({ mutationFn: api.doctor.startClaudeLogin, onSuccess: set, onError: (e) => toast.error("Could not start the sign-in", { description: errorMessage(e) }) });
+  const cancel = useMutation({ mutationFn: api.doctor.cancelClaudeLogin, onSuccess: set });
+  const submit = useMutation({
+    mutationFn: () => api.doctor.submitClaudeLoginCode(code),
+    onSuccess: (s) => {
+      set(s);
+      setCode("");
+    },
+    onError: (e) => toast.error("Could not send the code", { description: errorMessage(e) }),
+  });
+
+  const state = data?.state ?? "idle";
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!auto || !data || autoStarted.current) return;
+    autoStarted.current = true;
+    onAuto?.();
+    if (data.state === "idle") start.mutate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, data]);
+  const prev = useRef(state);
+  useEffect(() => {
+    if (prev.current === "waiting" && state === "done") {
+      toast.success("Signed in to Claude");
+      onDone();
+    }
+    prev.current = state;
+  }, [state, onDone]);
+
+  if (state === "done")
+    return (
+      <p className="mt-2.5 flex items-center gap-2 text-xs font-medium text-success">
+        <CircleCheck className="size-3.5" /> Signed in. Checking…
+      </p>
+    );
+
+  if (state !== "waiting")
+    return (
+      <div className="mt-2.5 space-y-2">
+        {state === "failed" && data?.message && <p className="text-xs text-destructive">{data.message}</p>}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <Button size="sm" onClick={() => start.mutate()} disabled={start.isPending}>
+            {start.isPending ? <Spinner /> : <LogIn />}
+            {state === "failed" ? "Try again" : "Sign in to Claude"}
+          </Button>
+          <span className="text-xs text-muted-foreground">Opens your browser. Works with a Claude Pro or Max plan.</span>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="mt-2.5 rounded-md border bg-paper-2 p-3">
+      <div className="flex items-center gap-2 text-xs font-medium">
+        <Spinner className="size-3.5" /> Waiting for you to sign in…
+      </div>
+      <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-foreground/85">
+        <li>In the browser window that just opened, sign in with your Claude account.</li>
+        <li>
+          Click <span className="font-medium">Authorize</span>.
+        </li>
+        <li>Come back here. This turns green by itself.</li>
+      </ol>
+      {data?.url && (
+        <form
+          className="mt-3 space-y-1.5 border-t pt-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (code.trim()) submit.mutate();
+          }}
+        >
+          <p className="text-xs text-muted-foreground">
+            No browser window?{" "}
+            <button type="button" className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline" onClick={() => void openExternal(data.url!)}>
+              Open the sign-in page <ExternalLink className="size-3" />
+            </button>{" "}
+            and paste the code it shows at the end:
+          </p>
+          <div className="flex gap-2">
+            <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Paste the code" className="h-8 font-mono text-xs" autoComplete="off" spellCheck={false} />
+            <Button type="submit" size="sm" variant="outline" disabled={!code.trim() || submit.isPending}>
+              {submit.isPending ? <Spinner /> : null} Continue
+            </Button>
+          </div>
+        </form>
+      )}
+      <Button size="xs" variant="ghost" className="mt-2 -ml-2 text-muted-foreground" onClick={() => cancel.mutate()} disabled={cancel.isPending}>
+        Cancel
+      </Button>
     </div>
   );
 }

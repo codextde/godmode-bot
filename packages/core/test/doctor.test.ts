@@ -65,7 +65,7 @@ describe("doctor", () => {
   test("non-installable dependencies return guidance instead of running anything", async () => {
     const auth = await installDependency("claude-auth");
     expect(auth.ok).toBe(false);
-    expect(auth.output).toContain("claude");
+    expect(auth.output).toContain("Sign in to Claude");
     const git = await installDependency("git");
     expect(git.ok).toBe(false);
     const unknown = await installDependency("nope" as DependencyId);

@@ -394,7 +394,7 @@ function installHint(id: DependencyId): string {
     case "claude":
       return win ? "Run in PowerShell: irm https://claude.ai/install.ps1 | iex" : "Run: curl -fsSL https://claude.ai/install.sh | bash";
     case "claude-auth":
-      return "Open a terminal and run `claude` once to log in, or add an Anthropic API key in Settings → Integrations.";
+      return "Click Sign in to Claude (or run `claude auth login` in a terminal) to log in with your Claude account. Or add an Anthropic API key in Integrations → API keys.";
     case "uv":
       return win
         ? 'Run: powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
