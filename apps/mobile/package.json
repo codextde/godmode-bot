@@ -1,6 +1,6 @@
 {
   "name": "@godmode/mobile",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
@@ -12,6 +12,8 @@
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@expo-google-fonts/geist": "^0.4.2",
+    "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/ui": "~57.0.21",
     "@expo/vector-icons": "^15.0.2",
     "@shopify/flash-list": "2.0.2",

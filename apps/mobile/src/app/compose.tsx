@@ -9,29 +9,23 @@ import { Skeleton, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
+import { pickAgent, SUGGESTIONS } from "@/lib/desktop-parity";
 import { useNewChatChoice } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { agentsFor, projectsFor, useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
-const IDEAS = ["Check my inbox and summarize what needs me", "Find the cheapest flight to Berlin next Friday", "What did you work on today?"];
-
 /** A new chat in the picked workspace: pick who does it, say what to do. */
 export default function Compose() {
   const c = useColors();
-  const { agentId } = useLocalSearchParams<{ agentId?: string }>();
+  const { agentId, prompt } = useLocalSearchParams<{ agentId?: string; prompt?: string }>();
   const { data: agents, isLoading } = useAgents();
   const { id: workspaceId, projectId: scopeProject, workspaces } = useWorkspace();
   const enabled = agentsFor(agents ?? [], workspaceId).filter((a) => a.enabled);
   const [picked, setPicked] = useState<string | undefined>(agentId);
-  const current =
-    enabled.find((a) => a.id === picked) ??
-    (scopeProject ? enabled.find((a) => a.projectId === scopeProject) : undefined) ??
-    (workspaceId ? enabled.find((a) => a.workspaceId === workspaceId) : undefined) ??
-    enabled.find((a) => a.isDefault) ??
-    enabled[0];
-  const [idea, setIdea] = useState("");
+  const current = pickAgent(enabled, workspaceId, scopeProject, picked);
+  const [idea, setIdea] = useState(prompt ?? "");
   const projects = projectsFor(current, workspaces, workspaceId);
   /** Picked here; undefined = the phone's project when the agent may work on it, else the agent's own. */
   const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
@@ -44,6 +38,9 @@ export default function Compose() {
   const rail = useRef<ScrollView>(null);
   const revealed = useRef(false);
   const choice = useNewChatChoice((s) => s.choice);
+  useEffect(() => {
+    if (prompt) composer.current?.setText(prompt);
+  }, [prompt]);
   // The model belongs to the agent picked here: a new pick starts from that agent's default.
   useEffect(() => useNewChatChoice.getState().reset(), [current?.id]);
 
@@ -130,7 +127,7 @@ export default function Compose() {
           attachments
           onSend={start}
           autoFocus
-          placeholder={current ? `What should ${current.name} do?` : "What should Godmode do?"}
+          placeholder={current ? `Ask ${current.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
           trailing={current ? <ModelButton agent={current} choice={choice} /> : null}
         />
       </View>
@@ -146,7 +143,7 @@ export default function Compose() {
         <T variant="eyebrow" muted>
           Try
         </T>
-        {IDEAS.map((text) => (
+        {SUGGESTIONS.map(({ text }) => (
           <Pressable
             key={text}
             onPress={() => {

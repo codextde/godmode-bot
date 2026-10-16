@@ -31,15 +31,24 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/settings$/],
   ["PUT", /^\/api\/settings$/],
   ["GET", /^\/api\/notifications$/],
+  ["POST", /^\/api\/notifications\/read$/],
+  // Logins agents miss: seen, dismissed or opened again. Logins themselves are added on the computer.
   ["GET", /^\/api\/missing-logins$/],
+  ["PATCH", new RegExp(`^/api/missing-logins/${ID}$`)],
   // Questions and approvals agents wait for: listed and answered (no files from the phone).
   ["GET", /^\/api\/questions$/],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`)],
-  // Tasks agents gave the human: listed, moved and closed (no files from the phone).
+  // Tasks agents gave the human, and the human's own: listed, added, edited, moved, closed and deleted (no files from the phone).
   ["GET", /^\/api\/human-tasks$/],
+  ["POST", /^\/api\/human-tasks$/],
   ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`)],
+  ["DELETE", new RegExp(`^/api/human-tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`)],
+  // Calls agents made and took: read, never placed from the phone (nor their setup).
+  ["GET", /^\/api\/calls$/],
+  ["GET", /^\/api\/calls\/call_[^/]+$/],
 
+  ["GET", /^\/api\/agent-templates$/],
   ["GET", /^\/api\/agents$/],
   ["POST", /^\/api\/agents$/],
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
@@ -127,8 +136,8 @@ const NULLABLE_SETTINGS = new Set(["defaultMaxBudgetUsd", "monthlyBudgetUsd"]);
 
 const WORKSPACE_KEYS = ["name", "description", "color", "icon", "instructions", "autoMerge", "browserProfileId", "sources"];
 const PROJECT_KEYS = ["name", "description", "color", "icon", "instructions", "browserProfileId", "sources"];
-/** What an agent is and how it thinks; its permissions, tools, folders and machines are set on the computer. */
-const AGENT_KEYS = ["name", "role", "description", "instructions", "personality", "model", "effort", "ultracode", "enabled", "projectId", "heartbeat"];
+/** What an agent is, looks like and how it thinks; its permissions, tools, folders and machines are set on the computer. */
+const AGENT_KEYS = ["name", "role", "description", "instructions", "personality", "avatar", "color", "character", "model", "effort", "ultracode", "enabled", "projectId", "heartbeat"];
 
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
 const BODIES: [method: string, path: RegExp, keys: string[]][] = [
@@ -153,8 +162,12 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", new RegExp(`^/api/conversations/${ID}/followup/run$`), []],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
-  ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId"]],
+  ["POST", /^\/api\/human-tasks$/, ["title", "body", "url", "priority", "workspaceId", "status"]],
+  ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId", "priority", "title", "body"]],
   ["POST", new RegExp(`^/api/human-tasks/${ID}/close$`), ["outcome", "note", "optionId"]],
+  ["POST", /^\/api\/notifications\/read$/, ["ids"]],
+  // A login is linked to a request on the computer, where the vault is.
+  ["PATCH", new RegExp(`^/api/missing-logins/${ID}$`), ["status"]],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`), []],
   ["POST", /^\/api\/computer\/input$/, ["view", "event", "frame"]],
   ["POST", new RegExp(`^/api/vms/${ID}/input$`), ["event", "frame"]],

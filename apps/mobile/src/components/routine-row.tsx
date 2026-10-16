@@ -2,7 +2,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router } from "expo-router";
 import { memo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from "react-native";
-import type { Agent, Routine } from "@godmode/shared";
+import { cronToHuman, scheduleToHuman, type Agent, type Routine } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
@@ -17,16 +17,29 @@ function appName(slug: string): string {
   return slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-/** What starts an automation, in one line: its next run or check, the app event, the condition or the webhook. */
+function phoneTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
+/** What starts an automation, in one line: its schedule and next run, the app event, the condition or the webhook. */
 export function triggerText(r: Routine): string {
   const next = r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
-  switch (r.trigger.type) {
-    case "schedule":
-      return next ? `Next run ${next}` : "On a schedule";
+  const t = r.trigger;
+  switch (t.type) {
+    case "schedule": {
+      const zone = r.timezone && r.timezone !== phoneTimezone() ? ` (${r.timezone.replace(/_/g, " ")})` : "";
+      return `${scheduleToHuman(r.cron, t.startWindowMinutes, t.runsPerWindow)}${zone}${next ? ` · next run ${next}` : ""}`;
+    }
     case "app":
-      return `${r.trigger.triggerName} · ${appName(r.trigger.toolkit)}`;
-    case "condition":
-      return `When ${r.trigger.condition}${next ? ` · next check ${next}` : ""}`;
+      return `${t.triggerName} · ${appName(t.toolkit)}`;
+    case "condition": {
+      const often = cronToHuman(r.cron);
+      return `When ${t.condition} · checked ${often.charAt(0).toLowerCase()}${often.slice(1)}`;
+    }
     case "webhook":
       return "When its webhook is called";
   }

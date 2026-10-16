@@ -5,10 +5,11 @@ import { format } from "date-fns";
 import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Attachment, Message, MessageBlock } from "@godmode/shared";
+import type { Attachment, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
 import { isPlaceholderReply, toolActivity } from "@godmode/shared";
 import { FileChip } from "./attachments";
-import { Icon } from "./icon";
+import { CALL_STATUS, callName, openCall } from "./call-parts";
+import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { QuestionCard } from "./question-card";
 import { RemoteImage } from "./remote-image";
@@ -23,6 +24,10 @@ type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Ste
 
 const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 
+/** The question card is the record of an ask; the call itself only shows when it failed. */
+const ASK_TOOLS = new Set(["ask_human", "request_approval"]);
+const isAsk = (block: MessageBlock) => block.type === "tool_use" && !block.isError && ASK_TOOLS.has(block.name.slice(block.name.lastIndexOf("__") + 2));
+
 /** Consecutive tool calls and thinking collapse into one "steps" row; a subagent gets its own card with its work inside. */
 function group(blocks: MessageBlock[]): Part[] {
   const parts: Part[] = [];
@@ -34,6 +39,7 @@ function group(blocks: MessageBlock[]): Part[] {
   for (const block of blocks) {
     if ("parentToolUseId" in block && block.parentToolUseId) continue;
     if (block.type === "text" && isPlaceholderReply(block.text)) continue;
+    if (isAsk(block)) continue;
     if (block.type === "tool_use" && isSubagent(block)) parts.push({ kind: "subagent", block, children: children.get(block.id) ?? [] });
     else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
@@ -85,7 +91,8 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
 });
 
 export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content }: { blocks: MessageBlock[]; streaming?: boolean; content?: string }) {
-  const parts = useMemo(() => group(blocks), [blocks]);
+  // A reply stored without blocks is its text.
+  const parts = useMemo(() => group(blocks.length || !content ? blocks : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
   return (
     <Pressable onLongPress={content ? () => copy(content) : undefined} style={styles.assistant}>
@@ -138,8 +145,12 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
       );
     case "notice":
       return (
-        <View style={[styles.callout, { backgroundColor: block.level === "warning" ? c.warningSoft : c.sunken }]}>
-          <Icon name={block.level === "warning" ? "warning" : "bolt"} size={14} color={block.level === "warning" ? c.warning : c.textMuted} />
+        <View style={[styles.callout, { backgroundColor: block.level === "warning" ? c.warningSoft : block.level === "success" ? c.successSoft : c.sunken }]}>
+          <Icon
+            name={block.level === "warning" ? "warning" : block.level === "success" ? "check" : "bolt"}
+            size={14}
+            color={block.level === "warning" ? c.warning : block.level === "success" ? c.success : c.textMuted}
+          />
           <T variant="footnote" muted style={{ flex: 1 }}>
             {block.mod ? (
               <T variant="footnote" style={{ fontWeight: "600" }}>
@@ -162,13 +173,26 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
     case "retry":
       return (
         <Marker
-          icon="refresh"
-          text={block.auto ? (block.cause === "error" ? "Picked up again after an error" : block.cause === "offline" ? "Picked up again once Claude was reachable" : "Picked up again after a restart") : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
+          icon={block.mode === "continue" ? "play" : "refresh"}
+          text={block.auto ? ((AUTO_RETRY[block.cause ?? "restart"] ?? AUTO_RETRY.restart)[block.mode] ?? "Picked up again") : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
+          detail={block.masked ? "Saved secrets stay masked" : undefined}
           at={block.at}
         />
       );
-    case "call":
-      return <Marker icon="call" text={`Call with ${block.contactName || block.number || "a caller"} ended`} detail={block.outcome || block.summary} at={block.at} />;
+    case "moved":
+      return <Marker icon="move" text={`Moved from ${block.from} to ${block.to}`} detail={block.continued ? "Continued there" : undefined} at={block.at} />;
+    case "call": {
+      const status = block.status === "done" ? "" : ` · ${CALL_STATUS[block.status]?.label ?? ""}`;
+      return (
+        <Marker
+          icon="call"
+          text={`Call with ${callName({ contactName: block.contactName, number: block.number, direction: "outbound" })} ended${status}`}
+          detail={block.outcome || block.summary}
+          at={block.at}
+          onPress={() => openCall(block.callId)}
+        />
+      );
+    }
     case "command":
       return (
         <View style={[styles.command, { backgroundColor: c.sunken }]}>
@@ -193,6 +217,9 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
               </T>
             ) : null}
           </View>
+          <T variant="caption" muted style={{ marginTop: 4, marginRight: 4 }}>
+            Picked up mid-task{Number.isNaN(new Date(block.sentAt).getTime()) ? "" : ` · sent ${format(new Date(block.sentAt), "HH:mm")}`}
+          </T>
         </View>
       );
     case "question":
@@ -235,11 +262,20 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
   }
 });
 
-/** Where the chat went on without the human: a follow-up the agent set, a turn that was picked up again, or a call that ended. */
-function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh" | "call"; text: string; detail?: string; at: string }) {
+const AUTO_RETRY: Record<RetryCause, Record<RetryMode, string>> = {
+  restart: { continue: "Continued after Godmode restarted", again: "Sent again after Godmode restarted" },
+  offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
+  error: { continue: "Continued after an error", again: "Sent again after an error" },
+};
+
+/**
+ * Where the chat went on without the human: a follow-up the agent set, a turn that was picked up again, a move to
+ * another computer, or a call that ended (it opens the call).
+ */
+function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: string; detail?: string; at: string; onPress?: () => void }) {
   const c = useColors();
   return (
-    <View style={styles.marker}>
+    <Pressable accessibilityRole={onPress ? "button" : undefined} disabled={!onPress} onPress={onPress} style={({ pressed }) => [styles.marker, pressed && { opacity: 0.6 }]}>
       <View style={[styles.markerLine, { backgroundColor: c.border }]} />
       <View style={{ alignItems: "center", gap: 2, maxWidth: "78%" }}>
         <Row style={{ gap: 6 }}>
@@ -247,6 +283,7 @@ function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh" | "call"
           <T variant="caption" muted style={{ fontWeight: "600" }}>
             {text} · {shortTime(at) === "now" ? "just now" : format(new Date(at), "MMM d, HH:mm")}
           </T>
+          {onPress ? <Icon name="chevron" size={9} color={c.textFaint} weight="semibold" /> : null}
         </Row>
         {detail ? (
           <T variant="caption" muted numberOfLines={2} style={{ textAlign: "center" }}>
@@ -255,7 +292,7 @@ function Marker({ icon, text, detail, at }: { icon: "clock" | "refresh" | "call"
         ) : null}
       </View>
       <View style={[styles.markerLine, { backgroundColor: c.border }]} />
-    </View>
+    </Pressable>
   );
 }
 

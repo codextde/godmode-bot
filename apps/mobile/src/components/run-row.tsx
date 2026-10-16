@@ -4,21 +4,24 @@ import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { formatUsd } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { openChat } from "./rows";
-import { Badge, Row, T } from "./ui";
+import { Badge, Row, T, type Tone } from "./ui";
 import { activityText, shortTime } from "@/lib/format";
 import { useRunActivity } from "@/lib/live";
 import { radius, space, useColors } from "@/lib/theme";
 
-type Tone = "neutral" | "brand" | "warning" | "danger";
-
+/** The desktop's labels and tones (run-status.tsx). */
 const STATUS_META: Record<RunStatus, { label: string; tone: Tone }> = {
   queued: { label: "Queued", tone: "neutral" },
   running: { label: "Running", tone: "brand" },
-  paused: { label: "Paused", tone: "neutral" },
-  succeeded: { label: "Done", tone: "neutral" },
+  paused: { label: "Paused", tone: "warning" },
+  succeeded: { label: "Succeeded", tone: "success" },
   failed: { label: "Failed", tone: "danger" },
-  cancelled: { label: "Stopped", tone: "neutral" },
+  cancelled: { label: "Cancelled", tone: "neutral" },
 };
+
+export function runStatusLabel(status: RunStatus): string {
+  return STATUS_META[status]?.label ?? status;
+}
 
 /** What started a run, in the desktop's words. */
 export const TRIGGER_LABEL: Record<RunTrigger, string> = {
@@ -26,7 +29,7 @@ export const TRIGGER_LABEL: Record<RunTrigger, string> = {
   routine: "Automation",
   check: "Condition check",
   dream: "Dream",
-  delegation: "Handed over",
+  delegation: "Delegation",
   manual: "Manual",
   api: "API",
   task: "Task",
@@ -84,7 +87,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
       <CharacterAvatar agent={agent} size={40} running={run.status === "running"} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>
-          <T variant="headline" numberOfLines={1} style={{ flex: 1, fontSize: 16 }}>
+          <T variant="callout" numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
             {firstLine(run.prompt) || "No prompt"}
           </T>
           <RunStatusBadge run={run} />
@@ -97,7 +100,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
             {error}
           </T>
         ) : live ? (
-          <T variant="footnote" color={c.brandStrong} numberOfLines={1} style={{ fontWeight: "500" }}>
+          <T variant="footnote" color={c.brandStrong} numberOfLines={1}>
             {run.status === "queued" ? "Waiting to start" : activityText(activity)}
           </T>
         ) : null}

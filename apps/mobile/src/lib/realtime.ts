@@ -30,6 +30,7 @@ const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> 
   workspaces: [qk.workspaces, qk.agents],
   tasks: [qk.tasks],
   "human-tasks": [qk.humanTasks, qk.bootstrap],
+  calls: [["calls"]],
 };
 
 function sendEvent(event: ClientEvent) {

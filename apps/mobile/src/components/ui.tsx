@@ -14,10 +14,10 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glass } from "./glass";
 import { Icon, type IconName } from "./icon";
-import { radius, space, type, useColors } from "@/lib/theme";
+import { alpha, radius, space, type, useColors, withFont, type Colors } from "@/lib/theme";
 
 type Variant = keyof typeof type;
 
@@ -31,7 +31,8 @@ export function T({
   ...props
 }: TextProps & { variant?: Variant; color?: ColorValue; muted?: boolean }) {
   const c = useColors();
-  return <Text {...props} style={[type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]} />;
+  const flat = StyleSheet.flatten([type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]);
+  return <Text {...props} style={withFont(flat)} />;
 }
 
 export function tap(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
@@ -40,7 +41,14 @@ export function tap(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackS
 
 export function Card({ children, style, onPress }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
   const c = useColors();
-  const base: ViewStyle = { backgroundColor: c.surface, borderRadius: radius.lg, borderCurve: "continuous", borderWidth: StyleSheet.hairlineWidth, borderColor: c.border };
+  const base: ViewStyle = {
+    backgroundColor: c.surface,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
+    boxShadow: c.shadowCard,
+  };
   if (!onPress) return <View style={[base, style]}>{children}</View>;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [base, pressed && { opacity: 0.72, transform: [{ scale: 0.985 }] }, style]}>
@@ -58,7 +66,7 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
       </T>
       {action && onAction ? (
         <Pressable hitSlop={10} onPress={onAction}>
-          <T variant="footnote" color={c.textMuted} style={{ fontWeight: "600" }}>
+          <T variant="footnote" color={c.textMuted} style={{ fontWeight: "500" }}>
             {action}
           </T>
         </Pressable>
@@ -67,7 +75,7 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
   );
 }
 
-/** Pulses only while its screen is in front: tabs and screens under others stay mounted. */
+/** Pulses like the desktop's live dot (a ring that fades out every 2s), only while its screen is in front. */
 export function LiveDot({ live = true, color, size = 8 }: { live?: boolean; color?: ColorValue; size?: number }) {
   const c = useColors();
   const focused = useIsFocused();
@@ -75,13 +83,13 @@ export function LiveDot({ live = true, color, size = 8 }: { live?: boolean; colo
   const moving = live && focused;
   useEffect(() => {
     if (!moving) return;
-    pulse.value = withRepeat(withTiming(1, { duration: 1400, easing: Easing.out(Easing.quad) }), -1, false);
+    pulse.value = withRepeat(withTiming(1, { duration: 2000, easing: Easing.out(Easing.quad) }), -1, false);
     return () => {
       cancelAnimation(pulse);
       pulse.value = 0;
     };
   }, [moving, pulse]);
-  const ring = useAnimatedStyle(() => ({ opacity: 0.55 * (1 - pulse.value), transform: [{ scale: 1 + pulse.value * 1.6 }] }));
+  const ring = useAnimatedStyle(() => ({ opacity: 0.55 * Math.max(0, 1 - pulse.value * 1.25), transform: [{ scale: 1 + pulse.value * 1.8 }] }));
   const fill = color ?? (live ? c.brand : c.textFaint);
   return (
     <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
@@ -91,47 +99,72 @@ export function LiveDot({ live = true, color, size = 8 }: { live?: boolean; colo
   );
 }
 
-export function Badge({ label, tone = "neutral", live }: { label: string; tone?: "neutral" | "brand" | "warning" | "danger"; live?: boolean }) {
+export type Tone = "neutral" | "brand" | "success" | "warning" | "danger" | "amber" | "emerald" | "rose" | "sky" | "violet" | "dream";
+
+/** A tone's text, fill, border and dot, like the desktop's tinted pills (fill 6–12%, border 20–30%). */
+export function toneColors(c: Colors, tone: Tone): { fg: string; bg: string; border: string; dot: string } {
+  switch (tone) {
+    case "brand":
+      return { fg: c.brandStrong, bg: c.brandSoft, border: alpha(c.brand, 0.25), dot: c.brand };
+    case "success":
+      return { fg: c.success, bg: c.successSoft, border: alpha(c.success, 0.2), dot: c.success };
+    case "warning":
+      return { fg: c.warning, bg: c.warningSoft, border: alpha(c.warning, 0.3), dot: c.warning };
+    case "danger":
+      return { fg: c.danger, bg: c.dangerSoft, border: alpha(c.danger, 0.2), dot: c.danger };
+    case "amber":
+      return { fg: c.amber, bg: alpha(c.amberMark, 0.1), border: alpha(c.amberMark, 0.3), dot: c.amberMark };
+    case "emerald":
+      return { fg: c.emerald, bg: alpha(c.emeraldMark, 0.1), border: alpha(c.emeraldMark, 0.25), dot: c.emeraldMark };
+    case "rose":
+      return { fg: c.rose, bg: alpha(c.roseMark, 0.1), border: alpha(c.roseMark, 0.25), dot: c.roseMark };
+    case "sky":
+      return { fg: c.sky, bg: alpha(c.skyMark, 0.1), border: alpha(c.skyMark, 0.25), dot: c.skyMark };
+    case "violet":
+      return { fg: c.violet, bg: alpha(c.violet, 0.1), border: alpha(c.violet, 0.25), dot: c.violet };
+    case "dream":
+      return { fg: c.dream, bg: c.dreamSoft, border: alpha(c.dream, 0.25), dot: c.dream };
+    default:
+      return { fg: c.textMuted, bg: c.sunken, border: c.border, dot: alpha(c.textMuted, 0.6) };
+  }
+}
+
+/** The desktop's pill: 5px corners, a 1px tinted border, 11px medium text and a 6px dot (`icon` stands in for the dot). */
+export function Badge({ label, tone = "neutral", live, icon, dot = true }: { label: string; tone?: Tone; live?: boolean; icon?: ReactNode; dot?: boolean }) {
   const c = useColors();
-  const tones = {
-    neutral: { bg: c.sunken, fg: c.textMuted },
-    brand: { bg: c.brandSoft, fg: c.brandStrong },
-    warning: { bg: c.warningSoft, fg: c.warning },
-    danger: { bg: c.dangerSoft, fg: c.danger },
-  }[tone];
+  const t = toneColors(c, tone);
   return (
-    <View style={[styles.badge, { backgroundColor: tones.bg }]}>
-      {live && <LiveDot size={6} color={tones.fg} />}
-      <T variant="caption" color={tones.fg} style={{ fontWeight: "600" }}>
+    <View style={[styles.badge, { backgroundColor: t.bg, borderColor: t.border }]}>
+      {icon ?? (dot ? live ? <LiveDot size={6} color={t.dot} /> : <View style={[styles.badgeDot, { backgroundColor: t.dot }]} /> : null)}
+      <T variant="caption" color={t.fg} numberOfLines={1} style={styles.badgeText}>
         {label}
       </T>
     </View>
   );
 }
 
-/** An agent's emoji on a quiet tile. */
-export function Avatar({ emoji, size = 40, running }: { emoji: string; size?: number; running?: boolean }) {
+/** Nobody is on it: the desktop's dashed square where an agent's face would be. */
+export function UnassignedAvatar({ size = 40 }: { size?: number }) {
   const c = useColors();
   return (
     <View
+      accessibilityLabel="Unassigned"
       style={{
         width: size,
         height: size,
-        borderRadius: size * 0.32,
+        borderRadius: Math.max(5, size * 0.25),
         borderCurve: "continuous",
-        backgroundColor: c.sunken,
-        alignItems: "center",
-        justifyContent: "center",
+        borderWidth: 1,
+        borderStyle: "dashed",
+        borderColor: alpha(c.textMuted, 0.4),
       }}
-    >
-      <Text style={{ fontSize: size * 0.5 }}>{emoji || "🤖"}</Text>
-      {running && (
-        <View style={[styles.avatarDot, { borderColor: c.background, right: -2, bottom: -2 }]}>
-          <LiveDot size={8} />
-        </View>
-      )}
-    </View>
+    />
   );
+}
+
+/** Kept for screens that still pass an emoji: a ticket without an agent shows the unassigned square, never an emoji. */
+export function Avatar({ size = 40 }: { emoji?: string; size?: number; running?: boolean }) {
+  return <UnassignedAvatar size={size} />;
 }
 
 export function Button({
@@ -150,7 +183,7 @@ export function Button({
   title: string;
   icon?: IconName;
   onPress?: () => void;
-  variant?: "primary" | "secondary" | "glass" | "danger";
+  variant?: "primary" | "secondary" | "outline" | "glass" | "danger";
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -158,11 +191,12 @@ export function Button({
 }) {
   const c = useColors();
   const fg = dark ? "#FFFFFF" : variant === "primary" ? c.onPrimary : variant === "danger" ? c.danger : c.text;
-  const height = size === "lg" ? 54 : 46;
+  const height = size === "lg" ? 48 : 44;
+  const corner = size === "lg" ? 10 : radius.md;
   const content = (
     <View style={[styles.buttonInner, { height }]}>
-      {loading ? <ActivityIndicator color={fg} /> : icon ? <Icon name={icon} size={17} color={fg} weight="semibold" /> : null}
-      <T variant="headline" color={fg} style={{ fontSize: 16 }}>
+      {loading ? <ActivityIndicator color={fg} /> : icon ? <Icon name={icon} size={16} color={fg} weight="medium" /> : null}
+      <T variant="callout" color={fg} style={{ fontWeight: "500", letterSpacing: -0.1 }}>
         {title}
       </T>
     </View>
@@ -173,20 +207,23 @@ export function Button({
   };
   if (variant === "glass") {
     return (
-      <Pressable onPress={press} disabled={disabled || loading} style={({ pressed }) => [{ opacity: disabled ? 0.4 : pressed ? 0.8 : 1 }, style]}>
-        <Glass interactive scheme={dark ? "dark" : undefined} fallback={dark ? SMOKE : undefined} style={{ borderRadius: radius.pill }}>
+      <Pressable onPress={press} disabled={disabled || loading} style={({ pressed }) => [{ opacity: disabled ? 0.5 : pressed ? 0.8 : 1 }, style]}>
+        <Glass interactive scheme={dark ? "dark" : undefined} fallback={dark ? SMOKE : undefined} style={{ borderRadius: corner, borderCurve: "continuous" }}>
           {content}
         </Glass>
       </Pressable>
     );
   }
-  const bg = variant === "primary" ? c.primary : variant === "danger" ? c.dangerSoft : c.sunken;
+  const bg = variant === "primary" ? c.primary : variant === "danger" ? c.dangerSoft : variant === "outline" ? c.surface : c.sunken;
+  const outline: ViewStyle | null =
+    variant === "outline" ? { borderWidth: 1, borderColor: c.input, boxShadow: c.shadowCard } : variant === "danger" ? { borderWidth: 1, borderColor: alpha(c.danger, 0.2) } : null;
   return (
     <Pressable
       onPress={press}
       disabled={disabled || loading}
       style={({ pressed }) => [
-        { backgroundColor: bg, borderRadius: radius.pill, opacity: disabled ? 0.4 : pressed ? 0.82 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+        { backgroundColor: bg, borderRadius: corner, borderCurve: "continuous", opacity: disabled ? 0.5 : pressed ? 0.85 : 1, transform: [{ scale: pressed ? 0.98 : 1 }] },
+        outline,
         style,
       ]}
     >
@@ -242,28 +279,50 @@ export function GlassIconButton({
   );
 }
 
-export function EmptyState({ icon, title, body, action }: { icon: IconName; title: string; body?: string; action?: ReactNode }) {
+/**
+ * Nothing to show yet, like the desktop: a dashed box on a half-transparent card with a bordered icon tile, or `art`
+ * (a character) in its place.
+ */
+export function EmptyState({
+  icon,
+  art,
+  title,
+  body,
+  action,
+  style,
+}: {
+  icon?: IconName;
+  art?: ReactNode;
+  title: string;
+  body?: string;
+  action?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
   const c = useColors();
   return (
-    <View style={styles.empty}>
-      <View style={[styles.emptyIcon, { backgroundColor: c.sunken }]}>
-        <Icon name={icon} size={24} color={c.textMuted} />
-      </View>
-      <T variant="headline" style={{ textAlign: "center" }}>
+    <Animated.View entering={FadeIn.duration(220)} style={[styles.empty, { borderColor: c.borderStrong, backgroundColor: alpha(c.surface, 0.5) }, style]}>
+      {art ? (
+        <View style={{ marginBottom: space.lg }}>{art}</View>
+      ) : icon ? (
+        <View style={[styles.emptyIcon, { backgroundColor: c.surface, borderColor: c.border, boxShadow: c.shadowCard }]}>
+          <Icon name={icon} size={20} color={c.text} />
+        </View>
+      ) : null}
+      <T variant="callout" style={{ textAlign: "center", fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
         {title}
       </T>
       {body ? (
-        <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 300 }}>
+        <T variant="subhead" muted style={{ textAlign: "center", maxWidth: 320, marginTop: 6 }}>
           {body}
         </T>
       ) : null}
-      {action ? <View style={{ marginTop: space.sm }}>{action}</View> : null}
-    </View>
+      {action ? <View style={{ marginTop: space.xl }}>{action}</View> : null}
+    </Animated.View>
   );
 }
 
 /** A placeholder block that breathes while its content loads. */
-export function Skeleton({ width, height = 12, radius: r = 6, style }: { width?: ViewStyle["width"]; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
+export function Skeleton({ width, height = 12, radius: r = radius.sm, style }: { width?: ViewStyle["width"]; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
   const c = useColors();
   const focused = useIsFocused();
   const v = useSharedValue(0.55);
@@ -313,7 +372,7 @@ export function ErrorState({ title, error, onRetry }: { title: string; error: st
       icon="wifi"
       title={title}
       body={error}
-      action={onRetry ? <Button title="Try again" icon="refresh" variant="secondary" onPress={onRetry} /> : undefined}
+      action={onRetry ? <Button title="Try again" icon="refresh" variant="outline" onPress={onRetry} /> : undefined}
     />
   );
 }
@@ -338,29 +397,43 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
+    gap: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: radius.badge,
+    borderCurve: "continuous",
+    borderWidth: 1,
     alignSelf: "flex-start",
+    flexShrink: 1,
   },
-  avatarDot: {
-    position: "absolute",
-    borderWidth: 2,
-    borderRadius: 8,
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  badgeText: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: "500",
   },
   buttonInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingHorizontal: 22,
+    paddingHorizontal: 18,
   },
   empty: {
     alignItems: "center",
-    gap: space.sm,
-    paddingVertical: 36,
+    justifyContent: "center",
+    marginHorizontal: space.lg,
+    marginVertical: space.sm,
+    paddingVertical: 48,
     paddingHorizontal: space.xl,
+    borderRadius: radius.lg,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderStyle: "dashed",
   },
   skeletonRow: {
     flexDirection: "row",
@@ -375,12 +448,13 @@ const styles = StyleSheet.create({
     paddingVertical: 48,
   },
   emptyIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
     borderCurve: "continuous",
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: space.lg,
   },
 });

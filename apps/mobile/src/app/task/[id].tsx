@@ -1,6 +1,7 @@
-import { isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets, type TaskBlockedKind } from "@godmode/shared";
+import { isOverdue, isWaiting, mergesOnApprove, reopenStatus, ticketList, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { format, formatDistanceToNowStrict } from "date-fns";
+import { useMemo, useState, type ReactNode } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import type { Task, TaskStatus } from "@godmode/shared";
@@ -12,10 +13,11 @@ import { openChat } from "@/components/rows";
 import { ProjectPicker } from "@/components/project-picker";
 import { STATUS_META, TaskStatusBadge, TYPE_META } from "@/components/task-row";
 import { TaskTimeline } from "@/components/task-timeline";
-import { Avatar, Badge, Button, Card, ErrorState, Row, SectionTitle, Skeleton, T, tap } from "@/components/ui";
+import { Badge, Button, Card, ErrorState, Row, SectionTitle, Skeleton, T, tap, UnassignedAvatar } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
-import { activityText } from "@/lib/format";
+import { BLOCKED_TITLE, dueLabel, formatCost, formatWork, isWorking, PRIORITY_LABEL, taskRepoLabel } from "@/lib/desktop-parity";
+import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
@@ -140,7 +142,6 @@ export default function TaskScreen() {
         <Row style={{ gap: 6, flexWrap: "wrap" }}>
           <TaskStatusBadge task={t} />
           {t.archivedAt ? <Badge label="Archived" /> : null}
-          <Badge label={TYPE_META[t.type].label} />
           <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : "Global"} />
           {projects.length > 0 && !t.archivedAt ? (
             <Pressable accessibilityRole="button" accessibilityLabel={project ? `Project ${project.name}. Change` : "Add to a project"} hitSlop={6} onPress={pickProject}>
@@ -193,10 +194,10 @@ export default function TaskScreen() {
       ) : null}
 
       <Card style={styles.agent} onPress={agent ? () => router.push({ pathname: "/agent/[id]", params: { id: agent.id } }) : undefined}>
-        {agent ? <CharacterAvatar agent={agent} size={40} running={working} /> : <Avatar emoji="📋" size={40} running={working} />}
+        {agent ? <CharacterAvatar agent={agent} size={40} running={working} /> : <UnassignedAvatar size={40} />}
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-            {agent?.name ?? "No agent yet"}
+            {agent?.name ?? "Unassigned"}
           </T>
           <T variant="footnote" muted numberOfLines={2}>
             {working
@@ -231,7 +232,7 @@ export default function TaskScreen() {
           <View style={{ flex: 1, gap: 2 }}>
             {t.blockedKind && t.blockedKind !== "manual" ? (
               <T variant="subhead" style={{ fontWeight: "600" }}>
-                {BLOCKED_TITLE[t.blockedKind]}
+                {BLOCKED_TITLE[t.blockedKind](agent?.name ?? "The agent")}
               </T>
             ) : null}
             {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
@@ -243,10 +244,20 @@ export default function TaskScreen() {
           </View>
         </Card>
       ) : null}
-      {t.runCount > 0 ? (
-        <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
-          {agent?.name ?? "The agent"} worked {Math.max(1, Math.round(t.workMs / 60_000))}m in {t.runCount} run{t.runCount === 1 ? "" : "s"} · ${t.costUsd.toFixed(2)}
-        </T>
+      {t.status === "in_review" ? (
+        <Card style={[styles.notice, { backgroundColor: c.brandSoft, borderColor: "transparent" }]}>
+          <Icon name="check" size={16} color={c.brandStrong} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <T variant="subhead" style={{ fontWeight: "600" }}>
+              Delivered — ready for your review
+            </T>
+            {mergesOnApprove(t) ? (
+              <T variant="footnote" muted>
+                Merges #{t.pullRequest!.number} into {t.baseBranch || "the default branch"} on {hostOf(t.pullRequest!.url)} and moves the ticket to Done.
+              </T>
+            ) : null}
+          </View>
+        </Card>
       ) : null}
 
       <Actions
@@ -282,6 +293,8 @@ export default function TaskScreen() {
         </View>
       )}
 
+      <Properties task={t} />
+
       <Parts task={t} workspaceId={pickedWorkspace === null || pickedWorkspace === t.workspaceId ? pickedWorkspace : t.workspaceId} />
 
       {t.pullRequest && (
@@ -306,12 +319,14 @@ export default function TaskScreen() {
         </Card>
       )}
 
-      {t.summary && (whole || loadingTexts) ? <TextSection title="Result" text={whole ? t.summary : undefined} /> : null}
+      {t.summary && (whole || loadingTexts) ? (
+        <TextSection title={isWorking(t) ? "Previous result" : t.type === "research" ? "Report" : "Result"} text={whole ? t.summary : undefined} />
+      ) : null}
       {(whole && t.description) || loadingTexts ? <TextSection title="Details" text={whole ? t.description : undefined} /> : null}
 
       {canFollowUp && (
         <View>
-          <SectionTitle title={t.status === "blocked" ? "Help it along" : "Ask for changes"} />
+          <SectionTitle title={t.status === "in_review" ? "Request changes" : t.blockedKind === "needs_input" && t.status === "blocked" ? "Answer" : t.status === "blocked" ? "Help it along" : "Ask for changes"} />
           <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
         </View>
       )}
@@ -320,6 +335,14 @@ export default function TaskScreen() {
         <SectionTitle title="Activity" />
         <TaskTimeline task={t} agents={agents} />
       </View>
+
+      <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
+        Filed by {t.createdBy === "user" ? "you" : (agents?.find((a) => `agent:${a.id}` === t.createdBy)?.name ?? "an agent")} on {format(new Date(t.createdAt), "d MMM yyyy, HH:mm")}
+        {t.runCount > 0
+          ? ` · ${agent?.name ?? "The agent"} worked ${formatWork(t.workMs)} in ${t.runCount} run${t.runCount === 1 ? "" : "s"} · ${formatCost(t.costUsd)}${isWorking(t) ? " so far" : ""}`
+          : ""}
+        {t.completedAt ? ` · closed ${formatDistanceToNowStrict(new Date(t.completedAt), { addSuffix: true })}` : ""}
+      </T>
     </ScrollView>
   );
 }
@@ -449,16 +472,6 @@ function Actions({
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
 
-const BLOCKED_TITLE: Record<TaskBlockedKind, string> = {
-  needs_input: "It needs something from you",
-  failed: "The run failed",
-  stopped: "Stopped",
-  interrupted: "Interrupted by a restart",
-  publish: "Couldn't publish the work",
-  setup: "Couldn't set it up",
-  manual: "Blocked",
-};
-
 function ActionButtons({
   buttons,
   busy,
@@ -484,6 +497,63 @@ function ActionButtons({
         />
       ))}
     </View>
+  );
+}
+
+/** The ticket's fields, read-only on the phone: they are set on the computer. */
+function Properties({ task: t }: { task: Task }) {
+  const c = useColors();
+  const coding = t.type === "coding" || !!t.branch;
+  const open = (t.waitsFor ?? []).filter((w) => !w.finished);
+  return (
+    <Card style={styles.props}>
+      <Prop label="Priority" value={PRIORITY_LABEL[t.priority]} color={t.priority === "urgent" ? c.danger : undefined} />
+      {t.dueDate ? <Prop label="Due date" value={dueLabel(t.dueDate)} color={isOverdue(t) ? c.danger : undefined} /> : null}
+      {t.waitsFor?.length ? (
+        <Prop
+          label="Waits for"
+          value={open.length ? ticketList(open.map((w) => w.number)) : "Nothing — all delivered"}
+          detail={open.length === 1 ? open[0]!.title : undefined}
+        />
+      ) : null}
+      {t.labels?.length ? (
+        <Prop label="Labels">
+          <Row style={{ gap: 4, flexWrap: "wrap", flex: 1 }}>
+            {(t.labels ?? []).map((l) => (
+              <Badge key={l} label={l} />
+            ))}
+          </Row>
+        </Prop>
+      ) : null}
+      <Prop label="Type" value={TYPE_META[t.type].label} detail={TYPE_META[t.type].hint} />
+      {coding ? <Prop label="Repository" value={taskRepoLabel(t) || "The workspace's"} mono /> : null}
+      {t.branch ? <Prop label="Branch" value={`${t.branch} → ${t.baseBranch || "default"}`} mono /> : null}
+      {t.type === "coding" ? (
+        <Prop label="Merge" value={t.autoMerge ? `Into ${t.baseBranch || "the default branch"} by itself once delivered` : "After your review"} />
+      ) : null}
+    </Card>
+  );
+}
+
+function Prop({ label, value, detail, color, mono, children }: { label: string; value?: string; detail?: string; color?: string; mono?: boolean; children?: ReactNode }) {
+  return (
+    <Row style={styles.prop}>
+      <T variant="footnote" muted style={styles.propLabel}>
+        {label}
+      </T>
+      {children ?? (
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant={mono ? "mono" : "subhead"} color={color} numberOfLines={2} selectable={mono}>
+            {value}
+          </T>
+          {detail ? (
+            <T variant="caption" muted numberOfLines={1}>
+              {detail}
+            </T>
+          ) : null}
+        </View>
+      )}
+    </Row>
   );
 }
 
@@ -555,6 +625,9 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
 }
 
 const styles = StyleSheet.create({
+  props: { paddingVertical: 6, paddingHorizontal: space.lg },
+  prop: { alignItems: "flex-start", gap: space.md, paddingVertical: 7 },
+  propLabel: { width: 84, paddingTop: 1 },
   part: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10 },
   partsLoading: { gap: space.md, paddingVertical: space.md, paddingHorizontal: space.lg },
   stale: {

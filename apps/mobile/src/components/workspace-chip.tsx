@@ -22,7 +22,7 @@ export function WorkspaceChip() {
       }}
       style={({ pressed }) => [styles.chip, { backgroundColor: c.sunken, opacity: pressed ? 0.7 : 1 }]}
     >
-      {workspace ? <T style={{ fontSize: 14 }}>{workspace.icon || "🗂️"}</T> : <Icon name="layers" size={13} color={c.textMuted} />}
+      {workspace?.icon ? <T style={{ fontSize: 14 }}>{workspace.icon}</T> : <Icon name="layers" size={13} color={c.textMuted} />}
       <T variant="subhead" numberOfLines={1} style={{ fontWeight: "600", flexShrink: 1 }} muted={!!project}>
         {name}
       </T>

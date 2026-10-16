@@ -3,7 +3,7 @@ import { memo, useMemo, type ReactNode } from "react";
 import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
 import { RemoteImage } from "./remote-image";
-import { radius, space, type, useColors, type Colors } from "@/lib/theme";
+import { alpha, fonts, radius, space, type, useColors, type Colors } from "@/lib/theme";
 
 /** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures). */
 export const Markdown = memo(function Markdown({ text, color }: { text: string; color?: string }) {
@@ -50,7 +50,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
       const h = t as Tokens.Heading;
       const size = h.depth <= 1 ? 22 : h.depth === 2 ? 19 : 17;
       return (
-        <Text key={key} style={{ color, fontSize: size, lineHeight: size * 1.3, fontWeight: "700", letterSpacing: -0.3, marginTop: 4 }}>
+        <Text key={key} style={{ color, fontSize: size, lineHeight: size * 1.3, fontFamily: fonts.semibold, letterSpacing: -0.3, marginTop: 4 }}>
           {inline(h.tokens, c, color)}
         </Text>
       );
@@ -62,9 +62,16 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
         <View key={key} style={{ gap: 6 }}>
           {list.items.map((item, i) => (
             <View key={i} style={styles.listItem}>
-              <Text style={[type.body, { color: c.textMuted, minWidth: list.ordered ? 22 : 14, fontVariant: ["tabular-nums"] }]}>
-                {item.task ? (item.checked ? "☑" : "☐") : list.ordered ? `${start + i}.` : "•"}
-              </Text>
+              {item.task ? (
+                <View
+                  accessibilityLabel={item.checked ? "Done" : "Not done"}
+                  style={[styles.check, item.checked ? { backgroundColor: c.text, borderColor: c.text } : { borderColor: alpha(c.textMuted, 0.6) }]}
+                >
+                  {item.checked ? <View style={[styles.tick, { borderColor: c.background }]} /> : null}
+                </View>
+              ) : (
+                <Text style={[type.body, { color: c.textMuted, minWidth: list.ordered ? 22 : 14, fontVariant: ["tabular-nums"] }]}>{list.ordered ? `${start + i}.` : "•"}</Text>
+              )}
               <View style={{ flex: 1, gap: 6 }}>{blocks(item.tokens, c, color)}</View>
             </View>
           ))}
@@ -97,7 +104,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
             {[table.header, ...table.rows].map((row, r) => (
               <View key={r} style={[styles.tableRow, { backgroundColor: r === 0 ? c.sunken : "transparent", borderColor: c.border }]}>
                 {row.map((cell, ci) => (
-                  <Text key={ci} style={[type.subhead, styles.cell, { color, fontWeight: r === 0 ? "600" : "400" }]}>
+                  <Text key={ci} style={[type.subhead, styles.cell, { color, fontFamily: r === 0 ? fonts.semibold : fonts.regular }]}>
                     {inline(cell.tokens, c, color)}
                   </Text>
                 ))}
@@ -121,7 +128,7 @@ function inline(tokens: Token[] | undefined, c: Colors, color: string): ReactNod
     switch (t.type) {
       case "strong":
         return (
-          <Text key={i} style={{ fontWeight: "700" }}>
+          <Text key={i} style={{ fontFamily: fonts.semibold }}>
             {inline((t as Tokens.Strong).tokens, c, color)}
           </Text>
         );
@@ -180,6 +187,24 @@ const styles = StyleSheet.create({
   listItem: {
     flexDirection: "row",
     gap: 6,
+  },
+  check: {
+    width: 15,
+    height: 15,
+    marginTop: 4,
+    marginRight: 2,
+    borderRadius: 4,
+    borderWidth: 1.25,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tick: {
+    width: 7,
+    height: 4,
+    marginTop: -2,
+    borderLeftWidth: 1.6,
+    borderBottomWidth: 1.6,
+    transform: [{ rotate: "-45deg" }],
   },
   code: {
     borderRadius: radius.sm,

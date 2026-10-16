@@ -12,7 +12,7 @@ import { T, tap } from "./ui";
 import { errorText } from "@/lib/api";
 import { addFiles, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
-import { radius, space, type, useColors } from "@/lib/theme";
+import { fonts, radius, space, type, useColors } from "@/lib/theme";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -358,6 +358,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
   },
   input: {
+    fontFamily: fonts.regular,
     fontSize: 16,
     lineHeight: 21,
     minHeight: 40,
@@ -382,8 +383,8 @@ const styles = StyleSheet.create({
   },
   slash: {
     ...type.mono,
+    fontFamily: fonts.monoMedium,
     fontSize: 18,
-    fontWeight: "700",
     lineHeight: 22,
   },
   send: {
