@@ -328,6 +328,15 @@ describe("runner end-to-end with fake claude", () => {
     expect(item.reason).toContain("couldn't log in to example.com");
   });
 
+  test("Claude's API refusing the sign-in is no missing login of a website", async () => {
+    const { run } = await startChat({ agentId: agent.id, content: "AUTH_403" });
+    const finished = await waitForRun(run.id, 20_000);
+    expect(finished.status).toBe("failed");
+    expect(finished.error).toBe("Failed to authenticate. API Error: 403 Request not allowed");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(listMissingLogins({}).filter((m) => m.runId === run.id)).toHaveLength(0);
+  });
+
   test("runs reach the MCP gateway; an explicit report disables the heuristic", async () => {
     const { run } = await startChat({ agentId: agent.id, content: "CALL_MCP" });
     const finished = await waitForRun(run.id, 20_000);
