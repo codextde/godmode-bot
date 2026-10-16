@@ -280,6 +280,24 @@ describe("vault tools", () => {
     expect([fills[2]!.allowedHosts, fills[2]!.httpHosts]).toEqual([["127.0.0.1"], ["127.0.0.1"]]);
   });
 
+  test("vault_fill_totp uses the 2FA of the same account's other login for the site", async () => {
+    fills.length = 0;
+    const twin = createCredential({ name: "Example support", url: "https://example.com/support", username: "Alice", password: "twin-pass-1234" });
+    const stranger = createCredential({ name: "Example ops", url: "https://example.com/ops", username: "mallory", password: "ops-pass-1234" });
+    try {
+      const r = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: twin.id });
+      expect(r.isError).toBeUndefined();
+      expect(fills[0]!.allowedHosts).toEqual(["example.com"]);
+      const other = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: stranger.id });
+      expect(other.isError).toBe(true);
+      expect(other.content[0]!.text).toContain("No 2FA code is linked");
+      expect(fills).toHaveLength(1);
+    } finally {
+      deleteCredential(twin.id);
+      deleteCredential(stranger.id);
+    }
+  });
+
   test("a name-guessed login is filled on its real site and remembers it", async () => {
     fills.length = 0;
     // Saved only for example.io, but the agent is on app.example.com (fake currentPage) — only the name "Example" matches this site.

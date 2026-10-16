@@ -966,6 +966,32 @@ export interface MissingLogin {
   updatedAt: ISODate;
 }
 
+/** Logins saved for a missing-2FA report's site and the 2FA entries that most likely belong to it, best first. */
+export interface MissingLoginTotpChoices {
+  host: string;
+  logins: Pick<Credential, "id" | "name" | "username" | "url" | "workspaceId" | "totpId">[];
+  suggestedTotpIds: ID[];
+}
+
+export interface MissingLoginTotpLinkInput {
+  totpId: ID;
+  /** The site's login to use; default: the best match for the 2FA entry's account */
+  credentialId?: ID;
+}
+
+/**
+ * linked: the entry was free and now belongs to the site's login. moved: it was linked to a login of another
+ * account and now belongs to this one. domain_added: it stays with its login (same account), which now also covers
+ * the site. already: nothing to change.
+ */
+export type MissingLoginTotpLinkOutcome = "linked" | "moved" | "domain_added" | "already";
+
+export interface MissingLoginTotpLinkResult {
+  item: MissingLogin;
+  credentialId: ID;
+  outcome: MissingLoginTotpLinkOutcome;
+}
+
 /* ------------------------------------------------------------------ */
 /* Integrations: MCP servers + Composio                                 */
 /* ------------------------------------------------------------------ */
