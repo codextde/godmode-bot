@@ -7,7 +7,7 @@
  * A turn that broke off because Claude's API couldn't be reached (no internet, DNS down, a dropped connection)
  * continues the same way once the API answers again, waiting a little longer after each try that broke off again. So
  * does a turn Claude Code dropped on its own (it exited without a result, crashed, or Claude's API answered with a
- * server error or "overloaded"), a few times at most.
+ * server error, "overloaded" or a 403), a few times at most.
  */
 import type { AutomationEventSource, MessageBlock, RetryMode, Run, RunTrigger } from "@godmode/shared";
 import { RUN_INTERRUPTED, RUN_SHUT_DOWN, retryModeOf } from "@godmode/shared";
@@ -40,9 +40,12 @@ const PLATFORMS = new Set(["slack", "telegram", "teams"]);
 /** Claude Code's answer when Claude's API couldn't be reached or the connection dropped, after its own retries. */
 const NO_CONNECTION =
   /^API Error: [^\n]*(Can't reach the API server|Unable to connect|Connection error|Connection dropped|Request timed out|socket hang up|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT)/i;
-/** Claude Code dropped the turn on its own, or Claude's API failed on its side: trying again usually helps. */
+/**
+ * Claude Code dropped the turn on its own, or Claude's API failed on its side: trying again usually helps. A 403 comes
+ * right after the computer wakes, before Claude Code has renewed its sign-in.
+ */
 const ERRORED =
-  /^(?:Claude Code exited (?:without a result|with code \d+)$|API Error: (?:5\d\d\b|[^\n]*(?:overloaded|Internal server error|"type":"api_error")))/i;
+  /^(?:Claude Code exited (?:without a result|with code \d+)$|API Error: (?:5\d\d\b|[^\n]*(?:overloaded|Internal server error|"type":"api_error"))|Failed to authenticate\. API Error: 403\b)/i;
 const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine", "delegation"]);
 /** Minutes to wait before each try in a row: a connection that just dropped often drops again right away. */
 const OFFLINE_BACKOFF_MIN = [0, 2, 5, 15, 30];
@@ -338,7 +341,7 @@ function offlineFailures(): RunRow[] {
   const since = new Date(Date.now() - OFFLINE_MAX_AGE_MS).toISOString();
   return all<RunRow>(
     `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
-     WHERE r.status = 'failed' AND (r.error LIKE 'API Error:%' OR r.error LIKE 'Claude Code exited%')
+     WHERE r.status = 'failed' AND (r.error LIKE 'API Error:%' OR r.error LIKE 'Claude Code exited%' OR r.error LIKE 'Failed to authenticate.%')
        AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
      ORDER BY r.created_at, r.rowid`,
     since,
