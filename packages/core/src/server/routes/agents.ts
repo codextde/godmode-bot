@@ -37,6 +37,7 @@ import { continueAgent, pauseAgent } from "../../services/pauses";
 import { beatNow, heartbeatState } from "../../services/heartbeats";
 import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "../../memory/dreaming";
 import { isMemoryPath } from "../../memory/files";
+import { MAX_MEMORY_EDIT_BYTES, readAgentMemory, writeAgentMemory } from "../../memory/editor";
 import { resolveRepoPath } from "../../agents/repo";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
@@ -290,6 +291,15 @@ export function registerAgentRoutes(app: Hono): void {
     }
     await writeAgentFile(agent.id, path, content);
     return c.json({ ok: true });
+  });
+
+  /* Memory editor (MEMORY.md only; phones reach this, never the other files) */
+
+  app.get("/api/agents/:id/memory", async (c) => c.json(await readAgentMemory(c.req.param("id"))));
+
+  app.put("/api/agents/:id/memory", async (c) => {
+    const input = await body(c, z.object({ content: z.string().max(MAX_MEMORY_EDIT_BYTES), digest: z.string().max(64).optional() }));
+    return c.json(await writeAgentMemory(c.req.param("id"), input.content, input.digest));
   });
 
   app.get("/api/agents/:id/commits", async (c) => {

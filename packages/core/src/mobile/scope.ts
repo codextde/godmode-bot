@@ -54,6 +54,9 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
   ["PATCH", new RegExp(`^/api/agents/${ID}$`)],
   ["GET", new RegExp(`^/api/agents/${ID}/commands$`)],
+  // Only MEMORY.md, through the memory editor: the rest of the agent's repository stays on the computer.
+  ["GET", new RegExp(`^/api/agents/${ID}/memory$`)],
+  ["PUT", new RegExp(`^/api/agents/${ID}/memory$`)],
   ["GET", /^\/api\/models$/],
 
   ["GET", /^\/api\/conversations$/],

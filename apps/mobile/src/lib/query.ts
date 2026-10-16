@@ -18,6 +18,7 @@ export const qk = {
   settings: ["settings"],
   agents: ["agents"],
   agent: (id: string) => ["agents", id],
+  agentMemory: (id: string) => ["agents", id, "memory"],
   agentCommands: (id: string) => ["agent-commands", id],
   models: ["models"],
   conversations: ["conversations"],

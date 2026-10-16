@@ -83,6 +83,7 @@ export default function RootLayout() {
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="chat/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="memory/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Memory" }} />
                 <Stack.Screen name="compose" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="task/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="my-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "My tasks" }} />

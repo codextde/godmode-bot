@@ -111,6 +111,8 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
       <Plate agent={agent} onRunTask={runTask} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
 
+      <MemoryCard agent={agent} />
+
       <View>
         <SectionTitle title="Automations" />
         <Card>
@@ -279,6 +281,30 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
             ) : null}
           </View>
         )}
+      </Card>
+    </View>
+  );
+}
+
+/** MEMORY.md at a glance; hidden when the computer runs a Godmode without the memory editor. */
+function MemoryCard({ agent }: { agent: Agent }) {
+  const c = useColors();
+  const memory = useQuery({ queryKey: qk.agentMemory(agent.id), queryFn: () => api.agents.memory(agent.id), retry: false });
+  if (!memory.data) return null;
+  const { chars, target, updatedAt, dreaming } = memory.data;
+  const detail = !chars
+    ? "Nothing remembered yet"
+    : `${chars.toLocaleString()} of ${target.toLocaleString()} characters${updatedAt ? ` · updated ${formatDistanceToNowStrict(new Date(updatedAt), { addSuffix: true })}` : ""}`;
+  return (
+    <View>
+      <SectionTitle title="Memory" />
+      <Card style={styles.plate}>
+        <PlateRow
+          icon={<Icon name={dreaming ? "moon" : "brain"} size={14} color={dreaming ? c.dream : chars > target ? c.warning : c.textMuted} />}
+          title={dreaming ? "Dreaming — tidying up its memory" : "What it remembers"}
+          detail={detail}
+          onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })}
+        />
       </Card>
     </View>
   );

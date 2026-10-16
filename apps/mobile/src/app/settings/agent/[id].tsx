@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import {
   HEARTBEAT_INTERVALS,
@@ -11,7 +11,7 @@ import {
 } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
-import { Group, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
+import { Group, LinkRow, PickerRow, SegmentRow, SwitchRow, TextEditor } from "@/components/form";
 import { Badge, EmptyState, Row, SectionTitle } from "@/components/ui";
 import { useEffectiveModel, NO_CHOICE } from "@/lib/composer";
 import { useAgents } from "@/lib/hooks";
@@ -142,6 +142,10 @@ export default function AgentSettings() {
           onSave={(description) => patchAgent(agent.id, { description }, { quiet: true })}
         />
       </View>
+
+      <Group footer="What the agent learned and keeps loading into every chat. It updates this itself; your edits guide what it remembers.">
+        <LinkRow icon="brain" title="Memory" detail="MEMORY.md" onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })} />
+      </Group>
 
       <Group title="Personality">
         <PickerRow

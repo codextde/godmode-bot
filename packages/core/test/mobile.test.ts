@@ -179,6 +179,9 @@ describe("device scope", () => {
     expect(deviceMayCall("POST", "/api/conversations/conv_1/queue/send")).toBe(true);
     expect(deviceMayCall("PATCH", "/api/agents/a1")).toBe(true);
     expect(deviceMayCall("PUT", "/api/agents/a1/file")).toBe(false);
+    expect(deviceMayCall("GET", "/api/agents/a1/memory")).toBe(true);
+    expect(deviceMayCall("PUT", "/api/agents/a1/memory")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/agents/a1/memory")).toBe(false);
   });
 
   test("reads calls, never places them", () => {

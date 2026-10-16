@@ -128,6 +128,35 @@ describe("agent routes", () => {
     expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: ".git/config", content: "x" })).status).toBe(403);
   });
 
+  test("memory editor endpoints", async () => {
+    type Mem = { content: string; exists: boolean; digest: string; chars: number; target: number; limit: number; dreaming: boolean; topics: string[]; updatedAt: string | null };
+    const empty = await call<Mem>("GET", `/api/agents/${agent.id}/memory`);
+    expect(empty.status).toBe(200);
+    expect(empty.data.dreaming).toBe(false);
+    expect(empty.data.topics).toContain("memory/people.md");
+    expect(empty.data.target).toBe(getSettings().memory.dreaming.maxMemoryChars);
+    expect(empty.data.limit).toBeGreaterThan(empty.data.target);
+
+    const saved = await call<Mem>("PUT", `/api/agents/${agent.id}/memory`, { content: "# Memory\n- likes tea\n", digest: empty.data.digest });
+    expect(saved.status).toBe(200);
+    expect(saved.data).toMatchObject({ content: "# Memory\n- likes tea\n", exists: true, chars: 21 });
+    expect(saved.data.digest).not.toBe(empty.data.digest);
+    expect((await call<GitCommit[]>("GET", `/api/agents/${agent.id}/commits`)).data[0]!.message).toBe("Edit MEMORY.md");
+
+    const stale = await call<{ code: string; details: Mem }>("PUT", `/api/agents/${agent.id}/memory`, { content: "mine", digest: empty.data.digest });
+    expect(stale.status).toBe(409);
+    expect(stale.data.code).toBe("memory_changed");
+    expect(stale.data.details.content).toBe("# Memory\n- likes tea\n");
+
+    const fresh = (await call<Mem>("GET", `/api/agents/${agent.id}/memory`)).data.digest;
+    const race = await Promise.all(["phone", "desktop"].map((who) => call("PUT", `/api/agents/${agent.id}/memory`, { content: who, digest: fresh })));
+    expect(race.map((r) => r.status).sort()).toEqual([200, 409]);
+
+    const forced = await call<Mem>("PUT", `/api/agents/${agent.id}/memory`, { content: "mine" });
+    expect(forced.data.content).toBe("mine");
+    expect((await call<{ content: string }>("GET", `/api/agents/${agent.id}/file?path=MEMORY.md`)).data.content).toBe("mine");
+  });
+
   test("routine endpoints", async () => {
     const bad = await call<{ error: string }>("POST", "/api/routines", { agentId: agent.id, name: "Bad", cron: "99 * * * *", prompt: "x" });
     expect(bad.status).toBe(400);
