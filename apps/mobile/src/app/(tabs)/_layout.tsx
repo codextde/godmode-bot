@@ -58,7 +58,7 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="agents">
         <NativeTabs.Trigger.Label>Agents</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "face.smiling", selected: "face.smiling.inverse" }} md="smart_toy" />
+        <NativeTabs.Trigger.Icon sf={{ default: "face.smiling.inverse", selected: "face.smiling" }} md="smart_toy" />
         {running > 0 && <NativeTabs.Trigger.Badge>{String(running)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
     </NativeTabs>
