@@ -9,8 +9,9 @@ name: Release
 # all attached to a draft GitHub release that a maintainer publishes after a quick check. The last job drops the .sig
 # files (latest.json carries the signatures), adds SHA256SUMS and puts a download table on top of the notes.
 #
-# Optional secrets for signed/notarized macOS builds: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
-# APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD (app-specific password), APPLE_TEAM_ID.
+# Secrets for signed + notarized macOS builds (Developer ID Application: Codext GmbH): APPLE_CERTIFICATE (base64 .p12),
+# APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID and for notarization either an App Store Connect
+# API key (APPLE_API_ISSUER, APPLE_API_KEY = key id, APPLE_API_KEY_P8 = contents of the .p8) or APPLE_ID + APPLE_PASSWORD.
 #
 # Required secrets for auto-update: TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the key matching
 # `plugins.updater.pubkey` in tauri.conf.json). They sign the update bundles and add latest.json to the release;
@@ -184,14 +185,25 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
         run: |
           # Exported only when set: empty values would make the bundler try (and fail) to import a certificate.
-          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID; do
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID APPLE_API_ISSUER APPLE_API_KEY; do
             value="${!name}"
             if [ -n "$value" ]; then
               { echo "$name<<__GODMODE_EOF__"; echo "$value"; echo "__GODMODE_EOF__"; } >> "$GITHUB_ENV"
             fi
           done
+          if [ -n "$APPLE_API_KEY_P8" ]; then
+            key_path="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$key_path"
+            echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
+          fi
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning::macOS build is not signed with a Developer ID (APPLE_CERTIFICATE missing): Gatekeeper will block it"
+          fi
 
       - name: Keep linuxdeploy from patching the sidecar
         if: matrix.skip_sidecar_rpath
@@ -220,6 +232,33 @@ jobs:
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
           retryAttempts: 1
+
+      - name: Check the macOS signature and notarization
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
+        run: |
+          app=$(ls -d apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/*.app | head -n1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dvv "$app" 2>&1 | grep -E "Authority=Developer ID Application|TeamIdentifier"
+          xcrun stapler validate "$app"
+          spctl --assess --type execute --verbose=2 "$app"
+
+      # The bundler notarizes the .app only; a downloaded DMG that is signed but not notarized can still warn on open.
+      - name: Notarize the DMG and replace it in the release
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_API_KEY_PATH != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          dmg=$(ls apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg | head -n1)
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          # GitHub stores spaces in asset names as dots.
+          name=$(basename "$dmg" | tr ' ' '.')
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$name\") | .id")
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+            -H "Content-Type: application/x-apple-diskimage" --input "$dmg" --jq .browser_download_url
 
   updater-manifest:
     name: Check latest.json
@@ -343,7 +382,8 @@ jobs:
           gh api "$release/assets?per_page=100" > assets.json
           gh api "$release" --jq '.body // ""' > body.md
           bun scripts/release-downloads.ts notes "$TAG" assets.json body.md > notes.md
-          gh api -X PATCH "$release" -F body=@notes.md --jq .html_url
+          # Without tag_name GitHub detaches a draft from its tag ("untagged-..."), and it can no longer be published.
+          gh api -X PATCH "$release" -f tag_name="$TAG" -F body=@notes.md --jq .html_url
           jq -r '.[].name' assets.json
 
   docker:
