@@ -49,11 +49,12 @@ type Item =
   | { key: string; role: "earlier" }
   | { key: string; role: "user"; message: Message }
   | { key: string; role: "assistant"; blocks: MessageBlock[]; content: string; streaming: boolean }
-  | { key: string; role: "live" };
+  | { key: string; role: "live" }
+  | { key: string; role: "note"; content: string };
 
 const NO_BLOCKS: MessageBlock[] = [];
 /** What marks a place in the chat where it went on without the human writing. */
-const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry", "call"]);
+const MARKERS = new Set<MessageBlock["type"]>(["human_task", "followup", "retry", "call", "moved"]);
 
 /** A stored message's row, the same object for as long as the message is: rows that didn't change don't render again. */
 const settled = new WeakMap<Message, Item | null>();
@@ -65,13 +66,30 @@ function itemOf(m: Message): Item | null {
   else if (m.role === "assistant") item = { key: m.id, role: "assistant", blocks: m.blocks, content: m.content, streaming: false };
   else {
     const markers = m.blocks.filter((b) => MARKERS.has(b.type));
-    item = markers.length ? { key: m.id, role: "assistant", blocks: markers, content: "", streaming: false } : null;
+    item = markers.length
+      ? { key: m.id, role: "assistant", blocks: markers, content: "", streaming: false }
+      : m.content.trim()
+        ? { key: m.id, role: "note", content: m.content.trim() }
+        : null;
   }
   settled.set(m, item);
   return item;
 }
 
 const Gap = () => <View style={{ height: 22 }} />;
+
+function SystemNote({ content }: { content: string }) {
+  const c = useColors();
+  return (
+    <View style={{ alignItems: "center" }}>
+      <View style={{ maxWidth: "80%", borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, backgroundColor: c.surface, paddingHorizontal: 12, paddingVertical: 5 }}>
+        <T variant="caption" muted style={{ textAlign: "center" }}>
+          {content}
+        </T>
+      </View>
+    </View>
+  );
+}
 
 export default function Chat() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -295,6 +313,8 @@ export default function Chat() {
           return <UserMessage message={item.message} />;
         case "live":
           return <LiveMessage conversationId={id} runId={runId} />;
+        case "note":
+          return <SystemNote content={item.content} />;
         default:
           return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />;
       }

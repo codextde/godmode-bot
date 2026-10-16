@@ -113,6 +113,9 @@ export function toolLabel(block: Extract<MessageBlock, { type: "tool_use" }>): T
     if (tool === "task_message") return { icon: "tasks", title: "Sent a message into a task", detail: clip(str(input.content)) || undefined };
     if (tool === "task_note") return { icon: "pencil", title: "Left a note on the task", detail: clip(str(input.text)) || undefined };
     if (tool === "task_report_blocked") return { icon: "warning", title: "Reported what it needs", detail: clip(str(input.reason)) || undefined };
+    if (tool === "my_routine_set_enabled") {
+      return { icon: "workflow", title: input.enabled === false ? "Paused one of its automations" : "Switched one of its automations on", detail: clip(str(input.reason)) || undefined };
+    }
     return { icon: "bolt", title: gatewayDone(tool) };
   }
   switch (tool) {

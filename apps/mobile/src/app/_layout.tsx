@@ -1,4 +1,7 @@
+import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from "@expo-google-fonts/geist";
+import { GeistMono_400Regular, GeistMono_500Medium } from "@expo-google-fonts/geist-mono";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { useFonts } from "expo-font";
 import { Image } from "expo-image";
 import { Stack, ThemeProvider } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -11,9 +14,19 @@ import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
-import { useColors, useNavigationTheme } from "@/lib/theme";
+import { fonts, useColors, useNavigationTheme } from "@/lib/theme";
 
 void SplashScreen.preventAutoHideAsync();
+
+/** Embedded at build time by the expo-font plugin (app.json); a build from before that loads them here, under the same names. */
+const FONT_FILES = {
+  [fonts.regular]: Geist_400Regular,
+  [fonts.medium]: Geist_500Medium,
+  [fonts.semibold]: Geist_600SemiBold,
+  [fonts.bold]: Geist_700Bold,
+  [fonts.mono]: GeistMono_400Regular,
+  [fonts.monoMedium]: GeistMono_500Medium,
+};
 
 export default function RootLayout() {
   const ready = useSession((s) => s.ready);
@@ -21,6 +34,8 @@ export default function RootLayout() {
   const deviceId = useSession((s) => s.connection?.deviceId);
   const theme = useNavigationTheme();
   const c = useColors();
+  const [fontsLoaded, fontError] = useFonts(FONT_FILES);
+  const fontsReady = fontsLoaded || !!fontError;
 
   useEffect(() => {
     void useSession.getState().load();
@@ -36,8 +51,8 @@ export default function RootLayout() {
   }, [ready, restored]);
 
   useEffect(() => {
-    if (restored) void SplashScreen.hideAsync();
-  }, [restored]);
+    if (restored && fontsReady) void SplashScreen.hideAsync();
+  }, [restored, fontsReady]);
 
   useEffect(() => {
     if (!restored) return;
@@ -55,7 +70,7 @@ export default function RootLayout() {
     };
   }, [deviceId, restored]);
 
-  if (!ready || !restored) return null;
+  if (!ready || !restored || !fontsReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
@@ -75,6 +90,9 @@ export default function RootLayout() {
                 <Stack.Screen name="archived-tasks" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Archived tasks" }} />
                 <Stack.Screen name="automations" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Automations" }} />
                 <Stack.Screen name="activity" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Activity" }} />
+                <Stack.Screen name="inbox" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Inbox" }} />
+                <Stack.Screen name="calls" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Calls" }} />
+                <Stack.Screen name="call/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="human-task/[id]" options={{ presentation: "formSheet", sheetAllowedDetents: [0.75, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="new-task" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />

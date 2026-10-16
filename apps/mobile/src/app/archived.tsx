@@ -74,7 +74,7 @@ export default function ArchivedChats() {
           ) : list.isError ? (
             <ErrorState title="Couldn't load archived chats" error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : (
-            <EmptyState icon="archive" title="No archived chats" body="Chats you archive land here. Long-press a chat to archive it." />
+            <EmptyState icon="archive" title="Nothing archived" body="Long-press a chat and archive it to tidy up. It lands here, with every message intact." />
           )
         }
       />

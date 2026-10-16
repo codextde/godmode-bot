@@ -84,21 +84,23 @@ export default function Settings() {
         </View>
       </Card>
 
-      <Group title="How your agents work" footer="Changes apply to your computer right away. Running chats pick them up with their next message.">
+      <Group title="Preferences" footer="Changes apply to your computer right away. Running chats pick them up with their next message.">
+        {s ? <FieldRow label="Your name" value={s.general.userName} placeholder="Add your name" maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}
+        <LinkRow
+          icon="sparkles"
+          title="AI & Claude"
+          value={s && model ? `${model} · ${EFFORT_LABELS[s.runner.effort]}` : undefined}
+          onPress={() => router.push("/settings/ai")}
+        />
         <LinkRow
           icon="text"
           title="Instructions"
           detail={s ? (s.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : "Rules for every agent, workspace and project") : undefined}
           onPress={() => router.push("/settings/instructions")}
         />
-        <LinkRow
-          icon="sparkles"
-          title="Model & limits"
-          value={s && model ? `${model} · ${EFFORT_LABELS[s.runner.effort]}` : undefined}
-          onPress={() => router.push("/settings/ai")}
-        />
-        <LinkRow icon="globe" title="Browser & computer" detail="What agents may see and control" onPress={() => router.push("/settings/capabilities")} />
-        <LinkRow icon="brain" title="Memory & upkeep" detail="Learning, dreaming, self-repair" onPress={() => router.push("/settings/memory")} />
+        <LinkRow icon="globe" title="Browser" detail="Profiles, background, live view" onPress={() => router.push("/settings/capabilities")} />
+        <LinkRow icon="display" title="Computer" detail="Computer use and virtual machines" onPress={() => router.push("/settings/capabilities")} />
+        <LinkRow icon="brain" title="Memory" detail="Learning, dreaming, upkeep" onPress={() => router.push("/settings/memory")} />
       </Group>
 
       <Group title="Your team">
@@ -111,22 +113,17 @@ export default function Settings() {
         <LinkRow icon="agents" title="Agents" value={agents ? String(agents.length) : undefined} onPress={() => router.push("/settings/agents")} />
       </Group>
 
-      {s ? (
-        <Group title="You" footer="Agents greet you and write to you by this name.">
-          <FieldRow label="Your name" value={s.general.userName} placeholder="Add your name" maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} />
-        </Group>
-      ) : null}
+      <Group title="Data & privacy" footer="Logins, 2FA codes, backups and the rest of Security stay on your computer.">
+        {biometrics.data ? (
+          <SwitchRow icon="faceid" title="Require Face ID" detail="Hides Godmode in the app switcher and asks after 30 seconds away." value={appLock} onChange={(on) => void toggleLock(on)} />
+        ) : null}
+        <Info icon="lock" label="Security" value="On your computer" />
+      </Group>
 
-      <Group title="Connection" footer="Logins, 2FA codes, backups and security stay on your computer. Remove this phone there anytime in Settings → Phone.">
+      <Group title="App" footer="Remove this phone on your computer anytime in Settings → Phone.">
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
         <Info icon="phone" label="This phone" value={me.data?.device.name ?? connection.deviceName} />
       </Group>
-
-      {biometrics.data ? (
-        <Group title="Privacy">
-          <SwitchRow icon="faceid" title="Require Face ID" detail="Hides Godmode in the app switcher and asks after 30 seconds away." value={appLock} onChange={(on) => void toggleLock(on)} />
-        </Group>
-      ) : null}
 
       <Button title="Disconnect this phone" variant="danger" icon="logout" onPress={disconnect} />
       <T variant="caption" muted style={{ textAlign: "center" }}>

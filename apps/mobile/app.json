@@ -2,14 +2,14 @@
   "expo": {
     "name": "Godmode",
     "slug": "godmode",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "scheme": "godmode",
     "userInterfaceStyle": "automatic",
     "ios": {
       "bundleIdentifier": "de.codext.godmode",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "icon": "./assets/godmode.icon",
       "supportsTablet": true,
       "infoPlist": {
@@ -28,7 +28,7 @@
     },
     "android": {
       "package": "de.codext.godmode",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#1C1C1C",
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -43,6 +43,79 @@
     "plugins": [
       "./plugins/with-scene-lifecycle",
       "expo-router",
+      [
+        "expo-font",
+        {
+          "ios": {
+            "fonts": [
+              "@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf",
+              "@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf",
+              "@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf",
+              "@expo-google-fonts/geist/700Bold/Geist_700Bold.ttf",
+              "@expo-google-fonts/geist-mono/400Regular/GeistMono_400Regular.ttf",
+              "@expo-google-fonts/geist-mono/500Medium/GeistMono_500Medium.ttf"
+            ]
+          },
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Geist-Regular",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist/400Regular/Geist_400Regular.ttf",
+                    "weight": 400
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Geist-Medium",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist/500Medium/Geist_500Medium.ttf",
+                    "weight": 500
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Geist-SemiBold",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist/600SemiBold/Geist_600SemiBold.ttf",
+                    "weight": 600
+                  }
+                ]
+              },
+              {
+                "fontFamily": "Geist-Bold",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist/700Bold/Geist_700Bold.ttf",
+                    "weight": 700
+                  }
+                ]
+              },
+              {
+                "fontFamily": "GeistMono-Regular",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist-mono/400Regular/GeistMono_400Regular.ttf",
+                    "weight": 400
+                  }
+                ]
+              },
+              {
+                "fontFamily": "GeistMono-Medium",
+                "fontDefinitions": [
+                  {
+                    "path": "@expo-google-fonts/geist-mono/500Medium/GeistMono_500Medium.ttf",
+                    "weight": 500
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {

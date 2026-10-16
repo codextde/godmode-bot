@@ -32,7 +32,7 @@ export default function Memory() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Memory & upkeep" }} />
+      <Stack.Screen options={{ title: "Memory" }} />
       <CloseButton />
       {!s || !m || !d ? (
         <View style={styles.loading}>

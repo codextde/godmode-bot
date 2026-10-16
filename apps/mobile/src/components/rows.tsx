@@ -1,8 +1,8 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Conversation, Project } from "@godmode/shared";
-import { agentPresence, presenceLabel } from "@godmode/shared";
-import { CharacterAvatar } from "./character";
+import { presenceLabel } from "@godmode/shared";
+import { CharacterAvatar, moodOf, useAgentPresence } from "./character";
 import { ProjectTag } from "./project-picker";
 import { Icon } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import { activityText, elapsed, shortTime } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
 import type { LiveRun } from "@/lib/live";
-import { radius, space, useColors } from "@/lib/theme";
+import { alpha, radius, space, useColors } from "@/lib/theme";
 
 const ORIGIN_LABEL: Partial<Record<Conversation["origin"], string>> = {
   routine: "Automation",
@@ -51,7 +51,7 @@ export function ConversationRow({
           </T>
           {project ? <ProjectTag project={project} /> : null}
           <View style={{ flex: 1 }} />
-          <T variant="footnote" color={running ? c.brandStrong : c.textMuted} style={running ? { fontWeight: "600" } : undefined}>
+          <T variant="footnote" color={running ? c.brandStrong : c.textMuted} style={running ? { fontWeight: "500" } : undefined}>
             {running ? "Working" : shortTime(conversation.lastMessageAt ?? conversation.createdAt)}
           </T>
         </Row>
@@ -109,28 +109,32 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
 
 export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; running?: number; queued?: number; onPress: () => void }) {
   const c = useColors();
-  // The same states as the desktop; an idle agent says when it last worked.
-  const presence = agentPresence(agent, { running, queued });
-  const status = presence.state === "idle" ? (agent.lastRunAt ? `Active ${shortTime(agent.lastRunAt)}` : "Ready") : presenceLabel(presence);
-  const busy = presence.state === "working";
+  // The desktop's states and words (AgentStatus), a missing login included.
+  const presence = useAgentPresence(agent, { running, queued });
+  const { state } = presence;
   const subtitle = agent.role || agent.description;
+  const dot = state === "idle" ? c.success : state === "waiting" || state === "paused" ? c.warning : state === "failed" ? c.danger : alpha(c.textMuted, 0.5);
+  const tone = state === "working" ? c.text : state === "waiting" ? c.text : state === "failed" ? c.danger : c.textMuted;
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.agent, pressed && { backgroundColor: c.sunken }]}>
-      <CharacterAvatar agent={agent} size={46} running={busy} />
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+      <CharacterAvatar agent={agent} size={46} running={state === "working"} mood={moodOf(presence)} />
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>
-          <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16 }}>
+          <T variant="callout" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
             {agent.name}
           </T>
-          {agent.isDefault && <Badge label="Main" />}
+          {agent.isDefault && <Badge label="Built-in" dot={false} />}
         </Row>
-        <T variant="subhead" muted numberOfLines={1}>
-          {subtitle || status}
-        </T>
+        <Row style={{ gap: 6 }}>
+          {state === "working" ? <LiveDot size={6} /> : <View style={[styles.presenceDot, { backgroundColor: dot }]} />}
+          <T variant="footnote" numberOfLines={1} style={{ flex: 1 }} color={c.textMuted}>
+            <T variant="footnote" color={tone} style={state === "working" ? { fontWeight: "500" } : undefined}>
+              {presenceLabel(presence)}
+            </T>
+            {subtitle ? ` · ${subtitle}` : ""}
+          </T>
+        </Row>
       </View>
-      <T variant="footnote" color={busy ? c.brandStrong : presence.state === "failed" ? c.danger : presence.state === "waiting" ? c.warning : c.textMuted}>
-        {busy ? (presence.running > 1 ? `${presence.running} chats` : "Working") : subtitle ? status : ""}
-      </T>
       <Icon name="chevron" size={13} color={c.textFaint} />
     </Pressable>
   );
@@ -162,6 +166,11 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     borderRadius: radius.sm,
     borderCurve: "continuous",
+  },
+  presenceDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   agent: {
     flexDirection: "row",

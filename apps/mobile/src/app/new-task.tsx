@@ -167,7 +167,7 @@ export default function NewTask() {
           {agentsLoading
             ? [104, 128, 92].map((w) => <Skeleton key={w} width={w} height={36} radius={18} />)
             : agents.map((a) => <Chip key={a.id} active={a.id === agent?.id} onPress={() => setPicked(a.id)} label={a.name} agent={a} />)}
-          <Chip active={!agent} onPress={() => setPicked(NONE)} label="Nobody yet" />
+          <Chip active={!agent} onPress={() => setPicked(NONE)} label="Unassigned" />
         </View>
         <T variant="footnote" muted>
           {agent ? `${agent.name} starts as soon as you create it.` : "It waits in the backlog until you assign an agent."}

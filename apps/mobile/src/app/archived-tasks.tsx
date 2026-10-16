@@ -56,7 +56,7 @@ export default function ArchivedTasks() {
           ) : tasks.isError ? (
             <ErrorState title="Couldn't load archived tasks" error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
           ) : (
-            <EmptyState icon="archive" title="No archived tasks" body="Tasks you archive are taken off the board and kept here." />
+            <EmptyState icon="archive" title="Nothing archived yet" body="Archive finished work to keep the board focused: long-press a task. Archived tasks keep everything and come back in one tap." />
           )
         }
       />

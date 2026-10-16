@@ -106,8 +106,8 @@ export default function AgentSettings() {
             style={[styles.role, { color: c.textMuted }]}
           />
           <Row style={{ gap: 6, marginTop: 4 }}>
-            {agent.isDefault ? <Badge label="Main assistant" /> : null}
-            {!agent.workspaceId ? <Badge label="Everywhere" /> : null}
+            {agent.isDefault ? <Badge label="Built-in" /> : null}
+            {!agent.workspaceId ? <Badge label="Global" /> : null}
           </Row>
         </View>
       </View>
@@ -154,7 +154,7 @@ export default function AgentSettings() {
         />
       </Group>
 
-      <Group title="Thinking" footer="Default follows Model & limits in Settings.">
+      <Group title="Thinking" footer="Default follows AI & Claude in Settings.">
         <PickerRow
           icon="cpu"
           title="Model"

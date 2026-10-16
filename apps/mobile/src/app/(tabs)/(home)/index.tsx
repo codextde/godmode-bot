@@ -1,21 +1,22 @@
 import { useQuery } from "@tanstack/react-query";
+import { format } from "date-fns";
 import { router, Stack } from "expo-router";
-import { memo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
-import { Icon } from "@/components/icon";
+import { Icon, type IconName } from "@/components/icon";
 import { answerQuestion } from "@/components/question-card";
 import { ConversationRow, RunCard } from "@/components/rows";
 import { ScreenTile } from "@/components/screen-tile";
-import { TaskRow } from "@/components/task-row";
-import { Card, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
+import { openTask } from "@/components/task-row";
+import { Card, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
-import { greeting } from "@/lib/format";
+import { greeting, needsYou, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
 import { useLive, useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -23,59 +24,50 @@ import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
 import { useSession } from "@/lib/session";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { chatProject, inProject, tasksInProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
+import { agentsFor, chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
+
+const NEEDS_SHOWN = 5;
+const RECENT_SHOWN = 6;
+
+const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "person", login: "key", review: "check", blocked: "warning" };
 
 export default function Home() {
   const c = useColors();
   const computer = useSession((s) => s.connection?.instance.name ?? "Your computer");
   const status = useLive((s) => s.status);
   const offlineReason = useLive((s) => s.offlineReason);
-  const { byId: agents } = useAgents();
+  const { data: allAgents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const { id: workspaceId, workspace, projectId, project } = useWorkspace();
+  const { id: workspaceId, projectId } = useWorkspace();
   const projects = useProjectIndex();
-  const openForYou = useOpenHumanTasks();
-  // Scoped like the rest of Home: the workspace's tasks and the ones without a workspace.
-  const mine = { data: openForYou.data?.filter((t) => t.status !== "backlog").filter((t) => !workspaceId || !t.workspaceId || t.workspaceId === workspaceId) };
-  const recent = useQuery(chatListQuery(workspaceId));
-  const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
-  const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
-  const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
-  const { screens } = useLiveScreens();
-  // The lists, not the open chats: those refresh on their own events.
   const pull = usePullRefresh(async () => {
     reconnectNow();
     await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[1] !== "detail" });
   });
 
-  const liveScreens = screens.filter(isLive);
-  const runningConversations = useRunningChats();
-  const chats = inProject(recent.data ?? [], projectId, agents)
-    .filter((conv) => conv.origin !== "dream")
-    .slice(0, 5);
-  const openTasks = tasksInProject(tasks.data ?? [], projectId)
-    .filter((t) => t.status === "in_review" || t.status === "blocked" || t.status === "in_progress" || t.status === "todo")
-    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    .slice(0, 4);
-  const projectOf = (conv: (typeof chats)[number]) => {
-    const id = chatProject(conv, agents);
-    return id ? projects.get(id)?.project : undefined;
+  const enabled = (allAgents ?? []).filter((a) => a.enabled);
+  const agent = pickAgent(agentsFor(enabled, workspaceId), workspaceId, projectId);
+  const userName = boot.data?.settings.general.userName?.trim();
+  const vaultLocked = !!boot.data && boot.data.vault.initialized && !boot.data.vault.unlocked;
+  const now = new Date();
+  const ask = (prompt?: string) => {
+    tap();
+    router.push(prompt ? { pathname: "/compose", params: { prompt } } : "/compose");
   };
-  const vaultLocked = boot.data && boot.data.vault.initialized && !boot.data.vault.unlocked;
 
   return (
-    <ScrollView
-      contentInsetAdjustmentBehavior="automatic"
-      contentContainerStyle={styles.content}
-      refreshControl={<RefreshControl {...pull} />}
-    >
-      <Stack.Title large>{greeting()}</Stack.Title>
+    <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
+      <Stack.Screen options={{ title: "", headerLargeTitleEnabled: false }} />
       <HeaderActions
         actions={[
           { icon: "compose", label: "New chat", onPress: () => router.push("/compose") },
           { icon: "tasks", label: "New task", onPress: () => router.push("/new-task") },
           { icon: "settings", label: "Settings", onPress: () => router.push("/settings") },
+        ]}
+        menu={[
+          { icon: "inbox", title: "Inbox", onPress: () => router.push("/inbox") },
+          { icon: "call", title: "Calls", onPress: () => router.push("/calls") },
         ]}
       />
 
@@ -86,24 +78,52 @@ export default function Home() {
         </T>
       </Pressable>
 
+      <View style={styles.hero}>
+        <View style={[styles.pill, { backgroundColor: c.surface, borderColor: c.border }]}>
+          <LiveDot size={6} />
+          <T variant="caption" muted>
+            {format(now, "EEEE, MMMM d")}
+            {enabled.length > 0 ? ` · ${enabled.length === 1 ? "1 agent ready" : `${enabled.length} agents ready`}` : ""}
+          </T>
+        </View>
+        <T variant="largeTitle" style={styles.greeting}>
+          {greeting(now)}
+          {userName ? `, ${userName}` : ""}.
+          <T variant="largeTitle" color={c.textFaint} style={styles.greeting}>
+            {"\n"}What should we get done?
+          </T>
+        </T>
+      </View>
+
       <WorkspaceChip />
 
-      <Pressable
-        onPress={() => {
-          tap();
-          router.push("/compose");
-        }}
-      >
+      <Pressable accessibilityRole="button" onPress={() => ask()}>
         <Glass interactive style={styles.ask} fallback={c.surface}>
           <Icon name="sparkles" size={18} color={c.textMuted} />
-          <T variant="body" muted style={{ flex: 1 }}>
-            {project ? `Ask Godmode in ${project.name}…` : workspace ? `Ask Godmode in ${workspace.name}…` : "Ask Godmode to do something…"}
+          <T variant="body" muted numberOfLines={1} style={{ flex: 1 }}>
+            {agent ? `Ask ${agent.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
           </T>
           <View style={[styles.askSend, { backgroundColor: c.primary }]}>
             <Icon name="send" size={14} color={c.onPrimary} weight="bold" />
           </View>
         </Glass>
       </Pressable>
+
+      <View style={styles.suggestions}>
+        {SUGGESTIONS.map((s) => (
+          <Pressable
+            key={s.text}
+            accessibilityRole="button"
+            onPress={() => ask(s.text)}
+            style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Icon name={s.icon} size={13} color={c.textMuted} />
+            <T variant="footnote" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+              {s.text}
+            </T>
+          </Pressable>
+        ))}
+      </View>
 
       {status === "offline" && (
         <Card style={[styles.notice, { backgroundColor: c.warningSoft, borderColor: "transparent" }]} onPress={() => reconnectNow()}>
@@ -119,128 +139,222 @@ export default function Home() {
         </Card>
       )}
 
-      <WorkingNow computer={computer} />
-
-      {(vaultLocked || (missing.data?.length ?? 0) > 0 || (questions.data?.length ?? 0) > 0 || (mine.data?.length ?? 0) > 0) && (
-        <View style={styles.section}>
-          <SectionTitle title="Needs you" />
-          <Card>
-            {vaultLocked && (
-              <NeedsRow icon="lock" title="The vault is locked" body="Agents can't sign in until you unlock it on your computer." />
-            )}
-            {mine.data?.slice(0, 4).map((t) => (
-              <NeedsRow
-                key={t.id}
-                icon="person"
-                title={t.title}
-                body={`${t.priority === "high" ? "Urgent · " : ""}${t.agentName ? (t.kind === "decision" ? `${t.agentName} left you a decision` : `${t.agentName} needs you to do this`) : "Your task"}${t.status === "doing" ? " · you're on it" : ""}`}
-                onPress={() => openHumanTask(t.id)}
-              />
-            ))}
-            {(mine.data?.length ?? 0) > 4 && (
-              <NeedsRow icon="person" title={`${mine.data!.length - 4} more tasks for you`} body="Open My tasks" onPress={() => router.push("/my-tasks")} />
-            )}
-            {questions.data?.slice(0, 4).map((q) => (
-              <QuestionRow key={q.id} question={q} agentName={agents.get(q.agentId)?.name} />
-            ))}
-            {missing.data?.slice(0, 4).map((m) => (
-              <NeedsRow key={m.id} icon="key" title={`${m.service}: ${m.kind === "missing_totp" ? "2FA code missing" : m.kind === "invalid_credential" ? "login doesn't work" : "login missing"}`} body={m.reason} />
-            ))}
-          </Card>
-        </View>
-      )}
-
-      {liveScreens.length > 0 && (
-        <View style={styles.section}>
-          <SectionTitle title="Live screens" action="All" onAction={() => router.push("/screens")} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingRight: space.lg }} style={{ marginRight: -space.lg }}>
-            {liveScreens.map((s) => (
-              <ScreenTile key={s.key} screen={s} style={{ width: 260 }} />
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {openTasks.length > 0 && (
-        <View style={styles.section}>
-          <SectionTitle title="Tasks" action="All" onAction={() => router.push("/tasks")} />
-          <Card style={{ paddingVertical: 4 }}>
-            {openTasks.map((t, i) => (
-              <View key={t.id}>
-                {i > 0 && <Hairline inset={72} />}
-                <TaskRow task={t} agent={t.agentId ? agents.get(t.agentId) : undefined} />
-              </View>
-            ))}
-          </Card>
-        </View>
-      )}
-
-      <View style={styles.section}>
-        <SectionTitle title="Recent chats" action={chats.length ? "All" : undefined} onAction={() => router.push("/chats")} />
-        <Card style={{ paddingVertical: 4 }}>
-          {chats.length ? (
-            chats.map((conv) => (
-              <ConversationRow
-                key={conv.id}
-                conversation={conv}
-                agent={agents.get(conv.agentId)}
-                running={runningConversations.has(conv.id)}
-                project={projectId ? undefined : projectOf(conv)}
-              />
-            ))
-          ) : recent.isLoading ? (
-            <SkeletonRows count={3} />
-          ) : (
-            <T variant="subhead" muted style={{ padding: space.lg }}>
-              {recent.isError ? `Couldn't load your chats. ${errorText(recent.error)}` : "No chats yet. Ask Godmode something to start one."}
-            </T>
-          )}
-        </Card>
-      </View>
+      <NeedsYou vaultLocked={vaultLocked} />
+      <WorkingNow />
+      <LiveScreens />
+      <RecentChats projects={projects} />
     </ScrollView>
   );
 }
 
-/** Agents that work right now. On its own so their activity labels don't render the whole of Home again. */
-const WorkingNow = memo(function WorkingNow({ computer }: { computer: string }) {
+/** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
+function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
   const c = useColors();
-  const status = useLive((s) => s.status);
+  const { byId: agents } = useAgents();
+  const { id: workspaceId, projectId } = useWorkspace();
+  const humanTasks = useOpenHumanTasks();
+  const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
+  const missing = useQuery({ queryKey: qk.missingLogins, queryFn: api.missingLogins.open });
+  const tasks = useQuery({ queryKey: qk.taskList(null), queryFn: () => api.tasks.list({}) });
+
+  const { items, elsewhere } = useMemo(() => {
+    const all = needsYou({
+      questions: questions.data ?? [],
+      humanTasks: humanTasks.data ?? [],
+      missing: missing.data ?? [],
+      tasks: tasks.data ?? [],
+      nameOf: (id) => (id ? (agents.get(id)?.name ?? "An agent") : "An agent"),
+    });
+    // The picked workspace's (and the global ones); in a project, what its tickets and agents wait for.
+    const scoped = all.filter((n) => {
+      if (workspaceId && n.workspaceId && n.workspaceId !== workspaceId) return false;
+      if (!projectId) return true;
+      return n.task ? n.task.projectId === projectId : !n.agentId || agents.get(n.agentId)?.projectId === projectId;
+    });
+    return { items: scoped, elsewhere: all.length - scoped.length };
+  }, [questions.data, humanTasks.data, missing.data, tasks.data, agents, workspaceId, projectId]);
+
+  const total = items.length + (vaultLocked ? 1 : 0);
+  if (!total && !elsewhere) return null;
+  if (!total) {
+    return (
+      <Pressable
+        accessibilityRole="link"
+        onPress={() => router.push("/inbox")}
+        style={({ pressed }) => [styles.elsewhere, { borderColor: c.borderStrong, opacity: pressed ? 0.6 : 1 }]}
+      >
+        <View style={[styles.dot, { backgroundColor: c.warning }]} />
+        <T variant="footnote" muted style={{ flex: 1 }}>
+          Nothing waits for you here. {elsewhere} {elsewhere === 1 ? "thing waits" : "things wait"} in other workspaces
+        </T>
+        <Icon name="chevron" size={11} color={c.textFaint} />
+      </Pressable>
+    );
+  }
+  const shown = items.slice(0, NEEDS_SHOWN);
+  const more = items.length > shown.length || elsewhere > 0;
+  return (
+    <View style={styles.section}>
+      <Head
+        title="Needs you"
+        count={total}
+        tone="warning"
+        action={more ? (elsewhere > 0 ? `+${elsewhere} in other workspaces · Inbox` : `All ${items.length} in the Inbox`) : undefined}
+        onAction={() => router.push("/inbox")}
+      />
+      <Card>
+        {vaultLocked && <NeedsRow icon="lock" title="The vault is locked" body="Agents can't sign in until you unlock it on your computer." />}
+        {shown.map((n) =>
+          n.question ? (
+            <QuestionRow key={n.id} need={n} question={n.question} />
+          ) : (
+            <NeedsRow
+              key={n.id}
+              icon={NEED_ICON[n.kind]}
+              title={n.title}
+              body={n.detail}
+              onPress={n.humanTask ? () => openHumanTask(n.humanTask!.id) : n.task ? () => openTask(n.task!.id) : undefined}
+            />
+          ),
+        )}
+      </Card>
+    </View>
+  );
+}
+
+/** Agents that work right now. On its own so their activity labels don't render the whole of Home again. */
+const WorkingNow = memo(function WorkingNow() {
   const { byId: agents } = useAgents();
   const { id: workspaceId } = useWorkspace();
   const recent = useQuery(chatListQuery(workspaceId));
-  const working = useWorkspaceRuns();
+  const live = useWorkspaceRuns();
+  const working = live.filter((w) => w.run.status === "running");
+  const queued = live.length - working.length;
+  if (!working.length) return null;
   return (
     <Animated.View layout={LinearTransition} style={styles.section}>
-      <SectionTitle title="Working now" />
-      {working.length ? (
-        <View style={{ gap: space.md }}>
-          {working.map((w) => (
-            <Animated.View key={w.run.id} entering={FadeIn}>
-              <RunCard live={w} agent={agents.get(w.run.agentId)} title={recent.data?.find((conv) => conv.id === w.run.conversationId)?.title} />
-            </Animated.View>
-          ))}
-        </View>
-      ) : (
-        <Card style={styles.idle}>
-          <View style={[styles.idleIcon, { backgroundColor: c.sunken }]}>
-            {status === "connecting" ? <ActivityIndicator size="small" color={c.textMuted} /> : <Icon name="check" size={15} color={c.textMuted} weight="bold" />}
-          </View>
-          <View style={{ flex: 1 }}>
-            <T variant="subhead" style={{ fontWeight: "600" }}>
-              {status === "connecting" ? "Checking in…" : "All quiet"}
-            </T>
-            <T variant="footnote" muted>
-              {status === "connecting" ? `Asking ${computer} what the team is doing.` : "No agent is working right now."}
-            </T>
-          </View>
-        </Card>
-      )}
+      <Head title="Working now" count={working.length} live note={queued > 0 ? `· ${queued} queued` : undefined} />
+      <View style={{ gap: space.md }}>
+        {working.map((w) => (
+          <Animated.View key={w.run.id} entering={FadeIn}>
+            <RunCard live={w} agent={agents.get(w.run.agentId)} title={recent.data?.find((conv) => conv.id === w.run.conversationId)?.title} />
+          </Animated.View>
+        ))}
+      </View>
     </Animated.View>
   );
 });
 
+/** What the agents' browsers, computers and phones show right now. */
+function LiveScreens() {
+  const live = useLiveScreens().screens.filter(isLive);
+  if (!live.length) return null;
+  return (
+    <View style={styles.section}>
+      <Head title="Live screens" count={live.length} action="All" onAction={() => router.push("/screens")} />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingRight: space.lg }} style={{ marginRight: -space.lg }}>
+        {live.map((s) => (
+          <ScreenTile key={s.key} screen={s} style={{ width: 260 }} />
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+/** The latest chats, pinned first. */
+function RecentChats({ projects }: { projects: ReturnType<typeof useProjectIndex> }) {
+  const { byId: agents } = useAgents();
+  const { id: workspaceId, projectId } = useWorkspace();
+  const recent = useQuery(chatListQuery(workspaceId));
+  const running = useRunningChats();
+  const chats = useMemo(
+    () =>
+      inProject(recent.data ?? [], projectId, agents)
+        .filter((conv) => !conv.archived && conv.origin !== "dream")
+        .sort((a, b) => Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt))
+        .slice(0, RECENT_SHOWN),
+    [recent.data, projectId, agents],
+  );
+  if (!recent.isLoading && !recent.isError && !chats.length) return null;
+  return (
+    <View style={styles.section}>
+      <Head title="Pick up where you left off" action="Your agents" onAction={() => router.push("/agents")} />
+      <Card style={{ paddingVertical: 4 }}>
+        {chats.length ? (
+          chats.map((conv) => {
+            const id = projectId ? null : chatProject(conv, agents);
+            return (
+              <ConversationRow
+                key={conv.id}
+                conversation={conv}
+                agent={agents.get(conv.agentId)}
+                running={running.has(conv.id) || !!conv.running}
+                project={id ? projects.get(id)?.project : undefined}
+              />
+            );
+          })
+        ) : recent.isLoading ? (
+          <SkeletonRows count={3} />
+        ) : (
+          <T variant="subhead" muted style={{ padding: space.lg }}>
+            Couldn't load your chats. {errorText(recent.error)}
+          </T>
+        )}
+      </Card>
+    </View>
+  );
+}
+
+/** A section's eyebrow with its count, like the desktop's: "Needs you 3", "Working now 2 · 1 queued". */
+function Head({
+  title,
+  count,
+  tone,
+  live,
+  note,
+  action,
+  onAction,
+}: {
+  title: string;
+  count?: number;
+  tone?: "warning";
+  live?: boolean;
+  note?: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  const c = useColors();
+  return (
+    <Row style={styles.head}>
+      {live ? <LiveDot size={7} /> : null}
+      <T variant="eyebrow" muted>
+        {title}
+      </T>
+      {count ? (
+        <View style={[styles.count, tone === "warning" ? { backgroundColor: c.warningSoft } : { backgroundColor: c.surface, borderColor: c.border, borderWidth: StyleSheet.hairlineWidth }]}>
+          <T variant="caption" color={tone === "warning" ? c.warning : c.text} style={styles.countText}>
+            {count}
+          </T>
+        </View>
+      ) : null}
+      {note ? (
+        <T variant="caption" muted>
+          {note}
+        </T>
+      ) : null}
+      {action && onAction ? (
+        <Pressable hitSlop={10} onPress={onAction} style={{ marginLeft: "auto", flexShrink: 1 }}>
+          <T variant="footnote" muted numberOfLines={1} style={{ fontWeight: "600" }}>
+            {action}
+          </T>
+        </Pressable>
+      ) : null}
+    </Row>
+  );
+}
+
 /** A question an agent waits on: an approval is answered right here, anything else in its chat. */
-function QuestionRow({ question: q, agentName }: { question: AgentQuestion; agentName?: string }) {
+function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestion }) {
   const c = useColors();
   const [sending, setSending] = useState<"approve" | "decline" | null>(null);
   const approval = q.kind === "approval";
@@ -254,8 +368,8 @@ function QuestionRow({ question: q, agentName }: { question: AgentQuestion; agen
     <View>
       <NeedsRow
         icon="warning"
-        title={approval ? `Needs your OK: ${q.title}` : q.title}
-        body={[agentName, q.taskNumber != null ? `Task #${q.taskNumber}` : null, approval ? (q.body ?? "") : "Open the chat to answer"].filter(Boolean).join(" · ")}
+        title={need.title}
+        body={[need.detail, q.taskNumber != null ? `Task #${q.taskNumber}` : null, approval ? q.body : "Open the chat to answer"].filter(Boolean).join(" · ")}
         onPress={() => router.push(`/chat/${q.conversationId}`)}
       />
       {approval ? (
@@ -285,7 +399,7 @@ function QuestionRow({ question: q, agentName }: { question: AgentQuestion; agen
   );
 }
 
-function NeedsRow({ icon, title, body, onPress }: { icon: "lock" | "key" | "warning" | "person"; title: string; body: string; onPress?: () => void }) {
+function NeedsRow({ icon, title, body, onPress }: { icon: IconName; title: string; body: string; onPress?: () => void }) {
   const c = useColors();
   return (
     <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? "button" : undefined}>
@@ -297,9 +411,11 @@ function NeedsRow({ icon, title, body, onPress }: { icon: "lock" | "key" | "warn
           <T variant="subhead" style={{ fontWeight: "600" }}>
             {title}
           </T>
-          <T variant="footnote" muted numberOfLines={2}>
-            {body}
-          </T>
+          {body ? (
+            <T variant="footnote" muted numberOfLines={2}>
+              {body}
+            </T>
+          ) : null}
         </View>
       </Row>
     </Pressable>
@@ -317,7 +433,26 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     paddingHorizontal: 4,
-    marginTop: -space.sm,
+  },
+  hero: {
+    gap: space.md,
+    paddingHorizontal: 4,
+    paddingTop: space.sm,
+  },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingVertical: 4,
+    paddingLeft: 9,
+    paddingRight: 11,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  greeting: {
+    fontSize: 30,
+    lineHeight: 35,
   },
   ask: {
     flexDirection: "row",
@@ -335,6 +470,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  suggestions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: space.sm,
+    marginTop: -space.xs,
+  },
+  suggestion: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: "100%",
+    paddingVertical: 7,
+    paddingHorizontal: 11,
+    borderRadius: radius.sm,
+    borderCurve: "continuous",
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   notice: {
     flexDirection: "row",
     alignItems: "center",
@@ -344,18 +496,37 @@ const styles = StyleSheet.create({
   section: {
     marginTop: space.sm,
   },
-  idle: {
+  head: {
+    gap: space.sm,
+    paddingHorizontal: 4,
+    marginBottom: space.sm,
+  },
+  count: {
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  countText: {
+    fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  elsewhere: {
     flexDirection: "row",
     alignItems: "center",
-    gap: space.md,
-    padding: space.lg,
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    borderWidth: 1,
+    borderStyle: "dashed",
   },
-  idleIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   decide: {
     gap: space.sm,

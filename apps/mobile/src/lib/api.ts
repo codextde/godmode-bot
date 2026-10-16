@@ -3,6 +3,8 @@ import Constants from "expo-constants";
 import { File } from "expo-file-system";
 import type {
   Agent,
+  AgentCharacter,
+  AgentTemplate,
   AnswerQuestionInput,
   AnswerQuestionResult,
   AgentQuestion,
@@ -17,14 +19,18 @@ import type {
   Conversation,
   HumanTask,
   HumanTaskCloseResult,
+  HumanTaskInput,
   HumanTaskLane,
+  HumanTaskPatch,
   ConversationWithMessages,
   MessagePage,
   MissingLogin,
+  MissingLoginStatus,
   MobilePairResult,
   MobilePairingPayload,
   MobileSession,
   ModelCatalog,
+  PhoneCall,
   Project,
   QueuedMessage,
   RetryMode,
@@ -64,6 +70,9 @@ export class ApiError extends Error {
 
 /** New work is refused until the computer has an active licence; it is added there, not on the phone. */
 const LICENSE_MESSAGE = "Godmode needs an active licence on your computer. Add your licence key in Godmode there, under Settings → License.";
+
+/** An older Godmode on the computer refuses what the phone asked for (`device_forbidden`). */
+export const UPDATE_DESKTOP_MESSAGE = "Update Godmode on your computer to do this from your phone.";
 
 export const OFFLINE_MESSAGE = "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.";
 const NO_ANSWER_MESSAGE = "No answer from your computer. Check whether it went through before trying again.";
@@ -362,6 +371,9 @@ export type AgentPatch = {
   description?: string;
   instructions?: string;
   personality?: string;
+  avatar?: string;
+  color?: string;
+  character?: Partial<AgentCharacter>;
   model?: string;
   effort?: Effort | null;
   ultracode?: boolean | null;
@@ -411,6 +423,8 @@ export const api = {
     update: (id: string, input: AgentPatch) => patch<Agent>(`/api/agents/${id}`, input),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
+    /** Roles to start a new agent from, by department. Their automations are set up on the computer. */
+    templates: () => get<AgentTemplate[]>("/api/agent-templates"),
   },
 
   models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
@@ -539,10 +553,19 @@ export const api = {
 
   notifications: {
     list: () => get<AppNotification[]>("/api/notifications", { limit: 30 }),
+    read: (ids: string[] | "all") => post<{ ok: true }>("/api/notifications/read", { ids }),
   },
 
   missingLogins: {
     open: () => get<MissingLogin[]>("/api/missing-logins", { status: "open" }),
+    /** Dismissed, marked resolved or opened again; the login itself is added on the computer. */
+    setStatus: (id: string, status: MissingLoginStatus) => patch<MissingLogin>(`/api/missing-logins/${id}`, { status }),
+  },
+
+  calls: {
+    /** Calls agents made and took, newest first. Placed on the computer, never from the phone. */
+    list: (limit = 100) => get<PhoneCall[]>("/api/calls", { limit }),
+    get: (id: string) => get<PhoneCall>(`/api/calls/${id}`),
   },
 
   humanTasks: {
@@ -550,6 +573,12 @@ export const api = {
     list: (q: { status?: "active" | "closed" | "all"; conversationId?: string } = {}) => get<HumanTask[]>("/api/human-tasks", q),
     /** The human is on it (`doing`) or puts it back (`open`). */
     move: (id: string, status: HumanTaskLane) => patch<HumanTask>(`/api/human-tasks/${id}`, { status }),
+    /** One of the human's own, to do now (`open`) or later (`backlog`). */
+    create: (input: HumanTaskInput) => post<HumanTask>("/api/human-tasks", input),
+    /** Moved (`status`, `beforeId`) or reprioritized; the words only of the human's own tasks. */
+    update: (id: string, input: Pick<HumanTaskPatch, "status" | "beforeId" | "priority" | "title" | "body">) => patch<HumanTask>(`/api/human-tasks/${id}`, input),
+    /** Refused while an agent stands still for the task's question. */
+    remove: (id: string) => del<{ ok: true }>(`/api/human-tasks/${id}`),
     /** Done or can't do it; the note goes to the agent and its chat continues. */
     close: (id: string, outcome: "done" | "declined", note?: string, optionId?: string) =>
       post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, { outcome, ...(note ? { note } : {}), ...(optionId ? { optionId } : {}) }),

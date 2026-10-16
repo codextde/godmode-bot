@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { isHumanTaskWaiting } from "@godmode/shared";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { DynamicColorIOS, Platform } from "react-native";
 import { LiveAccessory } from "@/components/live-accessory";
@@ -13,10 +14,16 @@ const tint = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1C1C1C", dark: "
 export default function TabsLayout() {
   const c = useColors();
   const working = useLive((s) => Object.keys(s.runs).length > 0);
+  const running = useLive((s) => Object.values(s.runs).filter(({ run }) => run.status === "running").length);
   const offline = useLive((s) => s.status === "offline");
   const { data: boot } = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const forYou = useOpenHumanTasks().data?.length ?? 0;
-  const needsYou = (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0) + forYou;
+  // The desktop's sidebar counts: what waits for the human (a parked backlog task doesn't), tickets to review or unblock.
+  const forYou = useOpenHumanTasks().data?.filter(isHumanTaskWaiting).length ?? 0;
+  const attention = boot?.counts.attention;
+  const needsYou = attention
+    ? attention.question + attention.todo + attention.login + attention.review + attention.blocked
+    : (boot?.counts.openMissingLogins ?? 0) + (boot?.counts.openQuestions ?? 0) + forYou;
+  const tasks = (attention?.review ?? 0) + (attention?.blocked ?? 0);
 
   return (
     <NativeTabs
@@ -42,8 +49,8 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="tasks">
         <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="checklist" md="checklist" />
-        {forYou > 0 && <NativeTabs.Trigger.Badge>{String(forYou)}</NativeTabs.Trigger.Badge>}
+        <NativeTabs.Trigger.Icon sf={{ default: "rectangle.split.3x1", selected: "rectangle.split.3x1.fill" }} md="view_kanban" />
+        {tasks > 0 && <NativeTabs.Trigger.Badge>{String(tasks)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="screens">
         <NativeTabs.Trigger.Label>Screens</NativeTabs.Trigger.Label>
@@ -51,7 +58,8 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="agents">
         <NativeTabs.Trigger.Label>Agents</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf={{ default: "person.2", selected: "person.2.fill" }} md="group" />
+        <NativeTabs.Trigger.Icon sf={{ default: "face.smiling", selected: "face.smiling.inverse" }} md="smart_toy" />
+        {running > 0 && <NativeTabs.Trigger.Badge>{String(running)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
     </NativeTabs>
   );

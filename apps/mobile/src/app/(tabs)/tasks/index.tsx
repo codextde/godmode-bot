@@ -1,12 +1,13 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Alert, RefreshControl, View } from "react-native";
-import type { Agent, Task, TaskStatus } from "@godmode/shared";
+import { TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { HumanTaskRow } from "@/components/human-task-row";
-import { TaskRow } from "@/components/task-row";
+import { FilterChips } from "@/components/filter-chips";
+import { STATUS_META, TaskRow } from "@/components/task-row";
 import { Button, Card, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
@@ -17,15 +18,11 @@ import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
 import { space } from "@/lib/theme";
 
 type Item = { kind: "header"; key: string; title: string } | { kind: "task"; key: string; task: Task };
+type Shown = "active" | "all" | TaskStatus;
 
-const GROUPS: { title: string; statuses: TaskStatus[] }[] = [
-  { title: "Needs you", statuses: ["in_review", "blocked"] },
-  { title: "In progress", statuses: ["in_progress", "todo"] },
-  { title: "Backlog", statuses: ["backlog"] },
-  { title: "Done", statuses: ["done", "cancelled"] },
-];
+const ACTIVE: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "blocked"];
 
-/** The task board of the picked workspace (or project), as a list: what agents need you to do, then what needs you first. */
+/** The task board of the picked workspace (or project) as a list, in the desktop's columns: the active ones first. */
 export default function Tasks() {
   const { id: workspaceId, projectId, workspaces } = useWorkspace();
   const projects = useProjectIndex();
@@ -34,20 +31,28 @@ export default function Tasks() {
   const { byId: agents } = useAgents();
   const names = useMemo(() => new Map(workspaces.map((w) => [w.id, w.name])), [workspaces]);
   const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch()]));
+  const [view, setView] = useState<Shown>("active");
   const newTask = () => router.push("/new-task");
 
+  const board = useMemo(() => tasksInProject(tasks.data ?? [], projectId), [tasks.data, projectId]);
+  const counts = useMemo(() => {
+    const n = new Map<TaskStatus, number>();
+    for (const t of board) n.set(t.status, (n.get(t.status) ?? 0) + 1);
+    return n;
+  }, [board]);
   const items = useMemo(() => {
-    const list = [...tasksInProject(tasks.data ?? [], projectId)].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    const statuses = view === "active" ? ACTIVE : view === "all" ? TASK_STATUSES : [view];
     const out: Item[] = [];
-    for (const g of GROUPS) {
-      const group = list.filter((t) => g.statuses.includes(t.status));
-      if (!group.length) continue;
-      out.push({ kind: "header", key: `h-${g.title}`, title: g.title });
-      for (const task of group) out.push({ kind: "task", key: task.id, task });
+    for (const status of statuses) {
+      const column = board.filter((t) => t.status === status).sort((a, b) => a.position - b.position || b.number - a.number);
+      if (!column.length) continue;
+      if (statuses.length > 1) out.push({ kind: "header", key: `h-${status}`, title: `${STATUS_META[status].label} · ${column.length}` });
+      for (const task of column) out.push({ kind: "task", key: task.id, task });
     }
     return out;
-  }, [tasks.data, projectId]);
+  }, [board, view]);
   const forYou = mine.data ?? [];
+  const activeCount = ACTIVE.reduce((n, s) => n + (counts.get(s) ?? 0), 0);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item, index }) => {
@@ -89,7 +94,7 @@ export default function Tasks() {
             <WorkspaceChip />
             {forYou.length > 0 && (
               <View>
-                <SectionTitle title={`For you · ${forYou.length}`} action="All" onAction={() => router.push("/my-tasks")} />
+                <SectionTitle title={`My tasks · ${forYou.length}`} action="All" onAction={() => router.push("/my-tasks")} />
                 <Card style={{ paddingVertical: 4 }}>
                   {forYou.slice(0, 3).map((t, i) => (
                     <View key={t.id}>
@@ -100,6 +105,18 @@ export default function Tasks() {
                 </Card>
               </View>
             )}
+            {board.length > 0 && (
+              <FilterChips
+                bleed={space.lg}
+                value={view}
+                onChange={setView}
+                filters={[
+                  { id: "active", label: "Active", count: activeCount },
+                  { id: "all", label: "All", count: board.length },
+                  ...TASK_STATUSES.map((s) => ({ id: s, label: STATUS_META[s].label, count: counts.get(s) ?? 0 })),
+                ]}
+              />
+            )}
           </View>
         }
         ListEmptyComponent={
@@ -108,7 +125,14 @@ export default function Tasks() {
               <SkeletonRows count={6} avatar={40} />
             </View>
           ) : tasks.isError ? (
-            <ErrorState title="Couldn't load the tasks" error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
+            <ErrorState title="Couldn't load the board" error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
+          ) : board.length ? (
+            <EmptyState
+              icon="tasks"
+              title={view === "active" ? "Nothing in the works" : `Nothing in ${STATUS_META[view as TaskStatus]?.label ?? "this view"}`}
+              body={view === "active" ? "Every ticket is parked, done or cancelled. Hand an agent a new one to get going." : undefined}
+              action={view === "active" ? <Button title="New task" icon="plus" onPress={newTask} /> : undefined}
+            />
           ) : (
             <EmptyState
               icon="tasks"

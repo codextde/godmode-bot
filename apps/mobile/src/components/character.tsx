@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { useIsFocused } from "expo-router";
 import { memo, useEffect } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
@@ -14,6 +15,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { parse, SvgAst, type JsxAST } from "react-native-svg";
 import {
+  agentPresence,
   characterPhase,
   defaultCharacter,
   MASCOT_CHARACTER,
@@ -21,10 +23,13 @@ import {
   renderCharacterSvg,
   type Agent,
   type AgentCharacter,
+  type AgentPresence,
   type CharacterMood,
 } from "@godmode/shared";
 import { LiveDot } from "./ui";
-import { useColors, useIsDark } from "@/lib/theme";
+import { api } from "@/lib/api";
+import { qk } from "@/lib/query";
+import { fonts, useColors, useIsDark } from "@/lib/theme";
 
 /**
  * The drawing can reach past its 100×100 box (hats, antennas, sparkles, z's). SVG views clip to their bounds, so the
@@ -45,7 +50,7 @@ function drawing(character: AgentCharacter, color: string, mood: CharacterMood, 
   if (ast === undefined) {
     const svg = renderCharacterSvg(character, { color, mood, faceScale })
       .replace('viewBox="0 0 100 100"', VIEWBOX)
-      .replace(/font-family="[^"]*"/, 'font-family="System"');
+      .replace(/font-family="[^"]*"(\s*font-weight="[^"]*")?/, `font-family="${fonts.semibold}"`);
     try {
       ast = parse(svg);
     } catch {
@@ -66,23 +71,59 @@ function canBlink(character: AgentCharacter, mood: CharacterMood): boolean {
 
 type CharacterAgent = Pick<Agent, "id" | "color" | "enabled" | "status"> & { isDefault?: boolean; character?: AgentCharacter | null };
 
+/** The agent's look; a core from before characters sends none, so it gets the stable look its id gives it, like on the desktop. */
 export function agentCharacter(agent: CharacterAgent): AgentCharacter {
-  // A core from before characters doesn't send one: the agent gets the look a newer core would give it.
-  return agent.character ?? (agent.isDefault ? MASCOT_CHARACTER : defaultCharacter(agent.id));
+  return agent.character ?? defaultCharacter(agent.id);
 }
 
+/** The desktop's avatar mood: working while a run is live, asleep while switched off. */
 export function agentMood(agent: Pick<Agent, "enabled" | "status">, running?: boolean): CharacterMood {
   if (running) return "working";
-  if (!agent.enabled) return "sleeping";
-  return agent.status === "error" ? "error" : "idle";
+  return agent.enabled ? "idle" : "sleeping";
+}
+
+type PresenceAgent = Pick<Agent, "id" | "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId"> & { heldRuns?: number };
+
+/** What the agent is doing right now, from the shared rules the desktop uses, a missing login included. */
+export function useAgentPresence(agent: PresenceAgent, live: { running?: number; queued?: number } = {}): AgentPresence {
+  const { data: needsLogin = false } = useQuery({
+    queryKey: qk.missingLogins,
+    queryFn: api.missingLogins.open,
+    select: (list) => list.some((m) => m.agentId === agent.id),
+  });
+  return agentPresence(agent, { ...live, needsLogin });
+}
+
+/** The character mood outside a chat, like the desktop's: busy while it works, waving while it needs the human. */
+export function moodOf(presence: AgentPresence): CharacterMood {
+  switch (presence.state) {
+    case "working":
+      return "working";
+    case "off":
+      return "sleeping";
+    case "waiting":
+      return "attention";
+    case "failed":
+      return "error";
+    default:
+      return "idle";
+  }
+}
+
+export function useAgentMood(agent: PresenceAgent, live: { running?: number; queued?: number } = {}): CharacterMood {
+  return moodOf(useAgentPresence(agent, live));
 }
 
 /** Idle breathing and blinking only from this size up: a list of small avatars that all breathe keeps the phone busy. */
 const LIVELY_SIZE = 60;
 
+const ease = Easing.inOut(Easing.sin);
+const instant = { duration: 0 };
+
 /**
- * A character, alive: it breathes, blinks, bobs while working and hops when happy. Small ones only move while they work,
- * and every one holds still while its screen is behind another (tabs stay mounted) or under Reduce Motion.
+ * A character, alive, with the desktop's timings (packages/shared/src/character.css): it breathes and blinks, bobs while
+ * working, hops when happy, wiggles when it needs you and shudders after an error. Small ones skip the idle breathing but
+ * keep their mood, and every one holds still while its screen is behind another (tabs stay mounted) or under Reduce Motion.
  */
 export const Character = memo(function Character({
   character,
@@ -105,52 +146,92 @@ export const Character = memo(function Character({
   const still = reduceMotion || !focused;
   const lively = size >= LIVELY_SIZE;
   const outline = useIsDark() ? OUTLINE.dark : OUTLINE.light;
-  const faceScale = size <= 28 ? 1.25 : 1;
+  const faceScale = size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1;
   const open = drawing(character, color, mood, faceScale);
   const blinks = lively && !still && canBlink(character, mood);
   const closed = blinks ? drawing({ ...character, eyes: "lines" }, color, mood, faceScale) : null;
   const phase = characterPhase(seed) * 1000;
 
   const breath = useSharedValue(0);
-  const move = useSharedValue(0);
+  const y = useSharedValue(0);
+  const x = useSharedValue(0);
+  const r = useSharedValue(0);
+  const sq = useSharedValue(0);
   const blink = useSharedValue(0);
 
   useEffect(() => {
     if (still) return;
-    const slow = mood === "sleeping";
-    if (lively) {
-      breath.value = withDelay(
-        phase % 1600,
-        withRepeat(withTiming(1, { duration: slow ? 2600 : 1900, easing: Easing.inOut(Easing.sin) }), -1, true),
-      );
+    const stagger = (cycle: number, anim: number) => withDelay(phase % cycle, anim);
+    if (lively && mood !== "happy" && mood !== "attention") {
+      const half = mood === "sleeping" ? 3000 : 2100;
+      breath.value = stagger(half * 2, withRepeat(withTiming(1, { duration: half, easing: ease }), -1, true));
     }
     if (mood === "working") {
-      move.value = withRepeat(withTiming(1, { duration: 420, easing: Easing.inOut(Easing.quad) }), -1, true);
+      y.value = stagger(900, withRepeat(withTiming(-1.5, { duration: 450, easing: ease }), -1, true));
+      sq.value = stagger(900, withRepeat(withTiming(-0.01, { duration: 450, easing: ease }), -1, true));
     } else if (mood === "happy") {
-      const hop = withSequence(
-        withTiming(1, { duration: 170, easing: Easing.out(Easing.quad) }),
-        withTiming(0, { duration: 230, easing: Easing.in(Easing.quad) }),
+      const curve = Easing.bezier(0.3, 0, 0.3, 1);
+      y.value = stagger(
+        1600,
+        withRepeat(withSequence(withDelay(160, withTiming(-9, { duration: 288, easing: curve })), withTiming(0, { duration: 288, easing: curve }), withDelay(864, withTiming(0, instant))), -1),
       );
-      move.value = withRepeat(withSequence(hop, hop, withDelay(1800, withTiming(0, { duration: 0 }))), -1);
-    } else if (mood === "thinking" || mood === "attention") {
-      move.value = withRepeat(withTiming(1, { duration: mood === "attention" ? 700 : 1600, easing: Easing.inOut(Easing.sin) }), -1, true);
+      sq.value = stagger(
+        1600,
+        withRepeat(
+          withSequence(
+            withTiming(0.07, { duration: 160, easing: curve }),
+            withTiming(-0.045, { duration: 288, easing: curve }),
+            withTiming(0.045, { duration: 288, easing: curve }),
+            withTiming(0, { duration: 224, easing: curve }),
+            withDelay(640, withTiming(0, instant)),
+          ),
+          -1,
+        ),
+      );
+    } else if (mood === "attention") {
+      r.value = stagger(
+        2400,
+        withRepeat(
+          withSequence(
+            withDelay(1320, withTiming(-6, { duration: 168, easing: ease })),
+            withTiming(5, { duration: 192, easing: ease }),
+            withTiming(-3, { duration: 192, easing: ease }),
+            withTiming(1, { duration: 192, easing: ease }),
+            withTiming(0, { duration: 336, easing: ease }),
+          ),
+          -1,
+        ),
+      );
+    } else if (mood === "error") {
+      x.value = stagger(
+        3000,
+        withRepeat(
+          withSequence(
+            withTiming(-1.5, { duration: 90 }),
+            withTiming(1.5, { duration: 90 }),
+            withTiming(-1, { duration: 90 }),
+            withTiming(0, { duration: 90 }),
+            withDelay(2640, withTiming(0, instant)),
+          ),
+          -1,
+        ),
+      );
+    } else if (mood === "thinking") {
+      r.value = stagger(3200, withRepeat(withSequence(withTiming(2.5, { duration: 1600, easing: ease }), withTiming(-2, { duration: 1600, easing: ease })), -1));
     }
     return () => {
-      cancelAnimation(breath);
-      cancelAnimation(move);
-      breath.value = 0;
-      move.value = 0;
+      for (const v of [breath, y, x, r, sq]) {
+        cancelAnimation(v);
+        v.value = 0;
+      }
     };
-  }, [mood, still, lively, phase, breath, move]);
+  }, [mood, still, lively, phase, breath, y, x, r, sq]);
 
   useEffect(() => {
     if (!blinks) return;
     blink.value = withDelay(
-      phase,
-      withRepeat(
-        withSequence(withDelay(3400, withTiming(1, { duration: 0 })), withDelay(120, withTiming(0, { duration: 0 }))),
-        -1,
-      ),
+      (phase * 1.7) % 5200,
+      withRepeat(withSequence(withDelay(4900, withTiming(1, instant)), withDelay(150, withTiming(0, instant))), -1),
     );
     return () => {
       cancelAnimation(blink);
@@ -158,18 +239,16 @@ export const Character = memo(function Character({
     };
   }, [blinks, phase, blink]);
 
+  const unit = size / 100;
   const body = useAnimatedStyle(() => {
     const b = breath.value;
-    const m = move.value;
-    const lift = mood === "working" ? m * size * 0.045 : mood === "happy" ? m * size * 0.14 : 0;
-    const tilt = mood === "thinking" ? (m - 0.5) * 6 : mood === "attention" ? (m - 0.5) * 8 : 0;
-    const squash = mood === "happy" ? m * 0.04 : 0;
     return {
       transform: [
-        { translateY: -lift },
-        { rotate: `${tilt}deg` },
-        { scaleX: 1 - b * 0.015 - squash },
-        { scaleY: 1 + b * 0.03 + squash },
+        { translateX: x.value * unit },
+        { translateY: y.value * unit },
+        { rotate: `${r.value}deg` },
+        { scaleX: 1 + b * 0.018 + sq.value },
+        { scaleY: 1 - b * 0.015 - sq.value },
       ],
     };
   });
@@ -181,7 +260,7 @@ export const Character = memo(function Character({
   const svgProps = { ...svgSize, color: outline };
 
   return (
-    <View style={[{ width: size, height: size }, style]} pointerEvents="none">
+    <View style={[{ width: size, height: size }, mood === "sleeping" && { opacity: 0.8 }, style]} pointerEvents="none">
       <Animated.View style={[{ width: size, height: size, transformOrigin: "50% 94%" }, body]}>
         <Animated.View style={[box, openStyle]}>
           <SvgAst ast={open} override={svgProps} />
@@ -197,8 +276,9 @@ export const Character = memo(function Character({
 });
 
 /**
- * An agent's character. Running → working (it bobs; under Reduce Motion a live dot says so instead), paused → asleep,
- * last run failed → a worried face. Without an agent (still loading, or deleted) it's Godmode's mascot.
+ * An agent's character. Running → working (it bobs; under Reduce Motion a live dot says so instead), switched off →
+ * asleep; `mood` overrides both (useAgentMood for an agent's own row or page). Without an agent (still loading, or
+ * deleted) it's Godmode's mascot.
  */
 export function CharacterAvatar({
   agent,
@@ -215,6 +295,7 @@ export function CharacterAvatar({
 }) {
   const c = useColors();
   const reduceMotion = useReducedMotion();
+  const working = running || mood === "working";
   return (
     <View style={style}>
       {agent ? (
@@ -222,7 +303,7 @@ export function CharacterAvatar({
       ) : (
         <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} mood={mood ?? (running ? "working" : "idle")} size={size} />
       )}
-      {running && reduceMotion ? (
+      {working && reduceMotion ? (
         <View style={{ position: "absolute", right: -2, bottom: -2, borderWidth: 2, borderRadius: 8, borderColor: c.background }}>
           <LiveDot size={8} />
         </View>
