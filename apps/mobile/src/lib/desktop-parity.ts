@@ -19,15 +19,9 @@ export const SUGGESTIONS: { icon: IconName; text: string }[] = [
   { icon: "search", text: "Research competitors and write a report" },
 ];
 
-/** Who a new chat goes to: the picked agent, else the project's, the workspace's, the main assistant, the first. */
-export function pickAgent(enabled: Agent[], workspaceId: string | null, projectId: string | null, picked?: string): Agent | undefined {
-  return (
-    enabled.find((a) => a.id === picked) ??
-    (projectId ? enabled.find((a) => a.projectId === projectId) : undefined) ??
-    (workspaceId ? enabled.find((a) => a.workspaceId === workspaceId) : undefined) ??
-    enabled.find((a) => a.isDefault) ??
-    enabled[0]
-  );
+/** Who a new chat goes to: the picked agent, else the main assistant (Godmode), else the first. */
+export function pickAgent(enabled: Agent[], picked?: string): Agent | undefined {
+  return enabled.find((a) => a.id === picked) ?? enabled.find((a) => a.isDefault) ?? enabled[0];
 }
 
 export type ChatBucket = "running" | "scheduled" | "done";

@@ -22,9 +22,11 @@ export default function Compose() {
   const { agentId, prompt } = useLocalSearchParams<{ agentId?: string; prompt?: string }>();
   const { data: agents, isLoading } = useAgents();
   const { id: workspaceId, projectId: scopeProject, workspaces } = useWorkspace();
-  const enabled = agentsFor(agents ?? [], workspaceId).filter((a) => a.enabled);
+  const enabled = agentsFor(agents ?? [], workspaceId)
+    .filter((a) => a.enabled)
+    .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
   const [picked, setPicked] = useState<string | undefined>(agentId);
-  const current = pickAgent(enabled, workspaceId, scopeProject, picked);
+  const current = pickAgent(enabled, picked);
   const [idea, setIdea] = useState(prompt ?? "");
   const projects = projectsFor(current, workspaces, workspaceId);
   /** Picked here; undefined = the phone's project when the agent may work on it, else the agent's own. */

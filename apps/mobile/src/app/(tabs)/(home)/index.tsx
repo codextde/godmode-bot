@@ -24,7 +24,7 @@ import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
 import { useSession } from "@/lib/session";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
-import { agentsFor, chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
+import { chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
 const NEEDS_SHOWN = 5;
@@ -39,7 +39,6 @@ export default function Home() {
   const offlineReason = useLive((s) => s.offlineReason);
   const { data: allAgents } = useAgents();
   const boot = useQuery({ queryKey: qk.bootstrap, queryFn: api.bootstrap });
-  const { id: workspaceId, projectId } = useWorkspace();
   const projects = useProjectIndex();
   const pull = usePullRefresh(async () => {
     reconnectNow();
@@ -47,7 +46,7 @@ export default function Home() {
   });
 
   const enabled = (allAgents ?? []).filter((a) => a.enabled);
-  const agent = pickAgent(agentsFor(enabled, workspaceId), workspaceId, projectId);
+  const agent = pickAgent(enabled);
   const userName = boot.data?.settings.general.userName?.trim();
   const vaultLocked = !!boot.data && boot.data.vault.initialized && !boot.data.vault.unlocked;
   const now = new Date();
