@@ -397,6 +397,21 @@ describe("StreamAccumulator — synthetic cases", () => {
     expect(fg.activityLabel()).toBe("Subagent working · Map the code");
   });
 
+  test("a turn that ends while its subagents work: the label says they work, not done, until they report back", () => {
+    const acc = new StreamAccumulator();
+    acc.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "a1", name: "Agent", input: { run_in_background: true } }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag", tool_use_id: "a1", description: "Build the module", task_type: "local_agent", is_backgrounded: true });
+    acc.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "a1", content: "Async agent launched successfully." }] } });
+    acc.push({ type: "assistant", message: { id: "m2", content: [{ type: "text", text: "Working on it in the background." }] } });
+    acc.push({ type: "result", subtype: "success", result: "Working on it in the background.", num_turns: 1 });
+    expect(acc.activityLabel()).toBe("Subagent working · Build the module");
+    acc.push({ type: "system", subtype: "task_notification", task_id: "ag", tool_use_id: "a1", status: "completed", summary: "Built it." });
+    acc.push({ type: "assistant", message: { id: "m3", content: [{ type: "text", text: "All done." }] } });
+    acc.push({ type: "result", subtype: "success", result: "All done.", num_turns: 1 });
+    expect(acc.activityLabel()).toBe("Done");
+    expect(acc.finalText()).toBe("All done.");
+  });
+
   test("a pause cuts a running workflow off: its task is stopped, for the run that continues too", () => {
     const first = new StreamAccumulator();
     first.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "w1", name: "Workflow", input: {} }] } });
