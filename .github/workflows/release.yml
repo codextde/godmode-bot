@@ -242,6 +242,24 @@ jobs:
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
 
+      # The bundler notarizes the .app only; a downloaded DMG that is signed but not notarized can still warn on open.
+      - name: Notarize the DMG and replace it in the release
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != '' && env.APPLE_API_KEY_PATH != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          dmg=$(ls apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg | head -n1)
+          xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
+          xcrun stapler staple "$dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          # GitHub stores spaces in asset names as dots.
+          name=$(basename "$dmg" | tr ' ' '.')
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$name\") | .id")
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=$name" \
+            -H "Content-Type: application/x-apple-diskimage" --input "$dmg" --jq .browser_download_url
+
   updater-manifest:
     name: Check latest.json
     needs: [create-release, desktop]
