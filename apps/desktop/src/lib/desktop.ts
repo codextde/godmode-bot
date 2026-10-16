@@ -18,6 +18,14 @@ export async function notifyDesktop(title: string, body?: string) {
   }
 }
 
+/** Quit and reopen the desktop app (core included). False in the browser dashboard, which can't. */
+export async function restartApp(): Promise<boolean> {
+  if (!isTauri) return false;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("restart_app");
+  return true;
+}
+
 /** Open a URL in the user's default browser. */
 export async function openExternal(url: string) {
   if (isTauri) {

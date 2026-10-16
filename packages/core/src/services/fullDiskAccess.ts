@@ -2,7 +2,7 @@
  * Full Disk Access can't be queried, only tried: open something macOS keeps behind it. Not every Mac has every such
  * place (a fresh account has no per-user privacy database, no Mail, no Safari data), so several are tried.
  */
-import { closeSync, openSync, readdirSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,24 @@ export function probeFullDiskAccess(candidates = protectedPaths()): boolean | nu
       const code = (err as NodeJS.ErrnoException).code;
       if (code === "EPERM" || code === "EACCES") denied = true;
     }
+  }
+  return denied ? false : null;
+}
+
+/**
+ * The same, from a new process: macOS lets a running process in only after it is restarted, but what Godmode starts
+ * from now on (agents, tools) gets in at once.
+ */
+export async function probeFullDiskAccessFresh(
+  run: (argv: string[]) => Promise<{ code: number | null; stderr: string }>,
+  candidates = protectedPaths(),
+): Promise<boolean | null> {
+  let denied = false;
+  for (const { path, dir } of candidates) {
+    if (!existsSync(path)) continue;
+    const res = await run(dir ? ["/bin/ls", path] : ["/usr/bin/head", "-c", "1", path]);
+    if (res.code === 0) return true;
+    if (/not permitted|permission denied/i.test(res.stderr)) denied = true;
   }
   return denied ? false : null;
 }

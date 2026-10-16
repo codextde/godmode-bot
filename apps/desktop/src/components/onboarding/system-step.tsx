@@ -5,6 +5,7 @@ import type { DoctorReport } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SubmitButton } from "./auth-layout";
+import { MacPermissionsSummary } from "@/components/permissions/mac-permissions";
 import { DoctorChecklist } from "./doctor-checklist";
 import { StepCard, StepFooter, StepHeader } from "./step-kit";
 
@@ -48,6 +49,7 @@ export function SystemStep({ onNext, onBack }: { onNext: () => void; onBack: () 
           </motion.div>
         )}
         <DoctorChecklist ids={["claude", "claude-auth", "uv", "browser-use", "chrome", "git"]} onReport={onReport} />
+        <MacPermissionsSummary className="mt-4" />
         <StepFooter onBack={onBack}>
           {allGood ? (
             <SubmitButton busy={false} type="button" onClick={onNext} className="w-auto px-6">

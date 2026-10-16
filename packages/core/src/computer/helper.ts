@@ -149,6 +149,9 @@ export async function resolveHelperBinary(): Promise<string | null> {
 /* ------------------------------------------------------------------ */
 
 export class NativeHelper {
+  /** Calls still waiting for an answer. */
+  pending = 0;
+
   constructor(
     private proc: LineProcess,
     readonly path: string,
@@ -163,7 +166,8 @@ export class NativeHelper {
   }
 
   async call<T>(cmd: string, params: Record<string, unknown> = {}, timeoutMs = 15_000): Promise<T> {
-    const res = await this.proc.request({ cmd, ...params }, timeoutMs);
+    this.pending++;
+    const res = await this.proc.request({ cmd, ...params }, timeoutMs).finally(() => this.pending--);
     if (res.ok === true) return res.result as T;
     throw new HelperError(typeof res.error === "string" ? res.error : "The computer helper failed", typeof res.code === "string" ? res.code : "failed");
   }
@@ -294,6 +298,40 @@ export async function getHelper(): Promise<ComputerHelper> {
       starting = null;
     });
   return starting;
+}
+
+/** The shared helper when it is already running; never starts one. */
+export function runningHelper(): ComputerHelper | null {
+  return current?.alive ? current : null;
+}
+
+let freshPath: { at: number; path: string | null } | null = null;
+
+/**
+ * Ask a helper of its own: macOS keeps what a process was told about Screen Recording until it quits, so the shared
+ * helper still says no after the human allowed it.
+ */
+export async function freshHelperPermissions(): Promise<HelperPermissions | null> {
+  // Finding the helper can mean extracting or compiling it: once is enough, and a failure is not retried every poll.
+  if (!freshPath || (!freshPath.path && Date.now() - freshPath.at > 5 * 60_000)) freshPath = { at: Date.now(), path: await resolveHelperBinary().catch(() => null) };
+  const path = freshPath.path;
+  if (!path) return null;
+  const helper = await spawnHelper(path, [], HELPER_NAME, path, 10_000).catch(() => null);
+  if (!helper) return null;
+  try {
+    return await helper.permissions();
+  } catch {
+    return null;
+  } finally {
+    await helper.close();
+  }
+}
+
+/** Stop this helper if it is still the shared one (another may have taken its place meanwhile). */
+export async function stopHelperIf(helper: ComputerHelper): Promise<boolean> {
+  if (current !== helper) return false;
+  await stopHelper();
+  return true;
 }
 
 export async function stopHelper(): Promise<void> {

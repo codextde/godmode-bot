@@ -9,13 +9,20 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::{
     core::{CoreInfo, CoreManager},
-    paths,
+    paths, updater,
 };
 
 /// `{ url, token }` of the running core, or `null` while it is (re)starting.
 #[tauri::command]
 pub fn core_info(core: State<'_, Arc<CoreManager>>) -> Option<CoreInfo> {
     core.info()
+}
+
+/// Quits and reopens Godmode with its window shown: macOS hands Full Disk Access only to a fresh start.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    updater::mark_relaunch(&app);
+    app.request_restart();
 }
 
 /// Directory holding `godmode.jsonl` (core) and `desktop.log` (this shell).

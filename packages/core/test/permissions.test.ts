@@ -7,7 +7,8 @@ import { config, loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { __setUvxForTests, runDoctor } from "../src/services/doctor";
-import { checkPermissions, fixPermission } from "../src/services/permissions";
+import { probeFullDiskAccessFresh } from "../src/services/fullDiskAccess";
+import { __setPrivacyProbeForTests, checkPermissions, fixPermission, hostApp } from "../src/services/permissions";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { fakeTools, type FakeTools } from "./fixtures/fake-tools";
 
@@ -34,11 +35,13 @@ beforeAll(() => {
   tools = fakeTools(join(dataDir, "fake-bin"));
   __setUvxForTests(tools.uvx);
   // No native helper in tests: the macOS privacy checks would start it.
+  __setPrivacyProbeForTests(async () => null);
   updateSettings({ runner: { claudePath: tools.claude }, computer: { enabled: false } });
 });
 
 afterAll(() => {
   __setUvxForTests(undefined);
+  __setPrivacyProbeForTests(undefined);
   if (realClaudeDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = realClaudeDir;
   closeDb();
@@ -280,11 +283,81 @@ suite("permission checks", () => {
 
   test("fixing something that works, or doesn't exist here, changes nothing", async () => {
     expect(await fixPermission("data-private")).toMatchObject({ outcome: "fixed", output: "Only your user account can open the data folder" });
-    // Computer use is off, so its permissions aren't checked — and never asked for unprompted.
+    // Not a Mac (no answer from the privacy probe): nothing to check, nothing to ask for.
     expect((await fixPermission("accessibility", { interactive: false })).outcome).toBe("failed");
     expect((await fixPermission("nope" as PermissionId)).outcome).toBe("failed");
     const ids = (await checkPermissions()).permissions.map((p) => p.id);
     expect(ids).not.toContain("accessibility");
     expect(ids).not.toContain("screen-recording");
+  });
+});
+
+describe("macOS privacy permissions", () => {
+  afterAll(() => __setPrivacyProbeForTests(async () => null));
+
+  test("every permission gets a row with what the guide needs, even with computer use off", async () => {
+    __setPrivacyProbeForTests(async () => ({ accessibility: false, screenRecording: true, fullDiskAccess: true, fullDiskAccessHere: false }));
+    const rows = (await checkPermissions()).permissions.filter((p) => p.privacy);
+    expect(rows.map((p) => p.id)).toEqual(["accessibility", "screen-recording", "full-disk-access"]);
+    const [ax, sr, fda] = rows;
+    expect(ax).toMatchObject({ ok: false, required: false, fix: "request", privacy: { pane: "Accessibility", addManually: false, inUse: false } });
+    expect(sr).toMatchObject({ ok: true, fixHint: "", privacy: { pane: "Screen & System Audio Recording" } });
+    // Granted for what Godmode starts from now on, but the running core only gets it after a restart.
+    expect(fda).toMatchObject({ ok: true, privacy: { pane: "Full Disk Access", addManually: true, restartNeeded: true } });
+    expect(fda!.detail).toContain("restart");
+  });
+
+  test("a permission computer use needs counts as in use once computer use is on", async () => {
+    __setPrivacyProbeForTests(async () => ({ accessibility: false, screenRecording: false, fullDiskAccess: false, fullDiskAccessHere: false }));
+    updateSettings({ computer: { enabled: true } });
+    try {
+      const rows = (await checkPermissions()).permissions.filter((p) => p.privacy);
+      expect(rows.find((p) => p.id === "screen-recording")!.privacy!.inUse).toBe(true);
+      expect(rows.find((p) => p.id === "full-disk-access")).toMatchObject({ ok: false, privacy: { restartNeeded: false } });
+      // The background upkeep never opens a system dialog.
+      expect((await fixPermission("screen-recording", { interactive: false })).outcome).toBe("manual");
+    } finally {
+      updateSettings({ computer: { enabled: false } });
+    }
+  });
+
+  test("a check that can't answer leaves its row out", async () => {
+    __setPrivacyProbeForTests(async () => ({ accessibility: null, screenRecording: null, fullDiskAccess: null, fullDiskAccessHere: null }));
+    expect((await checkPermissions()).permissions.filter((p) => p.privacy)).toEqual([]);
+  });
+
+  test("the app macOS asks about is Godmode's bundle, or the terminal it runs in", () => {
+    const bundle = mkdtempSync(join(tmpdir(), "godmode-host-"));
+    const app = join(bundle, "Godmode Bot.app");
+    mkdirSync(join(app, "Contents", "MacOS"), { recursive: true });
+    writeFileSync(join(app, "Contents", "Info.plist"), "<plist><dict><key>CFBundleIdentifier</key>\n<string>dev.codext.godmode</string></dict></plist>");
+    try {
+      const none = () => null;
+      expect(hostApp(join(app, "Contents", "MacOS", "godmode-core"), {}, none)).toEqual({ name: "Godmode Bot", path: app, bundleId: "dev.codext.godmode" });
+      // Started from source inside Godmode's app: it is still Godmode's entry.
+      expect(hostApp("/opt/homebrew/bin/bun", {}, () => app)).toEqual({ name: "Godmode Bot", path: app, bundleId: "dev.codext.godmode" });
+      expect(hostApp("/opt/homebrew/bin/bun", {}, () => "/System/Applications/Utilities/Terminal.app")).toMatchObject({ name: "Terminal", bundleId: null });
+      expect(hostApp("/opt/homebrew/bin/bun", { __CFBundleIdentifier: "com.apple.Terminal" }, none)).toEqual({ name: "Terminal", path: null, bundleId: null });
+      expect(hostApp("/opt/homebrew/bin/bun", { __CFBundleIdentifier: "dev.codext.godmode" }, none)).toEqual({ name: "Godmode Bot", path: null, bundleId: "dev.codext.godmode" });
+      expect(hostApp("/opt/homebrew/bin/bun", {}, none).name).toBe("the app that started Godmode");
+    } finally {
+      rmSync(bundle, { recursive: true, force: true });
+    }
+  });
+
+  test("Full Disk Access from a new process: refused, allowed, or nothing to try", async () => {
+    const home = mkdtempSync(join(tmpdir(), "godmode-fda-"));
+    const mail = join(home, "Mail");
+    mkdirSync(mail);
+    const candidates = [{ path: join(home, "missing.db"), dir: false }, { path: mail, dir: true }];
+    const seen: string[][] = [];
+    try {
+      expect(await probeFullDiskAccessFresh(async (argv) => (seen.push(argv), { code: 1, stderr: `ls: ${mail}: Operation not permitted` }), candidates)).toBe(false);
+      expect(seen).toEqual([["/bin/ls", mail]]);
+      expect(await probeFullDiskAccessFresh(async () => ({ code: 0, stderr: "" }), candidates)).toBe(true);
+      expect(await probeFullDiskAccessFresh(async () => ({ code: 0, stderr: "" }), [{ path: join(home, "nope"), dir: true }])).toBeNull();
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

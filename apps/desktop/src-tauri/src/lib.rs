@@ -59,6 +59,7 @@ pub fn run() {
             commands::core_info,
             commands::write_file,
             commands::core_logs_path,
+            commands::restart_app,
             set_close_to_tray,
             updater::update_state,
             updater::check_for_updates,

@@ -12,7 +12,7 @@ import { audit, listAudit } from "../../services/audit";
 import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
-import { PERMISSION_IDS, checkPermissions, fixPermission } from "../../services/permissions";
+import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPrivacySettings, resetPrivacy } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
 import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
 import { CLEANUP_IDS, scanCleanup } from "../../services/cleanup";
@@ -109,6 +109,16 @@ export function registerSystemRoutes(app: Hono) {
   app.post("/api/doctor/permissions/fix", async (c) => {
     const { id } = await body(c, z.object({ id: z.enum(PERMISSION_IDS) }));
     return c.json(await fixPermission(id));
+  });
+  /** macOS: open the System Settings pane of a privacy permission (and show Godmode's app to drag in). */
+  app.post("/api/doctor/permissions/open", async (c) => {
+    const { id, reveal } = await body(c, z.object({ id: z.enum(PRIVACY_IDS), reveal: z.boolean().optional() }));
+    return c.json(await openPrivacySettings(id, { reveal }));
+  });
+  /** macOS: forget Godmode's entry for a privacy permission and ask again. */
+  app.post("/api/doctor/permissions/reset", async (c) => {
+    const { id } = await body(c, z.object({ id: z.enum(PRIVACY_IDS) }));
+    return c.json(await resetPrivacy(id));
   });
   /** Repair everything Godmode can repair by itself. */
   app.post("/api/doctor/fix", async (c) => {

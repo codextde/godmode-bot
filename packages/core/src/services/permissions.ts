@@ -5,12 +5,13 @@
  * Every problem says how it gets solved: Godmode repairs it itself ("auto": its own files and folders), the human
  * allows it in a system dialog ("request": macOS privacy), or only the human can ("manual": files of another user).
  */
-import { accessSync, chmodSync, constants, lstatSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
+import { accessSync, chmodSync, constants, lstatSync, readFileSync, readdirSync, realpathSync, statSync, type Stats } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, sep } from "node:path";
+import { basename, dirname, join, sep } from "node:path";
 import type { FixResult, PermissionId, PermissionReport, PermissionStatus } from "@godmode/shared";
 import { blockedProfileRoots } from "../browser/importer";
-import { getHelper, helperAvailability } from "../computer/helper";
+import { NativeHelper, freshHelperPermissions, getHelper, runningHelper, stopHelperIf, type ComputerHelper, type HelperPermissions } from "../computer/helper";
+import { activeComputerRuns } from "../computer/service";
 import { config, ensureDir } from "../config";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -18,7 +19,7 @@ import { now } from "../util";
 import { managedTartPath } from "../vm/tart";
 import { claudeConfigDir } from "./claudeUpdate";
 import { isWin, resetDoctorCache, resolveClaudeBinary, resolveUvx, runCommand } from "./doctor";
-import { probeFullDiskAccess } from "./fullDiskAccess";
+import { probeFullDiskAccess, probeFullDiskAccessFresh } from "./fullDiskAccess";
 import { getSettings } from "./settings";
 
 const log = logger("permissions");
@@ -241,64 +242,211 @@ function checkClaudeConfig(): Check {
 /* macOS privacy                                                        */
 /* ------------------------------------------------------------------ */
 
-const PRIVACY_PANES = {
-  accessibility: "Privacy_Accessibility",
-  "screen-recording": "Privacy_ScreenCapture",
-  "full-disk-access": "Privacy_AllFiles",
+const PRIVACY = {
+  accessibility: { anchor: "Privacy_Accessibility", pane: "Accessibility", tcc: "Accessibility" },
+  "screen-recording": { anchor: "Privacy_ScreenCapture", pane: "Screen & System Audio Recording", tcc: "ScreenCapture" },
+  "full-disk-access": { anchor: "Privacy_AllFiles", pane: "Full Disk Access", tcc: "SystemPolicyAllFiles" },
 } as const;
 
-type PrivacyId = keyof typeof PRIVACY_PANES;
+type PrivacyId = keyof typeof PRIVACY;
 
-const isPrivacyId = (id: PermissionId): id is PrivacyId => id in PRIVACY_PANES;
+export const PRIVACY_IDS = ["accessibility", "screen-recording", "full-disk-access"] as const satisfies readonly PrivacyId[];
+
+const isPrivacyId = (id: PermissionId): id is PrivacyId => id in PRIVACY;
+
+const TERMINALS: Record<string, string> = {
+  "com.apple.Terminal": "Terminal",
+  "com.googlecode.iterm2": "iTerm",
+  "dev.warp.Warp-Stable": "Warp",
+  "com.mitchellh.ghostty": "Ghostty",
+  "com.microsoft.VSCode": "Visual Studio Code",
+  "com.todesktop.230313mzl4w4u92": "Cursor",
+};
+
+interface HostApp {
+  name: string;
+  path: string | null;
+  bundleId: string | null;
+}
+
+const bundleOf = (path: string) => path.match(/^(.*?\.app)\/Contents\//)?.[1] ?? null;
+
+/** The app highest up among the processes that started this one: the one macOS holds responsible. */
+function ancestorBundle(): string | null {
+  let pid = process.ppid;
+  let found: string | null = null;
+  for (let i = 0; i < 20 && pid > 1; i++) {
+    const out = Bun.spawnSync(["/bin/ps", "-o", "ppid=,comm=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim();
+    const m = out.match(/^(\d+)\s+(.*)$/);
+    if (!m) break;
+    found = bundleOf(m[2]!) ?? found;
+    pid = Number(m[1]);
+  }
+  return found;
+}
+
+const isGodmodeBundle = (id: string) => id === "dev.codext.godmode" || id.startsWith("dev.codext.godmode.");
+
+let cachedHost: HostApp | null = null;
+
+/** The app macOS asks about: Godmode's own bundle, or the app (a terminal) it was started from. */
+export function hostApp(execPath?: string, env: Record<string, string | undefined> = process.env, parents: () => string | null = ancestorBundle): HostApp {
+  if (execPath === undefined && cachedHost) return cachedHost;
+  const own = bundleOf(execPath ?? process.execPath);
+  const bundle = own ?? (process.platform === "darwin" || execPath !== undefined ? parents() : null);
+  let host: HostApp;
+  if (bundle) {
+    let bundleId: string | null = null;
+    try {
+      bundleId = readFileSync(join(bundle, "Contents", "Info.plist"), "utf8").match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/)?.[1] ?? null;
+    } catch {
+      /* no plist */
+    }
+    // Only Godmode's own entries are ever reset, never a terminal's.
+    host = { name: basename(bundle, ".app"), path: bundle, bundleId: bundleId && isGodmodeBundle(bundleId) ? bundleId : null };
+  } else {
+    // launchd passes on the bundle id of the app that started this chain of processes.
+    const from = env.__CFBundleIdentifier;
+    const godmode = !!from && isGodmodeBundle(from);
+    host = { name: godmode ? "Godmode Bot" : (from && TERMINALS[from]) || env.TERM_PROGRAM || "the app that started Godmode", path: null, bundleId: godmode ? from! : null };
+  }
+  if (execPath === undefined) cachedHost = host;
+  return host;
+}
+
+interface PrivacyProbe {
+  accessibility: boolean | null;
+  screenRecording: boolean | null;
+  /** Full Disk Access for what Godmode starts from now on, and for the running core itself. */
+  fullDiskAccess: boolean | null;
+  fullDiskAccessHere: boolean | null;
+}
+
+let probeOverride: (() => Promise<PrivacyProbe | null>) | undefined;
+
+export function __setPrivacyProbeForTests(fn: (() => Promise<PrivacyProbe | null>) | undefined) {
+  probeOverride = fn;
+  lastProbe = null;
+}
+
+let lastProbe: { at: number; value: Promise<PrivacyProbe | null> } | null = null;
+let inflight: Promise<PrivacyProbe | null> | null = null;
+/** Last real answers: a probe that fails once (a helper too slow to start) doesn't make a row vanish. */
+let known: PrivacyProbe = { accessibility: null, screenRecording: null, fullDiskAccess: null, fullDiskAccessHere: null };
+
+const PROBE_TTL_MS = 2_500;
+
+/** Asked from new processes, so an answer given in System Settings shows without restarting Godmode. */
+function probePrivacy(): Promise<PrivacyProbe | null> {
+  if (probeOverride) return probeOverride();
+  if (process.platform !== "darwin") return Promise.resolve(null);
+  if (inflight) return inflight;
+  if (lastProbe && Date.now() - lastProbe.at < PROBE_TTL_MS) return lastProbe.value;
+  inflight = (async (): Promise<PrivacyProbe> => {
+    const running = runningHelper();
+    const shared = running ? await running.permissions().catch(() => null) : null;
+    // A "yes" from the running helper holds; only a "no" may be out of date.
+    const [helper, fresh] = await Promise.all([
+      shared?.accessibility && shared.screenRecording ? shared : freshHelperPermissions().catch(() => null),
+      probeFullDiskAccessFresh((argv) => runCommand(argv, { timeoutMs: 5_000, maxOutput: 4_000 })),
+    ]);
+    if (running && shared && helper && helper !== shared) await dropStaleHelper(running, shared, helper);
+    const pick = <T>(value: T | null | undefined, last: T | null): T | null => (value === null || value === undefined ? last : value);
+    known = {
+      accessibility: pick(helper?.accessibility, known.accessibility),
+      screenRecording: pick(helper?.screenRecording, known.screenRecording),
+      fullDiskAccess: pick(fresh, known.fullDiskAccess),
+      fullDiskAccessHere: probeFullDiskAccess(),
+    };
+    return known;
+  })().finally(() => {
+    lastProbe = { at: Date.now(), value: inflight! };
+    inflight = null;
+  });
+  return inflight;
+}
+
+/**
+ * The shared helper keeps an old "no" until it quits: restart it once a new process got a "yes" — but only while no
+ * agent uses the computer and nothing waits for it, or a held key or a running action would be cut off.
+ */
+async function dropStaleHelper(running: ComputerHelper, old: HelperPermissions, fresh: HelperPermissions) {
+  const stale = (fresh.accessibility && !old.accessibility) || (fresh.screenRecording && !old.screenRecording);
+  if (!stale || activeComputerRuns().length || (running instanceof NativeHelper && running.pending > 0)) return;
+  log.info("macOS privacy changed: restarting the computer helper");
+  if (await stopHelperIf(running).catch(() => false)) bus.changed("computer");
+}
 
 async function privacyChecks(): Promise<PermissionStatus[]> {
-  if (process.platform !== "darwin") return [];
+  const probe = await probePrivacy();
+  if (!probe) return [];
+  const app = hostApp();
+  const computer = getSettings().computer.enabled;
+  const guide = (id: PrivacyId, extra: { restartNeeded?: boolean; inUse: boolean }) => ({
+    pane: PRIVACY[id].pane,
+    appName: app.name,
+    appPath: app.path,
+    addManually: id === "full-disk-access",
+    restartNeeded: extra.restartNeeded ?? false,
+    inUse: extra.inUse,
+    canReset: !!app.bundleId,
+  });
+  const allow = (id: PrivacyId) => `Allow ${app.name} in System Settings → Privacy & Security → ${PRIVACY[id].pane}.`;
   const out: PermissionStatus[] = [];
-  const computer = getSettings().computer.enabled && (await helperAvailability()).available;
-  const perms = computer
-    ? await getHelper()
-        .then((h) => h.permissions())
-        .catch(() => null)
-    : null;
-  if (perms) {
+  if (probe.accessibility !== null) {
+    const ok = probe.accessibility;
     out.push({
       id: "accessibility",
-      name: "Accessibility",
-      ok: perms.accessibility,
-      detail: perms.accessibility ? "Agents can click and type in what you share" : "Not allowed yet — agents can't click or type",
+      name: "Device control",
+      ok,
+      detail: ok ? "Agents can click, type and press buttons in what you share" : "Not allowed yet — agents can't click or type on this Mac",
       path: null,
       required: false,
       fix: "request",
-      fixHint: perms.accessibility ? "" : "Allow Godmode in System Settings → Privacy & Security → Accessibility.",
+      fixHint: ok ? "" : allow("accessibility"),
+      privacy: guide("accessibility", { inUse: computer }),
     });
+  }
+  if (probe.screenRecording !== null) {
+    const ok = probe.screenRecording;
     out.push({
       id: "screen-recording",
       name: "Screen Recording",
-      ok: perms.screenRecording,
-      detail: perms.screenRecording ? "Agents can see the windows and screens you share" : "Not allowed yet — agents can't see windows or screens",
+      ok,
+      detail: ok ? "Agents can see the windows and screens you share" : "Not allowed yet — agents can't see windows or screens",
       path: null,
       required: false,
       fix: "request",
-      fixHint: perms.screenRecording ? "" : "Allow Godmode in System Settings → Privacy & Security → Screen & System Audio Recording, then restart Godmode.",
+      fixHint: ok ? "" : allow("screen-recording"),
+      privacy: guide("screen-recording", { inUse: computer }),
     });
   }
-  // Only worth a row once it matters: it is on, or macOS has kept Godmode out of a browser's data folder.
-  const fda = probeFullDiskAccess();
-  const blocked = blockedProfileRoots();
-  if (fda === true || (fda === false && blocked.length)) {
+  if (probe.fullDiskAccess !== null || probe.fullDiskAccessHere !== null) {
+    const ok = probe.fullDiskAccess === true || probe.fullDiskAccessHere === true;
+    const restartNeeded = ok && probe.fullDiskAccessHere === false;
+    const blocked = blockedProfileRoots();
     out.push({
       id: "full-disk-access",
       name: "Full Disk Access",
-      ok: fda,
-      detail: fda ? "Godmode can import sign-ins from your browser profiles" : "macOS keeps Godmode out of your browser profiles, so sign-ins can't be imported",
-      path: fda ? null : (blocked[0] ?? null),
+      ok,
+      detail: restartNeeded
+        ? "Allowed — restart Godmode once so it can use it too (agents already can)"
+        : ok
+          ? "Agents can open protected folders like Mail, Messages and your browser profiles"
+          : blocked.length
+            ? "macOS keeps Godmode out of your browser profiles, so sign-ins can't be imported"
+            : "Not allowed yet — agents can't open Mail, Messages or browser profiles",
+      path: ok ? null : (blocked[0] ?? null),
       required: false,
       fix: "request",
-      fixHint: fda ? "" : "Allow Godmode in System Settings → Privacy & Security → Full Disk Access, then restart Godmode.",
+      fixHint: ok ? "" : `${allow("full-disk-access")} Add it with + if it isn't listed, then restart Godmode.`,
+      privacy: guide("full-disk-access", { restartNeeded, inUse: blocked.length > 0 }),
     });
   }
   return out;
 }
+
+const openPane = (id: PrivacyId) => runCommand(["/usr/bin/open", `x-apple.systempreferences:com.apple.preference.security?${PRIVACY[id].anchor}`], { timeoutMs: 10_000 });
 
 /** Show the system's own dialog, and the settings pane when it stays unanswered (macOS asks only once). */
 async function requestPrivacy(id: PrivacyId): Promise<void> {
@@ -311,7 +459,43 @@ async function requestPrivacy(id: PrivacyId): Promise<void> {
     );
     if (id === "accessibility" ? granted.accessibility : granted.screenRecording) return;
   }
-  await runCommand(["/usr/bin/open", `x-apple.systempreferences:com.apple.preference.security?${PRIVACY_PANES[id]}`], { timeoutMs: 10_000 });
+  await openPane(id);
+}
+
+/**
+ * Open the pane where the human switches a permission on; `reveal` also shows Godmode's app in the Finder, to drag
+ * into the list (Full Disk Access only lists what was added).
+ */
+export async function openPrivacySettings(id: PrivacyId, opts: { reveal?: boolean } = {}): Promise<{ ok: boolean; output: string }> {
+  if (process.platform !== "darwin") return { ok: false, output: "System Settings only exist on macOS." };
+  const app = hostApp();
+  if (opts.reveal && app.path) await runCommand(["/usr/bin/open", "-R", app.path], { timeoutMs: 10_000 });
+  const res = await openPane(id);
+  return { ok: res.code === 0, output: res.code === 0 ? "" : res.stderr.trim() || "System Settings didn't open." };
+}
+
+/**
+ * Forget Godmode's entry and ask again. An update with a new signature can leave a switch that shows on but no
+ * longer counts; only a fresh entry helps then.
+ */
+export async function resetPrivacy(id: PrivacyId): Promise<FixResult> {
+  const name = id === "accessibility" ? "Device control" : id === "screen-recording" ? "Screen Recording" : "Full Disk Access";
+  const app = hostApp();
+  if (process.platform !== "darwin" || !app.bundleId) return { kind: "permission", id, name, outcome: "manual", output: "Only Godmode's own app can be reset. Remove it in System Settings with − and add it again." };
+  const res = await runCommand(["/usr/bin/tccutil", "reset", PRIVACY[id].tcc, app.bundleId], { timeoutMs: 10_000 });
+  if (res.code !== 0) return { kind: "permission", id, name, outcome: "failed", output: res.stderr.trim() || "tccutil failed" };
+  log.info(`reset the macOS ${PRIVACY[id].tcc} entry of ${app.bundleId}`);
+  lastProbe = null;
+  // The running helper would keep answering from the forgotten entry.
+  const running = runningHelper();
+  if (id !== "full-disk-access" && running && !activeComputerRuns().length) await stopHelperIf(running).catch(() => {});
+  try {
+    await requestPrivacy(id);
+  } catch (err) {
+    return { kind: "permission", id, name, outcome: "failed", output: err instanceof Error ? err.message : String(err) };
+  }
+  bus.changed("computer");
+  return { kind: "permission", id, name, outcome: "pending", output: `Switch ${app.name} on again in ${PRIVACY[id].pane}.` };
 }
 
 /* ------------------------------------------------------------------ */
@@ -348,6 +532,7 @@ export async function fixPermission(id: PermissionId, opts: { interactive?: bool
     } catch (err) {
       return result(before.name, "failed", err instanceof Error ? err.message : String(err));
     }
+    lastProbe = null;
     const after = (await privacyChecks()).find((p) => p.id === id);
     bus.changed("computer");
     return after?.ok ? result(before.name, "fixed", after.detail) : result(before.name, "pending", before.fixHint);

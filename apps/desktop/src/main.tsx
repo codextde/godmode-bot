@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { VaultGrantDialog } from "@/components/vault/grant";
+import { MacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { isCloudError } from "@/lib/api";
 import { cloudContext } from "@/lib/core";
 import { installExternalLinks, installDropGuard } from "@/lib/desktop";
@@ -45,6 +46,7 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
           </BrowserRouter>
           <Toaster richColors position="bottom-right" />
           <VaultGrantDialog />
+          <MacPermissionsGuide />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
