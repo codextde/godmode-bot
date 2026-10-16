@@ -1,11 +1,12 @@
 import { marked, type Token, type Tokens } from "marked";
 import { memo, useMemo, type ReactNode } from "react";
-import { Linking, ScrollView, StyleSheet, Text, View } from "react-native";
+import { UITextView as Text } from "@bsky.app/react-native-uitextview";
+import { Linking, ScrollView, StyleSheet, View } from "react-native";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
 import { RemoteImage } from "./remote-image";
 import { alpha, fonts, radius, space, type, useColors, type Colors } from "@/lib/theme";
 
-/** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures). */
+/** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures); every block is selectable by range on iOS. */
 export const Markdown = memo(function Markdown({ text, color }: { text: string; color?: string }) {
   const c = useColors();
   const tokens = useMemo(() => marked.lexer(text, { gfm: true }), [text]);
@@ -23,7 +24,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
     case "text": {
       const text = t as Tokens.Text;
       return (
-        <Text key={key} style={[type.body, { color }]} selectable>
+        <Text key={key} style={[type.body, { color }]} selectable uiTextView>
           {text.tokens ? inline(text.tokens, c, color) : decode(text.text)}
         </Text>
       );
@@ -41,7 +42,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
         );
       }
       return (
-        <Text key={key} style={[type.body, { color }]} selectable>
+        <Text key={key} style={[type.body, { color }]} selectable uiTextView>
           {inline(tokens, c, color)}
         </Text>
       );
@@ -50,7 +51,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
       const h = t as Tokens.Heading;
       const size = h.depth <= 1 ? 22 : h.depth === 2 ? 19 : 17;
       return (
-        <Text key={key} style={{ color, fontSize: size, lineHeight: size * 1.3, fontFamily: fonts.semibold, letterSpacing: -0.3, marginTop: 4 }}>
+        <Text key={key} selectable uiTextView style={{ color, fontSize: size, lineHeight: size * 1.3, fontFamily: fonts.semibold, letterSpacing: -0.3, marginTop: 4 }}>
           {inline(h.tokens, c, color)}
         </Text>
       );
@@ -82,7 +83,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
       const code = t as Tokens.Code;
       return (
         <ScrollView key={key} horizontal showsHorizontalScrollIndicator={false} style={[styles.code, { backgroundColor: c.sunken }]}>
-          <Text selectable style={[type.mono, { color, lineHeight: 19 }]}>
+          <Text selectable uiTextView style={[type.mono, { color, lineHeight: 19 }]}>
             {code.text}
           </Text>
         </ScrollView>
@@ -104,7 +105,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
             {[table.header, ...table.rows].map((row, r) => (
               <View key={r} style={[styles.tableRow, { backgroundColor: r === 0 ? c.sunken : "transparent", borderColor: c.border }]}>
                 {row.map((cell, ci) => (
-                  <Text key={ci} style={[type.subhead, styles.cell, { color, fontFamily: r === 0 ? fonts.semibold : fonts.regular }]}>
+                  <Text key={ci} selectable uiTextView style={[type.subhead, styles.cell, { color, fontFamily: r === 0 ? fonts.semibold : fonts.regular }]}>
                     {inline(cell.tokens, c, color)}
                   </Text>
                 ))}
@@ -116,7 +117,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
     }
     default:
       return "text" in t && t.text ? (
-        <Text key={key} style={[type.body, { color }]} selectable>
+        <Text key={key} style={[type.body, { color }]} selectable uiTextView>
           {t.text}
         </Text>
       ) : null;

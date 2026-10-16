@@ -12,6 +12,7 @@
     "doctor": "expo-doctor"
   },
   "dependencies": {
+    "@bsky.app/react-native-uitextview": "^2.7.1",
     "@expo-google-fonts/geist": "^0.4.2",
     "@expo-google-fonts/geist-mono": "^0.4.3",
     "@expo/ui": "~57.0.21",

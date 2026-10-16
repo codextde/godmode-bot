@@ -1,3 +1,4 @@
+import { UITextView } from "@bsky.app/react-native-uitextview";
 import * as Haptics from "expo-haptics";
 import { useIsFocused } from "expo-router";
 import { useEffect, type ReactNode } from "react";
@@ -5,7 +6,6 @@ import {
   ActivityIndicator,
   Pressable,
   StyleSheet,
-  Text,
   View,
   type ColorValue,
   type PressableProps,
@@ -32,7 +32,8 @@ export function T({
 }: TextProps & { variant?: Variant; color?: ColorValue; muted?: boolean }) {
   const c = useColors();
   const flat = StyleSheet.flatten([type[variant] as TextStyle, { color: color ?? (muted ? c.textMuted : c.text) }, style]);
-  return <Text {...props} style={withFont(flat)} />;
+  // iOS Text only copies a whole block; a UITextView lets the human pick a range.
+  return <UITextView {...props} uiTextView style={withFont(flat)} />;
 }
 
 export function tap(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) {
