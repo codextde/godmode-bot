@@ -12,6 +12,7 @@ import { createApp } from "../src/server/app";
 import { getAccessToken } from "../src/server/auth";
 import { CLAUDE_RELEASES_URL } from "../src/services/claudeUpdate";
 import { __setUvxForTests, runDoctor } from "../src/services/doctor";
+import { __setPrivacyProbeForTests } from "../src/services/permissions";
 import { __resetMaintenanceForTests, fixAll, installUpdates, maintenanceStatus, retryPostponedUpdates, runMaintenance, startMaintenance, stopMaintenance } from "../src/services/maintenance";
 import { applyRuntimeSettings } from "../src/services/runtime";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
@@ -48,6 +49,8 @@ async function assertFakesInPlace() {
 }
 
 beforeAll(() => {
+  // No macOS privacy probe here: it would start the native helper and look into ~/Library.
+  __setPrivacyProbeForTests(async () => null);
   setLogLevel("error");
   dataDir = mkdtempSync(join(tmpdir(), "godmode-maintenance-"));
   process.env.CLAUDE_CONFIG_DIR = join(dataDir, "claude-config");

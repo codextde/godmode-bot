@@ -1603,6 +1603,25 @@ export interface PermissionStatus {
    */
   fix: "auto" | "request" | "manual";
   fixHint: string;
+  /** macOS privacy permissions: what the step-by-step guide needs. */
+  privacy?: PrivacyGuide;
+}
+
+export interface PrivacyGuide {
+  /** The pane in System Settings → Privacy & Security, as macOS names it. */
+  pane: string;
+  /** The app macOS lists and the human switches on. */
+  appName: string;
+  /** Its bundle (to drag into the list); null when it can't be found. */
+  appPath: string | null;
+  /** macOS only lists the app once it is added with + (Full Disk Access); otherwise asking puts it there. */
+  addManually: boolean;
+  /** Allowed, but Godmode itself only gets it after a restart. */
+  restartNeeded: boolean;
+  /** The feature that needs it is turned on. */
+  inUse: boolean;
+  /** It is Godmode's own app, so Godmode can clear a stale entry (an update can leave a switch that is on but no longer counts). */
+  canReset: boolean;
 }
 
 export interface PermissionReport {

@@ -384,6 +384,10 @@ export const api = {
     updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
     permissions: () => get<PermissionReport>("/api/doctor/permissions"),
     fixPermission: (id: PermissionId) => post<FixResult>("/api/doctor/permissions/fix", { id }),
+    /** macOS: open the System Settings pane; `reveal` also shows Godmode's app in the Finder. */
+    openPrivacySettings: (id: PermissionId, reveal = false) => post<{ ok: boolean; output: string }>("/api/doctor/permissions/open", { id, reveal }),
+    /** macOS: forget Godmode's entry and ask again. */
+    resetPrivacy: (id: PermissionId) => post<FixResult>("/api/doctor/permissions/reset", { id }),
     /** Repair everything Godmode can repair by itself. */
     fixAll: () => post<FixReport>("/api/doctor/fix"),
     updates: (refresh = false) => get<UpdateReport>("/api/doctor/updates", { refresh: refresh ? 1 : undefined }),

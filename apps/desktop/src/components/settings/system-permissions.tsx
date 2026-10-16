@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
+import { isPrivacyPermission, useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -16,8 +17,9 @@ import { cn } from "@/lib/utils";
 /** After asking macOS, the answer is given in System Settings: look again for a while. */
 const WAIT_FOR_ANSWER_MS = 2 * 60_000;
 
-export function usePermissions(watch = false) {
-  return useQuery({ queryKey: qk.permissions, queryFn: api.doctor.permissions, staleTime: 10_000, refetchInterval: watch ? 2_000 : false });
+/** `watch`: look every 2 s (a system dialog is open); `idleMs`: look now and then (the sidebar). */
+export function usePermissions(watch = false, idleMs?: number) {
+  return useQuery({ queryKey: qk.permissions, queryFn: api.doctor.permissions, staleTime: 10_000, refetchInterval: watch ? 2_000 : (idleMs ?? false) });
 }
 
 /** Tell the human what a repair did (shared by single repairs and "Fix all"). */
@@ -101,7 +103,9 @@ function PermissionRow({ permission, onFixed }: { permission: PermissionStatus; 
     onError: (e) => toast.error(`Couldn't fix ${permission.name}`, { description: errorMessage(e) }),
   });
 
-  const state: "ok" | "warn" | "error" = permission.ok ? "ok" : permission.required ? "error" : "warn";
+  const showGuide = useMacPermissionsGuide((s) => s.show);
+  const guided = isPrivacyPermission(permission.id) && !!permission.privacy;
+  const state: "ok" | "warn" | "error" = permission.ok && !permission.privacy?.restartNeeded ? "ok" : permission.required ? "error" : "warn";
   const Icon = state === "ok" ? CircleCheck : state === "error" ? CircleX : CircleAlert;
   const request = permission.fix === "request";
 
@@ -129,7 +133,11 @@ function PermissionRow({ permission, onFixed }: { permission: PermissionStatus; 
             </p>
           )}
         </div>
-        {!permission.ok && permission.fix !== "manual" && (
+        {guided ? (
+          <Button size="sm" variant={permission.ok && !permission.privacy?.restartNeeded ? "ghost" : "outline"} onClick={() => showGuide(permission.id)}>
+            {permission.ok && !permission.privacy?.restartNeeded ? "Details" : "Set up"}
+          </Button>
+        ) : !permission.ok && permission.fix !== "manual" && (
           <Button size="sm" variant={permission.required ? "default" : "outline"} onClick={() => fix.mutate()} disabled={fix.isPending}>
             {fix.isPending ? <Spinner /> : request ? <KeyRound /> : <Wrench />}
             {request ? "Allow" : fix.isPending ? "Fixing…" : "Fix"}

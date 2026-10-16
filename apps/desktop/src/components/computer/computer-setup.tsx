@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, MonitorOff, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { ComputerStatus } from "@godmode/shared";
+import { useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
@@ -54,7 +55,8 @@ export function useComputerSetupActions() {
 
 /** What still stands between the human and computer use: turned off, missing macOS permissions, Cua Driver. */
 export function ComputerSetupNotice({ status, className, showCua = true }: { status: ComputerStatus | undefined; className?: string; showCua?: boolean }) {
-  const { permissions, installCua } = useComputerSetupActions();
+  const { installCua } = useComputerSetupActions();
+  const showGuide = useMacPermissionsGuide((s) => s.show);
   if (!status) return null;
   const missing = missingPermissions(status);
   const items: React.ReactNode[] = [];
@@ -77,12 +79,12 @@ export function ComputerSetupNotice({ status, className, showCua = true }: { sta
         tone="warn"
         title={`Godmode needs ${missing.join(" and ")}`}
         action={
-          <Button size="sm" onClick={() => permissions.mutate()} disabled={permissions.isPending}>
-            {permissions.isPending && <Spinner />} Allow access
+          <Button size="sm" onClick={() => showGuide(status.permissions.accessibility === false ? "accessibility" : "screen-recording")}>
+            Set up
           </Button>
         }
       >
-        macOS asks once. {missing.includes("Screen Recording") ? "Without Screen Recording, agents can't see windows. " : ""}
+        A short guide shows where to switch {missing.length > 1 ? "them" : "it"} on. {missing.includes("Screen Recording") ? "Without Screen Recording, agents can't see windows. " : ""}
         {missing.includes("Accessibility") ? "Without Accessibility, they can't click or type." : ""}
       </Notice>,
     );

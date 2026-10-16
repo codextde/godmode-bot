@@ -181,7 +181,7 @@ fn relaunch_marker(app: &AppHandle) -> Option<PathBuf> {
     paths::data_dir(app).map(|dir| dir.join(RELAUNCH_MARKER))
 }
 
-fn mark_relaunch(app: &AppHandle) {
+pub fn mark_relaunch(app: &AppHandle) {
     if let Some(marker) = relaunch_marker(app) {
         let _ = fs::write(marker, b"");
     }

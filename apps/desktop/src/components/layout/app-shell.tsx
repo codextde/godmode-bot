@@ -62,6 +62,7 @@ import { RecentChats } from "@/components/layout/recent-chats";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
+import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
@@ -261,6 +262,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarContent>
 
         <SidebarFooter className="px-3 pb-3">
+          <MacPermissionsButton />
           <ClaudeUpdateButton />
           <UpdateButton />
           <DeviceIndicator />

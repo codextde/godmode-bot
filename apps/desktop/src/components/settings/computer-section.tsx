@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { missingPermissions, useComputerSetupActions, useComputerStatus } from "@/components/computer/computer-setup";
+import { useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,8 @@ export function ComputerSection({ settings }: { settings: Settings }) {
   const c = settings.computer;
   const qc = useQueryClient();
   const status = useComputerStatus();
-  const { permissions, installCua } = useComputerSetupActions();
+  const { installCua } = useComputerSetupActions();
+  const showGuide = useMacPermissionsGuide((st) => st.show);
   const stopCua = useMutation({
     mutationFn: api.computer.stopCua,
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.computer }),
@@ -75,13 +77,11 @@ export function ComputerSection({ settings }: { settings: Settings }) {
         <SettingsGroup
           title="macOS permissions"
           icon={<ShieldCheck />}
-          description="Asked for the app that runs Godmode. Restart Godmode after granting them."
+          description="Asked for the app that runs Godmode. Godmode notices when you switch them on."
           actions={
-            missing.length ? (
-              <Button size="sm" onClick={() => permissions.mutate()} disabled={permissions.isPending}>
-                {permissions.isPending && <Spinner />} Allow access
-              </Button>
-            ) : undefined
+            <Button size="sm" variant={missing.length ? "default" : "outline"} onClick={() => showGuide(s?.permissions.accessibility === false ? "accessibility" : s?.permissions.screenRecording === false ? "screen-recording" : undefined)}>
+              {missing.length ? "Set up" : "Guide"}
+            </Button>
           }
         >
           <InfoRow label="Screen Recording — see windows and screens">

@@ -69,6 +69,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/doctor/updates", A],
   ["GET", "/api/doctor/maintenance", A],
   ["POST", "/api/doctor/permissions/fix", refused(COMPUTER_ONLY)],
+  ["POST", "/api/doctor/permissions/open", refused(COMPUTER_ONLY)],
+  ["POST", "/api/doctor/permissions/reset", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/fix", refused(COMPUTER_ONLY)],
   ["POST", "/api/doctor/updates", refused(COMPUTER_ONLY)],
   ["GET", "/api/cleanup", A],
