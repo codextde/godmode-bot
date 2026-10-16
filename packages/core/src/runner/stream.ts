@@ -271,12 +271,13 @@ export class StreamAccumulator {
   /** Short human label for what the run is doing right now. */
   /** What the run is doing right now, in plain words (`names` resolves agent and login ids, and masks secrets). */
   activityLabel(names?: ActivityNames): string {
-    if (this.final) return this.final.isError ? "Failed" : "Done";
+    // A turn can end while its subagents still work: the run goes on, and another turn follows once they report back.
+    const background = this.backgroundWork();
+    if (this.final && !background) return this.final.isError ? "Failed" : "Done";
     if (this.limit) return "Waiting for rate limit…";
     if (this.compacting) return "Compacting conversation…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
-    const background = this.backgroundWork();
     if (background) return background;
     switch (last.type) {
       case "tool_use":

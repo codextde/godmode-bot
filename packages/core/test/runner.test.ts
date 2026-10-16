@@ -92,6 +92,7 @@ describe("runner end-to-end with fake claude", () => {
     expect(inv.prompt).toBe("Hello there\nsecond line");
     expect(realpathSync(inv.cwd)).toBe(realpathSync(agent.repoPath));
     expect(inv.env.GODMODE_TOKEN).toBeNull();
+    expect(inv.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS).toBe("0");
     for (const flag of ["-p", "--verbose", "--include-partial-messages", "--strict-mcp-config", "--dangerously-skip-permissions"]) {
       expect(inv.args).toContain(flag);
     }
