@@ -1,11 +1,13 @@
 import type { RoutineTriggerType } from "@godmode/shared";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
-import { TRIGGER_ORDER, TRIGGER_TYPES } from "./trigger-meta";
+import { EASY_TRIGGER_TEXT, TRIGGER_ORDER, TRIGGER_TYPES } from "./trigger-meta";
 
 /** Four cards: what starts the automation. */
 export function TriggerPicker({ value, onChange, className }: { value: RoutineTriggerType; onChange: (type: RoutineTriggerType) => void; className?: string }) {
+  const easy = useEasyMode();
   return (
     <RadioGroup
       value={value}
@@ -15,6 +17,7 @@ export function TriggerPicker({ value, onChange, className }: { value: RoutineTr
     >
       {TRIGGER_ORDER.map((type) => {
         const meta = TRIGGER_TYPES[type];
+        const text = easy ? EASY_TRIGGER_TEXT[type] : meta;
         const Icon = meta.icon;
         return (
           <Label
@@ -30,8 +33,8 @@ export function TriggerPicker({ value, onChange, className }: { value: RoutineTr
               <Icon className="size-4" />
             </span>
             <span className="min-w-0">
-              <span className="block text-sm leading-snug font-medium">{meta.title}</span>
-              <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{meta.hint}</span>
+              <span className="block text-sm leading-snug font-medium">{text.title}</span>
+              <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{text.hint}</span>
             </span>
           </Label>
         );

@@ -14,12 +14,14 @@ import { formatCost, formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
 import { useBudgets } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { BudgetMeter } from "@/components/budgets/budget-meter";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
   const runsQ = useRuns(agent.id);
   const [selected, setSelected] = useState<Run | null>(null);
   const [runTask, setRunTask] = useState(false);
+  const easy = useEasyMode();
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
@@ -58,7 +60,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
       <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
         <Kpi
           icon={<Activity />}
-          label={runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
+          label={easy ? (runs.length >= 200 ? "Jobs (last 200)" : "Jobs done") : runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
           value={runsQ.isLoading ? null : String(stats.total)}
           extra={<Sparkbars values={stats.buckets} />}
         />
@@ -70,13 +72,13 @@ export function OverviewTab({ agent }: { agent: Agent }) {
           tone={stats.successRate != null && stats.successRate < 0.8 ? "warn" : undefined}
         />
         <Kpi icon={<Coins />} label="Total cost" value={runsQ.isLoading ? null : formatCost(stats.cost)} />
-        <Kpi icon={<Timer />} label="Avg duration" value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
+        <Kpi icon={<Timer />} label={easy ? "Average time" : "Avg duration"} value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded-xl border bg-card p-2 shadow-card">
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
-            <h2 className="text-sm font-medium tracking-[-0.01em]">Recent runs</h2>
+            <h2 className="text-sm font-medium tracking-[-0.01em]">{easy ? "Recent work" : "Recent runs"}</h2>
             <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
               <Link to={`/activity?agent=${agent.id}`}>
                 All activity <ArrowRight />
@@ -90,10 +92,12 @@ export function OverviewTab({ agent }: { agent: Agent }) {
               ))}
             </div>
           ) : runsQ.isError ? (
-            <p className="p-4 text-sm text-muted-foreground">Couldn't load runs: {errorMessage(runsQ.error)}</p>
+            <p className="p-4 text-sm text-muted-foreground">
+              {easy ? "Couldn't load its recent work" : "Couldn't load runs"}: {errorMessage(runsQ.error)}
+            </p>
           ) : runs.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              No runs yet. Start a chat or give it a task — every run shows up here.
+              {easy ? "Nothing yet. Start a chat or give it a task, and everything it does shows up here." : "No runs yet. Start a chat or give it a task — every run shows up here."}
             </div>
           ) : (
             <div className="space-y-0.5">

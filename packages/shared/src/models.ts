@@ -1242,8 +1242,14 @@ export interface SelfRepairResult {
   skipped: string | null;
 }
 
+/** Easy: plain words, fewer choices up front, the rest one click away. Professional: everything in view. */
+export type InterfaceMode = "easy" | "pro";
+export const INTERFACE_MODES: readonly InterfaceMode[] = ["easy", "pro"];
+
 export interface GeneralSettings {
   theme: "dark" | "light" | "system";
+  /** How much of Godmode the dashboard shows at once; every feature stays in both. */
+  mode: InterfaceMode;
   accent: string;
   /** User display name for greetings */
   userName: string;

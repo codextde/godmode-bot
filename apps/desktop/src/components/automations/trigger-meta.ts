@@ -58,6 +58,14 @@ export const TRIGGER_TYPES: Record<RoutineTriggerType, TriggerTypeMeta> = {
   },
 };
 
+/** Easy mode: the same triggers in everyday words. */
+export const EASY_TRIGGER_TEXT: Record<RoutineTriggerType, { title: string; hint: string }> = {
+  schedule: { title: "On a schedule", hint: "Every morning, each Monday, on the 1st…" },
+  app: { title: "When something happens in an app", hint: "A new email, Slack message, calendar event…" },
+  condition: { title: "When a condition is true", hint: "Checked regularly, described in your own words" },
+  webhook: { title: "When another tool calls a link", hint: "A shop, a form or Zapier opens a secret link" },
+};
+
 export const TRIGGER_ORDER: RoutineTriggerType[] = ["schedule", "app", "condition", "webhook"];
 
 /** App and webhook automations react to incoming events (and can be tested with a sample one). */

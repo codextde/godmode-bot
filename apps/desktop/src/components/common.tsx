@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { useLocation } from "react-router";
 import { motion } from "motion/react";
 import { Globe2, Layers } from "lucide-react";
 import type { AgentCharacter, CharacterMood } from "@godmode/shared";
@@ -7,6 +8,7 @@ import { Character } from "@/components/character";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useWorkspaceName } from "@/lib/hooks";
+import { EASY_PAGES, useEasyMode } from "@/lib/mode";
 import { useAgentRunning } from "@/stores/live";
 
 /** Consistent page header used by every screen: quiet icon tile, medium-weight title, muted description. */
@@ -23,6 +25,11 @@ export function PageHeader({
   actions?: ReactNode;
   className?: string;
 }) {
+  const easy = useEasyMode();
+  const { pathname } = useLocation();
+  const plain = easy ? EASY_PAGES[pathname] : undefined;
+  title = plain?.title ?? title;
+  description = plain?.description ?? description;
   return (
     <div className={cn("flex flex-wrap items-start justify-between gap-4 px-5 pt-6 pb-5 @2xl:px-8 @2xl:pt-8 @2xl:pb-6", className)}>
       <div className="flex min-w-0 items-start gap-3.5">

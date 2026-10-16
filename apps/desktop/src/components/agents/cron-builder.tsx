@@ -95,6 +95,7 @@ function DayTimeline({ draft }: { draft: CronDraft }) {
  * `children` render above the summary, which includes `startWindowMinutes`; `problem` shows there like an invalid expression.
  * With `onWindowChange` it also offers random runs spread over a time range ("5 times a day at random times"): the
  * builder then owns the start window and the runs per window, and hides `children` while that mode is on.
+ * `simple` hides the cron expression (no custom editor unless the value already needs one, no expression in the summary).
  */
 export function CronBuilder({
   value,
@@ -105,6 +106,7 @@ export function CronBuilder({
   onWindowChange,
   onProblemChange,
   problem = null,
+  simple = false,
   children,
 }: {
   value: string;
@@ -116,6 +118,7 @@ export function CronBuilder({
   /** Problems the cron can't show (an end before the start): the caller blocks saving while there is one. */
   onProblemChange?: (problem: string | null) => void;
   problem?: string | null;
+  simple?: boolean;
   children?: ReactNode;
 }) {
   const [draft, setDraft] = useState<CronDraft>(() => parseCron(value, startWindowMinutes, runsPerWindow));
@@ -161,9 +164,9 @@ export function CronBuilder({
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              {KINDS.map((k) => (
+              {KINDS.filter((k) => !simple || k !== "custom" || draft.kind === "custom").map((k) => (
                 <SelectItem key={k} value={k}>
-                  {CRON_KIND_LABELS[k]}
+                  {simple && k === "custom" ? "Custom schedule" : CRON_KIND_LABELS[k]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -347,7 +350,7 @@ export function CronBuilder({
         </div>
       )}
 
-      {draft.kind === "custom" && (
+      {draft.kind === "custom" && !simple && (
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-custom`} className="text-xs text-muted-foreground">
             Cron expression <span className="font-normal">(minute hour day month weekday)</span>
@@ -388,7 +391,7 @@ export function CronBuilder({
       >
         {error ? <TriangleAlert className="size-4 shrink-0" /> : <CalendarClock className="size-4 shrink-0 text-muted-foreground" />}
         <span className="min-w-0 flex-1 truncate">{error ?? scheduleToHuman(cron, startWindowMinutes, runsPerWindow)}</span>
-        {!error && <code className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{cron}</code>}
+        {!error && !simple && <code className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{cron}</code>}
       </div>
     </div>
   );

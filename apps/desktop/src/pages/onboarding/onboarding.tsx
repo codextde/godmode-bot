@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Globe2, HandHeart, KeySquare, LockKeyhole, PartyPopper, Stethoscope, AppWindow } from "lucide-react";
-import type { Bootstrap } from "@godmode/shared";
+import type { Bootstrap, InterfaceMode } from "@godmode/shared";
 import { Backdrop, Wordmark } from "@/components/brand";
 import { ActivateStep } from "@/components/onboarding/activate-step";
 import { BrowserStep } from "@/components/onboarding/browser-step";
@@ -33,7 +33,7 @@ const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
 
 const SESSION_KEY = storageKey("godmode-onboarding");
 
-function loadSession(): { step?: StepId; userName?: string } {
+function loadSession(): { step?: StepId; userName?: string; mode?: InterfaceMode } {
   try {
     return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "{}");
   } catch {
@@ -41,7 +41,7 @@ function loadSession(): { step?: StepId; userName?: string } {
   }
 }
 
-function saveSession(v: { step: StepId; userName: string }) {
+function saveSession(v: { step: StepId; userName: string; mode: InterfaceMode }) {
   try {
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(v));
   } catch {
@@ -79,6 +79,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
   });
   const [direction, setDirection] = useState(1);
   const [userName, setUserName] = useState(() => loadSession().userName ?? bootstrap.settings.general.userName ?? "");
+  const [mode, setMode] = useState<InterfaceMode>(() => loadSession().mode ?? (bootstrap.settings.general.mode === "easy" ? "easy" : "pro"));
   const [summary, setSummary] = useState<OnboardingSummary>({
     doctorOk: null,
     vault: bootstrap.vault.initialized && bootstrap.vault.unlocked ? "existing" : null,
@@ -91,13 +92,13 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
     const next = Math.max(0, Math.min(steps.length - 1, to));
     setDirection(next >= index ? 1 : -1);
     setIndex(next);
-    saveSession({ step: steps[next], userName });
+    saveSession({ step: steps[next], userName, mode });
   };
   const next = () => go(index + 1);
   const back = () => go(index - 1);
 
   const finish = async (to: string) => {
-    await api.settings.update({ onboardingComplete: true, general: { userName: userName.trim() } });
+    await api.settings.update({ onboardingComplete: true, general: { userName: userName.trim(), mode } });
     try {
       sessionStorage.removeItem(SESSION_KEY);
     } catch {
@@ -113,7 +114,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
   let content: ReactNode;
   switch (stepId) {
     case "welcome":
-      content = <WelcomeStep userName={userName} onUserName={setUserName} onNext={next} />;
+      content = <WelcomeStep userName={userName} onUserName={setUserName} mode={mode} onMode={setMode} onNext={next} />;
       break;
     case "system":
       content = (

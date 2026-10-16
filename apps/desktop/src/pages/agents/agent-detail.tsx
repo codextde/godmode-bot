@@ -2,13 +2,14 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { ArrowLeft, Bot, Brain, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
+import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { leadOf, reportsOf } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { useEasyMode } from "@/lib/mode";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { AgentAvatar, EmptyState, PageBody, ScopeBadge } from "@/components/common";
@@ -51,6 +52,10 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+// Easy mode keeps the everyday tabs in the bar and moves the inner workings under "More", with plainer names.
+const EASY_MORE: readonly TabId[] = ["heartbeat", "history"];
+const EASY_LABELS: Partial<Record<TabId, string>> = { heartbeat: "Check-ins", history: "Version history" };
 
 export default function AgentDetailPage() {
   const params = useParams();
@@ -128,6 +133,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
   const shortPath = useShortPath();
   const [runTask, setRunTask] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const easy = useEasyMode();
 
   return (
     <div className="relative border-b">
@@ -171,11 +177,13 @@ function AgentHeader({ agent }: { agent: Agent }) {
                 </Link>
               )}
               <ScopeBadge workspaceId={agent.workspaceId} />
-              <span className="flex items-center gap-1">
-                <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
-                {agent.effort && <span className="text-muted-foreground/70">· {agent.effort} effort</span>}
-                {agent.ultracode && <span className="text-muted-foreground/70">· Ultracode</span>}
-              </span>
+              {!easy && (
+                <span className="flex items-center gap-1">
+                  <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
+                  {agent.effort && <span className="text-muted-foreground/70">· {agent.effort} effort</span>}
+                  {agent.ultracode && <span className="text-muted-foreground/70">· Ultracode</span>}
+                </span>
+              )}
               {agent.browser.enabled && (
                 <span className="flex items-center gap-1">
                   <Globe className="size-3.5" /> Browser
@@ -263,6 +271,12 @@ function AgentHeader({ agent }: { agent: Agent }) {
 
 function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
   const { isMobile } = useSidebar();
+  const easy = useEasyMode();
+  const navigate = useNavigate();
+  const shown = easy ? TABS.filter((t) => !EASY_MORE.includes(t.id)) : TABS;
+  const more = easy ? TABS.filter((t) => EASY_MORE.includes(t.id)) : [];
+  const activeMore = more.find((t) => t.id === active);
+  const href = (id: TabId) => (id ? `/agents/${agentId}/${id}` : `/agents/${agentId}`);
   return (
     <nav
       aria-label="Agent sections"
@@ -270,13 +284,13 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
       className={cn("sticky z-20 border-b bg-background px-3 @2xl:px-6", isTauri && isMac && !isMobile ? "top-7" : "top-0")}
     >
       <div className="scroll-fade-x flex gap-1 overflow-x-auto py-2 [scrollbar-width:none]">
-        {TABS.map((t) => {
+        {shown.map((t) => {
           const isActive = t.id === active;
           const Icon = t.icon;
           return (
             <NavLink
               key={t.id}
-              to={t.id ? `/agents/${agentId}/${t.id}` : `/agents/${agentId}`}
+              to={href(t.id)}
               end
               aria-current={isActive ? "page" : undefined}
               className={cn(
@@ -296,6 +310,35 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
             </NavLink>
           );
         })}
+        {more.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-current={activeMore ? "page" : undefined}
+              className={cn(
+                "relative flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                activeMore ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {activeMore && (
+                <motion.span
+                  layoutId="agent-tab"
+                  className="absolute inset-0 rounded-md border bg-card shadow-card"
+                  transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
+                />
+              )}
+              {activeMore ? <activeMore.icon className="relative size-4" /> : <Ellipsis className="relative size-4" />}
+              <span className="relative">{activeMore ? EASY_LABELS[activeMore.id] : "More"}</span>
+              <ChevronDown className="relative size-3.5 opacity-60" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {more.map((t) => (
+                <DropdownMenuItem key={t.id} onClick={() => navigate(href(t.id))}>
+                  <t.icon /> {EASY_LABELS[t.id] ?? t.label}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </nav>
   );

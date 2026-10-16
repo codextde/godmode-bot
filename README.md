@@ -344,6 +344,14 @@ the full path). Inside Godmode nothing changes: the built-in *Godmode* agent cre
    trigger (here: a new Gmail message via Composio), the agent and the steps, and it runs whenever it happens.
 6. **Check the inbox** — if an agent couldn't log in, it tells you what's missing.
 
+### Easy and Professional mode
+
+Godmode starts in **Professional** mode: every tool, setting and detail in view. Not a developer? Pick **Easy** during
+onboarding, in **Settings → General → Interface**, or with ⌘K → *Switch to Easy mode* (or just ask Godmode). Easy mode
+shows the everyday pages in plain words (Passwords, Connected apps, My to-dos, History), keeps everything else under
+**More** and **Advanced settings**, folds an agent's work steps into a short summary with the technical details one click
+away, and asks agents to answer without jargon. Both modes have exactly the same features.
+
 ### Computer use — share a window or your screen
 
 Click **Share** (the screen icon) in the message box and pick what the agent may see and control in this chat:

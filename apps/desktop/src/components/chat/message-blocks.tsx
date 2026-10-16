@@ -19,6 +19,7 @@ import { useNow } from "@/components/vault/use-now";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useMods } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
 import { Markdown } from "./markdown";
@@ -27,7 +28,7 @@ import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
 import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
-import { describeTool, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
+import { describeTool, describeToolEasy, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
@@ -250,8 +251,10 @@ export function MessageBlocks({
 /* ------------------------------------------------------------------ */
 
 function ThinkingItem({ text, active }: { text: string; active: boolean }) {
-  if (active && !text.trim()) return <ThinkingState />;
-  return <ThinkingReasoning text={text} active={active} />;
+  const easy = useEasyMode();
+  // Easy mode doesn't stream the reasoning; it stays folded, one click away.
+  if (active && (easy || !text.trim())) return <ThinkingState />;
+  return <ThinkingReasoning text={text} active={active} summary={easy ? "it through" : undefined} />;
 }
 
 /** A message the human sent while the agent worked, where the agent picked it up. */
@@ -426,13 +429,16 @@ function stepRunning(block: ToolUseBlock, streaming: boolean) {
 }
 
 function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext; streaming: boolean }) {
+  const easy = useEasyMode();
   const [manual, setManual] = useState<boolean | null>(null);
   const tools = steps.filter((s): s is Extract<Step, { type: "tool" }> => s.type === "tool");
-  const metas = tools.map((s) => describeTool(s.block.name, s.block.input, ctx));
+  const describe = easy ? describeToolEasy : describeTool;
+  const metas = tools.map((s) => describe(s.block.name, s.block.input, ctx));
   const runningIdx = streaming ? tools.findIndex((s) => stepRunning(s.block, true)) : -1;
   const failed = tools.filter((s) => s.block.isError).length;
   const images = tools.filter((s) => s.block.image).map((s) => s.block.image!);
-  const expanded = manual ?? streaming;
+  // Easy mode stays a one-line summary while it works; the steps unfold on request.
+  const expanded = manual ?? (streaming && !easy);
   const single = tools.length === 1 && steps.length === 1;
 
   if (tools.length === 0) {
@@ -448,7 +454,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   const uniqueIcons = Array.from(new Map(metas.map((m) => [m.icon, m])).values()).slice(-3);
 
   if (single) {
-    return <ToolStep block={tools[0].block} meta={metas[0]} running={runningIdx === 0} standalone />;
+    return <ToolStep block={tools[0].block} meta={metas[0]} running={runningIdx === 0} easy={easy} standalone />;
   }
 
   return (
@@ -469,19 +475,30 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
             );
           })}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2 text-sm">
-            {runningIdx >= 0 ? (
-              <span className="text-shimmer truncate font-medium">{current.title}…</span>
-            ) : (
-              <span className="truncate font-medium">{current.title}</span>
+        {easy ? (
+          <span className="min-w-0 flex-1">
+            <span className={cn("block truncate text-sm font-medium", streaming && "text-shimmer")}>
+              {streaming ? `Working… step ${runningIdx >= 0 ? runningIdx + 1 : tools.length}: ${current.title}` : `Worked through ${tools.length} ${tools.length === 1 ? "step" : "steps"}`}
+            </span>
+            {failed > 0 && (
+              <span className="block text-xs text-muted-foreground">{failed === 1 ? "1 step didn't work" : `${failed} steps didn't work`}</span>
             )}
           </span>
-          <span className="block text-xs text-muted-foreground">
-            {tools.length} steps
-            {failed > 0 && <span className="text-destructive"> · {failed} failed</span>}
+        ) : (
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-2 text-sm">
+              {runningIdx >= 0 ? (
+                <span className="text-shimmer truncate font-medium">{current.title}…</span>
+              ) : (
+                <span className="truncate font-medium">{current.title}</span>
+              )}
+            </span>
+            <span className="block text-xs text-muted-foreground">
+              {tools.length} steps
+              {failed > 0 && <span className="text-destructive"> · {failed} failed</span>}
+            </span>
           </span>
-        </span>
+        )}
         {!expanded && images.length > 0 && (
           <span className="hidden gap-1 @lg:flex">
             {images.slice(-3).map((img, i) => (
@@ -498,7 +515,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
             const last = i === steps.length - 1;
             if (s.type === "thought") {
               if (!s.block.text.trim()) return null;
-              return <ThoughtStep key={s.key} text={s.block.text} last={last} />;
+              return <ThoughtStep key={s.key} text={s.block.text} last={last} easy={easy} />;
             }
             const toolIdx = tools.findIndex((t) => t.block === s.block);
             return (
@@ -507,6 +524,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
                 block={s.block}
                 meta={metas[toolIdx]}
                 running={toolIdx === runningIdx}
+                easy={easy}
                 last={last}
                 incomplete={!streaming && s.block.result === undefined && !s.block.isError}
               />
@@ -518,7 +536,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   );
 }
 
-function ThoughtStep({ text, last }: { text: string; last: boolean }) {
+function ThoughtStep({ text, last, easy }: { text: string; last: boolean; easy: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <li className="relative pl-9">
@@ -527,7 +545,11 @@ function ThoughtStep({ text, last }: { text: string; last: boolean }) {
         <Brain className="size-3.5" />
       </span>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full py-1.5 text-left">
-        <p className={cn("text-[13px] leading-relaxed text-muted-foreground italic", !open && "line-clamp-2")}>{text.trim()}</p>
+        {easy && !open ? (
+          <p className="text-[13px] leading-relaxed text-muted-foreground">Thought it through</p>
+        ) : (
+          <p className={cn("text-[13px] leading-relaxed text-muted-foreground italic", !open && "line-clamp-2")}>{text.trim()}</p>
+        )}
       </button>
     </li>
   );
@@ -537,6 +559,7 @@ function ToolStep({
   block,
   meta,
   running,
+  easy = false,
   last = true,
   standalone = false,
   incomplete = false,
@@ -544,6 +567,7 @@ function ToolStep({
   block: ToolUseBlock;
   meta: ToolMeta;
   running: boolean;
+  easy?: boolean;
   last?: boolean;
   standalone?: boolean;
   incomplete?: boolean;
@@ -585,9 +609,9 @@ function ToolStep({
           <Lock className="size-3" /> Secret hidden
         </span>
       )}
-      {edit && !running && !failed && <DiffStat rows={edit.rows} />}
-      {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">Failed</span>}
-      {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">No result</span>}
+      {edit && !running && !failed && !easy && <DiffStat rows={edit.rows} />}
+      {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">{easy ? "Didn't work" : "Failed"}</span>}
+      {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">{easy ? "Didn't finish" : "No result"}</span>}
       <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground opacity-60 transition group-hover:opacity-100", open && "rotate-90")} />
     </button>
   );
@@ -595,9 +619,7 @@ function ToolStep({
   const body = (
     <>
       {block.image && <Screenshot image={block.image} alt={meta.title} />}
-      <Collapse open={open}>
-        <ToolDetails block={block} edit={edit} />
-      </Collapse>
+      <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>
     </>
   );
 
@@ -669,22 +691,7 @@ function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBloc
   return (
     <div className="mt-1 mb-2 space-y-2">
       {todos ? (
-        <ul className="space-y-1.5 rounded-lg border bg-card p-3">
-          {todos.map((t, i) => (
-            <li key={i} className="flex items-start gap-2 text-[13px]">
-              {t.status === "completed" ? (
-                <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full bg-brand text-white dark:text-black">
-                  <DrawCheck className="size-2.5" />
-                </span>
-              ) : t.status === "in_progress" ? (
-                <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-foreground" />
-              ) : (
-                <Circle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className={cn(t.status === "completed" && "text-muted-foreground line-through")}>{t.content}</span>
-            </li>
-          ))}
-        </ul>
+        <TodoList todos={todos} />
       ) : (
         input &&
         input !== "{}" && (
@@ -706,6 +713,50 @@ function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBloc
           }
         />
       )}
+    </div>
+  );
+}
+
+function TodoList({ todos }: { todos: { content: string; status: string }[] }) {
+  return (
+    <ul className="space-y-1.5 rounded-lg border bg-card p-3">
+      {todos.map((t, i) => (
+        <li key={i} className="flex items-start gap-2 text-[13px]">
+          {t.status === "completed" ? (
+            <span className="mt-0.5 grid size-3.5 shrink-0 place-items-center rounded-full bg-brand text-white dark:text-black">
+              <DrawCheck className="size-2.5" />
+            </span>
+          ) : t.status === "in_progress" ? (
+            <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-foreground" />
+          ) : (
+            <Circle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className={cn(t.status === "completed" && "text-muted-foreground line-through")}>{t.content}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Easy mode: the to-do list reads as it is; the raw call (input, output, diff) waits behind one more explicit click. */
+function EasyStepDetails({ block, edit }: { block: ToolUseBlock; edit: { file: string; rows: DiffRow[] } | null }) {
+  const [tech, setTech] = useState(false);
+  const todos = todoItems(block.input);
+  return (
+    <div className="mt-1 mb-2 space-y-1.5">
+      {todos && <TodoList todos={todos} />}
+      <button
+        type="button"
+        onClick={() => setTech((t) => !t)}
+        aria-expanded={tech}
+        className="inline-flex items-center gap-1 rounded-md py-0.5 text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        <ChevronRight className={cn("size-3 transition-transform", tech && "rotate-90")} />
+        {tech ? "Hide technical details" : "Show technical details"}
+      </button>
+      <Collapse open={tech}>
+        <ToolDetails block={block} edit={edit} />
+      </Collapse>
     </div>
   );
 }
@@ -814,6 +865,7 @@ function useHandedOverRun(parentRunId: string | undefined, agentId: string | und
 function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; streaming: boolean; parentRunId?: string }) {
   const input = (block.input ?? {}) as { agentId?: string; task?: string; wait?: boolean };
   const agent = useAgentById(input.agentId);
+  const easy = useEasyMode();
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const running = stepRunning(block, streaming);
@@ -869,7 +921,7 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
                 {agent.name}
               </Link>
             ) : (
-              <span className="font-semibold">another agent</span>
+              <span className="font-semibold">{easy ? "a teammate" : "another agent"}</span>
             )}
             {agent?.role && <span className="text-xs text-muted-foreground">· {agent.role}</span>}
             {state && (
@@ -905,7 +957,7 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
             className="flex w-full items-center gap-1.5 px-3.5 py-2 text-left text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
             <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-            {block.isError ? "Error details" : `${agent?.name ?? "Agent"}'s result`}
+            {block.isError ? (easy ? "What went wrong" : "Error details") : `${agent?.name ?? (easy ? "Teammate" : "Agent")}'s result`}
           </button>
           <Collapse open={open}>
             <div className="px-3.5 pb-3.5">
@@ -942,14 +994,15 @@ function subagentAnchor(id: string) {
 }
 
 function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBlock; ctx: ToolContext; childBlocks: MessageBlock[]; streaming: boolean }) {
-  const meta = describeTool(block.name, block.input, ctx);
+  const easy = useEasyMode();
+  const meta = (easy ? describeToolEasy : describeTool)(block.name, block.input, ctx);
   const { task, background, status, running, failed, result } = subagentState(block, streaming);
   const [open, setOpen] = useState<boolean | null>(null);
   // One the run waits for unfolds while it works; one in the background stays small, the run goes on below it.
   const expanded = open ?? (running && !background);
   const Icon = meta.icon;
   const steps = Math.max(childBlocks.filter((b) => b.type === "tool_use").length, task?.toolUses ?? 0);
-  const kind = background ? "Background subagent" : "Subagent";
+  const kind = easy ? (background ? "Helper, working in the background" : "Helper") : background ? "Background subagent" : "Subagent";
   const state = running
     ? task?.activity || "Starting…"
     : failed
@@ -1017,7 +1070,9 @@ function Elapsed({ since, className }: { since: number; className?: string }) {
  * without this the chat looks idle. Each row jumps to its card.
  */
 function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolContext }) {
+  const easy = useEasyMode();
   const count = blocks.length;
+  const noun = easy ? "helper" : "subagent";
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -1027,13 +1082,13 @@ function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolCo
       className="rounded-xl border border-dashed bg-card/60 px-3 py-2.5"
     >
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Orb variant="B5" size={14} label="Subagents working" />
-        <span className="font-medium text-foreground/80">{count === 1 ? "1 subagent is working in the background" : `${count} subagents are working in the background`}</span>
+        <Orb variant="B5" size={14} label={easy ? "Helpers working" : "Subagents working"} />
+        <span className="font-medium text-foreground/80">{count === 1 ? `1 ${noun} is working in the background` : `${count} ${noun}s are working in the background`}</span>
         <span className="ml-auto hidden @md:inline">Continues when they report back</span>
       </div>
       <ul className="mt-2 space-y-0.5">
         {blocks.map((b) => {
-          const title = describeTool(b.name, b.input, ctx).title;
+          const title = (easy ? describeToolEasy : describeTool)(b.name, b.input, ctx).title;
           const task = b.task;
           return (
             <li key={b.id}>
@@ -1066,7 +1121,7 @@ function agentPhases(agents: ToolTaskAgent[]): { phase: string; agents: ToolTask
   return Array.from(phases, ([phase, list]) => ({ phase, agents: list }));
 }
 
-function WorkflowAgent({ agent, live }: { agent: ToolTaskAgent; live: boolean }) {
+function WorkflowAgent({ agent, live, easy }: { agent: ToolTaskAgent; live: boolean; easy: boolean }) {
   // An agent still queued or running when its workflow ended never finished.
   const running = live && agent.state === "running";
   const label = live || agent.state === "done" || agent.state === "failed" ? AGENT_STATE_LABEL[agent.state] : "Not finished";
@@ -1087,7 +1142,7 @@ function WorkflowAgent({ agent, live }: { agent: ToolTaskAgent; live: boolean })
         {agent.label}
         <span className="sr-only"> — {label}</span>
       </span>
-      {running && agent.lastTool ? (
+      {easy ? null : running && agent.lastTool ? (
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{agent.lastTool}</span>
       ) : (
         !!agent.tokens && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{formatTokens(agent.tokens)} tokens</span>
@@ -1098,12 +1153,14 @@ function WorkflowAgent({ agent, live }: { agent: ToolTaskAgent; live: boolean })
 
 /** A Claude Code workflow: the agents it runs, by phase, kept up to date while it works. */
 function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const easy = useEasyMode();
   const [open, setOpen] = useState<boolean | null>(null);
   const [details, setDetails] = useState(false);
   const task = block.task;
   const input = (block.input ?? {}) as { name?: unknown; script?: unknown };
   const name = task?.description || (typeof input.name === "string" ? input.name : "");
-  const title = name || "Workflow";
+  const kind = easy ? "Team task" : "Workflow";
+  const title = name || kind;
   // A workflow still running on a turn that has ended was cut off with its run.
   const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
   const running = status ? status === "running" : stepRunning(block, streaming);
@@ -1126,8 +1183,8 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
               ? "No result"
               : "";
   const stats = [
-    agents.length > 0 && `${done}/${agents.length} agents`,
-    !!task?.totalTokens && `${formatTokens(task.totalTokens)} tokens`,
+    agents.length > 0 && `${done}/${agents.length} ${easy ? "helpers" : "agents"}`,
+    (!easy || details) && !!task?.totalTokens && `${formatTokens(task.totalTokens)} tokens`,
     !!task?.durationMs && formatDuration(task.durationMs),
   ].filter(Boolean);
   const script = typeof input.script === "string" ? input.script : "";
@@ -1153,7 +1210,7 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
           <span className={cn("block truncate text-sm font-medium", running && "text-shimmer")}>{title}</span>
           {(name || state) && (
             <span className="block truncate text-xs text-muted-foreground">
-              {name && "Workflow"}
+              {name && kind}
               {name && state && " · "}
               {state && <span className={cn(failed && "text-destructive")}>{state}</span>}
             </span>
@@ -1171,7 +1228,7 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
               {phase && <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{phase}</div>}
               <ul className="space-y-1.5">
                 {list.map((a, i) => (
-                  <WorkflowAgent key={i} agent={a} live={status === "running"} />
+                  <WorkflowAgent key={i} agent={a} live={status === "running"} easy={easy} />
                 ))}
               </ul>
             </div>
@@ -1187,7 +1244,7 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
             className="flex flex-1 items-center gap-1.5 py-2 pl-3.5 text-left font-medium transition hover:text-foreground"
           >
             <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", details && "rotate-90")} />
-            Details
+            {easy ? "Technical details" : "Details"}
           </button>
           {stats.length > 0 && <span className="min-w-0 truncate tabular-nums">{stats.join(" · ")}</span>}
         </div>

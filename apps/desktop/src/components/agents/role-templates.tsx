@@ -48,11 +48,17 @@ export function RoleTemplates({
   loading,
   onPick,
   onDescribe,
+  title = "Or hire one role",
+  description = "One agent per job, or one all-in-one agent that runs a whole department.",
+  blankLabel = "Blank agent",
 }: {
   templates: AgentTemplate[];
   loading: boolean;
   onPick: (templateId: string) => void;
   onDescribe: (text: string) => void;
+  title?: string;
+  description?: string;
+  blankLabel?: string;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -69,9 +75,9 @@ export function RoleTemplates({
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
           <h2 id="roles-title" className="text-lg font-medium tracking-[-0.02em]">
-            Or hire one role
+            {title}
           </h2>
-          <p className="text-sm text-muted-foreground">One agent per job, or one all-in-one agent that runs a whole department.</p>
+          <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex w-full items-center gap-2 @xl:w-auto">
           <InputGroup className="flex-1 @xl:w-72">
@@ -88,7 +94,7 @@ export function RoleTemplates({
             )}
           </InputGroup>
           <Button variant="outline" onClick={() => onPick("scratch")}>
-            <Plus /> Blank agent
+            <Plus /> {blankLabel}
           </Button>
         </div>
       </div>

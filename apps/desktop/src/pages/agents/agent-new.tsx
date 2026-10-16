@@ -12,6 +12,7 @@ import { clearDraft, draftKeys, loadDraft, useDraft } from "@/lib/drafts";
 import { useAgentTemplates, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { useEasyMode } from "@/lib/mode";
 import { AgentAvatar, EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
 import { Backdrop } from "@/components/brand";
 import { Button } from "@/components/ui/button";
@@ -55,6 +56,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
   const { data: boot } = useBootstrap();
   const workspace = useScopeWorkspace();
   const templates = useAgentTemplates();
+  const easy = useEasyMode();
   const [description, setDescription, descriptionDraft] = useDraft("agent-new:describe", "");
   const [focused, setFocused] = useState(false);
   const [draftList, setDraftList] = useState(() => draftKeys(FORM_DRAFTS));
@@ -84,12 +86,112 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     if (focusStructures) structuresRef.current?.scrollIntoView({ block: "start" });
   }, [focusStructures]);
 
+  const describeSection = (
+    <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-4 @md:p-6 @2xl:p-8">
+      <Backdrop className="opacity-60" />
+      <div className="relative mx-auto max-w-3xl">
+        <div className="mb-4 flex items-center gap-2 text-sm font-medium">
+          <span className="grid size-7 place-items-center rounded-md border bg-card text-foreground shadow-card">
+            <Wand2 className="size-4" />
+          </span>
+          <span className="text-base font-medium tracking-[-0.01em]">{easy ? "Or describe it" : "Describe it"}</span>
+          <span className="text-muted-foreground">— Godmode sets it up for you</span>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canDescribe) describe.mutate();
+          }}
+          className={cn(
+            "rounded-xl border bg-card p-2 shadow-card transition",
+            focused && "border-foreground/20 shadow-float",
+            describe.isPending && "glow-border",
+          )}
+        >
+          <textarea
+            ref={describeRef}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                if (canDescribe) describe.mutate();
+              }
+            }}
+            rows={4}
+            placeholder="An agent that logs into my utility and phone provider accounts on the 3rd of each month, downloads the latest bills as PDF and tells me the totals…"
+            aria-label="Describe your agent"
+            className="block w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/70"
+          />
+          <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
+            <span className="hidden items-center gap-1 text-xs text-muted-foreground @xl:flex">
+              <Kbd>{modKey}</Kbd>
+              <Kbd>↵</Kbd>
+            </span>
+            <Button
+              type="submit"
+              disabled={!canDescribe}
+              className="ml-auto"
+            >
+              {describe.isPending ? <Spinner /> : <Sparkles />}
+              Create with Godmode
+            </Button>
+          </div>
+        </form>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {EXAMPLES.map((ex) => (
+            <button
+              key={ex}
+              type="button"
+              onClick={() => setDescription(ex)}
+              className="rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+  const structuresSection = (
+    <section ref={structuresRef} className="scroll-mt-6" aria-labelledby="structures-title">
+      <div className="mb-4">
+        <h2 id="structures-title" className="text-lg font-medium tracking-[-0.02em]">
+          {easy ? "Or set up a whole team" : "Or start a whole company"}
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          {easy
+            ? "Several helpers at once: each has its own job, and a lead hands out the work and checks it."
+            : "An org chart hired in one go: every agent has its job, every lead hands out the work and reviews it."}
+        </p>
+      </div>
+      <TeamTemplates />
+    </section>
+  );
+  const rolesSection = (
+    <RoleTemplates
+      title={easy ? "Pick a helper to start from" : undefined}
+      description={easy ? "Ready-made helpers for everyday jobs. Pick one and change anything you like, or start with a blank one." : undefined}
+      blankLabel={easy ? "Start blank" : undefined}
+      templates={templates.data ?? []}
+      loading={templates.isLoading}
+      onPick={onPick}
+      onDescribe={(text) => {
+        if (text) setDescription(text);
+        describeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+        describeRef.current?.focus({ preventScroll: true });
+      }}
+    />
+  );
+
   return (
     <>
       <PageHeader
         icon={<Bot />}
         title="New agent"
-        description="Describe what you need in plain words, or start from a template."
+        description={easy ? "Start from a ready-made helper, or describe what you need in your own words." : "Describe what you need in plain words, or start from a template."}
         actions={
           <Button variant="ghost" asChild>
             <Link to="/agents">
@@ -122,94 +224,19 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
           </section>
         )}
 
-        <section className="relative overflow-hidden rounded-2xl border bg-paper-2 p-4 @md:p-6 @2xl:p-8">
-          <Backdrop className="opacity-60" />
-          <div className="relative mx-auto max-w-3xl">
-            <div className="mb-4 flex items-center gap-2 text-sm font-medium">
-              <span className="grid size-7 place-items-center rounded-md border bg-card text-foreground shadow-card">
-                <Wand2 className="size-4" />
-              </span>
-              <span className="text-base font-medium tracking-[-0.01em]">Describe it</span>
-              <span className="text-muted-foreground">— Godmode sets it up for you</span>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (canDescribe) describe.mutate();
-              }}
-              className={cn(
-                "rounded-xl border bg-card p-2 shadow-card transition",
-                focused && "border-foreground/20 shadow-float",
-                describe.isPending && "glow-border",
-              )}
-            >
-              <textarea
-                ref={describeRef}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    if (canDescribe) describe.mutate();
-                  }
-                }}
-                rows={4}
-                placeholder="An agent that logs into my utility and phone provider accounts on the 3rd of each month, downloads the latest bills as PDF and tells me the totals…"
-                aria-label="Describe your agent"
-                className="block w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/70"
-              />
-              <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
-                <span className="hidden items-center gap-1 text-xs text-muted-foreground @xl:flex">
-                  <Kbd>{modKey}</Kbd>
-                  <Kbd>↵</Kbd>
-                </span>
-                <Button
-                  type="submit"
-                  disabled={!canDescribe}
-                  className="ml-auto"
-                >
-                  {describe.isPending ? <Spinner /> : <Sparkles />}
-                  Create with Godmode
-                </Button>
-              </div>
-            </form>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => setDescription(ex)}
-                  className="rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section ref={structuresRef} className="scroll-mt-6" aria-labelledby="structures-title">
-          <div className="mb-4">
-            <h2 id="structures-title" className="text-lg font-medium tracking-[-0.02em]">
-              Or start a whole company
-            </h2>
-            <p className="text-sm text-muted-foreground">An org chart hired in one go: every agent has its job, every lead hands out the work and reviews it.</p>
-          </div>
-          <TeamTemplates />
-        </section>
-
-        <RoleTemplates
-          templates={templates.data ?? []}
-          loading={templates.isLoading}
-          onPick={onPick}
-          onDescribe={(text) => {
-            if (text) setDescription(text);
-            describeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-            describeRef.current?.focus({ preventScroll: true });
-          }}
-        />
+        {easy ? (
+          <>
+            {rolesSection}
+            {describeSection}
+            {structuresSection}
+          </>
+        ) : (
+          <>
+            {describeSection}
+            {structuresSection}
+            {rolesSection}
+          </>
+        )}
         {templates.isError && <p className="text-sm text-muted-foreground">Templates are unavailable right now ({errorMessage(templates.error)}).</p>}
       </PageBody>
     </>

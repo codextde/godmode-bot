@@ -1,5 +1,5 @@
-import type { CaptchaSolver, Effort } from "@godmode/shared";
-import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import type { CaptchaSolver, Effort, InterfaceMode } from "@godmode/shared";
+import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, INTERFACE_MODES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
@@ -19,6 +19,8 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
   const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
   if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") needsGrant();
+  const mode = (patch.general as { mode?: unknown } | undefined)?.mode;
+  if (mode !== undefined && !INTERFACE_MODES.includes(mode as InterfaceMode)) throw badRequest(`general.mode must be one of ${INTERFACE_MODES.join(", ")}`);
   const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
   const instructions = runner?.appendSystemPrompt;
   if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {

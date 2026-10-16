@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Navigate, NavLink, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -6,6 +6,7 @@ import {
   AudioLines,
   BrainCircuit,
   Box,
+  ChevronRight,
   BroomSparkles,
   Cloud,
   CreditCard,
@@ -53,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { useBootstrap, useSettings } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
@@ -81,6 +83,28 @@ const SECTIONS = [
 ] as const satisfies readonly { id: string; label: string; icon: ReactNode; group: string }[];
 
 type SectionId = (typeof SECTIONS)[number]["id"];
+
+/** Easy mode: the sections people change day to day, in plain words; the rest waits under Advanced. */
+const EASY: Partial<Record<SectionId, { label: string; group: string }>> = {
+  general: { label: "General", group: "Everyday" },
+  ai: { label: "AI", group: "Everyday" },
+  instructions: { label: "Instructions", group: "Everyday" },
+  memory: { label: "Memory", group: "Everyday" },
+  voice: { label: "Voice", group: "Everyday" },
+  calls: { label: "Phone calls", group: "Everyday" },
+  phone: { label: "Phone app", group: "Everyday" },
+  security: { label: "Security", group: "Account" },
+  backup: { label: "Backup", group: "Account" },
+  license: { label: "License", group: "Account" },
+  billing: { label: "Billing", group: "Account" },
+  about: { label: "About", group: "Account" },
+};
+
+const EASY_ADVANCED_LABEL: Partial<Record<SectionId, string>> = {
+  computer: "Computer control",
+  connect: "Claude Code & MCP",
+  system: "System check",
+};
 
 /** Sections that render without the settings document (they use their own endpoints). */
 const STANDALONE: SectionId[] = ["backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
@@ -162,7 +186,38 @@ export default function SettingsPage() {
   );
 }
 
+type NavEntry = { id: SectionId; label: string; icon: ReactNode; group: string };
+
 function SectionNav({ active }: { active: SectionId }) {
+  const easy = useEasyMode();
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  if (!easy) return <SectionList active={active} entries={SECTIONS} />;
+  const everyday: NavEntry[] = (Object.keys(EASY) as SectionId[]).map((id) => ({ ...SECTIONS.find((s) => s.id === id)!, ...EASY[id]! }));
+  const advanced: NavEntry[] = SECTIONS.flatMap((s) =>
+    EASY[s.id] ? [] : [{ ...s, label: EASY_ADVANCED_LABEL[s.id] ?? s.label, group: "Advanced" }],
+  );
+  const open = showAdvanced || advanced.some((s) => s.id === active);
+  return (
+    <SectionList
+      active={active}
+      entries={open ? [...everyday, ...advanced] : everyday}
+      footer={
+        !open && (
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(true)}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-[13px] whitespace-nowrap text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 @4xl:mt-4"
+          >
+            Advanced settings
+            <ChevronRight className="size-3.5" />
+          </button>
+        )
+      }
+    />
+  );
+}
+
+function SectionList({ active, entries, footer }: { active: SectionId; entries: readonly NavEntry[]; footer?: ReactNode }) {
   return (
     <nav
       aria-label="Settings sections"
@@ -171,9 +226,9 @@ function SectionNav({ active }: { active: SectionId }) {
         "@4xl:sticky @4xl:top-6 @4xl:mx-0 @4xl:w-52 @4xl:shrink-0 @4xl:flex-col @4xl:gap-0.5 @4xl:overflow-visible @4xl:px-0 @4xl:pb-0 @4xl:mask-none @4xl:animate-none",
       )}
     >
-      {SECTIONS.map((s, i) => {
+      {entries.map((s, i) => {
         const isActive = s.id === active;
-        const firstInGroup = i === 0 || SECTIONS[i - 1].group !== s.group;
+        const firstInGroup = i === 0 || entries[i - 1].group !== s.group;
         return (
           <div key={s.id} className="contents">
             {firstInGroup && (
@@ -201,6 +256,7 @@ function SectionNav({ active }: { active: SectionId }) {
           </div>
         );
       })}
+      {footer}
     </nav>
   );
 }

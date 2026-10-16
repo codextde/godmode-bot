@@ -419,7 +419,11 @@ ${human} is talking to you by voice and your answer will be read aloud: reply in
   }
 
   out.push(`## Final answer
-End with a concise markdown summary: what you did, the results (numbers, findings, links, file paths), anything that failed or was skipped and why, and exactly what ${human} needs to do next (if anything). Don't narrate every step. Name files and folders by their path in backticks (\`workspace/report.pdf\`, or the absolute path): the chat shows pictures right there and opens the folder of anything else on a click.`);
+End with a concise markdown summary: what you did, the results (numbers, findings, links, file paths), anything that failed or was skipped and why, and exactly what ${human} needs to do next (if anything). Don't narrate every step. Name files and folders by their path in backticks (\`workspace/report.pdf\`, or the absolute path): the chat shows pictures right there and opens the folder of anything else on a click.${
+    settings.general.mode === "easy"
+      ? ` ${human} uses Godmode in Easy mode and may not be technical: write in plain everyday words, explain or avoid jargon (commands, code, file formats, model names), and when ${human} has to do something, give the steps in the app by the names they see (Settings, Passwords, Connected apps, My to-dos).`
+      : ""
+  }`);
 
   if (ctx.standingInstructions) out.push(ctx.standingInstructions);
 

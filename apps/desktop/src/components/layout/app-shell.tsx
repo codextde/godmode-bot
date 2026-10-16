@@ -69,6 +69,7 @@ import { Callout } from "@/components/settings/settings-kit";
 import { LicenseBanner } from "@/components/license/license-banner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap, useHumanTasks, useMods } from "@/lib/hooks";
+import { useEasyMode } from "@/lib/mode";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
@@ -129,6 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: mods = [] } = useMods();
   // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;
+  const easy = useEasyMode();
 
   // Notices when the human comes back after a while (Home then sums up what happened).
   useEffect(() => startPresence(), []);
@@ -203,6 +205,33 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/android", label: "Android phones", icon: <Smartphone /> },
     { to: "/runners", label: "Runners", icon: <MonitorSmartphone /> },
   ];
+  // Easy mode: the everyday pages in plain words up front, every other page under More.
+  const byPath = new Map([...workNav, ...accessNav, ...machineNav].map((item) => [item.to, item]));
+  const easyItem = (to: string, label: string): NavItem => ({ ...byPath.get(to)!, label });
+  const easyNav: NavItem[] = [
+    easyItem("/inbox", "Inbox"),
+    easyItem("/my-tasks", "My to-dos"),
+    easyItem("/agents", "Agents"),
+    easyItem("/automations", "Automations"),
+    easyItem("/tasks", "Task board"),
+    easyItem("/vault/logins", "Passwords"),
+    easyItem("/integrations", "Connected apps"),
+  ];
+  const easyMore: NavItem[] = [
+    easyItem("/activity", "History"),
+    easyItem("/calls", "Phone calls"),
+    easyItem("/messaging", "Chat apps"),
+    easyItem("/vault/2fa", "2FA codes"),
+    easyItem("/vault/passkeys", "Passkeys"),
+    easyItem("/vault/cards", "Payment cards"),
+    easyItem("/plugins", "Add-ons"),
+    easyItem("/browser", "Browser"),
+    easyItem("/computer", "Computer control"),
+    easyItem("/android", "Android phones"),
+    easyItem("/vms", "Virtual machines"),
+    easyItem("/ssh", "Servers"),
+    easyItem("/runners", "Other computers"),
+  ];
 
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
@@ -250,14 +279,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarGroupContent>
               <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                 <NavMenuItem item={{ to: "/", label: "Chat", icon: <MessagesSquare />, end: true }} />
-                {workNav.map((item) => (
+                {(easy ? easyNav : workNav).map((item) => (
                   <NavMenuItem key={item.to} item={item} />
                 ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          <NavSection id="access" label="Access" items={accessNav} />
-          <NavSection id="machines" label="Machines" items={machineNav} />
+          {easy ? (
+            <NavSection id="more" label="More" items={easyMore} folded="list" />
+          ) : (
+            <>
+              <NavSection id="access" label="Access" items={accessNav} />
+              <NavSection id="machines" label="Machines" items={machineNav} />
+            </>
+          )}
           <RecentChats />
         </SidebarContent>
 
@@ -373,8 +408,11 @@ function DesktopDragStrip() {
   return <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />;
 }
 
-/** A sidebar section that folds to its label and a row of icons, so chats keep the room. The rail always lists every item. */
-function NavSection({ id, label, items }: { id: string; label: string; items: NavItem[] }) {
+/**
+ * A sidebar section that folds to its label and a row of icons (or, for long lists, to the label and the page on screen),
+ * so chats keep the room. The rail always lists every item.
+ */
+function NavSection({ id, label, items, folded = "icons" }: { id: string; label: string; items: NavItem[]; folded?: "icons" | "list" }) {
   const expanded = useUi((s) => s.expandedNav.includes(id));
   const toggle = useUi((s) => s.toggleNavSection);
   const { state, isMobile } = useSidebar();
@@ -391,7 +429,9 @@ function NavSection({ id, label, items }: { id: string; label: string; items: Na
       className="eyebrow group/label flex h-7 min-w-0 shrink items-center gap-1 rounded-md px-2 text-[10.5px] text-sidebar-foreground/70 outline-none transition hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
     >
       {label}
-      <ChevronRight className={cn("size-3 opacity-0 transition group-hover/label:opacity-100 group-focus-visible/label:opacity-100", open && "rotate-90")} />
+      <ChevronRight
+        className={cn("size-3 transition", folded === "icons" && "opacity-0 group-hover/label:opacity-100 group-focus-visible/label:opacity-100", open && "rotate-90")}
+      />
     </button>
   );
   if (open)
@@ -407,6 +447,25 @@ function NavSection({ id, label, items }: { id: string; label: string; items: Na
         </SidebarGroupContent>
       </SidebarGroup>
     );
+  if (folded === "list") {
+    const current = items.find((item) => pathname.startsWith(item.to));
+    const waiting = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
+    return (
+      <SidebarGroup className="py-1">
+        <div className="flex items-center justify-between gap-1">
+          {header}
+          {waiting > 0 && <span className="mr-2 size-1.5 rounded-full bg-brand" aria-label={`${waiting} waiting`} />}
+        </div>
+        {current && (
+          <SidebarGroupContent id={listId}>
+            <SidebarMenu>
+              <NavMenuItem item={current} />
+            </SidebarMenu>
+          </SidebarGroupContent>
+        )}
+      </SidebarGroup>
+    );
+  }
   return (
     <SidebarGroup className="flex-row items-center justify-between gap-1 py-0.5">
       {header}

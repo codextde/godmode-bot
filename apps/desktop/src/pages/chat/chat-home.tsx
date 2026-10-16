@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, Bell, Pin, Receipt, Telescope, Mail } from "lucide-react";
+import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Pin, Receipt, Scale, Telescope, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Backdrop } from "@/components/brand";
@@ -24,6 +24,7 @@ import { AndroidChip } from "@/components/android/android-chip";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { usePlaces } from "@/lib/places";
+import { useEasyMode } from "@/lib/mode";
 
 /** The new chat's place was never picked: it goes where this computer sends new chats. */
 const DEFAULT_PLACE = "__default";
@@ -49,6 +50,16 @@ const SUGGESTIONS = [
   { icon: Receipt, text: "Create an agent that downloads my invoices every month" },
   { icon: Bell, text: "Log into GitHub and check my notifications" },
   { icon: Telescope, text: "Research competitors and write a report" },
+];
+
+/** Easy mode: everyday office errands. `prompt` leaves the open end for the human to finish. */
+const EASY_SUGGESTIONS = [
+  { icon: Mail, text: "Sort my inbox and draft replies" },
+  { icon: BedDouble, text: "Find a hotel in Berlin for next week under 150 EUR" },
+  { icon: FileText, text: "Make a summary of this PDF", prompt: "Make a summary of the attached PDF" },
+  { icon: CalendarClock, text: "Remind me every Monday about open invoices" },
+  { icon: Scale, text: "Compare prices for…", prompt: "Compare prices for " },
+  { icon: Receipt, text: "Download this month's invoices and file them" },
 ];
 
 /** Chat previews are raw markdown — strip the syntax so cards read as plain sentences. */
@@ -88,6 +99,7 @@ const fade = (delay: number) => ({
 export default function ChatHome() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const easy = useEasyMode();
   const [params, setParams] = useSearchParams();
   const { data: boot } = useBootstrap();
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
@@ -237,8 +249,12 @@ export default function ChatHome() {
               agentsLoading ? (
                 <Skeleton className="h-8 w-32 rounded-lg" />
               ) : (
+                <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
+              )
+            }
+            options={
+              !agentsLoading && (
                 <>
-                  <AgentPicker agents={available} value={selected?.id ?? null} onChange={setAgentId} />
                   <RunnerChip value={onRunner ? runnerId : hereId} onChange={setRunnerId} />
                   {!onRunner && (
                     <FolderChip
@@ -300,23 +316,53 @@ export default function ChatHome() {
           </AnimatePresence>
         </motion.div>
 
-        <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
-          {SUGGESTIONS.map(({ icon: Icon, text }) => (
-            <button
-              key={text}
-              type="button"
-              onClick={() => composerRef.current?.setText(text)}
-              className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-            >
-              <Icon className="size-3.5 transition group-hover:text-foreground" />
-              {text}
-            </button>
-          ))}
-        </motion.div>
+        {easy ? (
+          <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
+            <h2 className="eyebrow mb-2.5 px-0.5">Try something like</h2>
+            <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
+              {EASY_SUGGESTIONS.map(({ icon: Icon, text, prompt }) => (
+                <button
+                  key={text}
+                  type="button"
+                  onClick={() => composerRef.current?.setText(prompt ?? text)}
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
+                    <Icon className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{text}</span>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
+            {SUGGESTIONS.map(({ icon: Icon, text }) => (
+              <button
+                key={text}
+                type="button"
+                onClick={() => composerRef.current?.setText(text)}
+                className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                <Icon className="size-3.5 transition group-hover:text-foreground" />
+                {text}
+              </button>
+            ))}
+          </motion.div>
+        )}
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
-          <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-          <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
+          {easy ? (
+            <>
+              <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
+              <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> drop files anywhere
+            </>
+          ) : (
+            <>
+              <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
+              <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
+            </>
+          )}
         </motion.p>
       </div>
 

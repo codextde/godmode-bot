@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { Bell, Gauge, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { useTheme } from "@/components/theme-provider";
 import { isTauri } from "@/lib/core";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
+import { useSetInterfaceMode } from "@/lib/mode";
+import { ModePicker } from "./mode-picker";
 import { CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 type Theme = Settings["general"]["theme"];
@@ -16,6 +18,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const { patch } = useSettingsPatch();
   const { theme, setTheme } = useTheme();
   const g = settings.general;
+  const { setMode } = useSetInterfaceMode();
 
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [autostartBusy, setAutostartBusy] = useState(false);
@@ -55,6 +58,15 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   return (
     <div className="space-y-5">
       <SectionHeading title="General" description="How Godmode greets you, looks and behaves on your desktop." />
+
+      <SettingsGroup
+        title="Interface"
+        icon={<Gauge />}
+        description="Easy keeps Godmode simple for everyday work. Professional shows every tool and detail. Both can do exactly the same."
+        bodyClassName="p-5"
+      >
+        <ModePicker value={g.mode === "easy" ? "easy" : "pro"} onChange={(mode) => mode !== g.mode && setMode(mode)} />
+      </SettingsGroup>
 
       <SettingsGroup title="Profile" icon={<UserRound />}>
         <SettingRow label="Your name" htmlFor="user-name" description="Agents use it to address you and sign messages on your behalf.">

@@ -20,7 +20,8 @@ function sentencesOf(text: string): string[] {
     .filter(Boolean);
 }
 
-export function ThinkingReasoning({ text, active, seconds }: { text: string; active: boolean; seconds?: number | null }) {
+/** `summary` replaces the "for Ns" part of the folded header (e.g. "it through"). */
+export function ThinkingReasoning({ text, active, seconds, summary }: { text: string; active: boolean; seconds?: number | null; summary?: string }) {
   const [open, setOpen] = useState(false);
   const [fade, setFade] = useState({ top: false, bottom: true });
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -71,7 +72,7 @@ export function ThinkingReasoning({ text, active, seconds }: { text: string; act
         <button type="button" className={styles.trHeader + " " + styles.isClickable} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <span className={styles.trLabel}>
             <span className={styles.trVerb}>Thought</span>
-            {secs ? ` for ${secs}s` : " process"}
+            {summary ? ` ${summary}` : secs ? ` for ${secs}s` : " process"}
           </span>
           <svg className={styles.trChevron} viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
             <path d="m4.5 15.75 7.5-7.5 7.5 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />

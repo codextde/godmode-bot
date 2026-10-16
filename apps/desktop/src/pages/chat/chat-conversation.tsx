@@ -634,7 +634,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 blocked={agent && !agent.enabled ? `Switch ${agent.name} on to send` : undefined}
                 disabled={runnerAway}
                 onRecall={() => queueRef.current?.editLast() ?? false}
-                leading={
+                options={
                   <>
                     {(onRunner || inGroup) && <RunnerPill place={chatPlace} targets={moveTargets} onMove={openMove} />}
                     {!onRunner && (
