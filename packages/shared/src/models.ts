@@ -840,6 +840,19 @@ export interface MemorySize {
   limit: number;
 }
 
+/** MEMORY.md as the memory editor opens it (desktop and phone). */
+export interface AgentMemory extends MemorySize {
+  content: string;
+  exists: boolean;
+  /** Fingerprint of `content`: sent back on save, so an edit made underneath (by a run or a dream) isn't overwritten. */
+  digest: string;
+  /** A dream is consolidating the memory: saving waits until it has ended. */
+  dreaming: boolean;
+  /** Notes under memory/ that MEMORY.md can link to, repo-relative. */
+  topics: string[];
+  updatedAt: ISODate | null;
+}
+
 /** Dreaming status of one agent. */
 export interface DreamOverview {
   /** Dreaming is switched on in Settings → Memory. */

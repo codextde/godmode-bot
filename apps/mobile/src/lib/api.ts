@@ -4,6 +4,7 @@ import { File } from "expo-file-system";
 import type {
   Agent,
   AgentCharacter,
+  AgentMemory,
   AgentTemplate,
   AnswerQuestionInput,
   AnswerQuestionResult,
@@ -423,6 +424,9 @@ export const api = {
     update: (id: string, input: AgentPatch) => patch<Agent>(`/api/agents/${id}`, input),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
+    /** MEMORY.md only. `digest` = the version the edit started from (409 `memory_changed` when it changed); an older Godmode refuses this (403). */
+    memory: (id: string) => get<AgentMemory>(`/api/agents/${id}/memory`),
+    saveMemory: (id: string, content: string, digest?: string) => put<AgentMemory>(`/api/agents/${id}/memory`, { content, ...(digest ? { digest } : {}) }),
     /** Roles to start a new agent from, by department. Their automations are set up on the computer. */
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
   },

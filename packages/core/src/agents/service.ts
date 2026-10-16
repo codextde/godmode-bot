@@ -1063,7 +1063,7 @@ export async function commitAgentRepo(agentId: string, message: string): Promise
 /* ------------------------------------------------------------------ */
 
 /** The agent, with its repository created first if it is missing (e.g. restored from a backup without repos). */
-async function withRepo(id: string): Promise<Agent> {
+export async function withRepo(id: string): Promise<Agent> {
   const agent = getAgent(id);
   if (!existsSync(join(agent.repoPath, ".git"))) await ensureAgentRepo(agent);
   return agent;

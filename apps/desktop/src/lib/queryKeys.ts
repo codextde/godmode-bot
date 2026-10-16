@@ -44,6 +44,7 @@ export const qk = {
   agentFiles: (id: string, path: string) => ["agents", "files", id, path],
   agentFileAll: ["agents", "file"] as unknown[],
   agentFile: (id: string, path: string) => ["agents", "file", id, path],
+  agentMemory: (id: string) => ["agents", "memory", id],
   agentCommitsAll: ["agents", "commits"] as unknown[],
   agentCommits: (id: string) => ["agents", "commits", id],
   agentCommands: (id: string) => ["agents", "commands", id],

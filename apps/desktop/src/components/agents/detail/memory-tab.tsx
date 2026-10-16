@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { DreamsPanel, useDreamingNow } from "./dreams-panel";
+import { BrokenLinks, brokenMemoryLinks, MemoryBudget, memoryLinkTarget, memorySections, SectionMenu, type MemorySection } from "./memory-editor-parts";
 
 const PINNED = ["MEMORY.md", "CLAUDE.md"];
 const HIDDEN = new Set([".git"]);
@@ -121,6 +122,11 @@ export function MemoryTab({ agent }: { agent: Agent }) {
     if (dirty) setPending(entry);
     else setSelected(entry);
   };
+  const openFile = (path: string) => {
+    const dirs = path.split("/").slice(0, -1).map((_, i, parts) => parts.slice(0, i + 1).join("/"));
+    setExpanded((s) => new Set([...s, ...dirs]));
+    select({ path, size: 0 });
+  };
   const toggleDir = (path: string) =>
     setExpanded((s) => {
       const next = new Set(s);
@@ -155,6 +161,7 @@ export function MemoryTab({ agent }: { agent: Agent }) {
               size={selected.size}
               dreaming={dreaming}
               onDirtyChange={setDirty}
+              onOpenFile={openFile}
             />
           ) : (
             <div className="grid flex-1 place-items-center p-10 text-sm text-muted-foreground">Select a file to view it.</div>
@@ -279,6 +286,7 @@ function FileEditor({
   size,
   dreaming,
   onDirtyChange,
+  onOpenFile,
 }: {
   agentId: string;
   agentName: string;
@@ -287,6 +295,8 @@ function FileEditor({
   /** A dream of the agent is running: memory files are locked until it ends. */
   dreaming: boolean;
   onDirtyChange: (dirty: boolean) => void;
+  /** A link in the preview points at another note in the repository. */
+  onOpenFile: (path: string) => void;
 }) {
   const qc = useQueryClient();
   const file = useQuery({ queryKey: qk.agentFile(agentId, path), queryFn: () => api.agents.readFile(agentId, path) });
@@ -303,6 +313,25 @@ function FileEditor({
   const [view, setView] = useState<"edit" | "preview">(isMarkdown && fixedReason ? "preview" : "edit");
   const edit = (text: string) => setDraft((d) => ({ text, base: d && d.text !== original ? d.base : original }));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const isMemory = path === "MEMORY.md";
+  const memory = useQuery({ queryKey: qk.agentMemory(agentId), queryFn: () => api.agents.memory(agentId), enabled: isMemory });
+  const sections = useMemo(() => (isMarkdown ? memorySections(value) : []), [isMarkdown, value]);
+  const broken = useMemo(() => (isMemory && memory.data ? brokenMemoryLinks(value, memory.data.topics) : []), [isMemory, memory.data, value]);
+
+  const jumpTo = (section: MemorySection) => {
+    if (view === "preview") {
+      const headings = previewRef.current?.querySelectorAll("h1, h2, h3");
+      headings?.[sections.indexOf(section)]?.scrollIntoView({ block: "start", behavior: "smooth" });
+      return;
+    }
+    const el = textareaRef.current;
+    if (!el) return;
+    const offset = value.split("\n").slice(0, section.line).reduce((n, l) => n + l.length + 1, 0);
+    el.focus();
+    el.setSelectionRange(offset, offset);
+    el.scrollTop = Math.max(0, section.line * parseFloat(getComputedStyle(el).lineHeight || "20") - 12);
+  };
 
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
@@ -327,7 +356,10 @@ function FileEditor({
       qc.setQueryData(qk.agentFile(agentId, path), { path, content });
       qc.invalidateQueries({ queryKey: qk.agentCommits(agentId) });
       qc.invalidateQueries({ queryKey: qk.agentFiles(agentId, parentOf(path)) });
-      if (path === "MEMORY.md") qc.invalidateQueries({ queryKey: qk.agentDreams(agentId) });
+      if (isMemory) {
+        qc.invalidateQueries({ queryKey: qk.agentDreams(agentId) });
+        qc.invalidateQueries({ queryKey: qk.agentMemory(agentId) });
+      }
       setDraft(null);
       toast.success(`Saved ${nameOf(path)}`);
     },
@@ -367,6 +399,7 @@ function FileEditor({
         <span className="min-w-0 truncate font-mono text-[13px]">{path}</span>
         {dirty && <span className="size-2 shrink-0 rounded-full bg-warning" aria-label="Unsaved changes" title="Unsaved changes" />}
         <div className="ml-auto flex items-center gap-2">
+          <SectionMenu sections={sections} onPick={jumpTo} />
           {isMarkdown && (
             <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as "edit" | "preview")} aria-label="View mode">
               <ToggleGroupItem value="edit" aria-label={readOnly ? "Source" : "Edit"} className="gap-1 px-2 text-xs">
@@ -430,7 +463,17 @@ function FileEditor({
         ) : file.isError && !missing ? (
           <div className="p-6 text-sm text-muted-foreground">Couldn't open this file: {errorMessage(file.error)}</div>
         ) : view === "preview" && isMarkdown ? (
-          <div className="max-h-[70vh] overflow-y-auto p-5">
+          <div
+            ref={previewRef}
+            className="max-h-[70vh] overflow-y-auto p-5"
+            onClickCapture={(e) => {
+              const target = memoryLinkTarget((e.target as HTMLElement).closest("a")?.getAttribute("href") ?? null);
+              if (!target) return;
+              e.preventDefault();
+              e.stopPropagation();
+              onOpenFile(target);
+            }}
+          >
             {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-sm text-muted-foreground italic">Empty file.</p>}
           </div>
         ) : (
@@ -457,10 +500,11 @@ function FileEditor({
         )}
       </div>
 
-      <div className="flex items-center gap-3 border-t px-4 py-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-3 overflow-hidden border-t px-4 py-2 text-[11px] whitespace-nowrap text-muted-foreground">
         <span className="tabular-nums">{lines.toLocaleString()} lines</span>
         <span className="tabular-nums">{formatSize(new Blob([value]).size)}</span>
-        {path === "MEMORY.md" && <span>The agent maintains this file itself and consolidates it while dreaming — edits guide what it remembers.</span>}
+        {isMemory && memory.data && <MemoryBudget chars={value.length} memory={memory.data} />}
+        {isMemory && <BrokenLinks paths={broken} />}
         {file.dataUpdatedAt > 0 && !dirty && (
           <span className="ml-auto">loaded {formatDistanceToNowStrict(file.dataUpdatedAt, { addSuffix: true })}</span>
         )}

@@ -22,6 +22,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   SpendReport,
   Agent,
   AgentFileEntry,
+  AgentMemory,
   AgentHeartbeatState,
   AgentInput,
   AgentQuestion,
@@ -542,6 +543,8 @@ export const api = {
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
     commits: (id: string) => get<GitCommit[]>(`/api/agents/${id}/commits`),
+    /** MEMORY.md with its size budget and the notes under memory/ it can link to. */
+    memory: (id: string) => get<AgentMemory>(`/api/agents/${id}/memory`),
     /** Slash commands of the installed Claude Code CLI, as this agent's runs see them */
     commands: (id: string) => get<SlashCommand[]>(`/api/agents/${id}/commands`),
     /** Pause everything the agent works on (409 when it isn't working); `continue` resumes all of it. */

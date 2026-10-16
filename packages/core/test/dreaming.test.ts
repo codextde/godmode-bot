@@ -1062,6 +1062,8 @@ describe("routes", () => {
     await until(() => getDream(dream.id).status === "running", 10_000, "dream running");
     expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "MEMORY.md", content: "mine" })).status).toBe(409);
     expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "./memory/x.md", content: "mine" })).status).toBe(409);
+    expect((await call("PUT", `/api/agents/${agent.id}/memory`, { content: "mine" })).status).toBe(409);
+    expect(((await call("GET", `/api/agents/${agent.id}/memory`)).data as { dreaming: boolean }).dreaming).toBe(true);
     expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "workspace/notes.md", content: "fine" })).status).toBe(200);
     await cancelRun(getDream(dream.id).runId!);
     await dreamToEnd(dream);
