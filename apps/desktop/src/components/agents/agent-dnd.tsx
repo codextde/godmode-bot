@@ -87,7 +87,7 @@ interface DndState {
 const Ctx = createContext<DndState>({ dragged: null, plan: () => null });
 
 /** The smallest target under the pointer: a row inside a panel wins over the panel. */
-const innermost: CollisionDetection = (args) => {
+export const innermost: CollisionDetection = (args) => {
   const area = (id: string | number) => {
     const r = args.droppableRects.get(id);
     return r ? r.width * r.height : Infinity;
@@ -95,15 +95,21 @@ const innermost: CollisionDetection = (args) => {
   return pointerWithin(args).sort((a, b) => area(a.id) - area(b.id));
 };
 
-/** The ghost sits beside the pointer, so the row under it stays readable. */
-const besideCursor: Modifier = ({ transform, activatorEvent, draggingNodeRect }) => {
+/** The ghost sits beside the pointer, so the row under it stays readable; near the window's edge it flips to the other side. */
+export const besideCursor: Modifier = ({ transform, activatorEvent, draggingNodeRect, overlayNodeRect }) => {
   if (!draggingNodeRect || !activatorEvent || !("clientX" in activatorEvent)) return transform;
   const e = activatorEvent as PointerEvent;
-  return { ...transform, x: transform.x + e.clientX - draggingNodeRect.left + 14, y: transform.y + e.clientY - draggingNodeRect.top + 10 };
+  const x = e.clientX + transform.x;
+  const y = e.clientY + transform.y;
+  const w = overlayNodeRect?.width ?? draggingNodeRect.width;
+  const h = overlayNodeRect?.height ?? draggingNodeRect.height;
+  const left = x + 14 + w > window.innerWidth - 8 ? x - 14 - w : x + 14;
+  const top = y + 10 + h > window.innerHeight - 8 ? y - 10 - h : y + 10;
+  return { ...transform, x: left - draggingNodeRect.left, y: top - draggingNodeRect.top };
 };
 
 /** A click right after a drop would open the agent it started on. */
-function swallowNextClick() {
+export function swallowNextClick() {
   const stop = (e: Event) => {
     e.preventDefault();
     e.stopPropagation();

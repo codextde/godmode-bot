@@ -3,6 +3,7 @@ import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { createWorkspace, deleteWorkspace, listWorkspaces, updateWorkspace } from "../../services/workspaces";
 import { MAX_SOURCES, syncSource } from "../../services/workspaceSources";
 import { createProject, deleteProject, getProject, listProjects, updateProject } from "../../services/projects";
+import { SCOPE_ITEMS, VAULT_ITEMS, moveProject, moveWorkspace } from "../../services/scopeMoves";
 import { get } from "../../db";
 import { conflict } from "../../util";
 import { requestDevice } from "../auth";
@@ -37,6 +38,25 @@ const projectSchema = z.object({
   sources: z.array(sourceSchema).max(MAX_SOURCES, `A project can have up to ${MAX_SOURCES} folders and repositories.`).optional(),
 });
 
+const ids = z.array(z.string().trim().min(1).max(100)).max(100_000);
+
+const projectMoveSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(100).nullable(),
+  restore: z
+    .object({
+      items: z.partialRecord(z.enum(Object.keys(SCOPE_ITEMS) as [keyof typeof SCOPE_ITEMS, ...(keyof typeof SCOPE_ITEMS)[]]), ids),
+      projectIds: ids,
+      vmId: z.string().trim().max(100).nullable(),
+      autoMerge: z.boolean(),
+    })
+    .optional(),
+  contextReviewed: z.boolean().optional(),
+});
+
+/** Logins, 2FA codes, passkeys and cards going to other agents: like changing their workspace, that takes the passphrase. */
+const movesVaultItems = (workspaceId: string) =>
+  VAULT_ITEMS.some((kind) => get(`SELECT 1 FROM ${SCOPE_ITEMS[kind].table} WHERE workspace_id = ? LIMIT 1`, workspaceId));
+
 export function registerWorkspaceRoutes(app: Hono): void {
   app.get("/api/workspaces", (c) => c.json(listWorkspaces()));
 
@@ -64,6 +84,23 @@ export function registerWorkspaceRoutes(app: Hono): void {
   app.post("/api/projects/:id/sources/:sourceId/sync", (c) => {
     const project = getProject(c.req.param("id"));
     return c.json(syncSource(project.workspaceId, c.req.param("sourceId"), project.id));
+  });
+
+  app.post("/api/projects/:id/move", async (c) => {
+    const id = c.req.param("id");
+    const input = await body(c, projectMoveSchema);
+    // Its context becomes a workspace's, which every run there gets: like saving it, that takes the passphrase.
+    const promotesFillOnly = input.workspaceId === null && !input.restore && getProject(id).fillOnly;
+    const restoresVault = VAULT_ITEMS.some((kind) => input.restore?.items[kind]?.length);
+    if ((promotesFillOnly || restoresVault) && isInitialized()) requireGrant(c);
+    return c.json(await moveProject(id, input));
+  });
+
+  app.post("/api/workspaces/:id/move", async (c) => {
+    const id = c.req.param("id");
+    const input = await body(c, z.object({ workspaceId: z.string().trim().min(1).max(100) }));
+    if (movesVaultItems(id) && isInitialized()) requireGrant(c);
+    return c.json(await moveWorkspace(id, input));
   });
 
   app.delete("/api/projects/:id", async (c) => {

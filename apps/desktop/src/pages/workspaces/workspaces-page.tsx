@@ -54,6 +54,7 @@ import { WorkspaceDialog } from "@/components/workspaces/workspace-dialog";
 import { SourcesSummary } from "@/components/workspaces/workspace-sources";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { type WorkspaceActivity, projectKey, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
+import { ProjectMoveMenu, ScopeDnd, WorkspaceMoveMenu, useProjectDnd, useWorkspaceDnd } from "@/components/workspaces/scope-dnd";
 import { ProjectDialog } from "@/components/projects/project-dialog";
 
 const SORTS: { id: WorkspacesSort; label: string }[] = [
@@ -235,6 +236,7 @@ export default function WorkspacesPage() {
     });
   }, [all, query, sort, activity]);
   const showGlobal = !query || "global shared".includes(query);
+  const movable = all.length > 1 || all.some((w) => w.projects.length > 0);
   const menuFor = (ws: Workspace) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -259,6 +261,7 @@ export default function WorkspacesPage() {
         <DropdownMenuItem onClick={() => addProject(ws)}>
           <FolderPlus /> New project
         </DropdownMenuItem>
+        <WorkspaceMoveMenu workspace={ws} />
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(ws)}>
           <Trash2 /> Delete
@@ -347,155 +350,167 @@ export default function WorkspacesPage() {
             </div>
           </div>
         )}
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-64 rounded-xl" />
-            ))}
-          </div>
-        ) : isError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
-            <p className="font-medium text-destructive">Couldn't load workspaces</p>
-            <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
-            <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
-              Try again
-            </Button>
-          </div>
-        ) : query && !list.length && !showGlobal ? (
-          <EmptyState
-            icon={<Search />}
-            title={`No workspace matches “${search.trim()}”`}
-            description="Try another name, or create it."
-            action={
-              <Button variant="outline" onClick={openCreate}>
-                <Plus /> New workspace
+        <ScopeDnd workspaces={all}>
+          {isLoading ? (
+            <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <Skeleton key={i} className="h-64 rounded-xl" />
+              ))}
+            </div>
+          ) : isError ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
+              <p className="font-medium text-destructive">Couldn't load workspaces</p>
+              <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
+              <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
+                Try again
               </Button>
-            }
-          />
-        ) : view === "list" ? (
-          <div className="overflow-hidden rounded-xl border bg-card shadow-card">
-            {showGlobal && (
-              <ScopeListRow
-                current={scope === "global"}
-                tile={<div aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary ring-1 ring-border ring-inset"><Globe2 className="size-4" /></div>}
-                title="Global"
-                description="Shared with every workspace"
-                counts={counts.get(null)}
-                activity={activity.of(null)}
-                onOpen={() => open(null)}
-                onBoard={() => open(null, "/tasks")}
-              />
-            )}
-            {list.map((ws) => (
-              <Fragment key={ws.id}>
+            </div>
+          ) : query && !list.length && !showGlobal ? (
+            <EmptyState
+              icon={<Search />}
+              title={`No workspace matches “${search.trim()}”`}
+              description="Try another name, or create it."
+              action={
+                <Button variant="outline" onClick={openCreate}>
+                  <Plus /> New workspace
+                </Button>
+              }
+            />
+          ) : view === "list" ? (
+            <div className="overflow-hidden rounded-xl border bg-card shadow-card">
+              {showGlobal && (
                 <ScopeListRow
-                  current={scope === ws.id && !scopedProject}
-                  tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="sm" className="size-9 rounded-lg text-lg" />}
-                  title={ws.name}
-                  description={ws.description}
-                  counts={counts.get(ws.id)}
-                  activity={activity.of(ws.id)}
-                  onOpen={() => open(ws)}
-                  onBoard={() => open(ws, "/tasks")}
-                  menu={menuFor(ws)}
+                  workspace={null}
+                  current={scope === "global"}
+                  tile={<div aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary ring-1 ring-border ring-inset"><Globe2 className="size-4" /></div>}
+                  title="Global"
+                  description="Shared with every workspace"
+                  counts={counts.get(null)}
+                  activity={activity.of(null)}
+                  onOpen={() => open(null)}
+                  onBoard={() => open(null, "/tasks")}
                 />
-                {ws.projects.map((p, i) => (
-                  <ProjectListRow
-                    key={p.id}
-                    project={p}
-                    last={i === ws.projects.length - 1}
-                    current={scope === ws.id && scopedProject === p.id}
-                    activity={activity.of(projectKey(p.id))}
-                    onOpen={() => openProject(ws, p)}
-                    onBoard={() => openProject(ws, p, "/tasks")}
-                    onEdit={() => editProject(ws, p)}
+              )}
+              {list.map((ws) => (
+                <Fragment key={ws.id}>
+                  <ScopeListRow
+                    workspace={ws}
+                    current={scope === ws.id && !scopedProject}
+                    tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="sm" className="size-9 rounded-lg text-lg" />}
+                    title={ws.name}
+                    description={ws.description}
+                    counts={counts.get(ws.id)}
+                    activity={activity.of(ws.id)}
+                    onOpen={() => open(ws)}
+                    onBoard={() => open(ws, "/tasks")}
+                    menu={menuFor(ws)}
+                  />
+                  {ws.projects.map((p, i) => (
+                    <ProjectListRow
+                      key={p.id}
+                      project={p}
+                      workspace={ws}
+                      last={i === ws.projects.length - 1}
+                      current={scope === ws.id && scopedProject === p.id}
+                      activity={activity.of(projectKey(p.id))}
+                      onOpen={() => openProject(ws, p)}
+                      onBoard={() => openProject(ws, p, "/tasks")}
+                      onEdit={() => editProject(ws, p)}
+                    />
+                  ))}
+                </Fragment>
+              ))}
+              {!query && (
+                <button
+                  type="button"
+                  onClick={openCreate}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted-foreground transition hover:bg-accent/50 hover:text-foreground focus-visible:bg-accent/50 focus-visible:outline-none"
+                >
+                  <span className="grid size-9 place-items-center rounded-lg border border-dashed">
+                    <Plus className="size-4" />
+                  </span>
+                  New workspace
+                </button>
+              )}
+            </div>
+          ) : (
+            <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
+              {showGlobal && (
+                <ScopeCard
+                  workspace={null}
+                  index={0}
+                  current={scope === "global"}
+                  tile={globalTile}
+                  title="Global"
+                  subtitle="Shared with every workspace"
+                  description="Logins, 2FA codes, integrations and agents here are available everywhere — perfect for your personal accounts and the main Godmode assistant."
+                  counts={counts.get(null)}
+                  countsLoading={counts.loading}
+                  activity={activity.of(null)}
+                  onOpen={() => open(null)}
+                  onBoard={() => open(null, "/tasks")}
+                  context={globalContext}
+                />
+              )}
+              <AnimatePresence initial={false}>
+                {list.map((ws, i) => (
+                  <ScopeCard
+                    key={ws.id}
+                    workspace={ws}
+                    index={i + 1}
+                    current={scope === ws.id && !scopedProject}
+                    tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
+                    title={ws.name}
+                    description={ws.description}
+                    counts={counts.get(ws.id)}
+                    countsLoading={counts.loading}
+                    activity={activity.of(ws.id)}
+                    onOpen={() => open(ws)}
+                    onBoard={() => open(ws, "/tasks")}
+                    context={{
+                      label: ws.instructions.trim() ? "Agent context" : "Add agent context",
+                      set: !!ws.instructions.trim(),
+                      onClick: () => editFocused(ws, "instructions"),
+                    }}
+                    sources={{ list: ws.sources, onClick: () => editFocused(ws, "sources") }}
+                    projects={{
+                      list: ws.projects,
+                      current: scope === ws.id ? scopedProject : null,
+                      onOpen: (p) => openProject(ws, p),
+                      onEdit: (p) => editProject(ws, p),
+                      onAdd: () => addProject(ws),
+                    }}
+                    menu={menuFor(ws)}
                   />
                 ))}
-              </Fragment>
-            ))}
-            {!query && (
-              <button
-                type="button"
-                onClick={openCreate}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-muted-foreground transition hover:bg-accent/50 hover:text-foreground focus-visible:bg-accent/50 focus-visible:outline-none"
-              >
-                <span className="grid size-9 place-items-center rounded-lg border border-dashed">
-                  <Plus className="size-4" />
-                </span>
-                New workspace
-              </button>
-            )}
-          </div>
-        ) : (
-          <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
-            {showGlobal && (
-              <ScopeCard
-                index={0}
-                current={scope === "global"}
-                tile={globalTile}
-                title="Global"
-                subtitle="Shared with every workspace"
-                description="Logins, 2FA codes, integrations and agents here are available everywhere — perfect for your personal accounts and the main Godmode assistant."
-                counts={counts.get(null)}
-                countsLoading={counts.loading}
-                activity={activity.of(null)}
-                onOpen={() => open(null)}
-                onBoard={() => open(null, "/tasks")}
-                context={globalContext}
-              />
-            )}
-            <AnimatePresence initial={false}>
-              {list.map((ws, i) => (
-                <ScopeCard
-                  key={ws.id}
-                  index={i + 1}
-                  current={scope === ws.id && !scopedProject}
-                  tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
-                  title={ws.name}
-                  description={ws.description}
-                  counts={counts.get(ws.id)}
-                  countsLoading={counts.loading}
-                  activity={activity.of(ws.id)}
-                  onOpen={() => open(ws)}
-                  onBoard={() => open(ws, "/tasks")}
-                  context={{
-                    label: ws.instructions.trim() ? "Agent context" : "Add agent context",
-                    set: !!ws.instructions.trim(),
-                    onClick: () => editFocused(ws, "instructions"),
-                  }}
-                  sources={{ list: ws.sources, onClick: () => editFocused(ws, "sources") }}
-                  projects={{
-                    list: ws.projects,
-                    current: scope === ws.id ? scopedProject : null,
-                    onOpen: (p) => openProject(ws, p),
-                    onEdit: (p) => editProject(ws, p),
-                    onAdd: () => addProject(ws),
-                  }}
-                  menu={menuFor(ws)}
-                />
-              ))}
-            </AnimatePresence>
-            {!query && (
-              <motion.button
-                layout
-                type="button"
-                onClick={openCreate}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(list.length + 1, 12) * 0.03 }}
-                className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/15 p-6 text-center transition hover:border-foreground/25 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
-                  <Plus className="size-5" />
-                </span>
-                <span className="text-sm font-medium">{list.length ? "New workspace" : "Create your first workspace"}</span>
-                <span className="max-w-60 text-xs text-muted-foreground">
-                  {list.length ? "Another client, project or team." : "e.g. one per client — agents there only see that client's logins."}
-                </span>
-              </motion.button>
-            )}
-          </motion.div>
-        )}
+              </AnimatePresence>
+              {!query && (
+                <motion.button
+                  layout
+                  type="button"
+                  onClick={openCreate}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(list.length + 1, 12) * 0.03 }}
+                  className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/15 p-6 text-center transition hover:border-foreground/25 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
+                    <Plus className="size-5" />
+                  </span>
+                  <span className="text-sm font-medium">{list.length ? "New workspace" : "Create your first workspace"}</span>
+                  <span className="max-w-60 text-xs text-muted-foreground">
+                    {list.length ? "Another client, project or team." : "e.g. one per client — agents there only see that client's logins."}
+                  </span>
+                </motion.button>
+              )}
+            </motion.div>
+          )}
+          {movable && list.length > 0 && (
+            <p className="mt-6 text-xs text-muted-foreground">
+              Drag a project onto another workspace, or out to make it a workspace. Drag a workspace onto another to nest it.
+            </p>
+          )}
+        </ScopeDnd>
       </PageBody>
 
       <WorkspaceDialog
@@ -602,6 +617,7 @@ function conflictCounts(details: unknown, fallback: Counts): [string, number][] 
 }
 
 function ScopeCard({
+  workspace,
   index,
   current,
   tile,
@@ -618,6 +634,8 @@ function ScopeCard({
   sources,
   projects,
 }: {
+  /** null for Global. */
+  workspace: Workspace | null;
   index: number;
   current: boolean;
   tile: ReactNode;
@@ -640,8 +658,11 @@ function ScopeCard({
     { key: "totp", label: "2FA", icon: <ShieldCheck /> },
     { key: "integrations", label: "Integrations", icon: <Plug /> },
   ];
+  const dnd = useWorkspaceDnd(workspace);
   return (
     <motion.article
+      ref={dnd.ref}
+      {...dnd.props}
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -649,7 +670,11 @@ function ScopeCard({
       transition={{ delay: Math.min(index, 12) * 0.03 }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-5 shadow-card transition hover:shadow-float",
-        current ? "border-brand/35 ring-1 ring-brand/15" : "hover:border-foreground/15",
+        current ? "border-brand/35 ring-1 ring-brand/15" : dnd.state === "none" && "hover:border-foreground/15",
+        dnd.state === "available" && "border-dashed border-brand/40",
+        dnd.state === "valid" && "scale-[1.015] border-brand/60 ring-4 ring-brand/15",
+        // `!` because motion holds the card's opacity inline.
+        dnd.isDragging && "opacity-35!",
       )}
     >
       <div className="relative flex items-start justify-between gap-3">
@@ -782,6 +807,7 @@ function ActivityChips({ activity, className, compact }: { activity: WorkspaceAc
 }
 
 function ScopeListRow({
+  workspace,
   current,
   tile,
   title,
@@ -792,6 +818,8 @@ function ScopeListRow({
   onBoard,
   menu,
 }: {
+  /** null for Global. */
+  workspace: Workspace | null;
   current: boolean;
   tile: ReactNode;
   title: string;
@@ -808,8 +836,20 @@ function ScopeListRow({
     { label: "Logins", n: counts.logins, icon: <KeyRound /> },
     { label: "Integrations", n: counts.integrations, icon: <Plug /> },
   ];
+  const dnd = useWorkspaceDnd(workspace);
   return (
-    <div className={cn("group relative flex items-center gap-3 border-b px-4 py-2.5 transition last:border-b-0 hover:bg-accent/40", current && "bg-brand-soft/40")}>
+    <div
+      ref={dnd.ref}
+      {...dnd.props}
+      className={cn(
+        "group relative flex items-center gap-3 border-b px-4 py-2.5 transition last:border-b-0",
+        dnd.state === "none" && "hover:bg-accent/40",
+        current && "bg-brand-soft/40",
+        dnd.state === "available" && "bg-brand/[0.03]",
+        dnd.state === "valid" && "bg-brand/10",
+        dnd.isDragging && "opacity-35",
+      )}
+    >
       {current && <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-brand" />}
       {tile}
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
@@ -880,33 +920,7 @@ function ProjectStrip({
       </div>
       <ul className="flex flex-col gap-0.5">
         {shown.map((p) => (
-          <li key={p.id} className="group/project relative flex items-center rounded-md transition hover:bg-card">
-            <button
-              type="button"
-              onClick={() => onOpen(p)}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              aria-current={current === p.id || undefined}
-            >
-              <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded text-[11px]" />
-              <span className="truncate">{p.name}</span>
-              {current === p.id && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />}
-              {p.sources.length > 0 && (
-                <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-muted-foreground tabular-nums" title={p.sources.map((x) => x.name).join(", ")}>
-                  <FolderGit2 className="size-3" aria-hidden />
-                  {p.sources.length}
-                </span>
-              )}
-            </button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${p.name}`}
-              onClick={() => onEdit(p)}
-              className="mr-0.5 size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 [&_svg]:size-3.5"
-            >
-              <Pencil />
-            </Button>
-          </li>
+          <ProjectChip key={p.id} project={p} current={current === p.id} onOpen={() => onOpen(p)} onEdit={() => onEdit(p)} />
         ))}
       </ul>
       {(hidden > 0 || all) && list.length > STRIP_MAX && (
@@ -918,9 +932,40 @@ function ProjectStrip({
   );
 }
 
+/** One project in a card's strip; drag it to another workspace or out into its own. */
+function ProjectChip({ project: p, current, onOpen, onEdit }: { project: Project; current: boolean; onOpen: () => void; onEdit: () => void }) {
+  const dnd = useProjectDnd(p);
+  const reveal = "size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [&_svg]:size-3.5";
+  return (
+    <li ref={dnd.ref} {...dnd.props} className={cn("group/project relative flex items-center rounded-md transition hover:bg-card", dnd.isDragging && "opacity-35")}>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left text-[13px] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        aria-current={current || undefined}
+      >
+        <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded text-[11px]" />
+        <span className="truncate">{p.name}</span>
+        {current && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />}
+        {p.sources.length > 0 && (
+          <span className="ml-auto flex shrink-0 items-center gap-1 font-mono text-[10.5px] text-muted-foreground tabular-nums" title={p.sources.map((x) => x.name).join(", ")}>
+            <FolderGit2 className="size-3" aria-hidden />
+            {p.sources.length}
+          </span>
+        )}
+      </button>
+      <Button variant="ghost" size="icon-sm" aria-label={`Edit ${p.name}`} onClick={onEdit} className={reveal}>
+        <Pencil />
+      </Button>
+      <ProjectMoveMenu project={p} className={cn("mr-0.5", reveal)} />
+    </li>
+  );
+}
+
 /** A project under its workspace in the list view. */
 function ProjectListRow({
   project,
+  workspace,
   last,
   current,
   activity,
@@ -929,6 +974,7 @@ function ProjectListRow({
   onEdit,
 }: {
   project: Project;
+  workspace: Workspace;
   last: boolean;
   current: boolean;
   activity: WorkspaceActivity;
@@ -936,8 +982,19 @@ function ProjectListRow({
   onBoard: () => void;
   onEdit: () => void;
 }) {
+  const dnd = useProjectDnd(project, workspace);
   return (
-    <div className={cn("group relative flex items-center gap-3 border-b py-2 pr-4 pl-8 transition last:border-b-0 hover:bg-accent/40", current && "bg-brand-soft/40")}>
+    <div
+      ref={dnd.ref}
+      {...dnd.props}
+      className={cn(
+        "group relative flex items-center gap-3 border-b py-2 pr-4 pl-8 transition last:border-b-0",
+        dnd.state === "none" && "hover:bg-accent/40",
+        current && "bg-brand-soft/40",
+        dnd.state === "valid" && "bg-brand/10",
+        dnd.isDragging && "opacity-35",
+      )}
+    >
       {current && <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-brand" />}
       <span aria-hidden className="absolute top-0 left-8 h-full w-3">
         <span className={cn("absolute left-0 w-px bg-border", last ? "top-0 h-1/2" : "inset-y-0")} />
@@ -961,6 +1018,7 @@ function ProjectListRow({
         <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={`Edit ${project.name}`} className="text-muted-foreground">
           <Pencil />
         </Button>
+        <ProjectMoveMenu project={project} />
       </div>
     </div>
   );

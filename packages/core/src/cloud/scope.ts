@@ -42,6 +42,8 @@ const settingsGroups: Rule = (body) => {
 };
 /** What an agent may do (its permissions) widens what reaches secrets: that needs allowSecrets. */
 const agentPermissions: Rule = (body) => (body.permissions !== undefined ? "secrets" : "allowed");
+/** A workspace becoming a project hands its logins and cards to the other workspace's agents; an undo hands them back. */
+const restoresItems: Rule = (body) => (asObject(body.restore).items !== undefined ? "secrets" : "allowed");
 /** Testing a saved server sends its stored password or key to whatever host the body names. */
 const sshTest: Rule = (body) => (body.id !== undefined ? "secrets" : "allowed");
 
@@ -122,6 +124,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|POST", "/api/projects", A],
   ["PATCH|DELETE", "/api/projects/:id", A],
   ["POST", "/api/projects/:id/sources/:sourceId/sync", A],
+  ["POST", "/api/projects/:id/move", restoresItems],
+  ["POST", "/api/workspaces/:id/move", S],
   ["GET", "/api/agents", A],
   ["POST", "/api/agents", agentPermissions],
   ["GET", "/api/agent-templates", A],

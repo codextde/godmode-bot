@@ -98,7 +98,7 @@ export function ProjectDialog({
       const input = { name: name.trim(), icon, color, description: description.trim(), instructions: instructions.trim(), browserProfileId, sources };
       if (!project) return api.projects.create({ ...input, workspaceId: workspace.id });
       // Asked for only when an agent wrote the project's context: its runs read secrets again once the human saved it.
-      return withGrant((grant) => api.projects.update(project.id, input, grant), `Let runs in ${project.name}, whose context an agent wrote, read secrets again`);
+      return withGrant((grant) => api.projects.update(project.id, input, grant), `Confirm to let runs in ${project.name}, whose context an agent wrote, read secrets again.`);
     },
     onSuccess: (saved, key) => {
       const created = key === newKey;

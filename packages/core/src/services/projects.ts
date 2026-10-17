@@ -48,7 +48,7 @@ function toModel(r: ProjectRow, sources: WorkspaceSource[] = listSources(r.works
   };
 }
 
-function uniqueSlug(workspaceId: string, name: string, selfId?: string): string {
+export function uniqueSlug(workspaceId: string, name: string, selfId?: string): string {
   const base = slugify(name);
   let candidate = base;
   for (let i = 2; get("SELECT id FROM projects WHERE workspace_id = ? AND slug = ? AND id IS NOT ?", workspaceId, candidate, selfId ?? null); i++) {

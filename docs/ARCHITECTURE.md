@@ -131,6 +131,21 @@ without projects works exactly as before.
   the workspace takes its projects along. Projects travel with the `workspaces` entity (UI events, runner mirror).
 * Desktop: the sidebar switcher nests foldable projects under their workspace; picking one scopes Recent, Home and the
   board to it and preselects it for new chats and tickets.
+* Moving (`services/scopeMoves.ts`, drag and drop on the Workspaces page, `components/workspaces/scope-dnd.tsx`):
+  `POST /api/projects/:id/move {workspaceId}` moves a project with its agents (and what they own there: integrations,
+  questions, …), the global agents' chats in it, its tickets (with their parts) and its sources to another workspace;
+  `{workspaceId: null}` makes it a workspace of its own (it keeps its parent's VM and auto-merge). `POST
+  /api/workspaces/:id/move {workspaceId}` makes a workspace a project of another: its own agents, chats, tickets and
+  sources become the project's, its projects the other workspace's (keeping its default profile, which becomes the
+  project's), and every other row with its `workspace_id` (logins, 2FA, cards, integrations, profiles, goals, …;
+  `SCOPE_ITEMS`) the other workspace's. Clones move to `repos/<new workspace id>/` under a free name, right after the
+  commit; moves run one at a time. Links across the new boundary are cut: leads (the agent reports to Godmode), a
+  ticket's agent, a moving agent's chats on the old workspace's other projects; the result's `notes` say so, and what
+  the agents no longer use (a VM, a default profile). Every move returns its `undo` call (a workspace's items come back
+  with `restore`); cut links stay cut. Moving logins, 2FA codes, passkeys or cards to other agents takes the vault
+  passphrase (cloud: `allowSecrets`), as does promoting a fill-only project; one whose context an agent wrote becomes a
+  workspace only with `contextReviewed` (409 `context_review` otherwise; the UI shows that context first). Human-only:
+  it changes which logins agents reach, like an agent's workspace.
 
 ### Files and folders in chat messages
 

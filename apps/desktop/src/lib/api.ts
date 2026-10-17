@@ -198,6 +198,9 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   WorkspaceInput,
   Project,
   ProjectInput,
+  ProjectMoveInput,
+  WorkspaceMoveInput,
+  ScopeMoveResult,
   WorkspaceSource,
   SelfRepairInput,
   SelfRepairResult,
@@ -484,6 +487,7 @@ export const api = {
     update: (id: string, input: Partial<WorkspaceInput>) => patch<Workspace>(`/api/workspaces/${id}`, input),
     delete: (id: string, force = false) => del<{ ok: true }>(`/api/workspaces/${id}`, { force: force ? 1 : undefined }),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/workspaces/${id}/sources/${sourceId}/sync`),
+    move: (id: string, input: WorkspaceMoveInput, grant?: string) => request<ScopeMoveResult>("POST", `/api/workspaces/${id}/move`, input, withGrant(grant)),
   },
 
   projects: {
@@ -491,6 +495,7 @@ export const api = {
     update: (id: string, input: Partial<Omit<ProjectInput, "workspaceId">>, grant?: string) => request<Project>("PATCH", `/api/projects/${id}`, input, withGrant(grant)),
     delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/projects/${id}/sources/${sourceId}/sync`),
+    move: (id: string, input: ProjectMoveInput, grant?: string) => request<ScopeMoveResult>("POST", `/api/projects/${id}/move`, input, withGrant(grant)),
   },
 
   tasks: {
