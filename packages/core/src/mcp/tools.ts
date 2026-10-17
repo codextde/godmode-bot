@@ -84,6 +84,7 @@ import {
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
 import { dreamTidies, reportDream, tidyWorkspace } from "../memory/dreaming";
+import { NOTE_MAX as WORKSPACE_NOTE_MAX } from "../memory/workspace";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
@@ -712,7 +713,7 @@ const agentFields = {
     .object({
       allowDelegation: z.boolean().optional(),
       delegateTo: z.array(z.string()).optional().describe("Agent ids it may delegate to; empty = any peer"),
-      maxBudgetUsd: z.number().positive().nullable().optional().describe("Cost cap per run in USD"),
+      maxBudgetUsd: z.number().positive().nullable().optional().describe("Cost cap per run in USD; applies only while the human has Budgets and spend on"),
     })
     .optional(),
   browser: z
@@ -1849,7 +1850,7 @@ const TOOLS: ToolDef[] = [
           allowDelegation: target.permissions.allowDelegation,
           canManageAgents: target.permissions.canManageAgents,
           secretAccess: target.permissions.secretAccess,
-          maxBudgetUsd: target.permissions.maxBudgetUsd,
+          ...(getSettings().runner.spendTracking ? { maxBudgetUsd: target.permissions.maxBudgetUsd, monthlyBudgetUsd: target.permissions.monthlyBudgetUsd } : {}),
         },
         browserEnabled: target.browser.enabled,
         subagents: target.subagents.map((s) => s.name),
@@ -2518,7 +2519,7 @@ const TOOLS: ToolDef[] = [
       json(
         listGoals()
           .filter((g) => everything || g.status === "active")
-          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: g.costUsd })),
+          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: getSettings().runner.spendTracking ? g.costUsd : undefined })),
       ),
   }),
 
@@ -2697,7 +2698,7 @@ const TOOLS: ToolDef[] = [
           result: t.summary,
           ...(t.status === "blocked" ? { blocked: { kind: t.blockedKind, reason: t.blockedReason } } : {}),
           ...(t.pullRequest ? { pullRequest: t.pullRequest } : {}),
-          cost: { usd: Math.round(t.costUsd * 100) / 100, workMinutes: Math.round(t.workMs / 60_000), runs: t.runCount },
+          cost: { usd: getSettings().runner.spendTracking ? Math.round(t.costUsd * 100) / 100 : undefined, workMinutes: Math.round(t.workMs / 60_000), runs: t.runCount },
           createdAt: t.createdAt,
           startedAt: t.startedAt,
           completedAt: t.completedAt,
@@ -2777,14 +2778,15 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "workspace_tidy",
     description:
-      "Sort your workspace while dreaming. operations (carried out in order, each checked on its own): `move` puts an entry (file or folder) at `to`; `discard` takes out what is no longer needed (it waits in workspace/tmp for a week, then it is removed). Paths are relative to workspace/. A move updates the path in your memory files. Refused: tmp/ and uploads/, entries changed in the last few days or named by your instructions, automations or follow-ups, an existing `to`, and discarding what your memory still names. Returns one line per operation.",
+      "Tidy your workspace while dreaming. operations (carried out in order, each checked on its own): `move` puts an entry (file or folder) at `to`; `discard` takes out what is no longer needed (it waits in workspace/tmp for a week, then it is removed); `rewrite` replaces a Markdown note's text with `content` (its complete new text). Paths are relative to workspace/. A move updates the path in your memory files. Refused: tmp/ and uploads/, entries changed in the last few days or named by your instructions, automations or follow-ups, an existing `to`, discarding what your memory still names, and rewriting notes inside a project with its own .git. Returns one line per operation.",
     schema: z.object({
       operations: z
         .array(
           z.object({
-            action: z.enum(["move", "discard"]),
-            path: z.string().min(1).max(500).describe("Entry to move or discard, relative to workspace/"),
+            action: z.enum(["move", "discard", "rewrite"]),
+            path: z.string().min(1).max(500).describe("Entry to move, discard or rewrite, relative to workspace/"),
             to: z.string().max(500).optional().describe("move: the new path, relative to workspace/ (must not exist yet)"),
+            content: z.string().max(WORKSPACE_NOTE_MAX).optional().describe("rewrite: the note's complete new text (Markdown)"),
           }),
         )
         .min(1)
@@ -2797,13 +2799,17 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "spend_overview",
     description:
-      "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only.",
+      "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only. Answers only while the human has spend tracking on.",
     schema: z.object({
       period: z.enum(["today", "week", "month", "all"]).optional().describe("Default: month (the calendar month budgets count)"),
       agentId: z.string().optional().describe("Only this agent"),
     }),
     when: isManager,
     run: ({ period, agentId }) => {
+      if (!getSettings().runner.spendTracking) {
+        const human = getSettings().general.userName.trim() || "the human";
+        return `Spend tracking is off, so Godmode shows no costs and no budget applies (with a Claude subscription the costs Claude Code reports are API prices nobody pays). ${human} can switch it on in Settings → AI under "Budgets and spend".`;
+      }
       const report = spendReport(period ?? "month", agentId);
       const budgets = budgetOverview();
       const names = new Map(listAgents().map((a) => [a.id, a.name]));
@@ -2839,6 +2845,7 @@ const TOOLS: ToolDef[] = [
     run: ({ agentId, status, limit }) => {
       const names = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
       const runs = listRuns({ agentId, status, limit: limit ?? 20 });
+      const tracking = getSettings().runner.spendTracking;
       // A paused run that waits for the human's answer says so: the human, not the run, holds it up.
       const waiting = new Map(
         listQuestions({ status: "open", limit: 500 }).map((q) => [q.runId, q.kind === "approval" ? `the human's OK: ${q.title}` : `the human's answer: ${q.title}`]),
@@ -2855,7 +2862,7 @@ const TOOLS: ToolDef[] = [
           trigger: r.trigger,
           createdAt: r.createdAt,
           finishedAt: r.finishedAt,
-          costUsd: r.costUsd,
+          costUsd: tracking ? r.costUsd : undefined,
           conversationId: r.conversationId,
           task: snippet(r.prompt, 200),
           result: snippet(r.result, 400),

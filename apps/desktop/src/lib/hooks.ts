@@ -22,6 +22,11 @@ export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.settings.get });
 }
 
+/** Costs of Claude runs and budgets show only with spend tracking on (off: a Claude subscription, no real money). */
+export function useSpendTracking(): boolean {
+  return useSettings().data?.runner.spendTracking ?? false;
+}
+
 export function useWorkspaces() {
   return useQuery({ queryKey: qk.workspaces, queryFn: api.workspaces.list });
 }

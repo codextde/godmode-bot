@@ -1,21 +1,24 @@
 /**
- * Tidying an agent's workspace while it dreams (memory/dreaming.ts): an inventory of what lies in `workspace/`, and
- * the moves the dream asks for through `workspace_tidy` — sorting an entry into another folder, or discarding it into
- * `workspace/tmp/`, where the cleanup removes it after a week (services/cleanup.ts). Everything a dream does here is
- * recorded, rolled back with a failed dream and put back when the human undoes it.
+ * Tidying an agent's workspace while it dreams (memory/dreaming.ts): an inventory of what lies in `workspace/` and of
+ * the notes (Markdown files) in it, and the changes the dream asks for through `workspace_tidy` — sorting an entry into
+ * another folder, discarding it into `workspace/tmp/`, where the cleanup removes it after a week (services/cleanup.ts),
+ * or rewriting a note (merged, brought up to date, shortened). Everything a dream does here is recorded with what it
+ * replaced, rolled back with a failed dream and put back when the human undoes it.
  *
  * The dream never touches files itself (it has no shell): every move goes through here, confined to `workspace/`, never
  * through a symlink, never over an existing entry. `tmp/` (Godmode clears it) and `uploads/` (the human's files) stay
  * out, and so does anything changed in the last few days or named by the agent's instructions, automations or
  * follow-ups. Paths the agent's memory names are rewritten to the new place; a discard waits until the memory no longer
- * names the entry.
+ * names the entry. Notes inside a project of their own (a folder with a .git) are the project's, not the agent's: they
+ * are neither listed nor rewritten.
  */
-import { lstatSync, mkdirSync, readdirSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
+import { lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { lstat, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Agent, DreamWorkspaceChange } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { all } from "../db";
+import { withoutSecrets } from "../vault/vault";
 import { canRestore, snapshotMemory } from "./files";
 
 export const WORKSPACE_DIR = "workspace";
@@ -25,6 +28,14 @@ const RESERVED = ["tmp", "uploads"];
 export const RECENT_DAYS = 3;
 /** Moves one dream may make. */
 export const MAX_TIDY_CHANGES = 300;
+/** Notes one dream may rewrite (each change keeps the old and the new text). */
+export const MAX_REWRITES = 25;
+/** A note larger than this isn't rewritten (nor may a rewrite make it larger). */
+export const NOTE_MAX = 128 * 1024;
+const NOTE = /\.(md|markdown)$/i;
+const NOTES_LIMIT = 200;
+/** Folders that are never notes of the agent: installed packages and build output. */
+const NOT_NOTES = new Set(["node_modules", "dist", "build", "vendor", "Pods", "DerivedData"]);
 /** What may come out of tmp/ into the versioned workspace: a script or a file, not a whole build. */
 export const RESCUE_MAX = 25_000_000;
 const SCRATCH_LIMIT = 60;
@@ -233,6 +244,99 @@ function namedScratch(root: string, refs: References): Map<string, string[]> {
 }
 
 /* ------------------------------------------------------------------ */
+/* Notes                                                                */
+/* ------------------------------------------------------------------ */
+
+/** `rel` lies in a project of its own: a folder on the way to it (not the workspace itself) holds a .git. */
+function inProject(root: string, rel: string): boolean {
+  const parts = rel.split("/");
+  for (let i = 1; i < parts.length; i++) {
+    if (exists(join(root, ...parts.slice(0, i), ".git"))) return true;
+  }
+  return false;
+}
+
+interface Note {
+  rel: string;
+  bytes: number;
+  modified: number;
+}
+
+/** The agent's notes: Markdown files in the workspace, outside tmp/, uploads/, hidden folders, packages and projects. */
+function listNotes(root: string): Note[] {
+  const notes: Note[] = [];
+  const walk = (dir: string, depth: number) => {
+    let names: string[];
+    try {
+      names = readdirSync(join(root, dir)).sort((a, b) => a.localeCompare(b));
+    } catch {
+      return;
+    }
+    if (dir && names.includes(".git")) return;
+    for (const name of names) {
+      if (name.startsWith(".") || NOT_NOTES.has(name) || (!dir && RESERVED.includes(name))) continue;
+      const rel = dir ? `${dir}/${name}` : name;
+      let st;
+      try {
+        st = lstatSync(join(root, rel));
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (depth < 6) walk(rel, depth + 1);
+      } else if (st.isFile() && NOTE.test(name)) notes.push({ rel, bytes: st.size, modified: st.mtimeMs });
+    }
+  };
+  walk("", 0);
+  return notes;
+}
+
+/** The note's first line as a title. */
+function noteTitle(abs: string): string {
+  try {
+    const head = readFileSync(abs, "utf8").slice(0, 2_000);
+    const line = head.split("\n").find((l) => l.trim()) ?? "";
+    const title = line.replace(/^#+\s*/, "").replace(/[*_`]/g, "").replace(/\s+/g, " ").trim();
+    return title.length > 70 ? `${title.slice(0, 69)}…` : title;
+  } catch {
+    return "";
+  }
+}
+
+/** Entries a look for changes visits at most (a large workspace counts as changed when the look runs out). */
+const CHANGE_SCAN_LIMIT = 20_000;
+
+/** Something in the workspace (outside tmp/ and uploads/) was added or changed after `since` (ms). */
+export function workspaceChangedSince(repoPath: string, since: number): boolean {
+  const root = workspaceRoot(repoPath);
+  if (!root) return false;
+  let budget = CHANGE_SCAN_LIMIT;
+  const walk = (dir: string): boolean => {
+    let names: string[];
+    try {
+      names = readdirSync(join(root, dir));
+    } catch {
+      return false;
+    }
+    for (const name of names) {
+      if (name.startsWith(".") || NOT_NOTES.has(name) || (!dir && RESERVED.includes(name))) continue;
+      if (--budget < 0) return true;
+      const rel = dir ? `${dir}/${name}` : name;
+      let st;
+      try {
+        st = lstatSync(join(root, rel));
+      } catch {
+        continue;
+      }
+      if (st.mtimeMs > since) return true;
+      if (st.isDirectory() && walk(rel)) return true;
+    }
+    return false;
+  };
+  return walk("");
+}
+
+/* ------------------------------------------------------------------ */
 /* Inventory                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -257,7 +361,8 @@ export async function workspaceInventory(agent: Owner & Pick<Agent, "name">, at 
     .sort((a, b) => a.localeCompare(b));
   const refs = references(agent);
   const scratch = [...namedScratch(root, refs)].sort(([a], [b]) => a.localeCompare(b));
-  if (!names.length && !scratch.length) return { text: "", entries: 0 };
+  const notes = listNotes(root);
+  if (!names.length && !scratch.length && !notes.length) return { text: "", entries: 0 };
   const recent = at.getTime() - RECENT_DAYS * DAY;
   const lines: string[] = [];
   let total = 0;
@@ -294,6 +399,15 @@ export async function workspaceInventory(agent: Owner & Pick<Agent, "name">, at 
     const kind = stats.files > 1 ? `folder, ${stats.files} files` : "file";
     kept.push(`- \`${rel}\` — ${kind}, ${formatBytes(stats.bytes)}, last changed ${day(stats.modified)} · ${notes.join(" · ")}`);
   }
+  const noteLines = notes.slice(0, NOTES_LIMIT).map((n) => {
+    const flags: string[] = [];
+    if (n.modified >= recent) flags.push(`changed in the last ${RECENT_DAYS} days — stays as is`);
+    else if (n.bytes > NOTE_MAX) flags.push(`too large to rewrite (over ${formatBytes(NOTE_MAX)})`);
+    const pin = pinnedBy(agent, refs, n.rel);
+    if (pin) flags.push(`named in ${pin} — stays as is`);
+    const title = noteTitle(join(root, n.rel));
+    return `- \`${n.rel}\` — ${formatBytes(n.bytes)}, last changed ${day(n.modified)}${title ? ` · "${title}"` : ""}${flags.length ? ` · ${flags.join(" · ")}` : ""}`;
+  });
   const more = names.length - INVENTORY_LIMIT;
   const text = [
     `# Workspace of ${agent.name} — ${day(at.getTime())}`,
@@ -314,9 +428,20 @@ export async function workspaceInventory(agent: Owner & Pick<Agent, "name">, at 
           scratch.length > SCRATCH_LIMIT ? `\n(${scratch.length - SCRATCH_LIMIT} more are not listed.)` : "",
         ]
       : []),
+    ...(noteLines.length
+      ? [
+          "",
+          "## Notes",
+          "",
+          `${notes.length} Markdown note${notes.length === 1 ? "" : "s"} in the workspace (tmp/, uploads/ and projects with a .git of their own left out), by folder. Rewrite what is out of date and merge what overlaps with \`rewrite\` in workspace_tidy.`,
+          "",
+          ...noteLines,
+          notes.length > NOTES_LIMIT ? `\n(${notes.length - NOTES_LIMIT} more are not listed.)` : "",
+        ]
+      : []),
     "",
   ].join("\n");
-  return { text, entries: names.length + scratch.length };
+  return { text, entries: names.length + scratch.length + notes.length };
 }
 
 /* ------------------------------------------------------------------ */
@@ -324,10 +449,12 @@ export async function workspaceInventory(agent: Owner & Pick<Agent, "name">, at 
 /* ------------------------------------------------------------------ */
 
 export interface TidyOperation {
-  action: "move" | "discard";
+  action: "move" | "discard" | "rewrite";
   path: string;
   /** Where to (move only), inside workspace/. */
   to?: string;
+  /** The note's whole new text (rewrite only). */
+  content?: string;
 }
 
 export interface TidyOutcome {
@@ -377,11 +504,30 @@ function discardTarget(root: string, rel: string, at: Date): string {
   return to;
 }
 
+/** Why the note at `rel` can't be rewritten (null = it can). */
+async function rewriteRefusal(agent: Owner, refs: References, root: string, rel: string, at: Date): Promise<string | null> {
+  if (reserved(rel)) return "notes in tmp/ and uploads/ are not rewritten.";
+  if (!NOTE.test(rel)) return "only Markdown notes (.md) are rewritten.";
+  const abs = join(root, rel);
+  if (!exists(abs)) return "it doesn't exist.";
+  if (!noSymlink(root, rel)) return "it is (or lies behind) a link.";
+  const st = lstatSync(abs);
+  if (!st.isFile()) return "it isn't a file.";
+  if (st.size > NOTE_MAX) return `it is ${formatBytes(st.size)}: notes over ${formatBytes(NOTE_MAX)} are not rewritten.`;
+  if (inProject(root, rel)) return "it belongs to a project with a .git of its own.";
+  if (st.mtimeMs >= at.getTime() - RECENT_DAYS * DAY) return `it changed in the last ${RECENT_DAYS} days and may belong to work in progress.`;
+  if (await holdsSecret(abs, rel)) return "it looks like a secret.";
+  const pin = pinnedBy(agent, refs, rel);
+  return pin ? `it is named in ${pin}, so it stays as it is.` : null;
+}
+
 export interface TidyHooks {
   /** Asked right before each move: false once the dream has ended (or is being stopped), and nothing more moves. */
   active?: () => boolean;
   /** Called right after each move, before anything else can happen (the move is on disk now). */
   record?: (change: DreamWorkspaceChange) => void;
+  /** Notes the dream rewrote before this call. */
+  rewrites?: number;
 }
 
 /**
@@ -393,12 +539,55 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], hooks
   if (!root) return operations.map((op) => ({ change: null, line: `${op.path}: there is no workspace folder.` }));
   const refs = references(agent);
   const outcomes: TidyOutcome[] = [];
+  let rewrites = hooks.rewrites ?? 0;
   for (const op of operations) {
     refs.memory = snapshotMemory(agent.repoPath).files;
     const from = workspacePath(agent.repoPath, op.path);
     const skip = (why: string) => outcomes.push({ change: null, line: `${op.path}: skipped — ${why}` });
     if (!from) {
       skip("not a path inside workspace/.");
+      continue;
+    }
+    if (op.action === "rewrite") {
+      const after = withoutSecrets((op.content ?? "").replace(/\r\n/g, "\n"));
+      if (!after.trim()) {
+        skip("`content` is empty — discard a note that can go.");
+        continue;
+      }
+      if (Buffer.byteLength(after) > NOTE_MAX) {
+        skip(`the new text is over ${formatBytes(NOTE_MAX)} — keep notes shorter, split them by topic.`);
+        continue;
+      }
+      if (rewrites >= MAX_REWRITES) {
+        skip(`this dream already rewrote ${MAX_REWRITES} notes — leave the rest for the next one.`);
+        continue;
+      }
+      const refusal = await rewriteRefusal(agent, refs, root, from, at);
+      if (refusal) {
+        skip(refusal);
+        continue;
+      }
+      const abs = join(root, from);
+      const before = readFileSync(abs, "utf8");
+      if (before === after) {
+        skip("the new text is the same as the old one.");
+        continue;
+      }
+      if (hooks.active && !hooks.active()) {
+        outcomes.push({ change: null, line: `${op.path}: not rewritten — the dream has ended.` });
+        break;
+      }
+      try {
+        writeFileSync(abs, after, "utf8");
+      } catch (err) {
+        skip(`it couldn't be written (${err instanceof Error ? err.message : String(err)}).`);
+        continue;
+      }
+      const change: DreamWorkspaceChange = { action: "rewrite", from, to: from, bytes: Buffer.byteLength(after), before, after };
+      hooks.record?.(change);
+      rewrites++;
+      const delta = Buffer.byteLength(after) - Buffer.byteLength(before);
+      outcomes.push({ change, line: `${from}: rewritten (${delta <= 0 ? `${formatBytes(-delta)} shorter` : `${formatBytes(delta)} longer`}).` });
       continue;
     }
     const fromScratch = from.startsWith("tmp/");
@@ -508,7 +697,7 @@ export async function applyTidy(agent: Owner, operations: TidyOperation[], hooks
 /* Undo                                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Everything the dream moved is still where it went, and its old place is free. */
+/** Everything the dream moved is still where it went, its old place is free, and the notes it rewrote are as it left them. */
 export function canUndoWorkspace(repoPath: string, changes: DreamWorkspaceChange[]): boolean {
   const root = workspaceRoot(repoPath);
   if (!root) return !changes.length;
@@ -517,16 +706,36 @@ export function canUndoWorkspace(repoPath: string, changes: DreamWorkspaceChange
   const under = (p: string, dir: string) => p === dir || p.startsWith(`${dir}/`);
   let placed = new Set<string>();
   const freed = new Set<string>();
+  // Rewritten notes: where each lies now, and the text the dream left there.
+  let rewritten: { path: string; after: string }[] = [];
   for (const c of changes) {
-    placed = new Set([...placed].map((p) => (under(p, c.from) ? `${c.to}${p.slice(c.from.length)}` : p)));
+    if (c.action === "rewrite") {
+      rewritten.push({ path: c.from, after: c.after ?? "" });
+      continue;
+    }
+    const follow = (p: string) => (under(p, c.from) ? `${c.to}${p.slice(c.from.length)}` : p);
+    placed = new Set([...placed].map(follow));
+    rewritten = rewritten.map((r) => ({ ...r, path: follow(r.path) }));
     placed.add(c.to);
     for (const f of [...freed]) if (under(f, c.to)) freed.delete(f);
     freed.add(c.from);
   }
-  return [...placed].every((p) => exists(join(root, p)) && noSymlink(root, p)) && [...freed].every((p) => !exists(join(root, p)));
+  return (
+    [...placed].every((p) => exists(join(root, p)) && noSymlink(root, p)) &&
+    [...freed].every((p) => !exists(join(root, p))) &&
+    rewritten.every((r) => noSymlink(root, r.path) && readNote(join(root, r.path)) === r.after)
+  );
 }
 
-/** Put back what the dream moved, newest first. Returns the paths that could not go back. */
+function readNote(abs: string): string | null {
+  try {
+    return lstatSync(abs).isFile() ? readFileSync(abs, "utf8") : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Put back what the dream moved and rewrote, newest first. Returns the paths that could not go back. */
 export function undoWorkspace(repoPath: string, changes: DreamWorkspaceChange[]): string[] {
   const root = workspaceRoot(repoPath);
   if (!root) return changes.map((c) => c.from);
@@ -534,6 +743,18 @@ export function undoWorkspace(repoPath: string, changes: DreamWorkspaceChange[])
   for (const c of [...changes].reverse()) {
     const toAbs = join(root, c.to);
     const fromAbs = join(root, c.from);
+    if (c.action === "rewrite") {
+      // Put the old text back only over the dream's own: an edit made since stays.
+      if (!workspacePath(repoPath, c.from) || !noSymlink(root, c.from) || c.before === undefined || readNote(fromAbs) !== c.after) failed.push(c.from);
+      else {
+        try {
+          writeFileSync(fromAbs, c.before, "utf8");
+        } catch {
+          failed.push(c.from);
+        }
+      }
+      continue;
+    }
     if (!workspacePath(repoPath, c.from) || !workspacePath(repoPath, c.to) || !exists(toAbs) || exists(fromAbs) || !noSymlink(root, c.to) || !noSymlink(root, c.from)) {
       failed.push(c.from);
       continue;

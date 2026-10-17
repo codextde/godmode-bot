@@ -7,7 +7,7 @@ import type { Agent, AwayHighlight } from "@godmode/shared";
 import { formatUsd } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
-import { useAway } from "@/lib/hooks";
+import { useAway, useSpendTracking } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
 
@@ -25,12 +25,13 @@ export function AwaySummaryCard({ agents }: { agents: Agent[] }) {
   const away = useUi((s) => s.away);
   const setAway = useUi((s) => s.setAway);
   const { data } = useAway(away);
+  const spendTracking = useSpendTracking();
   if (!away || !data || (data.finished === 0 && data.delivered === 0)) return null;
   const facts = [
     plural(data.finished, "run") + " finished",
     data.failed ? plural(data.failed, "problem") : null,
     data.delivered ? `${plural(data.delivered, "ticket")} delivered` : null,
-    data.costUsd > 0 ? `${formatUsd(data.costUsd)} spent` : null,
+    spendTracking && data.costUsd > 0 ? `${formatUsd(data.costUsd)} spent` : null,
   ].filter(Boolean);
 
   return (
@@ -56,7 +57,7 @@ export function AwaySummaryCard({ agents }: { agents: Agent[] }) {
               {data.agents.slice(0, 5).map((a) => {
                 const agent = agentById.get(a.agentId);
                 return (
-                  <li key={a.agentId} className="flex items-center gap-1.5 text-xs text-muted-foreground" title={`${a.name}: ${plural(a.runs, "run")}, ${formatUsd(a.costUsd)}`}>
+                  <li key={a.agentId} className="flex items-center gap-1.5 text-xs text-muted-foreground" title={`${a.name}: ${plural(a.runs, "run")}${spendTracking ? `, ${formatUsd(a.costUsd)}` : ""}`}>
                     {agent && <AgentAvatar agent={agent} size="sm" still className="size-5 rounded-md text-[10px]" />}
                     <span className="text-foreground">{a.name}</span>
                     <span className="tabular-nums">{a.runs}</span>

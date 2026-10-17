@@ -50,7 +50,7 @@ import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } f
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { clearDraft, draftKeys, saveDraft, useDraft } from "@/lib/drafts";
-import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
+import { useGoals, useQuestions, useSpendTracking, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
 import { Switch } from "@/components/ui/switch";
@@ -231,6 +231,7 @@ function TaskDetail({
   onReassign: (task: Task, agentId: string | null) => void;
 }) {
   const qc = useQueryClient();
+  const spendTracking = useSpendTracking();
   const { data: board = [] } = useTasks("all");
   const labelsInUse = [...new Set(board.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b));
   const workspace = task.workspaceId ? (workspaces.get(task.workspaceId) ?? null) : null;
@@ -470,7 +471,7 @@ function TaskDetail({
             Filed by {task.createdBy === "user" ? "you" : (agents.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? "an agent")} on{" "}
             {format(new Date(task.createdAt), "d MMM yyyy, HH:mm")}
             {task.runCount > 0 &&
-              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"} · ${formatCost(task.costUsd)}${
+              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"}${spendTracking ? ` · ${formatCost(task.costUsd)}` : ""}${
                 isWorking(task) ? " so far" : ""
               }`}
             {task.completedAt && ` · closed ${formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}`}
@@ -691,6 +692,7 @@ function WorkPanel({
   onStartWithoutWaiting: () => void;
 }) {
   const qc = useQueryClient();
+  const spendTracking = useSpendTracking();
   const activity = useTaskActivity(task);
   const working = isWorking(task);
   const { resume } = usePauseActions(task.conversationId ?? "");
@@ -858,7 +860,9 @@ function WorkPanel({
       kind === "failed" && /timed out/i.test(reason)
         ? "It hit the run's time limit. Try again, or split the task into smaller ones."
         : kind === "failed" && /cost budget/i.test(reason)
-          ? `It reached its cost budget. Raise ${who}'s budget, then try again.`
+          ? spendTracking
+            ? `It reached its cost budget. Raise ${who}'s budget, then try again.`
+            : "It reached its cost budget. Turn on Budgets and spend in Settings → AI & Claude to change it, or try again."
           : null;
     const restart = (label: string, icon = <RotateCcw />) =>
       task.agentId ? (

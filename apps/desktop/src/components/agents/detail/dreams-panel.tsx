@@ -10,6 +10,7 @@ import {
   CirclePause,
   CircleStop,
   Eye,
+  FilePen,
   FileText,
   FolderInput,
   FolderTree,
@@ -647,7 +648,7 @@ function JournalEntry({
             </span>
           )}
           <span className="ml-auto flex items-center gap-1">
-            {d.files.length > 0 && (
+            {(d.files.length > 0 || d.workspace.some((m) => m.action === "rewrite")) && (
               <Button variant="outline" size="xs" onClick={() => onReview(d)}>
                 <Eye /> Review changes
               </Button>
@@ -693,20 +694,21 @@ function JournalEntry({
 
 const MOVE_META = {
   move: { label: "sorted", icon: FolderInput, className: "text-sky-700 dark:text-sky-300" },
+  rewrite: { label: "rewritten", icon: FilePen, className: "text-violet-700 dark:text-violet-300" },
   discard: { label: "discarded", icon: Trash2, className: "text-rose-700 dark:text-rose-300" },
 } as const;
 
 /** How the dream tidied the workspace; after a rollback, what couldn't be moved back. */
 function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck: boolean }) {
   const [all, setAll] = useState(false);
-  const counts = (["move", "discard"] as const).map((action) => ({ action, n: moves.filter((m) => m.action === action).length })).filter((c) => c.n > 0);
+  const counts = (["move", "rewrite", "discard"] as const).map((action) => ({ action, n: moves.filter((m) => m.action === action).length })).filter((c) => c.n > 0);
   const out = moves.filter((m) => m.action === "discard").reduce((n, m) => n + m.bytes, 0);
   const shown = all ? moves : moves.slice(0, MOVES_PREVIEW);
   return (
     <div className="mt-2.5 max-w-3xl overflow-hidden rounded-lg border bg-paper-2/60">
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs">
         <FolderTree className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="font-medium">{stuck ? "Couldn't be moved back" : "Workspace"}</span>
+        <span className="font-medium">{stuck ? "Couldn't be put back" : "Workspace"}</span>
         {counts.map(({ action, n }) => {
           const meta = MOVE_META[action];
           return (
@@ -736,6 +738,8 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
                     {m.to}
                   </span>
                 </>
+              ) : m.action === "rewrite" ? (
+                <span className="shrink-0 text-muted-foreground">{formatBytes(m.bytes)} now</span>
               ) : (
                 <span className="shrink-0 text-muted-foreground">removed after a week</span>
               )}

@@ -14,6 +14,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
+import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { saveBlob } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -172,6 +173,7 @@ const PAGE = 300;
 export function RunLogViewer({ runId, live = false }: { runId: string; live?: boolean }) {
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
+  const spendTracking = useSpendTracking();
   const log = useQuery({
     queryKey: [...qk.run(runId), "log"],
     queryFn: () => fetchLog(runId),
@@ -234,7 +236,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
       </div>
       <ol className="relative space-y-1 border-l pl-4">
         {visible.slice(0, limit).map((e, i) => (
-          <LogRow key={i} entry={e} toolNames={toolNames} />
+          <LogRow key={i} entry={e} toolNames={toolNames} spendTracking={spendTracking} />
         ))}
       </ol>
       {visible.length > limit && (
@@ -246,7 +248,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
   );
 }
 
-function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, { name: string; input: unknown }> }) {
+function LogRow({ entry, toolNames, spendTracking }: { entry: LogEntry; toolNames: Map<string, { name: string; input: unknown }>; spendTracking: boolean }) {
   switch (entry.kind) {
     case "init":
       return (
@@ -313,7 +315,8 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
           tone={entry.isError ? "error" : "success"}
         >
           <span className="text-muted-foreground tabular-nums">
-            {formatDuration(entry.durationMs)} · {formatCost(entry.costUsd)}
+            {formatDuration(entry.durationMs)}
+            {spendTracking && ` · ${formatCost(entry.costUsd)}`}
             {entry.numTurns != null && ` · ${entry.numTurns} turns`}
             {entry.tokensIn != null && ` · ${formatTokens(entry.tokensIn)} in / ${formatTokens(entry.tokensOut)} out`}
           </span>

@@ -19,7 +19,7 @@ import { MessageBlocks } from "./message-blocks";
 import { CopyButton } from "./copy-button";
 import { UserBubble } from "./user-bubble";
 import { AttachmentList } from "./attachments";
-import { useAllAgents, useBootstrap, useTasks } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useSpendTracking, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
@@ -281,6 +281,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 
 function RunMeta({ runId }: { runId: string }) {
   const modelLabel = useModelLabel();
+  const spendTracking = useSpendTracking();
   const { data: run } = useQuery({
     queryKey: qk.run(runId),
     queryFn: () => api.runs.get(runId),
@@ -296,7 +297,7 @@ function RunMeta({ runId }: { runId: string }) {
           <Timer className="size-3" /> {formatDuration(run.durationMs)}
         </span>
       )}
-      {run.costUsd != null && (
+      {spendTracking && run.costUsd != null && (
         <span className="inline-flex items-center gap-1">
           <Coins className="size-3" /> {formatCost(run.costUsd)}
         </span>

@@ -1045,7 +1045,7 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   const meta = [
     finishedRun.status,
     finishedRun.numTurns != null ? `${finishedRun.numTurns} turns` : null,
-    finishedRun.costUsd != null ? `$${finishedRun.costUsd.toFixed(4)}` : null,
+    finishedRun.costUsd != null && getSettings().runner.spendTracking ? `$${finishedRun.costUsd.toFixed(4)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

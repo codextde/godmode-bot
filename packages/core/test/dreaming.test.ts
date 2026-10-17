@@ -35,7 +35,7 @@ import {
   startDream,
 } from "../src/memory/dreaming";
 import { diffSnapshots, isMemoryPath, memoryChars, memoryForPrompt, memoryOutgrew, snapshotMemory } from "../src/memory/files";
-import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, workspacePath } from "../src/memory/workspace";
+import { applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, workspacePath } from "../src/memory/workspace";
 
 let env: TestEnv;
 const DAY = 86_400_000;
@@ -789,6 +789,92 @@ describe("tidying the workspace", () => {
     } finally {
       updateSettings({ memory: { dreaming: { tidyWorkspace: true } } });
     }
+  });
+  test("a dream rewrites its old notes, leaves what it must not touch, and an undo brings the old text back", async () => {
+    const agent = await makeAgent({ name: "Note Keeper" });
+    entry(agent, "plans/launch.md");
+    entry(agent, "old/a.md");
+    entry(agent, "fresh-note.md", [], 0);
+    entry(agent, "app", ["README.md"]);
+    mkdirSync(join(agent.repoPath, "workspace", "app", ".git"));
+    entry(agent, "brief.md");
+    entry(agent, "notes.txt");
+    entry(agent, "app-store/node_modules/pkg/README.md");
+    const ts = new Date().toISOString();
+    insert("routines", { id: newId("rtn"), agent_id: agent.id, name: "Daily", cron: "0 9 * * *", prompt: "Read workspace/brief.md first", created_at: ts, updated_at: ts });
+    const launch = "# Launch\n- Shipped on 2026-10-01\n";
+
+    const dream = await tidyDream(agent, [
+      { action: "rewrite", path: "plans/launch.md", content: launch },
+      { action: "rewrite", path: "plans/launch.md", content: "# Again\n" },
+      { action: "move", path: "old/a.md", to: "archive/a.md" },
+      { action: "rewrite", path: "archive/a.md", content: "# A, merged\n" },
+      { action: "rewrite", path: "fresh-note.md", content: "x" },
+      { action: "rewrite", path: "app/README.md", content: "x" },
+      { action: "rewrite", path: "brief.md", content: "x" },
+      { action: "rewrite", path: "notes.txt", content: "x" },
+      { action: "rewrite", path: "old-missing.md", content: "x" },
+      { action: "rewrite", path: "archive/a.md", content: "   " },
+    ]);
+    expect(dream.status).toBe("succeeded");
+    const report = dreamReport(dream);
+    expect(report.inventory).toContain("## Notes");
+    expect(report.inventory).toContain('- `plans/launch.md` — ');
+    expect(report.inventory).toContain('"plans/launch.md"');
+    expect(report.inventory).toMatch(/`brief\.md` — .*named in the automation "Daily" — stays as is/);
+    expect(report.inventory).not.toContain("app/README.md");
+    expect(report.inventory).not.toContain("pkg/README.md");
+    expect(getRun(dream.runId!).prompt).toContain("Rewrite your notes");
+    const lines = report.tidy!.text.split("\n");
+    expect(lines[0]).toMatch(/plans\/launch\.md: rewritten/);
+    expect(lines[1]).toMatch(/changed in the last 3 days/);
+    expect(lines[3]).toMatch(/archive\/a\.md: rewritten/);
+    expect(lines[4]).toMatch(/changed in the last 3 days/);
+    expect(lines[5]).toMatch(/project with a \.git/);
+    expect(lines[6]).toMatch(/named in the automation "Daily"/);
+    expect(lines[7]).toMatch(/only Markdown notes/);
+    expect(lines[8]).toMatch(/doesn't exist/);
+    expect(lines[9]).toMatch(/`content` is empty/);
+
+    expect(dream.workspace.map((c) => [c.action, c.from, c.to])).toEqual([
+      ["rewrite", "plans/launch.md", "plans/launch.md"],
+      ["move", "old/a.md", "archive/a.md"],
+      ["rewrite", "archive/a.md", "archive/a.md"],
+    ]);
+    expect(dream.workspace.some((c) => "before" in c || "after" in c)).toBe(false);
+    expect(readRepo(agent, "workspace/plans/launch.md")).toBe(launch);
+    const detail = getDream(dream.id);
+    expect(detail.fileChanges.find((f) => f.path === "workspace/plans/launch.md")).toEqual({ path: "workspace/plans/launch.md", before: "plans/launch.md\n", after: launch });
+    expect(detail.fileChanges.find((f) => f.path === "workspace/archive/a.md")?.after).toBe("# A, merged\n");
+    expect(dream.canRevert).toBe(true);
+
+    await revertDream(dream.id);
+    expect(readRepo(agent, "workspace/plans/launch.md")).toBe("plans/launch.md\n");
+    expect(readRepo(agent, "workspace/old/a.md")).toBe("old/a.md\n");
+    expect(ws(agent, "archive")).toBe(false);
+  });
+
+  test("a note edited after the dream keeps the edit: the dream can't be undone anymore", async () => {
+    const agent = await makeAgent({ name: "Edited Notes" });
+    entry(agent, "status.md");
+    const dream = await tidyDream(agent, [{ action: "rewrite", path: "status.md", content: "# Status\n- done\n" }]);
+    expect(dream.canRevert).toBe(true);
+    writeFileSync(join(agent.repoPath, "workspace", "status.md"), "# Status\n- edited by hand\n");
+    expect(getDream(dream.id).canRevert).toBe(false);
+    const changes = JSON.parse(get<{ workspace: string }>("SELECT workspace FROM dreams WHERE id = ?", dream.id)!.workspace);
+    expect(undoWorkspace(agent.repoPath, changes)).toEqual(["status.md"]);
+    expect(readRepo(agent, "workspace/status.md")).toBe("# Status\n- edited by hand\n");
+  });
+
+  test("a workspace counts as changed by what was added or edited in it, not by tmp/", async () => {
+    const agent = await makeAgent({ name: "Watcher" });
+    entry(agent, "reports", ["q3.md"]);
+    const since = Date.now() - DAY;
+    expect(workspaceChangedSince(agent.repoPath, since)).toBe(false);
+    entry(agent, "tmp/build.log", [], 0);
+    expect(workspaceChangedSince(agent.repoPath, since)).toBe(false);
+    writeFileSync(join(agent.repoPath, "workspace", "reports", "q3.md"), "new\n");
+    expect(workspaceChangedSince(agent.repoPath, since)).toBe(true);
   });
 });
 
