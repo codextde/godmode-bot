@@ -58,7 +58,7 @@ function toModel(
   };
 }
 
-function uniqueSlug(name: string): string {
+export function uniqueSlug(name: string): string {
   const base = slugify(name);
   let candidate = base;
   for (let i = 2; get<{ id: string }>("SELECT id FROM workspaces WHERE slug = ?", candidate); i++) candidate = `${base}-${i}`;

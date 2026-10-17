@@ -44,7 +44,7 @@ const RUN_CLONE_WAIT_MS = 90_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 const NO_GIT = "git isn't installed on this computer. Install it (Settings → System shows how) to use repositories.";
 
-interface SourceRow {
+export interface SourceRow {
   id: string;
   workspace_id: string;
   /** null = the workspace's own; else one of its projects'. */
@@ -285,6 +285,56 @@ export async function trashClones(rows: SourceRow[]): Promise<void> {
       log.warn(`could not move clone ${path} to the trash`, err);
     }
   }
+}
+
+/**
+ * Hand sources over to another workspace (and project), inside the caller's transaction. Clones live in their
+ * workspace's folder, so each gets a free directory there; run the returned function once it committed to move them.
+ */
+export function relocateSources(rows: SourceRow[], workspaceId: string, projectOf: (row: SourceRow) => string | null): () => Promise<void> {
+  const taken = new Set(gitSourceRows(workspaceId).map((r) => r.path.toLowerCase()));
+  const moves: { id: string; from: string; to: string }[] = [];
+  const ts = now();
+  for (const row of rows) {
+    const dir = row.kind === "git" ? cloneDirName(row.path, taken, workspaceId) : row.path;
+    run("UPDATE workspace_sources SET workspace_id = ?, project_id = ?, path = ?, updated_at = ? WHERE id = ?", workspaceId, projectOf(row), dir, ts, row.id);
+    const from = row.kind === "git" ? clonePath(row) : null;
+    const to = from ? clonePath({ workspace_id: workspaceId, path: dir }) : null;
+    if (from && to) moves.push({ id: row.id, from, to });
+  }
+  const move = async (m: (typeof moves)[number]) => {
+    try {
+      if (!existsSync(m.from)) return;
+      if (existsSync(m.to)) {
+        // Cloned anew at its new place meanwhile: the old clone may hold unpushed work.
+        const trashed = await moveToTrash(m.from, trashDir(), basename(m.to));
+        if (trashed) log.info(`moved clone ${m.from} to ${trashed}`);
+      } else {
+        mkdirSync(dirname(m.to), { recursive: true });
+        renameSync(m.from, m.to);
+      }
+      const parent = dirname(m.from);
+      if (existsSync(parent) && !readdirSync(parent).length) rmdirSync(parent);
+    } catch (err) {
+      log.warn(`could not move clone ${m.from} to ${m.to}`, err);
+    }
+  };
+  // Clones nothing works on move right away (before a run can start cloning at the new place); the others once stopped.
+  return async () => {
+    const idle = moves.filter((m) => !busy.has(m.id)).map(move);
+    for (const m of moves.filter((m) => busy.has(m.id))) {
+      const running = busy.get(m.id);
+      running?.abort.abort();
+      await running?.done;
+      await move(m);
+    }
+    await Promise.all(idle);
+  };
+}
+
+/** Sources of a workspace (all, or only its own with `projectId` null) or of one project. */
+export function sourceRows(workspaceId: string, projectId?: string | null): SourceRow[] {
+  return projectId === undefined ? all<SourceRow>("SELECT * FROM workspace_sources WHERE workspace_id = ?", workspaceId) : rowsOf(workspaceId, projectId);
 }
 
 /** Git sources of a workspace and its projects (or of one project), for trashing their clones once it is deleted. */

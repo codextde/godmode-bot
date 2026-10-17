@@ -142,7 +142,7 @@ export function useDuplicateAgent() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (agent: Agent) =>
-      agent.permissions.secretAccess === "reveal" ? withGrant((grant) => api.agents.duplicate(agent.id, grant), `Copy ${agent.name}, which may read secrets`) : api.agents.duplicate(agent.id),
+      agent.permissions.secretAccess === "reveal" ? withGrant((grant) => api.agents.duplicate(agent.id, grant), `Confirm to copy ${agent.name}, which may read secrets.`) : api.agents.duplicate(agent.id),
     onSuccess: (copy, source) => {
       qc.invalidateQueries({ queryKey: qk.agents });
       toast.success(`${copy.name} is ready`, { description: `Same setup as ${source.name}, with a fresh memory. Give it its own name and role.` });

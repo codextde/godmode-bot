@@ -25,6 +25,7 @@ import type {
   TotpAlgorithm,
   TotpEntry,
   Workspace,
+  Project,
 } from "./models";
 
 /** Standard error body returned by the API with non-2xx status codes. */
@@ -64,6 +65,59 @@ export interface ProjectInput {
 }
 
 export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
+
+/** Items a workspace owns besides its agents, chats, tasks and repositories; they go along when it becomes a project. */
+export type ScopeItemKind =
+  | "credentials"
+  | "totp"
+  | "passkeys"
+  | "paymentCards"
+  | "mcpServers"
+  | "apiTools"
+  | "composioConnections"
+  | "browserProfiles"
+  | "goals"
+  | "humanTasks"
+  | "questions"
+  | "missingLogins";
+
+/** What a workspace brought along when it became a project; moving that project out with it puts everything back. */
+export interface ScopeRestore {
+  items: Partial<Record<ScopeItemKind, ID[]>>;
+  /** Its projects, which became projects of the other workspace too. */
+  projectIds: ID[];
+  vmId: ID | null;
+  autoMerge: boolean;
+}
+
+export interface ProjectMoveInput {
+  /** The workspace it moves to; null = it becomes a workspace of its own. */
+  workspaceId: ID | null;
+  /** Only with `workspaceId: null`: what came along when it was a workspace (an undo). */
+  restore?: ScopeRestore;
+  /** The human checked the context an agent wrote for it before it becomes a workspace's (else 409 `context_review`). */
+  contextReviewed?: boolean;
+}
+
+export interface WorkspaceMoveInput {
+  /** The workspace it becomes a project of, with everything in it. */
+  workspaceId: ID;
+}
+
+export type ScopeMoveCounts = Partial<Record<ScopeItemKind | "agents" | "chats" | "tasks" | "sources" | "projects", number>>;
+
+export interface ScopeMoveResult {
+  /** The workspace it moved into, or the new one it became. */
+  workspace: Workspace;
+  /** The project it is now; null once it is a workspace. */
+  project: Project | null;
+  /** What moved along, by kind (0s left out). */
+  moved: ScopeMoveCounts;
+  /** What changed for its agents beyond the move: a VM or browser profile they no longer use, leads and tickets cut loose. */
+  notes: string[];
+  /** The call that puts it back (links the move cut, like a lead or a ticket's agent, stay cut). */
+  undo: { projectId: ID; input: ProjectMoveInput } | { workspaceId: ID; input: WorkspaceMoveInput };
+}
 
 export interface AgentInput {
   workspaceId?: ID | null;
