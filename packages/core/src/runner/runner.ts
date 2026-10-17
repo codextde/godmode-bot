@@ -413,7 +413,10 @@ interface Job {
   timedOut: boolean;
   /** The watchdog stopped it: its report (the run's error). */
   stalled?: string;
-  /** Last line Claude Code wrote, and when the process started (ms) — what the watchdog looks at. */
+  /**
+   * Last line Claude Code wrote, and when the process started — what the watchdog looks at. On the awake clock
+   * (`performance.now()`, which stops while the computer sleeps): time asleep is no stall.
+   */
   lastOutputAt?: number;
   spawnedAt?: number;
   lastLabel: string;
@@ -478,7 +481,10 @@ export function activeRunForConversation(conversationId: string): string | null 
   return queued;
 }
 
-/** A running run as the watchdog sees it. `waiting`: it stands still on purpose (a pause, the usage limit, compacting). */
+/**
+ * A running run as the watchdog sees it, its times on the awake clock (`performance.now()`). `waiting`: it stands still
+ * on purpose (a pause, the usage limit, compacting).
+ */
 export interface WatchedRun {
   runId: string;
   agentId: string;
@@ -1743,8 +1749,8 @@ async function spawnClaude(
     throw err;
   }
   job.proc = proc;
-  job.spawnedAt ??= Date.now();
-  job.lastOutputAt = Date.now();
+  job.spawnedAt ??= performance.now();
+  job.lastOutputAt = performance.now();
   if (halted(job)) killTree(proc);
   try {
     proc.stdin.write(prompt);
@@ -1755,7 +1761,7 @@ async function spawnClaude(
   const stderrP = readTail(proc.stderr, STDERR_TAIL_BYTES);
   const tail = tailLines(outPath, proc.exited, (raw) => {
     const line = raw.trim();
-    job.lastOutputAt = Date.now();
+    job.lastOutputAt = performance.now();
     if (!line) return;
     let event: unknown;
     try {

@@ -14,7 +14,7 @@ import { all, get, insert, run, tx } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { moveToTrash } from "../agents/repo";
-import { badRequest, childEnv, hostnameOf, newId, notFound, now, which } from "../util";
+import { awakeTimeout, badRequest, childEnv, hostnameOf, newId, notFound, now, which } from "../util";
 import { normalizeWorkingDirectory, workingDirectoryProblem } from "./folders";
 
 const log = logger("sources");
@@ -443,7 +443,8 @@ async function exec(
   const stdin = opts.input === undefined ? "ignore" : new Blob([opts.input]);
   const proc = Bun.spawn([bin, ...safe, ...args], { cwd: opts.cwd, env: opts.env, stdin, stdout: "pipe", stderr: "pipe" });
   let timedOut = false;
-  const timer = setTimeout(() => {
+  // Awake time only: a fetch the computer slept through isn't timed out the moment it wakes.
+  const cancelTimeout = awakeTimeout(() => {
     timedOut = true;
     proc.kill();
   }, opts.timeoutMs);
@@ -457,7 +458,7 @@ async function exec(
     const [stdout, stderr] = stopped ? await Promise.race([output, Bun.sleep(500).then(() => ["", ""] as const)]) : await output;
     return { ok: code === 0 && !stopped, stdout, stderr, timedOut, ms: Math.round(performance.now() - started) };
   } finally {
-    clearTimeout(timer);
+    cancelTimeout();
     opts.signal?.removeEventListener("abort", stop);
   }
 }
