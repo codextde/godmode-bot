@@ -53,6 +53,8 @@ export const MAX_OPEN_PER_CHAT = 5;
 /** Closed tasks the board lists (newest first). */
 const CLOSED_LIMIT = 60;
 const POSITION_STEP = 1024;
+/** How long an answered decision keeps a new one that asks the same off the list. */
+const DECISION_MEMORY_MS = 3 * 24 * 60 * 60 * 1000;
 
 interface Row {
   id: string;
@@ -294,11 +296,78 @@ function ticketOf(conversationId: string): { id: string; workspace_id: string | 
   return get<{ id: string; workspace_id: string | null }>("SELECT id, workspace_id FROM tasks WHERE conversation_id = ?", conversationId);
 }
 
+/* ------------------------------------------------------------------ */
+/* The same thing twice                                                */
+/* ------------------------------------------------------------------ */
+
+const FILLER = new Set(
+  (
+    "a an the and or but if then than so to of in on at by for from with without into onto about as is are was were be been being it its this that these those " +
+    "i me my we our us you your he she they them their his her do does did done can could should shall may might must will would please again still now " +
+    "just also not no yes there here what which who when where how why up down out over one ein eine einen einem einer der die das den dem des und oder aber " +
+    "wenn dann zu von im in am an auf mit für fuer ohne ist sind war bitte noch jetzt schon auch nicht ja nein ich du sie wir ihr er es mir dir uns euch"
+  ).split(" "),
+);
+
+function words(text: string): Set<string> {
+  const plain = text
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/(\d)[.,'](?=\d{3}\b)/g, "$1")
+    .replace(/['’]s\b/g, "");
+  return new Set((plain.match(/[\p{L}\p{N}]+/gu) ?? []).filter((w) => !FILLER.has(w) && (w.length > 1 || /\d/.test(w))));
+}
+
+/** Two titles that ask for the same thing: (nearly) all words of the shorter one are in the longer one. */
+export function sameAsk(a: string, b: string): boolean {
+  const x = words(a);
+  const y = words(b);
+  const [small, big] = x.size <= y.size ? [x, y] : [y, x];
+  if (!small.size) return false;
+  let shared = 0;
+  for (const w of small) if (big.has(w)) shared++;
+  if (shared === small.size && small.size === big.size) return true;
+  return shared >= 3 && shared / small.size >= 0.8;
+}
+
+/** "H-12" mentions in a text that are tasks on the list. */
+function mentionedTasks(text: string): Row[] {
+  const numbers = [...new Set([...text.matchAll(/\bH-(\d{1,6})\b/g)].map((m) => Number(m[1])))];
+  return numbers.map((n) => get<Row>(`${SELECT} WHERE h.number = ?`, n)).filter((r): r is Row => !!r);
+}
+
+/** A task on the human's list that already asks for this: open (or in the backlog, or being done), or answered since `since`. */
+export function findSameHumanTask(title: string, opts: { since?: string; except?: string[] } = {}): HumanTask | null {
+  const skip = new Set(opts.except ?? []);
+  const rows = all<Row>(
+    `${SELECT} WHERE h.status IN ${ACTIVE_SQL}${opts.since ? " OR (h.status IN ('done', 'declined') AND h.closed_at >= ?)" : ""} ORDER BY CASE WHEN h.status IN ${ACTIVE_SQL} THEN 0 ELSE 1 END, h.number DESC`,
+    ...(opts.since ? [opts.since] : []),
+  );
+  const hit = rows.find((r) => !skip.has(r.id) && sameAsk(title, r.title));
+  return hit ? toHumanTask(hit) : null;
+}
+
+/** Why an agent in this chat shouldn't put this on the list again, or null. A decision its own answer left open here doesn't count: asking it properly takes its place. */
+export function duplicateAsk(conversationId: string, title: string): string | null {
+  const same = findSameHumanTask(clean(title, 300), { except: openFromAnswer(conversationId).map((r) => r.id) });
+  if (!same) return null;
+  const ref = humanTaskRef(same);
+  return `${alreadyThere(same)}. Don't add it a second time: work with ${ref}, and if your work waits for it, say so in your answer and mention ${ref}.`;
+}
+
+function alreadyThere(t: HumanTask): string {
+  const from = [t.agentName, t.conversationTitle ? `chat "${t.conversationTitle}"` : ""].filter(Boolean).join(", ");
+  return `${humanTaskRef(t)} “${t.title}” is already on ${humanName()}'s list${from ? ` (${from})` : ""}`;
+}
+
 /** The gateway's `human_task_create`. */
 export function createAgentHumanTask(origin: HumanTaskOrigin, input: HumanTaskInput): HumanTask {
   const agent = getAgent(origin.agentId);
   const title = clean(input.title, 200);
   if (!title) throw badRequest("Say what to do (title).");
+  const twice = duplicateAsk(origin.conversationId, title);
+  if (twice) throw conflict(twice);
   const open =
     get<{ n: number }>(
       `SELECT COUNT(*) AS n FROM human_tasks WHERE conversation_id = ? AND question_id IS NULL AND from_answer = 0 AND status IN ${ACTIVE_SQL}`,
@@ -381,11 +450,19 @@ export function noteOpenDecision(run: FinishedRun, answer: string): HumanTask | 
     }
     return null;
   }
-  const same = earlier.find((e) => e.title === title);
+  const same = earlier.find((e) => sameAsk(e.title, title));
   for (const e of earlier) if (e !== same) withdraw(e, "A later answer took its place.");
   if (same) {
     if (earlier.length > 1) changed();
     return getHumanTask(same.id);
+  }
+  // A report that lists what is already open ("H-12 and H-14 are still open"), or a decision the list already holds
+  // or the human answered lately: no second ticket for it.
+  const mentioned = mentionedTasks(title).length > 0;
+  const since = new Date(Date.now() - DECISION_MEMORY_MS).toISOString();
+  if (mentioned || findSameHumanTask(title, { since })) {
+    if (earlier.length) changed();
+    return null;
   }
   const agent = getAgent(run.agentId);
   const ticket = ticketOf(run.conversationId);

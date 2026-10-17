@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
@@ -9,7 +9,8 @@ import { deleteConversation, getConversation, sendMessage, startChat } from "../
 import { listAttention } from "../src/services/attention";
 import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
-import { closeHumanTask, getHumanTask, listHumanTasks, startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
+import { closeHumanTask, getHumanTask, listHumanTasks, noteOpenDecision, sameAsk, startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
+import { run as sql } from "../src/db";
 import { answerQuestion, getQuestion, openQuestionOf } from "../src/services/questions";
 import { stopPauses } from "../src/services/pauses";
 import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
@@ -224,6 +225,11 @@ describe("the human's own tasks", () => {
 });
 
 describe("a decision an answer leaves open", () => {
+  // Every test leaves the same decision: an earlier one would keep it off the list.
+  beforeEach(() => {
+    sql("DELETE FROM human_tasks WHERE from_answer = 1");
+  });
+
   /** A chat whose agent finished with a "Decision for you" in its answer. */
   async function chatWithDecision(content = "LEAVE_DECISION set up the store") {
     const { conversation, run } = await startChat({ agentId: agent.id, content });
@@ -353,6 +359,52 @@ describe("a decision an answer leaves open", () => {
     await settled(["in_review"]);
     expect(lastPrompt()).toContain("Dana answered:\nGo ahead");
   }, 40_000);
+});
+
+describe("the same thing twice", () => {
+  beforeEach(() => {
+    sql("UPDATE human_tasks SET status = 'withdrawn' WHERE status IN ('backlog', 'open', 'doing') AND question_id IS NULL");
+  });
+
+  test("titles that ask for the same thing match, different ones don't", () => {
+    expect(
+      sameAsk(
+        "If an order comes in before CJ sources it, may we buy that one unit on AliExpress (WINOMO item 3256813118244875, about USD 18) and ship it straight to the customer?",
+        "if a hoop order comes in before CJ finds a supplier, may we buy that one unit on AliExpress (WINOMO item, about USD 18) and ship it straight to the customer?",
+      ),
+    ).toBe(true);
+    expect(sameAsk("Easyclean claim of 8,139 EUR: sue or write off?", "the Easyclean claim (8139 EUR): sue or write off")).toBe(true);
+    expect(sameAsk("Log in to Higgsfield in the Godmode browser", "Log in to Twilio in the Godmode browser")).toBe(false);
+    expect(sameAsk('Type the Scalable CAPTCHA and click "Anmelden"', 'financeAds: type the CAPTCHA and click "Jetzt kostenlos registrieren!"')).toBe(false);
+    expect(sameAsk("Confirm on your phone", "Confirm the Google Ads sign-in on your phone")).toBe(false);
+  });
+
+  test("an agent can't put a task on the list that is already there, from whichever chat", async () => {
+    const first = await chatWithTask("HUMAN_TASK passkey once");
+    const second = await startChat({ agentId: other.id, content: "hello" });
+    await waitForRun(second.run.id, 10_000);
+    const ctx = { runId: second.run.id, agentId: other.id, conversationId: second.conversation.id, workspaceId: null, depth: 0 };
+    const twice = await callTool(ctx, "human_task_create", { title: "Please create the passkey" });
+    expect(twice.isError).toBe(true);
+    expect(twice.content[0]!.text).toContain(`H-${first.task.number} “Create the passkey” is already on Dana's list`);
+    expect(listHumanTasks({ status: "active", conversationId: second.conversation.id })).toHaveLength(0);
+    expect((await callTool(ctx, "human_task_create", { title: "Scan the Google QR code for the YouTube channel" })).isError).toBeUndefined();
+
+    // Once it is done, it may be asked again.
+    await closeHumanTask(first.task.id, { outcome: "done" });
+    expect((await callTool(ctx, "human_task_create", { title: "Create the passkey" })).isError).toBeUndefined();
+    for (const t of listHumanTasks({ status: "active", conversationId: second.conversation.id })) await closeHumanTask(t.id, { outcome: "declined" });
+  }, 30_000);
+
+  test("an answer that only lists what is open, or asks what the list holds, adds nothing", async () => {
+    const { conversationId, run, task } = await chatWithTask("HUMAN_TASK roll-up");
+    const finished = { agentId: agent.id, conversationId, runId: run.id, workspaceId: null, attended: false };
+    const rollUp = `Ops pulse done.\n\n## Decisions for you\n\nH-${task.number} (create the passkey) is still open.`;
+    expect(noteOpenDecision(finished, rollUp)).toBeNull();
+    expect(noteOpenDecision(finished, "I set it up.\n\nShould I create the passkey now?")).toBeNull();
+    expect(listHumanTasks({ status: "active", conversationId }).map((t) => t.id)).toEqual([task.id]);
+    await closeHumanTask(task.id, { outcome: "declined" });
+  }, 30_000);
 });
 
 describe("questions and approvals have a ticket", () => {
