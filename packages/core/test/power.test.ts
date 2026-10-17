@@ -253,6 +253,7 @@ describe("lid-closed mode", () => {
     const status = await powerStatus();
     expect(status).toMatchObject({ enabled: true, active: false, state: "error", permission: false });
     expect(status.error).toContain("no longer allowed");
+    expect(all<{ title: string }>("SELECT title FROM notifications WHERE title = 'Your Mac sleeps with the lid closed'")).toHaveLength(1);
   });
 
   test("a paused run keeps the Mac awake: the answer it waits for must reach it", async () => {

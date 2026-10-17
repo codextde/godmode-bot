@@ -34,7 +34,7 @@ const SHORT_LIMIT_MS = 60 * 60_000;
 /** On quit: how long a switch under way may finish before sleep is given back regardless. */
 const STOP_WAIT_MS = 1_000;
 const RELEASE_FAILED = "Godmode couldn't let the Mac sleep again. Click \"Let the Mac sleep\" in Settings → General and enter your Mac password.";
-const HOLD_FAILED = "Godmode is no longer allowed to keep the Mac awake. Turn lid-closed mode off and on again.";
+const HOLD_FAILED = "Godmode is no longer allowed to keep the Mac awake, so it sleeps when the lid closes. Turn lid-closed mode off and on again in Settings → General and enter your Mac password once.";
 
 export interface Exec {
   code: number;
@@ -233,6 +233,7 @@ function failed(message: string) {
   if (lastError === message) return;
   lastError = message;
   if (message === RELEASE_FAILED) notify("error", "Your Mac can't sleep with the lid closed", message, "/settings/general");
+  else notify("warning", "Your Mac sleeps with the lid closed", message, "/settings/general");
 }
 
 /** Bring `disablesleep` in line with the setting, the runs and the battery. */
