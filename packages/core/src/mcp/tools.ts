@@ -151,7 +151,7 @@ import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parse
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
 import { callOwnerWhenAsked, callsEnabled, getCall, listCalls, ownerCallRefusal, placeCall } from "../calls/calls";
-import { MAX_OPEN_PER_CHAT, createAgentHumanTask, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
+import { MAX_OPEN_PER_CHAT, createAgentHumanTask, duplicateAsk, findHumanTask, listHumanTasks, withdrawHumanTask } from "../services/humanTasks";
 import { createMod, findMod, installMod, listMods, updateMod } from "../mods/service";
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
@@ -1545,6 +1545,8 @@ const TOOLS: ToolDef[] = [
     }),
     when: canAsk,
     run: ({ question, context, options, call }, { ctx }) => {
+      const twice = duplicateAsk(ctx.conversationId, question);
+      if (twice) return fail(twice);
       const out = askQuestion(ctx, { kind: "question", question, context, options });
       if (!out.ok) return fail(out.text);
       if (!call || !out.id) return out.text;
@@ -1574,6 +1576,8 @@ const TOOLS: ToolDef[] = [
     }),
     when: canAsk,
     run: ({ action, reason, affects }, { ctx }) => {
+      const twice = duplicateAsk(ctx.conversationId, action);
+      if (twice) return fail(twice);
       const out = askQuestion(ctx, { kind: "approval", action, reason, affects });
       return out.ok ? out.text : fail(out.text);
     },
@@ -1581,7 +1585,7 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "human_task_create",
-    description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes on their task list ("My tasks") with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). For a decision or an OK use ask_human / request_approval instead.`,
+    description: `Give the human a task: something you can't do yourself and they have to — solve a CAPTCHA, log in where only they can, confirm on their phone, sign or upload a document, pay, call someone, change a setting only they reach, give you access. It goes on their task list ("My tasks") with a notification. Write \`title\` as an imperative ("Confirm the Google Ads sign-in on your phone"), \`instructions\` as exact steps plus what you need back, and link the page where they do it. Finish what doesn't depend on it, then end your turn with a short summary of what you're waiting for: when they mark it done (or say they can't), this chat continues by itself with their note — don't poll and don't schedule a follow-up for it. On a board task the ticket waits in Blocked until then. One task per thing to do (at most ${MAX_OPEN_PER_CHAT} open per chat). Godmode refuses a task the human's list already holds (from any agent or chat) and names it: then work with that one instead of rephrasing it into a new one. For a decision or an OK use ask_human / request_approval instead.`,
     schema: z.object({
       title: z.string().min(1).max(200).describe("What to do, as an imperative, self-contained — also shown in a notification"),
       instructions: z.string().max(6000).optional().describe("How: exact steps, where, what you found, and what you need back. Markdown, short."),
