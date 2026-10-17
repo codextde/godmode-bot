@@ -7,7 +7,7 @@
  */
 import type { CaptchaSolver, CaptchaStatus, Settings } from "@godmode/shared";
 import { getMeta, setMeta } from "../db";
-import { getSettings } from "../services/settings";
+import { getSettings, updateSettings } from "../services/settings";
 import { HttpError, hostnameOf, sleep } from "../util";
 import { getAppSecret, hasAppSecret, isUnlocked } from "../vault/vault";
 import { attachToPage, pickActivePage, type CdpClient, type PageSession, type PageTarget } from "./cdp";
@@ -106,6 +106,21 @@ export function captchaStatus(): CaptchaStatus {
     solvedToday: solvedToday(),
     dailyLimit: getSettings().browser.captchaDailyLimit,
   };
+}
+
+/**
+ * Once: a solver key stored while no solver was picked (saved under API keys before that picked one) selects its
+ * solver. Only with exactly one solver key, and never again after that, so a later "off" stays off.
+ */
+export function adoptStoredSolverKey(): SolverId | null {
+  const DONE = "captcha.adopted_key";
+  if (getMeta(DONE)) return null;
+  setMeta(DONE, new Date().toISOString());
+  if (activeSolver()) return null;
+  const stored = (Object.keys(SOLVERS) as SolverId[]).filter((id) => keySet(SOLVERS[id].secret));
+  if (stored.length !== 1) return null;
+  updateSettings({ browser: { captchaSolver: stored[0]! } });
+  return stored[0]!;
 }
 
 function solverKey(id: SolverId): string {
