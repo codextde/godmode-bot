@@ -53,6 +53,11 @@ function isRoutineRefusal(err: HttpError) {
   return err.status === 401 || err.status === 423 || err.code === "grant_required";
 }
 
+/** A runner or the group's primary that didn't answer in time: its connection, not a fault here (the caller gets the 504). */
+export function isUnanswered(err: HttpError) {
+  return err.code === "runner_timeout";
+}
+
 function isApiPath(path: string) {
   return path.startsWith("/api/") || path.startsWith("/mcp") || path.startsWith("/hooks/");
 }
@@ -128,9 +133,9 @@ export function createApp() {
   app.onError((err, c) => {
     const route = c.req.routePath;
     if (err instanceof HttpError) {
-      if (err.status >= 500) log.error(`${c.req.method} ${route} failed`, { err, status: err.status, code: err.code });
+      if (err.status >= 500 && !isUnanswered(err)) log.error(`${c.req.method} ${route} failed`, { err, status: err.status, code: err.code });
       else if (!isRoutineRefusal(err) && !isPublicPath(c.req.path)) {
-        logRejection("info", "request rejected", { method: c.req.method, route, status: err.status, code: err.code, error: err.message });
+        logRejection("info", isUnanswered(err) ? "request unanswered" : "request rejected", { method: c.req.method, route, status: err.status, code: err.code, error: err.message });
       }
       return c.json({ error: err.message, code: err.code, details: err.details }, err.status as 400);
     }
