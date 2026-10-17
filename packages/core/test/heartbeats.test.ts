@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { RUN_WATCHDOG, heartbeatAllowedAt, nextAllowedAt, nextHeartbeatAt, normalizeHeartbeat, runEndOf } from "@godmode/shared";
-import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get, run as sql } from "../src/db";
 import { getAgent, updateAgent } from "../src/agents/service";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
@@ -178,6 +178,29 @@ describe("beats", () => {
     expect(invocations(env).at(-1)!.prompt).toContain("Nothing changed on your tickets since your last heartbeat.");
   });
 
+  test("a checklist chat whose context grew too large starts a fresh session", async () => {
+    const a = await withHeartbeat(await makeAgent({ name: "Grower" }), { checklist: "Look at the orders." });
+    const first = await beat(a.id);
+    await waitForRun(first.runId!, 10_000);
+    const session = get<{ claude_session_id: string }>("SELECT claude_session_id FROM conversations WHERE id = ?", first.conversationId)!.claude_session_id;
+
+    try {
+      __setHeartbeatsForTests({ maxContextTokens: 10_000_000 });
+      await waitForRun((await beat(a.id)).runId!, 10_000);
+      expect(argValue(invocations(env).at(-1)!, "--resume")).toBe(session);
+
+      __setHeartbeatsForTests({ maxContextTokens: 1 });
+      const fresh = await beat(a.id);
+      await waitForRun(fresh.runId!, 10_000);
+      expect(fresh.conversationId).toBe(first.conversationId);
+      const inv = invocations(env).at(-1)!;
+      expect(inv.args).not.toContain("--resume");
+      expect(argValue(inv, "--session-id")).not.toBe(session);
+    } finally {
+      __setHeartbeatsForTests({ maxContextTokens: 150_000 });
+    }
+  });
+
   test("the sweep beats what is due, once", async () => {
     const a = await withHeartbeat(await makeAgent({ name: "Sweeper" }));
     sql("UPDATE agents SET heartbeat = json_set(heartbeat, '$.since', ?) WHERE id = ?", new Date(Date.now() - 2 * 3_600_000).toISOString(), a.id);
@@ -187,6 +210,15 @@ describe("beats", () => {
     expect(listBeats(a.id).length).toBe(1);
     const state = heartbeatState(a.id);
     expect(Date.parse(state.nextAt!)).toBeGreaterThan(Date.now() + 50 * 60_000);
+  });
+
+  test("a sweep with nothing due doesn't stop the later ones", async () => {
+    const a = await withHeartbeat(await makeAgent({ name: "Later" }));
+    await sweepHeartbeats();
+    expect(listBeats(a.id).length).toBe(0);
+    sql("UPDATE agents SET heartbeat = json_set(heartbeat, '$.since', ?) WHERE id = ?", new Date(Date.now() - 2 * 3_600_000).toISOString(), a.id);
+    await sweepHeartbeats();
+    expect(listBeats(a.id).length).toBe(1);
   });
 
   test("a switched-off agent doesn't beat", async () => {

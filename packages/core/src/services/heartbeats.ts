@@ -8,7 +8,7 @@
  *  - records what it did. A beat with nothing to do is quiet: no run, no cost.
  * Beats due while Godmode was off happen once it is back (one, not one per missed interval).
  */
-import type { AgentHeartbeatState, HeartbeatBeat, HeartbeatOutcome, HeartbeatWake, HeartbeatWakeReason, Run, Task, TaskEvent } from "@godmode/shared";
+import type { AgentHeartbeatState, HeartbeatBeat, HeartbeatOutcome, HeartbeatWake, HeartbeatWakeReason, Run, RunUsage, Task, TaskEvent } from "@godmode/shared";
 import {
   MAX_HEARTBEAT_WAKES,
   TASK_PRIORITY_RANK,
@@ -38,7 +38,7 @@ import { listTaskEvents, listTasks, wakeTask } from "../tasks/service";
 import { listWatchdogEvents } from "../runner/watchdog";
 import { licenseBlocks } from "../license/license";
 import { exhaustedBudget } from "./budgets";
-import { createConversation, sendMessage } from "./conversations";
+import { createConversation, sendMessage, setConversationState } from "./conversations";
 import { pauseOf } from "./pauses";
 import { getSettings } from "./settings";
 
@@ -51,6 +51,8 @@ const KEEP_QUIET_DAYS = 14;
 const KEEP_DAYS = 90;
 const MAX_CHANGES = 15;
 const MAX_BOARD = 20;
+/** Tokens a checklist turn may read before the next beat starts a fresh session: a grown chat makes every check expensive. */
+let MAX_CONTEXT_TOKENS = 150_000;
 
 interface BeatRow {
   id: string;
@@ -212,11 +214,22 @@ function lastRunEnd(conversationId: string | null): string | null {
 /* The checklist                                                       */
 /* ------------------------------------------------------------------ */
 
-/** The agent's heartbeat chat (one per agent, reused, so the agent remembers its earlier beats). */
+/** The agent's heartbeat chat (one per agent, reused, so the agent remembers its earlier beats until its context grows too large). */
 function heartbeatConversation(agentId: string): string {
   const existing = get<{ id: string }>("SELECT id FROM conversations WHERE agent_id = ? AND origin = 'heartbeat' ORDER BY created_at DESC LIMIT 1", agentId);
   if (existing) return existing.id;
   return createConversation({ agentId, title: "Heartbeat", origin: "heartbeat" }).id;
+}
+
+/** What a turn of the chat's last checklist run read on average (its context), or 0. */
+function contextTokens(conversationId: string): number {
+  const row = get<{ usage: string | null; num_turns: number | null }>(
+    "SELECT usage, num_turns FROM runs WHERE conversation_id = ? AND usage IS NOT NULL ORDER BY created_at DESC, rowid DESC LIMIT 1",
+    conversationId,
+  );
+  const usage = parseJson<RunUsage | null>(row?.usage ?? null, null);
+  if (!usage || !row?.num_turns) return 0;
+  return (usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens) / row.num_turns;
 }
 
 function boardLine(t: Task): string {
@@ -336,6 +349,7 @@ async function beatOnce(agentId: string, reason: "scheduled" | "now"): Promise<H
     if (activeRunForConversation(conversationId) || pauseOf(conversationId)) checklist = "busy";
     else {
       try {
+        if (contextTokens(conversationId) > MAX_CONTEXT_TOKENS) setConversationState(conversationId, { claudeSessionId: null });
         const { run } = await sendMessage(conversationId, {
           content: `**Heartbeat**\n\n${hb.checklist.trim()}`,
           prompt: checklistPrompt({ interval: hb.intervalMinutes, checklist: hb.checklist, tickets, changes, lastBeat, woke }),
@@ -439,25 +453,26 @@ function prune() {
 
 /** Beat every heartbeat that is due. */
 export function sweepHeartbeats(): Promise<void> {
+  // Reset in a chained finally: a sweep with nothing due never awaits, and an inner finally would run before the assignment.
   sweeping ??= (async () => {
-    try {
-      prune();
-      const at = new Date();
-      for (const a of all<{ id: string }>("SELECT id FROM agents WHERE enabled = 1 AND json_extract(heartbeat, '$.enabled') = 1")) {
-        if (beating.has(a.id)) continue;
-        try {
-          const hb = getAgent(a.id).heartbeat;
-          const due = nextHeartbeatAt(hb, lastBeatAt(a.id));
-          if (!due || due > at || !heartbeatAllowedAt(hb, at)) continue;
-          await beat(a.id, "scheduled");
-        } catch (err) {
-          log.warn(`heartbeat of ${a.id} failed`, err);
-        }
+    prune();
+    const at = new Date();
+    for (const a of all<{ id: string }>("SELECT id FROM agents WHERE enabled = 1 AND json_extract(heartbeat, '$.enabled') = 1")) {
+      if (beating.has(a.id)) continue;
+      try {
+        const hb = getAgent(a.id).heartbeat;
+        const due = nextHeartbeatAt(hb, lastBeatAt(a.id));
+        if (!due || due > at || !heartbeatAllowedAt(hb, at)) continue;
+        await beat(a.id, "scheduled");
+      } catch (err) {
+        log.warn(`heartbeat of ${a.id} failed`, err);
       }
-    } finally {
-      sweeping = null;
     }
-  })();
+  })()
+    .catch((err) => log.warn("heartbeat sweep failed", err))
+    .finally(() => {
+      sweeping = null;
+    });
   return sweeping;
 }
 
@@ -478,8 +493,9 @@ export function stopHeartbeats(): void {
   offBus = null;
 }
 
-/** Tests: how long a ticket must be still before it counts as standing still, and the timer's tick. */
-export function __setHeartbeatsForTests(opts: { settleMs?: number; tickMs?: number }): void {
+/** Tests: how long a ticket must be still before it counts as standing still, the timer's tick and the context limit. */
+export function __setHeartbeatsForTests(opts: { settleMs?: number; tickMs?: number; maxContextTokens?: number }): void {
   if (typeof opts.settleMs === "number") SETTLE_MS = opts.settleMs;
   if (typeof opts.tickMs === "number") TICK_MS = opts.tickMs;
+  if (typeof opts.maxContextTokens === "number") MAX_CONTEXT_TOKENS = opts.maxContextTokens;
 }
