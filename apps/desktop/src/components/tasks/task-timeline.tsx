@@ -25,7 +25,7 @@ import { ChatFilesScope } from "@/components/chat/local-files";
 import { followupWhen } from "@/components/chat/followup";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useTaskEvents } from "@/lib/hooks";
+import { useSpendTracking, useTaskEvents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { formatCost, formatWork } from "./task-meta";
 
@@ -132,6 +132,7 @@ function Row({
 
 function EventRow({ event: e, task }: { event: TaskEvent; task: Task }) {
   const [open, setOpen] = useState(false);
+  const spendTracking = useSpendTracking();
   const pending = e.id.startsWith("pending-");
   const text = taskEventText(e, { you: "You", youObject: "you", when: followupWhen });
   const Icon = ICONS[e.kind] ?? CircleDot;
@@ -140,7 +141,7 @@ function EventRow({ event: e, task }: { event: TaskEvent; task: Task }) {
   if (e.kind === "delivered") {
     // The latest result is the one shown above; earlier ones open here.
     const current = e.body === task.summary;
-    const meta = [e.data.durationMs ? formatWork(e.data.durationMs) : null, e.data.costUsd ? formatCost(e.data.costUsd) : null].filter(Boolean).join(" · ");
+    const meta = [e.data.durationMs ? formatWork(e.data.durationMs) : null, spendTracking && e.data.costUsd ? formatCost(e.data.costUsd) : null].filter(Boolean).join(" · ");
     return (
       <Row
         icon={Icon}

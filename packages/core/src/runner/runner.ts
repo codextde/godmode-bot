@@ -2211,7 +2211,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   }
   // The fallback runs in the same process: only a model of the same provider can take over.
   const fallback = settings.runner.fallbackModel?.trim();
-  const budget = agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd;
+  // Per-run caps apply only with spend tracking on: with a Claude subscription its costs are API prices nobody pays.
+  const budget = settings.runner.spendTracking ? (agent.permissions.maxBudgetUsd ?? settings.runner.defaultMaxBudgetUsd) : null;
   // cmd.exe cannot pass multi-line arguments: use the file variants for Windows .cmd shims.
   const viaFiles = cmd[0] === "cmd.exe";
 

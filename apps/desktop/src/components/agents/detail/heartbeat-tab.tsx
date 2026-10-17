@@ -24,7 +24,7 @@ import {
 } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useSettings } from "@/lib/hooks";
+import { useSettings, useSpendTracking } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/markdown";
@@ -613,6 +613,7 @@ const RUN_STATE: Record<string, { label: string; className?: string }> = {
 
 function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
   const [open, setOpen] = useState(false);
+  const spendTracking = useSpendTracking();
   const state = b.runStatus && b.runStatus !== "succeeded" ? RUN_STATE[b.runStatus] : undefined;
   const running = b.runStatus === "running" || b.runStatus === "queued";
   const long = !!b.result && (b.result.length > 180 || b.result.includes("\n"));
@@ -624,7 +625,7 @@ function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
         <span className="font-medium text-foreground/80">Checklist</span>
         {state && <span className={state.className}>{state.label}</span>}
         <span className="ml-auto flex items-center gap-3">
-          {b.costUsd != null && b.costUsd > 0 && <span className="tabular-nums">{formatUsd(b.costUsd)}</span>}
+          {spendTracking && b.costUsd != null && b.costUsd > 0 && <span className="tabular-nums">{formatUsd(b.costUsd)}</span>}
           {b.conversationId && (
             <Link to={`/chat/${b.conversationId}`} className="font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline">
               {running ? "Watch" : "Open chat"}

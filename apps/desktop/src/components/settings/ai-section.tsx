@@ -246,7 +246,7 @@ export function AiSection({ settings }: { settings: Settings }) {
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Limits" icon={<Gauge />} description="Guardrails for cost and runaway tasks.">
+      <SettingsGroup title="Limits" icon={<Gauge />} description={r.spendTracking ? "Guardrails for cost and runaway tasks." : "Guardrails for runaway tasks."}>
         <SettingRow label="Parallel runs" htmlFor="max-runs" description="How many agent runs may execute at the same time. Extra runs wait in a queue.">
           <NumberField id="max-runs" min={1} max={32} value={r.maxConcurrentRuns} onCommit={(v) => v !== null && patch({ runner: { maxConcurrentRuns: v } })} />
         </SettingRow>
@@ -298,37 +298,48 @@ export function AiSection({ settings }: { settings: Settings }) {
             </SettingRow>
           </>
         )}
-        <SettingRow label="Default budget per run" htmlFor="budget" description="Hard spending cap passed to Claude Code. Leave empty for unlimited.">
-          <NumberField
-            id="budget"
-            prefix="$"
-            suffix="USD"
-            min={0}
-            step={0.5}
-            allowEmpty
-            placeholder="Unlimited"
-            value={r.defaultMaxBudgetUsd}
-            onCommit={(v) => patch({ runner: { defaultMaxBudgetUsd: v === 0 ? null : v } })}
-          />
-        </SettingRow>
         <SettingRow
-          label="Monthly team budget"
-          htmlFor="team-budget"
-          description="Everything your agents cost in a calendar month. At 80% you're told; at 100% automations, follow-ups and board tickets wait until you raise it or let them run. Chats you start still run."
+          label="Budgets and spend"
+          htmlFor="spend-tracking"
+          description="Show what runs cost and set monthly budgets. With a Claude subscription, leave this off: Claude Code reports API prices you don't pay."
         >
-          <NumberField
-            id="team-budget"
-            prefix="$"
-            suffix="USD"
-            min={0}
-            step={5}
-            allowEmpty
-            placeholder="No budget"
-            value={r.monthlyBudgetUsd ?? null}
-            onCommit={(v) => patch({ runner: { monthlyBudgetUsd: v === 0 ? null : v } })}
-          />
+          <Switch id="spend-tracking" checked={r.spendTracking ?? false} onCheckedChange={(spendTracking) => patch({ runner: { spendTracking } })} />
         </SettingRow>
-        <TeamBudget />
+        {r.spendTracking && (
+          <>
+            <SettingRow label="Default budget per run" htmlFor="budget" description="Hard spending cap passed to Claude Code. Leave empty for unlimited.">
+              <NumberField
+                id="budget"
+                prefix="$"
+                suffix="USD"
+                min={0}
+                step={0.5}
+                allowEmpty
+                placeholder="Unlimited"
+                value={r.defaultMaxBudgetUsd}
+                onCommit={(v) => patch({ runner: { defaultMaxBudgetUsd: v === 0 ? null : v } })}
+              />
+            </SettingRow>
+            <SettingRow
+              label="Monthly team budget"
+              htmlFor="team-budget"
+              description="Everything your agents cost in a calendar month. At 80% you're told; at 100% automations, follow-ups and board tickets wait until you raise it or let them run. Chats you start still run."
+            >
+              <NumberField
+                id="team-budget"
+                prefix="$"
+                suffix="USD"
+                min={0}
+                step={5}
+                allowEmpty
+                placeholder="No budget"
+                value={r.monthlyBudgetUsd ?? null}
+                onCommit={(v) => patch({ runner: { monthlyBudgetUsd: v === 0 ? null : v } })}
+              />
+            </SettingRow>
+            <TeamBudget />
+          </>
+        )}
       </SettingsGroup>
 
       <SettingsGroup title="Claude Code CLI" icon={<TerminalSquare />}>

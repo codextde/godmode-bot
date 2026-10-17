@@ -357,6 +357,20 @@ describe("untrusted backup contents", () => {
     expect(warnings.some((w) => w.includes("1 plugin(s) with an unsafe name"))).toBe(true);
   });
 
+  test("a backup from before spend tracking keeps it on only where it had budgets", async () => {
+    const withRunner = (runner: Record<string, unknown>) =>
+      tamper((dump) => {
+        const settings = (dump.tables.settings ??= []).filter((row) => row.key !== "runner");
+        dump.tables.settings = [...settings, { key: "runner", value: JSON.stringify(runner) }];
+      });
+    await importBackup(withRunner({ monthlyBudgetUsd: 20 }), BACKUP_PASSPHRASE);
+    expect(getSettings().runner).toMatchObject({ monthlyBudgetUsd: 20, spendTracking: true });
+    await importBackup(withRunner({ effort: "high" }), BACKUP_PASSPHRASE);
+    expect(getSettings().runner.spendTracking).toBe(false);
+    await importBackup(withRunner({ monthlyBudgetUsd: 20, spendTracking: false }), BACKUP_PASSPHRASE);
+    expect(getSettings().runner.spendTracking).toBe(false);
+  });
+
   test("turns off unattended computer use, clears shared screens and the Cua Driver command", async () => {
     const evil = tamper((dump) => {
       const base = dump.tables.agents![0]!;

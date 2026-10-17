@@ -713,7 +713,7 @@ const agentFields = {
     .object({
       allowDelegation: z.boolean().optional(),
       delegateTo: z.array(z.string()).optional().describe("Agent ids it may delegate to; empty = any peer"),
-      maxBudgetUsd: z.number().positive().nullable().optional().describe("Cost cap per run in USD"),
+      maxBudgetUsd: z.number().positive().nullable().optional().describe("Cost cap per run in USD; applies only while the human has Budgets and spend on"),
     })
     .optional(),
   browser: z
@@ -1850,7 +1850,7 @@ const TOOLS: ToolDef[] = [
           allowDelegation: target.permissions.allowDelegation,
           canManageAgents: target.permissions.canManageAgents,
           secretAccess: target.permissions.secretAccess,
-          maxBudgetUsd: target.permissions.maxBudgetUsd,
+          ...(getSettings().runner.spendTracking ? { maxBudgetUsd: target.permissions.maxBudgetUsd, monthlyBudgetUsd: target.permissions.monthlyBudgetUsd } : {}),
         },
         browserEnabled: target.browser.enabled,
         subagents: target.subagents.map((s) => s.name),
@@ -2519,7 +2519,7 @@ const TOOLS: ToolDef[] = [
       json(
         listGoals()
           .filter((g) => everything || g.status === "active")
-          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: g.costUsd })),
+          .map((g) => ({ id: g.id, title: g.title, why: g.why || undefined, status: g.status, targetDate: g.targetDate ?? undefined, tickets: g.tickets, costUsd: getSettings().runner.spendTracking ? g.costUsd : undefined })),
       ),
   }),
 
@@ -2698,7 +2698,7 @@ const TOOLS: ToolDef[] = [
           result: t.summary,
           ...(t.status === "blocked" ? { blocked: { kind: t.blockedKind, reason: t.blockedReason } } : {}),
           ...(t.pullRequest ? { pullRequest: t.pullRequest } : {}),
-          cost: { usd: Math.round(t.costUsd * 100) / 100, workMinutes: Math.round(t.workMs / 60_000), runs: t.runCount },
+          cost: { usd: getSettings().runner.spendTracking ? Math.round(t.costUsd * 100) / 100 : undefined, workMinutes: Math.round(t.workMs / 60_000), runs: t.runCount },
           createdAt: t.createdAt,
           startedAt: t.startedAt,
           completedAt: t.completedAt,
@@ -2799,13 +2799,17 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "spend_overview",
     description:
-      "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only.",
+      "What the team cost: runs, cost in USD and working time for today, this week, this month or all time — in total, per agent and per kind of work (chat, automation, task, delegation, followup, memory) — plus the monthly budgets with what is spent and how many runs are held. Use it when the human asks what the agents cost or why work is waiting. Budgets are set by the human only. Answers only while the human has spend tracking on.",
     schema: z.object({
       period: z.enum(["today", "week", "month", "all"]).optional().describe("Default: month (the calendar month budgets count)"),
       agentId: z.string().optional().describe("Only this agent"),
     }),
     when: isManager,
     run: ({ period, agentId }) => {
+      if (!getSettings().runner.spendTracking) {
+        const human = getSettings().general.userName.trim() || "the human";
+        return `Spend tracking is off, so Godmode shows no costs and no budget applies (with a Claude subscription the costs Claude Code reports are API prices nobody pays). ${human} can switch it on in Settings → AI under "Budgets and spend".`;
+      }
       const report = spendReport(period ?? "month", agentId);
       const budgets = budgetOverview();
       const names = new Map(listAgents().map((a) => [a.id, a.name]));
@@ -2841,6 +2845,7 @@ const TOOLS: ToolDef[] = [
     run: ({ agentId, status, limit }) => {
       const names = new Map(listAgents({ workspaceId: "all" }).map((a) => [a.id, a.name]));
       const runs = listRuns({ agentId, status, limit: limit ?? 20 });
+      const tracking = getSettings().runner.spendTracking;
       // A paused run that waits for the human's answer says so: the human, not the run, holds it up.
       const waiting = new Map(
         listQuestions({ status: "open", limit: 500 }).map((q) => [q.runId, q.kind === "approval" ? `the human's OK: ${q.title}` : `the human's answer: ${q.title}`]),
@@ -2857,7 +2862,7 @@ const TOOLS: ToolDef[] = [
           trigger: r.trigger,
           createdAt: r.createdAt,
           finishedAt: r.finishedAt,
-          costUsd: r.costUsd,
+          costUsd: tracking ? r.costUsd : undefined,
           conversationId: r.conversationId,
           task: snippet(r.prompt, 200),
           result: snippet(r.result, 400),

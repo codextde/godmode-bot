@@ -61,6 +61,24 @@ SELECT id, agent_id, agent_name, trigger, at, MAX(0, own), duration_ms, failed F
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */
+/**
+ * Costs and budgets show only with spend tracking on (off by default: with a Claude subscription, the costs Claude Code
+ * reports are API prices nobody pays). Installs that set a team, per-run or agent budget before it existed keep it on.
+ * Idempotent (only settings without the switch); also run after a restore, because a backup from before migration 96
+ * has no switch. Migration 96 embeds it.
+ */
+export const SPEND_TRACKING_SQL = /* sql */ `
+INSERT OR IGNORE INTO settings (key, value) SELECT 'runner', '{}' WHERE EXISTS (
+  SELECT 1 FROM agents WHERE json_valid(permissions)
+    AND (json_extract(permissions, '$.monthlyBudgetUsd') > 0 OR json_extract(permissions, '$.maxBudgetUsd') > 0));
+UPDATE settings SET value = json_set(value, '$.spendTracking', json(CASE
+    WHEN json_extract(value, '$.monthlyBudgetUsd') > 0 OR json_extract(value, '$.defaultMaxBudgetUsd') > 0 OR EXISTS (
+      SELECT 1 FROM agents WHERE json_valid(permissions)
+        AND (json_extract(permissions, '$.monthlyBudgetUsd') > 0 OR json_extract(permissions, '$.maxBudgetUsd') > 0))
+    THEN 'true' ELSE 'false' END))
+WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.spendTracking') IS NULL;
+`;
+
 export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
   {
     id: 1,
@@ -1560,5 +1578,10 @@ CREATE INDEX idx_passkeys_profile ON passkeys(profile_id);
 -- headless runner. Its chats are mirrored like a runner's; it gets no Godmode updates and no runner health checks.
 ALTER TABLE runners ADD COLUMN kind TEXT NOT NULL DEFAULT 'runner';
 `,
+  },
+  {
+    id: 96,
+    name: "spend_tracking",
+    sql: SPEND_TRACKING_SQL,
   },
 ];

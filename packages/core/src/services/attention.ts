@@ -6,6 +6,7 @@ import type { AttentionItem, RunPause } from "@godmode/shared";
 import { formatUsd, monthName } from "@godmode/shared";
 import { all, get } from "../db";
 import { parseJson } from "../util";
+import { getSettings } from "./settings";
 import { listQuestions } from "./questions";
 import { listHumanTasks } from "./humanTasks";
 import { listTasks } from "../tasks/service";
@@ -141,12 +142,14 @@ export function listAttention(): AttentionItem[] {
     });
   }
 
-  // Held for a monthly budget: one row per budget, not one per run.
-  for (const h of all<{ scope: string | null; agent_id: string; n: number; budget: number | null; since: string; resume_at: string | null }>(
+  // Held for a monthly budget: one row per budget, not one per run. Without spend tracking nothing is held for long:
+  // only a switched-off agent's runs wait, and they go on once it is switched on.
+  const held = getSettings().runner.spendTracking ? all<{ scope: string | null; agent_id: string; n: number; budget: number | null; since: string; resume_at: string | null }>(
     `SELECT budget_scope AS scope, CASE WHEN budget_scope = 'team' THEN '' ELSE agent_id END AS agent_id, COUNT(*) AS n,
        MAX(budget_usd) AS budget, MIN(created_at) AS since, MIN(resume_at) AS resume_at
      FROM paused_runs WHERE reason = 'budget' GROUP BY 1, 2`,
-  )) {
+  ) : [];
+  for (const h of held) {
     const team = h.scope === "team";
     const runs = h.n === 1 ? "1 run waits" : `${h.n} runs wait`;
     items.push({

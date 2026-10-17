@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Agent } from "@godmode/shared";
-import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get, getDb, insert, run as sql } from "../src/db";
-import { SPEND_BACKFILL_SQL } from "../src/db/migrations";
+import { MIGRATIONS, SPEND_BACKFILL_SQL, SPEND_TRACKING_SQL } from "../src/db/migrations";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
 import { ensureDefaultAgent, getAgent, updateAgent } from "../src/agents/service";
@@ -11,7 +11,7 @@ import { getConversation, startChat } from "../src/services/conversations";
 import { createRoutine, runRoutineNow } from "../src/services/routines";
 import { continueAgent, continueConversation, startPauses, stopPauses } from "../src/services/pauses";
 import { listNotifications } from "../src/services/notifications";
-import { updateSettings } from "../src/services/settings";
+import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { budgetOverview, checkThresholds, exhaustedBudget, monthStart, startBudgets, stopBudgets } from "../src/services/budgets";
 import { periodStart, spendReport } from "../src/services/spend";
 import { callTool } from "../src/mcp/tools";
@@ -37,7 +37,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   sql("DELETE FROM spend");
-  updateSettings({ runner: { monthlyBudgetUsd: null } });
+  updateSettings({ runner: { monthlyBudgetUsd: null, defaultMaxBudgetUsd: null, spendTracking: true } });
 });
 
 const api = (method: string, path: string, body?: unknown) =>
@@ -244,4 +244,123 @@ describe("monthly budgets", () => {
     await waitForRun(child, 20_000);
     await new Promise((r) => setTimeout(r, 50));
   }, 30_000);
+});
+
+describe("spend tracking off", () => {
+  test("no budget applies: nothing is held, nobody is told, the overview shows none", () => {
+    updateSettings({ runner: { monthlyBudgetUsd: 5, spendTracking: false } });
+    spent(6);
+    const before = listNotifications().length;
+    checkThresholds(agent.id);
+    expect(listNotifications()).toHaveLength(before);
+    expect(exhaustedBudget(agent)).toBeNull();
+    expect(budgetOverview().team).toMatchObject({ budgetUsd: null, state: "none" });
+    updateSettings({ runner: { spendTracking: true } });
+    expect(exhaustedBudget(agent)).toMatchObject({ scope: "team", budgetUsd: 5 });
+  });
+
+  test("switching it off lets held work go on", async () => {
+    const own = await makeAgent({ name: "Held then free", permissions: { monthlyBudgetUsd: 1 } });
+    spent(2, own.id);
+    const routine = createRoutine({ agentId: own.id, name: "Hourly", cron: "0 * * * *", prompt: "Say hello" });
+    const { triggerRoutine } = await import("../src/scheduler/scheduler");
+    const held = await triggerRoutine(routine.id, { scheduled: true });
+    await until(() => getRun(held.id).status === "paused", 10_000, "held");
+    updateSettings({ runner: { spendTracking: false } });
+    await until(() => getRun(held.id).status === "succeeded", 15_000, "released once spend tracking is off");
+    const again = await triggerRoutine(routine.id, { scheduled: true });
+    await waitForRun(again.id, 20_000);
+    expect(getRun(again.id).status).toBe("succeeded");
+  }, 60_000);
+
+  test("a switched-off agent's held work isn't shown as held and goes on once the agent is back", async () => {
+    const own = await makeAgent({ name: "Napping", permissions: { monthlyBudgetUsd: 1 } });
+    spent(2, own.id);
+    const routine = createRoutine({ agentId: own.id, name: "Twice a day", cron: "0 9,17 * * *", prompt: "Say hello" });
+    const { triggerRoutine } = await import("../src/scheduler/scheduler");
+    const held = await triggerRoutine(routine.id, { scheduled: true });
+    await until(() => getRun(held.id).status === "paused", 10_000, "held");
+    await updateAgent(own.id, { enabled: false });
+    updateSettings({ runner: { spendTracking: false } });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(getRun(held.id).status).toBe("paused");
+    const { listAttention } = await import("../src/services/attention");
+    expect(listAttention().some((i) => i.kind === "held")).toBe(false);
+    await updateAgent(own.id, { enabled: true });
+    await until(() => getRun(held.id).status === "succeeded", 15_000, "going on once switched on");
+  }, 60_000);
+
+  test("runs get no --max-budget-usd while it is off", async () => {
+    updateSettings({ runner: { defaultMaxBudgetUsd: 2, spendTracking: false } });
+    const off = await startChat({ agentId: agent.id, content: "Say hello" });
+    await waitForRun(off.run.id, 20_000);
+    expect(invocations(env).at(-1)!.args).not.toContain("--max-budget-usd");
+    updateSettings({ runner: { spendTracking: true } });
+    const on = await startChat({ agentId: agent.id, content: "Say hello" });
+    await waitForRun(on.run.id, 20_000);
+    expect(argValue(invocations(env).at(-1)!, "--max-budget-usd")).toBe("2");
+  }, 60_000);
+
+  test("spend_overview says it is off instead of numbers", async () => {
+    const godmode = await ensureDefaultAgent();
+    const conv = newId("cnv");
+    insert("conversations", { id: conv, agent_id: godmode.id, title: "x", origin: "chat", created_at: now(), updated_at: now() });
+    const runId = newId("run");
+    insert("runs", { id: runId, agent_id: godmode.id, conversation_id: conv, trigger: "chat", status: "running", prompt: "x", created_at: now() });
+    const ctx = { runId, agentId: godmode.id, conversationId: conv, workspaceId: null, depth: 0 };
+    spent(3);
+    updateSettings({ runner: { spendTracking: false } });
+    const off = await callTool(ctx, "spend_overview", {});
+    expect(off.content[0]!.text).toContain("Spend tracking is off");
+    expect(off.content[0]!.text).toContain("Settings → AI");
+    updateSettings({ runner: { spendTracking: true } });
+    const on = JSON.parse((await callTool(ctx, "spend_overview", {})).content[0]!.text) as { totals: { month: { costUsd: number } } };
+    expect(on.totals.month.costUsd).toBe(3);
+  });
+
+  test("only the human switches it, and the change is audited", async () => {
+    expect((await api("PUT", "/api/settings", { runner: { spendTracking: "yes" } })).status).toBe(400);
+    const audits = () => get<{ n: number }>("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'spend.tracking'")!.n;
+    const before = audits();
+    expect((await api("PUT", "/api/settings", { runner: { spendTracking: false } })).status).toBe(200);
+    expect((await api("PUT", "/api/settings", { runner: { spendTracking: false } })).status).toBe(200);
+    expect(audits()).toBe(before + 1);
+    expect(getSettings().runner.spendTracking).toBe(false);
+  });
+
+  test("the migration turns it on only where a budget was set", () => {
+    const migration = MIGRATIONS.find((m) => m.name === "spend_tracking")!.sql;
+    expect(migration).toBe(SPEND_TRACKING_SQL);
+    const agents = all<{ id: string; permissions: string }>("SELECT id, permissions FROM agents");
+    const runner = get<{ value: string }>("SELECT value FROM settings WHERE key = 'runner'");
+    const stored = () => {
+      const row = get<{ value: string }>("SELECT value FROM settings WHERE key = 'runner'");
+      return row ? (JSON.parse(row.value) as { spendTracking?: boolean }).spendTracking : "no row";
+    };
+    const migrate = (value: Record<string, unknown> | null) => {
+      sql("DELETE FROM settings WHERE key = 'runner'");
+      if (value) sql("INSERT INTO settings (key, value) VALUES ('runner', ?)", JSON.stringify(value));
+      getDb().run(migration);
+      return stored();
+    };
+    try {
+      sql("UPDATE agents SET permissions = json_remove(permissions, '$.monthlyBudgetUsd', '$.maxBudgetUsd')");
+      expect(migrate(null)).toBe("no row");
+      expect(migrate({ model: "claude-opus-5" })).toBe(false);
+      expect(migrate({ monthlyBudgetUsd: null, defaultMaxBudgetUsd: null })).toBe(false);
+      expect(migrate({ monthlyBudgetUsd: 20 })).toBe(true);
+      expect(migrate({ defaultMaxBudgetUsd: 2 })).toBe(true);
+      expect(migrate({ monthlyBudgetUsd: 20, spendTracking: false })).toBe(false);
+      sql("UPDATE agents SET permissions = json_set(permissions, '$.maxBudgetUsd', 3) WHERE id = ?", agent.id);
+      expect(migrate({ model: "claude-opus-5" })).toBe(true);
+      expect(migrate(null)).toBe(true);
+      sql("UPDATE agents SET permissions = json_set(json_remove(permissions, '$.maxBudgetUsd'), '$.monthlyBudgetUsd', 10) WHERE id = ?", agent.id);
+      expect(migrate(null)).toBe(true);
+    } finally {
+      for (const a of agents) sql("UPDATE agents SET permissions = ? WHERE id = ?", a.permissions, a.id);
+      sql("DELETE FROM settings WHERE key = 'runner'");
+      if (runner) sql("INSERT INTO settings (key, value) VALUES ('runner', ?)", runner.value);
+      resetSettingsCache();
+    }
+  });
 });

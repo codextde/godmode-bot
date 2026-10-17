@@ -21,12 +21,13 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") needsGrant();
   const mode = (patch.general as { mode?: unknown } | undefined)?.mode;
   if (mode !== undefined && !INTERFACE_MODES.includes(mode as InterfaceMode)) throw badRequest(`general.mode must be one of ${INTERFACE_MODES.join(", ")}`);
-  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
+  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown; spendTracking?: unknown } | undefined;
   const instructions = runner?.appendSystemPrompt;
   if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
     throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
   }
   if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
+  if (runner?.spendTracking !== undefined && typeof runner.spendTracking !== "boolean") throw badRequest("runner.spendTracking must be true or false");
   const { effort, model, fallbackModel } = (runner ?? {}) as { effort?: unknown; model?: unknown; fallbackModel?: unknown };
   if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
   for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {
