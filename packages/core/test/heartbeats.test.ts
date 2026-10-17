@@ -4,7 +4,7 @@ import { RUN_WATCHDOG, heartbeatAllowedAt, nextAllowedAt, nextHeartbeatAt, norma
 import { argValue, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { get, run as sql } from "../src/db";
 import { getAgent, updateAgent } from "../src/agents/service";
-import { getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { cancelRun, getRun, listRuns, waitForRun, watchedRuns } from "../src/runner/runner";
 import { __setWatchdogForTests, assess, checkRuns, listWatchdogEvents } from "../src/runner/watchdog";
 import { __setHeartbeatsForTests, beat, heartbeatState, listBeats, sweepHeartbeats } from "../src/services/heartbeats";
 import { startChat } from "../src/services/conversations";
@@ -318,6 +318,18 @@ describe("watchdog", () => {
     }
   });
 
+  test("time the computer slept is no stall: runs are timed on the awake clock", async () => {
+    const a = await makeAgent({ name: "Sleeper" });
+    const { run } = await startChat({ agentId: a.id, content: "SLEEP until done" });
+    await until(() => watchedRuns().some((r) => r.runId === run.id), 10_000, "run to start");
+    const watched = watchedRuns().find((r) => r.runId === run.id)!;
+    expect(watched.lastOutputAt).toBeLessThanOrEqual(performance.now());
+    expect(watched.lastOutputAt).toBeGreaterThan(performance.now() - 60_000);
+    expect(checkRuns()).toBe(0);
+    await cancelRun(run.id);
+    await waitForRun(run.id, 10_000);
+  });
+
   test("a stalled ticket tries again once, then waits blocked", async () => {
     const a = await makeAgent({ name: "Stuck Ticket" });
     __setWatchdogForTests({ stallMs: 300 });
@@ -340,7 +352,7 @@ describe("watchdog", () => {
   test("turned off, it leaves runs alone", () => {
     updateSettings({ runner: { watchdog: false } });
     try {
-      expect(checkRuns(Date.now() + 10 * 3_600_000)).toBe(0);
+      expect(checkRuns(performance.now() + 10 * 3_600_000)).toBe(0);
     } finally {
       updateSettings({ runner: { watchdog: true } });
     }

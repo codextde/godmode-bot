@@ -199,8 +199,8 @@ function intervene(run: WatchedRun, verdict: Verdict): void {
   }
 }
 
-/** One look at every running run. */
-export function checkRuns(at = Date.now()): number {
+/** One look at every running run. `at` is on the awake clock: the time the computer slept doesn't count as a stall. */
+export function checkRuns(at = performance.now()): number {
   const limits = watchdogLimits();
   if (!limits) return 0;
   let stopped = 0;
