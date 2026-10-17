@@ -5,8 +5,10 @@
  * happened since its last dream — the exchanges of its chats, automations and delegated tasks — and rewrites its
  * long-term memory: it captures context nobody explicitly asked it to remember, merges duplicates, resolves
  * contradictions (newer wins), makes dates absolute and rewrites plans that have passed, and prunes what is stale.
- * With settings.memory.dreaming.tidyWorkspace it also sorts the agent's workspace — loose files into topic folders,
- * disposable leftovers out — through `workspace_tidy` (memory/workspace.ts).
+ * With settings.memory.dreaming.tidyWorkspace it also tidies the agent's workspace through `workspace_tidy`
+ * (memory/workspace.ts): loose files into topic folders, disposable leftovers out, and its Markdown notes rewritten —
+ * merged where they overlap, brought up to date, shortened. A workspace that changed since the last dream is reason
+ * enough for a dream once settings.memory.dreaming.refreshDays have passed, even without new activity.
  *
  * MEMORY.md is loaded into every run (runner/prompt.ts), so a dream also has to keep it small: under settings.memory.
  * dreaming.maxMemoryChars, with the details moved into memory/. The dream is told the measured size, and its report is
@@ -72,7 +74,7 @@ import {
 } from "./files";
 import { exhaustedBudget } from "../services/budgets";
 import { licenseBlocks } from "../license/license";
-import { MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceInventory, type TidyOperation } from "./workspace";
+import { MAX_REWRITES, MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, type TidyOperation } from "./workspace";
 
 
 const log = logger("dreaming");
@@ -151,9 +153,15 @@ function revertible(row: DreamRow, changes: DreamFileChange[], moves: DreamWorks
   return changes.every((c) => currentMemoryFile(repoPath, c.path) === c.after) && canUndoWorkspace(repoPath, moves);
 }
 
+/** What a dream did in the workspace, without the text of the notes it rewrote (that is in DreamDetail.fileChanges). */
+function listedMoves(moves: DreamWorkspaceChange[]): DreamWorkspaceChange[] {
+  return moves.map(({ before: _before, after: _after, ...move }) => move);
+}
+
 function toDream(row: DreamRow, repoPath: string | null): Dream {
   const files = fileChangesOf(row);
-  const workspace = movesOf(row);
+  const moves = movesOf(row);
+  const workspace = listedMoves(moves);
   const memory = files.find((f) => f.path === MEMORY_FILE);
   return {
     id: row.id,
@@ -170,7 +178,7 @@ function toDream(row: DreamRow, repoPath: string | null): Dream {
     files: files.map((f) => f.path),
     memoryChars: memory ? { before: memory.before?.length ?? 0, after: memory.after?.length ?? 0 } : null,
     workspace,
-    canRevert: revertible(row, files, workspace, repoPath),
+    canRevert: revertible(row, files, moves, repoPath),
     error: row.error,
     createdAt: row.created_at,
     startedAt: row.started_at,
@@ -190,7 +198,10 @@ function dreamRow(id: string): DreamRow {
 
 export function getDream(id: string): DreamDetail {
   const row = dreamRow(id);
-  return { ...toDream(row, repoPathOf(row.agent_id)), fileChanges: fileChangesOf(row) };
+  const notes = movesOf(row)
+    .filter((m) => m.action === "rewrite")
+    .map((m) => ({ path: `workspace/${m.from}`, before: m.before ?? null, after: m.after ?? null }));
+  return { ...toDream(row, repoPathOf(row.agent_id)), fileChanges: [...fileChangesOf(row), ...notes] };
 }
 
 export function listDreams(agentId: string, limit = LIST_LIMIT): Dream[] {
@@ -422,13 +433,15 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
     : "There is no new activity since your last dream: check your memory against today's date and tidy it up.";
   const tidy = input.inventoryPath
     ? [
-        `4. Tidy your workspace (\`workspace/\`), so you and ${human} find things and nothing piles up. What lies there is listed in \`${input.inventoryPath}\`; look inside folders when a name doesn't tell you enough.`,
-        "   - Sort loose files and one-off folders into a few topic folders: by project, client or kind of work (reuse folders that exist; short lowercase-with-dashes names; at most two levels deep).",
+        `4. Tidy your workspace (\`workspace/\`), so you and ${human} find things and nothing piles up. What lies there, and the notes in it, are listed in \`${input.inventoryPath}\`; look inside folders when a name doesn't tell you enough.`,
+        "   - Sort loose files and one-off folders into a few topic folders: by project, client or kind of work (reuse folders that exist; short lowercase-with-dashes names; at most two levels deep). Sort what lies loose inside the topic folders too.",
         "   - Move finished work that is worth keeping (sent offers, invoices, reports, final assets, scripts you may run again) into its topic folder, or into `archive/<topic>/` when it is done for good.",
         "   - Discard what is clearly disposable: test screenshots, intermediate renders and exports, downloads you can fetch again, duplicates, leftovers of finished tasks. When unsure, keep it.",
         "   - Never discard deliverables, contracts, invoices, anything the human sent or will need again, or what your memory still relies on.",
         "   - tmp/ is for throwaway files and Godmode clears it by itself. What your notes name there is listed at the end of the inventory: move what you still use (scripts, helpers) into a proper folder like `scripts/`, and drop the mention of what you don't, so it can go.",
-        `   - Do every move and discard with \`workspace_tidy\` (in batches). It updates the paths in your memory files for you; mention a move elsewhere in your notes only when the path appears without \`workspace/\`. It refuses what is in use: entries changed in the last ${RECENT_DAYS} days, or named by your instructions, automations or follow-ups.`,
+        `   - Rewrite your notes (the Markdown files under "Notes" in the inventory) so each one is current and worth reading: merge notes on the same topic into one (rewrite the one you keep, then discard the others), turn status that changed and plans whose date passed into what is true now, make dates absolute, cut logs and step-by-step histories down to the results and facts that still matter, and point paths at where things are now. Keep every fact, number, id, link and decision that may still be needed, and the language the note is written in. Read a note fully before you rewrite it, and pass its complete new text. Up to ${MAX_REWRITES} notes per dream: the most outdated and overlapping first, the rest waits for the next one.`,
+        "   - Leave alone what is not your own working note: deliverables and anything sent, published or signed (offers, invoices, contracts, emails, posts, reports someone received), what the human or another person wrote, and a project's README or docs. Sort those, never rewrite them. A note that is fine as it is stays as it is.",
+        `   - Do every move, discard and rewrite with \`workspace_tidy\` (in batches; move a note before you rewrite it, and rewrite each note once — a rewritten note counts as just changed). It updates the paths in your memory files for you; mention a move elsewhere in your notes only when the path appears without \`workspace/\`. It refuses what is in use: entries changed in the last ${RECENT_DAYS} days, or named by your instructions, automations or follow-ups.`,
         "   - If the workspace is already tidy, leave it. Don't rename things for the sake of it.",
       ].join("\n")
     : null;
@@ -678,7 +691,8 @@ async function tidyInTurn(dreamId: string, agentId: string, operations: TidyOper
   const record = (change: DreamWorkspaceChange) => {
     exec("UPDATE dreams SET workspace = ? WHERE id = ?", JSON.stringify([...movesOf(moves() ?? { workspace: null }), change]), dreamId);
   };
-  const outcomes = await applyTidy(getAgent(agentId), operations.slice(0, room), { active, record });
+  const rewrites = movesOf(moves() ?? { workspace: null }).filter((m) => m.action === "rewrite").length;
+  const outcomes = await applyTidy(getAgent(agentId), operations.slice(0, room), { active, record, rewrites });
   if (outcomes.some((o) => o.change)) emitDreams();
   const lines = outcomes.map((o) => `- ${o.line}`);
   if (operations.length > room) lines.push(`- ${operations.length - room} more left out: a dream makes at most ${MAX_TIDY_CHANGES} workspace changes.`);
@@ -765,7 +779,7 @@ export function onDreamRunFinished(run: Run): void {
   pruneDreams(row.agent_id);
   removeDigest(repoPath, row.id);
   if (status === "succeeded" && (kept.length || moves.length)) {
-    const title = summary ? firstLine(summary, 120) : kept.length ? `${kept.length} memory file(s) consolidated` : `${moves.length} workspace entries sorted`;
+    const title = summary ? firstLine(summary, 120) : kept.length ? `${kept.length} memory file(s) consolidated` : `${moves.length} workspace change(s)`;
     commitAgentRepo(row.agent_id, `Dream: ${title}`).catch((err) => log.warn(`could not commit the dream of agent ${row.agent_id}`, err));
   }
   log.info(`dream ${row.id} ${status}${paused ? " (paused)" : ""}: ${changed} change(s)${status === "succeeded" ? "" : ", rolled back"}`);
@@ -882,6 +896,7 @@ export function dreamDue(agent: Agent, settings: Settings = getSettings(), at = 
   if (s.refreshDays <= 0) return false;
   const last = lastDreamAt(agent.id) ?? agent.createdAt;
   if (at.getTime() - new Date(last).getTime() < s.refreshDays * 86_400_000) return false;
+  if (s.tidyWorkspace && workspaceChangedSince(agent.repoPath, new Date(last).getTime())) return true;
   // Old memory without dates can't go stale by time alone; new activity below the threshold rides along.
   return mentionsTime(readMemory(agent.repoPath) ?? "");
 }
