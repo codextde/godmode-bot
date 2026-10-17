@@ -119,9 +119,27 @@ export default function ModelAndLimits() {
         />
       </Group>
 
-      <Group title="Budgets" footer="Used up, unattended work waits until next month. Leave empty for no limit.">
-        <FieldRow label="Per run" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.defaultMaxBudgetUsd ? String(r.defaultMaxBudgetUsd) : ""} onCommit={budget("defaultMaxBudgetUsd")} />
-        <FieldRow label="Team per month" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.monthlyBudgetUsd ? String(r.monthlyBudgetUsd) : ""} onCommit={budget("monthlyBudgetUsd")} />
+      <Group
+        title="Budgets"
+        footer={
+          r.spendTracking
+            ? "Used up, unattended work waits until next month. Leave empty for no limit."
+            : "With a Claude subscription, leave this off: Claude Code reports API prices you don't pay."
+        }
+      >
+        <SwitchRow
+          icon="dollar"
+          title="Budgets and spend"
+          detail="Show what runs cost and set monthly budgets."
+          value={r.spendTracking ?? false}
+          onChange={(spendTracking) => void patchSettings({ runner: { spendTracking } })}
+        />
+        {r.spendTracking ? (
+          <FieldRow label="Per run" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.defaultMaxBudgetUsd ? String(r.defaultMaxBudgetUsd) : ""} onCommit={budget("defaultMaxBudgetUsd")} />
+        ) : null}
+        {r.spendTracking ? (
+          <FieldRow label="Team per month" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.monthlyBudgetUsd ? String(r.monthlyBudgetUsd) : ""} onCommit={budget("monthlyBudgetUsd")} />
+        ) : null}
       </Group>
 
       <Group title="Watchdog" footer="Stops runs that stall or go in circles, so they don't burn time and tokens.">

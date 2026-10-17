@@ -2,7 +2,8 @@
  * Monthly budgets: the team's (settings.runner.monthlyBudgetUsd) and each agent's (permissions.monthlyBudgetUsd).
  * Spend comes from the ledger (services/spend.ts), booked in the month it was spent. At 80 % the human is told; at
  * 100 % unattended work (automations, follow-ups, board tickets) is held as a paused run (reason "budget") until the
- * month ends, the budget is raised, or the human lets it run. Chats the human starts still run.
+ * month ends, the budget is raised, or the human lets it run. Chats the human starts still run. Budgets apply only with
+ * spend tracking on (settings.runner.spendTracking); switching it off lets held work go on.
  */
 import type { Agent, BudgetOverview, BudgetReleaseInput, BudgetStatus } from "@godmode/shared";
 import { BUDGET_WARN_AT, formatUsd, monthName } from "@godmode/shared";
@@ -48,8 +49,14 @@ export interface BudgetStop {
 
 const amount = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
+/** Budgets apply only with spend tracking on (settings.runner.spendTracking). */
 export function teamBudget(): number | null {
-  return amount(getSettings().runner.monthlyBudgetUsd);
+  const runner = getSettings().runner;
+  return runner.spendTracking ? amount(runner.monthlyBudgetUsd) : null;
+}
+
+function agentBudget(agent: Pick<Agent, "permissions">): number | null {
+  return getSettings().runner.spendTracking ? amount(agent.permissions.monthlyBudgetUsd) : null;
 }
 
 /** The monthly budget that is used up for this agent's work — the team's first — or null. No query without budgets. */
@@ -59,7 +66,7 @@ export function exhaustedBudget(agent: Pick<Agent, "id" | "name" | "permissions"
     const spent = spentThisMonth();
     if (spent >= team) return { scope: "team", agentId: agent.id, agentName: agent.name, budgetUsd: team, spentUsd: spent };
   }
-  const own = amount(agent.permissions.monthlyBudgetUsd);
+  const own = agentBudget(agent);
   if (own !== null) {
     const spent = spentThisMonth(agent.id);
     if (spent >= own) return { scope: "agent", agentId: agent.id, agentName: agent.name, budgetUsd: own, spentUsd: spent };
@@ -93,7 +100,7 @@ export function budgetOverview(): BudgetOverview {
   const team = teamBudget();
   const agents = listAgents()
     .map((a): BudgetStatus => {
-      const budget = amount(a.permissions.monthlyBudgetUsd);
+      const budget = agentBudget(a);
       const spent = spentThisMonth(a.id);
       return { agentId: a.id, budgetUsd: budget, spentUsd: spent, held: heldCount("AND agent_id = ?", a.id), state: stateOf(budget, spent) };
     })
@@ -142,7 +149,7 @@ export function checkThresholds(agentId: string): void {
       "The team's",
     );
   }
-  const own = agent ? amount(agent.permissions.monthlyBudgetUsd) : null;
+  const own = agent ? agentBudget(agent) : null;
   if (agent && own !== null) {
     const spent = spentThisMonth(agent.id);
     tell(
@@ -221,7 +228,8 @@ let releaseTimer: ReturnType<typeof setTimeout> | null = null;
 let lastAmounts: string | null = null;
 
 function amountsNow(): string {
-  return JSON.stringify([teamBudget(), ...listAgents().map((a) => [a.id, amount(a.permissions.monthlyBudgetUsd)])]);
+  // Switched on again, an agent's work held while it was off is looked at too (spend tracking off: it goes on).
+  return JSON.stringify([teamBudget(), ...listAgents().map((a) => [a.id, a.enabled ? agentBudget(a) : "off"])]);
 }
 
 /** A budget may have changed: held work with room continues (debounced; nothing happens unless an amount changed). */

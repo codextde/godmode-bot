@@ -419,7 +419,8 @@ function claudeMdContext(agent: Agent) {
   const workspace = agent.workspaceId
     ? get<{ name: string; description: string }>("SELECT name, description FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
-  return { userName: getSettings().general.userName ?? "", workspace };
+  const settings = getSettings();
+  return { userName: settings.general.userName ?? "", workspace, spendTracking: settings.runner.spendTracking };
 }
 
 /**
@@ -804,24 +805,32 @@ export function removeFromDelegateLists(agentIds: string[]): void {
 let ensuring: Promise<Agent> | null = null;
 let settingsHookRegistered = false;
 let lastUserName: string | null = null;
+let lastSpendTracking: boolean | null = null;
 
 /** Meta key: the built-in agent's files were rewritten after it became the mascot (migration 20). */
 const MASCOT_FILES_KEY = "agents.mascot_files";
 
-/** Regenerate every agent's CLAUDE.md when the user's display name changes (it is part of each CLAUDE.md). */
+/**
+ * Regenerate every agent's CLAUDE.md when the user's display name changes (it is part of each CLAUDE.md), and those of
+ * agents with a per-run cap when spend tracking is switched (the cap is mentioned only with it on).
+ */
 function registerSettingsHook() {
   if (settingsHookRegistered) return;
   settingsHookRegistered = true;
   lastUserName = getSettings().general.userName ?? "";
+  lastSpendTracking = getSettings().runner.spendTracking;
   onSettingsApplied((s) => {
     const name = s.general.userName ?? "";
-    if (name === lastUserName) return;
+    const renamed = name !== lastUserName;
+    if (!renamed && s.runner.spendTracking === lastSpendTracking) return;
     lastUserName = name;
+    lastSpendTracking = s.runner.spendTracking;
     void (async () => {
       for (const agent of listAgents()) {
+        if (!renamed && agent.permissions.maxBudgetUsd == null) continue;
         // Missing repositories are created lazily (ensureAgentRepo) with the current name anyway.
         if (!existsSync(join(agent.repoPath, ".git"))) continue;
-        await refreshAgentFiles(agent.id, "Update user name").catch((err) =>
+        await refreshAgentFiles(agent.id, renamed ? "Update user name" : "Update spend tracking").catch((err) =>
           log.warn(`failed to refresh CLAUDE.md of agent ${agent.slug}`, err),
         );
       }

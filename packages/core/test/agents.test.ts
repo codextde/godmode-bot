@@ -176,7 +176,8 @@ describe("agent updates", () => {
     expect(claudeMd).toContain("British English");
     expect(claudeMd).not.toContain("Write blog posts.");
     expect(claudeMd).toContain("**editor** — Proofreads drafts");
-    expect(claudeMd).toContain("$5");
+    // The per-run cap is mentioned only with spend tracking on (off by default).
+    expect(claudeMd).not.toContain("$5");
     expect(JSON.parse(readFileSync(join(agent.repoPath, "state/agent.json"), "utf8")).name).toBe("Senior Writer");
 
     const commits = await listAgentCommits(agent.id);
@@ -733,11 +734,14 @@ describe("characters and personality", () => {
 
   test("CLAUDE.md personality section: preset, custom text or none", () => {
     const base = getAgent(getDefaultAgentId()!);
-    const ctx = { userName: "Ada", workspace: null };
+    const ctx = { userName: "Ada", workspace: null, spendTracking: false };
     const render = (personality: string) => renderClaudeMd({ ...base, personality } as Agent, ctx);
     for (const preset of PERSONALITY_PRESETS) expect(render(preset.id)).toContain(`## Your personality\n\n${preset.prompt}`);
     expect(render("Speak in haiku.")).toContain("## Your personality\n\nSpeak in haiku.");
     expect(render("")).not.toContain("## Your personality");
+    const capped = { ...base, permissions: { ...base.permissions, maxBudgetUsd: 5 } } as Agent;
+    expect(renderClaudeMd(capped, { ...ctx, spendTracking: true })).toContain("Each run is capped at $5");
+    expect(renderClaudeMd(capped, ctx)).not.toContain("capped at");
     expect(render("   ")).not.toContain("## Your personality");
     // Right after "Who you are".
     const md = render("calm");

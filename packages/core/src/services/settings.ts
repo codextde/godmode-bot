@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
     watchdog: true,
     stallMinutes: DEFAULT_STALL_MINUTES,
     loopRepeats: DEFAULT_LOOP_REPEATS,
+    spendTracking: false,
     defaultMaxBudgetUsd: null,
     monthlyBudgetUsd: null,
     extraArgs: [],

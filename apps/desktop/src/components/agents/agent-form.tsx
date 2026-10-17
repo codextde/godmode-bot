@@ -45,7 +45,7 @@ import {
 } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useModelCatalog, useSpendTracking, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { useDraft } from "@/lib/drafts";
@@ -288,6 +288,7 @@ export function AgentForm({
 }) {
   const { data: boot } = useBootstrap();
   const { catalog } = useModelCatalog();
+  const spendTracking = useSpendTracking();
   const scope = useUi((s) => s.workspace);
   const scopeProject = useUi((s) => s.project);
   const defaults = useMemo(
@@ -624,48 +625,52 @@ export function AgentForm({
             onChange={(v) => set("canManageAgents", v)}
           />
 
-          <div className="grid gap-1.5 @md:max-w-xs">
-            <Label htmlFor="agent-budget">Max budget per run</Label>
-            <div className="relative">
-              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-              <Input
-                id="agent-budget"
-                inputMode="decimal"
-                value={values.maxBudgetUsd}
-                onChange={(e) => set("maxBudgetUsd", e.target.value.replace(",", "."))}
-                placeholder="No limit"
-                aria-invalid={!!err("maxBudgetUsd")}
-                className="pl-7"
-              />
-            </div>
-            {err("maxBudgetUsd") ? (
-              <p className="text-xs text-destructive">{err("maxBudgetUsd")}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">A run stops when it would cost more than this.</p>
-            )}
-          </div>
-          <div className="grid gap-1.5 @md:max-w-xs">
-            <Label htmlFor="agent-month-budget">Monthly budget</Label>
-            <div className="relative">
-              <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-              <Input
-                id="agent-month-budget"
-                inputMode="decimal"
-                value={values.monthlyBudgetUsd}
-                onChange={(e) => set("monthlyBudgetUsd", e.target.value.replace(",", "."))}
-                placeholder="No budget"
-                aria-invalid={!!err("monthlyBudgetUsd")}
-                className="pl-7"
-              />
-            </div>
-            {err("monthlyBudgetUsd") ? (
-              <p className="text-xs text-destructive">{err("monthlyBudgetUsd")}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                What {values.name.trim() || "it"} may cost in a calendar month. When it's used up, its automations, follow-ups and board tickets wait for you — chats you start still run.
-              </p>
-            )}
-          </div>
+          {spendTracking && (
+            <>
+              <div className="grid gap-1.5 @md:max-w-xs">
+                <Label htmlFor="agent-budget">Max budget per run</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="agent-budget"
+                    inputMode="decimal"
+                    value={values.maxBudgetUsd}
+                    onChange={(e) => set("maxBudgetUsd", e.target.value.replace(",", "."))}
+                    placeholder="No limit"
+                    aria-invalid={!!err("maxBudgetUsd")}
+                    className="pl-7"
+                  />
+                </div>
+                {err("maxBudgetUsd") ? (
+                  <p className="text-xs text-destructive">{err("maxBudgetUsd")}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">A run stops when it would cost more than this.</p>
+                )}
+              </div>
+              <div className="grid gap-1.5 @md:max-w-xs">
+                <Label htmlFor="agent-month-budget">Monthly budget</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                  <Input
+                    id="agent-month-budget"
+                    inputMode="decimal"
+                    value={values.monthlyBudgetUsd}
+                    onChange={(e) => set("monthlyBudgetUsd", e.target.value.replace(",", "."))}
+                    placeholder="No budget"
+                    aria-invalid={!!err("monthlyBudgetUsd")}
+                    className="pl-7"
+                  />
+                </div>
+                {err("monthlyBudgetUsd") ? (
+                  <p className="text-xs text-destructive">{err("monthlyBudgetUsd")}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    What {values.name.trim() || "it"} may cost in a calendar month. When it's used up, its automations, follow-ups and board tickets wait for you — chats you start still run.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </FormSection>
 
@@ -902,7 +907,7 @@ export function AgentForm({
                   <span className={cn("mt-0.5 block text-xs", advancedError ? "text-destructive" : "text-muted-foreground")}>
                     {advancedError
                       ? "Something in here needs a fix before you can save."
-                      : "Model, folder, permissions and budgets, browser, computer, servers, tools and subagents. The defaults work well."}
+                      : `Model, folder, ${spendTracking ? "permissions and budgets" : "permissions"}, browser, computer, servers, tools and subagents. The defaults work well.`}
                   </span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />

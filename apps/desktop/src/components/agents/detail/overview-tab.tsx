@@ -13,7 +13,7 @@ import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
 import { formatCost, formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
-import { useBudgets } from "@/lib/hooks";
+import { useBudgets, useSpendTracking } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { BudgetMeter } from "@/components/budgets/budget-meter";
 
@@ -22,6 +22,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
   const [selected, setSelected] = useState<Run | null>(null);
   const [runTask, setRunTask] = useState(false);
   const easy = useEasyMode();
+  const spendTracking = useSpendTracking();
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
@@ -57,7 +58,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
       <AgentBudget agent={agent} />
       <RunTaskDialog agent={agent} open={runTask} onOpenChange={setRunTask} />
 
-      <div className="grid grid-cols-2 gap-3 @4xl:grid-cols-4">
+      <div className={cn("grid gap-3", spendTracking ? "grid-cols-2 @4xl:grid-cols-4" : "grid-cols-3")}>
         <Kpi
           icon={<Activity />}
           label={easy ? (runs.length >= 200 ? "Jobs (last 200)" : "Jobs done") : runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
@@ -71,7 +72,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
           hint={stats.failed ? `${stats.failed} failed` : undefined}
           tone={stats.successRate != null && stats.successRate < 0.8 ? "warn" : undefined}
         />
-        <Kpi icon={<Coins />} label="Total cost" value={runsQ.isLoading ? null : formatCost(stats.cost)} />
+        {spendTracking && <Kpi icon={<Coins />} label="Total cost" value={runsQ.isLoading ? null : formatCost(stats.cost)} />}
         <Kpi icon={<Timer />} label={easy ? "Average time" : "Avg duration"} value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
       </div>
 

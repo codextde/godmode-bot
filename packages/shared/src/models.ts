@@ -1324,6 +1324,11 @@ export interface RunnerSettings {
   stallMinutes: number;
   /** The same tool with the same input and the same result this many times in a row = going in circles. */
   loopRepeats: number;
+  /**
+   * Shows what runs cost in USD and enables budgets. Off (Claude subscription, where Claude Code's costs are API prices
+   * nobody pays): nothing about cost is shown and no budget applies. Costs are recorded either way.
+   */
+  spendTracking: boolean;
   defaultMaxBudgetUsd: number | null;
   /** What the whole team may cost per calendar month in USD; used up = unattended work waits. null = no budget. */
   monthlyBudgetUsd: number | null;

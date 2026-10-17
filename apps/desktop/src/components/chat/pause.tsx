@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNow } from "@/components/vault/use-now";
 import { api, errorMessage } from "@/lib/api";
+import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { followupIn, followupWhen } from "./followup";
@@ -129,6 +130,7 @@ function QuestionBar({ conversationId, pause, agentName }: { conversationId: str
 /** Held because a monthly budget is used up: it goes on next month or when the budget has room — or now, if the human says so. */
 function HeldBar({ conversationId, pause, agentName, agentId, queued }: { conversationId: string; pause: RunPause; agentName: string; agentId?: string; queued: number }) {
   const { resume, stop } = usePauseActions(conversationId);
+  const spendTracking = useSpendTracking();
   const team = pause.budget?.scope === "team";
   const along = queued > 0 ? ` Your ${queued > 1 ? `${queued} messages go` : "message goes"} along.` : "";
   return (
@@ -139,14 +141,20 @@ function HeldBar({ conversationId, pause, agentName, agentId, queued }: { conver
       <div className="min-w-0 flex-1 leading-snug">
         <p className="truncate text-[13px] font-medium">{pause.budget ? budgetPauseTitle(pause.budget, agentName, pause.pausedAt) : "Held — a monthly budget is used up"}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {pause.auto && pause.resumeAt ? `Continues by itself ${followupWhen(pause.resumeAt)}, or when you raise the budget.` : "Raise the budget or let it run."}
+          {!spendTracking
+            ? "Budgets are off now: let it run or stop it."
+            : pause.auto && pause.resumeAt
+              ? `Continues by itself ${followupWhen(pause.resumeAt)}, or when you raise the budget.`
+              : "Raise the budget or let it run."}
           {along}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <Button size="xs" variant="ghost" asChild className="hidden @lg:inline-flex">
-          <Link to={team ? "/settings/ai" : agentId ? `/agents/${agentId}/settings#permissions` : "/agents"}>Raise budget</Link>
-        </Button>
+        {spendTracking && (
+          <Button size="xs" variant="ghost" asChild className="hidden @lg:inline-flex">
+            <Link to={team ? "/settings/ai" : agentId ? `/agents/${agentId}/settings#permissions` : "/agents"}>Raise budget</Link>
+          </Button>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button size="xs" disabled={resume.isPending} onClick={() => resume.mutate()}>

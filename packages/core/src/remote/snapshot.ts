@@ -389,6 +389,8 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
         delete next[field];
         if (isObject(mine) && field in mine) next[field] = mine[field];
       }
+      // A controller from before spend tracking doesn't send the switch: the runner keeps its own.
+      if (section === "runner" && !("spendTracking" in next) && isObject(mine) && "spendTracking" in mine) next.spendTracking = mine.spendTracking;
       store(section, JSON.stringify(next));
     }
     // A runner is set up by pairing it; nobody clicks through onboarding there.

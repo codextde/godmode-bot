@@ -24,7 +24,7 @@ import {
 import type { Run } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAgent, useQuestions } from "@/lib/hooks";
+import { useAgent, useQuestions, useSpendTracking } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
@@ -122,6 +122,7 @@ function RunDetail({ runId, placeholder, onOpenRun }: { runId: string; placehold
 
 function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) => void }) {
   const modelLabel = useModelLabel();
+  const spendTracking = useSpendTracking();
   const { data: agent } = useAgent(run.agentId);
   const { live, status, running, elapsed } = useRunLiveState(run);
   const cancel = useCancelRun();
@@ -211,7 +212,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Stat icon={<Timer />} label="Duration" value={elapsed != null ? formatElapsed(elapsed) : formatDuration(run.durationMs)} />
-          <Stat icon={<Coins />} label="Cost" value={formatCost(run.costUsd)} />
+          {spendTracking && <Stat icon={<Coins />} label="Cost" value={formatCost(run.costUsd)} />}
           <Stat icon={<Repeat />} label="Turns" value={run.numTurns != null ? String(run.numTurns) : "—"} />
           <Stat icon={<Cpu />} label="Model" value={modelLabel(run.model)} />
           <Stat
@@ -225,6 +226,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
             label="Started"
             value={run.startedAt ? format(new Date(run.startedAt), "p") : "—"}
             hint={run.startedAt ? format(new Date(run.startedAt), "PP") : undefined}
+            className={spendTracking ? undefined : "col-span-2"}
           />
         </div>
 
@@ -306,9 +308,9 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
   );
 }
 
-function Stat({ icon, label, value, hint }: { icon: ReactNode; label: string; value: string; hint?: string }) {
+function Stat({ icon, label, value, hint, className }: { icon: ReactNode; label: string; value: string; hint?: string; className?: string }) {
   return (
-    <div className="rounded-lg border bg-card p-3 shadow-card" title={hint}>
+    <div className={cn("rounded-lg border bg-card p-3 shadow-card", className)} title={hint}>
       <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground [&_svg]:size-3.5">
         {icon}
         {label}

@@ -9,6 +9,11 @@ export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.settings.get });
 }
 
+/** Costs of Claude runs show only with spend tracking on (off: a Claude subscription, no real money). */
+export function useSpendTracking(): boolean {
+  return useSettings().data?.runner.spendTracking ?? false;
+}
+
 /** The values `base` had at the keys `patch` changes: undoes one save without undoing another. */
 function before(base: unknown, patch: unknown): unknown {
   if (typeof base !== "object" || base === null || typeof patch !== "object" || patch === null || Array.isArray(patch)) return base;

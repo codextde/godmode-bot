@@ -319,6 +319,10 @@ describe("phone access", () => {
     expect(saved.status).toBe(200);
     expect(((await saved.json()) as { runner: { appendSystemPrompt: string; monthlyBudgetUsd: number } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only.", monthlyBudgetUsd: 50 });
     expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: null } }))).status).toBe(200);
+    const tracking = await phone("/api/settings", json("PUT", { runner: { spendTracking: true } }));
+    expect(((await tracking.json()) as { runner: { spendTracking: boolean } }).runner.spendTracking).toBe(true);
+    expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: "on" } }))).status).toBe(403);
+    expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: false } }))).status).toBe(200);
     expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
     expect((await phone("/api/settings", json("PUT", { runner: { model: "x y" } }))).status).toBe(400);
     for (const patch of [

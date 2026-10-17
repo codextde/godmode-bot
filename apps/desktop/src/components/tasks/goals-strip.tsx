@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
+import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { dueLabel } from "./task-meta";
@@ -64,6 +65,7 @@ export function GoalsStrip({ goals, selected, onSelect, workspaceId }: { goals: 
 
 function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selected: boolean; onSelect: () => void; onEdit: () => void }) {
   const qc = useQueryClient();
+  const spendTracking = useSpendTracking();
   const save = useMutation({
     mutationFn: (patch: Partial<GoalInput>) => api.goals.update(g.id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.goals }),
@@ -99,7 +101,7 @@ function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selecte
         </span>
         <span className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
           <span>{g.tickets.total ? `${g.tickets.done} of ${g.tickets.total} done` : "No tickets yet"}</span>
-          {g.costUsd > 0 && <span>· {formatUsd(g.costUsd)}</span>}
+          {spendTracking && g.costUsd > 0 && <span>· {formatUsd(g.costUsd)}</span>}
           {g.targetDate && <span className="ml-auto">{dueLabel(g.targetDate)}</span>}
         </span>
         {g.why && (
