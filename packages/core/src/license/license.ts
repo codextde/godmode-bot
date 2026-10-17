@@ -316,26 +316,24 @@ function storeVerdict(verdict: Verdict) {
 /** Ask the licence server about the stored key now. Fails open: without an answer the last state stays. */
 export function refreshLicense(): Promise<LicenseState> {
   checking ??= (async () => {
-    try {
-      if (pendingEnvKey) await adoptEnvKey(pendingEnvKey);
-      const key = getMeta(META.key);
-      if (!key) return publish();
-      const answer = await ask(key);
-      // Changed or removed while the server was asked.
-      if (getMeta(META.key) !== key) return publish();
-      if (answer.kind === "verdict") {
-        const before = parseJson<Verdict | null>(getMeta(META.verdict), null);
-        storeVerdict(answer.verdict);
-        const status = statusOf(answer.verdict);
-        if (!before || statusOf(before) !== status) log.info("licence checked", { key: key.slice(-5), status, plan: answer.verdict.plan });
-      } else {
-        log.info("licence server not reachable, keeping the last state", { reason: answer.reason });
-      }
-      return publish();
-    } finally {
-      checking = null;
+    if (pendingEnvKey) await adoptEnvKey(pendingEnvKey);
+    const key = getMeta(META.key);
+    if (!key) return publish();
+    const answer = await ask(key);
+    // Changed or removed while the server was asked.
+    if (getMeta(META.key) !== key) return publish();
+    if (answer.kind === "verdict") {
+      const before = parseJson<Verdict | null>(getMeta(META.verdict), null);
+      storeVerdict(answer.verdict);
+      const status = statusOf(answer.verdict);
+      if (!before || statusOf(before) !== status) log.info("licence checked", { key: key.slice(-5), status, plan: answer.verdict.plan });
+    } else {
+      log.info("licence server not reachable, keeping the last state", { reason: answer.reason });
     }
-  })();
+    return publish();
+  })().finally(() => {
+    checking = null;
+  });
   return checking;
 }
 
