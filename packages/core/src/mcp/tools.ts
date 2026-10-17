@@ -84,6 +84,7 @@ import {
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
 import { dreamTidies, reportDream, tidyWorkspace } from "../memory/dreaming";
+import { NOTE_MAX as WORKSPACE_NOTE_MAX } from "../memory/workspace";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
 import { createWorkspace, listWorkspaces, updateWorkspace } from "../services/workspaces";
@@ -2777,14 +2778,15 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "workspace_tidy",
     description:
-      "Sort your workspace while dreaming. operations (carried out in order, each checked on its own): `move` puts an entry (file or folder) at `to`; `discard` takes out what is no longer needed (it waits in workspace/tmp for a week, then it is removed). Paths are relative to workspace/. A move updates the path in your memory files. Refused: tmp/ and uploads/, entries changed in the last few days or named by your instructions, automations or follow-ups, an existing `to`, and discarding what your memory still names. Returns one line per operation.",
+      "Tidy your workspace while dreaming. operations (carried out in order, each checked on its own): `move` puts an entry (file or folder) at `to`; `discard` takes out what is no longer needed (it waits in workspace/tmp for a week, then it is removed); `rewrite` replaces a Markdown note's text with `content` (its complete new text). Paths are relative to workspace/. A move updates the path in your memory files. Refused: tmp/ and uploads/, entries changed in the last few days or named by your instructions, automations or follow-ups, an existing `to`, discarding what your memory still names, and rewriting notes inside a project with its own .git. Returns one line per operation.",
     schema: z.object({
       operations: z
         .array(
           z.object({
-            action: z.enum(["move", "discard"]),
-            path: z.string().min(1).max(500).describe("Entry to move or discard, relative to workspace/"),
+            action: z.enum(["move", "discard", "rewrite"]),
+            path: z.string().min(1).max(500).describe("Entry to move, discard or rewrite, relative to workspace/"),
             to: z.string().max(500).optional().describe("move: the new path, relative to workspace/ (must not exist yet)"),
+            content: z.string().max(WORKSPACE_NOTE_MAX).optional().describe("rewrite: the note's complete new text (Markdown)"),
           }),
         )
         .min(1)

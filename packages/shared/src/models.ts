@@ -794,10 +794,14 @@ export interface DreamFileChange {
  * place, `discard` moved it to `to` under `tmp/`, where the cleanup removes it after a week.
  */
 export interface DreamWorkspaceChange {
-  action: "move" | "discard";
+  action: "move" | "discard" | "rewrite";
   from: string;
+  /** Where it went (a rewrite stays where it is: the same as `from`). */
   to: string;
   bytes: number;
+  /** Rewrite only: the note's text before and after (left out of dream lists, see DreamDetail.fileChanges). */
+  before?: string;
+  after?: string;
 }
 
 export interface Dream {
@@ -831,6 +835,7 @@ export interface Dream {
 }
 
 export interface DreamDetail extends Dream {
+  /** The memory files it changed, then the workspace notes it rewrote (as `workspace/<path>`). */
   fileChanges: DreamFileChange[];
 }
 
