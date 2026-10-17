@@ -3,6 +3,7 @@ import type Stripe from 'stripe';
 import { env } from 'cloudflare:workers';
 import { cryptoProvider, stripe } from '@/lib/stripe';
 import { db, revokeForCharge, syncSubscription, upsertFromSession } from '@/lib/db';
+import { sendWelcome } from '@/lib/mail';
 
 export const prerender = false;
 
@@ -63,6 +64,7 @@ async function handle(event: Stripe.Event) {
       // Trials complete without a payment; store the trial end right away instead of waiting for an update event.
       const subId = typeof s.subscription === 'string' ? s.subscription : s.subscription?.id;
       if (s.mode === 'subscription' && subId) await syncSubscription(await stripe().subscriptions.retrieve(subId));
+      if (paid) await sendWelcome(s.id).catch((e) => console.error('welcome email failed', e));
       break;
     }
     case 'checkout.session.async_payment_succeeded':
