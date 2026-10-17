@@ -290,6 +290,15 @@ describe("keys and the licence server", () => {
     expect(await res.json()).toMatchObject({ status: "missing", keyHint: null, blocked: true });
   });
 
+  test("a check without a key doesn't stop the later ones", async () => {
+    expect((await refreshLicense()).status).toBe("missing");
+    answer = trial();
+    await putKey(KEY);
+    answer = json({ valid: true, plan: "monthly", status: "active" });
+    expect((await refreshLicense()).status).toBe("active");
+    expect(calls).toHaveLength(2);
+  });
+
   test("POST /api/license/refresh asks the server again", async () => {
     answer = trial();
     await putKey(KEY);
