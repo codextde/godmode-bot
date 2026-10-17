@@ -40,6 +40,7 @@ import { startRunNotices, stopRunNotices } from "./services/runNotices";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
 import { startMessaging, stopMessaging } from "./messaging/service";
+import { adoptStoredSolverKey } from "./browser/captcha";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
 import { shutdownVms, startVms } from "./vm/service";
@@ -181,6 +182,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (!runner) startLicense();
   await vault.tryAutoUnlock();
   ensureDefaultProfile();
+  if (!runner) adoptStoredSolverKey();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
   // What the stop cut off, before the scheduler, follow-ups or automations start anything in those chats.

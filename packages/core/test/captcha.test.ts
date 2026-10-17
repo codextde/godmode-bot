@@ -19,6 +19,7 @@ import {
   __setCaptchaFetchForTests,
   __setCaptchaPollForTests,
   buildTask,
+  adoptStoredSolverKey,
   captchaSolverReady,
   captchaStatus,
   solveTask,
@@ -155,6 +156,16 @@ describe("service API", () => {
     __setCaptchaFetchForTests(async (url) => new Response(JSON.stringify(url.endsWith("createTask") ? { errorId: 0, taskId: 1 } : { errorId: 0, status: "processing" })));
     const err = await solveTask("2captcha", { type: "RecaptchaV2TaskProxyless" }, 50).then(() => new Error("solved"), (e: Error) => e);
     expect(err.message).toContain("did not answer");
+  });
+
+  test("a key stored while no solver was picked selects its solver, once", () => {
+    vault.setAppSecret("twocaptcha_api_key", KEY);
+    updateSettings({ browser: { captchaSolver: "off" } });
+    expect(adoptStoredSolverKey()).toBe("2captcha");
+    expect(captchaStatus().solver).toBe("2captcha");
+    updateSettings({ browser: { captchaSolver: "off" } });
+    expect(adoptStoredSolverKey()).toBeNull();
+    expect(captchaStatus().solver).toBe("off");
   });
 
   test("balance", async () => {

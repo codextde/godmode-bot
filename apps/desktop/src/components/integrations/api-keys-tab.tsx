@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import type { LucideIcon } from "lucide-react";
+import type { CaptchaSolver } from "@godmode/shared";
 import { ArrowRight, AudioLines, Boxes, BrainCircuit, Check, CircleDashed, CircleCheck, Cloud, ExternalLink, KeyRound, Mic, Pencil, Puzzle, ShieldCheck, Sparkles, Trash2, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,7 +76,7 @@ export const KNOWN_KEYS: KeyMeta[] = [
     { key: "twocaptcha_api_key", label: "2Captcha API key", link: { href: "https://2captcha.com/enterpage", label: "2captcha.com" } },
     { key: "capsolver_api_key", label: "CapSolver API key", link: { href: "https://dashboard.capsolver.com", label: "capsolver.com" }, placeholder: "CAP-…" },
     { key: "anticaptcha_api_key", label: "Anti-Captcha API key", link: { href: "https://anti-captcha.com/clients/settings/apisetup", label: "anti-captcha.com" } },
-  ].map((k) => ({ ...k, description: "CAPTCHA solving for agents, when picked in Settings → Browser.", icon: Puzzle, optional: true })),
+  ].map((k) => ({ ...k, description: "CAPTCHA solving for agents. Saving a key turns it on with this service if none is picked (Settings → Browser).", icon: Puzzle, optional: true })),
   {
     key: "composio_api_key",
     label: "Composio API key",
@@ -86,6 +87,22 @@ export const KNOWN_KEYS: KeyMeta[] = [
 ];
 
 type SecretRow = { key: string; set: boolean; updatedAt: string | null };
+
+const CAPTCHA_SOLVER_OF: Record<string, { id: CaptchaSolver; label: string }> = {
+  twocaptcha_api_key: { id: "2captcha", label: "2Captcha" },
+  capsolver_api_key: { id: "capsolver", label: "CapSolver" },
+  anticaptcha_api_key: { id: "anticaptcha", label: "Anti-Captcha" },
+};
+
+/** A solver key saved while CAPTCHA solving is off turns that solver on: a key alone would do nothing. */
+async function selectSolverForKey(key: string): Promise<string | null> {
+  const solver = CAPTCHA_SOLVER_OF[key];
+  if (!solver) return null;
+  const settings = await api.settings.get();
+  if (settings.browser.captchaSolver !== "off") return null;
+  await api.settings.update({ browser: { captchaSolver: solver.id } });
+  return solver.label;
+}
 
 /** App-level API keys stored in the vault. Values are write-only. */
 export function ApiKeysTab({ onOpenComposio, onOpenTools }: { onOpenComposio: () => void; onOpenTools: () => void }) {
@@ -158,13 +175,17 @@ function KeyRow({ meta, state, onOpenComposio }: { meta: KeyMeta; state: SecretR
     void qc.invalidateQueries({ queryKey: qk.appSecrets });
     if (meta.key === "composio_api_key") void qc.invalidateQueries({ queryKey: qk.composio });
     if (meta.key === "browser_use_api_key") void qc.invalidateQueries({ queryKey: ["browser", "profile-use"] });
-    if (meta.key.endsWith("captcha_api_key") || meta.key === "capsolver_api_key") void qc.invalidateQueries({ queryKey: qk.captcha });
+    if (CAPTCHA_SOLVER_OF[meta.key]) void qc.invalidateQueries({ queryKey: qk.captcha });
   };
 
   const save = useMutation({
-    mutationFn: (v: string) => api.vault.secrets.set(meta.key, v),
-    onSuccess: () => {
-      toast.success(`${meta.label} saved`);
+    mutationFn: async (v: string) => {
+      await api.vault.secrets.set(meta.key, v);
+      return selectSolverForKey(meta.key).catch(() => null);
+    },
+    onSuccess: (solver) => {
+      toast.success(`${meta.label} saved`, solver ? { description: `Agents now send CAPTCHAs to ${solver} (Settings → Browser).` } : undefined);
+      if (solver) void qc.invalidateQueries({ queryKey: qk.settings });
       setValue("");
       setEditing(false);
       invalidate();
