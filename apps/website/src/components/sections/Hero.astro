@@ -7,7 +7,7 @@ import CheckoutButton from '../ui/CheckoutButton.astro';
 import Countdown from '../ui/Countdown.astro';
 import CouponCode from '../ui/CouponCode.astro';
 import { COUPON, FOUNDING, PRICING } from '@/config/site';
-import chat from '@/assets/shots/chat.png';
+import recording from '@/assets/shots/hero-recording.jpg';
 ---
 
 <section data-hero class="relative isolate overflow-hidden pt-[112px] sm:pt-[132px]">
@@ -91,13 +91,13 @@ import chat from '@/assets/shots/chat.png';
         <div class="window-bar">
           <i></i><i></i><i></i>
           <div class="mx-auto flex items-center gap-2 font-mono text-[11px] text-dim">
-            <span class="live-dot !size-1.5"></span> Godmode · working
+            <span class="live-dot !size-1.5"></span> Real screen recording · sped up
           </div>
         </div>
         <div class="hero-screen relative aspect-video bg-bg">
           <Image
-            src={chat}
-            alt="Godmode logging into a billing portal: the password and 2FA code are filled from the encrypted vault and marked ‘Secret hidden’, next to a live preview of its browser."
+            src={recording}
+            alt="A real Mac desktop: Godmode looked up Notion, Linear and Slack pricing in its own Chrome window and answered with a table of what a 10-person team pays per month."
             widths={[640, 960, 1280, 1600, 2000]}
             sizes="(min-width: 1200px) 1120px, 94vw"
             loading="eager"
@@ -112,7 +112,7 @@ import chat from '@/assets/shots/chat.png';
             autoplay
             preload="metadata"
             data-autoplay
-            aria-label="Godmode completing a task: it signs into a billing portal with a hidden password and 2FA code, downloads invoices and posts them to Slack."
+            aria-label="Real screen recording, sped up: Godmode opens Notion, Linear and Slack pricing in its own browser and answers with a table of what a 10-person team pays per month."
           >
             <source src="/media/hero.webm" type="video/webm" />
             <source src="/media/hero.mp4" type="video/mp4" />
@@ -122,17 +122,17 @@ import chat from '@/assets/shots/chat.png';
 
       <!-- Floating status chips -->
       <div class="float-chip left-[2%] top-[18%] hidden md:flex" style="--fd:0s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="lock-keyhole" size={15} /></span>
+        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="globe" size={15} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">Password filled</b>
-          <span class="font-mono text-[11px] text-dim">secret hidden from the AI</span>
+          <b class="block text-[13px] font-medium text-text">Its own Chrome window</b>
+          <span class="font-mono text-[11px] text-dim">real pages, nothing staged</span>
         </span>
       </div>
       <div class="float-chip right-[1%] top-[42%] hidden md:flex" style="--fd:-2s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="shield-check" size={15} /></span>
+        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="table" size={15} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">2FA code <span class="font-mono tracking-widest text-brand">••• •••</span></b>
-          <span class="font-mono text-[11px] text-dim">typed from your vault</span>
+          <b class="block text-[13px] font-medium text-text">Three sites, one table</b>
+          <span class="font-mono text-[11px] text-dim">prices checked live</span>
         </span>
       </div>
       <div class="float-chip bottom-[10%] left-[6%] hidden lg:flex" style="--fd:-4s">
