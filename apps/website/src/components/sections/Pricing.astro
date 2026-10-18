@@ -8,14 +8,14 @@ import { COUPON, FOUNDING, PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 const included = [
-  'Unlimited agents, chats and automations',
-  'Browser use with your Chrome sessions',
-  'Background computer use',
-  'Its own macOS VMs (Apple silicon)',
-  'Encrypted vault, 2FA, password import',
+  'Unlimited AI coworkers, chats and automations',
+  'Works in your browser, signed in as you',
+  'Uses your desktop apps in the background',
+  'A separate Mac of its own (Apple silicon)',
+  'Password vault with 2FA codes',
   'Slack, Telegram, Teams & voice',
-  'Desktop app + headless web dashboard',
-  'macOS, Windows and Linux',
+  'Always-on version for a spare computer',
+  'Mac, Windows and Linux',
 ];
 const cards = [
   {
@@ -41,7 +41,7 @@ const stack = [
   {
     tag: 'Core',
     title: 'Godmode Pro, every feature',
-    text: 'The AI coworker that uses your computer like you do. Every update while you’re subscribed.',
+    text: 'The AI coworker that does your computer work, start to finish. Every update while you’re subscribed.',
     value: `$${monthly.price * 12}`,
     per: '/yr',
   },
@@ -55,7 +55,7 @@ const stack = [
   {
     tag: 'Bonus 2',
     title: 'The hire-in-a-click library',
-    text: '9 ready-made agents (invoices, inbox, research, leads, QA…) and the 25-automation playbook. Paste, run, done.',
+    text: '9 ready-made AI coworkers (invoices, inbox, research, leads, social posts…) and the 25-automation playbook. Paste, run, done.',
     value: '$250',
     per: '',
   },
@@ -211,8 +211,8 @@ const guarantees = [
           <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
         </span>
         <p class="text-[13px] leading-relaxed text-muted">
-          <span class="text-text">Runs on the Claude plan you already have.</span> Sign in with Claude Pro or Max, or use an
-          Anthropic API key — not included. <a href="#faq" class="underline decoration-line-3 underline-offset-2 hover:text-text">Details</a>
+          <span class="text-text">Thinks with Claude, on your own Claude plan.</span> Sign in with Claude Pro or Max from
+          claude.ai, or use an Anthropic API key. Not included. <a href="#faq" class="underline decoration-line-3 underline-offset-2 hover:text-text">Details</a>
         </p>
       </div>
       <div class="flex items-start gap-3 rounded-2xl p-4 ring-1 ring-line">

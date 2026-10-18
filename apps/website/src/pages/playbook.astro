@@ -16,7 +16,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
       ['Payout reconciliation', 'Weekly', 'Match last week’s Stripe payouts against the bank statement in our online banking. List anything that doesn’t add up, with links.'],
       ['Receipt filer', 'When an email with a receipt arrives', 'Save the receipt PDF, add it to our expense sheet with date, vendor, amount and category, and forward it to accounting.'],
       ['Dunning, politely', 'Every Thursday', 'Find invoices more than 14 days overdue in our accounting tool and draft a friendly reminder for each customer. Don’t send — put them in Gmail drafts.'],
-      ['Subscription audit', 'First of the month', 'List every SaaS subscription charged to our company card last month, with the price and last login date. Flag anything nobody used.'],
+      ['Subscription audit', 'First of the month', 'List every software subscription charged to our company card last month, with the price and last login date. Flag anything nobody used.'],
     ],
   },
   {
@@ -34,7 +34,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
     name: 'Marketing',
     icon: 'megaphone',
     items: [
-      ['Ads report', 'Friday 16:00', 'Pull spend, clicks and conversions from Meta, Google and X Ads for this week into our reporting sheet. Flag any campaign with CPA above $80.'],
+      ['Ads report', 'Friday 16:00', 'Pull spend, clicks and sales from Meta, Google and TikTok Ads for this week into our reporting sheet. Flag any campaign that costs more than $80 per sale.'],
       ['Competitor watch', 'When it changes', 'Watch the pricing pages of these three competitors. When anything changes, send me a screenshot and what changed.'],
       ['Content repurposing', 'When a blog post goes live', 'Turn the new blog post into a LinkedIn post, an X thread and a newsletter blurb. Save drafts in Notion for my review.'],
       ['SEO check', 'Every Monday', 'Check Search Console for pages that lost more than 20% clicks week over week and suggest one fix for each.'],
@@ -47,19 +47,19 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
     items: [
       ['Ticket first responder', 'When a ticket arrives', 'Answer new shipping questions in Zendesk using our help center and the order status in Shopify. Escalate refunds over $200 to me.'],
       ['Stock alerts', 'Daily 09:00', 'Check inventory in Shopify. For anything under 2 weeks of stock, draft a purchase order with the supplier from our sheet.'],
-      ['Domain & certificate keeper', 'Monthly', 'Check expiry dates of our domains and SSL certificates. Renew anything expiring in the next 30 days with the saved logins.'],
+      ['Renewal keeper', 'Monthly', 'Check when our domains, insurance policies and software licences expire. Renew the domains due in the next 30 days with the saved logins and remind me of the rest.'],
       ['Meeting prep', 'Every morning', 'For each meeting today, prepare one page: who they are, our history from email and CRM, and three questions to ask.'],
       ['Office restock', 'When we run low', 'When someone writes “we’re out of …” in #office, reorder it from our usual Amazon Business account and confirm in the thread.'],
     ],
   },
   {
-    name: 'Founders & engineering',
-    icon: 'crown',
+    name: 'Founders & office',
+    icon: 'briefcase-business',
     items: [
       ['Morning briefing', 'Daily 06:30', 'Read my inbox, calendar and yesterday’s revenue in Stripe. Send me a five-line briefing on Telegram with what needs my attention.'],
-      ['Bug reproducer', 'On demand · in its VM', 'In your Mac VM, clone the repo, reproduce the bug from issue #{n}, fix it, run the tests and open a pull request.'],
-      ['Release QA', 'Nightly', 'Run through signup, checkout and cancellation on staging in a fresh browser. Report anything broken with screenshots to #eng.'],
-      ['Investor update', 'Monthly', 'Draft this month’s investor update from our metrics sheet, shipped changelog and notes in Notion. Keep it under 300 words.'],
+      ['Meeting scheduler', 'On demand', 'Find a 45-minute slot next week that works for me and everyone on this email, send the invite and put the agenda from the thread in it.'],
+      ['Document filer', 'When a PDF arrives by email', 'Rename every contract or letter that arrives as a PDF with date and sender, file it in Drive › Documents › {year} and add a line to our document list.'],
+      ['Investor update', 'Monthly', 'Draft this month’s investor update from our numbers sheet and the notes in Notion. Keep it under 300 words.'],
       ['Travel booker', 'On demand', 'Find the best flight to {city} next month that fits my calendar and book it with my airline login. Ask before paying over $800.'],
     ],
   },
@@ -68,7 +68,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
 
 <Base
   title="The Godmode Playbook: 25 automations"
-  description="25 ready-to-use AI automations for finance, sales, marketing, support and founders — paste a prompt into Godmode and it runs."
+  description="25 ready-to-use automations for finance, sales, marketing, support and the office. Paste one into Godmode and it does the work in your own browser and apps. No coding."
 >
   <Nav home={false} />
   <main class="pt-36 pb-16">

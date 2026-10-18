@@ -41,7 +41,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Model',
-    us: ['yes', `${SITE.model} on every task, through Anthropic’s official Claude Code, and every newer Claude the day you get it`],
+    us: ['yes', `${SITE.model} on every task, and every newer Claude the day you get it`],
     them: ['partial', 'Picked per task by xAI: a fast Grok 4.8 for most requests, Claude Opus 5.5 and others for some'],
   },
   {
@@ -61,7 +61,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Memory you can read',
-    us: ['yes', 'Each agent’s memory is a git repo: read it, edit it, roll it back'],
+    us: ['yes', 'You can read and edit what each agent remembers, and undo any change'],
     them: ['partial', 'Preferences and summaries kept by the service'],
   },
   {
@@ -110,13 +110,13 @@ const reasons = [
   },
   {
     icon: 'mouse-pointer-click',
-    title: 'Real computer use on your apps',
-    text: 'Excel, Finder, a legacy ERP client, the vendor tool that has no API: Godmode drives the actual window in the background while you keep working.',
+    title: 'Works in your real apps',
+    text: 'Excel, Finder, an old order program, the supplier tool nobody connected to anything: Godmode works in the actual window in the background while you keep working.',
   },
   {
     icon: 'sparkles',
     title: 'Claude, not a mystery model',
-    text: `Godmode thinks with ${SITE.model} through Anthropic’s own Claude Code, the agent developers already trust for long, careful work.`,
+    text: `Godmode thinks with ${SITE.model} on every task, the Claude model known for long, careful work. You always know which AI did the job.`,
   },
   {
     icon: 'hard-drive',
@@ -162,11 +162,11 @@ const faqs = [
   },
   {
     q: 'Does Godmode use Grok?',
-    a: `No. Godmode runs on Anthropic’s official Claude Code, so your agents think with ${SITE.model} and every newer Claude model as soon as your account has it.`,
+    a: `No. Godmode runs on Anthropic’s own official Claude software, so your agents think with ${SITE.model} and every newer Claude model as soon as your account has it.`,
   },
   {
     q: 'What happens to my logins in Grok Bot compared with Godmode?',
-    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an AES-256-GCM vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
+    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an encrypted vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
   },
   {
     q: 'Can Godmode keep working when my laptop is closed, like Grok Bot?',
@@ -191,7 +191,7 @@ const jsonLd = {
 
 <Base
   title="Grok Bot alternative: Godmode vs Grok Bot (2026)"
-  description={`Godmode vs Grok Bot, compared honestly: where the agent runs, who holds your logins and 2FA, usage limits, computer use and price. Godmode's agent works on your own computer, with ${SITE.model} on every task.`}
+  description={`Godmode vs Grok Bot, compared honestly: where the work happens, who holds your logins and 2FA, usage limits, your desktop apps and price. Godmode's agent works on your own computer, with ${SITE.model} on every task.`}
 >
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   <Nav home={false} />

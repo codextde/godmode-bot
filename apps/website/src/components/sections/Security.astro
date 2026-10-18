@@ -6,32 +6,32 @@ const points = [
   {
     icon: 'eye-off',
     title: 'Fill, don’t reveal',
-    text: 'In the browser, Godmode types passwords and 2FA codes into the page itself. The model only ever sees that a secret was filled.',
+    text: 'Godmode types your passwords and 2FA codes into the login page itself. The AI only ever learns that a password was filled, never what it is.',
   },
   {
     icon: 'link-2',
-    title: 'Site-bound logins',
-    text: 'A login is only ever filled into its own website, over https, into a real password field. Phishing and prompt-injected lookalikes get nothing.',
+    title: 'Only on the right website',
+    text: 'Your bank login is only ever filled into your bank’s real website. Fake lookalike pages and phishing tricks get nothing.',
   },
   {
     icon: 'hard-drive',
-    title: 'Encrypted on your device',
-    text: 'AES-256-GCM envelope encryption with scrypt, keys in your OS keychain. Your vault, agents and history never touch our servers.',
+    title: 'Encrypted on your computer',
+    text: 'Locked with the same kind of encryption banks use, the key kept in your computer’s keychain. Your passwords and history never touch our servers.',
   },
   {
     icon: 'box',
-    title: 'Isolated when you want it',
-    text: 'Give risky work its own macOS VM. Scope logins, folders and integrations per workspace, so each agent reaches only what it needs.',
+    title: 'Only what each job needs',
+    text: 'Give each AI coworker only the logins and folders its job needs, and give sensitive work a separate Mac of its own.',
   },
   {
     icon: 'scroll-text',
     title: 'Everything on the record',
-    text: 'An audit log of every secret access. Known secrets are redacted from transcripts, logs and screens. Every run is committed to git.',
+    text: 'A record of every time a password is used. Passwords are blacked out in chats, logs and screenshots. Every task it did is saved.',
   },
   {
     icon: 'hand',
     title: 'You stay in charge',
-    text: 'Watch every step live. Take control with one click, stop any run instantly, and get told exactly which login is missing.',
+    text: 'Watch every step live, take over with one click, stop any task instantly. It asks you before anything important.',
   },
 ];
 ---
@@ -45,33 +45,32 @@ const points = [
         <Words text="Built like a vault. *Not like a demo.*" class="h-section mt-6" />
       </div>
       <p class="lead max-w-[460px]" data-reveal style="--d:200">
-        You’re handing an AI the keys to your business. So the keys stay on your device, encrypted — and in the browser the
-        AI never gets to hold them.
+        You’re handing an AI the keys to your work. So the keys stay on your computer, encrypted, and the AI never gets to
+        hold them.
       </p>
     </div>
 
     <div class="mt-16 grid gap-3 lg:grid-cols-[1fr_1.35fr]">
       <!-- Context window visual -->
       <div class="card p-6 sm:p-8" data-reveal>
-        <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">What the model sees</p>
+        <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">What the AI sees</p>
         <div class="ctx mt-5 space-y-2.5 font-mono text-[12.5px] leading-relaxed">
-          <div class="ctx-line" style="--c:0"><span class="text-muted">user</span> Log into the Acme portal and download September’s invoice.</div>
-          <div class="ctx-line" style="--c:1"><span class="text-brand">tool</span> vault_fill_login(“billing.acme.com”)</div>
+          <div class="ctx-line" style="--c:0"><span class="text-muted">you</span> Log into the Acme portal and download September’s invoice.</div>
+          <div class="ctx-line" style="--c:1"><span class="text-brand">godmode</span> Filling your Acme login from the vault</div>
           <div class="ctx-line ctx-result" style="--c:2">
-            <span class="text-dim">result</span> filled username ✓ password ✓
+            <span class="text-dim">filled</span> email ✓ password ✓
             <span class="redact">[secret hidden]</span>
           </div>
-          <div class="ctx-line" style="--c:3"><span class="text-brand">tool</span> vault_fill_totp(“billing.acme.com”)</div>
+          <div class="ctx-line" style="--c:3"><span class="text-brand">godmode</span> The site asks for a 2FA code</div>
           <div class="ctx-line ctx-result" style="--c:4">
-            <span class="text-dim">result</span> 2FA code filled ✓ <span class="redact">[secret hidden]</span>
+            <span class="text-dim">filled</span> 2FA code ✓ <span class="redact">[secret hidden]</span>
           </div>
           <div class="ctx-line" style="--c:5"><span class="text-muted">godmode</span> Signed in. Downloaded invoice INV-2026-0931.pdf.</div>
         </div>
         <div class="mt-6 flex flex-wrap gap-2">
-          <span class="chip chip-brand"><Icon name="shield-check" size={11} /> AES-256-GCM</span>
-          <span class="chip">scrypt N=2¹⁷</span>
-          <span class="chip">OS keychain</span>
-          <span class="chip">no telemetry</span>
+          <span class="chip chip-brand"><Icon name="shield-check" size={11} /> Bank-grade encryption</span>
+          <span class="chip">Stays on your computer</span>
+          <span class="chip">No tracking in the app</span>
         </div>
       </div>
 
@@ -90,10 +89,10 @@ const points = [
       </div>
     </div>
     <p class="mt-6 max-w-[860px] text-[12.5px] leading-relaxed text-dim" data-reveal>
-      Plainly stated: agents run Claude Code with full permissions so they can finish without asking — treat them like a
-      trusted coworker, and use a VM for sensitive work. Inside a VM the agent controls the whole machine, so signing in
-      there is best effort and closer to revealing a password than to fill-only; it’s off until you allow it. Tasks and the
-      pages the agent reads are processed by Claude under your own Anthropic account.
+      Plainly stated: Godmode can use your computer without asking at every click, so it can finish the job. Treat it like a
+      trusted coworker and give sensitive work a separate Mac of its own. On that separate Mac it controls the whole
+      machine, so signing in there is best effort and closer to showing it a password; it’s off until you allow it. Your
+      tasks and the pages it reads are processed by Claude under your own Anthropic account.
     </p>
   </div>
 </section>

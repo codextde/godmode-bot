@@ -9,18 +9,18 @@ import messaging from '@/assets/shots/messaging.png';
 import activity from '@/assets/shots/activity.png';
 
 const clips = [
-  { key: 'vm', title: 'Its own Mac', text: 'An isolated macOS VM on your device. The agent works inside; your Mac stays untouched.', src: '/media/feature-vm' },
+  { key: 'vm', title: 'A Mac of its own', text: 'A separate Mac just for Godmode, right on your computer. It works in there; your desktop stays yours.', src: '/media/feature-vm' },
   { key: 'background', title: 'In the background', text: 'It clicks and types in a covered window while your cursor does its own thing.', src: '/media/feature-background' },
-  { key: 'vault', title: 'Fill, don’t reveal', text: 'Passwords and 2FA codes are typed into the page. The model sees [secret hidden].', src: '/media/feature-vault' },
+  { key: 'vault', title: 'Signs in for you', text: 'Passwords and 2FA codes are typed into the login page. The AI only sees [secret hidden].', src: '/media/feature-vault' },
 ];
 
 const shots = [
-  { img: agents, label: 'Agents', text: 'Persistent coworkers with memory, schedules and tools' },
+  { img: agents, label: 'Your team', text: 'AI coworkers with their own jobs, notes and schedules' },
   { img: browser, label: 'Live browser', text: 'Watch it work — take control anytime' },
   { img: routines, label: 'Routines', text: 'Everything that runs on its own, at a glance' },
   { img: vault, label: '2FA codes', text: 'Import Google Authenticator QR screenshots' },
   { img: messaging, label: 'Chat apps', text: 'Slack, Telegram and Teams bots for your agents' },
-  { img: activity, label: 'Activity', text: 'Every run, its cost, duration and result' },
+  { img: activity, label: 'Activity', text: 'Everything it did, how long it took and what came out' },
 ];
 ---
 
@@ -28,7 +28,7 @@ const shots = [
   <div class="container-x">
     <div class="flex flex-col items-start justify-between gap-6 md:flex-row md:items-end">
       <div class="max-w-[640px]">
-        <p class="eyebrow" data-reveal><span class="n">05</span> See it work</p>
+        <p class="eyebrow" data-reveal><span class="n">06</span> See it work</p>
         <Words text="Watch it. Or *don’t* — that’s the point." class="h-section mt-6" />
       </div>
       <p class="lead max-w-[380px] md:text-right" data-reveal style="--d:150">

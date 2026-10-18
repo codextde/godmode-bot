@@ -3,26 +3,26 @@ import Icon from '../ui/Icon.astro';
 
 const rowA = [
   ['file-down', 'Download every invoice from 14 supplier portals'],
-  ['messages-square', 'Answer new support tickets in Zendesk'],
+  ['mail', 'Reply to every customer who is still waiting'],
   ['contact', 'Update the CRM after every sales call'],
-  ['landmark', 'Reconcile Stripe payouts with the bank'],
-  ['newspaper', 'Publish the weekly newsletter'],
-  ['chart-column', 'Pull ad reports from Meta, Google & X'],
+  ['chart-column', 'Pull the ad numbers from Meta, Google & TikTok'],
+  ['newspaper', 'Write and schedule this week’s social posts'],
   ['receipt', 'File expense receipts into accounting'],
-  ['bug', 'QA the checkout on staging, every night'],
+  ['table', 'Update the sales spreadsheet every Friday'],
+  ['package', 'Answer “where is my order?” with the tracking link'],
 ];
 const rowB = [
   ['plane', 'Book the cheapest flight that fits my calendar'],
   ['alarm-clock', 'Chase unpaid invoices, politely'],
   ['briefcase', 'Post the job ad on five job boards'],
-  ['users', 'Research leads and enrich them in a sheet'],
-  ['eye', 'Watch competitor pricing and tell me what changed'],
-  ['globe', 'Renew domains before they expire'],
+  ['users', 'Research leads and put them in a sheet'],
+  ['eye', 'Watch competitor prices and tell me what changed'],
+  ['clipboard-list', 'Fill in the same form for 30 customers'],
   ['shopping-cart', 'Reorder office supplies when we run low'],
   ['calendar-check', 'Prepare my Monday briefing from inbox & calendar'],
 ];
 const tools =
-  'Gmail · Slack · HubSpot · Salesforce · Notion · Stripe · Shopify · QuickBooks · Xero · Zendesk · LinkedIn · Google Ads · Jira · Linear · Figma · Excel · DATEV · Amazon Seller Central · any bank portal · any website'.split(
+  'Gmail · Outlook · Excel · Google Sheets · Word · WhatsApp Web · Slack · HubSpot · Shopify · Amazon · eBay · Etsy · Meta Ads · Google Ads · TikTok Ads · Canva · Instagram · LinkedIn · QuickBooks · DATEV · PayPal · any bank portal · any website'.split(
     ' · ',
   );
 ---
@@ -51,7 +51,7 @@ const tools =
 
   <div class="container-x mt-14">
     <p class="text-center text-[13px] text-dim" data-reveal>
-      If it runs in a browser or on a Mac, Godmode can use it — no integration required.
+      If you can open it on your computer, Godmode can use it. Nothing to connect, nothing to install.
     </p>
     <div class="marquee-wrap mask-x mt-5 overflow-hidden" data-reveal style="--d:100">
       <div class="marquee items-center gap-10" style="--dur:80s">

@@ -2,7 +2,6 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Logo from '../ui/Logo.astro';
-import { SITE } from '@/config/site';
 
 interface Props {
   eyebrow: string;
@@ -12,36 +11,36 @@ const { eyebrow } = Astro.props;
 const modes = [
   {
     icon: 'globe',
-    title: 'Your browser, signed in',
-    text: 'A real Chromium with your imported Chrome profile. No bot-flagged sandbox, no starting from zero.',
-    how: 'cookies · sessions · tabs',
+    title: 'Your websites, signed in',
+    text: 'Email, online banking, your shop, supplier portals, ad accounts. It uses your own logins, so there is nothing to set up.',
+    how: 'any website · your logins',
   },
   {
     icon: 'app-window',
-    title: 'Any app, in the background',
-    text: 'Share one window and Claude reads its controls and types into it while it’s covered. Your cursor never moves.',
-    how: 'ui elements · no cursor',
+    title: 'Your programs, in the background',
+    text: 'Excel, Word, Outlook, your accounting software. It clicks and types into the window while you keep using your mouse.',
+    how: 'desktop apps · mouse stays yours',
   },
   {
     icon: 'monitor',
-    title: 'Your whole desktop',
-    text: 'When a job spans apps, share a display and it works like a person on screen-share. You see every move.',
-    how: 'every display · take over',
+    title: 'Your whole screen',
+    text: 'When a job spans several programs, it works on your screen like a colleague on a screen share. You see every move.',
+    how: 'watch live · take over anytime',
   },
   {
     icon: 'monitor-smartphone',
-    title: 'Its own Mac',
-    text: 'An isolated macOS VM on your Mac for installs, builds and risky experiments. Your machine stays untouched.',
-    how: 'one click · shared folder',
+    title: 'A computer of its own',
+    text: 'On a Mac, give it a separate Mac of its own with one click. It works in there all day and never gets in your way.',
+    how: 'one click · Apple silicon',
   },
 ];
 
 const versus: [string, string, string][] = [
-  ['Logins', 'You build a way to sign in, then paste passwords into a prompt', 'Vault fills passwords and 2FA codes; the model sees [secret hidden]'],
-  ['Where it clicks', 'A demo container with an empty browser', 'Your sessions, your apps, or its own Mac'],
-  ['Your mouse', 'Taken over while it works', 'Stays yours: background input to the shared window'],
-  ['When it’s stuck', 'The script fails', 'Asks you in chat, or you hit “Take control” and it carries on'],
-  ['Running it again', 'Your own cron, your own glue code', 'Schedules, email and Slack triggers, plain-language conditions'],
+  ['Who does the work', 'It tells you the steps, you do the clicking', 'It does the steps and hands you the result'],
+  ['Logins', 'You log in yourself, or paste passwords into the chat', 'Signs in with your saved logins and 2FA codes; the AI never sees them'],
+  ['Your tools', 'Only what you copy into the chat window', 'Your websites, your programs, your files'],
+  ['When it gets stuck', 'You start over', 'It asks you, or you take over for a moment and it carries on'],
+  ['Next week', 'You ask again', 'It runs by itself: on a schedule, when an email arrives, when something changes'],
 ];
 ---
 
@@ -49,12 +48,12 @@ const versus: [string, string, string][] = [
   <div class="container-x">
     <div class="grid items-end gap-8 lg:grid-cols-[1.15fr_0.85fr]">
       <div class="max-w-[760px]">
-        <p class="eyebrow" data-reveal><span class="n">{eyebrow}</span> Computer use</p>
-        <Words text="The best computer use for Claude, *built in.*" class="h-section mt-6" />
+        <p class="eyebrow" data-reveal><span class="n">{eyebrow}</span> Where it works</p>
+        <Words text="Chatbots tell you how. *Godmode does it.*" class="h-section mt-6" />
       </div>
       <p class="lead max-w-[440px]" data-reveal style="--d:150">
-        {SITE.model} is one of the strongest computer-use models there is. Godmode gives it the best computer to use:
-        yours, already signed in, with four ways to work and zero setup.
+        Godmode uses a computer the way you do. It works where your work already is: in your browser, in your programs,
+        on your screen, or on a computer of its own.
       </p>
     </div>
 
@@ -76,12 +75,12 @@ const versus: [string, string, string][] = [
     <div class="card mt-3 overflow-hidden" data-reveal style="--d:100">
       <div class="overflow-x-auto">
         <table class="compare w-full min-w-[720px] border-collapse text-left">
-          <caption class="sr-only">Claude computer use on its own compared with Claude computer use in Godmode</caption>
+          <caption class="sr-only">An AI chatbot compared with Godmode</caption>
           <thead>
             <tr>
               <th scope="col" class="w-[18%]"><span class="sr-only">Topic</span></th>
-              <th scope="col" class="col-head w-[41%]">Claude computer use, do-it-yourself</th>
-              <th scope="col" class="col-head is-us w-[41%]"><span class="flex items-center gap-2"><Logo size={20} /> Claude computer use in Godmode</span></th>
+              <th scope="col" class="col-head w-[41%]">An AI chatbot</th>
+              <th scope="col" class="col-head is-us w-[41%]"><span class="flex items-center gap-2"><Logo size={20} /> Godmode</span></th>
             </tr>
           </thead>
           <tbody>

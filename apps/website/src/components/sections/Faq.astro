@@ -8,7 +8,17 @@ const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'what',
     q: 'What exactly do I get?',
-    a: `The signed, ready-to-install Godmode app for macOS, Windows and Linux (plus the headless server with its web dashboard and Docker image), automatic updates, support, a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed.`,
+    a: `The ready-to-install Godmode app for Mac, Windows and Linux (plus an always-on version for a spare computer that you reach from any browser), automatic updates, support, a license key, and every feature on this page, in every plan. Godmode Pro is $${monthly.price} a month, or $${yearly.price} a year ($${yearly.perMonth} a month), with every update while you’re subscribed.`,
+  },
+  {
+    key: 'technical',
+    q: 'Do I need to be technical?',
+    a: `No. If you can explain the task to a colleague, you can hand it to Godmode. You type or say what you need in plain words, and it does the clicking. Setup installs everything for you, and Founding members get a ${FOUNDING.setupMinutes}-minute setup call with the founder, so you leave with ${FOUNDING.setupAutomations} automations already running.`,
+  },
+  {
+    key: 'chatgpt',
+    q: 'How is this different from ChatGPT?',
+    a: `ChatGPT answers in a chat window, and then you do the work. Godmode does the work: it logs into the websites and programs you use, clicks through, finishes the task and hands you the result. It can also do it again by itself every week, or whenever an email arrives.`,
   },
   {
     key: 'founding',
@@ -23,47 +33,47 @@ const faqs: { key: string; q: string; a: string }[] = [
   {
     key: 'claude',
     q: 'Do I need a Claude subscription?',
-    a: `Yes. Godmode runs on Anthropic’s official Claude Code, so it thinks with Claude Opus 5.5 — and with every newer Claude model the day you get access. Sign in with a Claude Pro or Max plan, or add an Anthropic API key. For heavy automation, Max or an API key fits better than Pro. Anthropic has changed how subscriptions cover this kind of use before; if it happens again, an API key keeps working.`,
+    a: `Yes. Godmode thinks with Claude, the AI from Anthropic (today Claude Opus 5.5, and every newer Claude the day you get access). You sign in with a Claude Pro or Max plan from claude.ai, or add an Anthropic API key. If Godmode works for you all day, Max or an API key fits better than Pro. Anthropic has changed how subscriptions cover this kind of use before; if it happens again, an API key keeps working.`,
   },
   {
     key: 'passwords',
     q: 'Is it really safe to give an AI my passwords?',
-    a: `Your logins and 2FA secrets live in a vault on your device, encrypted with AES-256-GCM. In the browser, Godmode types them into the page itself — the model only learns that a secret was filled, never its value — and only into the login’s own website. Every access is logged. One honest exception: inside a macOS VM the agent controls the whole machine, so signing in there is best effort and off until you allow it.`,
+    a: `Your passwords and 2FA codes live in a vault on your computer, encrypted (AES-256). Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Every use is logged. One honest exception: on a separate Mac of its own, Godmode controls the whole machine, so signing in there is best effort and off until you allow it.`,
   },
   {
     key: 'data',
     q: 'Where does my data go?',
-    a: `Your vault, browser profiles, agents, memory, history and VMs stay on your device. Godmode has no telemetry and sends nothing to us unless you link it to Godmode Cloud. The tasks you give and the pages your agents read are processed by Claude under your own Anthropic account — exactly as when you use Claude Code directly.`,
+    a: `Your passwords, logins, AI coworkers, their notes and their history stay on your computer. The app has no tracking and sends nothing to us unless you link it to Godmode Cloud. The tasks you give and the pages Godmode reads are processed by Claude under your own Anthropic account, exactly as when you use Claude directly.`,
   },
   {
     key: 'mouse',
     q: 'Will it take over my mouse and keyboard?',
-    a: `Not when you share a window: Godmode clicks and types into it in the background, even when it’s covered, and your cursor stays yours. If you share a whole display it uses the real mouse (like screen-sharing with a person), and agents with their own VM work entirely inside it.`,
+    a: `Not when it works in a single program: Godmode clicks and types into that window in the background, even when it’s covered, and your mouse stays yours. If you let it use your whole screen it moves the real mouse (like a colleague on a screen share), and on a separate Mac of its own it works entirely in there.`,
   },
   {
     key: 'mac',
     q: 'Do I need a Mac?',
-    a: `No. The app runs on macOS, Windows and Linux. Only the “own Mac” virtual machines need a Mac with Apple silicon (Apple allows two macOS VMs running at the same time). Browser use, the vault, agents, automations and chat apps work everywhere.`,
+    a: `No. The app runs on Mac, Windows and Linux. Only the “Mac of its own” needs a Mac with Apple silicon (Apple allows two at the same time). Everything else, from websites and programs to the password vault, automations and Slack or Telegram, works everywhere.`,
   },
   {
     key: 'offline',
     q: 'Does it work when my computer is off?',
-    a: `Not on that computer — Godmode works on your machine, which is the point. For 24/7 agents, run the headless server on an always-on Mac mini, PC or home server and use the web dashboard from anywhere.`,
+    a: `Not on that computer: Godmode works on your machine, which is the point. To keep it working around the clock, install the always-on version on a spare Mac mini or PC and reach it from any browser, or from your phone.`,
   },
   {
     key: 'cant',
     q: 'What can’t it do?',
-    a: `It won’t solve CAPTCHAs — when one appears you click “Take control” and it carries on afterwards. Like any AI it can make mistakes, so review consequential work (payments, contracts, anything public) until you trust a routine.`,
+    a: `Some CAPTCHAs: it solves the common ones once you connect a solving service such as 2Captcha; for the rest you click “Take control” and it carries on afterwards. Like any AI it can make mistakes, so check important work (payments, contracts, anything public) until you trust a routine. It asks before those steps by default.`,
   },
   {
     key: 'free',
     q: 'Godmode is open source. Why pay?',
-    a: `You don’t have to. The whole app is on GitHub under the MIT License: clone it, build it, run every feature for free, change it however you like. Godmode Pro is for everyone who would rather not maintain a build: the signed apps for Mac, Windows and Linux, automatic updates, the one-line server install and Docker image, and help from the people who build it. Your subscription also pays for Godmode’s development.`,
+    a: `You don’t have to, if you can build software yourself. The whole app is on GitHub under the MIT License, free to build and change. Godmode Pro is for everyone else: the ready-to-install apps for Mac, Windows and Linux, automatic updates, the always-on version, and help from the people who build it. Your subscription also pays for Godmode’s development.`,
   },
   {
     key: 'cloud',
     q: 'Why not ChatGPT Dots or Grok Bot?',
-    a: `Both run on the vendor’s cloud computer, so your cookies and logins live on their servers, behind plan limits they can change. Godmode runs on your device, with your sessions, and your price doesn’t change after you buy. The trade-off: cloud agents keep going with your laptop closed — for that, run Godmode on an always-on machine.`,
+    a: `Both run on the vendor’s cloud computer, so your logins live on their servers, behind plan limits they can change. Godmode runs on your own computer, signed in as you, and your price doesn’t change after you buy. The trade-off: cloud assistants keep going with your laptop closed; for that, run Godmode on an always-on computer.`,
   },
   {
     key: 'refund',
