@@ -22,6 +22,11 @@ declare namespace Cloudflare {
     ADMIN_PASSWORD: string;
     SESSION_SECRET: string;
     GITHUB_TOKEN?: string;
+    EMAIL?: SendEmail;
+    LIFECYCLE_EMAILS?: string;
+    MAIL_FROM?: string;
+    MAIL_FROM_NAME?: string;
+    MAIL_REPLY_TO?: string;
     STRIPE_AUTOMATIC_TAX?: string;
     STRIPE_MANAGED_PAYMENTS?: string;
     STRIPE_REQUIRE_TOS?: string;

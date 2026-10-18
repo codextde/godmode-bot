@@ -100,7 +100,9 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
     ),
     all(
       `SELECT o.created_at, o.plan, o.status, o.sub_status, o.trial_end, o.comp, o.amount_total, o.currency, o.email,
-              o.country, o.utm_source, o.utm_campaign, o.twclid, ${REPEAT_TRIAL} AS repeat_trial
+              o.country, o.utm_source, o.utm_campaign, o.twclid, ${REPEAT_TRIAL} AS repeat_trial,
+              o.first_seen_at, o.last_seen_at, o.app_version,
+              (SELECT group_concat(kind, ' · ') FROM emails e WHERE e.session_id = o.session_id) AS emails
        FROM orders o WHERE o.livemode = ? AND o.status NOT IN ('open') ORDER BY o.created_at DESC LIMIT 25`,
       liveFlag,
     ),
@@ -188,6 +190,10 @@ const sourceRows = sources.map((s) => {
 const money = (v: number, cur = 'usd') =>
   v.toLocaleString('en-US', { style: 'currency', currency: cur.toUpperCase(), maximumFractionDigits: 0 });
 const date = (ms: unknown) => new Date(n(ms)).toISOString().slice(0, 16).replace('T', ' ');
+const ago = (ms: number) => {
+  const m = Math.max(0, Math.round((now - ms) / 60000));
+  return m < 60 ? `${m}m ago` : m < 2880 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
+};
 const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=${mode}`;
 ---
 
@@ -357,9 +363,9 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
             <a href="/admin/export.csv?what=leads" class="btn btn-ghost btn-sm">Leads CSV</a>
           </div>
         </div>
-        <table class="mt-4 w-full min-w-[760px] text-[13px]">
+        <table class="mt-4 w-full min-w-[980px] text-[13px]">
           <thead class="text-left text-[12px] text-dim">
-            <tr><th class="py-2 font-normal">Date (UTC)</th><th class="font-normal">Plan</th><th class="font-normal">Status</th><th class="text-right font-normal">Amount</th><th class="font-normal pl-4">Email</th><th class="font-normal">Country</th><th class="font-normal">Source</th></tr>
+            <tr><th class="py-2 font-normal">Date (UTC)</th><th class="font-normal">Plan</th><th class="font-normal">Status</th><th class="text-right font-normal">Amount</th><th class="font-normal pl-4">Email</th><th class="font-normal">Country</th><th class="font-normal">Source</th><th class="font-normal">App</th><th class="font-normal">Emails</th></tr>
           </thead>
           <tbody>
             {recent.map((o) => (
@@ -374,6 +380,10 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
                 <td class="pl-4 text-text-2">{o.email ?? '—'}</td>
                 <td class="text-muted">{o.country ?? '—'}</td>
                 <td class="text-muted">{o.utm_source ?? (o.twclid ? 'x (click id)' : '—')}{o.utm_campaign ? ` · ${o.utm_campaign}` : ''}</td>
+                <td class="whitespace-nowrap" title={o.first_seen_at ? `first ${date(o.first_seen_at)}` : undefined}>
+                  {o.last_seen_at ? <span class="chip chip-brand">{ago(n(o.last_seen_at))} · v{o.app_version}</span> : <span class="text-dim">not activated</span>}
+                </td>
+                <td class="whitespace-nowrap text-muted">{o.emails ?? '—'}</td>
               </tr>
             ))}
             {!recent.length && <tr><td class="py-2 text-dim">No orders yet.</td></tr>}
