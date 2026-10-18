@@ -18,8 +18,9 @@ writing the same emails. Not developers (they are welcome, but we don't sell to 
 - One line: Tell Godmode what you need. It opens your browser and apps, signs in, clicks through and finishes the job.
 - Proof, in plain words:
   - Signs in with your own logins and 2FA codes, and never sees your passwords.
-  - Works in the websites and programs you already use. No integrations, no coding, no IT project.
-  - Does the whole job, not a draft: download, fill in, file, send (and asks you first before anything important).
+  - Works in the websites and programs you already use. No coding, no IT project.
+  - Does the whole job, not a draft: download, fill in, file, send. By default it asks you before important steps
+    (sending, paying, deleting, posting) unless the task already told it to go ahead.
   - Runs on its own: every Monday, when an email arrives, when a price changes.
   - Remembers how you like things.
   - Message it from your phone, Slack, Telegram or Teams.
@@ -36,6 +37,15 @@ writing the same emails. Not developers (they are welcome, but we don't sell to 
 6. Research: compare tools or suppliers, market lists, price alerts.
 
 Never lead with coding, bug fixing, pull requests, test suites or servers.
+
+## Claims to keep accurate
+
+- Not "no API keys" or "nothing to connect": instant email/Slack triggers need a connected account (Composio),
+  CAPTCHA solving needs the user's 2Captcha/CapSolver/Anti-Captcha key, Teams needs an Azure bot. Say "no coding".
+- Not "always asks first": asking is the default, it skips it when the task already says to do that step.
+- Passwords are hidden from the AI and blacked out in chats and logs, not in screenshots.
+- Banks that confirm logins in their phone app still need the user; say "it asks you when a site wants your phone".
+- The always-on version for a spare computer installs with one copy-paste command (Founding members get help).
 
 ## Words
 
