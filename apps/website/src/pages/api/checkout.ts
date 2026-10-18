@@ -34,9 +34,18 @@ const unavailable = (wantsJson: boolean) =>
     ? Response.json({ error: 'plan_unavailable' }, { status: 410 })
     : new Response(null, { status: 303, headers: { location: '/#pricing' } });
 
+// Scripts, scanners and uptime checks must not open live Stripe sessions: they pile up as expired
+// checkouts with no email and make the funnel look like real people quit at the card step.
+const isBot = (request: Request) => BOTS.test(request.headers.get('user-agent') ?? '');
+
 export const POST: APIRoute = async ({ request, url }) => {
   const wantsJson = (request.headers.get('accept') ?? '').includes('application/json');
   let plan: Plan = 'monthly';
+  if (isBot(request)) {
+    return wantsJson
+      ? Response.json({ error: 'not_a_browser' }, { status: 403 })
+      : new Response(null, { status: 303, headers: { location: '/#pricing' } });
+  }
 
   try {
     if (!(await allowed('CHECKOUT_LIMIT', request))) {
@@ -132,7 +141,7 @@ export const POST: APIRoute = async ({ request, url }) => {
 export const GET: APIRoute = async (ctx) => {
   if (RETIRED.has(ctx.url.searchParams.get('plan') ?? '')) return unavailable(false);
   const plan = planFrom(ctx.url.searchParams.get('plan'));
-  if (BOTS.test(ctx.request.headers.get('user-agent') ?? '')) {
+  if (isBot(ctx.request)) {
     return new Response(null, { status: 303, headers: { location: '/#pricing' } });
   }
   const form = new URLSearchParams({ plan });
@@ -140,10 +149,10 @@ export const GET: APIRoute = async (ctx) => {
     const v = ctx.url.searchParams.get(k);
     if (v) form.set(k, v);
   }
-  const request = new Request(ctx.request.url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: form,
-  });
+  // Keep the visitor's IP and user agent so the rate limit and bot check still apply.
+  const headers = new Headers(ctx.request.headers);
+  headers.set('content-type', 'application/x-www-form-urlencoded');
+  headers.delete('content-length');
+  const request = new Request(ctx.request.url, { method: 'POST', headers, body: form });
   return POST({ ...ctx, request });
 };
