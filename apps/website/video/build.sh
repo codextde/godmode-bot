@@ -50,8 +50,10 @@ build() {
   esac
 }
 
+# The site's hero (public/media/hero.*) is a real screen recording now, not this animation: `./build.sh hero`
+# would replace it, so it is left out of the default set.
 if [ "$#" -eq 0 ]; then
-  set -- hero feature-vm feature-background feature-vault ad-main-16x9 ad-main-1x1 ad-vault-1x1 ad-vm-9x16 og-image
+  set -- feature-vm feature-background feature-vault ad-main-16x9 ad-main-1x1 ad-vault-1x1 ad-vm-9x16 og-image
 fi
 for p in "$@"; do echo "▸ $p"; build "$p"; done
 ls -la "$OUT"

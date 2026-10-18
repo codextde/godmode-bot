@@ -7,47 +7,47 @@ import { PRICING } from '@/config/site';
 const { monthly, yearly } = PRICING.plans;
 
 type Cell = ['yes' | 'no' | 'partial' | '?' | 'text', string];
-const cols = ['Godmode', 'Grok Bot', 'ChatGPT Dots', 'OpenClaw', 'Hermes Agent', 'Claude Cowork'];
+const cols = ['Godmode', 'ChatGPT Dots', 'Grok Bot', 'Claude Cowork'];
 const rows: { label: string; cells: Cell[] }[] = [
   {
-    label: 'Runs on your own device',
-    cells: [['yes', 'Mac · Windows · Linux'], ['no', 'Cloud computer'], ['no', 'Cloud computer'], ['yes', 'Self-hosted'], ['yes', 'Self-hosted'], ['partial', 'Cloud by default']],
+    label: 'Does the work on your own computer',
+    cells: [['yes', 'Mac · Windows · Linux'], ['no', 'Cloud computer'], ['no', 'Cloud computer'], ['partial', 'Cloud by default']],
   },
   {
-    label: 'Its own computer',
-    cells: [['yes', 'macOS VMs on your Mac'], ['partial', 'One cloud PC for all bots'], ['yes', 'Cloud computer'], ['no', 'Sandbox off by default'], ['partial', 'Containers / remote'], ['partial', 'Fresh sandbox each session']],
+    label: 'A computer of its own',
+    cells: [['yes', 'A separate Mac on your Mac'], ['yes', 'Cloud computer'], ['partial', 'One cloud PC for all bots'], ['partial', 'Fresh sandbox each session']],
   },
   {
-    label: 'Continues your browser sessions',
-    cells: [['yes', 'Chrome profile import'], ['no', 'Cloud browser'], ['no', 'Cloud browser'], ['yes', 'Browser Relay'], ['?', ''], ['yes', 'Claude in Chrome']],
+    label: 'Already signed in to your accounts',
+    cells: [['yes', 'Brings over your Chrome logins'], ['no', 'Cloud browser'], ['no', 'Cloud browser'], ['yes', 'Claude in Chrome']],
   },
   {
-    label: 'Encrypted vault + 2FA, hidden from the model',
-    cells: [['yes', 'AES-256-GCM · TOTP'], ['no', 'You type them in yourself'], ['partial', 'Passwords; 2FA not stated'], ['no', 'Not encrypted at rest'], ['no', 'Display-only redaction'], ['?', '']],
+    label: 'Passwords and 2FA codes, hidden from the AI',
+    cells: [['yes', 'Encrypted vault · 2FA codes'], ['partial', 'Passwords; 2FA not stated'], ['no', 'You type them in yourself'], ['?', '']],
   },
   {
-    label: 'Persistent agents with memory',
-    cells: [['yes', 'Versioned in git'], ['yes', ''], ['yes', ''], ['yes', ''], ['yes', ''], ['partial', 'Fresh per session']],
+    label: 'Remembers you between tasks',
+    cells: [['yes', 'Notes you can read and edit'], ['yes', ''], ['yes', ''], ['partial', 'Fresh per session']],
   },
   {
-    label: 'Automations & triggers',
-    cells: [['yes', 'Schedules · events · webhooks'], ['yes', 'Routines'], ['yes', 'Scheduled tasks'], ['yes', 'Cron · webhooks'], ['yes', 'Scheduling'], ['yes', 'Scheduled tasks']],
+    label: 'Runs on its own, on a schedule',
+    cells: [['yes', 'Schedules · new emails · changes'], ['yes', 'Scheduled tasks'], ['yes', 'Routines'], ['yes', 'Scheduled tasks']],
   },
   {
-    label: 'Slack · Telegram · Teams',
-    cells: [['yes', 'All three'], ['partial', 'Slack via plugins'], ['partial', 'Slack · Teams'], ['yes', '29+ channels'], ['partial', 'No Teams'], ['?', '']],
+    label: 'Message it from Slack · Telegram · Teams',
+    cells: [['yes', 'All three'], ['partial', 'Slack · Teams'], ['partial', 'Slack via plugins'], ['?', '']],
   },
   {
     label: 'Keeps working with your laptop shut',
-    cells: [['partial', 'On an always-on machine'], ['yes', ''], ['yes', ''], ['partial', 'On a server'], ['partial', 'On a VPS'], ['yes', 'Cloud tasks']],
+    cells: [['partial', 'On an always-on computer'], ['yes', ''], ['yes', ''], ['yes', 'Cloud tasks']],
   },
   {
-    label: 'Model',
-    cells: [['text', 'Claude Opus 5.5'], ['text', 'Mostly Grok, routed'], ['text', 'GPT-6 Astra'], ['text', 'Any'], ['text', 'Any'], ['text', 'Claude']],
+    label: 'AI model',
+    cells: [['text', 'Claude Opus 5.5'], ['text', 'GPT-6 Astra'], ['text', 'Mostly Grok, routed'], ['text', 'Claude']],
   },
   {
     label: 'Price',
-    cells: [['text', `${PRICING.trialDays} days free, then $${yearly.perMonth}–${monthly.price}/mo`], ['text', '$20–$40/mo, weekly cap'], ['text', 'From $100/mo (Pro)'], ['text', 'Free + model'], ['text', 'Free + model'], ['text', 'In Claude Pro / Max']],
+    cells: [['text', `${PRICING.trialDays} days free, then $${yearly.perMonth}–${monthly.price}/mo`], ['text', 'From $100/mo (Pro)'], ['text', '$20–$40/mo, weekly cap'], ['text', 'In Claude Pro / Max']],
   },
 ];
 const mark = {
@@ -62,10 +62,10 @@ const mark = {
   <div class="container-x">
     <div class="mx-auto max-w-[820px] text-center">
       <p class="eyebrow justify-center" data-reveal><span class="n">09</span> Compare</p>
-      <Words text="The best of every agent. *On a machine you own.*" class="h-section mx-auto mt-6" />
+      <Words text="Others work on a cloud computer. *Godmode works on yours.*" class="h-section mx-auto mt-6" />
       <p class="lead mx-auto mt-6 max-w-[620px]" data-reveal style="--d:200">
-        Grok Bot’s teammates, Dots’ own computer, OpenClaw’s local control, Hermes’ memory — plus a vault for passwords
-        <em>and</em> 2FA codes that the model never sees. All in one app, running on your device.
+        A team of AI coworkers, a computer of its own and your own logins, plus a vault for passwords <em>and</em> 2FA
+        codes that the AI never sees. All in one app, on a computer you own.
       </p>
     </div>
 
@@ -85,11 +85,11 @@ const mark = {
     <p class="mt-8 flex items-center justify-end gap-1.5 text-[12px] text-dim md:hidden">Swipe to compare <Icon name="arrow-right" size={12} /></p>
     <div class="card mt-3 overflow-hidden" data-reveal style="--d:100">
       <div class="overflow-x-auto">
-        <table class="compare w-full min-w-[980px] border-collapse text-left">
+        <table class="compare w-full min-w-[820px] border-collapse text-left">
           <caption class="sr-only">Godmode compared with other AI agents</caption>
           <thead>
             <tr>
-              <th scope="col" class="w-[22%]"><span class="sr-only">Feature</span></th>
+              <th scope="col" class="w-[26%]"><span class="sr-only">Feature</span></th>
               {
                 cols.map((c, i) => (
                   <th scope="col" class:list={['col-head', i === 0 && 'is-us']}>

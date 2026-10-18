@@ -6,7 +6,7 @@ message: "Godmode Bot is an AI coworker that actually does the work on your comp
 destination: website + x-feed
 aspect: 1920x1080 (hero, feature loops), 1080x1080 + 1920x1080 + 1080x1920 (X ads), 1200x630 (og)
 language: en
-audience: founders, operators and teams who want an AI that finishes real computer work
+audience: everyone who works at a computer (office staff, small-business and shop owners, marketers, freelancers) and wants an AI that finishes real computer work; not developers (positioning since 2026-10-18, see ../marketing/positioning.md)
 length: hero 25s loop · feature loops 8s · ads 11–18s
 angle: product-in-action, premium restraint
 ---

@@ -11,23 +11,30 @@
       @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
       @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
       html, body { width: 1200px; height: 630px; }
-      #shot { position: absolute; left: 640px; top: 96px; width: 820px; height: 512px; border-radius: 18px; overflow: hidden;
-        border: 1px solid var(--line-2); background: #1a1a1a;
-        box-shadow: 0 40px 90px rgba(0,0,0,0.7), 0 10px 30px rgba(0,0,0,0.45);
-        -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0.25) 0%, #000 34%);
-        mask-image: linear-gradient(to right, rgba(0,0,0,0.25) 0%, #000 34%); }
+      #shot { position: absolute; left: 676px; top: 112px; width: 600px; height: 420px; border-radius: 18px; overflow: hidden;
+        border: 1px solid var(--line-2); background: var(--s1);
+        box-shadow: 0 40px 90px rgba(0,0,0,0.7), 0 10px 30px rgba(0,0,0,0.45); }
       #shot .ftb { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: #151515; border-bottom: 1px solid rgba(255,255,255,0.06);
         display: flex; align-items: center; padding: 0 12px; }
       #shot .ftb .traffic i { width: 10px; height: 10px; }
-      #shot img { position: absolute; left: -300px; top: -170px; width: 1200px; height: 750px; }
-      #hl { position: absolute; left: 451px; top: 222px; width: 98px; height: 200px; border-radius: 12px; border: 2.5px solid var(--em);
-        box-shadow: 0 0 0 5px rgba(47,214,144,0.14), 0 0 30px rgba(47,214,144,0.35); }
+      #shot .panel { position: absolute; left: 26px; right: 70px; top: 54px; }
+      #shot .label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+      #shot .msg { margin-top: 10px; padding: 14px 16px; border-radius: 14px; background: var(--s2); border: 1px solid var(--line-2);
+        font-size: 18px; line-height: 1.4; color: var(--fg); }
+      #shot .steps { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; }
+      #shot .steps li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line);
+        background: rgba(255,250,240,0.02); font-size: 15px; color: #d8d4cc; }
+      #shot .steps li::before { content: ""; width: 16px; height: 16px; flex: none; border-radius: 50%; background: var(--em-soft);
+        box-shadow: inset 0 0 0 1.5px var(--em); }
+      #shot .tag { margin-left: auto; font-family: var(--mono); font-size: 11.5px; font-weight: 400; padding: 3px 8px; border-radius: 999px;
+        border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+      #shot .tag.ok { border-color: var(--em-line); color: var(--em); background: var(--em-soft); }
       #left { position: absolute; left: 72px; top: 0; bottom: 0; width: 600px; display: flex; flex-direction: column; justify-content: center; }
       .brandrow { display: flex; align-items: center; gap: 14px; }
       .brandrow .logo { width: 52px; height: 52px; }
       .brandrow b { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
-      h1 { font-size: 66px; margin-top: 34px; width: 580px; line-height: 1.02; }
-      h1 .serif { font-size: 74px; }
+      h1 { font-size: 56px; margin-top: 34px; width: 590px; line-height: 1.04; }
+      h1 .serif { font-size: 72px; }
       .sub { margin-top: 28px; font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
       .by { margin-top: 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; color: #d8d4cc; }
     </style>
@@ -40,12 +47,24 @@
         <div class="bg-warm" style="left: -200px; top: -300px; width: 900px; height: 800px"></div>
         <div class="guide-v" style="left: 40px"></div>
         <div class="guide-h" style="top: 594px"></div>
-        <div id="shot"><div class="ftb"><div class="traffic color"><i></i><i></i><i></i></div></div><img src="assets/screens/chat.png" alt="" /><div id="hl"></div></div>
+        <div id="shot">
+          <div class="ftb"><div class="traffic color"><i></i><i></i><i></i></div></div>
+          <div class="panel">
+            <div class="label">You · Monday 08:00</div>
+            <div class="msg">Download this month’s invoices from our supplier portals, file them in Drive and send me the total.</div>
+            <ul class="steps">
+              <li>Signed into 6 portals with your logins<b class="tag">secret hidden</b></li>
+              <li>Downloaded 23 new invoices</li>
+              <li>Filed them in Drive › Invoices</li>
+              <li>Sent you the total<b class="tag ok">done</b></li>
+            </ul>
+          </div>
+        </div>
         <div id="left">
           <div class="brandrow"><div class="logo" data-logo></div><b>Godmode Bot</b></div>
-          <h1 class="headline" id="h">Like Grok Bot.<br><span class="serif">But with Claude.</span></h1>
-          <div class="sub">Your computer · Your logins · 2FA vault</div>
-          <div class="by"><span class="claude-dot"></span>Powered by Claude Opus 5.5</div>
+          <h1 class="headline" id="h">Your computer work.<br><span class="serif">Done for you.</span></h1>
+          <div class="sub">Your browser · Your apps · Your logins</div>
+          <div class="by"><span class="claude-dot"></span>Powered by Claude</div>
         </div>
         <div class="grain" data-layout-ignore></div>
       </div>

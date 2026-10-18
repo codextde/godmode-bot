@@ -1,5 +1,12 @@
 # X Ads launch plan — Godmode
 
+> Status 2026-10-18: every X ad is paused since 2026-10-10 (EUR ~500, no sale). A new paid test needs Daniel's explicit OK
+> (cap, kill rule, payback). If one ever runs, it follows marketing/positioning.md: everyday computer workers, not
+> developers. Target small-business owners, office and admin staff, marketers, e-commerce sellers and freelancers
+> (interests: small business, productivity, Microsoft Excel, Shopify, e-commerce, digital marketing, virtual assistants;
+> keywords: busywork, virtual assistant, invoices, spreadsheets, "where is my order", ads report). The developer keyword
+> list below (claude code, openclaw, hermes agent, grok bot) is retired.
+
 Ads account: https://ads.x.com/manager/18ce55kuefv/campaigns · Landing page: https://usegodmode.com
 
 Goal: start 7-day free trials of Godmode Pro ($39/month, or $348/year = $29/month) with founders, operators and

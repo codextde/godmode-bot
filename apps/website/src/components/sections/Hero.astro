@@ -6,8 +6,8 @@ import Character from '../ui/Character.astro';
 import CheckoutButton from '../ui/CheckoutButton.astro';
 import Countdown from '../ui/Countdown.astro';
 import CouponCode from '../ui/CouponCode.astro';
-import { COUPON, FOUNDING, PRICING, SITE } from '@/config/site';
-import chat from '@/assets/shots/chat.png';
+import { COUPON, FOUNDING, PRICING } from '@/config/site';
+import recording from '@/assets/shots/hero-recording.jpg';
 ---
 
 <section data-hero class="relative isolate overflow-hidden pt-[112px] sm:pt-[132px]">
@@ -18,31 +18,31 @@ import chat from '@/assets/shots/chat.png';
 
   <div class="container-x relative text-center">
     <div data-reveal style="--d:0">
-      <a href="/vs/grok-bot" class="pill group mx-auto" data-track="hero_pill">
+      <a href="/use-cases" class="pill group mx-auto" data-track="hero_pill">
         <span class="flex items-center gap-2 rounded-full bg-[rgb(217_119_87/0.14)] py-1 pr-2.5 pl-2 text-[12.5px] whitespace-nowrap text-[#f0a488]">
           <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"
             ><path
               fill="currentColor"
               d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg
           >
-          Claude Opus 5.5
+          Powered by Claude
         </span>
-        <span class="whitespace-nowrap text-text-2"><span class="hidden sm:inline">See how Godmode compares to Grok Bot</span><span class="sm:hidden">Godmode vs Grok Bot</span></span>
+        <span class="whitespace-nowrap text-text-2"><span class="hidden sm:inline">60 everyday jobs people hand to Godmode</span><span class="sm:hidden">60 jobs it does for you</span></span>
         <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
       </a>
     </div>
 
     <Words
       as="h1"
-      text="Like Grok Bot. *But with Claude.*"
+      text="Your computer work. *Done for you.*"
       class="h-display text-grad mx-auto mt-7 max-w-[12.5ch] pb-2"
       delay={120}
     />
 
-    <p class="lead mx-auto mt-6 max-w-[640px]" data-reveal style="--d:450">
-      Godmode is the AI coworker that runs Claude on every task and works on your own computer, not a shared cloud box. It
-      opens your browser, signs in with your logins and 2FA, clicks through your apps and keeps going until the job
-      is done — quietly in the background, or on its own Mac. Just tell it what you need.
+    <p class="lead mx-auto mt-6 max-w-[660px]" data-reveal style="--d:450">
+      Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words, like you would a
+      colleague. It opens your browser and apps, signs in, clicks through and finishes the job: emails answered, invoices
+      filed, the spreadsheet updated, the ads report in your inbox.
     </p>
 
     <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:600">
@@ -61,12 +61,10 @@ import chat from '@/assets/shots/chat.png';
       <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.yearly.perMonth}/mo, locked for life</li>
     </ul>
 
-    <p class="mt-4 text-[13px] text-muted" data-reveal style="--d:760">
-      <a href={SITE.repo} rel="noopener" class="group inline-flex items-center gap-1.5 hover:text-text" data-track="hero_github">
-        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.69 1.25 3.35.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.69 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.84 1.19 3.1 0 4.42-2.7 5.39-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"></path></svg>
-        Open source under MIT. Build it yourself for free, or let us ship it to you.
-        <Icon name="arrow-right" size={13} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
-      </a>
+    <p class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[13px] text-muted" data-reveal style="--d:760">
+      <span class="flex items-center gap-1.5"><Icon name="laptop" size={14} class="text-dim" /> Mac and Windows</span>
+      <span class="flex items-center gap-1.5"><Icon name="message-circle" size={14} class="text-dim" /> No coding, just plain words</span>
+      <span class="flex items-center gap-1.5"><Icon name="lock-keyhole" size={14} class="text-dim" /> Your passwords stay on your computer</span>
     </p>
 
     <div class="mt-7 flex flex-col items-center gap-3" data-reveal style="--d:800">
@@ -93,13 +91,13 @@ import chat from '@/assets/shots/chat.png';
         <div class="window-bar">
           <i></i><i></i><i></i>
           <div class="mx-auto flex items-center gap-2 font-mono text-[11px] text-dim">
-            <span class="live-dot !size-1.5"></span> Godmode · working
+            <span class="live-dot !size-1.5"></span> Real screen recording · sped up
           </div>
         </div>
         <div class="hero-screen relative aspect-video bg-bg">
           <Image
-            src={chat}
-            alt="Godmode logging into a billing portal: the password and 2FA code are filled from the encrypted vault and marked ‘Secret hidden’, next to a live preview of its browser."
+            src={recording}
+            alt="A real Mac desktop: Godmode looked up Notion, Linear and Slack pricing in its own Chrome window and answered with a table of what a 10-person team pays per month."
             widths={[640, 960, 1280, 1600, 2000]}
             sizes="(min-width: 1200px) 1120px, 94vw"
             loading="eager"
@@ -114,7 +112,7 @@ import chat from '@/assets/shots/chat.png';
             autoplay
             preload="metadata"
             data-autoplay
-            aria-label="Godmode completing a task: it signs into a billing portal with a hidden password and 2FA code, downloads invoices and posts them to Slack."
+            aria-label="Real screen recording, sped up: Godmode opens Notion, Linear and Slack pricing in its own browser and answers with a table of what a 10-person team pays per month."
           >
             <source src="/media/hero.webm" type="video/webm" />
             <source src="/media/hero.mp4" type="video/mp4" />
@@ -124,17 +122,17 @@ import chat from '@/assets/shots/chat.png';
 
       <!-- Floating status chips -->
       <div class="float-chip left-[2%] top-[18%] hidden md:flex" style="--fd:0s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="lock-keyhole" size={15} /></span>
+        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="globe" size={15} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">Password filled</b>
-          <span class="font-mono text-[11px] text-dim">secret hidden from the AI</span>
+          <b class="block text-[13px] font-medium text-text">Its own Chrome window</b>
+          <span class="font-mono text-[11px] text-dim">real pages, nothing staged</span>
         </span>
       </div>
       <div class="float-chip right-[1%] top-[42%] hidden md:flex" style="--fd:-2s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="shield-check" size={15} /></span>
+        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="table" size={15} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">2FA code <span class="font-mono tracking-widest text-brand">••• •••</span></b>
-          <span class="font-mono text-[11px] text-dim">typed from your vault</span>
+          <b class="block text-[13px] font-medium text-text">Three sites, one table</b>
+          <span class="font-mono text-[11px] text-dim">prices checked live</span>
         </span>
       </div>
       <div class="float-chip bottom-[10%] left-[6%] hidden lg:flex" style="--fd:-4s">

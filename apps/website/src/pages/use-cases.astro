@@ -5,7 +5,7 @@ import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { PRICING, SITE, yearlySavings } from '@/config/site';
+import { PRICING, yearlySavings } from '@/config/site';
 
 type How = 'browser' | 'app' | 'desktop' | 'vm' | 'chat';
 const howLabel: Record<How, [string, string]> = {
@@ -28,7 +28,7 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
       ['Every government portal wants a different login and a 2FA code.', 'Log into the tax office portal, download every notice from this year and save them in Documents › Tax › 2026 with readable names.', 'browser', 'Quarterly'],
       ['My Downloads folder is a landfill.', 'Sort my Downloads folder: invoices into Finance, screenshots into Pictures › Screenshots, installers into the trash. Show me the plan before you move anything.', 'app', 'Monthly'],
       ['Forms, forms, forms.', 'Fill the supplier onboarding form at this link with our company data from the shared drive. Stop before submitting and show me a screenshot.', 'browser', 'Once'],
-      ['I forget to renew things until they break.', 'Every month, check when our domains, SSL certificates, insurance and software licences expire and tell me on Telegram about anything due in the next 30 days.', 'chat', 'Monthly'],
+      ['I forget to renew things until they break.', 'Every month, check when our domains, insurance policies, leases and the car’s inspection are due and tell me on Telegram about anything in the next 30 days.', 'chat', 'Monthly'],
     ],
   },
   {
@@ -40,7 +40,7 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
       ['Stripe payouts never match the bank statement.', 'Match last week’s Stripe payouts against our online banking. List every payout that doesn’t add up, with links to both sides.', 'browser', 'Weekly'],
       ['Our accountant keeps asking for missing receipts.', 'Find every card transaction from September without a receipt in our accounting tool, search my email for each one and upload what you find.', 'browser', 'Monthly'],
       ['Customers pay late and I hate chasing them.', 'Find invoices more than 14 days overdue and draft a friendly reminder for each customer in Gmail drafts. Don’t send.', 'browser', 'Weekly'],
-      ['We pay for SaaS nobody uses.', 'List every subscription charged to the company card last quarter with its price and last login. Flag anything unused for 60 days.', 'browser', 'Quarterly'],
+      ['We pay for software nobody uses.', 'List every subscription charged to the company card last quarter with its price and last login. Flag anything unused for 60 days.', 'browser', 'Quarterly'],
       ['The budget spreadsheet is always out of date.', 'Open the budget workbook in Excel, update the actuals sheet from this month’s bank export and highlight every line more than 10% over plan.', 'app', 'Monthly'],
     ],
   },
@@ -59,15 +59,15 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
   },
   {
     key: 'marketing',
-    name: 'Marketing',
+    name: 'Marketing & ads',
     icon: 'megaphone',
     items: [
-      ['Ad reporting is four dashboards and a copy-paste job.', 'Pull spend, clicks and conversions from Meta, Google and X Ads into our reporting sheet and flag every campaign with a CPA above $80.', 'browser', 'Fridays'],
+      ['Ad reporting is four dashboards and a copy-paste job.', 'Pull spend, clicks and sales from Meta, Google and TikTok Ads into our reporting sheet and flag every campaign that costs more than $80 per sale.', 'browser', 'Fridays'],
+      ['Some ads spend money and never sell.', 'Every morning, find the ads that spent more than $50 without a single sale. Send me the list and pause the ones I say yes to.', 'browser', 'Daily'],
+      ['Our best ad is getting tired.', 'Look at our three best-selling Meta ads from last month and write five new versions of each: new hook, same offer. Put them in the ads doc for my review.', 'browser', 'Weekly'],
       ['Competitors change prices and I hear about it from customers.', 'Watch the pricing pages of these three competitors. When anything changes, send me a screenshot and a two-line summary.', 'browser', 'When it changes'],
-      ['One blog post should be ten posts.', 'Turn today’s blog post into a LinkedIn post, an X thread and a newsletter blurb in our voice. Save them as drafts for my review.', 'browser', 'When a post goes live'],
       ['Our search traffic dropped and nobody knows why.', 'Check Search Console for pages that lost more than 20% clicks week over week and suggest one concrete fix for each.', 'browser', 'Weekly'],
       ['Reviews go unanswered for weeks.', 'Reply to new Google reviews in our voice. Send me anything under 3 stars before you answer it.', 'browser', 'Daily'],
-      ['Design tweaks wait for the designer.', 'Open our banner file in Figma, make the five size variants in this list with the new headline and export them as PNG to the shared folder.', 'app', 'Once'],
     ],
   },
   {
@@ -89,7 +89,7 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
     icon: 'life-buoy',
     items: [
       ['The same five questions fill the support queue.', 'Answer new Zendesk tickets that our help center already covers, link the article, and leave the rest assigned to me.', 'browser', 'When a ticket arrives'],
-      ['Bug reports from customers are vague.', 'For each new bug ticket, reproduce it on staging in a clean browser, attach screenshots and steps, and file it in Linear.', 'vm', 'When a ticket arrives'],
+      ['Customers write in three languages.', 'Answer new customer emails in French, Spanish and Italian in our usual tone using our help center, and keep an English copy of each answer for me.', 'browser', 'When an email arrives'],
       ['Refunds need three tools.', 'For refund requests under $50, check the order in Shopify, refund it in Stripe and reply to the customer. Ask me for anything bigger.', 'browser', 'When a ticket arrives'],
       ['Our help center is outdated.', 'Read last month’s tickets, find the 10 most common questions without a good article, and draft those articles in our help center as unpublished.', 'browser', 'Monthly'],
       ['Nobody reads the weekly support numbers.', 'Every Monday, post five lines to #support: volume, first response time, top three topics and one thing we should fix.', 'chat', 'Weekly'],
@@ -97,16 +97,16 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
     ],
   },
   {
-    key: 'engineering',
-    name: 'Engineering',
-    icon: 'code-xml',
+    key: 'social',
+    name: 'Social media & content',
+    icon: 'share-2',
     items: [
-      ['A bug that only happens in Safari.', 'In your Mac VM, clone the repo, reproduce the checkout bug from issue #42 in Safari, fix it, run the tests and open a pull request.', 'vm', 'Once'],
-      ['Nobody tests signup before a release.', 'Every night, go through signup, checkout and cancellation on staging in a fresh browser and post anything broken with screenshots to #eng.', 'browser', 'Nightly'],
-      ['Dependency updates pile up.', 'In your VM, update our dependencies one by one, run the test suite after each, and open one pull request with everything that passes.', 'vm', 'Weekly'],
-      ['Setting up a new Mac takes a day.', 'Install our dev setup in your VM from the onboarding doc, note every step that’s wrong or missing, and send me a fixed version of the doc.', 'vm', 'Once'],
-      ['Vendor dashboards have no API.', 'Every morning, open the hosting dashboard, the error tracker and the uptime tool and send me one message with anything red.', 'browser', 'Daily'],
-      ['App Store screenshots for every device size.', 'Run the app in the simulators in your VM, take the screenshots from our list for each device size and put them in the shared folder.', 'vm', 'Each release'],
+      ['Posting every day is a second job.', 'Plan next week’s Instagram and LinkedIn posts from our product list, write the captions in our voice and schedule them. Show me the plan before anything goes live.', 'browser', 'Weekly'],
+      ['One blog post should be ten posts.', 'Turn today’s blog post into a LinkedIn post, an Instagram caption and a newsletter blurb in our voice. Save them as drafts for my review.', 'browser', 'When a post goes live'],
+      ['Comments and DMs pile up.', 'Answer new comments and DMs on our Instagram and Facebook pages with the answers from our FAQ doc. Leave anything about refunds or complaints for me.', 'browser', 'Daily'],
+      ['Finding creators takes forever.', 'Find 20 Instagram and TikTok creators in home and living with 10k to 100k followers, add their engagement and contact email to our creator sheet and draft a short personal message for each.', 'browser', 'Once'],
+      ['The newsletter always goes out late.', 'Write this month’s newsletter in Mailchimp from our three latest posts and new products, send me a test email and schedule it for Thursday 9:00 once I say OK.', 'browser', 'Monthly'],
+      ['Every channel wants a different image size.', 'Open our banner in Canva, make the five size variants on this list with the new headline and save them as PNG in the shared folder.', 'browser', 'Once'],
     ],
   },
   {
@@ -116,23 +116,23 @@ const groups: { key: string; name: string; icon: string; items: Case[] }[] = [
     items: [
       ['I need a market overview by Friday.', 'Find every company selling AI bookkeeping to small businesses in Germany. For each: website, pricing, funding and one sentence on the angle. Put it in a sheet.', 'browser', 'Once'],
       ['Which tool should we buy?', 'Compare these four project-management tools for a 12-person agency: price, Gantt, client access, time tracking. Sign up for trials if you need to and give me a recommendation.', 'browser', 'Once'],
-      ['Tenders slip past us.', 'Every morning, search the public tender portals for Shopify and e-commerce projects in DACH and send me new ones with deadline and budget.', 'browser', 'Daily'],
+      ['Tenders slip past us.', 'Every morning, search the public tender portals for marketing and website projects in our region and send me new ones with deadline and budget.', 'browser', 'Daily'],
       ['Long PDFs I’ll never read.', 'Read the 80-page contract in my Downloads folder and list every clause about termination, liability and auto-renewal with page numbers.', 'app', 'Once'],
       ['I want a price alert, not a tab I refresh.', 'Watch the price of this flight and this monitor. Tell me when either drops by more than 10%.', 'browser', 'When it changes'],
-      ['Hiring takes forever to start.', 'Find 30 senior Shopify developers in Europe who are open to work, with links and why each fits, and put them in our hiring sheet.', 'browser', 'Once'],
+      ['Hiring takes forever to start.', 'Find 30 experienced bookkeepers in Munich who are open to work, with profile links and why each fits, and put them in our hiring sheet.', 'browser', 'Once'],
     ],
   },
   {
     key: 'it',
-    name: 'IT & ops',
-    icon: 'server',
+    name: 'Office & IT',
+    icon: 'building-2',
     items: [
-      ['Onboarding a new hire touches ten tools.', 'Create accounts for our new hire Lisa in Google Workspace, Slack, Notion and GitHub, add her to the right groups and send me the checklist when done.', 'browser', 'When someone joins'],
+      ['Onboarding a new hire touches ten tools.', 'Create accounts for our new hire Lisa in Google Workspace, Slack, Notion and our HR tool, add her to the right groups and calendars, and send me the checklist when done.', 'browser', 'When someone joins'],
       ['Offboarding is where security leaks.', 'Remove Max from every tool on our offboarding list, transfer his files to me and confirm each step in #ops.', 'browser', 'When someone leaves'],
       ['The office runs out of coffee. Again.', 'When someone writes “we’re out of …” in #office, reorder it from our Amazon Business account and confirm in the thread.', 'chat', 'When someone asks'],
-      ['Legacy desktop software with no API.', 'Open our old ERP client, export yesterday’s orders as CSV and upload the file to the shared drive.', 'app', 'Daily'],
-      ['Backups that nobody checks.', 'Every Sunday, check that last night’s backups exist in each storage console and that the newest file is under 24 hours old. Tell me only if one isn’t.', 'browser', 'Weekly'],
-      ['Server alerts at 3 a.m.', 'When the uptime monitor reports downtime, check the status page and the server logs and tell me on Telegram what you found before I wake up.', 'chat', 'When it’s down'],
+      ['Old office software nobody wants to touch.', 'Open our old order program, export yesterday’s orders as a spreadsheet and upload it to the shared drive.', 'app', 'Daily'],
+      ['The printer runs out of toner on deadline day.', 'Every Friday, check the toner levels on the office printer’s status page and order new cartridges from our usual supplier for anything under 20%.', 'browser', 'Weekly'],
+      ['New software shouldn’t mess up a work laptop.', 'On your own Mac, install the trial versions of these three PDF editors, try merging and signing a test file in each and tell me which one is easiest.', 'vm', 'Once'],
     ],
   },
   {
@@ -154,8 +154,8 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
 ---
 
 <Base
-  title={`${total} AI agent use cases: problems you solve with one message`}
-  description={`${total} real problems Godmode solves from a single chat message: inbox, invoices, CRM, ads, Shopify, support, QA, research and personal errands. Claude computer use on your own computer, already signed in.`}
+  title={`${total} everyday jobs to hand to your AI coworker`}
+  description={`${total} everyday computer jobs Godmode does for you from one message: email, invoices, ad reports, social posts, online shop orders, customer emails, research and personal errands. In your own browser and apps, already signed in. No coding.`}
 >
   <Nav home={false} />
   <main class="pt-36 pb-16" data-track-view="use_case_library">
@@ -164,9 +164,9 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
         <p class="eyebrow" data-reveal><span class="n">●</span> Use cases</p>
         <Words as="h1" text={`${total} problems you solve *with one message.*`} class="h-section mt-6" />
         <p class="lead mt-6 max-w-[640px]" data-reveal style="--d:200">
-          Type the problem the way you’d tell a coworker. Godmode works out the clicks, signs in with your saved logins,
-          and does the work with {SITE.model} in your browser, your apps, or its own Mac. Every example below is a
-          real message you can paste.
+          Write it the way you’d ask a colleague. Godmode works out the clicks, signs in with your saved logins and
+          does the whole job in your browser, your apps or on its own Mac. Every example below is a real message you
+          can copy, change and send.
         </p>
       </div>
 
@@ -222,7 +222,7 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
           <div>
             <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Coming from Grok Bot?</p>
             <p class="h-card mt-3 text-[22px]">See how Godmode compares</p>
-            <p class="mt-2 text-[15px] text-muted">Your own computer, your sessions, 2FA filled for you.</p>
+            <p class="mt-2 text-[15px] text-muted">Your own computer, your logins, 2FA filled for you.</p>
           </div>
           <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
         </a>
@@ -230,7 +230,7 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
           <div>
             <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Want it on autopilot?</p>
             <p class="h-card mt-3 text-[22px]">25 ready-made automations</p>
-            <p class="mt-2 text-[15px] text-muted">Prompts with schedules and triggers, ready to paste.</p>
+            <p class="mt-2 text-[15px] text-muted">Tasks that run on a schedule. Copy, paste, done.</p>
           </div>
           <Icon name="arrow-up-right" size={22} class="flex-none text-dim transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-brand" />
         </a>

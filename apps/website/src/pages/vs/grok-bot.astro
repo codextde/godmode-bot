@@ -16,12 +16,12 @@ type Mark = 'yes' | 'no' | 'partial';
 const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Where the work happens',
-    us: ['yes', 'On your Mac, Windows or Linux computer, plus isolated macOS VMs on your Mac'],
+    us: ['yes', 'On your Mac, Windows or Linux computer, plus a separate Mac of its own on your Mac'],
     them: ['partial', 'One cloud computer that all your Bots share'],
   },
   {
     label: 'Your existing logins',
-    us: ['yes', 'Import your Chrome profile and continue your sessions, already signed in'],
+    us: ['yes', 'Bring over your Chrome logins once and it is already signed in'],
     them: ['no', 'A fresh cloud browser. You sign in to every site again'],
   },
   {
@@ -36,12 +36,12 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Its own machine',
-    us: ['yes', 'Isolated macOS VMs on your Mac, one click (Apple silicon)'],
+    us: ['yes', 'A separate Mac of its own on your Mac, one click (Apple silicon)'],
     them: ['partial', 'A shared cloud computer, one computer-use task per Bot screen at a time'],
   },
   {
     label: 'Model',
-    us: ['yes', `${SITE.model} on every task, through Anthropic’s official Claude Code, and every newer Claude the day you get it`],
+    us: ['yes', `${SITE.model} on every task, and every newer Claude the day you get it`],
     them: ['partial', 'Picked per task by xAI: a fast Grok 4.8 for most requests, Claude Opus 5.5 and others for some'],
   },
   {
@@ -51,7 +51,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Automations',
-    us: ['yes', 'Schedules, app events (new email, Slack message), webhooks and plain-language conditions'],
+    us: ['yes', 'Schedules, new emails and Slack messages, and changes you describe in plain words'],
     them: ['yes', 'Re-run a learned skill on a schedule'],
   },
   {
@@ -61,12 +61,12 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Memory you can read',
-    us: ['yes', 'Each agent’s memory is a git repo: read it, edit it, roll it back'],
+    us: ['yes', 'You can read and edit what each agent remembers, and undo any change'],
     them: ['partial', 'Preferences and summaries kept by the service'],
   },
   {
     label: 'Your data',
-    us: ['yes', 'Vault, browser profiles, memory and history stay on your device. No telemetry'],
+    us: ['yes', 'Passwords, logins, notes and history stay on your computer. No tracking in the app'],
     them: ['no', 'Requires cloud data storage'],
   },
   {
@@ -110,18 +110,18 @@ const reasons = [
   },
   {
     icon: 'mouse-pointer-click',
-    title: 'Real computer use on your apps',
-    text: 'Excel, Finder, a legacy ERP client, the vendor tool that has no API: Godmode drives the actual window in the background while you keep working.',
+    title: 'Works in your real apps',
+    text: 'Excel, Finder, an old order program, the supplier tool nobody connected to anything: Godmode works in the actual window in the background while you keep working.',
   },
   {
     icon: 'sparkles',
     title: 'Claude, not a mystery model',
-    text: `Godmode thinks with ${SITE.model} through Anthropic’s own Claude Code, the agent developers already trust for long, careful work.`,
+    text: `Godmode thinks with ${SITE.model} on every task, the Claude model known for long, careful work. You always know which AI did the job.`,
   },
   {
     icon: 'hard-drive',
     title: 'Your logins stay home',
-    text: 'Cloud agents keep your signed-in sessions on the vendor’s computer. With Godmode, cookies, vault and memory never leave your machine.',
+    text: 'Cloud agents keep your logins on the vendor’s computer. With Godmode, your logins, passwords and notes never leave your machine.',
   },
 ];
 
@@ -143,7 +143,7 @@ const sameTask = {
 
 const steps = [
   ['download', 'Install Godmode', 'macOS, Windows or Linux. Sign in with your Claude plan or an Anthropic API key.'],
-  ['import', 'Bring your sessions', 'Import your Chrome profile and your logins from Chrome, 1Password or Bitwarden. 2FA from a Google Authenticator QR screenshot.'],
+  ['import', 'Bring your logins', 'Bring over your Chrome logins and your passwords from Chrome, 1Password or Bitwarden. 2FA codes from a screenshot of your authenticator QR code.'],
   ['users', 'Recreate your Bots in one message', 'Tell the main agent what each Bot did (“a sales assistant that updates HubSpot after every call”). It creates the agent, its memory and its schedule.'],
 ];
 
@@ -162,11 +162,11 @@ const faqs = [
   },
   {
     q: 'Does Godmode use Grok?',
-    a: `No. Godmode runs on Anthropic’s official Claude Code, so your agents think with ${SITE.model} and every newer Claude model as soon as your account has it.`,
+    a: `No. Godmode runs on Anthropic’s own official Claude software, so your agents think with ${SITE.model} and every newer Claude model as soon as your account has it.`,
   },
   {
     q: 'What happens to my logins in Grok Bot compared with Godmode?',
-    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an AES-256-GCM vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
+    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an encrypted vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
   },
   {
     q: 'Can Godmode keep working when my laptop is closed, like Grok Bot?',
@@ -191,7 +191,7 @@ const jsonLd = {
 
 <Base
   title="Grok Bot alternative: Godmode vs Grok Bot (2026)"
-  description={`Godmode vs Grok Bot, compared honestly: where the agent runs, who holds your logins and 2FA, usage limits, computer use and price. Godmode's agent works on your own computer, with ${SITE.model} on every task.`}
+  description={`Godmode vs Grok Bot, compared honestly: where the work happens, who holds your logins and 2FA, usage limits, your desktop apps and price. Godmode's agent works on your own computer, with ${SITE.model} on every task.`}
 >
   <script slot="head" type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   <Nav home={false} />
@@ -212,7 +212,7 @@ const jsonLd = {
             <a href="#table" class="btn btn-ghost btn-lg" data-track="vs_grok_table">See the full comparison</a>
           </div>
           <ul class="mt-9 flex flex-wrap gap-2" data-reveal style="--d:420">
-            {['Your device, not their cloud', 'Chrome sessions imported', '2FA filled for you', 'No weekly usage meter', `${SITE.model} computer use`].map((t) => (
+            {['Your computer, not their cloud', 'Already signed in as you', '2FA filled for you', 'No weekly usage meter', 'Powered by Claude'].map((t) => (
               <li class="chip chip-brand"><Icon name="check" size={11} stroke={2.4} /> {t}</li>
             ))}
           </ul>
@@ -227,7 +227,7 @@ const jsonLd = {
           <ul class="mt-6 space-y-3.5 text-[15px] leading-relaxed text-text-2">
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Agents that use the accounts you are already signed into</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Scheduled jobs behind 2FA that finish without you</li>
-            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Computer use on your real desktop apps, not a cloud copy</li>
+            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Works in your real desktop programs, not a cloud copy</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Claude doing the thinking on every task, with no extra weekly cap</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Logins, files and memory that never leave your machine</li>
           </ul>
@@ -349,7 +349,7 @@ const jsonLd = {
       </div>
     </section>
 
-    <ComputerUse eyebrow="04" />
+    <ComputerUse eyebrow="04" title="Four ways it works. *All on your computer.*" table={false} />
 
     <section class="py-20 sm:py-28">
       <div class="container-x">
