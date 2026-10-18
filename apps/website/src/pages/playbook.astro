@@ -42,7 +42,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
     ],
   },
   {
-    name: 'Support & ops',
+    name: 'Support & office',
     icon: 'life-buoy',
     items: [
       ['Ticket first responder', 'When a ticket arrives', 'Answer new shipping questions in Zendesk using our help center and the order status in Shopify. Escalate refunds over $200 to me.'],
@@ -77,7 +77,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
         <p class="eyebrow" data-reveal><span class="n">●</span> The Godmode Playbook</p>
         <Words as="h1" text="25 automations to hand off *this week.*" class="h-section mt-6" />
         <p class="lead mt-6 max-w-[620px]" data-reveal style="--d:200">
-          Copy a prompt, paste it into Godmode, adjust the details. Godmode signs in with your saved logins, does the
+          Copy a task, paste it into Godmode, adjust the details. Godmode signs in with your saved logins, does the
           clicking, and asks before anything risky.
         </p>
       </div>
@@ -104,7 +104,7 @@ const groups: { name: string; icon: string; items: [string, string, string][] }[
                     {prompt}
                   </p>
                   <button type="button" class="btn btn-ghost btn-sm mt-4 self-start" data-copy={prompt} data-track={`copy_${title}`}>
-                    <Icon name="copy" size={13} /> <span data-copy-label>Copy prompt</span>
+                    <Icon name="copy" size={13} /> <span data-copy-label>Copy task</span>
                   </button>
                 </div>
               ))}

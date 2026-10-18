@@ -5,14 +5,16 @@ import Logo from '../ui/Logo.astro';
 
 interface Props {
   eyebrow: string;
+  title?: string;
+  table?: boolean;
 }
-const { eyebrow } = Astro.props;
+const { eyebrow, title = 'Chatbots tell you how. *Godmode does it.*', table = true } = Astro.props;
 
 const modes = [
   {
     icon: 'globe',
     title: 'Your websites, signed in',
-    text: 'Email, online banking, your shop, supplier portals, ad accounts. It uses your own logins, so there is nothing to set up.',
+    text: 'Email, online banking, your shop, supplier portals, ad accounts. It uses your own logins, so there is no setup per website.',
     how: 'any website · your logins',
   },
   {
@@ -49,7 +51,7 @@ const versus: [string, string, string][] = [
     <div class="grid items-end gap-8 lg:grid-cols-[1.15fr_0.85fr]">
       <div class="max-w-[760px]">
         <p class="eyebrow" data-reveal><span class="n">{eyebrow}</span> Where it works</p>
-        <Words text="Chatbots tell you how. *Godmode does it.*" class="h-section mt-6" />
+        <Words text={title} class="h-section mt-6" />
       </div>
       <p class="lead max-w-[440px]" data-reveal style="--d:150">
         Godmode uses a computer the way you do. It works where your work already is: in your browser, in your programs,
@@ -72,6 +74,8 @@ const versus: [string, string, string][] = [
       }
     </div>
 
+    {
+      table && (
     <div class="card mt-3 overflow-hidden" data-reveal style="--d:100">
       <div class="overflow-x-auto">
         <table class="compare w-full min-w-[720px] border-collapse text-left">
@@ -107,5 +111,7 @@ const versus: [string, string, string][] = [
         </table>
       </div>
     </div>
+      )
+    }
   </div>
 </section>

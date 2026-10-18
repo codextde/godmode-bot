@@ -16,12 +16,12 @@ type Mark = 'yes' | 'no' | 'partial';
 const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Where the work happens',
-    us: ['yes', 'On your Mac, Windows or Linux computer, plus isolated macOS VMs on your Mac'],
+    us: ['yes', 'On your Mac, Windows or Linux computer, plus a separate Mac of its own on your Mac'],
     them: ['partial', 'One cloud computer that all your Bots share'],
   },
   {
     label: 'Your existing logins',
-    us: ['yes', 'Import your Chrome profile and continue your sessions, already signed in'],
+    us: ['yes', 'Bring over your Chrome logins once and it is already signed in'],
     them: ['no', 'A fresh cloud browser. You sign in to every site again'],
   },
   {
@@ -36,7 +36,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Its own machine',
-    us: ['yes', 'Isolated macOS VMs on your Mac, one click (Apple silicon)'],
+    us: ['yes', 'A separate Mac of its own on your Mac, one click (Apple silicon)'],
     them: ['partial', 'A shared cloud computer, one computer-use task per Bot screen at a time'],
   },
   {
@@ -51,7 +51,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Automations',
-    us: ['yes', 'Schedules, app events (new email, Slack message), webhooks and plain-language conditions'],
+    us: ['yes', 'Schedules, new emails and Slack messages, and changes you describe in plain words'],
     them: ['yes', 'Re-run a learned skill on a schedule'],
   },
   {
@@ -66,7 +66,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Your data',
-    us: ['yes', 'Vault, browser profiles, memory and history stay on your device. No telemetry'],
+    us: ['yes', 'Passwords, logins, notes and history stay on your computer. No tracking in the app'],
     them: ['no', 'Requires cloud data storage'],
   },
   {
@@ -121,7 +121,7 @@ const reasons = [
   {
     icon: 'hard-drive',
     title: 'Your logins stay home',
-    text: 'Cloud agents keep your signed-in sessions on the vendor’s computer. With Godmode, cookies, vault and memory never leave your machine.',
+    text: 'Cloud agents keep your logins on the vendor’s computer. With Godmode, your logins, passwords and notes never leave your machine.',
   },
 ];
 
@@ -143,7 +143,7 @@ const sameTask = {
 
 const steps = [
   ['download', 'Install Godmode', 'macOS, Windows or Linux. Sign in with your Claude plan or an Anthropic API key.'],
-  ['import', 'Bring your sessions', 'Import your Chrome profile and your logins from Chrome, 1Password or Bitwarden. 2FA from a Google Authenticator QR screenshot.'],
+  ['import', 'Bring your logins', 'Bring over your Chrome logins and your passwords from Chrome, 1Password or Bitwarden. 2FA codes from a screenshot of your authenticator QR code.'],
   ['users', 'Recreate your Bots in one message', 'Tell the main agent what each Bot did (“a sales assistant that updates HubSpot after every call”). It creates the agent, its memory and its schedule.'],
 ];
 
@@ -212,7 +212,7 @@ const jsonLd = {
             <a href="#table" class="btn btn-ghost btn-lg" data-track="vs_grok_table">See the full comparison</a>
           </div>
           <ul class="mt-9 flex flex-wrap gap-2" data-reveal style="--d:420">
-            {['Your device, not their cloud', 'Chrome sessions imported', '2FA filled for you', 'No weekly usage meter', `${SITE.model} computer use`].map((t) => (
+            {['Your computer, not their cloud', 'Already signed in as you', '2FA filled for you', 'No weekly usage meter', 'Powered by Claude'].map((t) => (
               <li class="chip chip-brand"><Icon name="check" size={11} stroke={2.4} /> {t}</li>
             ))}
           </ul>
@@ -227,7 +227,7 @@ const jsonLd = {
           <ul class="mt-6 space-y-3.5 text-[15px] leading-relaxed text-text-2">
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Agents that use the accounts you are already signed into</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Scheduled jobs behind 2FA that finish without you</li>
-            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Computer use on your real desktop apps, not a cloud copy</li>
+            <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Works in your real desktop programs, not a cloud copy</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Claude doing the thinking on every task, with no extra weekly cap</li>
             <li class="flex gap-3"><Icon name="check" size={17} stroke={2.2} class="mt-0.5 flex-none text-brand" />Logins, files and memory that never leave your machine</li>
           </ul>
@@ -349,7 +349,7 @@ const jsonLd = {
       </div>
     </section>
 
-    <ComputerUse eyebrow="04" />
+    <ComputerUse eyebrow="04" title="Four ways it works. *All on your computer.*" table={false} />
 
     <section class="py-20 sm:py-28">
       <div class="container-x">
