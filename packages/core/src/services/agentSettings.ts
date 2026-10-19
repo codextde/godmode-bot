@@ -1,10 +1,9 @@
 import type { Settings } from "@godmode/shared";
-import { INTERFACE_MODES } from "@godmode/shared";
 import { HttpError } from "../util";
 import { audit } from "./audit";
 import { applyRuntimeSettings } from "./runtime";
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from "./settings";
-import { sameSettingShape, settingInRange } from "./settingShape";
+import { SETTING_CHOICES, sameSettingShape, settingInRange } from "./settingShape";
 import { checkSettingsPatch } from "./settingsPatch";
 
 type Sections = Record<string, unknown>;
@@ -42,10 +41,6 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
   maintenance: ["autoFix", "autoUpdate"],
 };
 
-const CHOICES: Record<string, readonly string[]> = {
-  "general.theme": ["dark", "light", "system"],
-  "general.mode": INTERFACE_MODES,
-};
 const FRACTIONS = new Set(["voice.rate"]);
 /** 0 switches the limit off: that is the human's call. */
 const AT_LEAST: Record<string, number> = { "runner.runTimeoutMinutes": 1 };
@@ -104,10 +99,10 @@ export function agentSettingsRefusal(changes: Record<string, unknown>, human: st
       }
       if (!listed(section).includes(name) || Array.isArray(was)) return `${path} stays with ${human}: ${guarded}.`;
       const whole = typeof value !== "number" || ((Number.isInteger(value) || FRACTIONS.has(path)) && value >= (AT_LEAST[path] ?? -Infinity));
+      const choices = SETTING_CHOICES[path];
+      if (choices && typeof value === "string" && !choices.includes(value)) return `${path} must be one of: ${choices.join(", ")}.`;
       if (!sameSettingShape(value, was, false) || !whole || !settingInRange(path, value)) return `Invalid value for ${path}: it is ${JSON.stringify(was)} now, keep its type and range.`;
       if (typeof value === "string") {
-        const choices = CHOICES[path];
-        if (choices && !choices.includes(value)) return `${path} must be one of: ${choices.join(", ")}.`;
         if (value.length > MAX_TEXT || NOT_ONE_LINE.test(value)) return `${path} takes one line of at most ${MAX_TEXT} characters.`;
       }
     }

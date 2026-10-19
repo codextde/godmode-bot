@@ -237,6 +237,12 @@
   * {
     @apply border-border outline-ring/50;
   }
+  .theme-switching,
+  .theme-switching *,
+  .theme-switching *::before,
+  .theme-switching *::after {
+    transition: none !important;
+  }
   html,
   body,
   #root {

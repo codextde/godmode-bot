@@ -324,6 +324,8 @@ describe("phone access", () => {
     expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: "on" } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: false } }))).status).toBe(200);
     expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
+    const themed = await phone("/api/settings", json("PUT", { general: { theme: "dark" } }));
+    expect(((await themed.json()) as { general: { theme: string } }).general.theme).toBe("dark");
     expect((await phone("/api/settings", json("PUT", { runner: { model: "x y" } }))).status).toBe(400);
     for (const patch of [
       { runner: { claudePath: "/tmp/evil" } },
@@ -338,6 +340,7 @@ describe("phone access", () => {
       { runner: { maxConcurrentRuns: 100000 } },
       { runner: { runTimeoutMinutes: -1 } },
       { general: { userName: "x".repeat(81) } },
+      { general: { theme: "purple" } },
       JSON.parse('{"memory":{"dreaming":{"__proto__":{}}}}') as object,
       { runner: { effort: 5 } },
       { memory: { dreaming: { cron: 1 } } },

@@ -1,5 +1,6 @@
 import { useColorScheme, type TextStyle } from "react-native";
 import { DarkTheme, DefaultTheme, type Theme } from "expo-router";
+import { useAppearance } from "./appearance";
 
 /** Godmode's tokens (apps/desktop/src/index.css): warm paper and anthracite, one quiet green accent. */
 const light = {
@@ -151,11 +152,14 @@ export const type = {
 } as const;
 
 export function useColors(): Colors {
-  return useColorScheme() === "dark" ? dark : light;
+  return useIsDark() ? dark : light;
 }
 
+/** The computer's theme; "system" follows this phone. */
 export function useIsDark(): boolean {
-  return useColorScheme() === "dark";
+  const theme = useAppearance((s) => s.theme);
+  const scheme = useColorScheme();
+  return theme === "system" ? scheme === "dark" : theme === "dark";
 }
 
 export function useNavigationTheme(): Theme {

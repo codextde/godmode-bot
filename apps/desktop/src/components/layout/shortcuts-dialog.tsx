@@ -2,6 +2,7 @@ import { Fragment, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/common";
 import { modKey } from "@/lib/desktop";
+import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { useUi } from "@/stores/ui";
 
 /** "G then T" style jumps: the second key, where it goes, and what it's called. */
@@ -27,6 +28,7 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
       { keys: [`${modKey}1–9`], what: "Switch to a workspace (in A–Z order)" },
       { keys: [`${modKey}0`], what: "All workspaces" },
       { keys: [`${modKey},`], what: "Settings" },
+      { keys: [THEME_SHORTCUT], what: "Light or dark mode" },
       { keys: ["?"], what: "This list" },
     ],
   },

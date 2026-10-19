@@ -1290,8 +1290,12 @@ export interface SelfRepairResult {
 export type InterfaceMode = "easy" | "pro";
 export const INTERFACE_MODES: readonly InterfaceMode[] = ["easy", "pro"];
 
+/** Light unless the human picks another; "system" follows each device's own setting. */
+export type Theme = "light" | "dark" | "system";
+export const THEMES: readonly Theme[] = ["light", "dark", "system"];
+
 export interface GeneralSettings {
-  theme: "dark" | "light" | "system";
+  theme: Theme;
   /** How much of Godmode the dashboard shows at once; every feature stays in both. */
   mode: InterfaceMode;
   accent: string;

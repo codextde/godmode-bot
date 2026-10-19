@@ -65,6 +65,8 @@ import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { LidModeButton } from "@/components/layout/lid-mode";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { useTheme } from "@/components/theme-provider";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { LicenseBanner } from "@/components/license/license-banner";
@@ -112,6 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data: boot } = useBootstrap();
   const navigate = useNavigate();
   const setCommandOpen = useUi((s) => s.setCommandOpen);
+  const { toggle: toggleTheme } = useTheme();
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useRunningCount();
@@ -174,11 +177,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       } else if (mod && e.key === ",") {
         e.preventDefault();
         navigate("/settings/general");
+      } else if (mod && e.shiftKey && !e.altKey && letterOf(e) === "l") {
+        e.preventDefault();
+        if (!e.repeat) toggleTheme();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, setCommandOpen]);
+  }, [navigate, setCommandOpen, toggleTheme]);
 
   const workNav: NavItem[] = [
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
@@ -614,6 +620,7 @@ function FooterBar() {
         <TooltipContent>Lock vault</TooltipContent>
       </Tooltip>
       <LidModeButton />
+      <ThemeToggle />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant={location.pathname.startsWith("/settings") ? "secondary" : "ghost"} size="icon" className="size-8" asChild>
