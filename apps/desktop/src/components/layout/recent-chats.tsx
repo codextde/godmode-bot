@@ -281,6 +281,12 @@ function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Work
   );
 }
 
+const TAB_LIST = "flex gap-px rounded-lg border bg-secondary/70 p-0.5";
+const TAB =
+  "relative flex h-6.5 min-w-0 flex-auto items-center justify-center gap-1 rounded-md px-1.5 text-[11.5px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50";
+const TAB_PILL = "absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent";
+const TAB_SPRING = { type: "spring", stiffness: 460, damping: 36 } as const;
+
 type ChatSource = Exclude<RecentSource, "all">;
 
 /** Mine: chats the human started, here or from Slack, Telegram or Teams. Automations: started by a trigger. Agents: an agent started it itself. */
@@ -339,7 +345,7 @@ function SourceTabs({
   };
 
   return (
-    <div role="tablist" aria-label="Who started the chats" onKeyDown={onKeyDown} className="mb-1.5 flex items-center gap-3 border-b border-border/70 px-1">
+    <div role="tablist" aria-label="Who started the chats" onKeyDown={onKeyDown} className={cn(TAB_LIST, "mb-1")}>
       {SOURCES.map((t, i) => {
         const active = t.value === value;
         const { unread, needsYou } = stats[t.value];
@@ -356,24 +362,15 @@ function SourceTabs({
                 aria-selected={active}
                 tabIndex={active ? 0 : -1}
                 onClick={() => onChange(t.value)}
-                className={cn(
-                  "relative flex h-7 items-center gap-1 text-[12px] font-medium outline-none transition-colors focus-visible:text-foreground",
-                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
+                className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
-                {t.label}
+                {active && <motion.span layoutId="recent-source-pill" className={TAB_PILL} transition={TAB_SPRING} />}
+                <span className="relative truncate">{t.label}</span>
                 {signal && (
                   <span
-                    className={cn("size-1.5 rounded-full", signal === "needs" ? "bg-warning" : "bg-brand-strong")}
+                    className={cn("relative size-1.5 shrink-0 rounded-full", signal === "needs" ? "bg-warning" : "bg-brand-strong")}
                     role="img"
                     aria-label={signal === "needs" ? "Waiting for you" : "New replies"}
-                  />
-                )}
-                {active && (
-                  <motion.span
-                    layoutId="recent-source-line"
-                    className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground"
-                    transition={{ type: "spring", stiffness: 460, damping: 36 }}
                   />
                 )}
               </button>
@@ -435,7 +432,7 @@ function RecentTabs({
   return (
     <div className="sticky top-0 z-10 -mx-2 bg-sidebar px-2 pt-1 pb-1.5">
       {children}
-      <div role="tablist" aria-label="Filter recent chats" onKeyDown={onKeyDown} className="flex gap-px rounded-lg border bg-secondary/70 p-0.5">
+      <div role="tablist" aria-label="Filter recent chats" onKeyDown={onKeyDown} className={TAB_LIST}>
         {TABS.map((t, i) => {
           const active = t.value === value;
           const count = t.value === "running" || t.value === "scheduled" ? counts[t.value] : 0;
@@ -454,18 +451,9 @@ function RecentTabs({
                   aria-controls="recent-chats-panel"
                   tabIndex={active ? 0 : -1}
                   onClick={() => onChange(t.value)}
-                  className={cn(
-                    "relative flex h-6.5 min-w-0 flex-auto items-center justify-center gap-1 rounded-md px-1.5 text-[11.5px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                    active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                  )}
+                  className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
                 >
-                  {active && (
-                    <motion.span
-                      layoutId="recent-tab-pill"
-                      className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent"
-                      transition={{ type: "spring", stiffness: 460, damping: 36 }}
-                    />
-                  )}
+                  {active && <motion.span layoutId="recent-tab-pill" className={TAB_PILL} transition={TAB_SPRING} />}
                   <span className="relative truncate">{t.label}</span>
                   {count > 0 && (
                     <span
