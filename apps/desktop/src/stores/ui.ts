@@ -6,6 +6,9 @@ export type AgentsView = "grid" | "list" | "chart";
 
 export type RecentTab = "all" | "running" | "scheduled" | "done";
 
+/** Who started the chats the sidebar lists: the human, an automation or an agent on its own. */
+export type RecentSource = "mine" | "automations" | "agents" | "all";
+
 export type WorkspacesView = "grid" | "list";
 
 export type WorkspacesSort = "name" | "active" | "attention";
@@ -38,6 +41,7 @@ interface UiState {
   collapsedAgentGroups: string[];
   /** Which chats the sidebar's Recent list shows. */
   recentTab: RecentTab;
+  recentSource: RecentSource;
   /** Workspace ids picked lately, newest first (the switcher lists them on top). */
   recentWorkspaces: string[];
   /** The Workspaces page shows cards or rows, in this order. */
@@ -62,6 +66,7 @@ interface UiState {
   setAgentsView: (v: AgentsView) => void;
   toggleAgentGroup: (key: string) => void;
   setRecentTab: (tab: RecentTab) => void;
+  setRecentSource: (source: RecentSource) => void;
   toggleNavSection: (key: string) => void;
   setWorkspacesView: (v: WorkspacesView) => void;
   setWorkspacesSort: (v: WorkspacesSort) => void;
@@ -86,6 +91,7 @@ export const useUi = create<UiState>()(
       agentsView: "grid",
       collapsedAgentGroups: [],
       recentTab: "all",
+      recentSource: "mine",
       recentWorkspaces: [],
       expandedNav: [],
       workspacesView: "grid",
@@ -116,6 +122,7 @@ export const useUi = create<UiState>()(
           collapsedAgentGroups: s.collapsedAgentGroups.includes(key) ? s.collapsedAgentGroups.filter((k) => k !== key) : [...s.collapsedAgentGroups, key],
         })),
       setRecentTab: (recentTab) => set({ recentTab }),
+      setRecentSource: (recentSource) => set({ recentSource }),
       setWorkspacesView: (workspacesView) => set({ workspacesView }),
       setWorkspacesSort: (workspacesSort) => set({ workspacesSort }),
       toggleNavSection: (key) =>
@@ -139,6 +146,7 @@ export const useUi = create<UiState>()(
         agentsView: s.agentsView,
         collapsedAgentGroups: s.collapsedAgentGroups,
         recentTab: s.recentTab,
+        recentSource: s.recentSource,
         recentWorkspaces: s.recentWorkspaces,
         expandedNav: s.expandedNav,
         workspacesView: s.workspacesView,
