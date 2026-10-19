@@ -416,6 +416,20 @@ describe("applying a snapshot on a runner", () => {
     expect(vault.status().autoLockMinutes).toBe(0);
   });
 
+  test("a setting the controller changed is audited on the runner once", async () => {
+    const audits = () => all<{ actor: string; details: string }>("SELECT actor, details FROM audit_log WHERE action = 'settings.update' ORDER BY rowid");
+    const before = audits().length;
+    use(controller);
+    const effort = getSettings().runner.effort;
+    await sync(() => updateSettings({ runner: { effort: effort === "max" ? "low" : "max" } }));
+    const logged = audits().slice(before);
+    expect(logged.map((a) => a.actor)).toEqual(["controller"]);
+    expect(JSON.parse(logged[0]!.details)).toEqual({ via: "sync", changes: [{ setting: "runner.effort", from: effort, to: effort === "max" ? "low" : "max" }] });
+    await sync(() => {});
+    expect(audits().length).toBe(before + 1);
+    await sync(() => updateSettings({ runner: { effort } }));
+  });
+
   test("applying the same snapshot again changes nothing", async () => {
     const before = state();
     const claudeMd = readFileSync(join(runnerDir, "agents", "helper", "CLAUDE.md"), "utf8");

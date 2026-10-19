@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_CLOUD_SETTINGS, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_CLOUD_SETTINGS, DEFAULT_FALLBACK_MODEL, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS: Settings = {
   runner: {
     claudePath: "",
     model: DEFAULT_MODEL,
-    fallbackModel: "claude-sonnet-5",
+    fallbackModel: DEFAULT_FALLBACK_MODEL,
     effort: "high",
     ultracode: false,
     bypassPermissions: true,

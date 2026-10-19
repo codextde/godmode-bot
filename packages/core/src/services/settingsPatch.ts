@@ -5,7 +5,7 @@ import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
 import { badRequest } from "../util";
 import { isValidDreamSchedule } from "../memory/dreaming";
-import { getSettings } from "./settings";
+import { DEFAULT_SETTINGS, getSettings } from "./settings";
 
 const CLOUD_SWITCHES = ["enabled", "browserAccess", "phoneAccess", "allowSecrets"];
 
@@ -160,7 +160,14 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       if (typeof value !== "boolean") throw badRequest(`cloud.${key} must be true or false`);
     }
   }
+  // A section saved as anything but an object replaces it whole: every later read and save would break on it.
+  for (const [section, value] of Object.entries(patch)) {
+    const base = (DEFAULT_SETTINGS as unknown as Record<string, unknown>)[section];
+    if (isObject(base) && value !== undefined && !isObject(value)) throw badRequest(`${section} takes an object of settings`);
+  }
 }
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 function checkPhonePatch(value: unknown): void {
   if (value === undefined) return;

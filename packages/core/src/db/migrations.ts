@@ -1584,4 +1584,18 @@ ALTER TABLE runners ADD COLUMN kind TEXT NOT NULL DEFAULT 'runner';
     name: "spend_tracking",
     sql: SPEND_TRACKING_SQL,
   },
+  {
+    id: 97,
+    name: "opus_fallback",
+    sql: /* sql */ `
+-- The fallback model is Opus by default now. A save of any AI setting stored the whole section with the old default:
+-- those follow, with an audit entry like any other settings change.
+INSERT INTO audit_log (id, ts, actor, action, target, details)
+SELECT 'aud_' || lower(hex(randomblob(8))), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 'system', 'settings.update', NULL,
+  json_object('via', 'update', 'changes', json_array(json_object('setting', 'runner.fallbackModel', 'from', 'claude-sonnet-5', 'to', 'claude-opus-5')))
+FROM settings WHERE key = 'runner' AND json_valid(value) AND json_extract(value, '$.fallbackModel') = 'claude-sonnet-5';
+UPDATE settings SET value = json_set(value, '$.fallbackModel', 'claude-opus-5')
+WHERE key = 'runner' AND json_valid(value) AND json_extract(value, '$.fallbackModel') = 'claude-sonnet-5';
+`,
+  },
 ];

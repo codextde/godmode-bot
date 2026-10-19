@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent } from "@godmode/shared";
-import { DEFAULT_MODEL, GLM_MODELS, ZAI_ANTHROPIC_BASE_URL, modelProvider } from "@godmode/shared";
+import { DEFAULT_FALLBACK_MODEL, DEFAULT_MODEL, GLM_MODELS, ZAI_ANTHROPIC_BASE_URL, modelProvider } from "@godmode/shared";
 import { argValue, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
 import { callTool } from "../src/mcp/tools";
@@ -133,7 +133,7 @@ describe("GLM on Z.ai", () => {
     expect(run.status).toBe("succeeded");
     const inv = invocations(env).at(-1)!;
     expect(argValue(inv, "--model")).toBe(DEFAULT_MODEL);
-    expect(argValue(inv, "--fallback-model")).toBe("claude-sonnet-5");
+    expect(argValue(inv, "--fallback-model")).toBe(DEFAULT_FALLBACK_MODEL);
     expect(inv.env.ANTHROPIC_API_KEY).toBe("sk-ant-must-not-leak");
     expect(inv.env.ANTHROPIC_BASE_URL).toBeNull();
     expect(inv.env.ANTHROPIC_AUTH_TOKEN).toBeNull();
