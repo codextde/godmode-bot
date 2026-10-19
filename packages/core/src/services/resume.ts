@@ -86,6 +86,9 @@ export interface InterruptedWork {
 
 const CUT_OFF = `((r.status = 'cancelled' AND r.error = ?) OR (r.status = 'failed' AND r.error = ?))`;
 const LATEST = `r.id = (SELECT l.id FROM runs l WHERE l.conversation_id = r.conversation_id ORDER BY l.created_at DESC, l.rowid DESC LIMIT 1)`;
+// Sorted after the fact (`+`), so SQLite reads the few runs that finished lately from idx_runs_finished instead of walking
+// every chat and all of its runs (~130 ms on a cold start).
+const OLDEST_FIRST = "+r.created_at, r.rowid";
 
 function cutOffByRestart(r: Pick<RunRow, "status" | "error">): boolean {
   return (r.status === "cancelled" && r.error === RUN_SHUT_DOWN) || (r.status === "failed" && r.error === RUN_INTERRUPTED);
@@ -104,7 +107,7 @@ export function interruptedWork(): InterruptedWork {
     const runs = all<RunRow>(
       `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
        WHERE ${CUT_OFF} AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
-       ORDER BY r.created_at, r.rowid`,
+       ORDER BY ${OLDEST_FIRST}`,
       RUN_SHUT_DOWN,
       RUN_INTERRUPTED,
       since,
@@ -347,7 +350,7 @@ function offlineFailures(): RunRow[] {
     `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
      WHERE r.status = 'failed' AND (r.error LIKE 'API Error:%' OR r.error LIKE 'Claude Code exited%' OR r.error LIKE 'Failed to authenticate.%')
        AND r.finished_at > ? AND c.runner_id IS NULL AND ${LATEST}
-     ORDER BY r.created_at, r.rowid`,
+     ORDER BY ${OLDEST_FIRST}`,
     since,
   ).filter(continuesOffline);
 }
