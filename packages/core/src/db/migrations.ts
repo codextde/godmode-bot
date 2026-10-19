@@ -1598,4 +1598,14 @@ UPDATE settings SET value = json_set(value, '$.fallbackModel', 'claude-opus-5')
 WHERE key = 'runner' AND json_valid(value) AND json_extract(value, '$.fallbackModel') = 'claude-sonnet-5';
 `,
   },
+  {
+    id: 98,
+    name: "dismiss_unknown_missing_logins",
+    sql: /* sql */ `
+-- Older builds filed a missing login from any answer that mentioned a failed login, without a page it was about: no
+-- site, no address, mostly a quoted error or another agent's report. Nothing can be added for those.
+UPDATE missing_logins SET status = 'dismissed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE status = 'open' AND service = 'Unknown service' AND url = '';
+`,
+  },
 ];

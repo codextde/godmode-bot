@@ -49,6 +49,29 @@ describe("a decision left open in an answer", () => {
   test("a section that says there is nothing to decide", () => {
     expect(detectOpenDecision("Done.\n\n## Decisions for you\n\nNone.\n\n## Next\n\nShould I deploy it?")).toBeNull();
     expect(detectOpenDecision("Fertig.\n\n**Offene Entscheidungen:** keine")).toBeNull();
+    expect(
+      detectOpenDecision(
+        "| Ticket | Status |\n|---|---|\n| Demo shop | complete |\n\n**Waiting for you:** nothing new from this run. You will probably want to settle the pricing before the next calls, but nobody asked you directly, so I didn't create a task for it.\n\nI recorded all 10 tickets in `workspace/state.json`.",
+      ),
+    ).toBeNull();
+    expect(detectOpenDecision("Shift done.\n\n4. **Needed from you:** none. I took back H-74, which was created from my \"nothing\" line.")).toBeNull();
+    expect(detectOpenDecision("No replies.\n\n**Needed from Dana or Sam:** nothing new. Still open from Sam: two addresses and his answers on two leads.", "Dana")).toBeNull();
+    expect(detectOpenDecision("Done.\n\n**Waiting for you:** nothing new from this run. The pricing is still open on the board.\n\nAnything else?")).toBeNull();
+    expect(detectOpenDecision("Done.\n\n**Waiting for you:** Nothing for now. I'll check the inbox again tomorrow.\n\nWant me to also draft the emails?")).toBeNull();
+  });
+
+  test("a section that starts with none but still asks", () => {
+    expect(detectOpenDecision("Checked the inbox.\n\n**Waiting for you:** None of the leads replied. Should I send the follow-ups now or on Monday?")?.title).toBe(
+      "Should I send the follow-ups now or on Monday?",
+    );
+    expect(detectOpenDecision("**Decision for you:** None of the three quotes fits the budget. Pick A (cheaper) or B (faster) and I'll book it.")).not.toBeNull();
+    expect(detectOpenDecision("**Decisions for you:** Nothing is booked yet. Choose hotel A or hotel B for the 12th.")).not.toBeNull();
+    expect(detectOpenDecision("**Entscheidung für dich:** Keine Antwort von Sam bisher. Entscheide, ob wir nachfassen.")).not.toBeNull();
+    expect(detectOpenDecision("**Decisions for you:** No new decisions. Still open from yesterday: go live Friday or Monday?")?.title).toBe(
+      "Still open from yesterday: go live Friday or Monday?",
+    );
+    expect(detectOpenDecision("**Decision for you:** None from the shortlist works. Choose A or B and I'll book it.")).not.toBeNull();
+    expect(detectOpenDecision("**Entscheidung für dich:** Keiner von beiden Anbietern passt. Nimm A oder B, dann buche ich.")).not.toBeNull();
   });
 
   test("a closing question to the human", () => {

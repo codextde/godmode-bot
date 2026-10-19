@@ -103,7 +103,10 @@ const CHOICE = /\b(?:or|oder)\b/i;
 
 /** The section says there is nothing to decide. */
 const NOTHING =
-  /^(?:[-–—]+|(?:none|nothing|n\/a|nope|not (?:right )?now|no (?:open |pending )?(?:decisions?|questions?|action|input)|keine?[rs]?|nichts|aktuell (?:keine|nichts)|derzeit (?:keine|nichts))\b[^\n?]{0,40})$/i;
+  /^(?:[-–—]+|(?:none|nothing|n\/a|nope|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|action|input)|keine?[rs]?|nichts|aktuell (?:keine|nichts)|derzeit (?:keine|nichts))\b[^\n?]{0,40})$/i;
+/** A sentence that says only that ("nothing new from this run.", "None for now."), not "None of the quotes fits." */
+const NOTHING_SENTENCE =
+  /^(?:none|nothing|nope|n\/a|nichts|keine?[rs]?|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|input))(?: (?:new|neue[ns]?|further|more|else|weiter[es]?))?(?: (?:decisions?|questions?|entscheidung(?:en)?|fragen?))?(?: (?:from|in|for|on|von|aus|seit|für) (?:(?:this|that|the|my|your|today'?s|diesem|dieser|diesen|meiner|meinem|deiner) [\p{L}'-]+|me|you|us|mir|dir|dich|euch|uns|heute|gestern|yesterday|today))?(?: (?:for now|right now|so far|yet|today|this time|bisher|aktuell|heute|gerade))?[.!]?$/iu;
 
 interface Heading {
   line: number;
@@ -153,6 +156,11 @@ function shorten(s: string, max: number): string {
 
 const isQuestion = (s: string) => /\?["'”’)\]]*$/.test(s);
 
+/** Not a pleasantry, a question to someone else or extra work on offer. */
+function forTheHuman(s: string): boolean {
+  return !NOT_FOR_THE_HUMAN.some((re) => re.test(s)) && !(OFFERS.some((re) => re.test(s)) && !CHOICE.test(s));
+}
+
 /** The section's question: its first sentence that asks, else its first sentence. */
 function titleOf(section: string): string {
   const all = sentences(section);
@@ -185,7 +193,10 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
     const next = headings.find((o) => o.line > h.line && o.level <= h.level);
     const section = [h.rest, ...lines.slice(h.line + 1, next?.line ?? lines.length)].join("\n").trim();
     const said = plain(section.split("\n").find((l) => l.trim()) ?? "");
-    if (!section || NOTHING.test(said)) {
+    // "nothing new from this run. You may want to …" goes on without asking: still nothing.
+    const all = sentences(section);
+    const asks = all.some((s) => (isQuestion(s) || WAITS.some((re) => re.test(s))) && forTheHuman(s));
+    if (!section || NOTHING.test(said) || (NOTHING_SENTENCE.test(all[0] ?? "") && !asks)) {
       saidNothing = true;
       continue;
     }
@@ -204,8 +215,7 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
   if (!last) return null;
   // Only what the answer ends on: a question further up is one the agent goes on to answer itself.
   const asked = sentences(last).at(-1);
-  if (!asked || !(isQuestion(asked) ? ASKS : WAITS).some((re) => re.test(asked))) return null;
-  if (NOT_FOR_THE_HUMAN.some((re) => re.test(asked)) || (OFFERS.some((re) => re.test(asked)) && !CHOICE.test(asked))) return null;
+  if (!asked || !(isQuestion(asked) ? ASKS : WAITS).some((re) => re.test(asked)) || !forTheHuman(asked)) return null;
   const title = shorten(asked, TITLE_MAX);
   return { title, body: bodyOf(last, title) };
 }
