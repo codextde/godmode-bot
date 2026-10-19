@@ -388,15 +388,24 @@ describe("continuing once Claude can be reached again", () => {
     expect(await continueAfterOutage(offline)).toBe(0);
   }, 40_000);
 
-  test("a turn Claude's API refused with a 403 right after waking goes on", async () => {
+  test("a turn Claude's API refused with a 403 goes on after a pause, not right away, three times at most", async () => {
+    const refused = "Failed to authenticate. API Error: 403 Request not allowed";
     const conv = chat(agent, "routine");
-    const last = cutOff(agent, conv, { status: "failed", error: "Failed to authenticate. API Error: 403 Request not allowed", trigger: "routine" });
-    expect(offlineRetryAt(last)).not.toBeNull();
-    expect(await continueAfterOutage(offline)).toBe(1);
-    const run = next(conv, last)!;
-    expect(marker(run.id)).toMatchObject({ type: "retry", runId: last, auto: true, cause: "error" });
-    await waitForRun(run.id, 10_000);
-  }, 20_000);
+    let last = cutOff(agent, conv, { status: "failed", error: refused, trigger: "routine" });
+    for (const waitMin of [2, 5, 15]) {
+      expect(await continueAfterOutage(offline)).toBe(0);
+      expect(Date.parse(offlineRetryAt(last)!)).toBeGreaterThan(Date.now() + (waitMin - 1) * 60_000);
+      sql("UPDATE runs SET finished_at = ? WHERE id = ?", ago(waitMin * 60_000 + 1000), last);
+      expect(await continueAfterOutage(offline)).toBe(1);
+      const run = next(conv, last)!;
+      expect(marker(run.id)).toMatchObject({ type: "retry", runId: last, auto: true, cause: "error" });
+      await waitForRun(run.id, 10_000);
+      sql("UPDATE runs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?", refused, now(), run.id);
+      last = run.id;
+    }
+    expect(offlineRetryAt(last)).toBeNull();
+    expect(await continueAfterOutage(offline)).toBe(0);
+  }, 40_000);
 
   test("work handed over without waiting continues; work someone waited for is left to them", async () => {
     const parentChat = chat(agent);

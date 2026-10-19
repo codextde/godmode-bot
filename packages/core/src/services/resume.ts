@@ -40,17 +40,20 @@ const PLATFORMS = new Set(["slack", "telegram", "teams"]);
 /** Claude Code's answer when Claude's API couldn't be reached or the connection dropped, after its own retries. */
 const NO_CONNECTION =
   /^API Error: [^\n]*(Can't reach the API server|Unable to connect|Connection error|Connection dropped|Request timed out|socket hang up|ENOTFOUND|EAI_AGAIN|ENETUNREACH|ECONNREFUSED|ECONNRESET|ECONNABORTED|EPIPE|ETIMEDOUT)/i;
-/**
- * Claude Code dropped the turn on its own, or Claude's API failed on its side: trying again usually helps. A 403 comes
- * right after the computer wakes, before Claude Code has renewed its sign-in.
- */
+/** Claude Code dropped the turn on its own, or Claude's API failed on its side: trying again usually helps. */
 const ERRORED =
   /^(?:Claude Code exited (?:without a result|with code \d+)$|API Error: (?:5\d\d\b|[^\n]*(?:overloaded|Internal server error|"type":"api_error"))|Failed to authenticate\. API Error: 403\b)/i;
+/**
+ * Claude's API refused the request (right after the computer wakes, or while its network changes). Claude Code doesn't
+ * try again itself, and the refusal lasts a minute or two: a try right away fails the same way.
+ */
+const REFUSED = /^Failed to authenticate\. API Error: 403\b/i;
 const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine", "delegation"]);
 /** Minutes to wait before each try in a row: a connection that just dropped often drops again right away. */
 const OFFLINE_BACKOFF_MIN = [0, 2, 5, 15, 30];
 /** An error that comes back each time is no passing hiccup: fewer tries. */
 const ERROR_BACKOFF_MIN = [0, 2, 5];
+const REFUSED_BACKOFF_MIN = [2, 5, 15];
 /** Broke off longer ago than this, the turn waits for someone to continue it. */
 const OFFLINE_MAX_AGE_MS = 12 * 3_600_000;
 const OFFLINE_CHECK_MS = 60_000;
@@ -333,7 +336,8 @@ function causeOf(error: string | null | undefined): "offline" | "error" | null {
 }
 
 function backoffOf(r: RunRow): number[] {
-  return causeOf(r.error) === "offline" ? OFFLINE_BACKOFF_MIN : ERROR_BACKOFF_MIN;
+  if (causeOf(r.error) === "offline") return OFFLINE_BACKOFF_MIN;
+  return REFUSED.test(r.error?.trim() ?? "") ? REFUSED_BACKOFF_MIN : ERROR_BACKOFF_MIN;
 }
 
 /** Turns that failed because Claude's API couldn't be reached or Claude Code dropped them, and nothing went on in their chat since. */
