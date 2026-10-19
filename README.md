@@ -37,8 +37,9 @@ memory, routines and history.
 Most AI assistants stop the moment they hit a login screen. Godmode Bot is built around the things a real coworker
 needs to be useful:
 
-- **Access** — a managed browser (via [browser-use](https://github.com/browser-use/browser-use)), your Chrome sessions,
-  and hundreds of apps through [Composio](https://composio.dev) or any MCP server.
+- **Access** — a managed browser (via [browser-use](https://github.com/browser-use/browser-use)) and your Chrome sessions.
+  Agents sign in to any website with your saved logins and 2FA codes, so apps need no MCP connector. Composio and MCP
+  servers are optional, for instant app triggers and APIs without a website.
 - **Credentials without exposure** — a local, encrypted vault for logins and TOTP 2FA. Passwords and codes are typed
   into the page *for* the agent; the model never sees them.
 - **Autonomy** — powered by [Claude Code](https://code.claude.com) (Opus 5.5) in full-bypass mode, so work continues

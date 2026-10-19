@@ -29,10 +29,10 @@ export function ComposioExplainer() {
       <div className="relative grid grid-cols-1 items-center gap-8 @5xl:grid-cols-[1fr_minmax(0,300px)]">
         <div>
           <p className="eyebrow">Composio</p>
-          <h3 className="mt-2 text-[22px] leading-tight font-medium tracking-[-0.025em]">Plug your agents into the apps you already use</h3>
+          <h3 className="mt-2 text-[22px] leading-tight font-medium tracking-[-0.025em]">React the moment something arrives</h3>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Composio handles sign-in and API plumbing for hundreds of services. Connect an account once and every agent in reach gets
-            it as MCP tools — no scraping, no shared passwords.
+            Optional. Connect an account when an automation should start on a new email or Slack message, or when an agent should call
+            the app's API directly.
           </p>
           <div className="mt-6 grid grid-cols-1 gap-3 @3xl:grid-cols-3">
             {POINTS.map((p, i) => (

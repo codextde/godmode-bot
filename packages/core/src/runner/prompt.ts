@@ -273,7 +273,7 @@ This run uses ${ctx.glm} on Z.ai, not Claude, for a task Claude couldn't do. It 
     const where = ctx.vm ? ` It is Google Chrome inside the VM "${ctx.vm.name}", not a browser on ${human}'s computer.` : "";
     const takeover = ctx.vm ? "on the VM's screen" : "in Godmode's live browser view";
     out.push(`### Browser
-Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. ${
+Use the \`browser\` MCP tools for anything on the web (navigate, click, type, read pages, take screenshots).${where} The browser keeps its cookies between runs, so you are often already logged in — check before logging in again. A website needs no MCP connector or integration: sign in with the vault (see "Logging in to websites") and work in the page. ${
       captchaSolverReady(settings)
         ? `If a CAPTCHA blocks you (reCAPTCHA, Cloudflare Turnstile, a picture with distorted text), call \`captcha_solve\`: ${human}'s solving service solves it and Godmode puts the answer into the page; never try to solve a CAPTCHA yourself. When it can't (hCaptcha, a "Just a moment" page, another kind of puzzle, the daily limit) or another human check blocks you, tell ${human} (they can take over ${takeover}).`
         : `If a CAPTCHA or an unexpected human check blocks you, tell ${human} in your final summary (they can take over ${takeover}).`
