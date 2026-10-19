@@ -1,6 +1,6 @@
 import { Geist_400Regular, Geist_500Medium, Geist_600SemiBold, Geist_700Bold } from "@expo-google-fonts/geist";
 import { GeistMono_400Regular, GeistMono_500Medium } from "@expo-google-fonts/geist-mono";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Image } from "expo-image";
 import { Stack, ThemeProvider } from "expo-router";
@@ -10,8 +10,10 @@ import { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
+import { api } from "@/lib/api";
+import { loadAppearance, useAppearance } from "@/lib/appearance";
 import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
-import { queryClient } from "@/lib/query";
+import { qk, queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
 import { fonts, useColors, useNavigationTheme } from "@/lib/theme";
@@ -37,8 +39,10 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   const fontsReady = fontsLoaded || !!fontError;
 
+  const [appearanceReady, setAppearanceReady] = useState(false);
   useEffect(() => {
     void useSession.getState().load();
+    void loadAppearance().finally(() => setAppearanceReady(true));
   }, []);
 
   // What the last session saw is on screen before the computer answers.
@@ -51,8 +55,8 @@ export default function RootLayout() {
   }, [ready, restored]);
 
   useEffect(() => {
-    if (restored && fontsReady) void SplashScreen.hideAsync();
-  }, [restored, fontsReady]);
+    if (restored && fontsReady && appearanceReady) void SplashScreen.hideAsync();
+  }, [restored, fontsReady, appearanceReady]);
 
   useEffect(() => {
     if (!restored) return;
@@ -70,13 +74,14 @@ export default function RootLayout() {
     };
   }, [deviceId, restored]);
 
-  if (!ready || !restored || !fontsReady) return null;
+  if (!ready || !restored || !fontsReady || !appearanceReady) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: c.background }}>
       <KeyboardProvider>
         <QueryClientProvider client={queryClient}>
           <ThemeProvider value={theme}>
+            <ThemeSync paired={paired} />
             <StatusBar style="auto" />
             <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: { backgroundColor: c.background } }}>
               <Stack.Protected guard={paired}>
@@ -113,4 +118,13 @@ export default function RootLayout() {
       </KeyboardProvider>
     </GestureHandlerRootView>
   );
+}
+
+/** Follows the computer's theme, also when the desktop, another phone or an agent changes it. */
+function ThemeSync({ paired }: { paired: boolean }) {
+  const { data } = useQuery({ queryKey: qk.settings, queryFn: api.settings.get, enabled: paired, select: (s) => s.general.theme });
+  useEffect(() => {
+    if (data) useAppearance.getState().setTheme(data);
+  }, [data]);
+  return null;
 }

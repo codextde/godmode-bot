@@ -3,13 +3,14 @@ import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { EFFORT_LABELS, findModel } from "@godmode/shared";
+import { EFFORT_LABELS, findModel, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { FieldRow, Group, LinkRow, SwitchRow } from "@/components/form";
+import { FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
+import { useAppearance } from "@/lib/appearance";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -22,10 +23,17 @@ import { useWorkspace } from "@/lib/workspace";
 
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 
+const THEME_OPTIONS = [
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+  { value: "system", label: "System" },
+] as const satisfies readonly { value: Theme; label: string }[];
+
 export default function Settings() {
   const c = useColors();
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
+  const theme = useAppearance((s) => s.theme);
   const status = useLive((s) => s.status);
   const me = useQuery({ queryKey: qk.me, queryFn: api.me });
   const settings = useSettings();
@@ -86,6 +94,18 @@ export default function Settings() {
 
       <Group title="Preferences" footer="Changes apply to your computer right away. Running chats pick them up with their next message.">
         {s ? <FieldRow label="Your name" value={s.general.userName} placeholder="Add your name" maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}
+        {s ? (
+          <SegmentRow
+            title="Appearance"
+            detail="System follows this phone's setting."
+            options={THEME_OPTIONS}
+            value={theme}
+            onChange={(next) => {
+              useAppearance.getState().setTheme(next);
+              void patchSettings({ general: { theme: next } });
+            }}
+          />
+        ) : null}
         <LinkRow
           icon="sparkles"
           title="AI & Claude"

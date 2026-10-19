@@ -62,6 +62,7 @@ import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { ATTENTION_ICON } from "@/components/attention/attention-list";
 import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
+import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
@@ -110,7 +111,7 @@ export function CommandPalette() {
   const setOpen = useUi((s) => s.setCommandOpen);
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { resolved, setTheme } = useTheme();
+  const { resolved, toggle: toggleTheme } = useTheme();
   const mode = useInterfaceMode();
   const { setMode } = useSetInterfaceMode();
   // In Easy mode pages go by their plain names; both names always find them.
@@ -285,12 +286,13 @@ export function CommandPalette() {
             <Keyboard /> Keyboard shortcuts <CommandShortcut>?</CommandShortcut>
           </CommandItem>
           <CommandItem
+            value="switch light dark mode theme appearance night day"
             onSelect={() => {
-              setTheme(resolved === "dark" ? "light" : "dark");
+              toggleTheme();
               setOpen(false);
             }}
           >
-            {resolved === "dark" ? <Sun /> : <Moon />} Toggle theme
+            {resolved === "dark" ? <Sun /> : <Moon />} Switch to {resolved === "dark" ? "light" : "dark"} mode <CommandShortcut>{THEME_SHORTCUT}</CommandShortcut>
           </CommandItem>
           <CommandItem
             value={`switch to ${MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode interface simple advanced beginner expert`}

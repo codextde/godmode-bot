@@ -4,6 +4,7 @@
   var t = "light";
   try {
     t = localStorage.getItem("godmode-theme") || "light";
+    if (t !== "dark" && t !== "system") t = "light";
   } catch (e) {}
   if (t === "system") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   var r = document.documentElement;

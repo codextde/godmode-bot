@@ -5,6 +5,7 @@ import type { Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
+import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { isTauri } from "@/lib/core";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
@@ -51,11 +52,6 @@ export function GeneralSection({ settings }: { settings: Settings }) {
     }
   };
 
-  const changeTheme = (t: Theme) => {
-    setTheme(t);
-    patch({ general: { theme: t } });
-  };
-
   return (
     <div className="space-y-5">
       <SectionHeading title="General" description="How Godmode greets you, looks and behaves on your desktop." />
@@ -82,11 +78,11 @@ export function GeneralSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Appearance" icon={<Palette />}>
-        <SettingRow label="Theme" description="Warm paper by day, anthracite by night. System follows your OS setting.">
+        <SettingRow label="Theme" description={`Warm paper by day, anthracite by night. System follows your OS. Switch any time with ${THEME_SHORTCUT}.`}>
           <Segmented<Theme>
             aria-label="Theme"
             value={theme}
-            onChange={changeTheme}
+            onChange={setTheme}
             options={[
               { value: "light", label: "Light", icon: <Sun /> },
               { value: "dark", label: "Dark", icon: <Moon /> },
