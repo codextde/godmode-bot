@@ -56,12 +56,17 @@ describe("a decision left open in an answer", () => {
     ).toBeNull();
     expect(detectOpenDecision("Shift done.\n\n4. **Needed from you:** none. I took back H-74, which was created from my \"nothing\" line.")).toBeNull();
     expect(detectOpenDecision("No replies.\n\n**Needed from Dana or Sam:** nothing new. Still open from Sam: two addresses and his answers on two leads.", "Dana")).toBeNull();
+    expect(detectOpenDecision("Done.\n\n**Waiting for you:** nothing new from this run. The pricing is still open on the board.\n\nAnything else?")).toBeNull();
+    expect(detectOpenDecision("Done.\n\n**Waiting for you:** Nothing for now. I'll check the inbox again tomorrow.\n\nWant me to also draft the emails?")).toBeNull();
   });
 
   test("a section that starts with none but still asks", () => {
     expect(detectOpenDecision("Checked the inbox.\n\n**Waiting for you:** None of the leads replied. Should I send the follow-ups now or on Monday?")?.title).toBe(
       "Should I send the follow-ups now or on Monday?",
     );
+    expect(detectOpenDecision("**Decision for you:** None of the three quotes fits the budget. Pick A (cheaper) or B (faster) and I'll book it.")).not.toBeNull();
+    expect(detectOpenDecision("**Decisions for you:** Nothing is booked yet. Choose hotel A or hotel B for the 12th.")).not.toBeNull();
+    expect(detectOpenDecision("**Entscheidung für dich:** Keine Antwort von Sam bisher. Entscheide, ob wir nachfassen.")).not.toBeNull();
   });
 
   test("a closing question to the human", () => {

@@ -660,6 +660,10 @@ describe("helpers", () => {
     expect(detectLoginFailure("The second didn't go out because the forum login failed; it reported that, and it's already on your list.")).toBeNull();
     expect(detectLoginFailure("The shop login failed again, which is still on your list.")).toBeNull();
     expect(detectLoginFailure("Der Login ist fehlgeschlagen. Couldn't log in to the forum, das habe ich bereits gemeldet.")).toBeNull();
+    expect(detectLoginFailure("I couldn't log in to the supplier portal: it reported that the password is invalid.")).not.toBeNull();
+    expect(detectLoginFailure("Login failed because the account is already flagged for suspicious activity.")).not.toBeNull();
+    expect(detectLoginFailure("I couldn't log in to the tax portal to check the return that was already filed last week.")).not.toBeNull();
+    expect(detectLoginFailure("Couldn't log in, das Portal hat schon gemeldet, dass das Konto gesperrt ist.")).not.toBeNull();
   });
 
   test("usedBrowser", () => {
