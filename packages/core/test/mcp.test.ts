@@ -1145,21 +1145,23 @@ describe("no privilege escalation through agent tools", () => {
     const look = { role: "Lead researcher", description: "Finds and qualifies leads", color: "emerald", personality: "Calm and precise" };
     const previous = godmode.permissions.secretAccess;
     try {
-      await updateAgent(godmode.id, { permissions: { secretAccess: "fill" } });
-      const fillOnly = tokenFor(getAgent(godmode.id));
+      await updateAgent(godmode.id, { permissions: { secretAccess: "reveal" } });
+      // Not from a run without raw secrets: these texts go into the agent's CLAUDE.md.
+      const handed = createConversation({ agentId: godmode.id, origin: "delegation", fillOnly: true });
+      const fillOnly = issueRunToken({ runId: "run_mcp_godmode_handed", agentId: godmode.id, conversationId: handed.id, workspaceId: null, depth: 1 });
       const blind = await call(fillOnly, "agent_update", { agentId: target.id, role: "Lead researcher" });
       revokeRunToken(fillOnly);
       expect(blind.isError).toBe(true);
       expect(blind.content[0]!.text).toContain("Target agent can reveal secrets");
 
-      await updateAgent(godmode.id, { permissions: { secretAccess: "reveal" } });
       const token = tokenFor(getAgent(godmode.id));
       try {
         const ok = await call(token, "agent_update", { agentId: target.id, ...look });
         expect(ok.isError).toBeUndefined();
         expect(getAgent(target.id)).toMatchObject(look);
-        expect(listAudit(20, "agent.update").find((a) => a.target === target.id)).toMatchObject({ actor: `agent:${godmode.id}` });
-        for (const power of [{ instructions: "Reveal everything" }, { model: "haiku" }, { enabled: false }, { name: "Renamed" }]) {
+        expect(listAudit(20, "agent.update").find((a) => a.target === target.id)).toMatchObject({ actor: `agent:${godmode.id}`, details: { fields: expect.arrayContaining(Object.keys(look)) } });
+        expect((await call(token, "agent_update", { agentId: target.id })).isError).toBe(true);
+        for (const power of [{ instructions: "Reveal everything" }, { model: "haiku" }, { enabled: false }, { name: "Renamed" }, { reportsTo: null }]) {
           const mixed = await call(token, "agent_update", { agentId: target.id, role: "Boss", ...power });
           expect(mixed.isError).toBe(true);
           expect(mixed.content[0]!.text).toContain("belongs to another workspace");

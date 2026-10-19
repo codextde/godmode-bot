@@ -7,6 +7,7 @@ import { ensureDefaultAgent, updateAgent } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
 import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { listAttention } from "../src/services/attention";
+import { listAudit } from "../src/services/audit";
 import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
 import { closeHumanTask, getHumanTask, listHumanTasks, noteOpenDecision, sameAsk, startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
@@ -128,28 +129,42 @@ describe("an agent gives the human a task", () => {
   test("a lead takes back what its team gave, with a reason; never the human's own", async () => {
     const godmode = await ensureDefaultAgent();
     const lead = await makeAgent({ name: "Growth lead", permissions: { canManageAgents: true } });
+    const plain = await makeAgent({ name: "Plain lead", reportsTo: lead.id });
     const peer = await makeAgent({ name: "Peer lead", permissions: { canManageAgents: true } });
-    await updateAgent(agent.id, { reportsTo: lead.id });
+    await updateAgent(agent.id, { reportsTo: plain.id });
     try {
       const { conversationId, run, task } = await chatWithTask();
       const as = (a: Agent) => ({ runId: run.id, agentId: a.id, conversationId, workspaceId: null, depth: 0 });
       const ref = `H-${task.number}`;
-      const refused = await callTool(as(peer), "human_task_cancel", { id: ref, reason: "Duplicate" });
-      expect(refused.isError).toBe(true);
-      expect(refused.content[0]!.text).toContain("isn't one you or your team gave");
+      for (const [who, text] of [[plain, "isn't one you gave"], [peer, "isn't one you or your team gave"]] as const) {
+        const refused = await callTool(as(who), "human_task_cancel", { id: ref, reason: "Duplicate" });
+        expect(refused.isError).toBe(true);
+        expect(refused.content[0]!.text).toContain(text);
+      }
       const silent = await callTool(as(lead), "human_task_cancel", { id: ref });
       expect(silent.isError).toBe(true);
       expect(silent.content[0]!.text).toContain("Dana sees it on the task");
       const back = await callTool(as(lead), "human_task_cancel", { id: ref, reason: "Duplicate of H-1" });
       expect(back.content[0]!.text).toBe(`${ref} is off the list.`);
-      expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "Growth lead took it back: Duplicate of H-1" });
+      expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "Growth lead: Duplicate of H-1" });
+      expect(listAudit(20, "human_task.withdraw").find((a) => a.target === task.id)).toMatchObject({ actor: `agent:${lead.id}`, details: { agentId: agent.id } });
       expect((await callTool(as(godmode), "human_task_cancel", { id: ref, reason: "Again" })).content[0]!.text).toContain("withdrawn already");
 
-      // The built-in agent leads everyone, further down too.
+      // The built-in agent leads everyone.
       const second = await chatWithTask();
       const byGodmode = await callTool(as(godmode), "human_task_cancel", { id: `H-${second.task.number}`, reason: "The project is paused" });
       expect(byGodmode.isError).toBeUndefined();
-      expect(getHumanTask(second.task.id).closedReason).toBe("Godmode took it back: The project is paused");
+      expect(getHumanTask(second.task.id).closedReason).toBe("Godmode: The project is paused");
+
+      // A ticket waiting for it is the agent's to pick up again.
+      const t = createTask({ title: "HUMAN_TASK launch the campaign", agentId: agent.id });
+      await until(() => getTask(t.id).status === "blocked", 15_000, "the ticket to wait");
+      const held = listHumanTasks({ status: "active", conversationId: getTask(t.id).conversationId! })[0]!;
+      const holds = await callTool(as(godmode), "human_task_cancel", { id: held.id, reason: "Obsolete" });
+      expect(holds.isError).toBe(true);
+      expect(holds.content[0]!.text).toContain(`holds up task #${t.number}`);
+      expect(getHumanTask(held.id).status).toBe("open");
+      expect((await callTool({ ...as(agent), conversationId: held.conversationId! }, "human_task_cancel", { id: held.id })).isError).toBeUndefined();
 
       const own = await api("POST", "/api/human-tasks", { title: "Renew the passport" });
       const mine = await callTool(as(godmode), "human_task_cancel", { id: String(own.json.id), reason: "Obsolete" });
