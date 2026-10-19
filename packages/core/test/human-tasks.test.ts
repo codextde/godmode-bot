@@ -3,7 +3,7 @@ import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { callTool } from "../src/mcp/tools";
-import { updateAgent } from "../src/agents/service";
+import { ensureDefaultAgent, updateAgent } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
 import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { listAttention } from "../src/services/attention";
@@ -123,6 +123,42 @@ describe("an agent gives the human a task", () => {
     const back = await callTool(ctx, "human_task_cancel", { id: `H-${task.number}`, reason: "Found an API key instead" });
     expect(back.content[0]!.text).toBe(`H-${task.number} is off the list.`);
     expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "Found an API key instead" });
+  }, 30_000);
+
+  test("a lead takes back what its team gave, with a reason; never the human's own", async () => {
+    const godmode = await ensureDefaultAgent();
+    const lead = await makeAgent({ name: "Growth lead", permissions: { canManageAgents: true } });
+    const peer = await makeAgent({ name: "Peer lead", permissions: { canManageAgents: true } });
+    await updateAgent(agent.id, { reportsTo: lead.id });
+    try {
+      const { conversationId, run, task } = await chatWithTask();
+      const as = (a: Agent) => ({ runId: run.id, agentId: a.id, conversationId, workspaceId: null, depth: 0 });
+      const ref = `H-${task.number}`;
+      const refused = await callTool(as(peer), "human_task_cancel", { id: ref, reason: "Duplicate" });
+      expect(refused.isError).toBe(true);
+      expect(refused.content[0]!.text).toContain("isn't one you or your team gave");
+      const silent = await callTool(as(lead), "human_task_cancel", { id: ref });
+      expect(silent.isError).toBe(true);
+      expect(silent.content[0]!.text).toContain("Dana sees it on the task");
+      const back = await callTool(as(lead), "human_task_cancel", { id: ref, reason: "Duplicate of H-1" });
+      expect(back.content[0]!.text).toBe(`${ref} is off the list.`);
+      expect(getHumanTask(task.id)).toMatchObject({ status: "withdrawn", closedReason: "Growth lead took it back: Duplicate of H-1" });
+      expect((await callTool(as(godmode), "human_task_cancel", { id: ref, reason: "Again" })).content[0]!.text).toContain("withdrawn already");
+
+      // The built-in agent leads everyone, further down too.
+      const second = await chatWithTask();
+      const byGodmode = await callTool(as(godmode), "human_task_cancel", { id: `H-${second.task.number}`, reason: "The project is paused" });
+      expect(byGodmode.isError).toBeUndefined();
+      expect(getHumanTask(second.task.id).closedReason).toBe("Godmode took it back: The project is paused");
+
+      const own = await api("POST", "/api/human-tasks", { title: "Renew the passport" });
+      const mine = await callTool(as(godmode), "human_task_cancel", { id: String(own.json.id), reason: "Obsolete" });
+      expect(mine.isError).toBe(true);
+      expect(mine.content[0]!.text).toContain("Dana's own task");
+      expect(getHumanTask(String(own.json.id)).status).toBe("open");
+    } finally {
+      await updateAgent(agent.id, { reportsTo: null });
+    }
   }, 30_000);
 
   test("at most five open tasks per chat; deleting the chat withdraws them", async () => {

@@ -752,6 +752,9 @@ const agentFields = {
     ),
 };
 
+/** agentFields that change how an agent looks and is introduced, not what it can do. */
+const COSMETIC_AGENT_FIELDS = new Set<string>(["role", "description", "avatar", "color", "character", "personality"]);
+
 const triggerSchema = z
   .discriminatedUnion("type", [
     z.object({
@@ -1631,10 +1634,11 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "human_task_cancel",
-    description: "Take back a task you gave the human when you don't need it anymore (you found another way, or the work was dropped). It leaves their list.",
+    description:
+      "Take back a task you gave the human when you don't need it anymore (you found another way, or the work was dropped). It leaves their list. A manager may also take back a duplicate or obsolete one an agent of its team gave (one that reports to it, directly or further down), with a reason; the human's own tasks stay theirs.",
     schema: z.object({
       id: z.string().min(1).max(100).describe('The task\'s id or its ref, e.g. "H-12"'),
-      reason: z.string().max(500).optional().describe("Why it isn't needed anymore"),
+      reason: z.string().max(500).optional().describe("Why it isn't needed anymore; required for a task of your team, the human sees it on the task"),
     }),
     when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
     run: ({ id, reason }, { agent }) => {
@@ -2129,9 +2133,11 @@ const TOOLS: ToolDef[] = [
     when: managesSetup,
     run: async ({ agentId, ...patch }, { agent, ctx }) => {
       const target = getAgent(agentId);
+      // How a reveal-mode agent of another workspace shows on the chart is the built-in agent's to tidy up, from a run that reads secrets itself.
+      const cosmetic = agent.isDefault && revealsHere(agent, ctx) && Object.keys(patch).every((k) => COSMETIC_AGENT_FIELDS.has(k));
       const refusal =
         offHostRefusal(ctx, target, "change its settings") ??
-        revealTargetRefusal(agent, ctx, target, "change its settings") ??
+        (cosmetic ? computerTargetRefusal(agent, target, "change its settings") : revealTargetRefusal(agent, ctx, target, "change its settings")) ??
         protectedLeadRefusal(agent, ctx, patch.reportsTo);
       if (refusal) return fail(refusal);
       assertAgentPatchAllowed(target, patch);

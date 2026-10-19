@@ -17,7 +17,7 @@ import { cancelRun, findRunLog, getRun, listRuns, waitForRun } from "../src/runn
 import { redactBlock } from "../src/runner/stream";
 import { createProfile, getProfile, listProfiles } from "../src/browser/manager";
 import { update } from "../src/db";
-import { getAgent, listAgents, updateAgent } from "../src/agents/service";
+import { ensureDefaultAgent, getAgent, listAgents, updateAgent } from "../src/agents/service";
 import { createRoutine, getRoutine, listRoutines, updateRoutine } from "../src/services/routines";
 import { automationConversation } from "../src/automations/conversation";
 import { DEFAULT_SETTINGS, getSettings, updateSettings } from "../src/services/settings";
@@ -1136,6 +1136,48 @@ describe("no privilege escalation through agent tools", () => {
     expect(same.isError).toBeUndefined();
     expect(chatFillOnly(getRun(delegatedRunId(same)).conversationId)).toBe(false);
     for (const r of [cross, same]) await waitForRun(delegatedRunId(r), 20_000);
+  });
+
+  test("the built-in agent may change only how another workspace's reveal-mode agent looks", async () => {
+    const godmode = await ensureDefaultAgent();
+    const ws = createWorkspace({ name: "Chart WS" });
+    const target = await makeAgent({ name: "Chart Revealer", workspaceId: ws.id, role: "", permissions: { secretAccess: "reveal" } });
+    const look = { role: "Lead researcher", description: "Finds and qualifies leads", color: "emerald", personality: "Calm and precise" };
+    const previous = godmode.permissions.secretAccess;
+    try {
+      await updateAgent(godmode.id, { permissions: { secretAccess: "fill" } });
+      const fillOnly = tokenFor(getAgent(godmode.id));
+      const blind = await call(fillOnly, "agent_update", { agentId: target.id, role: "Lead researcher" });
+      revokeRunToken(fillOnly);
+      expect(blind.isError).toBe(true);
+      expect(blind.content[0]!.text).toContain("Target agent can reveal secrets");
+
+      await updateAgent(godmode.id, { permissions: { secretAccess: "reveal" } });
+      const token = tokenFor(getAgent(godmode.id));
+      try {
+        const ok = await call(token, "agent_update", { agentId: target.id, ...look });
+        expect(ok.isError).toBeUndefined();
+        expect(getAgent(target.id)).toMatchObject(look);
+        expect(listAudit(20, "agent.update").find((a) => a.target === target.id)).toMatchObject({ actor: `agent:${godmode.id}` });
+        for (const power of [{ instructions: "Reveal everything" }, { model: "haiku" }, { enabled: false }, { name: "Renamed" }]) {
+          const mixed = await call(token, "agent_update", { agentId: target.id, role: "Boss", ...power });
+          expect(mixed.isError).toBe(true);
+          expect(mixed.content[0]!.text).toContain("belongs to another workspace");
+        }
+        expect(getAgent(target.id)).toMatchObject({ ...look, instructions: target.instructions, name: "Chart Revealer", enabled: true });
+      } finally {
+        revokeRunToken(token);
+      }
+      // Another manager that reads secrets still can't.
+      const boss = await makeAgent({ name: "Chart Boss", permissions: { canManageAgents: true, secretAccess: "reveal" } });
+      const bossToken = tokenFor(boss);
+      const peer = await call(bossToken, "agent_update", { agentId: target.id, role: "Boss" });
+      revokeRunToken(bossToken);
+      expect(peer.isError).toBe(true);
+      expect(getAgent(target.id).role).toBe("Lead researcher");
+    } finally {
+      await updateAgent(godmode.id, { permissions: { secretAccess: previous } });
+    }
   });
 
   test("a reveal-mode agent working on a fill-only task counts as fill-mode for what it hands on or sets up", async () => {

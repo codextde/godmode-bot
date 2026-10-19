@@ -26,14 +26,14 @@ import type {
   MessageBlock,
   QuestionOption,
 } from "@godmode/shared";
-import { humanTaskRef, parseSlashCommand } from "@godmode/shared";
+import { chainOf, humanTaskRef, parseSlashCommand } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, insert, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { redact } from "../vault/vault";
-import { getAgent } from "../agents/service";
+import { getAgent, listAgents } from "../agents/service";
 import { activeRunForConversation } from "../runner/runner";
 import { describeNow, stripNoteTags } from "../runner/prompt";
 import { detectOpenDecision } from "../runner/openDecision";
@@ -776,17 +776,34 @@ ${
   return null;
 }
 
-/** The agent takes a task back: it isn't needed anymore. */
+/**
+ * The agent takes a task back: it isn't needed anymore. A lead that manages agents (the built-in agent leads everyone)
+ * may take back one its team gave, directly or further down, with a reason the human sees on it. Never the human's own.
+ */
 export function withdrawHumanTask(id: string, reason: string, by: { agentId: string }): HumanTask {
   const r = requireRow(id);
-  if (r.agent_id !== by.agentId) throw badRequest(`${humanTaskRef(r)} isn't one you gave`);
-  if (!isActive(r.status)) throw conflict(`${humanTaskRef(r)} is ${r.status} already`);
-  if (r.question_id) throw badRequest(`${humanTaskRef(r)} is your question to the human: it waits for their answer`);
-  const why = clean(reason, 500) || null;
+  const ref = humanTaskRef(r);
+  const lead = r.agent_id === by.agentId ? null : teamLeadOf(r, by.agentId);
+  if (!isActive(r.status)) throw conflict(`${ref} is ${r.status} already`);
+  if (r.question_id) throw badRequest(`${ref} is ${lead ? "a" : "your"} question to the human: it waits for their answer`);
+  const text = clean(reason, 500);
+  if (lead && !text) throw badRequest(`Say why ${ref} isn't needed anymore: ${humanName()} sees it on the task`);
+  const why = lead ? `${lead.name} took it back: ${text}` : text || null;
   withdraw(r, why);
-  audit(`agent:${by.agentId}`, "human_task.withdraw", id, { reason: why });
+  audit(`agent:${by.agentId}`, "human_task.withdraw", id, { reason: why, ...(lead ? { agentId: r.agent_id } : {}) });
   changed();
   return getHumanTask(id);
+}
+
+/** The caller, when it may take back a task another agent gave: it manages agents and that agent reports to it. */
+function teamLeadOf(r: Row, callerId: string): Agent {
+  if (!r.agent_id) throw badRequest(`${humanTaskRef(r)} is ${humanName()}'s own task`);
+  const caller = getAgent(callerId);
+  const agents = listAgents();
+  const author = agents.find((a) => a.id === r.agent_id);
+  const leads = (caller.isDefault || caller.permissions.canManageAgents) && !!author && chainOf(author, agents, Infinity).some((a) => a.id === caller.id);
+  if (!leads) throw badRequest(`${humanTaskRef(r)} isn't one you or your team gave`);
+  return caller;
 }
 
 /** An agent's tasks whose chat (and so the agent's work) is gone: nobody waits for them anymore. */
