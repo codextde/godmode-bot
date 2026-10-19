@@ -2,9 +2,9 @@ import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { AlarmClock, Archive, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Zap } from "lucide-react";
+import { AlarmClock, Archive, Bot, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -24,7 +24,7 @@ import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
-import { type RecentTab, useUi } from "@/stores/ui";
+import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
 
 const PAGE = 25;
 
@@ -72,8 +72,12 @@ export function RecentChats() {
 
   const recentTab = useUi((s) => s.recentTab);
   const setRecentTab = useUi((s) => s.setRecentTab);
+  const recentSource = useUi((s) => s.recentSource);
+  const setRecentSource = useUi((s) => s.setRecentSource);
 
-  const visible = conversations.filter((c) => !c.archived);
+  const unarchived = conversations.filter((c) => !c.archived);
+  const sources = sourceStats(unarchived);
+  const visible = unarchived.filter((c) => recentSource === "all" || chatSource(c) === recentSource);
   const bucketOf = (c: Conversation) => chatBucket(c, runningConversations.has(c.id) || queuedConversations.has(c.id));
   const counts = { all: visible.length, running: 0, scheduled: 0, done: 0 };
   let needsYou = 0;
@@ -82,7 +86,7 @@ export function RecentChats() {
     if (c.paused?.reason === "question") needsYou++;
   }
   const [limit, setLimit] = useState(PAGE);
-  useEffect(() => setLimit(PAGE), [recentTab, scope]);
+  useEffect(() => setLimit(PAGE), [recentTab, recentSource, scope]);
   const matching = visible
     .filter((c) => recentTab === "all" || bucketOf(c) === recentTab)
     .sort((a, b) =>
@@ -96,7 +100,7 @@ export function RecentChats() {
   const dated = recentTab === "all" || recentTab === "done";
   const dayOf = (c: Conversation) => (c.pinned ? "Pinned" : dayLabel(c.lastMessageAt ?? c.createdAt));
 
-  if (visible.length === 0 && !hasArchived && !scopeName) return deleteDialog;
+  if (unarchived.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -112,10 +116,12 @@ export function RecentChats() {
           Mark all read
         </button>
       )}
-      <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou} />
+      <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou}>
+        <SourceTabs value={recentSource} onChange={setRecentSource} stats={sources} />
+      </RecentTabs>
       <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
         <SidebarMenu>
-          {items.length === 0 && <EmptyTab tab={recentTab} scopeName={scopeName} hasArchived={hasArchived} />}
+          {items.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
           {items.map((c, i) => {
             const day = dated && (i === 0 || dayOf(items[i - 1]!) !== dayOf(c)) ? dayOf(c) : null;
             const agent = agents.find((a) => a.id === c.agentId);
@@ -275,6 +281,114 @@ function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Work
   );
 }
 
+type ChatSource = Exclude<RecentSource, "all">;
+
+/** Mine: chats the human started, here or from Slack, Telegram or Teams. Automations: started by a trigger. Agents: an agent started it itself. */
+function chatSource(c: Conversation): ChatSource {
+  switch (c.origin) {
+    case "routine":
+    case "api":
+      return "automations";
+    case "delegation":
+    case "task":
+    case "heartbeat":
+    case "dream":
+      return "agents";
+    default:
+      return "mine";
+  }
+}
+
+type SourceStat = { unread: number; needsYou: number };
+
+function sourceStats(chats: Conversation[]): Record<RecentSource, SourceStat> {
+  const stats = Object.fromEntries(SOURCES.map((s) => [s.value, { unread: 0, needsYou: 0 }])) as Record<RecentSource, SourceStat>;
+  for (const c of chats) {
+    for (const key of [chatSource(c), "all"] as const) {
+      if (c.unread) stats[key].unread++;
+      if (c.paused?.reason === "question") stats[key].needsYou++;
+    }
+  }
+  return stats;
+}
+
+const SOURCES: { value: RecentSource; label: string; hint: string }[] = [
+  { value: "mine", label: "Mine", hint: "Chats you started" },
+  { value: "automations", label: "Automations", hint: "Started by an automation or the API" },
+  { value: "agents", label: "Agents", hint: "Started by an agent: handovers, board tasks, heartbeats" },
+  { value: "all", label: "All", hint: "Every chat" },
+];
+
+function SourceTabs({
+  value,
+  onChange,
+  stats,
+}: {
+  value: RecentSource;
+  onChange: (source: RecentSource) => void;
+  stats: Record<RecentSource, SourceStat>;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!delta) return;
+    e.preventDefault();
+    const next = (SOURCES.findIndex((t) => t.value === value) + delta + SOURCES.length) % SOURCES.length;
+    onChange(SOURCES[next].value);
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <div role="tablist" aria-label="Who started the chats" onKeyDown={onKeyDown} className="mb-1.5 flex items-center gap-3 border-b border-border/70 px-1">
+      {SOURCES.map((t, i) => {
+        const active = t.value === value;
+        const { unread, needsYou } = stats[t.value];
+        const signal = !active && t.value !== "all" && (needsYou > 0 ? "needs" : unread > 0 ? "unread" : null);
+        return (
+          <Tooltip key={t.value}>
+            <TooltipTrigger asChild>
+              <button
+                ref={(el) => {
+                  refs.current[i] = el;
+                }}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                tabIndex={active ? 0 : -1}
+                onClick={() => onChange(t.value)}
+                className={cn(
+                  "relative flex h-7 items-center gap-1 text-[12px] font-medium outline-none transition-colors focus-visible:text-foreground",
+                  active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t.label}
+                {signal && (
+                  <span
+                    className={cn("size-1.5 rounded-full", signal === "needs" ? "bg-warning" : "bg-brand-strong")}
+                    role="img"
+                    aria-label={signal === "needs" ? "Waiting for you" : "New replies"}
+                  />
+                )}
+                {active && (
+                  <motion.span
+                    layoutId="recent-source-line"
+                    className="absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-foreground"
+                    transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                  />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              {t.hint}
+              {needsYou > 0 ? ` · ${needsYou} need${needsYou === 1 ? "s" : ""} you` : unread > 0 ? ` · ${unread} unread` : ""}
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
 type ChatBucket = Exclude<RecentTab, "all">;
 
 /** Running: working, queued or standing still until someone acts. Scheduled: continues by itself later. Done: the rest. */
@@ -300,11 +414,13 @@ function RecentTabs({
   onChange,
   counts,
   needsYou,
+  children,
 }: {
   value: RecentTab;
   onChange: (tab: RecentTab) => void;
   counts: Record<RecentTab, number>;
   needsYou: number;
+  children?: ReactNode;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -318,6 +434,7 @@ function RecentTabs({
 
   return (
     <div className="sticky top-0 z-10 -mx-2 bg-sidebar px-2 pt-1 pb-1.5">
+      {children}
       <div role="tablist" aria-label="Filter recent chats" onKeyDown={onKeyDown} className="flex gap-px rounded-lg border bg-secondary/70 p-0.5">
         {TABS.map((t, i) => {
           const active = t.value === value;
@@ -388,11 +505,19 @@ const EMPTY: Record<RecentTab, { icon: typeof Zap; title: string; text: string }
   done: { icon: CircleCheck, title: "Nothing finished yet", text: "Finished chats land here." },
 };
 
-function EmptyTab({ tab, scopeName, hasArchived }: { tab: RecentTab; scopeName: string | null; hasArchived: boolean }) {
+const EMPTY_SOURCE: Record<Exclude<RecentSource, "all">, { icon: typeof Zap; title: string; text: string }> = {
+  mine: { icon: MessagesSquare, title: "No chats from you yet", text: "Chats you start show up here. Automations and agents have their own tabs." },
+  automations: { icon: Workflow, title: "No automation chats", text: "When an automation runs, its chat lands here." },
+  agents: { icon: Bot, title: "No agent chats", text: "Handovers, board tasks and heartbeats agents start themselves land here." },
+};
+
+function EmptyTab({ tab, source, scopeName, hasArchived }: { tab: RecentTab; source: RecentSource; scopeName: string | null; hasArchived: boolean }) {
   const { icon: Icon, title, text } =
-    tab === "all" && scopeName
-      ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, text: hasArchived ? "Its archived chats are below." : "New chats you start here land in this list." }
-      : EMPTY[tab];
+    tab === "all" && source !== "all"
+      ? EMPTY_SOURCE[source]
+      : tab === "all" && scopeName
+        ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, text: hasArchived ? "Its archived chats are below." : "New chats you start here land in this list." }
+        : EMPTY[tab];
   return (
     <li className="flex flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-5 text-center">
       <Icon className="mb-0.5 size-4 text-muted-foreground/70" aria-hidden />
