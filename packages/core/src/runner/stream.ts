@@ -1,4 +1,4 @@
-import { isPlaceholderReply, toolActivity, type ActivityNames } from "@godmode/shared";
+import { BROWSER_MCP_NAME, isPlaceholderReply, toolActivity, type ActivityNames } from "@godmode/shared";
 /**
  * Pure parser for Claude Code `--output-format stream-json` events.
  *
@@ -852,4 +852,10 @@ export function detectLoginFailure(text: string): string | null {
     }
   }
   return null;
+}
+
+/** The run used the browser: a login failure in its answer can be about the page it is on, not just quoted in a report. */
+export function usedBrowser(tools: Iterable<string>): boolean {
+  for (const name of tools) if (name.startsWith(`mcp__${BROWSER_MCP_NAME}__`)) return true;
+  return false;
 }

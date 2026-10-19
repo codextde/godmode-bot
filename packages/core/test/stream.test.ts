@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MessageBlock } from "@godmode/shared";
 import { isPlaceholderReply } from "@godmode/shared";
-import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent } from "../src/runner/stream";
+import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent, usedBrowser } from "../src/runner/stream";
 
 function events(name: string): unknown[] {
   return readFileSync(join(import.meta.dir, "fixtures", name), "utf8")
@@ -657,5 +657,13 @@ describe("helpers", () => {
     expect(detectLoginFailure("I logged in and downloaded the invoice.")).toBeNull();
     expect(detectLoginFailure("No login required — the page is public.")).toBeNull();
     expect(detectLoginFailure("I couldn't find the log in button at first, but then succeeded.")).toBeNull();
+  });
+
+  test("usedBrowser", () => {
+    expect(usedBrowser(["Bash", "mcp__browser__browser_navigate"])).toBe(true);
+    expect(usedBrowser(["mcp__browser__retry_with_browser_use_agent"])).toBe(true);
+    expect(usedBrowser(new Set(["Read", "mcp__godmode__report_missing_login", "mcp__godmode__browser_profiles_list"]))).toBe(false);
+    expect(usedBrowser(["mcp__playwright__browser_navigate"])).toBe(false);
+    expect(usedBrowser([])).toBe(false);
   });
 });
