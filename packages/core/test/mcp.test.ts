@@ -1551,19 +1551,19 @@ describe("settings tools", () => {
     const before = getSettings();
     const audits = settingsAudits();
     try {
-      const res = await update({ runner: { fallbackModel: "claude-opus-5", stallMinutes: 30 }, memory: { dreaming: { model: "" } } });
+      const res = await update({ runner: { fallbackModel: "claude-opus-4-8", stallMinutes: 30 }, memory: { dreaming: { model: "" } } });
       expect(res.isError).toBeUndefined();
       const { changed } = JSON.parse(res.content[0]!.text) as { changed: { setting: string; from: unknown; to: unknown }[] };
       expect(changed).toEqual(
         expect.arrayContaining([
-          { setting: "runner.fallbackModel", from: before.runner.fallbackModel, to: "claude-opus-5" },
+          { setting: "runner.fallbackModel", from: before.runner.fallbackModel, to: "claude-opus-4-8" },
           { setting: "runner.stallMinutes", from: before.runner.stallMinutes, to: 30 },
           { setting: "memory.dreaming.model", from: before.memory.dreaming.model, to: "" },
         ]),
       );
       expect(changed).toHaveLength(3);
       const now = getSettings();
-      expect(now.runner.fallbackModel).toBe("claude-opus-5");
+      expect(now.runner.fallbackModel).toBe("claude-opus-4-8");
       expect(now.memory.dreaming).toEqual({ ...before.memory.dreaming, model: "" });
       expect(now.runner.model).toBe(before.runner.model);
       const logged = listAudit(5).find((a) => a.action === "settings.update")!;

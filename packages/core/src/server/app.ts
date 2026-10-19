@@ -53,9 +53,12 @@ function isRoutineRefusal(err: HttpError) {
   return err.status === 401 || err.status === 423 || err.code === "grant_required";
 }
 
-/** A runner or the group's primary that didn't answer in time: its connection, not a fault here (the caller gets the 504). */
+/**
+ * A runner, the group's primary or an outside service (ElevenLabs, the cloud, a speech service) that didn't answer: its
+ * connection, not a fault here (the caller still gets the 502/504).
+ */
 export function isUnanswered(err: HttpError) {
-  return err.code === "runner_timeout";
+  return err.code === "runner_timeout" || !!err.code?.endsWith("_unreachable");
 }
 
 function isApiPath(path: string) {

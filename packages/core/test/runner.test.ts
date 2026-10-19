@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, ServerEvent } from "@godmode/shared";
-import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
+import { DEFAULT_FALLBACK_MODEL, MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { argValue, browserRuns, captureEvents, invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get, insert, run as sql } from "../src/db";
 import { getSettings, updateSettings } from "../src/services/settings";
@@ -100,7 +100,7 @@ describe("runner end-to-end with fake claude", () => {
     expect(argValue(inv, "--input-format")).toBe("text");
     expect(argValue(inv, "--model")).toBe("claude-opus-5-5");
     expect(argValue(inv, "--effort")).toBe("high");
-    expect(argValue(inv, "--fallback-model")).toBe("claude-sonnet-5");
+    expect(argValue(inv, "--fallback-model")).toBe(DEFAULT_FALLBACK_MODEL);
     expect(argValue(inv, "--setting-sources")).toBe("project,local");
     expect(argValue(inv, "--append-system-prompt")).toContain("vault_fill_login");
     expect(inv.args).not.toContain("--resume");
