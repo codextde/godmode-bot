@@ -786,6 +786,9 @@ export function withdrawHumanTask(id: string, reason: string, by: { agentId: str
   const lead = r.agent_id === by.agentId ? null : teamLeadOf(r, by.agentId);
   if (!isActive(r.status)) throw conflict(`${ref} is ${r.status} already`);
   if (r.question_id) throw badRequest(`${ref} is ${lead ? "a" : "your"} question to the human: it waits for their answer`);
+  // Only the agent picks its ticket up again.
+  const ticket = lead && r.task_id ? get<{ number: number }>("SELECT number FROM tasks WHERE id = ? AND status = 'blocked' AND blocked_kind = 'needs_input'", r.task_id) : null;
+  if (ticket) throw badRequest(`${ref} holds up task #${ticket.number}, which waits for it: ask ${r.agent_name ?? "its agent"} there with task_message to take it back, so the task goes on without it`);
   const text = clean(reason, 500);
   if (lead && !text) throw badRequest(`Say why ${ref} isn't needed anymore: ${humanName()} sees it on the task`);
   const why = lead ? `${lead.name}: ${text}` : text || null;
@@ -795,10 +798,7 @@ export function withdrawHumanTask(id: string, reason: string, by: { agentId: str
   return getHumanTask(id);
 }
 
-/**
- * The caller, when it may take back a task another agent gave: it manages agents and that agent reports to it. Not
- * while the task holds up that agent's ticket: only the agent itself picks it up again.
- */
+/** The caller, when it may take back a task another agent gave: it manages agents and that agent reports to it. */
 function teamLeadOf(r: Row, callerId: string): Agent {
   const ref = humanTaskRef(r);
   const caller = getAgent(callerId);
@@ -807,10 +807,6 @@ function teamLeadOf(r: Row, callerId: string): Agent {
   const agents = listAgents();
   const author = agents.find((a) => a.id === r.agent_id);
   if (!author || !chainOf(author, agents, Infinity).some((a) => a.id === caller.id)) throw badRequest(`${ref} isn't one you or your team gave`);
-  const ticket = r.task_id ? get<{ number: number; status: string }>("SELECT number, status FROM tasks WHERE id = ?", r.task_id) : null;
-  if (ticket?.status === "blocked") {
-    throw badRequest(`${ref} holds up task #${ticket.number}, which waits for it: ask ${author.name} there with task_message to take it back, so the task goes on without it`);
-  }
   return caller;
 }
 

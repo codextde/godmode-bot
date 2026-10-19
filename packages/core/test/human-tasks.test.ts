@@ -162,7 +162,7 @@ describe("an agent gives the human a task", () => {
       const held = listHumanTasks({ status: "active", conversationId: getTask(t.id).conversationId! })[0]!;
       const holds = await callTool(as(godmode), "human_task_cancel", { id: held.id, reason: "Obsolete" });
       expect(holds.isError).toBe(true);
-      expect(holds.content[0]!.text).toContain(`holds up task #${t.number}`);
+      expect(holds.content[0]!.text).toContain(`holds up task #${t.number}, which waits for it: ask Ads Bot there`);
       expect(getHumanTask(held.id).status).toBe("open");
       expect((await callTool({ ...as(agent), conversationId: held.conversationId! }, "human_task_cancel", { id: held.id })).isError).toBeUndefined();
 
