@@ -18,7 +18,7 @@ const NAMES: Record<string, string> = {
 
 const POINTS = [
   { icon: Boxes, title: "Hundreds of apps", body: "Gmail, Slack, GitHub, Notion, CRMs, calendars — each becomes a set of tools your agents can call." },
-  { icon: ShieldCheck, title: "OAuth, not passwords", body: "You sign in on the app's own page. Tokens live in Composio; Godmode only keeps your API key, encrypted." },
+  { icon: ShieldCheck, title: "OAuth sign-in", body: "You sign in on the app's own page. Tokens live in Composio; Godmode only keeps your API key, encrypted." },
   { icon: Layers, title: "Scoped accounts", body: "Connect an account for everyone, one workspace, or a single agent — e.g. work vs. personal Gmail." },
 ];
 

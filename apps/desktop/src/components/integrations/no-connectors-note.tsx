@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, CircleCheck, Globe, KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { storageKey } from "@/lib/core";
 
-const DISMISS_KEY = "godmode.integrations.noConnectorsNote";
+const DISMISS_KEY = storageKey("godmode-integrations-no-connectors");
 
 const STEPS = [
   { icon: Globe, label: "Opens the site" },
@@ -25,6 +26,7 @@ function dismissed(): boolean {
 export function NoConnectorsNote() {
   const navigate = useNavigate();
   const [hidden, setHidden] = useState(dismissed);
+  const titleId = useId();
 
   const dismiss = () => {
     try {
@@ -36,7 +38,7 @@ export function NoConnectorsNote() {
   };
 
   return (
-    <AnimatePresence initial={false}>
+    <AnimatePresence>
       {!hidden && (
         <motion.section
           key="note"
@@ -45,7 +47,7 @@ export function NoConnectorsNote() {
           exit={{ opacity: 0, height: 0, marginBottom: 0 }}
           transition={{ duration: 0.2 }}
           className="mb-6 overflow-hidden rounded-xl border border-brand/25 bg-card shadow-card"
-          aria-label="No connectors needed"
+          aria-labelledby={titleId}
         >
           <div className="grid grid-cols-1 gap-6 p-5 @4xl:grid-cols-[1fr_minmax(0,280px)] @4xl:items-center @2xl:p-6">
             <div className="flex items-start gap-4">
@@ -53,11 +55,11 @@ export function NoConnectorsNote() {
                 <ShieldCheck className="size-5" />
               </div>
               <div className="min-w-0">
-                <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Your apps don't need a connector</h2>
+                <h2 id={titleId} className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Your apps don't need a connector</h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
                   Godmode signs in to websites the way you do: with the username, password and 2FA code saved in your Vault. It types them
-                  into the login page itself, so the AI never sees them. Gmail, your CRM, a supplier portal: if it opens in a browser, your
-                  agents can use it, without an MCP connector.
+                  into the login page itself, so the AI never sees them. Your CRM, a supplier portal, your shop admin: most sites that open in
+                  a browser work right away, without an MCP connector.
                 </p>
                 <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
                   Connect an app here only when an automation should start the moment something arrives, like a new email, or for an API
