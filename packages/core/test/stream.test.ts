@@ -661,8 +661,9 @@ describe("helpers", () => {
 
   test("usedBrowser", () => {
     expect(usedBrowser(["Bash", "mcp__browser__browser_navigate"])).toBe(true);
-    expect(usedBrowser(["browser_get_state"])).toBe(true);
+    expect(usedBrowser(["mcp__browser__retry_with_browser_use_agent"])).toBe(true);
     expect(usedBrowser(new Set(["Read", "mcp__godmode__report_missing_login", "mcp__godmode__browser_profiles_list"]))).toBe(false);
+    expect(usedBrowser(["mcp__playwright__browser_navigate"])).toBe(false);
     expect(usedBrowser([])).toBe(false);
   });
 });
