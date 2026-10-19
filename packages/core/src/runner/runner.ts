@@ -142,7 +142,7 @@ import { attachAndroid, detachAndroid, promptDevices } from "../android/service"
 import { forgetAndroidRun } from "../android/tools";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
-import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock } from "./stream";
+import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock, usedBrowser } from "./stream";
 import { tailLines } from "./tail";
 import { requireLicense } from "../license/license";
 
@@ -2923,21 +2923,19 @@ function autoTitle(userMessageId: string): string | undefined {
 async function detectMissingLogin(job: Job, agent: Agent, text: string) {
   if (missingLoginReported.has(job.runId)) return;
   for (const name of job.acc.toolsCalled) if (name.endsWith("report_missing_login")) return;
+  // Without a page the run was on there is no login to add: the sentence quotes an error or another missing login.
+  if (!agent.browser.enabled || (job.vmId && !job.vmBrowser) || !usedBrowser(job.acc.toolsCalled)) return;
   const reason = detectLoginFailure(text);
   if (!reason) return;
-  let service = "Unknown service";
   let url = "";
-  if (agent.browser.enabled && (!job.vmId || job.vmBrowser)) {
-    try {
-      const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(runProfileOf(job) ?? resolveProfileForAgent(agent, job.conversationId).id, job.conversationId);
-      if (page?.url && /^https?:/i.test(page.url)) {
-        url = page.url;
-        service = hostnameOf(page.url) || service;
-      }
-    } catch (err) {
-      log.debug(`no current page for agent ${agent.id}`, err);
-    }
+  try {
+    const page = job.vmId ? await currentVmPage(job.vmId) : await currentPage(runProfileOf(job) ?? resolveProfileForAgent(agent, job.conversationId).id, job.conversationId);
+    if (page?.url && /^https?:/i.test(page.url)) url = page.url;
+  } catch (err) {
+    log.debug(`no current page for agent ${agent.id}`, err);
   }
+  const service = url ? hostnameOf(url) : "";
+  if (!service) return;
   try {
     reportMissingLogin({ agentId: agent.id, runId: job.runId, workspaceId: agent.workspaceId, kind: "other", service, url, reason });
     log.info(`run ${job.runId}: detected a login problem (${service})`);

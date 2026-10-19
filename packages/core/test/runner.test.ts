@@ -317,16 +317,12 @@ describe("runner end-to-end with fake claude", () => {
     }
   });
 
-  test("login failures in the final answer are reported as missing logins", async () => {
+  test("a login failure in the answer of a run without a browser page is no missing login", async () => {
     const { run } = await startChat({ agentId: agent.id, content: "LOGIN_FAIL" });
     const finished = await waitForRun(run.id, 20_000);
     expect(finished.status).toBe("succeeded");
-    await until(() => listMissingLogins({}).some((m) => m.runId === run.id), 5000, "missing login");
-    const item = listMissingLogins({}).find((m) => m.runId === run.id)!;
-    expect(item.kind).toBe("other");
-    expect(item.agentId).toBe(agent.id);
-    expect(item.service).toBe("Unknown service");
-    expect(item.reason).toContain("couldn't log in to example.com");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(listMissingLogins({}).filter((m) => m.runId === run.id)).toHaveLength(0);
   });
 
   test("Claude's API refusing the sign-in is no missing login of a website", async () => {
