@@ -836,6 +836,10 @@ const LOGIN_FAILURE_PATTERNS: RegExp[] = [
   /\b(?:no|missing)\s+(?:2fa|totp|mfa|two[- ]factor|authenticator)\b/i,
 ];
 
+/** The sentence passes on a login problem that is already reported ("it reported that, and it's already on your list"). */
+const ALREADY_REPORTED =
+  /\b(?:already\s+(?:reported|flagged|filed|on\s+(?:your|the)\s+(?:list|task list|inbox))|(?:is|are|it['’]s|they['’]re|that['’]s)\s+(?:still\s+)?on\s+your\s+(?:list|task list|inbox)|(?:it|they|he|she|which)\s+reported\s+(?:that|it|this)|(?:bereits|schon)\s+gemeldet|steht\s+(?:schon|bereits)\s+auf\s+deiner\s+liste)\b/i;
+
 /**
  * If the final answer says a login failed / is missing, return the sentence that says so (≤300 chars).
  * Used when the run did not call report_missing_login itself.
@@ -847,7 +851,7 @@ export function detectLoginFailure(text: string): string | null {
     .map((s) => s.replace(/^[\s>*#\-–•\d.)]+/, "").trim())
     .filter(Boolean);
   for (const sentence of sentences) {
-    if (LOGIN_FAILURE_PATTERNS.some((re) => re.test(sentence))) {
+    if (LOGIN_FAILURE_PATTERNS.some((re) => re.test(sentence)) && !ALREADY_REPORTED.test(sentence)) {
       return sentence.length > 300 ? `${sentence.slice(0, 299)}…` : sentence;
     }
   }

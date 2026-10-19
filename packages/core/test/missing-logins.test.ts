@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, insert, openDb } from "../src/db";
+import { closeDb, getDb, insert, openDb } from "../src/db";
+import { MIGRATIONS } from "../src/db/migrations";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
@@ -133,5 +134,16 @@ describe("missing logins", () => {
     expect(item.service).toBe("portal.example.com");
     expect(item.kind).toBe("other");
     expect(catchHttp(() => reportMissingLogin({ ...base, kind: "other", service: "  " })).status).toBe(400);
+  });
+
+  test("open items without a site from older builds are dismissed once", () => {
+    const unknown = reportMissingLogin({ ...base, workspaceId: "wsp_old", kind: "other", service: "Unknown service", reason: "it's already on your list" });
+    const named = reportMissingLogin({ ...base, workspaceId: "wsp_old2", kind: "other", service: "Unknown service", url: "https://unknown.example.com" });
+    const real = reportMissingLogin({ ...base, workspaceId: "wsp_old", kind: "other", service: "billing.example.com" });
+    getDb().run(MIGRATIONS.find((m) => m.name === "dismiss_unknown_missing_logins")!.sql);
+    const status = (id: string) => listMissingLogins().find((i) => i.id === id)?.status;
+    expect(status(unknown.id)).toBe("dismissed");
+    expect(status(named.id)).toBe("open");
+    expect(status(real.id)).toBe("open");
   });
 });
