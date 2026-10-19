@@ -103,7 +103,7 @@ const CHOICE = /\b(?:or|oder)\b/i;
 
 /** The section says there is nothing to decide. */
 const NOTHING =
-  /^(?:[-–—]+|(?:none|nothing|n\/a|nope|not (?:right )?now|no (?:open |pending )?(?:decisions?|questions?|action|input)|keine?[rs]?|nichts|aktuell (?:keine|nichts)|derzeit (?:keine|nichts))\b[^\n?]{0,40})$/i;
+  /^(?:[-–—]+|(?:none|nothing|n\/a|nope|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|action|input)|keine?[rs]?|nichts|aktuell (?:keine|nichts)|derzeit (?:keine|nichts))\b[^\n?]{0,40})$/i;
 
 interface Heading {
   line: number;
@@ -185,7 +185,10 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
     const next = headings.find((o) => o.line > h.line && o.level <= h.level);
     const section = [h.rest, ...lines.slice(h.line + 1, next?.line ?? lines.length)].join("\n").trim();
     const said = plain(section.split("\n").find((l) => l.trim()) ?? "");
-    if (!section || NOTHING.test(said)) {
+    // "nothing new from this run. You may want to …" goes on without asking: still nothing.
+    const all = sentences(section);
+    const asks = all.some((s) => isQuestion(s) || WAITS.some((re) => re.test(s)));
+    if (!section || NOTHING.test(said) || (NOTHING.test(all[0] ?? "") && !asks)) {
       saidNothing = true;
       continue;
     }
