@@ -67,6 +67,11 @@ describe("a decision left open in an answer", () => {
     expect(detectOpenDecision("**Decision for you:** None of the three quotes fits the budget. Pick A (cheaper) or B (faster) and I'll book it.")).not.toBeNull();
     expect(detectOpenDecision("**Decisions for you:** Nothing is booked yet. Choose hotel A or hotel B for the 12th.")).not.toBeNull();
     expect(detectOpenDecision("**Entscheidung für dich:** Keine Antwort von Sam bisher. Entscheide, ob wir nachfassen.")).not.toBeNull();
+    expect(detectOpenDecision("**Decisions for you:** No new decisions. Still open from yesterday: go live Friday or Monday?")?.title).toBe(
+      "Still open from yesterday: go live Friday or Monday?",
+    );
+    expect(detectOpenDecision("**Decision for you:** None from the shortlist works. Choose A or B and I'll book it.")).not.toBeNull();
+    expect(detectOpenDecision("**Entscheidung für dich:** Keiner von beiden Anbietern passt. Nimm A oder B, dann buche ich.")).not.toBeNull();
   });
 
   test("a closing question to the human", () => {

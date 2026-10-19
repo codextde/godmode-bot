@@ -106,7 +106,7 @@ const NOTHING =
   /^(?:[-–—]+|(?:none|nothing|n\/a|nope|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|action|input)|keine?[rs]?|nichts|aktuell (?:keine|nichts)|derzeit (?:keine|nichts))\b[^\n?]{0,40})$/i;
 /** A sentence that says only that ("nothing new from this run.", "None for now."), not "None of the quotes fits." */
 const NOTHING_SENTENCE =
-  /^(?:none|nothing|nope|n\/a|nichts|keine?[rs]?|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|input))(?: (?:new|neue[ns]?|further|more|else|weiter[es]?))?(?: (?:decisions?|questions?|entscheidung(?:en)?|fragen?))?(?: (?:from|in|for|on|von|aus|seit|für) [^.?!]{1,25})?(?: (?:for now|right now|so far|yet|today|this time|bisher|aktuell|heute|gerade))?[.!]?$/i;
+  /^(?:none|nothing|nope|n\/a|nichts|keine?[rs]?|not (?:right )?now|no (?:new |open |pending |further )?(?:decisions?|questions?|input))(?: (?:new|neue[ns]?|further|more|else|weiter[es]?))?(?: (?:decisions?|questions?|entscheidung(?:en)?|fragen?))?(?: (?:from|in|for|on|von|aus|seit|für) (?:(?:this|that|the|my|your|today'?s|diesem|dieser|diesen|meiner|meinem|deiner) [\p{L}'-]+|me|you|us|mir|dir|dich|euch|uns|heute|gestern|yesterday|today))?(?: (?:for now|right now|so far|yet|today|this time|bisher|aktuell|heute|gerade))?[.!]?$/iu;
 
 interface Heading {
   line: number;
@@ -156,9 +156,8 @@ function shorten(s: string, max: number): string {
 
 const isQuestion = (s: string) => /\?["'”’)\]]*$/.test(s);
 
-/** The sentence waits for the human: a question to them or a request, not a pleasantry or extra work on offer. */
-function asksHuman(s: string): boolean {
-  if (!(isQuestion(s) ? ASKS : WAITS).some((re) => re.test(s))) return false;
+/** Not a pleasantry, a question to someone else or extra work on offer. */
+function forTheHuman(s: string): boolean {
   return !NOT_FOR_THE_HUMAN.some((re) => re.test(s)) && !(OFFERS.some((re) => re.test(s)) && !CHOICE.test(s));
 }
 
@@ -196,7 +195,8 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
     const said = plain(section.split("\n").find((l) => l.trim()) ?? "");
     // "nothing new from this run. You may want to …" goes on without asking: still nothing.
     const all = sentences(section);
-    if (!section || NOTHING.test(said) || (NOTHING_SENTENCE.test(all[0] ?? "") && !all.some(asksHuman))) {
+    const asks = all.some((s) => (isQuestion(s) || WAITS.some((re) => re.test(s))) && forTheHuman(s));
+    if (!section || NOTHING.test(said) || (NOTHING_SENTENCE.test(all[0] ?? "") && !asks)) {
       saidNothing = true;
       continue;
     }
@@ -215,7 +215,7 @@ export function detectOpenDecision(text: string, human = ""): OpenDecision | nul
   if (!last) return null;
   // Only what the answer ends on: a question further up is one the agent goes on to answer itself.
   const asked = sentences(last).at(-1);
-  if (!asked || !asksHuman(asked)) return null;
+  if (!asked || !(isQuestion(asked) ? ASKS : WAITS).some((re) => re.test(asked)) || !forTheHuman(asked)) return null;
   const title = shorten(asked, TITLE_MAX);
   return { title, body: bodyOf(last, title) };
 }

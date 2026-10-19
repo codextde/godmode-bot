@@ -664,6 +664,8 @@ describe("helpers", () => {
     expect(detectLoginFailure("Login failed because the account is already flagged for suspicious activity.")).not.toBeNull();
     expect(detectLoginFailure("I couldn't log in to the tax portal to check the return that was already filed last week.")).not.toBeNull();
     expect(detectLoginFailure("Couldn't log in, das Portal hat schon gemeldet, dass das Konto gesperrt ist.")).not.toBeNull();
+    expect(detectLoginFailure("Login failed; the site already reported this account as locked.")).not.toBeNull();
+    expect(detectLoginFailure("The forum login failed, which I already flagged for you.")).toBeNull();
   });
 
   test("usedBrowser", () => {

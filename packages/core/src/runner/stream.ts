@@ -838,7 +838,7 @@ const LOGIN_FAILURE_PATTERNS: RegExp[] = [
 
 /** The sentence passes on a login problem that is already reported ("it reported that, and it's already on your list"). */
 const ALREADY_REPORTED =
-  /\b(?:already\s+(?:reported|flagged|filed)\s+(?:it|that|this|them)\b|already\s+on\s+(?:your|the)\s+(?:list|task list|inbox)|(?:is|are|it['’]s|they['’]re|that['’]s)\s+(?:still\s+)?on\s+your\s+(?:list|task list|inbox)|(?:bereits|schon)\s+gemeldet(?!\s*,?\s*dass)|steht\s+(?:schon|bereits)\s+auf\s+deiner\s+liste)\b/i;
+  /\b(?:already\s+(?:reported|flagged|filed)(?:\s+(?:it|that|this|them))?(?=\s*(?:[,.;!)]|$)|\s+(?:to|for)\s+you\b|\s+on\s+your\b)|already\s+on\s+(?:your|the)\s+(?:list|task list|inbox)|(?:is|are|it['’]s|they['’]re|that['’]s)\s+(?:still\s+)?on\s+your\s+(?:list|task list|inbox)|(?:bereits|schon)\s+gemeldet(?!\s*,?\s*dass)|steht\s+(?:schon|bereits)\s+auf\s+deiner\s+liste)\b/i;
 
 /**
  * If the final answer says a login failed / is missing, return the sentence that says so (≤300 chars).
