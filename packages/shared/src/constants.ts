@@ -4,6 +4,8 @@ export const APP_NAME = "Godmode Bot";
 export const APP_SLUG = "godmode";
 export const DEFAULT_PORT = 7777;
 export const DEFAULT_MODEL = "claude-opus-5-5";
+/** Takes over when the default model is overloaded: the Opus before it. */
+export const DEFAULT_FALLBACK_MODEL = "claude-opus-5";
 export const DEFAULT_AGENT_SLUG = "godmode";
 /** MEMORY.md: what dreams keep it under by default, and the range the setting takes (characters). */
 export const DEFAULT_MEMORY_CHARS = 8_000;

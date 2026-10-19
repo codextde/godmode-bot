@@ -13,9 +13,11 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { EXECUTABLE_SETTINGS } from "../backup/backup";
 import { get } from "../db";
+import { auditSettings } from "../services/agentSettings";
 import { getSettings, updateSettings } from "../services/settings";
 import { applyRuntimeSettings } from "../services/runtime";
 import { checkSettingsPatch } from "../services/settingsPatch";
+import { requestVia } from "../server/auth";
 import { adoptGrant, requireGrant } from "../server/grants";
 import { HttpError, badRequest } from "../util";
 import { forwarding, isSecondary, primaryRunnerId } from "./group";
@@ -178,7 +180,10 @@ async function putSettings(c: Context): Promise<Response> {
   }
   if (Object.keys(own).length) {
     checkSettingsPatch(own, () => requireGrant(c));
-    applyRuntimeSettings(updateSettings(own as never));
+    const before = getSettings();
+    const next = updateSettings(own as never);
+    auditSettings("user", before, next, Object.keys(own), requestVia(c));
+    applyRuntimeSettings(next);
   }
   let settings: Record<string, unknown> = getSettings() as unknown as Record<string, unknown>;
   if (Object.keys(shared).length) {

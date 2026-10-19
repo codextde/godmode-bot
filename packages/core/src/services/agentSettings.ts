@@ -1,8 +1,9 @@
+import type { Settings } from "@godmode/shared";
 import { INTERFACE_MODES } from "@godmode/shared";
 import { HttpError } from "../util";
 import { audit } from "./audit";
 import { applyRuntimeSettings } from "./runtime";
-import { getSettings, updateSettings } from "./settings";
+import { DEFAULT_SETTINGS, getSettings, updateSettings } from "./settings";
 import { sameSettingShape, settingInRange } from "./settingShape";
 import { checkSettingsPatch } from "./settingsPatch";
 
@@ -50,6 +51,8 @@ const FRACTIONS = new Set(["voice.rate"]);
 const AT_LEAST: Record<string, number> = { "runner.runTimeoutMinutes": 1 };
 const MAX_TEXT = 200;
 const AUDIT_TEXT = 200;
+/** Free text and CLI flags can carry passwords and tokens: the audit notes that they changed, not what they say. */
+const UNQUOTED = new Set(["runner.appendSystemPrompt", "runner.extraArgs"]);
 /** Line breaks and control characters: a setting's text is one plain line. */
 const NOT_ONE_LINE = /[\u0000-\u001f\u007f\u0085\u2028\u2029]/;
 
@@ -138,20 +141,32 @@ export function applyAgentSettings(actor: string, runId: string, changes: Record
   checkSettingsPatch(changes, () => {
     throw new HttpError(403, "This change needs the vault passphrase: the human makes it in Settings.");
   });
-  const before = getSettings() as unknown as Sections;
+  const before = getSettings();
   const next = updateSettings(changes as never);
+  const changed = auditSettings(actor, before, next, Object.keys(changes), { runId });
   applyRuntimeSettings(next);
-  const after = next as unknown as Sections;
+  return changed;
+}
+
+/**
+ * Records what a settings save changed in `sections`, setting by setting, as `settings.update` (nothing when nothing
+ * changed). Every save goes here, whoever made it: a setting that changes without an entry has no one to ask.
+ */
+export function auditSettings(actor: string, before: Settings, after: Settings, sections: string[], details: Record<string, unknown> = {}): SettingChange[] {
+  const was = before as unknown as Sections;
+  const now = after as unknown as Sections;
   const changed: SettingChange[] = [];
-  for (const section of Object.keys(changes)) {
-    const was = leaves(before[section], section);
-    for (const [setting, to] of leaves(after[section], section)) {
-      const from = was.get(setting);
+  for (const section of sections) {
+    if (!Object.hasOwn(DEFAULT_SETTINGS, section)) continue;
+    const old = leaves(was[section], section);
+    for (const [setting, to] of leaves(now[section], section)) {
+      const from = old.get(setting);
       if (JSON.stringify(from) !== JSON.stringify(to)) changed.push({ setting, from, to });
     }
   }
   if (changed.length) {
-    audit(actor, "settings.update", null, { runId, changes: changed.map((c) => ({ setting: c.setting, from: brief(c.from), to: brief(c.to) })) });
+    const entry = (c: SettingChange) => (UNQUOTED.has(c.setting) ? { setting: c.setting } : { setting: c.setting, from: brief(c.from), to: brief(c.to) });
+    audit(actor, "settings.update", null, { ...details, changes: changed.map(entry) });
   }
   return changed;
 }

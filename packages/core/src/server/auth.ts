@@ -183,6 +183,20 @@ export function requestDevice(c: Context): MobileDevice | null {
   return (c.get("device" as never) as MobileDevice | undefined) ?? null;
 }
 
+/** Where a person's request came from, for the audit: a paired phone, the cloud, another computer of the group, or this computer's app. */
+export function requestVia(c: Context): { via: "phone" | "cloud" | "computer" | "app"; name?: string; userId?: string } {
+  const device = requestDevice(c);
+  if (device) return { via: "phone", name: device.name };
+  if (isCloudChannel(c)) {
+    const user = env(c)?.cloud?.user;
+    return { via: "cloud", userId: user?.id ?? "unknown", name: user?.name ?? user?.email ?? "unknown" };
+  }
+  const link = c.env as { channel?: string; controllerId?: string } | undefined;
+  if (link?.channel !== "runner-link") return { via: "app" };
+  const name = link.controllerId ? get<{ name: string }>("SELECT name FROM link_controllers WHERE id = ?", link.controllerId)?.name : undefined;
+  return { via: "computer", name: name ?? "unknown" };
+}
+
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1", "tauri.localhost"]);
 
 /** Origins of the Tauri webview on macOS/Linux (tauri://localhost) and Windows (http(s)://tauri.localhost). */

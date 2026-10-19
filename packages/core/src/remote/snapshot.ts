@@ -23,6 +23,7 @@ import { logger } from "../log";
 import { listActiveRuns } from "../runner/runner";
 import { workingDirectoryProblem } from "../services/folders";
 import { applyRuntimeSettings } from "../services/runtime";
+import { auditSettings } from "../services/agentSettings";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { badRequest, parseJson } from "../util";
 import { decrypt, sha256 } from "../vault/crypto";
@@ -249,6 +250,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
   }
 
   const cfg = config();
+  const settingsBefore = getSettings();
   const warnings: string[] = [];
   const changed = new Set<EntityName>();
   /** Keys of rows that were added or really changed, per table. */
@@ -404,7 +406,9 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
   }
 
   resetSettingsCache();
-  applyRuntimeSettings(getSettings());
+  const settingsAfter = getSettings();
+  applyRuntimeSettings(settingsAfter);
+  auditSettings("controller", settingsBefore, settingsAfter, [...Object.keys(s.settings), "onboardingComplete"], { via: "sync" });
   ensureDefaultProfile();
 
   // A removed agent's repository goes to the trash first: a new agent with the same folder name must not inherit its
