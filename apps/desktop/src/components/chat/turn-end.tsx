@@ -1,14 +1,15 @@
-import type { ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import type { Agent, ConversationWithMessages, Message, RetryMode } from "@godmode/shared";
+import type { Agent, ConversationWithMessages, Message, RetryMode, Run } from "@godmode/shared";
 import { needsFix, retryHelps, retryModeOf, runEndOf, type RunEnd } from "@godmode/shared";
-import { ArrowUpRight, MessageSquarePlus, Play, RotateCcw, Workflow } from "lucide-react";
+import { ArrowUpRight, LogIn, MessageSquarePlus, Play, RotateCcw, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { useRunRoutine } from "@/components/agents/routine-item";
+import { ClaudeSignInSteps, maySignIn, useClaudeLogin } from "@/components/onboarding/claude-sign-in";
 import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { useRoutines, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -18,8 +19,6 @@ const PLATFORM_ORIGINS = new Set(["slack", "telegram", "teams"]);
 /** Where the fix for a turn that can't just be tried again lives. */
 function fixFor(end: RunEnd, agentName: string): { text: string; to?: string; label?: string } {
   switch (end.kind) {
-    case "auth":
-      return { text: "Sign Claude in again, then try again.", to: "/settings/system", label: "Open System" };
     case "cli":
       return { text: "Install Claude Code, then try again.", to: "/settings/system", label: "Open System" };
     case "vm":
@@ -141,6 +140,8 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     </Button>
   );
 
+  if (end?.kind === "auth") return <SignInAgain run={run} name={name} action={action} onSignedIn={() => retry.mutate()} />;
+
   if (end && needsFix(end)) {
     const fix = fixFor(end, name);
     return (
@@ -173,6 +174,86 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
             ? `Changed your mind? ${name} picks up where you stopped it.`
             : `${name} picks up where it stopped, in this chat.`
           : `Sends your message to ${name} again.`}
+      </span>
+    </Row>
+  );
+}
+
+/**
+ * Claude Code is signed out: sign in again from the chat (or the banner), and the turn goes on by itself once Claude
+ * works again while the chat is open.
+ */
+function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string; action: (variant: "outline" | "ghost") => ReactNode; onSignedIn: () => void }) {
+  const continued = useRef<string | null>(null);
+  const goOn = useCallback(() => {
+    if (continued.current === run.id) return;
+    continued.current = run.id;
+    onSignedIn();
+  }, [run.id, onSignedIn]);
+  const login = useClaudeLogin({ onSignedIn: goOn });
+  const { status, state, start } = login;
+  // Cleared some other way while the chat is open (a sign-in in a terminal, another run that got an answer).
+  const wasOut = useRef(false);
+  useEffect(() => {
+    if (status?.signedOut) wasOut.current = true;
+    else if (wasOut.current && status?.signedOut === null) {
+      wasOut.current = false;
+      goOn();
+    }
+  }, [status?.signedOut, goOn]);
+  // A core that knows the state says it works again (older ones leave it out).
+  const worksAgain = status?.signedOut === null && state !== "failed";
+
+  if (status?.signedOut?.apiKey)
+    return (
+      <Row>
+        <span className="min-w-0">Claude refused the Anthropic API key. Check it, then try again.</span>
+        <span className="flex shrink-0 items-center gap-1">
+          <Button size="xs" variant="outline" asChild>
+            <Link to="/integrations?tab=api-keys">
+              API keys <ArrowUpRight />
+            </Link>
+          </Button>
+          {action("ghost")}
+        </span>
+      </Row>
+    );
+  if (state === "waiting" && !login.mine)
+    return (
+      <Row>
+        <Spinner className="size-3.5" />
+        <span className="min-w-0">Signing in to Claude… {name} picks up where it stopped once you're done.</span>
+      </Row>
+    );
+  if (state === "waiting")
+    return (
+      <div className="-mt-3 space-y-1.5 pl-11">
+        <ClaudeSignInSteps login={login} className="max-w-xl" />
+        <p className="text-xs text-muted-foreground">{name} goes on by itself once you're signed in.</p>
+      </div>
+    );
+  if (worksAgain)
+    return (
+      <Row>
+        {action("outline")}
+        <span className="min-w-0">Claude works again. {name} picks up where it stopped.</span>
+      </Row>
+    );
+  if (!maySignIn)
+    return (
+      <Row>
+        <span className="min-w-0">Claude is signed out on this computer. Once its owner signs in again, try again.</span>
+        {action("ghost")}
+      </Row>
+    );
+  return (
+    <Row>
+      <span className="min-w-0">{state === "failed" && status?.message ? `The sign-in didn't finish: ${status.message}` : `Claude is signed out. Sign in again and ${name} goes on by itself.`}</span>
+      <span className="flex shrink-0 items-center gap-1">
+        <Button size="xs" disabled={start.isPending} aria-busy={start.isPending} onClick={() => start.mutate()}>
+          {start.isPending ? <Spinner /> : <LogIn />} {state === "failed" ? "Try again" : "Sign in again"}
+        </Button>
+        {action("ghost")}
       </span>
     </Row>
   );

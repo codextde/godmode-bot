@@ -10,6 +10,7 @@ import type {
   AppNotification,
   AutomationEvent,
   BrowserProfile,
+  ClaudeLoginStatus,
   Conversation,
   ID,
   Message,
@@ -78,6 +79,8 @@ export type ServerEvent =
   | { type: "question.updated"; question: AgentQuestion }
   | { type: "notification"; notification: AppNotification }
   | { type: "vault.status"; status: VaultStatus }
+  /** Claude Code's sign-in changed: a sign-in started or ended, or a run found it signed out. */
+  | { type: "claude.login"; status: ClaudeLoginStatus }
   | { type: "browser.updated"; profile: BrowserProfile }
   | {
       type: "browser.frame";

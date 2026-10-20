@@ -11,6 +11,7 @@ import { delimiter, dirname, join } from "node:path";
 import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shared";
 import { getSettings } from "./settings";
 import { hasAppSecret } from "../vault/vault";
+import { claudeSignedOut, recheckClaudeSignedOut } from "./claudeLogin";
 import { logger } from "../log";
 import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
@@ -251,6 +252,11 @@ function hasStoredAnthropicKey(): boolean {
 
 async function checkClaudeAuth(claudePath: string | null): Promise<Check> {
   const base = { id: "claude-auth" as const, name: "Claude login", version: null, path: null };
+  // `auth status` still says "logged in" when the stored sign-in ran out; a run that found it signed out knows better.
+  await recheckClaudeSignedOut();
+  const out = claudeSignedOut();
+  if (out?.apiKey) return { ...base, ok: false, detail: "Claude refused the Anthropic API key. Check it in Integrations → API keys." };
+  if (out) return { ...base, ok: false, detail: "The sign-in ran out. Sign in to Claude again." };
   const apiKey = hasStoredAnthropicKey() || !!process.env.ANTHROPIC_API_KEY;
   if (claudePath) {
     const res = await runCommand([claudePath, "auth", "status", "--json"], { timeoutMs: 20_000, env: childEnv({ PATH: toolPath() }) });

@@ -63,6 +63,7 @@ import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
 import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
+import { ClaudeSignedOutBanner } from "@/components/layout/claude-signed-out";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { LidModeButton } from "@/components/layout/lid-mode";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -319,6 +320,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <DesktopDragStrip />
         {cloudContext && boot && <CloudVersionNote coreVersion={boot.version} uiVersion={cloudContext.uiVersion} />}
         <PrimaryOfflineBanner />
+        <ClaudeSignedOutBanner />
         <LicenseBanner />
         <div ref={setScrollEl} className="@container min-h-0 flex-1 overflow-y-auto">
           <PageScrollContext value={scrollEl}>{children}</PageScrollContext>

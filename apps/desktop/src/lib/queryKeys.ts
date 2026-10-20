@@ -13,6 +13,7 @@ export const qk = {
   logEntries: (level: string, search: string) => ["logs", "entries", level, search],
   doctor: ["doctor"] as unknown[],
   claudeUpdate: ["doctor", "claude-update"] as unknown[],
+  claudeLogin: ["doctor", "claude-login"] as unknown[],
   permissions: ["doctor", "permissions"] as unknown[],
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],

@@ -5,7 +5,7 @@
  *
  * - "allowed": owners and operators. Viewers only read (GET/HEAD, and POST /api/conversations/:id/files).
  * - "secrets": only while `settings.cloud.allowSecrets` is on, and never for viewers.
- * - "owner": reads for the computer's owner only (cloud status and billing).
+ * - "owner": the computer's owner only (cloud status and billing, signing Claude Code in again).
  * - refused: linking, sign-in, phone management, local-only actions and machine settings stay on the computer.
  *
  * Sign-in routes and phone pairing never reach `requireAuth`, so `hostGuard` refuses them with `cloudPathRefusal`.
@@ -22,7 +22,7 @@ const LINK_ONLY = "Linking and access switches are managed on the computer itsel
 const PHONES_ONLY = "Phones are paired and managed in Godmode on the computer itself.";
 const SIGN_IN = "Signing in to this computer's own dashboard isn't available through Godmode Cloud.";
 const SETTINGS_ONLY = "These settings can only be changed in Godmode on the computer itself.";
-const OWNER_ONLY = "Only the owner of this computer can see this.";
+const OWNER_ONLY = "Only the owner of this computer can do this.";
 const VIEWER = "You can look, but not change anything on this computer.";
 const VIEWER_HIDDEN = "Viewers can't see this computer's screen or secrets.";
 export const SECRETS_OFF = "Turned off for cloud access. Allow it on the computer under Settings → Cloud.";
@@ -65,10 +65,11 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/models", A],
   ["POST", "/api/doctor/install", A],
   ["GET|POST", "/api/doctor/claude-update", A],
-  // Signing Claude Code in picks the account every agent on the computer runs on.
+  // Signing Claude Code in picks the account every agent on the computer runs on: only its owner does that from afar
+  // (the sign-in page opens on the phone and its code comes back here).
   ["GET", "/api/doctor/claude-login", A],
-  ["POST|DELETE", "/api/doctor/claude-login", refused(COMPUTER_ONLY)],
-  ["POST", "/api/doctor/claude-login/code", refused(COMPUTER_ONLY)],
+  ["POST|DELETE", "/api/doctor/claude-login", "owner"],
+  ["POST", "/api/doctor/claude-login/code", "owner"],
   // Settings → System: reading the state is fine from anywhere; changing macOS permissions or the machine's tools
   // happens on the computer itself.
   ["GET", "/api/doctor/permissions", A],

@@ -71,6 +71,7 @@ import { HttpError, awakeTimeout, badRequest, conflict, hostnameOf, newId, notFo
 import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { hasCardsForAgent } from "../vault/cards";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
+import { noteClaudeSignedOut, noteClaudeWorks } from "../services/claudeLogin";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { projectOfChat } from "../services/projects";
@@ -187,7 +188,8 @@ const PAUSE_GRACE_MS = 8000;
 /** Continuations a Stop hook (`/goal`) forces in a row without a tool call before Godmode ends the run. */
 const GOAL_IDLE_LIMIT = 2;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
-const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth (?:token|session) (?:has )?expired|credit balance is too low/i;
+const AUTH_PROBLEM = /not logged in\b|please run \/login|invalid api key|authentication_error|oauth (?:token|session) (?:has )?expired|credit balance is too low/i;
+const CLAUDE_SIGNED_OUT = "Claude Code is not signed in (or the API key is invalid). Sign in to Claude again, or check the Anthropic API key in Integrations → API keys.";
 /** Built-in Claude Code tools of a dream run: reading and editing the memory files, nothing else. */
 const DREAM_TOOLS = "Read,Write,Edit,Glob,Grep";
 /**
@@ -1853,6 +1855,12 @@ function recapPrefix(job: Job): string {
   return `<godmode-context>\nThe previous Claude session of this conversation could not be restored. Recap of the most recent messages:\n\n${lines.join("\n\n")}\n</godmode-context>\n\n`;
 }
 
+/** Claude Code itself ended the run over its sign-in (not a tool's output or the agent's own words about a website). */
+function claudeSaidSignedOut(job: Job, attempt: Attempt): boolean {
+  const final = job.acc.final;
+  return AUTH_PROBLEM.test([final?.errors.join("\n") ?? "", final?.isError ? final.text : "", attempt.stderr].join("\n"));
+}
+
 function describeFailure(job: Job, attempt: Attempt): string {
   const final = job.acc.final;
   const stderr = attempt.stderr.trim();
@@ -1860,9 +1868,7 @@ function describeFailure(job: Job, attempt: Attempt): string {
   if (AUTH_PROBLEM.test(haystack) && job.model && modelProvider(job.model) === "zai") {
     return `Z.ai rejected the request for ${job.model} (API key invalid, or no balance or plan). Check the Z.ai API key under Integrations → API keys.`;
   }
-  if (AUTH_PROBLEM.test(haystack)) {
-    return "Claude Code is not signed in (or the API key is invalid). Run `claude` in a terminal and log in, or add an Anthropic API key in Settings.";
-  }
+  if (AUTH_PROBLEM.test(haystack)) return CLAUDE_SIGNED_OUT;
   if (final) {
     if (final.errors.length) return final.errors.join("; ");
     switch (final.subtype) {
@@ -2421,7 +2427,10 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (job.goalPaused) return { status: "succeeded", error: null };
     if (job.stalled) return { status: "failed", error: job.stalled };
     if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
-    if (answer && !limited) return { status: "succeeded", error: null };
+    if (answer && !limited) {
+      if (!glm) noteClaudeWorks();
+      return { status: "succeeded", error: null };
+    }
     // Claude's usage limit ended the run: it stands still until the limit has reset.
     const limit = limitOf(job, attempt);
     if (limit) {
@@ -2431,7 +2440,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       return { status: "paused", error: null };
     }
     const unsaid = limitUnsaid(job, attempt);
-    return { status: "failed", error: unsaid ? `Claude's ${unsaid.limit} is reached` : describeFailure(job, attempt) };
+    if (unsaid) return { status: "failed", error: `Claude's ${unsaid.limit} is reached` };
+    const error = describeFailure(job, attempt);
+    if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt)) {
+      void noteClaudeSignedOut({ apiKey: !!env.ANTHROPIC_API_KEY, since: job.spawnedAt }).catch((err) => log.warn("could not mark Claude Code signed out", err));
+    }
+    return { status: "failed", error };
   } finally {
     try {
       await logSink.end();

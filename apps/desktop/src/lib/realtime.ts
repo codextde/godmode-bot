@@ -245,6 +245,11 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries({ queryKey: qk.spend });
       refreshSoon(qc, qk.bootstrap);
       break;
+    case "claude.login":
+      qc.setQueryData(qk.claudeLogin, event.status);
+      // The checklist's "Claude login" row follows it.
+      qc.invalidateQueries({ queryKey: qk.doctor, exact: true });
+      break;
     case "message.created":
     case "message.updated":
       upsertMessage(qc, event.message);

@@ -1,12 +1,21 @@
 /**
  * One-click Claude sign-in: runs `claude auth login` in the background. The CLI opens the browser and finishes by
- * itself once the person approves; when the browser can't open (server, Docker) the UI shows the sign-in link and
- * takes the code the page shows.
+ * itself once the person approves; when the browser can't open (server, Docker, a phone) the UI shows the sign-in link
+ * and takes the code the page shows.
+ *
+ * A run that finds Claude Code signed out marks it here: `claude auth status` still says "logged in" when the stored
+ * sign-in ran out, so the mark is what the doctor, the banner and the chats go by until a sign-in or a run that works.
  */
+import { statSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { ClaudeLoginStatus } from "@godmode/shared";
+import { deleteMeta, getMeta, setMeta } from "../db";
+import { bus } from "../events/bus";
 import { logger } from "../log";
-import { childEnv } from "../util";
-import { resetDoctorCache, resolveClaudeBinary, stripAnsi, toolPath } from "./doctor";
+import { childEnv, now, parseJson } from "../util";
+import { resetDoctorCache, resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
+import { notify } from "./notifications";
 
 const log = logger("claude-login");
 
@@ -19,23 +28,131 @@ interface Session {
   output: string;
 }
 
+interface SignedOut {
+  at: string;
+  apiKey: boolean;
+  /** Claude Code's stored credentials when the run found it signed out; a sign-in in a terminal changes them. */
+  stamp: string;
+}
+
+const SIGNED_OUT_META = "claude.signed_out";
+const RECHECK_MS = 10_000;
+
 let session: Session | null = null;
 let status: ClaudeLoginStatus = { state: "idle", url: null, message: null };
 let endedAt = 0;
+let signedOut: SignedOut | null | undefined;
+let signedInAt: string | null = null;
+let recheckedAt = 0;
+/** Counts the moments Claude was seen working: a failure that started reporting before one of them is old news. */
+let works = 0;
+/** performance.now() of the last sign-in (by Godmode, or new credentials found). */
+let signedInPerf = Number.NEGATIVE_INFINITY;
 
 export function claudeLoginStatus(): ClaudeLoginStatus {
   // A finished sign-in is only news for a minute; after that a new "not logged in" (logout) starts fresh.
   if (!session && status.state !== "idle" && Date.now() - endedAt > 60_000) status = { state: "idle", url: null, message: null };
-  return status;
+  const out = claudeSignedOut();
+  return { ...status, signedOut: out && { at: out.at, apiKey: out.apiKey }, signedInAt };
+}
+
+/** Set while runs find Claude Code signed out (kept across restarts). */
+export function claudeSignedOut(): SignedOut | null {
+  if (signedOut === undefined) {
+    try {
+      signedOut = parseJson<SignedOut | null>(getMeta(SIGNED_OUT_META), null);
+    } catch {
+      return null;
+    }
+  }
+  return signedOut;
+}
+
+function changed() {
+  bus.emit({ type: "claude.login", status: claudeLoginStatus() });
+}
+
+function setSignedOut(next: SignedOut | null) {
+  signedOut = next;
+  try {
+    if (next) setMeta(SIGNED_OUT_META, JSON.stringify(next));
+    else deleteMeta(SIGNED_OUT_META);
+  } catch (err) {
+    log.warn("could not store the Claude sign-in state", err);
+  }
+  resetDoctorCache();
+  changed();
+}
+
+/** Changes whenever Claude Code writes its credentials (a sign-in, or a refresh that worked). */
+async function credentialsStamp(): Promise<string> {
+  const parts: string[] = [];
+  try {
+    parts.push(String(statSync(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), ".credentials.json")).mtimeMs));
+  } catch {
+    /* none on disk */
+  }
+  if (process.platform === "darwin") {
+    const res = await runCommand(["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials"], { timeoutMs: 10_000 }).catch(() => null);
+    const mdat = res?.code === 0 ? res.stdout.match(/"mdat"<timedate>=\S+/)?.[0] : undefined;
+    if (mdat) parts.push(mdat);
+  }
+  return parts.join("|");
+}
+
+/**
+ * A run ended because Claude Code is signed out (or its API key was refused): say so until it works again.
+ * `apiKey`: the run had an Anthropic API key · `since`: performance.now() when its Claude Code started.
+ */
+export async function noteClaudeSignedOut({ apiKey, since }: { apiKey: boolean; since?: number }): Promise<void> {
+  if (claudeSignedOut() || session) return;
+  // It started before the last sign-in: it still had the old one.
+  if (since !== undefined && since < signedInPerf) return;
+  const seen = works;
+  const stamp = await credentialsStamp();
+  if (claudeSignedOut() || session || works !== seen) return;
+  log.warn(`a run found Claude Code signed out${apiKey ? " (Anthropic API key refused)" : ""}`);
+  setSignedOut({ at: now(), apiKey, stamp });
+  if (apiKey) notify("warning", "Claude refused the API key", "Your agents can't work until the Anthropic API key works again.", "/integrations?tab=api-keys");
+  else notify("warning", "Claude is signed out", "Your agents can't work until you sign in to Claude again. It's one click in Godmode.", "/settings/system");
+}
+
+/** Claude answered a run: whatever found it signed out is over. */
+export function noteClaudeWorks(): void {
+  works++;
+  if (claudeSignedOut()) setSignedOut(null);
+}
+
+/** The Anthropic API key was changed or removed: a refusal of the old one is no news any more. */
+export function noteAnthropicKeyChanged(): void {
+  if (claudeSignedOut()?.apiKey) setSignedOut(null);
+}
+
+function signedIn() {
+  works++;
+  signedInPerf = performance.now();
+}
+
+/** Clears the mark when Claude Code's credentials changed since (signed in from a terminal, or refreshed by itself). */
+export async function recheckClaudeSignedOut(): Promise<void> {
+  const out = claudeSignedOut();
+  if (!out || session || Date.now() - recheckedAt < RECHECK_MS) return;
+  recheckedAt = Date.now();
+  const stamp = await credentialsStamp();
+  if (!stamp || stamp === out.stamp || claudeSignedOut() !== out) return;
+  log.info("Claude Code's credentials changed since a run found it signed out");
+  signedIn();
+  setSignedOut(null);
 }
 
 export function startClaudeLogin(): ClaudeLoginStatus {
-  if (session) return status;
+  if (session) return claudeLoginStatus();
   const bin = resolveClaudeBinary();
   if (!bin) {
     endedAt = Date.now();
     status = { state: "failed", url: null, message: "Claude Code is not installed yet. Install it first, then sign in." };
-    return status;
+    changed();
+    return claudeLoginStatus();
   }
   let proc: ReturnType<typeof Bun.spawn>;
   try {
@@ -49,7 +166,8 @@ export function startClaudeLogin(): ClaudeLoginStatus {
   } catch (err) {
     endedAt = Date.now();
     status = { state: "failed", url: null, message: err instanceof Error ? err.message : String(err) };
-    return status;
+    changed();
+    return claudeLoginStatus();
   }
   const current: Session = {
     proc,
@@ -59,6 +177,7 @@ export function startClaudeLogin(): ClaudeLoginStatus {
   session = current;
   status = { state: "waiting", url: null, message: null };
   log.info("claude auth login started");
+  changed();
 
   const read = async (stream: ReadableStream<Uint8Array>) => {
     const decoder = new TextDecoder();
@@ -70,7 +189,10 @@ export function startClaudeLogin(): ClaudeLoginStatus {
         current.output = (current.output + decoder.decode(value, { stream: true })).slice(-20_000);
         if (session === current && !status.url) {
           const url = stripAnsi(current.output).match(URL_RE)?.[0];
-          if (url) status = { ...status, url };
+          if (url) {
+            status = { ...status, url };
+            changed();
+          }
         }
       }
     } catch {
@@ -80,7 +202,7 @@ export function startClaudeLogin(): ClaudeLoginStatus {
   void Promise.all([read(proc.stdout as ReadableStream<Uint8Array>), read(proc.stderr as ReadableStream<Uint8Array>)]).then(async () => {
     finish(current, await proc.exited.catch(() => null));
   });
-  return status;
+  return claudeLoginStatus();
 }
 
 function finish(s: Session, code: number | null, message?: string) {
@@ -97,6 +219,10 @@ function finish(s: Session, code: number | null, message?: string) {
   if (code === 0 && !message) {
     log.info("claude auth login succeeded");
     status = { state: "done", url: null, message: null };
+    signedInAt = now();
+    signedIn();
+    if (claudeSignedOut()) setSignedOut(null);
+    else changed();
     return;
   }
   const tail = stripAnsi(s.output)
@@ -107,21 +233,23 @@ function finish(s: Session, code: number | null, message?: string) {
     .join(" ");
   log.warn(`claude auth login ended (${code ?? "killed"})`);
   status = { state: "failed", url: null, message: message ?? (tail || "The sign-in did not finish. Try again.") };
+  changed();
 }
 
 /** The code the sign-in page shows when the browser could not hand the login back by itself. */
 export function submitClaudeLoginCode(code: string): ClaudeLoginStatus {
   const s = session;
   const value = code.trim();
-  if (!s || !value) return status;
+  if (!s || !value) return claudeLoginStatus();
   const stdin = s.proc.stdin as { write(data: string): unknown; flush?(): unknown } | undefined;
   stdin?.write(`${value}\n`);
   stdin?.flush?.();
-  return status;
+  return claudeLoginStatus();
 }
 
 export function cancelClaudeLogin(): ClaudeLoginStatus {
   if (session) finish(session, null, "Cancelled.");
   status = { state: "idle", url: null, message: null };
-  return status;
+  changed();
+  return claudeLoginStatus();
 }

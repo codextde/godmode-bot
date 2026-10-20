@@ -12,7 +12,7 @@ import { listNotifications, markRead, clearNotifications, unreadCount } from "..
 import { audit, listAudit } from "../../services/audit";
 import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
-import { cancelClaudeLogin, claudeLoginStatus, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
+import { cancelClaudeLogin, claudeLoginStatus, recheckClaudeSignedOut, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPrivacySettings, resetPrivacy } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
@@ -104,7 +104,10 @@ export function registerSystemRoutes(app: Hono) {
     disableIdleTimeout(c);
     return c.json(await inTurn(() => installDependency(id as never)));
   });
-  app.get("/api/doctor/claude-login", (c) => c.json(claudeLoginStatus()));
+  app.get("/api/doctor/claude-login", async (c) => {
+    await recheckClaudeSignedOut();
+    return c.json(claudeLoginStatus());
+  });
   app.post("/api/doctor/claude-login", (c) => c.json(startClaudeLogin()));
   app.post("/api/doctor/claude-login/code", async (c) => {
     const { code } = await body(c, z.object({ code: z.string().min(1).max(2000) }));
