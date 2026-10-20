@@ -34,6 +34,7 @@ import {
   parseRunnerView,
 } from "@godmode/shared";
 import { getAgent, getDefaultAgentId } from "../agents/service";
+import type { CdpCookie } from "../browser/cdp";
 import { exportProfileCookies, resolveProfileForAgent } from "../browser/manager";
 import { all, deleteMeta, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { projectOfChat } from "../services/projects";
@@ -56,6 +57,7 @@ import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import * as vault from "../vault/vault";
 import { remoteRuns } from "./activeRuns";
+import { browserSignIns, cookiesFor } from "./browserSessions";
 import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
@@ -734,7 +736,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
     }
     if (opts.profileId && r.sync_browser === 1) {
       try {
-        cookies = await copyCookies(id, l, opts.profileId);
+        cookies = await copyCookies(r, l, opts.profileId);
       } catch (err) {
         warnings.push(`Couldn't copy the browser sessions to ${r.name}: ${message(err)}`);
       }
@@ -771,15 +773,27 @@ async function exchangeMemory(runnerId: string, l: RemoteLink, name: string, age
   return changedLocal || changedRemote;
 }
 
-/** The sessions (cookies) of a browser profile, copied when they changed since the last copy to this runner. */
-async function copyCookies(runnerId: string, l: RemoteLink, profileId: string): Promise<boolean> {
-  const cookies = await exportProfileCookies(profileId);
+/**
+ * The sessions (cookies) of a browser profile that go to this runner or device (browserSessions.ts), copied when they
+ * changed since the last copy there. `read`: tests.
+ */
+export async function copyCookies(
+  target: { id: string; kind: RunnerKind },
+  l: Pick<RemoteLink, "json">,
+  profileId: string,
+  read: (profileId: string) => Promise<CdpCookie[]> = exportProfileCookies,
+): Promise<boolean> {
+  const policy = browserSignIns();
+  // Each device signs in by itself: its profile's browser isn't even started for this.
+  if (target.kind === "device" && policy === "own") return false;
+  const { cookies, mode } = cookiesFor(target.kind, policy, await read(profileId));
+  if (!cookies.length) return false;
   const digest = createHash("sha256")
-    .update(JSON.stringify(cookies.map((c) => [c.domain, c.path, c.name, c.value, c.expires]).sort()))
+    .update(JSON.stringify([mode, ...cookies.map((c) => [c.domain, c.path, c.name, c.value, c.expires]).sort()]))
     .digest("hex");
-  const key = `link.cookies.${runnerId}.${profileId}`;
-  if (getMeta(key) === digest || !cookies.length) return false;
-  await l.json("POST", `/api/link/browser/${encodeURIComponent(profileId)}/cookies`, { cookies }, { timeoutMs: SYNC_TIMEOUT_MS });
+  const key = `link.cookies.${target.id}.${profileId}`;
+  if (getMeta(key) === digest) return false;
+  await l.json("POST", `/api/link/browser/${encodeURIComponent(profileId)}/cookies`, { cookies, mode }, { timeoutMs: SYNC_TIMEOUT_MS });
   setMeta(key, digest);
   return true;
 }
