@@ -178,6 +178,13 @@ describe("between two computers", () => {
     expect(pendingFor("rnr_b")).toBe(0);
   });
 
+  test("an agent whose folder name isn't safe never lands", () => {
+    use(b);
+    const evil: ReplicaChange = { t: "agents", k: "agt_evil", at: T(20), row: { id: "agt_evil", name: "Evil", slug: "../../outside", created_at: T(0), updated_at: T(0) } };
+    expect(applyChanges("rnr_a", [evil], { peerWinsTies: true }).failed).toBe(1);
+    expect(get("SELECT id FROM agents WHERE id = 'agt_evil'")).toBeNull();
+  });
+
   test("the setup can be left out (a secondary gets it as the snapshot)", () => {
     use(a);
     run("INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('wsp_1', 'Shop', 'shop', ?, ?)", T(0), T(0));

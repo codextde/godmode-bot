@@ -17,7 +17,7 @@ import { all, get, getDb, getMeta, run as sql, setMeta, tx } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { now } from "../util";
-import { SETUP_TABLES } from "./snapshot";
+import { SETUP_TABLES, unsafe } from "./snapshot";
 
 const log = logger("replica");
 
@@ -475,6 +475,13 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   }
   for (const [i, k] of t.key.entries()) row[k] = parts[i]!;
   if (t.only && row[t.only.column] !== t.only.value) return;
+  // Ids and names that become folder names here are checked like the setup copy checks them.
+  const problem = unsafe(t.table, row);
+  if (problem) {
+    log.warn(problem, { peer });
+    result.failed++;
+    return;
+  }
   const missing = missingParent(row, t.table, incoming);
   if (missing) {
     sql(

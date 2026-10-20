@@ -211,7 +211,7 @@ export function appliedDigest(): string | null {
 /* ------------------------------------------------------------------ */
 
 /** Why a row can't be copied: its slug or id becomes a folder name on the runner (an agent's id does too, for its browser files). */
-function unsafe(table: string, row: Record<string, unknown>): string | null {
+export function unsafe(table: string, row: Record<string, unknown>): string | null {
   const label = typeof row.name === "string" && row.name ? row.name : String(row.id);
   if (table === "agents" && !(typeof row.slug === "string" && SAFE_ID.test(row.slug) && SAFE_ID.test(String(row.id)))) {
     return `Skipped agent "${label}": its folder name isn't safe.`;
