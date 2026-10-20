@@ -27,6 +27,8 @@ import { auditSettings } from "../services/agentSettings";
 import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/settings";
 import { badRequest, parseJson } from "../util";
 import { decrypt, sha256 } from "../vault/crypto";
+import { isSecondary, primaryRunnerId } from "./group";
+import { asPeer, pendingKeys } from "./replica";
 import * as vault from "../vault/vault";
 
 const log = logger("snapshot");
@@ -264,7 +266,13 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
     touched.get(spec.table)!.add(key);
   };
 
-  tx(() => {
+  // On a secondary of a device group: rows it changed itself that its primary hasn't taken yet stay as they are (the
+  // primary takes them and sends them back with its next copy), and what this copy writes is the primary's.
+  const primary = isSecondary() ? primaryRunnerId() : null;
+  const mineNow = (table: string) => (primary ? pendingKeys(primary, table) : new Set<string>());
+  const writing = <T>(fn: () => T): T => (primary ? asPeer(primary, null, fn) : fn());
+
+  writing(() => tx(() => {
     // Rows arrive children first; foreign keys are verified at COMMIT.
     getDb().run("PRAGMA defer_foreign_keys = ON");
     // Never pull an agent out from under a run.
@@ -297,6 +305,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
 
       const keys = new Set<string>();
       const rows: Record<string, Value>[] = [];
+      const ownChanges = mineNow(spec.table);
       for (const raw of incoming as unknown[]) {
         if (!isObject(raw) || typeof raw[pk] !== "string" || !raw[pk]) continue;
         if (spec.only && raw[spec.only.column] !== spec.only.value) continue;
@@ -312,6 +321,10 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
       for (const local of all<Record<string, unknown>>(`SELECT * FROM ${q(spec.table)}${filter}`, ...(spec.only ? [spec.only.value] : []))) {
         const key = String(local[pk]);
         if (keys.has(key)) continue;
+        if (ownChanges.has(key)) {
+          pending = true;
+          continue;
+        }
         if (spec.table === "agents" && busy.has(key)) {
           pending = true;
           warnings.push(
@@ -335,6 +348,10 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
 
       for (const row of rows) {
         const key = String(row[pk]);
+        if (ownChanges.has(key)) {
+          pending = true;
+          continue;
+        }
         if (spec.table === "agents") {
           const holder = get<{ name: string }>("SELECT name FROM agents WHERE slug = ? AND id != ?", String(row.slug), key);
           if (holder) {
@@ -398,7 +415,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
     }
     // A runner is set up by pairing it; nobody clicks through onboarding there.
     store("onboardingComplete", "true");
-  });
+  }));
 
   if (dek != null) {
     await vault.adoptKey(dek, { kdf: kdf as string, wrappedDek: wrappedDek as string, canary: canary ?? null });

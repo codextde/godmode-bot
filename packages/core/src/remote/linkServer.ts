@@ -25,7 +25,7 @@ import { newId, now } from "../util";
 import * as vault from "../vault/vault";
 import { LinkError, SecureChannel, type LinkPeer, type Transport } from "./channel";
 import { canonicalKey, controllerLookupId } from "./crypto";
-import { loadIdentity } from "./identity";
+import { loadIdentity, machineId } from "./identity";
 import { consumePairing, lookupPairing } from "./pairing";
 import { knownExecutableDigest, selfUpdateStatus } from "./selfUpdate";
 import { appliedDigest } from "./snapshot";
@@ -149,7 +149,16 @@ export function runnerInfo(): RunnerInfo {
     vault: { initialized: v.initialized, unlocked: v.unlocked },
     configDigest: appliedDigest(),
     activeRuns: listActiveRuns().length,
+    phone: phoneInfo?.() ?? null,
+    machineId: machineId(),
   };
+}
+
+let phoneInfo: (() => RunnerInfo["phone"]) | null = null;
+
+/** Where phones reach this computer (remote/devices.ts tells, for the other computers of its group). */
+export function setPhoneInfo(fn: (() => RunnerInfo["phone"]) | null): void {
+  phoneInfo = fn;
 }
 
 /** Paired controllers and whether they are connected now. */

@@ -110,11 +110,18 @@ function triggerSql(t: ReplicaTable): string[] {
   const columns = columnsOf(t.table);
   const shared = columns.filter((c) => !t.own.includes(c) && c !== "updated_at");
   const only = (alias: "NEW" | "OLD") => (t.only ? ` AND ${alias}.${q(t.only.column)} = '${t.only.value.replace(/'/g, "''")}'` : "");
+  // An update and an insert instead of INSERT OR REPLACE: a foreign key action (ON DELETE SET NULL) runs the trigger
+  // with its own conflict handling, and a replace would fail there.
+  const key = (alias: "NEW" | "OLD") => keyExpr(t, alias);
   const note = (alias: "NEW" | "OLD", deleted: 0 | 1) => `
   UPDATE replica_seq SET n = n + 1 WHERE id = 1;
-  INSERT OR REPLACE INTO replica_rows (tbl, pk, seq, at, deleted, origin)
-  VALUES ('${t.table}', ${keyExpr(t, alias)}, (SELECT n FROM replica_seq WHERE id = 1),
-          COALESCE((SELECT at FROM replica_ctx WHERE id = 1), ${STAMP}), ${deleted}, (SELECT origin FROM replica_ctx WHERE id = 1));`;
+  UPDATE replica_rows SET seq = (SELECT n FROM replica_seq WHERE id = 1), at = COALESCE((SELECT at FROM replica_ctx WHERE id = 1), ${STAMP}),
+         deleted = ${deleted}, origin = (SELECT origin FROM replica_ctx WHERE id = 1)
+   WHERE tbl = '${t.table}' AND pk = ${key(alias)};
+  INSERT INTO replica_rows (tbl, pk, seq, at, deleted, origin)
+  SELECT '${t.table}', ${key(alias)}, (SELECT n FROM replica_seq WHERE id = 1), COALESCE((SELECT at FROM replica_ctx WHERE id = 1), ${STAMP}),
+         ${deleted}, (SELECT origin FROM replica_ctx WHERE id = 1)
+   WHERE NOT EXISTS (SELECT 1 FROM replica_rows WHERE tbl = '${t.table}' AND pk = ${key(alias)});`;
   const changed = shared.map((c) => `OLD.${q(c)} IS NOT NEW.${q(c)}`).join(" OR ") || "0";
   const name = (op: string) => q(`replica_${t.table}_${op}`);
   return [
@@ -127,14 +134,15 @@ END`,
   ];
 }
 
-let ensured = false;
+/** The database the triggers were checked for (tests open several one after another). */
+let ensured: object | null = null;
 
 /**
  * Keep the triggers in step with the schema (a later migration adds a column: its changes are shared too) and note the
  * rows that were there before. Cheap when nothing changed.
  */
 export function ensureReplica(): void {
-  if (ensured) return;
+  if (ensured === getDb()) return;
   if (!exists("replica_rows")) return;
   const tables = replicaTables().filter((t) => exists(t.table));
   const wanted = tables.flatMap(triggerSql);
@@ -149,7 +157,7 @@ export function ensureReplica(): void {
     });
   }
   if (getMeta("replica.backfilled") !== "1") backfill(tables);
-  ensured = true;
+  ensured = getDb();
 }
 
 /** Rows from before the replica: known, as old as can be, so any real change wins over them. */
@@ -176,7 +184,7 @@ function backfill(tables: ReplicaTable[]): void {
 
 /** Tests open several databases one after another. */
 export function resetReplicaCache(): void {
-  ensured = false;
+  ensured = null;
   fkCache.clear();
   columnCache.clear();
 }
@@ -377,8 +385,8 @@ function missingParent(row: Record<string, Value>, table: string, incoming: Set<
 }
 
 /** A row's last known change here. */
-function localStamp(table: string, pk: string): { at: string; origin: string | null } | null {
-  return get<{ at: string; origin: string | null }>("SELECT at, origin FROM replica_rows WHERE tbl = ? AND pk = ?", table, pk);
+function localStamp(table: string, pk: string): { at: string; origin: string | null; deleted: number } | null {
+  return get<{ at: string; origin: string | null; deleted: number }>("SELECT at, origin, deleted FROM replica_rows WHERE tbl = ? AND pk = ?", table, pk);
 }
 
 function emptyResult(): ApplyResult {
@@ -425,7 +433,11 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   const parts = keyParts(t, c.k);
   if (!parts.length) return;
   const local = localStamp(t.table, c.k);
-  if (local && (local.at > c.at || (local.at === c.at && !opts.peerWinsTies && local.origin !== peer))) {
+  // The newer change wins. A tie: a deletion wins it (a row made and deleted in the same moment stays deleted), then
+  // the primary's change.
+  const tie = !!local && local.at === c.at;
+  const keep = !!local && (local.at > c.at || (tie && !c.d && (local.deleted === 1 || (local.origin !== peer && !opts.peerWinsTies))));
+  if (keep) {
     result.kept++;
     return;
   }

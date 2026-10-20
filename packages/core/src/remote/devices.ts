@@ -27,6 +27,10 @@ import {
   type MessageBlock,
   type Message,
   type MoveChatInput,
+  type BrowserSignIns,
+  type MobilePeer,
+  type RetireRunnerResult,
+  type RunnerInfo,
   type Run,
   type ServerEvent,
 } from "@godmode/shared";
@@ -37,7 +41,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { computerName } from "../mobile/devices";
 import { activeRunForConversation, cancelRun, listActiveRuns, waitForRun } from "../runner/runner";
-import { setForwarding, welcomeAll, type WsData } from "../server/ws";
+import { setForwarding, setLinkEventFilter, welcomeAll, type WsData } from "../server/ws";
 import { audit } from "../services/audit";
 import {
   type RunnerChatState,
@@ -62,10 +66,24 @@ import { remoteRuns } from "./activeRuns";
 import { canonicalKey } from "./crypto";
 import { readHandover, writeSession, writeTranscript } from "./handover";
 import { loadIdentity } from "./identity";
-import { forgetController, linkServerPort, startLinkServer, stopLinkServer } from "./linkServer";
-import { adoptChat, importChat } from "./mirror";
+import { forgetController, linkServerPort, runnerInfo, setPhoneInfo, startLinkServer, stopLinkServer } from "./linkServer";
+import { adoptChat, catchUp, fetchConversation, importChat } from "./mirror";
 import { createRunnerCode } from "./pairing";
-import { clearGroup, forwarding, groupRole, isPrimary, isSecondary, onGroupChange, primaryOnline, primaryRunnerId, setGroup, setPrimaryUp } from "./group";
+import {
+  clearGroup,
+  forwarding,
+  groupRole,
+  isPrimary,
+  isSecondary,
+  onGroupChange,
+  primaryOnline,
+  primaryRunnerId,
+  runsShared,
+  setGroup,
+  setPrimaryUp,
+  standingIn,
+  standingInSince,
+} from "./group";
 import {
   getRunner,
   link,
@@ -74,11 +92,23 @@ import {
   moveChatHere,
   pairWithCode,
   prepareRemoteMessage,
+  releaseChatsNow,
   removeRunner,
+  runnerExec,
+  runnerInfoOf,
   runnerOfConversation,
   runnerRow,
   setDeviceLinkHooks,
 } from "./runners";
+import { browserSignIns, setBrowserSignIns } from "./browserSessions";
+import { forgetPeer, pendingFor, replicaSeq } from "./replica";
+import { lastPulled as lastPulledAt, pendingChanges, pullFrom, replicaHint, startReplicaSync, stopReplicaSync } from "./replicaSync";
+import { endStandIn, forgetStandIn, primaryIsBack, primaryLeftNow, primaryWentAway, setStandInHooks, setStandInSettings, standInSettings, standInState, type TakeOver } from "./standIn";
+import { SERVICE_LABEL } from "./launchd";
+import { runMissedSince, setScheduleSettle } from "../scheduler/scheduler";
+import { instanceInfo } from "../mobile/devices";
+import { mobileUrls } from "../mobile/access";
+import { getSettings } from "../services/settings";
 import type { LinkState } from "./linkClient";
 
 const log = logger("devices");
@@ -90,6 +120,11 @@ const FAILOVER_MINUTES_META = "link.group.failoverMinutes";
 const FAILOVER_DEFAULT_MINUTES = 3;
 const ONLINE_WAIT_MS = 20_000;
 const STOP_WAIT_MS = 45_000;
+const HAND_BACK_WAIT_MS = 30_000;
+/** A secondary's copy of its primary's chats has the messages of this many days. */
+const PRIMARY_MESSAGES_DAYS = 30;
+const WAKE_GAP_MS = 90_000;
+const SETTLE_MS = 45_000;
 
 interface LinkHandler {
   app: Hono;
@@ -117,22 +152,40 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
   forwardEvent = deliver;
   setDeviceLinkHooks({
     primaryEvent: (event) => {
-      // The primary's view of the group is its own: this computer tells its windows about it itself.
-      if (event.type === "devices.updated") return;
+      // The primary's view of the group is its own: this computer tells its windows about it itself (and keeps the
+      // primary's settings for while it is away).
+      if (event.type === "devices.updated") return emitGroupSoon();
       if (event.type === "runner.updated" || event.type === "runner.deleted" || event.type === "runner.paired") emitGroupSoon();
       forwardEvent?.(event);
     },
     primaryState: (state) => {
       primaryError = state.state === "online" ? null : state.error;
-      setPrimaryUp(state.state === "online");
+      if (state.state === "online") primaryIsBack();
+      else {
+        setPrimaryUp(false);
+        primaryWentAway(primaryLastSeen());
+      }
       emitGroupSoon();
     },
     deviceState: (id, state) => {
-      if (state.state === "online") cancelFailover(id);
+      if (state.state === "online") {
+        cancelFailover(id);
+        linkUpAt.set(id, Date.now());
+      } else linkUpAt.delete(id);
       emitGroupSoon();
     },
-    deviceLost: (id, conversations) => scheduleFailover(id, conversations),
+    deviceLost: (id, conversations) => {
+      if (isPrimary()) scheduleFailover(id, conversations);
+    },
+    deviceConnected: (id) => (isSecondary() && id === primaryRunnerId() ? primaryArrived(id) : deviceArrived(id)),
+    replicaHint: (id) => replicaHint(id),
   });
+  setStandInHooks({ takeOver, changed: emitGroupSoon });
+  startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id) });
+  setLinkEventFilter(echoToPrimary);
+  setScheduleSettle(settled);
+  setPhoneInfo(() => (getSettings().mobile.enabled ? { instance: instanceInfo(), urls: mobileUrls() } : null));
+  startWakeWatch();
   let wasForwarding = forwarding();
   offGroup = onGroupChange(() => {
     emitGroupSoon();
@@ -166,6 +219,11 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
     welcome: () => primaryLink().json<{ activeRunIds: string[]; events: ServerEvent[] }>("GET", "/api/link/devices/welcome", undefined, { timeoutMs: 15_000 }),
   });
   setRemoteSender(async (conversationId, owner, input) => {
+    // Its computer is away and this one runs the group's work now: the chat continues here.
+    if (awayDevice(owner) && runsShared()) {
+      await continueHere(conversationId, { resume: false });
+      return sendMessage(conversationId, { content: input.content, prompt: input.prompt, marker: input.marker, trigger: input.trigger as never });
+    }
     const result = await sendThere(conversationId, owner, input);
     return { message: getMessage(result.message.id), run: getRun(result.run.id) };
   });
@@ -180,12 +238,22 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
       }
     })();
   });
-  if (groupRole()) listen();
+  if (groupRole()) {
+    listen();
+    // Started while the primary is away (or before its link is up): the stand-in clock starts now.
+    if (isSecondary() && !primaryOnline()) primaryWentAway(primaryLastSeen());
+  }
 }
 
 export function stopDevices(): void {
   for (const id of [...failovers.keys()]) cancelFailover(id);
   setDeviceLinkHooks(null);
+  setStandInHooks(null);
+  stopReplicaSync();
+  setLinkEventFilter(null);
+  setScheduleSettle(null);
+  setPhoneInfo(null);
+  stopWakeWatch();
   setForwarding(null);
   setRemoteSender(null);
   setRemoteAnswerer(null);
@@ -195,6 +263,252 @@ export function stopDevices(): void {
   groupTimer = null;
   handler = null;
   forwardEvent = null;
+}
+
+/** Godmode quits here: the other computers of the group take over at once instead of waiting to see if it's back. */
+export async function sayGoodbye(): Promise<void> {
+  if (!groupRole()) return;
+  const peers = isSecondary() ? [primaryRunnerId()].filter((x): x is string => !!x) : deviceRows().map((d) => d.id);
+  await Promise.all(
+    peers.map(async (id) => {
+      try {
+        const l = link(id);
+        if (l.state.state === "online") await l.json("POST", "/api/link/devices/away", {}, { timeoutMs: 1_500 });
+      } catch {
+        /* it hears it from the dropped link instead */
+      }
+    }),
+  );
+}
+
+/** Over the link: the other computer goes away now. */
+export function peerAway(peer: string): void {
+  if (isSecondary() && peer === primaryRunnerId()) primaryLeftNow();
+  else if (isPrimary()) goneNow.add(peer);
+}
+
+/* ------------------------------------------------------------------ */
+/* Phones                                                               */
+/* ------------------------------------------------------------------ */
+
+function phoneKey(id: string): string {
+  return `link.group.phone.${id}`;
+}
+
+/** Where phones reach another computer of the group: what it said at its last connect, kept for while it is away. */
+function phoneOf(id: string): RunnerInfo["phone"] | null {
+  const told = runnerInfoOf(id)?.phone;
+  if (told !== undefined) {
+    const raw = told ? JSON.stringify(told) : null;
+    if (raw !== getMeta(phoneKey(id))) {
+      if (raw) setMeta(phoneKey(id), raw);
+      else deleteMeta(phoneKey(id));
+    }
+    return told;
+  }
+  return parseJson<RunnerInfo["phone"] | null>(getMeta(phoneKey(id)), null);
+}
+
+/**
+ * The computers of the group a phone can talk to (GET /api/mobile/me), this one first: a phone paired with one of them
+ * works with all of them, so it reaches another when one is away.
+ */
+export function phonePeers(): MobilePeer[] {
+  const role = groupRole();
+  if (!role) return [];
+  const peers: MobilePeer[] = [];
+  if (getSettings().mobile.enabled) peers.push({ instance: instanceInfo(), urls: mobileUrls(), role });
+  const ids = role === "secondary" ? [primaryRunnerId()].filter((x): x is string => !!x) : deviceRows().map((d) => d.id);
+  for (const id of ids) {
+    const phone = phoneOf(id);
+    if (phone?.urls.length) peers.push({ instance: phone.instance, urls: phone.urls, role: role === "secondary" ? "primary" : "secondary" });
+  }
+  return peers;
+}
+
+/* ------------------------------------------------------------------ */
+/* Arriving                                                             */
+/* ------------------------------------------------------------------ */
+
+/** When each device's link came up last (ms): late ticks wait until what it changed meanwhile is here. */
+const linkUpAt = new Map<string, number>();
+/** Devices that said goodbye: their work continues here without the grace time. */
+const goneNow = new Set<string>();
+
+function primaryLastSeen(): string | null {
+  const pid = primaryRunnerId();
+  return pid ? (runnerRow(pid)?.last_seen_at ?? null) : null;
+}
+
+/** A device of the group whose link is down. */
+function awayDevice(id: string): boolean {
+  const r = runnerRow(id);
+  if (!r || r.kind !== "device") return false;
+  try {
+    return link(id).state.state !== "online";
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * On the primary: a secondary connected. What it changed while it was away (standing in, or just on its own) is taken
+ * first, so the setup copied there next already has it.
+ */
+async function deviceArrived(id: string): Promise<void> {
+  goneNow.delete(id);
+  await pullFrom(id);
+}
+
+/**
+ * On a secondary: its primary is there again. Its changes come here, what changed here goes there, chats this computer
+ * took over are handed back as this computer's, the shared work stops here, and then the app shows the primary again.
+ */
+async function primaryArrived(id: string): Promise<void> {
+  try {
+    await pullFrom(id);
+  } catch (err) {
+    log.info("could not take the primary's changes yet", { error: err instanceof Error ? err.message : String(err) });
+  }
+  const since = standingInSince();
+  if (since) await handBack(id, since);
+  if (link(id).state.state === "online") setPrimaryUp(true);
+  emitGroupSoon();
+  void catchUpWithPrimary(id);
+}
+
+async function handBack(id: string, since: string): Promise<void> {
+  await releaseChatsNow(id);
+  // Tells the primary there is something to pull; then wait until it has it (it pulls when its link to here is up).
+  bus.emit({ type: "replica.changed", seq: replicaSeq() });
+  const end = Date.now() + HAND_BACK_WAIT_MS;
+  while (pendingFor(id) > 0 && Date.now() < end && link(id).state.state === "online") await sleep(250);
+  const left = pendingFor(id);
+  endStandIn();
+  const minutes = Math.max(1, Math.round((Date.now() - Date.parse(since)) / 60_000));
+  log.info("the primary is back; standing in ends", { minutes, pending: left });
+  notify(
+    "info",
+    `${primaryName()} is back`,
+    `${computerName()} stood in for ${minutes === 1 ? "a minute" : `${minutes} minutes`}. ${left ? "What changed here goes over in a moment." : "Everything that changed here is there now."}`,
+    "/settings/devices",
+  );
+}
+
+/** A copy of the primary's chats, for while it is away (messages without screenshots; old chats without messages). */
+async function catchUpWithPrimary(id: string): Promise<void> {
+  try {
+    await catchUp(id, link(id), { lite: true, messagesSince: new Date(Date.now() - PRIMARY_MESSAGES_DAYS * 86_400_000).toISOString() });
+  } catch (err) {
+    log.info("could not copy the primary's chats", { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
+/** A change of the shared data points at a chat that isn't here yet. */
+async function fetchChatFrom(peer: string, conversationId: string): Promise<void> {
+  if (fetching.has(conversationId)) return;
+  fetching.add(conversationId);
+  try {
+    const l = link(peer);
+    if (l.state.state !== "online") return;
+    if (await fetchConversation(peer, l, conversationId, { lite: isSecondary() && peer === primaryRunnerId() })) replicaHint(peer);
+  } finally {
+    fetching.delete(conversationId);
+  }
+}
+
+const fetching = new Set<string>();
+
+/**
+ * Events this secondary only keeps a copy of (its primary's chats) don't go back to the primary: it has them. Its own
+ * chats' events still go there — the primary's app shows them.
+ */
+function echoToPrimary(peer: string, event: ServerEvent): boolean {
+  const pid = isSecondary() ? primaryRunnerId() : null;
+  if (!pid || controllerOf(pid) !== peer) return false;
+  const chat = chatOf(event);
+  return !!chat && get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", chat)?.runner_id === pid;
+}
+
+const controllers = new Map<string, string | null>();
+
+/** The controller entry (link_controllers) of a paired computer, by its key. */
+function controllerOf(runnerId: string): string | null {
+  if (controllers.has(runnerId)) return controllers.get(runnerId)!;
+  const key = runnerRow(runnerId)?.public_key;
+  let found: string | null = null;
+  if (key) {
+    for (const c of all<{ id: string; public_key: string }>("SELECT id, public_key FROM link_controllers")) {
+      try {
+        if (canonicalKey(c.public_key) === canonicalKey(key)) found = c.id;
+      } catch {
+        /* a damaged row never matches */
+      }
+    }
+  }
+  controllers.set(runnerId, found);
+  return found;
+}
+
+function chatOf(event: ServerEvent): string | null {
+  switch (event.type) {
+    case "conversation.updated":
+      return event.conversation.id;
+    case "message.created":
+    case "message.updated":
+      return event.message.conversationId;
+    case "run.started":
+    case "run.paused":
+    case "run.finished":
+      return event.run.conversationId;
+    case "run.delta":
+    case "run.activity":
+      return get<{ conversation_id: string }>("SELECT conversation_id FROM runs WHERE id = ?", event.runId)?.conversation_id ?? null;
+    default:
+      return null;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Late ticks after a sleep                                             */
+/* ------------------------------------------------------------------ */
+
+let wakeTimer: ReturnType<typeof setInterval> | null = null;
+let lastBeat = Date.now();
+let wokeAt = Date.now();
+
+/** A Mac that slept fires the timers it missed at once: those ticks wait until the group's copies are in. */
+function startWakeWatch(): void {
+  lastBeat = Date.now();
+  wakeTimer ??= setInterval(() => {
+    const t = Date.now();
+    if (t - lastBeat > WAKE_GAP_MS) wokeAt = t;
+    lastBeat = t;
+  }, 5_000);
+  wakeTimer.unref?.();
+}
+
+function stopWakeWatch(): void {
+  if (wakeTimer) clearInterval(wakeTimer);
+  wakeTimer = null;
+}
+
+/**
+ * Before a late automation tick on the primary: every computer of the group that is (or comes) online within a short
+ * while has been pulled since its link came up, so a run another one made while this one slept is known.
+ */
+async function settled(): Promise<void> {
+  if (!isPrimary()) return;
+  const end = Math.max(wokeAt + SETTLE_MS, Date.now() + 2_000);
+  for (;;) {
+    const waiting = deviceRows().filter((d) => {
+      const up = linkUpAt.get(d.id);
+      if (!up) return Date.now() < wokeAt + SETTLE_MS;
+      return (lastPulledAt(d.id) ?? 0) < up;
+    });
+    if (!waiting.length || Date.now() > end) return;
+    await sleep(500);
+  }
 }
 
 /** The other computers of the group reach this one at its link port. */
@@ -245,9 +559,56 @@ export function primaryLink() {
 }
 
 /** The group as the primary sees it: itself first, then every other computer. Also what secondaries ask for. */
+interface GroupSettings {
+  failover: boolean;
+  failoverMinutes: number;
+  standInEnabled: boolean;
+  standInMinutes: number;
+  browserSignIns: BrowserSignIns;
+}
+
+function groupSettings(): GroupSettings {
+  return { ...failoverSettings(), ...standInSettings(), browserSignIns: browserSignIns() };
+}
+
 /** What a secondary's Settings → Devices shows of the group (GET /api/link/devices/list). */
-export function groupForSecondary(): { devices: GroupDevice[]; failover: boolean; failoverMinutes: number } {
-  return { devices: primaryView(), ...failoverSettings() };
+export function groupForSecondary(): { devices: GroupDevice[] } & GroupSettings {
+  return { devices: primaryView(), ...groupSettings() };
+}
+
+/** A secondary keeps the primary's group settings for while it is away (written quietly: no event of its own). */
+function keepGroupSettings(remote: Partial<GroupSettings>): void {
+  const put = (key: string, value: string | undefined) => {
+    if (value !== undefined && getMeta(key) !== value) setMeta(key, value);
+  };
+  put(FAILOVER_META, remote.failover === undefined ? undefined : remote.failover ? "1" : "0");
+  put(FAILOVER_MINUTES_META, remote.failoverMinutes === undefined ? undefined : String(remote.failoverMinutes));
+  put("link.group.standIn", remote.standInEnabled === undefined ? undefined : remote.standInEnabled ? "1" : "0");
+  put("link.group.standInMinutes", remote.standInMinutes === undefined ? undefined : String(remote.standInMinutes));
+  put("link.group.browserSignIns", remote.browserSignIns);
+}
+
+/** The group's settings, on the primary. */
+export function setGroupSettings(input: Partial<GroupSettings>): void {
+  if (input.failover !== undefined || input.failoverMinutes !== undefined) setFailover({ failover: input.failover, failoverMinutes: input.failoverMinutes });
+  if (input.standInEnabled !== undefined || input.standInMinutes !== undefined) setStandInSettings({ standInEnabled: input.standInEnabled, standInMinutes: input.standInMinutes });
+  if (input.browserSignIns !== undefined) setBrowserSignIns(input.browserSignIns);
+  emitGroupSoon();
+}
+
+/** The same computer paired twice: a runner from an older setup on the computer this device runs on. */
+function runnerTwin(device: { machineId: string | null | undefined; hostname: string | null }): string | null {
+  const host = (h: string | null | undefined) => (h ?? "").toLowerCase().replace(/\.local$/, "");
+  for (const r of listRunners()) {
+    if (r.kind === "device") continue;
+    const info = runnerInfoOf(r.id);
+    if (device.machineId && info?.machineId) {
+      if (info.machineId === device.machineId) return r.id;
+      continue;
+    }
+    if (device.hostname && host(r.hostname) === host(device.hostname)) return r.id;
+  }
+  return null;
 }
 
 export function primaryView(): GroupDevice[] {
@@ -264,8 +625,8 @@ export function primaryView(): GroupDevice[] {
     activeRuns: listActiveRuns().length,
     conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id IS NULL")?.c ?? 0,
     standingIn: false,
-    fullDiskAccess: null,
-    runnerTwin: null,
+    fullDiskAccess: runnerInfo().fullDiskAccess ?? null,
+    runnerTwin: runnerTwin({ machineId: runnerInfo().machineId, hostname: runnerInfo().hostname }),
   };
   const others = listRunners()
     .filter((r) => r.kind === "device")
@@ -283,8 +644,8 @@ export function primaryView(): GroupDevice[] {
         activeRuns: r.activeRuns,
         conversations: r.conversations,
         standingIn: false,
-        fullDiskAccess: null,
-        runnerTwin: null,
+        fullDiskAccess: runnerInfoOf(r.id)?.fullDiskAccess ?? null,
+        runnerTwin: runnerTwin({ machineId: runnerInfoOf(r.id)?.machineId, hostname: r.hostname }),
       }),
     );
   return [self, ...others];
@@ -296,12 +657,9 @@ export async function deviceGroup(): Promise<DeviceGroup> {
   const base = {
     port: linkServerPort(),
     defaultRunOn: role ? defaultRunOn : null,
-    ...failoverSettings(),
-    standInEnabled: true,
-    standInMinutes: 2,
-    standIn: { state: "off" as const, since: null, takesOverAt: null },
-    pendingChanges: 0,
-    browserSignIns: "own" as const,
+    ...groupSettings(),
+    standIn: standInState(),
+    pendingChanges: role ? pendingChanges() : 0,
   };
   if (!role) return { ...base, role: null, primaryName: null, primaryOnline: false, primaryError: null, selfId: null, devices: [] };
   if (role === "primary") {
@@ -311,10 +669,11 @@ export async function deviceGroup(): Promise<DeviceGroup> {
   let devices: GroupDevice[] | null = null;
   if (forwarding()) {
     try {
-      const remote = await primaryLink().json<{ devices: GroupDevice[]; failover: boolean; failoverMinutes: number }>("GET", "/api/link/devices/list", undefined, { timeoutMs: 10_000 });
+      const remote = await primaryLink().json<{ devices: GroupDevice[] } & Partial<GroupSettings>>("GET", "/api/link/devices/list", undefined, { timeoutMs: 10_000 });
       // The primary is called what this computer calls it (its row here can be renamed).
       devices = remote.devices.map((d) => ({ ...d, self: d.id !== null && d.id === selfId, ...(d.id === null ? { name: primaryName() } : {}) }));
-      Object.assign(base, { failover: remote.failover, failoverMinutes: remote.failoverMinutes });
+      keepGroupSettings(remote);
+      Object.assign(base, groupSettings());
     } catch (err) {
       log.info("could not ask the primary for the group", { error: err instanceof Error ? err.message : String(err) });
     }
@@ -335,9 +694,9 @@ export async function deviceGroup(): Promise<DeviceGroup> {
         lastSeenAt: primary?.last_seen_at ?? null,
         latencyMs: state?.latencyMs ?? null,
         activeRuns: state?.activeRuns ?? 0,
-        conversations: 0,
+        conversations: pid ? (get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id = ?", pid)?.c ?? 0) : 0,
         standingIn: false,
-        fullDiskAccess: null,
+        fullDiskAccess: pid ? (runnerInfoOf(pid)?.fullDiskAccess ?? null) : null,
         runnerTwin: null,
       },
       {
@@ -352,12 +711,13 @@ export async function deviceGroup(): Promise<DeviceGroup> {
         latencyMs: null,
         activeRuns: listActiveRuns().length,
         conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id IS NULL")?.c ?? 0,
-        standingIn: false,
-        fullDiskAccess: null,
+        standingIn: standingIn(),
+        fullDiskAccess: runnerInfo().fullDiskAccess ?? null,
         runnerTwin: null,
       },
     ];
   }
+  devices = devices.map((d) => (d.self ? { ...d, standingIn: standingIn() } : d));
   return { ...base, role, primaryName: primaryName(), primaryOnline: primaryOnline(), primaryError: primaryOnline() ? null : primaryError, selfId, devices };
 }
 
@@ -394,8 +754,8 @@ function scheduleFailover(id: string, conversations: string[]): void {
   const settings = failoverSettings();
   if (!isPrimary() || !settings.failover || !conversations.length) return;
   cancelFailover(id);
-  // GODMODE_FAILOVER_MS: tests don't wait minutes.
-  const wait = Number(process.env.GODMODE_FAILOVER_MS) || settings.failoverMinutes * 60_000;
+  // GODMODE_FAILOVER_MS: tests don't wait minutes. A computer that said goodbye isn't coming back soon.
+  const wait = goneNow.has(id) ? 0 : Number(process.env.GODMODE_FAILOVER_MS) || settings.failoverMinutes * 60_000;
   const timer = setTimeout(() => void failover(id, conversations), wait);
   timer.unref?.();
   failovers.set(id, { timer, conversations });
@@ -428,6 +788,83 @@ async function failover(id: string, conversations: string[]): Promise<void> {
       moved.length === 1 ? `/chat/${moved[0]}` : "/settings/devices",
     );
   }
+}
+
+/**
+ * This secondary starts standing in for its primary (standIn.ts decided): the chats that were working there continue
+ * here from a recap, and automations that came due since it went run once.
+ */
+async function takeOver(t: TakeOver): Promise<void> {
+  const pid = primaryRunnerId();
+  const chats = pid
+    ? all<{ id: string; runner_state: string | null }>("SELECT id, runner_state FROM conversations WHERE runner_id = ? AND archived = 0", pid).filter((c) => {
+        const state = parseJson<Partial<RunnerChatState> | null>(c.runner_state, null);
+        return !!state?.running || !!state?.paused || !!state?.followup;
+      })
+    : [];
+  let continued = 0;
+  for (const chat of chats) {
+    try {
+      await continueHere(chat.id, { resume: true });
+      continued++;
+    } catch (err) {
+      log.warn(`could not continue chat ${chat.id} here`, err instanceof Error ? err.message : err);
+    }
+  }
+  const missed = await runMissedSince(t.lostAt).catch(() => 0);
+  audit("system", "device.stand_in", pid, { primary: primaryName(), chats: continued, automations: missed });
+  const extra = [continued ? `${continued === 1 ? "1 chat that was working" : `${continued} chats that were working`} continue${continued === 1 ? "s" : ""} here` : "", missed ? `${missed === 1 ? "1 automation" : `${missed} automations`} that came due ran` : ""].filter(Boolean);
+  notify(
+    "info",
+    `${computerName()} stands in for ${primaryName()}`,
+    `${primaryName()} is away, so automations, the board and your phone work here now${extra.length ? `; ${extra.join(", ")}` : ""}. What changes here goes back once it's there again.`,
+    "/settings/devices",
+  );
+}
+
+/**
+ * A chat of the primary continues on this secondary while the primary is away: it moves here with what this computer
+ * has of it (the agent picks up from a recap), and goes back as this computer's chat when the primary returns.
+ */
+async function continueHere(conversationId: string, opts: { resume: boolean }): Promise<void> {
+  const owner = runnerOfConversation(conversationId);
+  if (!owner) return;
+  const state = parseJson<Partial<RunnerChatState> | null>(get<{ runner_state: string | null }>("SELECT runner_state FROM conversations WHERE id = ?", conversationId)?.runner_state, null);
+  const from = deviceName(owner);
+  const here = computerName();
+  await moveChatHere(conversationId);
+  if (opts.resume && (state?.running || state?.paused)) {
+    await sendMessage(conversationId, { content: `Continued on ${here}`, prompt: continuePrompt(from, here, []), marker: marker(from, here, true), trigger: "chat" });
+  } else if (opts.resume) {
+    addMessage({ conversationId, role: "system", content: "", blocks: marker(from, here, false) });
+  }
+}
+
+/**
+ * Over the link: chats of this computer that `peer` took over while this one was away live there now. What still
+ * works here in them stops; the messages stay, and from now on this computer mirrors them from there.
+ */
+export async function releaseChatsTo(peer: string, ids: string[]): Promise<{ released: number }> {
+  const name = deviceName(peer);
+  let released = 0;
+  for (const id of ids) {
+    const row = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", id);
+    if (!row || row.runner_id !== null) continue;
+    const reason = `Stopped: ${name} continued this chat while this computer was away`;
+    const active = activeRunForConversation(id);
+    if (active) await cancelRun(active, reason, { byHuman: true }).catch(() => undefined);
+    const paused = pauseOf(id);
+    if (paused) await cancelRun(paused.run_id, reason, { byHuman: true }).catch(() => undefined);
+    cancelFollowup(id);
+    clearQueue(id);
+    const state: RunnerChatState = { running: false, paused: null, followup: null };
+    sql("UPDATE conversations SET runner_id = ?, runner_state = ?, working_directory = NULL, computer_target = NULL, updated_at = ? WHERE id = ?", peer, JSON.stringify(state), now(), id);
+    emitConversationUpdated(id);
+    released++;
+    void fetchChatFrom(peer, id);
+  }
+  if (released) audit("controller", "device.chats.released", peer, { to: name, chats: released });
+  return { released };
 }
 
 function safeRunner(id: string) {
@@ -566,6 +1003,7 @@ function deviceRows() {
 
 /** Back to a Godmode of its own: no more forwarding, the shared services start here again (index.ts listens). */
 function becomeAlone(): void {
+  forgetStandIn();
   clearGroup();
   deleteMeta(SELF_META);
   deleteMeta(DEFAULT_RUN_META);
@@ -588,6 +1026,7 @@ export async function leaveGroup(): Promise<DeviceGroup> {
         .catch((err) => log.warn("the primary didn't hear that this computer leaves", err instanceof Error ? err.message : err));
     }
     if (pid) await removeRunner(pid).catch((err) => log.warn("could not remove the primary", err instanceof Error ? err.message : err));
+    if (pid) forgetPeer(pid);
     if (row) forgetPeerKey(row.public_key);
     audit("user", "device.leave", pid, { primary: row?.name ?? null });
   } else {
@@ -611,6 +1050,7 @@ export async function removeDevice(id: string): Promise<DeviceGroup> {
     log.info(`${row.name} didn't hear that it leaves the group`, { error: err instanceof Error ? err.message : String(err) });
   }
   await removeRunner(id);
+  forgetPeer(id);
   forgetPeerKey(row.public_key);
   if (!deviceRows().length) becomeAlone();
   emitGroupSoon();
@@ -635,6 +1075,7 @@ export function peerLeft(controllerId: string): void {
   setTimeout(() => {
     void (async () => {
       if (row) await removeRunner(row.id).catch((err) => log.warn("could not remove the device that left", err instanceof Error ? err.message : err));
+      if (row) forgetPeer(row.id);
       forgetController(controllerId);
       if (isSecondary() ? row?.id === primaryRunnerId() || !primaryRunnerId() : !deviceRows().length) becomeAlone();
       if (row) notify("info", isPrimary() || !groupRole() ? `${row.name} left the device group` : `${row.name} removed this computer from its group`, "", "/settings/devices");
@@ -807,7 +1248,15 @@ async function sendThere(
  * there stops first and the agent continues on the new computer; otherwise a busy chat is refused.
  */
 export async function moveChat(conversationId: string, input: MoveChatInput): Promise<Conversation> {
-  if (isSecondary()) throw new HttpError(409, "Chats move between computers on the primary.", "not_primary");
+  if (isSecondary()) {
+    // While the primary is away a chat of it can continue here (it goes back as this computer's chat afterwards).
+    const owner = runnerOfConversation(conversationId);
+    if ((input.to ?? null) === null && owner && owner === primaryRunnerId() && !primaryOnline()) {
+      await continueHere(conversationId, { resume: !!input.force });
+      return getConversationSummary(conversationId);
+    }
+    throw new HttpError(409, "Chats move between computers on the primary.", "not_primary");
+  }
   if (!conversationExists(conversationId)) throw new HttpError(404, "Conversation not found", "not_found");
   const to = input.to ?? null;
   if (to !== null) {
@@ -873,3 +1322,49 @@ export async function handoff(from: string | null, to: string | null): Promise<H
   return result;
 }
 
+/* ------------------------------------------------------------------ */
+/* An old runner on a computer of the group                             */
+/* ------------------------------------------------------------------ */
+
+/** Switches the runner's background service off there, a moment after the answer left. */
+const UNINSTALL_SCRIPT = [
+  `plist="$HOME/Library/LaunchAgents/${SERVICE_LABEL}.plist"`,
+  `[ -f "$plist" ] || { echo "not installed"; exit 0; }`,
+  `bin=$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$plist")`,
+  `nohup /bin/sh -c "sleep 2; '$bin' runner uninstall" >/dev/null 2>&1 &`,
+  "echo uninstalling",
+].join("\n");
+
+/**
+ * A computer of the group also runs an old runner (it was a runner before it joined with the app): its chats move to the
+ * app on that computer, the runner's service is switched off there, and the pairing goes. Busy chats keep it waiting.
+ */
+export async function retireRunner(runnerId: string): Promise<RetireRunnerResult> {
+  if (isSecondary()) return primaryLink().json<RetireRunnerResult>("POST", "/api/devices/retire-runner", { runnerId }, { timeoutMs: 10 * 60_000 });
+  const runner = runnerRow(runnerId);
+  if (!runner || runner.kind === "device") throw new HttpError(404, "Runner not found", "not_found");
+  const twin = deviceRows().find((d) => runnerTwin({ machineId: runnerInfoOf(d.id)?.machineId, hostname: runnerRow(d.id)?.hostname ?? null }) === runnerId);
+  if (!twin) throw new HttpError(409, `${runner.name} doesn't run the Godmode app of your group, so its chats have nowhere to go.`, "no_twin");
+  link(twin.id).assertOnline();
+  const chats = all<{ id: string; title: string }>("SELECT id, title FROM conversations WHERE runner_id = ?", runnerId);
+  const working = chats.filter((c) => busy(c.id, runnerId));
+  if (working.length) {
+    throw new HttpError(409, `${working.length === 1 ? `“${working[0]!.title}” is` : `${working.length} chats are`} still working on the runner. Try again once ${working.length === 1 ? "it's" : "they're"} done.`, "runner_busy");
+  }
+  let moved = 0;
+  for (const chat of chats) {
+    await moveChat(chat.id, { to: twin.id, force: false });
+    moved++;
+  }
+  let uninstalled = false;
+  try {
+    const res = await runnerExec(runnerId, UNINSTALL_SCRIPT, 30);
+    uninstalled = res.code === 0;
+  } catch (err) {
+    log.info("could not switch the runner's service off", { error: err instanceof Error ? err.message : String(err) });
+  }
+  await removeRunner(runnerId);
+  audit("user", "device.retire_runner", runnerId, { name: runner.name, moved, uninstalled });
+  emitGroupSoon();
+  return { moved, uninstalled };
+}

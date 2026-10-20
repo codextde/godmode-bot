@@ -59,7 +59,7 @@ function cronJob(r: WantedRoutine): Cron {
       protect: true,
       catch: (err) => log.error(`routine ${r.id} tick crashed`, err),
     },
-    () => onTick(r.id),
+    (self: Cron) => onTick(r.id, self.currentRun()),
   );
 }
 
@@ -76,7 +76,7 @@ function randomStartJob(r: WantedRoutine, windowMinutes: number, runs: number, h
       jobs.delete(r.id);
       log.warn(`routine ${r.id} has no next start`, err);
     }
-    return onTick(r.id);
+    return onTick(r.id, slot);
   });
   return job;
 }
@@ -153,12 +153,28 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   }
 }
 
-async function onTick(routineId: string) {
+/** Late ticks (this computer slept or was away) wait until the device group's copies are in (remote/devices.ts). */
+let settle: (() => Promise<void>) | null = null;
+
+export function setScheduleSettle(fn: (() => Promise<void>) | null): void {
+  settle = fn;
+}
+
+const LATE_MS = 60_000;
+
+async function onTick(routineId: string, scheduledAt: Date | null = null) {
+  const late = !!scheduledAt && Date.now() - scheduledAt.getTime() > LATE_MS;
+  if (late && settle) await settle().catch(() => undefined);
   let routine: Routine;
   try {
     routine = getRoutine(routineId);
   } catch {
     reloadSchedules();
+    return;
+  }
+  // Another computer of the group ran this time already (it stood in while this one was away).
+  if (late && routine.lastRunAt && Date.parse(routine.lastRunAt) >= scheduledAt!.getTime() - LATE_MS) {
+    log.info(`routine ${routineId} already ran at ${routine.lastRunAt}; this late tick is skipped`);
     return;
   }
   try {
@@ -197,6 +213,33 @@ async function onTick(routineId: string) {
     const next = jobs.get(routineId)?.job.nextRun()?.toISOString() ?? null;
     if (exec("UPDATE routines SET next_run_at = ? WHERE id = ? AND next_run_at IS NOT ?", next, routineId, next).changes > 0) emitRoutine(routineId);
   }
+}
+
+/**
+ * A computer that starts standing in for its primary: scheduled automations that came due since the primary was last
+ * seen and didn't run there run now, once each.
+ */
+export async function runMissedSince(since: string): Promise<number> {
+  const from = Date.parse(since);
+  if (!Number.isFinite(from)) return 0;
+  const due = all<{ id: string; next_run_at: string; last_run_at: string | null }>(
+    `SELECT r.id, r.next_run_at, r.last_run_at FROM routines r JOIN agents a ON a.id = r.agent_id
+      WHERE r.enabled = 1 AND a.enabled = 1 AND r.next_run_at IS NOT NULL
+        AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
+  ).filter((r) => {
+    const at = Date.parse(r.next_run_at);
+    return at >= from - LATE_MS && at <= Date.now() && (!r.last_run_at || Date.parse(r.last_run_at) < at - LATE_MS);
+  });
+  let started = 0;
+  for (const r of due) {
+    try {
+      await triggerRoutine(r.id, { scheduled: true });
+      started++;
+    } catch (err) {
+      log.info(`routine ${r.id} didn't catch up`, { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return started;
 }
 
 /** Re-read routines from DB and reschedule (after CRUD). Unchanged jobs keep running. */

@@ -5,8 +5,8 @@
  * device group. The primary answers with everything it knows, chats of this computer included (it mirrors them and
  * forwards what concerns them back here).
  *
- * While the primary is away, this computer answers from what it has: its own chats work; the setup it copied is read
- * only, and the board and automations wait for the primary.
+ * While the primary is away, this computer is a full Godmode of its own: it has the group's shared data (replica.ts),
+ * every change works here and goes to the primary once it is back, and after a while it stands in for it (standIn.ts).
  *
  * Requests that came over a link are never forwarded: the primary asks this computer about its own chats that way.
  */
@@ -55,18 +55,6 @@ const BROWSER_INPUT = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|n
 /** Settings that describe this computer: kept and changed here, never the primary's. */
 const OWN_SECTIONS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "android", "vm", "power"]);
 
-/** While the primary is away: what this computer can still do with its own chats and copy. */
-const OFFLINE_WRITES: RegExp[] = [
-  /^\/api\/chat$/,
-  /^\/api\/conversations(\/|$)/,
-  /^\/api\/runs\/[A-Za-z0-9_-]{1,100}\/cancel$/,
-  /^\/api\/questions\/[A-Za-z0-9_-]{1,100}\/answer$/,
-  /^\/api\/notifications(\/|$)/,
-  /^\/api\/vault\/(unlock|lock|grant)$/,
-  /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigate)$/,
-  /^\/api\/computer\/input$/,
-];
-
 const MAX_BODY = 64 * 1024 * 1024;
 
 function viaLink(c: Context): boolean {
@@ -83,7 +71,7 @@ function primaryName(): string {
 }
 
 function offline(): HttpError {
-  return new HttpError(409, `${primaryName()} (the primary of this device group) is offline. Changes to agents, logins, settings, the board and automations wait until it's back.`, "primary_offline");
+  return new HttpError(409, `${primaryName()} (the primary of this device group) just went offline. Try again: this computer answers by itself now.`, "primary_offline");
 }
 
 async function bodyBytes(c: Context): Promise<Uint8Array | undefined> {
@@ -253,8 +241,6 @@ export const deviceRouting: MiddlewareHandler = async (c, next) => {
     const answer = await forwarded(c);
     return answer ?? next();
   }
-  // The primary is away: reading works from this computer's copy, changing what is shared waits.
-  const method = c.req.method;
-  if (method === "GET" || method === "HEAD" || isLocal(c.req.path) || OFFLINE_WRITES.some((re) => re.test(c.req.path))) return next();
-  throw offline();
+  // The primary is away: this computer has everything, and what changes here goes to the primary once it's back.
+  return next();
 };

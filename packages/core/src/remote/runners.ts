@@ -254,6 +254,16 @@ export function getRunner(id: string): RemoteRunner {
   return toRunner(requireRow(id));
 }
 
+/** What a runner said about itself at its last connect. */
+export function runnerInfoOf(id: string): RunnerInfo | undefined {
+  return infos.get(id);
+}
+
+/** The chats that moved here from `runnerId` are let go there now (it just connected, or the primary is back). */
+export function releaseChatsNow(runnerId: string): Promise<void> {
+  return releaseChats(runnerId);
+}
+
 /** The runner a chat works on (null for a chat of this computer). */
 export function runnerOfConversation(conversationId: string): string | null {
   return get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", conversationId)?.runner_id ?? null;
@@ -915,14 +925,26 @@ function pendingReleases(runnerId: string): string[] {
 
 /**
  * The runner drops its copy of the chats that moved to this computer. What it can't drop now is tried again after its
- * next connect and every 15 minutes. Never throws.
+ * next connect and every 15 minutes. Never throws. Another computer of the group keeps its messages and mirrors the
+ * chat from here instead (it took the chat over while this one was away, or the other way round).
  */
 async function releaseChats(runnerId: string): Promise<void> {
   const wanted = pendingReleases(runnerId);
   if (!wanted.length) return;
   const l = links.get(runnerId);
   const done = new Set<string>();
-  if (l?.state.state === "online") {
+  let drop = row(runnerId)?.kind !== "device";
+  if (l?.state.state === "online" && !drop) {
+    try {
+      await l.json("POST", "/api/link/devices/release-chats", { ids: wanted }, { timeoutMs: 120_000 });
+      for (const id of wanted) done.add(id);
+    } catch (err) {
+      // A computer from before keeping each other's chats: it drops them like a runner.
+      if (err instanceof HttpError && err.status === 404) drop = true;
+      else log.info(`${row(runnerId)?.name ?? runnerId} didn't take back its chats yet`, { error: message(err) });
+    }
+  }
+  if (l?.state.state === "online" && drop) {
     for (const id of wanted) {
       try {
         await l.json("DELETE", `/api/conversations/${encodeURIComponent(id)}`, undefined, { timeoutMs: 30_000 });
