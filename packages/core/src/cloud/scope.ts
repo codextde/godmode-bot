@@ -142,6 +142,18 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/agents/:id/commands", A],
   ["GET", "/api/agents/:id/files", A],
   ["GET|PUT", "/api/agents/:id/file", A],
+  ["GET", "/api/files/overview", A],
+  ["GET", "/api/agents/:id/files/sizes", A],
+  ["POST", "/api/agents/:id/files/inspect", A],
+  ["GET", "/api/agents/:id/files/review", A],
+  ["GET", "/api/agents/:id/files/notes", A],
+  ["GET", "/api/agents/:id/files/search", A],
+  ["POST", "/api/agents/:id/files/folder", A],
+  ["POST", "/api/agents/:id/files/move", A],
+  ["POST", "/api/agents/:id/files/delete", A],
+  ["GET|DELETE", "/api/agents/:id/files/deleted", A],
+  ["POST", "/api/agents/:id/files/deleted/:entryId/restore", A],
+  ["DELETE", "/api/agents/:id/files/deleted/:entryId", A],
   ["GET|PUT", "/api/agents/:id/memory", A],
   ["GET", "/api/agents/:id/commits", A],
   ["GET", "/api/agents/:id/heartbeat", A],
@@ -408,8 +420,11 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/budgets/release", A],
 ];
 
-/** Writes a viewer may make: resolving a chat's files changes nothing. */
-const VIEWER_WRITES: [string, string][] = [["POST", "/api/conversations/:id/files"]];
+/** Writes a viewer may make: resolving a chat's files and looking at an agent's before a delete change nothing. */
+const VIEWER_WRITES: [string, string][] = [
+  ["POST", "/api/conversations/:id/files"],
+  ["POST", "/api/agents/:id/files/inspect"],
+];
 /** Reads a viewer may not make: pictures of the screen, codes and keys. */
 const VIEWER_HIDDEN_READS = ["/api/computer/thumbnail", "/api/computer/sources", "/api/vms/:id/screenshot", "/api/android/devices/:id/screenshot", "/api/totp/codes", "/api/ssh/local-keys"];
 

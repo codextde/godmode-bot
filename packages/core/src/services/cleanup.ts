@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { CleanupEntry, CleanupId, CleanupItem, CleanupReport, CleanupResult, CleanupRun, HealthCheck, StorageArea, StorageUsage } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
+import { DELETED_DAYS, expiredDeletedFiles } from "../agents/files";
 import { withRepoLock } from "../agents/repo";
 import { namedBy } from "../memory/workspace";
 import { backupInProgress } from "../backup/backup";
@@ -39,6 +40,7 @@ const NAMES = {
   "agent-scratch": "Agents' scratch files",
   "agent-run-logs": "Old run logs",
   "agent-history": "Agent file history",
+  "deleted-files": "Deleted files",
   database: "Database",
   "old-logs": "Old logs",
   "vm-downloads": "Unfinished VM downloads",
@@ -57,6 +59,7 @@ export const RECOMMENDED: CleanupId[] = [
   "agent-scratch",
   "agent-run-logs",
   "agent-history",
+  "deleted-files",
   "database",
   "old-logs",
 ];
@@ -758,6 +761,21 @@ async function vmDownloads(scan: Scan): Promise<Category | null> {
   };
 }
 
+async function deletedFiles(scan: Scan): Promise<Category> {
+  const agents = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
+  const targets: Target[] = [];
+  for (const entry of expiredDeletedFiles(scan.at)) {
+    const t = await target(scan, entry.dir, `${agents.get(entry.agentId) ?? "A removed agent"} · ${entry.path}`);
+    t.entry.modifiedAt = entry.deletedAt;
+    targets.push(t);
+  }
+  return {
+    id: "deleted-files",
+    detail: `What you deleted on the Files page more than ${DELETED_DAYS} days ago. Until then it waits in the agent's bin, to be put back.`,
+    targets,
+  };
+}
+
 const TRASH_STAMP = /-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-(\d{3}))?Z(?:-\d+)?$/;
 
 function trashedAt(name: string): number {
@@ -809,6 +827,7 @@ const SCANNERS: Record<CleanupId, (scan: Scan) => Promise<Category | null> | Cat
   "agent-scratch": agentScratch,
   "agent-run-logs": agentRunLogs,
   "agent-history": agentHistory,
+  "deleted-files": deletedFiles,
   database,
   "old-logs": oldLogs,
   "vm-downloads": vmDownloads,

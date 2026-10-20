@@ -39,6 +39,20 @@ import { dreamOverview, getDream, isDreaming, revertDream, startDream } from "..
 import { isMemoryPath } from "../../memory/files";
 import { MAX_MEMORY_EDIT_BYTES, readAgentMemory, writeAgentMemory } from "../../memory/editor";
 import { resolveRepoPath } from "../../agents/repo";
+import {
+  createFolder,
+  deleteFiles,
+  filesOverview,
+  folderSizes,
+  inspectFiles,
+  listAgentNotes,
+  listDeletedFiles,
+  moveFile,
+  purgeDeletedFiles,
+  restoreDeletedFile,
+  reviewFiles,
+  searchAgentFiles,
+} from "../../agents/files";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
 import { requestDevice } from "../auth";
@@ -292,6 +306,49 @@ export function registerAgentRoutes(app: Hono): void {
     await writeAgentFile(agent.id, path, content);
     return c.json({ ok: true });
   });
+
+  /* Files page: sizes, review, notes, search, moves and the bin -------- */
+
+  const repoPathInput = z.string().trim().max(1024);
+  const pathList = z.array(repoPathInput.min(1)).min(1).max(500);
+
+  app.get("/api/files/overview", async (c) => c.json(await filesOverview()));
+
+  app.get("/api/agents/:id/files/sizes", async (c) => c.json(await folderSizes(c.req.param("id"), c.req.query("path") ?? "")));
+
+  app.post("/api/agents/:id/files/inspect", async (c) => {
+    const { paths } = await body(c, z.object({ paths: pathList }));
+    return c.json(await inspectFiles(c.req.param("id"), paths));
+  });
+
+  app.get("/api/agents/:id/files/review", async (c) => c.json(await reviewFiles(c.req.param("id"), c.req.query("fresh") === "1")));
+
+  app.get("/api/agents/:id/files/notes", async (c) => c.json(await listAgentNotes(c.req.param("id"))));
+
+  app.get("/api/agents/:id/files/search", async (c) => c.json(await searchAgentFiles(c.req.param("id"), (c.req.query("q") ?? "").slice(0, 200))));
+
+  app.post("/api/agents/:id/files/folder", async (c) => {
+    const { path } = await body(c, z.object({ path: repoPathInput.min(1) }));
+    return c.json(await createFolder(c.req.param("id"), path));
+  });
+
+  app.post("/api/agents/:id/files/move", async (c) => {
+    const { from, to } = await body(c, z.object({ from: repoPathInput.min(1), to: repoPathInput.min(1) }));
+    return c.json(await moveFile(c.req.param("id"), from, to));
+  });
+
+  app.post("/api/agents/:id/files/delete", async (c) => {
+    const { paths } = await body(c, z.object({ paths: pathList }));
+    return c.json(await deleteFiles(c.req.param("id"), paths));
+  });
+
+  app.get("/api/agents/:id/files/deleted", async (c) => c.json(await listDeletedFiles(c.req.param("id"))));
+
+  app.delete("/api/agents/:id/files/deleted", async (c) => c.json(await purgeDeletedFiles(c.req.param("id"))));
+
+  app.post("/api/agents/:id/files/deleted/:entryId/restore", async (c) => c.json(await restoreDeletedFile(c.req.param("id"), c.req.param("entryId"))));
+
+  app.delete("/api/agents/:id/files/deleted/:entryId", async (c) => c.json(await purgeDeletedFiles(c.req.param("id"), c.req.param("entryId"))));
 
   /* Memory editor (MEMORY.md only; phones reach this, never the other files) */
 
