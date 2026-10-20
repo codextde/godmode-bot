@@ -75,6 +75,14 @@ describe("the watchdog and a macOS dialog", () => {
   const t0 = Date.parse("2026-10-20T10:16:00Z");
   const run = { blocks: [tool("b", "Bash", { command: "ls -l ~/Desktop/fuerstenberger*" })], lastOutputAt: t0, startedAt: t0, waiting: false };
   const hold = { pending: true, act: "open your Desktop folder", computer: "Mac mini" };
+  // The step's label reads the settings (secrets are masked in it): this needs a database of its own.
+  let env: TestEnv;
+  beforeAll(async () => {
+    env = await setupEnv("godmode-mac-watchdog-");
+  });
+  afterAll(async () => {
+    await env.close();
+  });
 
   test("a run waiting for the answer is left alone; one stopped anyway says what it waited for", () => {
     expect(assess(run, t0 + 6 * 3_600_000, limits, hold)).toBeNull();
