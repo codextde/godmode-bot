@@ -3,6 +3,7 @@
  * for too long, or that calls the same tool with the same input and gets the same result over and over, is stopped:
  * it fails with a report that says exactly where it stood. A board ticket then tries again on its own (tasks/service
  * retries a stalled run once), a heartbeat's next beat picks the work up, and anything else is escalated to the human.
+ * A run that waits for someone to answer a macOS dialog (services/macPrompts.ts) is left alone.
  */
 import type { MessageBlock, WatchdogEvent, WatchdogKind } from "@godmode/shared";
 import { DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, RUN_WATCHDOG, toolActivity } from "@godmode/shared";
@@ -11,6 +12,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { newId, now } from "../util";
 import { redact } from "../vault/vault";
+import { macPromptHolding, type MacPromptHold } from "../services/macPrompts";
 import { notify } from "../services/notifications";
 import { getSettings } from "../services/settings";
 import { stopStalledRun, watchedRuns, type WatchedRun } from "./runner";
@@ -90,8 +92,16 @@ function loopOf(blocks: readonly MessageBlock[], repeats: number): ToolBlock | n
   return null;
 }
 
-/** What the watchdog makes of a running run right now; null = it is fine. */
-export function assess(run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "startedAt" | "waiting">, at: number, limits: WatchdogLimits): Verdict | null {
+/**
+ * What the watchdog makes of a running run right now; null = it is fine. `prompt`: a macOS dialog that holds the run
+ * (services/macPrompts.ts).
+ */
+export function assess(
+  run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "startedAt" | "waiting">,
+  at: number,
+  limits: WatchdogLimits,
+  prompt: MacPromptHold | null = null,
+): Verdict | null {
   if (run.waiting) return null;
   const tools = run.blocks.filter((b): b is ToolBlock => b.type === "tool_use");
   const looping = limits.loopRepeats >= 2 ? loopOf(run.blocks, limits.loopRepeats) : null;
@@ -111,6 +121,8 @@ export function assess(run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "starte
   const limit = pending ? base : Math.max(base, limits.stallMs + wakeupMs(last));
   const idle = at - run.lastOutputAt;
   if (idle < limit) return null;
+  // It waits for someone to answer macOS, and goes on by itself once someone does.
+  if (prompt?.pending) return null;
   const where = pending
     ? `while this step ran: ${stepLabel(pending)}`
     : background
@@ -118,8 +130,9 @@ export function assess(run: Pick<WatchedRun, "blocks" | "lastOutputAt" | "starte
       : last
         ? `after its last step, ${stepLabel(last)}, while the model was thinking or writing`
         : "before its first step, while the model was thinking or writing";
+  const asked = prompt ? ` — macOS was waiting on ${prompt.computer} for someone to allow Godmode to ${prompt.act}` : "";
   const steps = done.length ? ` It had made ${done.length} step${done.length === 1 ? "" : "s"} in ${minutes(at - run.startedAt)}.` : "";
-  return { kind: "stalled", report: `${RUN_WATCHDOG}: no sign of life for ${minutes(idle)} ${where}.${steps}` };
+  return { kind: "stalled", report: `${RUN_WATCHDOG}: no sign of life for ${minutes(idle)} ${where}${asked}.${steps}` };
 }
 
 export function watchdogLimits(): WatchdogLimits | null {
@@ -206,7 +219,7 @@ export function checkRuns(at = performance.now()): number {
   let stopped = 0;
   for (const run of watchedRuns()) {
     try {
-      const verdict = assess(run, at, limits);
+      const verdict = assess(run, at, limits, macPromptHolding(run));
       if (!verdict) continue;
       intervene(run, verdict);
       stopped++;
