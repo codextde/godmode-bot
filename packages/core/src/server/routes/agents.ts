@@ -297,13 +297,13 @@ export function registerAgentRoutes(app: Hono): void {
   app.get("/api/agents/:id/file", async (c) => c.json(await readAgentFile(c.req.param("id"), c.req.query("path") ?? "")));
 
   app.put("/api/agents/:id/file", async (c) => {
-    const { path, content } = await body(c, z.object({ path: z.string().trim().min(1).max(1024), content: z.string() }));
+    const { path, content, create } = await body(c, z.object({ path: z.string().trim().min(1).max(1024), content: z.string(), create: z.boolean().optional() }));
     const agent = getAgent(c.req.param("id"));
     // A dream owns the memory files while it runs (its rollback or undo would take the edit with it).
     if (isMemoryPath(resolveRepoPath(agent.repoPath, path).rel) && isDreaming(agent.id)) {
       throw conflict(`${agent.name} is dreaming (consolidating its memory) — edit it when the dream has ended, or cancel the dream.`);
     }
-    await writeAgentFile(agent.id, path, content);
+    await writeAgentFile(agent.id, path, content, { create });
     return c.json({ ok: true });
   });
 

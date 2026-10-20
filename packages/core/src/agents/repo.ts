@@ -354,8 +354,11 @@ export async function readRepoFile(dir: string, relPath: string): Promise<{ path
   return { path: rel, content };
 }
 
-/** Write a UTF-8 text file inside the repository (creates parent directories). Returns the relative path. */
-export async function writeRepoFile(dir: string, relPath: string, content: string): Promise<string> {
+/**
+ * Write a UTF-8 text file inside the repository (creates parent directories). Returns the relative path. `create`: only
+ * a new file — 409 when one is there already.
+ */
+export async function writeRepoFile(dir: string, relPath: string, content: string, opts: { create?: boolean } = {}): Promise<string> {
   ensureRepoExists(dir);
   const { abs, rel } = resolveRepoPath(dir, relPath);
   if (!rel) throw badRequest("A file path is required");
@@ -366,8 +369,12 @@ export async function writeRepoFile(dir: string, relPath: string, content: strin
     await assertRealInside(dir, abs);
     const existing = await stat(abs).catch(() => null);
     if (existing?.isDirectory()) throw badRequest("Path is a directory");
+    if (opts.create && (existing || (await lstat(abs).catch(() => null)))) throw new HttpError(409, "A file with this name is already there", "exists");
     await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, content, "utf8");
+    await writeFile(abs, content, { encoding: "utf8", flag: opts.create ? "wx" : "w" }).catch((err) => {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") throw new HttpError(409, "A file with this name is already there", "exists");
+      throw err;
+    });
     return rel;
   });
 }

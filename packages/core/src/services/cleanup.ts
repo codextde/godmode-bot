@@ -762,10 +762,13 @@ async function vmDownloads(scan: Scan): Promise<Category | null> {
 }
 
 async function deletedFiles(scan: Scan): Promise<Category> {
-  const agents = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
+  const agents = new Map(all<{ id: string; name: string; repo_path: string }>("SELECT id, name, repo_path FROM agents").map((a) => [a.id, a]));
   const targets: Target[] = [];
   for (const entry of expiredDeletedFiles(scan.at)) {
-    const t = await target(scan, entry.dir, `${agents.get(entry.agentId) ?? "A removed agent"} · ${entry.path}`);
+    const repo = agents.get(entry.agentId)?.repo_path;
+    // Under the agent's repository lock: a "Put back" at the same moment either finishes first or finds nothing.
+    const clean = () => (repo && inside(config().agentsDir, repo) ? withRepoLock(repo, () => remove(entry.dir)) : remove(entry.dir));
+    const t = await target(scan, entry.dir, `${agents.get(entry.agentId)?.name ?? "A removed agent"} · ${entry.path}`, { clean });
     t.entry.modifiedAt = entry.deletedAt;
     targets.push(t);
   }

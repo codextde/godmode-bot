@@ -227,4 +227,117 @@ describe("files page", () => {
     expect(row.notes).toBeGreaterThanOrEqual(4);
     expect(row.bytes).toBeGreaterThan(0);
   });
+
+  test("review: a folder it couldn't look all through, or one with only junk, is never called empty", async () => {
+    let deep = "workspace/deep";
+    for (let i = 0; i < 16; i++) deep += `/d${i}`;
+    put(`${deep}/big.bin`, Buffer.alloc(5000, 1));
+    put("workspace/logs/a.bak", "backup");
+    put("workspace/downloads/video.part", "still loading");
+    const review = (await call<FileReview>("GET", `/api/agents/${agent.id}/files/review?fresh=1`)).data;
+    const kinds = Object.fromEntries(review.items.map((i) => [i.path, i.kind]));
+    expect(Object.entries(kinds).filter(([p, k]) => p.startsWith("workspace/deep") && k === "empty")).toEqual([]);
+    expect(review.partial).toBe(true);
+    expect(kinds["workspace/logs"]).toBeUndefined();
+    expect(kinds["workspace/logs/a.bak"]).toBe("junk");
+    expect(kinds["workspace/downloads/video.part"]).toBeUndefined();
+    rmSync(at("workspace/deep"), { recursive: true });
+  });
+
+  test("a new note never overwrites a file that is there", async () => {
+    put("workspace/plans/existing.md", "# Keep me\n");
+    const res = await call("PUT", `/api/agents/${agent.id}/file`, { path: "workspace/plans/existing.md", content: "# New\n", create: true });
+    expect(res.status).toBe(409);
+    expect(readFileSync(at("workspace/plans/existing.md"), "utf8")).toBe("# Keep me\n");
+    expect((await call("PUT", `/api/agents/${agent.id}/file`, { path: "workspace/plans/brand-new.md", content: "# New\n", create: true })).status).toBe(200);
+  });
+
+  test("search and notes don't follow a linked MEMORY.md or memory/ out of the repository", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "godmode-outside-"));
+    writeFileSync(join(outside, "secret.txt"), "TOPSECRET line here\n");
+    mkdirSync(join(outside, "notes"));
+    writeFileSync(join(outside, "notes", "x.md"), "# Outside note TOPSECRET\n");
+    const memory = readFileSync(at("MEMORY.md"), "utf8");
+    rmSync(at("MEMORY.md"));
+    symlinkSync(join(outside, "secret.txt"), at("MEMORY.md"));
+    try {
+      expect((await call<AgentFileSearchHit[]>("GET", `/api/agents/${agent.id}/files/search?q=topsecret`)).data).toEqual([]);
+    } finally {
+      rmSync(at("MEMORY.md"));
+      writeFileSync(at("MEMORY.md"), memory);
+    }
+    const other = (await call<Agent>("POST", "/api/agents", { name: "Linked Bot" })).data;
+    await call("GET", `/api/agents/${other.id}/files?path=`);
+    rmSync(join(other.repoPath, "memory"), { recursive: true });
+    symlinkSync(join(outside, "notes"), join(other.repoPath, "memory"));
+    const notes = (await call<AgentNote[]>("GET", `/api/agents/${other.id}/files/notes`)).data;
+    expect(notes.some((n) => n.title.includes("Outside"))).toBe(false);
+    expect((await call<AgentFileSearchHit[]>("GET", `/api/agents/${other.id}/files/search?q=topsecret`)).data).toEqual([]);
+    rmSync(outside, { recursive: true, force: true });
+  });
+
+  test("a deleted link that points nowhere from the bin can still be put back", async () => {
+    put("workspace/links/target.txt", "t");
+    symlinkSync("target.txt", at("workspace/links/rel-link"));
+    const del = (await call<AgentFilesDeleteResult>("POST", `/api/agents/${agent.id}/files/delete`, { paths: ["workspace/links/rel-link"] })).data;
+    expect(del.deleted).toHaveLength(1);
+    const bin = (await call<DeletedAgentFile[]>("GET", `/api/agents/${agent.id}/files/deleted`)).data;
+    expect(bin.map((b) => b.path)).toContain("workspace/links/rel-link");
+    const back = await call<{ path: string }>("POST", `/api/agents/${agent.id}/files/deleted/${del.deleted[0]!.id}/restore`);
+    expect(back.data.path).toBe("workspace/links/rel-link");
+    expect(readFileSync(at("workspace/links/rel-link"), "utf8")).toBe("t");
+  });
+
+  test("moves: top-level names, links next to a note and [[names]] follow; nothing goes into tmp/ or uploads/", async () => {
+    put("todo.txt", "loose");
+    put("memory/clients/index.md", "# Clients\n- [todo](todo.txt)\n- [Acme](acme.md)\n- See [[acme]] and [[acme|the Acme note]]\n");
+    put("memory/clients/acme.md", "# Acme\n");
+    put("memory/clients/todo.txt", "client todo");
+    const top = await call<AgentFileMoveResult>("POST", `/api/agents/${agent.id}/files/move`, { from: "todo.txt", to: "workspace/todo.txt" });
+    expect(top.status).toBe(200);
+    expect(readFileSync(at("memory/clients/index.md"), "utf8")).toContain("[todo](todo.txt)");
+
+    const note = await call<AgentFileMoveResult>("POST", `/api/agents/${agent.id}/files/move`, { from: "memory/clients/acme.md", to: "memory/accounts/acme-gmbh.md" });
+    expect(note.data.rewritten).toContain("memory/clients/index.md");
+    const index = readFileSync(at("memory/clients/index.md"), "utf8");
+    expect(index).toContain("[Acme](../accounts/acme-gmbh.md)");
+    expect(index).toContain("[[acme-gmbh]] and [[acme-gmbh|the Acme note]]");
+
+    expect((await call("POST", `/api/agents/${agent.id}/files/move`, { from: "workspace/todo.txt", to: "workspace/tmp/todo.txt" })).status).toBe(400);
+    expect((await call("POST", `/api/agents/${agent.id}/files/move`, { from: "workspace/todo.txt", to: "workspace/TMP/todo.txt" })).status).toBe(400);
+    expect((await call("POST", `/api/agents/${agent.id}/files/move`, { from: "workspace/todo.txt", to: "workspace/uploads/todo.txt" })).status).toBe(400);
+    expect((await call("POST", `/api/agents/${agent.id}/files/folder`, { path: "workspace/tmp/new" })).status).toBe(400);
+  });
+
+  test("locked paths stay locked in any spelling", async () => {
+    const res = (await call<AgentFilesDeleteResult>("POST", `/api/agents/${agent.id}/files/delete`, { paths: ["memory.md", "Workspace", "Conversations", "workspace/TMP"] })).data;
+    expect(res.deleted).toEqual([]);
+    expect(res.refused).toHaveLength(4);
+    expect(existsSync(at("MEMORY.md"))).toBe(true);
+  });
+
+  test("a memory note named in the instructions counts as named, not unlinked", async () => {
+    put("memory/pinned-playbook.md", "# Pinned\n");
+    await call("PATCH", `/api/agents/${agent.id}`, { instructions: "Before a release read memory/pinned-playbook.md." });
+    const review = (await call<FileReview>("GET", `/api/agents/${agent.id}/files/review?fresh=1`)).data;
+    expect(review.items.find((i) => i.path === "memory/pinned-playbook.md")).toBeUndefined();
+    const info = (await call<AgentFileInfo[]>("POST", `/api/agents/${agent.id}/files/inspect`, { paths: ["memory/pinned-playbook.md"] })).data;
+    expect(info[0]!.namedBy).toEqual(["the instructions"]);
+  });
+
+  test("the bin: a tampered entry goes nowhere, a broken one doesn't break the list", async () => {
+    put("workspace/tamper.md", "x");
+    const del = (await call<AgentFilesDeleteResult>("POST", `/api/agents/${agent.id}/files/delete`, { paths: ["workspace/tamper.md"] })).data;
+    const entry = del.deleted[0]!;
+    const binRoot = join(dataDir, "agents", ".deleted-files", agent.id);
+    writeFileSync(join(binRoot, entry.id, "entry.json"), JSON.stringify({ ...entry, path: ".claude/settings.json" }));
+    expect((await call("POST", `/api/agents/${agent.id}/files/deleted/${entry.id}/restore`)).status).toBe(400);
+    expect(existsSync(at(".claude/settings.json"))).toBe(false);
+    mkdirSync(join(binRoot, "brokenentry1"), { recursive: true });
+    writeFileSync(join(binRoot, "brokenentry1", "entry.json"), JSON.stringify({ path: "workspace/x.md" }));
+    const bin = await call<DeletedAgentFile[]>("GET", `/api/agents/${agent.id}/files/deleted`);
+    expect(bin.status).toBe(200);
+    expect(bin.data.map((b) => b.id)).toContain(entry.id);
+    expect((await call("GET", "/api/files/overview")).status).toBe(200);
+  });
 });

@@ -11,7 +11,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { createReadStream, existsSync, lstatSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { cp, lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, join, relative } from "node:path";
 import type {
   Agent,
   AgentFileInfo,
@@ -46,6 +46,10 @@ const DAY = 86_400_000;
 /** Entries one size count visits at most (a folder with more counts as "at least"). */
 const COUNT_BUDGET = 400_000;
 const REVIEW_BUDGET = 250_000;
+/** Entries one item of the review counts at most (its own budget, so one huge folder doesn't starve the rest). */
+const ITEM_BUDGET = 200_000;
+/** A fresh review (it hashes files) at most this often per agent. */
+const FRESH_MS = 10_000;
 const SEARCH_BUDGET = 80_000;
 const SEARCH_LIMIT = 100;
 const SEARCH_READ_MAX = 512 * 1024;
@@ -85,6 +89,9 @@ const BUILD = new Set([
 const OUTPUT = new Set(["build", "dist", "out", "target", ".build"]);
 const PROJECT_FILES = ["package.json", "build.gradle", "build.gradle.kts", "pubspec.yaml", "Cargo.toml", "pyproject.toml", "setup.py", "Package.swift", "pom.xml", "Podfile"];
 const JUNK = /^(\.DS_Store|Thumbs\.db|desktop\.ini|npm-debug\.log.*|yarn-error\.log|~\$.*|\.~lock\..*#)$|\.(log|tmp|temp|bak|swp|crdownload|part)$/i;
+/** Downloads and temporary files that may still be written to. */
+const IN_PROGRESS = /\.(crdownload|part|tmp|temp|swp)$/i;
+const IN_PROGRESS_MS = 6 * 60 * 60_000;
 const TEXT = /\.(md|markdown|txt|json|jsonl|csv|tsv|ya?ml|toml|html?|css|xml|sh|py|m?js|ts|tsx|jsx|sql|env\.example)$/i;
 const NOTE = /\.(md|markdown)$/i;
 const ROOT_KNOWN = new Set([MEMORY_FILE, "CLAUDE.md", ".gitignore", ...AGENT_REPO_DIRS]);
@@ -109,17 +116,35 @@ const GODMODE_DIRS: Record<string, string> = {
   state: "A snapshot of the agent's settings, written by Godmode.",
 };
 
-/** Why `rel` can't be moved or deleted on the Files page (null = it can). */
+const FIXED_LOWER = new Map(Object.entries(FIXED).map(([k, v]) => [k.toLowerCase(), v]));
+
+/**
+ * Why `rel` can't be moved or deleted on the Files page (null = it can). Compared without case: on macOS `memory.md`
+ * is MEMORY.md.
+ */
 export function lockReason(rel: string): string | null {
-  if (rel in FIXED) return FIXED[rel]!;
-  const parts = rel.split("/");
+  const lower = rel.toLowerCase();
+  const fixed = FIXED_LOWER.get(lower);
+  if (fixed) return fixed;
+  const parts = lower.split("/");
   if (parts.length === 2 && parts[1] === ".gitkeep" && (AGENT_REPO_DIRS as readonly string[]).includes(parts[0]!)) return "Keeps the folder in the agent's history.";
   return GODMODE_DIRS[parts[0]!] ?? null;
 }
 
-/** Where moved entries and new folders may go: inside workspace/ or memory/. */
+/** tmp/ is cleared without the bin, uploads/ holds the human's attachments: nothing is moved or made there. */
+function reservedPlace(rel: string): boolean {
+  const lower = rel.toLowerCase();
+  return [SCRATCH, UPLOADS].some((r) => lower === r || lower.startsWith(`${r}/`));
+}
+
+/** Where moved entries and new folders may go: inside workspace/ or memory/, not into tmp/ or uploads/. */
 function placeable(rel: string): boolean {
-  return rel.startsWith(`${WORKSPACE_DIR}/`) || rel.startsWith(`${MEMORY_DIR}/`);
+  return (rel.startsWith(`${WORKSPACE_DIR}/`) || rel.startsWith(`${MEMORY_DIR}/`)) && !reservedPlace(rel);
+}
+
+/** A top folder of the repository that is a real folder (not a link to somewhere else). */
+function realDir(root: string, rel: string): boolean {
+  return entryOf(root, rel)?.isDirectory() ?? false;
 }
 
 /** No symlink on the way from the repository down to `rel` (with `self`, the entry itself neither). */
@@ -151,6 +176,7 @@ function repoPath(agent: Agent, input: string): string {
   return resolveRepoPath(agent.repoPath, input).rel;
 }
 
+/** Checked before waiting for the repository and again once it is ours: a dream may have started meanwhile. */
 function refuseWhileDreaming(agent: Agent) {
   if (isDreaming(agent.id)) {
     throw conflict(`${agent.name} is dreaming (tidying its memory and workspace) right now — try again when the dream has ended.`);
@@ -246,8 +272,9 @@ export async function folderSizes(agentId: string, dir: string): Promise<AgentFi
   );
 }
 
-function memoryNoteCount(repoPath: string): number {
-  return memoryTopics(repoPath).filter((p) => NOTE.test(p)).length;
+/** memory/ notes, only when memory/ is a real folder of the repository. */
+function memoryNotes(repoPath: string): string[] {
+  return realDir(repoPath, MEMORY_DIR) ? memoryTopics(repoPath).filter((p) => NOTE.test(p)) : [];
 }
 
 function binDir(agentId: string): string {
@@ -266,8 +293,8 @@ export function filesOverview(): Promise<AgentFilesOverview[]> {
         cachedTally(join(a.repo_path, MEMORY_DIR)),
         cachedTally(join(a.repo_path, MEMORY_FILE)),
       ]);
-      let notes = memoryNoteCount(a.repo_path);
-      if (entryOf(a.repo_path, WORKSPACE_DIR)?.isDirectory()) notes += listNotes(workspace).length;
+      let notes = memoryNotes(a.repo_path).length;
+      if (realDir(a.repo_path, WORKSPACE_DIR)) notes += listNotes(workspace).length;
       return {
         agentId: a.id,
         bytes: ws.bytes + memory.bytes + memoryFile.bytes,
@@ -311,16 +338,29 @@ function memoryLinks(repoPath: string): (rel: string) => string[] {
   };
 }
 
+/** The agent's instructions, automations and follow-ups (label → text): what names a path there keeps it in place. */
+function pinTexts(agent: Agent): [string, string][] {
+  const out: [string, string][] = [["the instructions", agent.instructions]];
+  for (const r of all<{ name: string; prompt: string }>("SELECT name, prompt FROM routines WHERE agent_id = ?", agent.id)) out.push([`the automation "${r.name}"`, r.prompt]);
+  for (const f of all<{ note: string }>("SELECT note FROM followups WHERE agent_id = ?", agent.id)) out.push(["a follow-up", f.note]);
+  return out;
+}
+
 /** Where the agent names a path of its repository (read once for many paths). */
 function namer(agent: Agent): (rel: string) => string[] {
   const workspace = namesOf(agent);
   const memory = memoryLinks(agent.repoPath);
+  const pins = pinTexts(agent);
   return (rel) => {
     if (rel.startsWith(`${WORKSPACE_DIR}/`)) return workspace(rel.slice(WORKSPACE_DIR.length + 1));
-    if (rel.startsWith(`${MEMORY_DIR}/`)) return memory(rel);
+    if (rel.startsWith(`${MEMORY_DIR}/`)) {
+      const pattern = mention(rel);
+      return [...pins.filter(([, text]) => pattern.test(text)).map(([label]) => label), ...memory(rel)];
+    }
     return [];
   };
 }
+
 
 /** Size, what names them and whether they may go, for the paths the human is about to move or delete. */
 export async function inspectFiles(agentId: string, paths: string[]): Promise<AgentFileInfo[]> {
@@ -330,7 +370,7 @@ export async function inspectFiles(agentId: string, paths: string[]): Promise<Ag
   for (const input of paths.slice(0, MAX_PATHS)) {
     const rel = repoPath(agent, input);
     const st = entryOf(agent.repoPath, rel);
-    if (!st) continue;
+    if (!st || !noLink(agent.repoPath, rel, false)) continue;
     const tally = st.isSymbolicLink() ? { bytes: st.size, files: 1, modified: st.mtimeMs, partial: false } : await cachedTally(join(agent.repoPath, rel));
     out.push({ ...sizeOf(rel, tally), type: st.isDirectory() ? "dir" : "file", namedBy: named(rel), locked: lockReason(rel) });
   }
@@ -376,7 +416,6 @@ class Reviewer {
   readonly copies = new Map<number, { rel: string; modified: number }[]>();
   partial = false;
   private left = REVIEW_BUDGET;
-  private counter = new Counter();
 
   constructor(
     private root: string,
@@ -384,18 +423,27 @@ class Reviewer {
   ) {}
 
   private add(kind: FileReviewKind, rel: string, dir: boolean, tally: Tally, detail: string, related?: string) {
+    if (tally.partial) this.partial = true;
     this.found.push({ kind, rel, dir, tally, detail, related });
   }
 
-  /** Walk a folder of the repository: what clutters it, and the files that may be copies of each other. */
-  async walk(rel: string, depth: number): Promise<boolean> {
+  /** What lies below `abs`, counted with a budget of its own. */
+  private count(abs: string): Promise<Tally> {
+    return new Counter(ITEM_BUDGET).of(abs);
+  }
+
+  /**
+   * Walk a folder of the repository: what clutters it, and the files that may be copies of each other. "unknown" when
+   * the walk couldn't look inside (too deep, out of budget, unreadable): such a folder is never called empty.
+   */
+  async walk(rel: string, depth: number): Promise<"filled" | "empty" | "unknown"> {
     if (this.left <= 0 || depth > 14) {
       this.partial = true;
-      return false;
+      return "unknown";
     }
     const abs = join(this.root, rel);
     const entries = await io(() => readdir(abs, { withFileTypes: true })).catch(() => null);
-    if (!entries) return false;
+    if (!entries) return "unknown";
     this.left -= entries.length;
     let kept = 0;
     for (const entry of entries) {
@@ -417,7 +465,7 @@ class Reviewer {
           continue;
         }
         if (BUILD.has(name) || (OUTPUT.has(name) && isProjectFolder(abs))) {
-          const tally = await this.counter.of(childAbs);
+          const tally = await this.count(childAbs);
           this.add("build", child, true, tally, BUILD.has(name) ? `Installed packages or a cache (${name}) — installing or building again brings it back.` : `Build output (${name}) — building the project again brings it back.`);
           kept++;
           continue;
@@ -431,8 +479,8 @@ class Reviewer {
           kept++;
           continue;
         }
-        const filled = await this.walk(child, depth + 1);
-        if (filled) kept++;
+        const inside = await this.walk(child, depth + 1);
+        if (inside !== "empty") kept++;
         else {
           const st = await lstat(childAbs).catch(() => null);
           this.add("empty", child, true, { ...NONE, modified: st?.mtimeMs ?? 0 }, "An empty folder.");
@@ -443,15 +491,14 @@ class Reviewer {
       const st = await io(() => lstat(childAbs)).catch(() => null);
       if (!st) continue;
       const tally: Tally = { bytes: st.size, files: 1, modified: st.mtimeMs, partial: false };
-      if (JUNK.test(name)) {
-        this.add("junk", child, false, tally, name === ".DS_Store" ? "Finder's folder settings — macOS writes them again when needed." : /\.log$/i.test(name) ? "A log file." : "A temporary or backup file.");
-        continue;
-      }
-      if (name === ".gitkeep") {
-        kept++;
-        continue;
-      }
+      // Junk still counts as content: the folder isn't empty, the junk is listed on its own.
       kept++;
+      if (JUNK.test(name)) {
+        if (IN_PROGRESS.test(name) && this.at - st.mtimeMs < IN_PROGRESS_MS) continue;
+        this.add("junk", child, false, tally, name === ".DS_Store" ? "Finder's folder settings — macOS writes them again when needed." : /\.log$/i.test(name) ? "A log file." : /\.bak$/i.test(name) ? "A backup copy." : "A temporary file.");
+        continue;
+      }
+      if (name === ".gitkeep") continue;
       if (st.size === 0) {
         this.add("empty", child, false, tally, "An empty file.");
         continue;
@@ -463,7 +510,7 @@ class Reviewer {
         this.copies.set(st.size, list);
       }
     }
-    return kept > 0;
+    return kept > 0 ? "filled" : "empty";
   }
 
   /** tmp/ goes by itself: only what is large is worth a look now. */
@@ -474,7 +521,7 @@ class Reviewer {
       const rel = `${SCRATCH}/${name}`;
       const st = await lstat(join(abs, name)).catch(() => null);
       if (!st || st.isSymbolicLink()) continue;
-      const tally = await this.counter.of(join(abs, name));
+      const tally = await this.count(join(abs, name));
       const discarded = /^discarded-(\d{4}-\d{2}-\d{2})/.exec(name);
       if (discarded) {
         this.add("scratch", rel, st.isDirectory(), tally, `A dream sorted these out on ${discarded[1]} — the daily cleanup removes them a week after their last change.`);
@@ -491,7 +538,7 @@ class Reviewer {
       if (name.startsWith(".") || ROOT_KNOWN.has(name)) continue;
       const st = await lstat(join(this.root, name)).catch(() => null);
       if (!st || st.isSymbolicLink()) continue;
-      const tally = await this.counter.of(join(this.root, name));
+      const tally = await this.count(join(this.root, name));
       if (JUNK.test(name)) this.add("junk", name, st.isDirectory(), tally, /\.log$/i.test(name) ? "A log file at the top of the repository." : "A temporary file at the top of the repository.");
       else this.add("loose", name, st.isDirectory(), tally, "Lies at the top of the repository, outside workspace/ — move it into workspace/ or delete it.");
     }
@@ -501,9 +548,11 @@ class Reviewer {
       if (name.startsWith(".") || rel === SCRATCH || rel === UPLOADS) continue;
       const st = await lstat(join(ws, name)).catch(() => null);
       if (!st || st.isSymbolicLink()) continue;
-      const tally = await this.counter.of(join(ws, name));
+      const tally = await this.count(join(ws, name));
+      // A count that stopped early doesn't know the newest change: no guess about age.
+      if (!tally.modified || tally.partial) continue;
       const idle = Math.floor((this.at - tally.modified) / DAY);
-      if (tally.modified && idle >= STALE_DAYS) {
+      if (idle >= STALE_DAYS) {
         this.add("stale", rel, st.isDirectory(), tally, `Nothing in it changed for ${idle} days (last ${day(tally.modified)}).`);
       } else if (!st.isDirectory() && idle >= RECENT_DAYS) {
         this.add("loose", rel, false, tally, "Lies loose at the top of workspace/ — sort it into a folder.");
@@ -545,15 +594,15 @@ class Reviewer {
     }
   }
 
-  /** Memory notes nothing links to, and links to notes that don't exist. */
-  memory(links: (rel: string) => string[]) {
-    for (const rel of memoryTopics(this.root)) {
-      if (!NOTE.test(rel) || links(rel).length) continue;
+  /** Memory notes nothing links to or names, and links to notes that don't exist. */
+  memory(named: (rel: string) => string[]) {
+    for (const rel of memoryNotes(this.root)) {
+      if (named(rel).length) continue;
       const st = entryOf(this.root, rel);
       if (!st) continue;
       this.add("unlinked-note", rel, false, { bytes: st.size, files: 1, modified: st.mtimeMs, partial: false }, "No link from MEMORY.md or another note — the agent may never read it. Link it, merge it, or delete it.");
     }
-    const pattern = /(?<![A-Za-z0-9._/-])memory\/[A-Za-z0-9._/-]+?\.(?:md|markdown|txt)(?![A-Za-z0-9_-])/g;
+    const pattern = /(?<![A-Za-z0-9._/-])memory\/[A-Za-z0-9._/-]+?\.(?:md|markdown|txt)(?![A-Za-z0-9_-]|\.[A-Za-z0-9_-])/g;
     const seen = new Set<string>();
     for (const [file, text] of Object.entries(snapshotMemory(this.root).files)) {
       for (const m of text.matchAll(pattern)) {
@@ -570,7 +619,7 @@ class Reviewer {
 export async function reviewFiles(agentId: string, fresh = false): Promise<FileReview> {
   const agent = await withRepo(agentId);
   const hit = reviewCache.get(agent.id);
-  if (!fresh && hit && Date.now() - hit.at < CACHE_MS * 2) return hit.review;
+  if (hit && Date.now() - hit.at < (fresh ? FRESH_MS : CACHE_MS * 2)) return hit.review;
   const review = buildReview(agent);
   reviewCache.set(agent.id, { at: Date.now(), review });
   review.catch(() => reviewCache.delete(agent.id));
@@ -581,11 +630,11 @@ async function buildReview(agent: Agent): Promise<FileReview> {
   const at = Date.now();
   const r = new Reviewer(agent.repoPath, at);
   const named = namer(agent);
-  if (entryOf(agent.repoPath, WORKSPACE_DIR)?.isDirectory()) await r.walk(WORKSPACE_DIR, 0);
-  if (entryOf(agent.repoPath, MEMORY_DIR)?.isDirectory()) await r.walk(MEMORY_DIR, 0);
+  if (realDir(agent.repoPath, WORKSPACE_DIR)) await r.walk(WORKSPACE_DIR, 0);
+  if (realDir(agent.repoPath, MEMORY_DIR)) await r.walk(MEMORY_DIR, 0);
   await r.tops();
   await r.duplicates(named);
-  r.memory(memoryLinks(agent.repoPath));
+  r.memory(named);
 
   const byPath = new Map<string, Candidate>();
   for (const c of r.found) {
@@ -594,10 +643,13 @@ async function buildReview(agent: Agent): Promise<FileReview> {
   }
   // A folder already on the list covers what lies in it.
   const folders = [...byPath.values()].filter((c) => c.dir).map((c) => `${c.rel}/`);
+  const covered = (rel: string) => folders.some((f) => rel.startsWith(f));
   const items: FileReviewItem[] = [];
   const perKind = new Map<FileReviewKind, number>();
   const sorted = [...byPath.values()]
-    .filter((c) => !lockReason(c.rel) && !folders.some((f) => c.rel.startsWith(f)))
+    .filter((c) => !lockReason(c.rel) && !covered(c.rel))
+    // The copy that stays may itself be on the list (in an old folder, as a large file): ticking both would lose both.
+    .filter((c) => c.kind !== "duplicate" || !c.related || (!covered(c.related) && !byPath.has(c.related)))
     .sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind) || b.tally.bytes - a.tally.bytes || a.rel.localeCompare(b.rel));
   for (const c of sorted) {
     const n = perKind.get(c.kind) ?? 0;
@@ -646,9 +698,9 @@ export async function listAgentNotes(agentId: string): Promise<AgentNote[]> {
     });
   };
   push(MEMORY_FILE, true);
-  for (const rel of memoryTopics(agent.repoPath)) if (NOTE.test(rel)) push(rel, links(rel).length > 0);
+  for (const rel of memoryNotes(agent.repoPath)) push(rel, links(rel).length > 0);
   const ws = join(agent.repoPath, WORKSPACE_DIR);
-  if (entryOf(agent.repoPath, WORKSPACE_DIR)?.isDirectory()) {
+  if (realDir(agent.repoPath, WORKSPACE_DIR)) {
     for (const note of listNotes(ws)) {
       const rel = `${WORKSPACE_DIR}/${note.rel}`;
       push(rel, named(rel).length > 0);
@@ -703,8 +755,9 @@ export async function searchAgentFiles(agentId: string, query: string): Promise<
       hits.push({ path: child, type: "file", line: text.slice(0, at).split("\n").length, snippet: snippetOf(line, at - lineStart, needle.length) });
     }
   };
-  if (entryOf(agent.repoPath, MEMORY_FILE)) {
-    const text = readFileSync(join(agent.repoPath, MEMORY_FILE), "utf8");
+  const memoryFile = entryOf(agent.repoPath, MEMORY_FILE);
+  if (memoryFile?.isFile() && memoryFile.size <= SEARCH_READ_MAX) {
+    const text = await readFile(join(agent.repoPath, MEMORY_FILE), "utf8").catch(() => "");
     const at = text.toLowerCase().indexOf(needle);
     if (at >= 0) {
       const lineStart = text.lastIndexOf("\n", at) + 1;
@@ -712,8 +765,8 @@ export async function searchAgentFiles(agentId: string, query: string): Promise<
       hits.push({ path: MEMORY_FILE, type: "file", line: text.slice(0, at).split("\n").length, snippet: snippetOf(text.slice(lineStart, lineEnd < 0 ? undefined : lineEnd), at - lineStart, needle.length) });
     }
   }
-  await visit(MEMORY_DIR, 1);
-  await visit(WORKSPACE_DIR, 1);
+  if (realDir(agent.repoPath, MEMORY_DIR)) await visit(MEMORY_DIR, 1);
+  if (realDir(agent.repoPath, WORKSPACE_DIR)) await visit(WORKSPACE_DIR, 1);
   return hits.sort((a, b) => Number(a.line !== null) - Number(b.line !== null));
 }
 
@@ -725,7 +778,7 @@ export async function searchAgentFiles(agentId: string, query: string): Promise<
 export async function createFolder(agentId: string, input: string): Promise<{ path: string }> {
   const agent = await withRepo(agentId);
   const rel = repoPath(agent, input);
-  if (!placeable(rel)) throw badRequest("New folders go inside workspace/ or memory/.");
+  if (!placeable(rel)) throw badRequest("New folders go inside workspace/ or memory/ (not into tmp/ or uploads/).");
   if (!noLink(agent.repoPath, rel)) throw badRequest("The folder would lie behind a link.");
   if (entryOf(agent.repoPath, rel)) throw conflict(`${rel} already exists.`);
   await withRepoLock(agent.repoPath, () => mkdir(join(agent.repoPath, rel), { recursive: true }));
@@ -733,13 +786,35 @@ export async function createFolder(agentId: string, input: string): Promise<{ pa
   return { path: rel };
 }
 
-/** Point the agent's memory at `to` wherever it named `from` (its own absolute paths too, never another agent's). */
+/**
+ * Point the agent's memory at `to` wherever it named `from`: repository paths and this agent's own absolute paths
+ * (never another agent's). A name at the top of the repository is only a path of its own when it is absolute — a bare
+ * "todo.txt" in a note may mean a file next to that note. A memory note moved also keeps its links next to it
+ * (`](note.md)`, written relative to the linking note) and its [[name]] when it is renamed.
+ */
 function repointMemory(repoPath: string, from: string, to: string): string[] {
   const pattern = mention(from, "g");
-  const own = (text: string, at: number) => at === 0 || text[at - 1] !== "/" || text.slice(0, at - 1).endsWith(repoPath) || text.slice(Math.max(0, at - 2), at) === "./";
+  const top = !from.includes("/");
+  const absolute = (text: string, at: number) => text[at - 1] === "/" && text.slice(0, at - 1).endsWith(repoPath);
+  const own = (text: string, at: number) => (top ? absolute(text, at) : at === 0 || text[at - 1] !== "/" || absolute(text, at) || text.slice(Math.max(0, at - 2), at) === "./");
+  const memoryNote = from.startsWith(`${MEMORY_DIR}/`) && NOTE.test(from);
+  const stem = (p: string) => basename(p).replace(/\.(md|markdown|txt)$/i, "");
+  const files = snapshotMemory(repoPath).files;
+  const sameStem = Object.keys(files).filter((p) => p !== from && stem(p).toLowerCase() === stem(from).toLowerCase()).length > 0;
   const changed: string[] = [];
-  for (const [path, text] of Object.entries(snapshotMemory(repoPath).files)) {
-    const next = text.replace(pattern, (match: string, at: number) => (own(text, at) ? to : match));
+  for (const [path, text] of Object.entries(files)) {
+    let next = text.replace(pattern, (match: string, at: number) => (own(text, at) ? to : match));
+    if (memoryNote) {
+      if (dirname(path) === dirname(from)) {
+        const near = new RegExp(`\\]\\((?:\\./)?${escape(basename(from))}((?:#[^)]*)?)\\)`, "g");
+        const target = relative(dirname(path), to).split("\\").join("/");
+        next = next.replace(near, (_m: string, hash: string) => `](${target}${hash})`);
+      }
+      if (stem(from) !== stem(to) && !sameStem) {
+        const wiki = new RegExp(`\\[\\[${escape(stem(from))}((?:\\|[^\\]]*)?)\\]\\]`, "g");
+        next = next.replace(wiki, (_m: string, label: string) => `[[${stem(to)}${label}]]`);
+      }
+    }
     if (next === text || !canRestore(repoPath, path) || !noLink(repoPath, path)) continue;
     writeFileSync(join(repoPath, path), next);
     changed.push(path);
@@ -754,11 +829,12 @@ export async function moveFile(agentId: string, fromInput: string, toInput: stri
   const to = repoPath(agent, toInput);
   const locked = lockReason(from);
   if (locked) throw new HttpError(403, locked, "locked");
-  if (!placeable(to) || lockReason(to)) throw badRequest("Entries move inside workspace/ or memory/.");
+  if (!placeable(to) || lockReason(to)) throw badRequest(reservedPlace(to) ? "Nothing moves into tmp/ (cleared without the bin) or uploads/." : "Entries move inside workspace/ or memory/.");
   if (to === from) return { path: to, rewritten: [] };
   if (to.startsWith(`${from}/`)) throw badRequest("A folder can't move into itself.");
   refuseWhileDreaming(agent);
   return withRepoLock(agent.repoPath, async () => {
+    refuseWhileDreaming(agent);
     const source = entryOf(agent.repoPath, from);
     if (!source) throw notFound(from);
     if (!noLink(agent.repoPath, from, false) || !noLink(agent.repoPath, to, false)) throw badRequest("The way there goes through a link.");
@@ -789,7 +865,9 @@ interface Stored extends DeletedAgentFile {
 function readEntry(dir: string, id: string): Stored | null {
   try {
     const meta = JSON.parse(readFileSync(join(dir, id, "entry.json"), "utf8")) as DeletedAgentFile;
-    if (typeof meta.path !== "string" || !existsSync(join(dir, id, "item"))) return null;
+    if (typeof meta.path !== "string" || typeof meta.deletedAt !== "string" || !Number.isFinite(Date.parse(meta.deletedAt))) return null;
+    // lstat: a link moved into the bin may point nowhere from there, it is still the entry.
+    lstatSync(join(dir, id, "item"));
     return { ...meta, id, dir: join(dir, id) };
   } catch {
     return null;
@@ -818,7 +896,10 @@ export async function listDeletedFiles(agentId: string): Promise<DeletedAgentFil
   return deletedEntries(agent.id).map(strip);
 }
 
-/** Entries of every agent's bin deleted more than `days` ago (agents removed since included): for the cleanup. */
+/**
+ * Entries of every agent's bin deleted more than `days` ago (agents removed since included), and leftovers of a delete
+ * that broke off (no item or no readable entry.json) older than a day: for the cleanup.
+ */
 export function expiredDeletedFiles(at = Date.now(), days = DELETED_DAYS): { agentId: string; path: string; dir: string; deletedAt: string }[] {
   const root = join(config().agentsDir, BIN);
   let agents: string[];
@@ -827,20 +908,50 @@ export function expiredDeletedFiles(at = Date.now(), days = DELETED_DAYS): { age
   } catch {
     return [];
   }
-  return agents.flatMap((agentId) =>
-    deletedEntries(agentId)
+  return agents.flatMap((agentId) => {
+    const dir = binDir(agentId);
+    const expired = deletedEntries(agentId)
       .filter((e) => at - Date.parse(e.deletedAt) >= days * DAY)
-      .map((e) => ({ agentId, path: e.path, dir: e.dir, deletedAt: e.deletedAt })),
-  );
+      .map((e) => ({ agentId, path: e.path, dir: e.dir, deletedAt: e.deletedAt }));
+    const broken = readdirSafe(dir)
+      .filter((id) => ENTRY_ID.test(id) && !readEntry(dir, id))
+      .flatMap((id) => {
+        const st = entryOf(dir, id);
+        return st && at - st.mtimeMs >= DAY ? [{ agentId, path: "(an unfinished delete)", dir: join(dir, id), deletedAt: st.mtime.toISOString() }] : [];
+      });
+    return [...expired, ...broken];
+  });
 }
 
+function readdirSafe(dir: string): string[] {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+/** The move into or out of the bin copied everything, but the source couldn't be removed completely. */
+class PartlyMoved extends Error {}
+
+/** Rename, or across disks copy and remove. Once the copy is complete it is never the part that goes. */
 async function moveAside(from: string, to: string) {
   try {
     await rename(from, to);
+    return;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "EXDEV") throw err;
-    await cp(from, to, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
+  }
+  try {
+    await cp(from, to, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true, errorOnExist: true, force: false });
+  } catch (err) {
+    await rm(to, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
+  try {
     await rm(from, { recursive: true, force: true });
+  } catch (err) {
+    throw new PartlyMoved(err instanceof Error ? err.message : String(err));
   }
 }
 
@@ -853,6 +964,7 @@ export async function deleteFiles(agentId: string, inputs: string[]): Promise<Ag
   const top = paths.filter((p) => !paths.some((q) => q !== p && p.startsWith(`${q}/`)));
   const result: AgentFilesDeleteResult = { deleted: [], refused: [] };
   await withRepoLock(agent.repoPath, async () => {
+    refuseWhileDreaming(agent);
     const bin = binDir(agent.id);
     for (const rel of top) {
       const locked = lockReason(rel);
@@ -879,6 +991,12 @@ export async function deleteFiles(agentId: string, inputs: string[]): Promise<Ag
         await moveAside(join(agent.repoPath, rel), join(dir, "item"));
         result.deleted.push(entry);
       } catch (err) {
+        if (err instanceof PartlyMoved) {
+          // The bin holds a full copy: it stays there; what couldn't be removed stays in place too.
+          result.deleted.push(entry);
+          result.refused.push({ path: rel, reason: `A full copy is in the bin, but some of it couldn't be removed here (${err.message}).` });
+          continue;
+        }
         await rm(dir, { recursive: true, force: true }).catch(() => {});
         result.refused.push({ path: rel, reason: `It couldn't be moved to the bin (${err instanceof Error ? err.message : String(err)}).` });
       }
@@ -910,14 +1028,19 @@ export async function restoreDeletedFile(agentId: string, id: string): Promise<A
   if (!ENTRY_ID.test(id)) throw notFound("Deleted entry");
   refuseWhileDreaming(agent);
   return withRepoLock(agent.repoPath, async () => {
+    refuseWhileDreaming(agent);
     const entry = readEntry(binDir(agent.id), id);
     if (!entry) throw notFound("Deleted entry");
     const original = repoPath(agent, entry.path);
-    if (lockReason(original)) throw badRequest("It can't go back there.");
+    // Only where the Files page deletes from: workspace/, memory/ or a plain name at the top — never a hidden file.
+    const fits = original.startsWith(`${WORKSPACE_DIR}/`) || original.startsWith(`${MEMORY_DIR}/`) || (!original.includes("/") && !original.startsWith("."));
+    if (!fits || lockReason(original)) throw badRequest("It can't go back there.");
     if (!noLink(agent.repoPath, original, false)) throw badRequest("The way back goes through a link.");
     const rel = freePlace(agent.repoPath, original);
     await mkdir(dirname(join(agent.repoPath, rel)), { recursive: true });
-    await moveAside(join(entry.dir, "item"), join(agent.repoPath, rel));
+    await moveAside(join(entry.dir, "item"), join(agent.repoPath, rel)).catch((err) => {
+      if (!(err instanceof PartlyMoved)) throw err;
+    });
     await rm(entry.dir, { recursive: true, force: true });
     await commitAllInLock(agent.repoPath, `Restore ${rel}`);
     forget(agent);
