@@ -36,14 +36,14 @@ const resultLine = (msgId: string) => `${stamp()} Df tccd[465:1] [com.apple.TCC:
 
 describe("reading macOS's privacy log", () => {
   test("a prompt, in compact and ndjson style", () => {
-    const desktop = { kind: "prompting", msgId: "164.8047", service: "SystemPolicyDesktopFolder", responsiblePath: "/Users/m/.local/bin/godmode", binaryPath: "/Users/m/.local/bin/godmode", pid: 50968 };
+    const desktop = { kind: "prompting", msgId: "164.8047", service: "SystemPolicyDesktopFolder", responsiblePath: "/Users/m/.local/bin/godmode", binaryPath: "/Users/m/.local/bin/godmode", identifier: "godmode-core", pid: 50968 };
     expect(parseTccLine(PROMPTING_COMPACT)).toEqual({ ...desktop, at: new Date(2026, 9, 20, 12, 16, 24, 967).getTime() } as never);
     expect(parseTccLine(PROMPTING_NDJSON)).toEqual({ ...desktop, at: Date.parse("2026-10-20T12:16:24.967+02:00") } as never);
     // In the app, macOS holds the app responsible; its path has a space.
     const app = parseTccLine(
       "AUTHREQ_PROMPTING: msgID=88.12, service=kTCCServiceSystemPolicyDocumentsFolder, subject=Sub:{dev.codext.godmode}Resp:{TCCDProcess: identifier=dev.codext.godmode, pid=812, auid=501, euid=501, responsible_path=/Applications/Godmode Bot.app/Contents/MacOS/godmode-bot, binary_path=/Applications/Godmode Bot.app/Contents/MacOS/godmode-bot},",
     );
-    expect(app).toMatchObject({ service: "SystemPolicyDocumentsFolder", responsiblePath: "/Applications/Godmode Bot.app/Contents/MacOS/godmode-bot", pid: 812 });
+    expect(app).toMatchObject({ service: "SystemPolicyDocumentsFolder", responsiblePath: "/Applications/Godmode Bot.app/Contents/MacOS/godmode-bot", identifier: "dev.codext.godmode", pid: 812 });
   });
 
   test("the answer, and what is no prompt", () => {
@@ -92,7 +92,7 @@ describe("watching while runs work", () => {
   let agent: Agent;
   const spawned: { argv: string[]; push: (line: string) => void; killed: boolean }[] = [];
   const shown: string[][] = [];
-  let showOutput = "";
+  let showOutput = () => "";
 
   function fakeStream(argv: string[]) {
     let out!: ReadableStreamDefaultController<Uint8Array>;
@@ -118,16 +118,19 @@ describe("watching while runs work", () => {
       spawn: fakeStream,
       show: async (argv) => {
         shown.push(argv);
-        return showOutput;
+        return showOutput();
       },
       lingerMs: 100,
       tickMs: 50,
       silentMs: 0,
+      slackMs: 100,
       ...over,
     });
   const isNote = (label: string) => label.startsWith(`Waiting for you on ${computerName()}`);
   const warnings = () => listNotifications().filter((n) => n.title === `macOS is waiting on ${computerName()}`);
   const inStep = (runId: string) => watchedRuns().some((r) => r.runId === runId && r.blocks.some((b) => b.type === "tool_use" && b.result === undefined));
+  /** The run has been silent a while: what macOS asks from now on holds it. */
+  const quiet = (runId: string) => until(() => watchedRuns().some((r) => r.runId === runId && performance.now() - r.lastOutputAt > 300), 10_000, "the run to be quiet");
 
   beforeAll(async () => {
     env = await setupEnv("godmode-mac-prompts-");
@@ -154,6 +157,7 @@ describe("watching while runs work", () => {
     expect(stream.argv.slice(0, 4)).toEqual(["/usr/bin/log", "stream", "--style", "ndjson"]);
     expect(stream.argv[5]).toContain("AUTHREQ_PROMPTING");
     await until(() => inStep(run.id), 10_000, "the step");
+    await quiet(run.id);
     const labels: string[] = [];
     const off = bus.on((e) => {
       if (e.type === "run.activity" && e.runId === run.id) labels.push(e.label);
@@ -194,10 +198,11 @@ describe("watching while runs work", () => {
   });
 
   test("a prompt nobody answers is given up, and the watchdog names it when it stops the run", async () => {
-    useDeps({ giveUpMs: 300 });
+    useDeps({ giveUpMs: 1_500 });
     const before = spawned.length;
     const { run } = await startChat({ agentId: agent.id, content: "LONG_STEP fetch the files" });
     await until(() => spawned.length === before + 1 && inStep(run.id), 10_000, "the step");
+    await quiet(run.id);
     const labels: string[] = [];
     const off = bus.on((e) => {
       if (e.type === "run.activity" && e.runId === run.id) labels.push(e.label);
@@ -228,22 +233,32 @@ describe("watching while runs work", () => {
         proc.kill();
         return proc;
       },
+      silentMs: 300,
+      // The watch outlasts the run: only the run going on can end the prompt here.
+      lingerMs: 30_000,
     });
-    showOutput = ['Filtering the log data using "subsystem == "com.apple.TCC""', promptingLine("901.1", "kTCCServiceSystemPolicyDownloadsFolder"), '{"count":1,"finished":1}'].join("\n");
+    showOutput = () => ['Filtering the log data using "subsystem == "com.apple.TCC""', promptingLine("901.1", "kTCCServiceSystemPolicyDownloadsFolder"), '{"count":1,"finished":1}'].join("\n");
     const stepDone = join(env.stateDir, "step-done");
     try {
       const { run } = await startChat({ agentId: agent.id, content: "LONG_STEP fetch the files" });
+      const labels: string[] = [];
+      const off = bus.on((e) => {
+        if (e.type === "run.activity" && e.runId === run.id) labels.push(e.label);
+      });
       await until(() => shown.length > 0, 10_000, "the log to be read");
       expect(spawned.length).toBe(before + 1);
       expect(shown[0]!.slice(0, 6)).toEqual(["/usr/bin/log", "show", "--last", "90s", "--style", "ndjson"]);
-      await until(() => pendingMacPrompts().some((p) => p.service === "SystemPolicyDownloadsFolder"), 5_000, "the prompt");
+      await until(() => labels.some(isNote), 5_000, "the run to show the prompt");
+      expect(labels.find(isNote)).toContain("open your Downloads folder");
       expect(macPromptHolding(watchedRuns().find((r) => r.runId === run.id)!)).toMatchObject({ pending: true, act: "open your Downloads folder" });
       writeFileSync(stepDone, "");
       const done = await waitForRun(run.id, 15_000);
+      off();
       expect(done.status).toBe("succeeded");
       await until(() => pendingMacPrompts().length === 0, 5_000, "the prompt to be over");
     } finally {
       rmSync(stepDone, { force: true });
+      stopMacPrompts();
     }
   });
 

@@ -23,11 +23,13 @@ const log = logger("mac-prompts");
 const LOG = "/usr/bin/log";
 const PREDICATE =
   'process == "tccd" AND subsystem == "com.apple.TCC" AND (eventMessage BEGINSWITH "AUTHREQ_PROMPTING" OR eventMessage BEGINSWITH "AUTHREQ_RESULT" OR eventMessage BEGINSWITH "Publishing <TCCDEvent")';
-/** A run that wrote nothing since a moment after the prompt waits for it (its lines are read a little later). */
-const SLACK_MS = 5_000;
 /** Without the stream: how far back `log show` reads, and how often at most. */
 const SHOW_LAST = "90s";
 const SHOW_EVERY_MS = 30_000;
+/** A stream that ended is started again after this long; one that ends right after it starts three times, never. */
+const RESTREAM_MS = 60_000;
+/** One notification per service in this long: a command that gave up and tried again meets the same dialog. */
+const TELL_EVERY_MS = 30 * 60_000;
 
 /** What a service lets a program do, in plain words: "macOS asks whether Godmode may <act>". */
 const ACTS: Record<string, string> = {
@@ -75,7 +77,7 @@ export function promptAct(service: string): string {
 /* ------------------------------------------------------------------ */
 
 export type TccLine =
-  | { kind: "prompting"; at: number; msgId: string; service: string; responsiblePath: string | null; binaryPath: string | null; pid: number | null }
+  | { kind: "prompting"; at: number; msgId: string; service: string; responsiblePath: string | null; binaryPath: string | null; identifier: string | null; pid: number | null }
   | { kind: "result"; at: number; msgId: string }
   | { kind: "event"; at: number; service: string; identifier: string };
 
@@ -110,7 +112,7 @@ export function parseTccLine(line: string): TccLine | null {
   const at = timeOf(time) ?? Date.now();
   let m = /AUTHREQ_PROMPTING: msgID=([^,\s]+), service=(\w+)/.exec(message);
   if (m) {
-    // The process macOS holds responsible ("Resp:{TCCDProcess: … pid=…, responsible_path=…, binary_path=…}").
+    // The process macOS holds responsible ("Resp:{TCCDProcess: identifier=…, pid=…, responsible_path=…, binary_path=…}").
     const resp = message.slice(Math.max(0, message.indexOf("Resp:{")));
     const pid = Number(field(resp, "pid"));
     return {
@@ -120,6 +122,7 @@ export function parseTccLine(line: string): TccLine | null {
       service: serviceName(m[2]!),
       responsiblePath: field(resp, "responsible_path"),
       binaryPath: field(resp, "binary_path"),
+      identifier: field(resp, "identifier"),
       pid: Number.isInteger(pid) && pid > 0 ? pid : null,
     };
   }
@@ -168,14 +171,13 @@ interface Prompt {
   service: string;
   act: string;
   msgIds: Set<string>;
-  /** When macOS asked: on the awake clock (like the watchdog's times), and on the wall clock. */
+  /** On the awake clock (like the watchdog's times): when macOS first asked, and last asked again. */
+  first: number;
   at: number;
-  since: number;
-  /** Runs it held; once none of them is silent any more, someone answered. */
+  /** Runs it held; without the stream, once none of them is silent any more, someone answered. */
   held: Set<string>;
   /** Runs that show it as their activity. */
   shown: Set<string>;
-  told: boolean;
 }
 
 /** By service: macOS shows one dialog per service, however many commands wait for it. */
@@ -184,6 +186,8 @@ const pending = new Map<string, Prompt>();
 const givenUp: Prompt[] = [];
 /** Prompts already read: `log show` reads the same lines again. */
 const seen = new Set<string>();
+/** When the human was last told about a dialog, by service (wall clock). */
+const told = new Map<string, number>();
 
 /** What the watchdog learns about a run a macOS dialog holds. `pending`: it is still open, so the run waits for it. */
 export interface MacPromptHold {
@@ -192,17 +196,20 @@ export interface MacPromptHold {
   computer: string;
 }
 
-const holds = (p: Prompt, r: Pick<WatchedRun, "lastOutputAt" | "waiting">) => !r.waiting && r.lastOutputAt <= p.at + SLACK_MS;
-const inStep = (r: WatchedRun) => r.blocks.some((b) => b.type === "tool_use" && b.result === undefined);
+/** Silent since macOS asked (its lines are read a moment after they are written). */
+const silentSince = (p: Prompt, r: Pick<WatchedRun, "lastOutputAt" | "waiting">) => !r.waiting && r.lastOutputAt <= p.at + deps.slackMs;
+/** In a step that may wait for macOS: Godmode's own tools run in Godmode, not in a command of the run. */
+const inStep = (r: WatchedRun) => r.blocks.some((b) => b.type === "tool_use" && b.result === undefined && !b.name.startsWith("mcp__godmode__"));
 
 /**
- * The macOS dialog a silent run may wait for. While one is open that is any run: a second command that asks for the
- * same thing waits behind the dialog without a line in the log. A dialog nobody answered names the runs it held.
+ * The macOS dialog a silent run may wait for. While one is open that is any run silent for less than macOS is waited
+ * for: a second command that asks for the same thing waits behind the dialog without a line in the log. Past that, or
+ * once nobody answered, only the runs it held are told what they waited for.
  */
 export function macPromptHolding(run: Pick<WatchedRun, "runId" | "lastOutputAt" | "waiting">): MacPromptHold | null {
   const open = pending.values().next().value;
-  if (open) return { pending: true, act: open.act, computer: computerName() };
-  const old = givenUp.findLast((p) => p.held.has(run.runId) || holds(p, run));
+  if (open && performance.now() - run.lastOutputAt <= deps.giveUpMs) return { pending: true, act: open.act, computer: computerName() };
+  const old = [...givenUp, ...pending.values()].findLast((p) => p.held.has(run.runId) && silentSince(p, run));
   return old ? { pending: false, act: old.act, computer: computerName() } : null;
 }
 
@@ -210,16 +217,13 @@ function onLine(line: string) {
   if (!watching) return;
   const e = parseTccLine(line);
   if (!e) return;
-  if (e.kind === "result") {
-    for (const p of [...pending.values()]) if (p.msgIds.has(e.msgId)) settle(p, "answered");
+  if (e.kind === "result" || e.kind === "event") {
+    const answers = (p: Prompt) => (e.kind === "result" ? p.msgIds.has(e.msgId) : p.service === e.service && ours(e.identifier));
+    for (const p of [...pending.values()]) if (answers(p)) settle(p, "answered");
+    for (let i = givenUp.length - 1; i >= 0; i--) if (answers(givenUp[i]!)) givenUp.splice(i, 1);
     return;
   }
-  if (e.kind === "event") {
-    const p = pending.get(e.service);
-    if (p && ours(e.identifier)) settle(p, "answered");
-    return;
-  }
-  if (seen.has(e.msgId) || !(ours(e.responsiblePath) || ours(e.binaryPath) || e.pid === process.pid)) return;
+  if (seen.has(e.msgId) || !(ours(e.responsiblePath) || ours(e.binaryPath) || ours(e.identifier) || e.pid === process.pid)) return;
   seen.add(e.msgId);
   if (seen.size > 500) seen.delete(seen.values().next().value!);
   const at = performance.now() - Math.max(0, Date.now() - e.at);
@@ -230,9 +234,11 @@ function onLine(line: string) {
     known.at = Math.max(known.at, at);
     return;
   }
-  pending.set(e.service, { service: e.service, act: promptAct(e.service), msgIds: new Set([e.msgId]), at, since: e.at, held: new Set(), shown: new Set(), told: false });
+  pending.set(e.service, { service: e.service, act: promptAct(e.service), msgIds: new Set([e.msgId]), first: at, at, held: new Set(), shown: new Set() });
   log.info("macOS asks the person at this computer", { service: e.service });
   review();
+  // Who it holds shows once the runs at work wrote again.
+  setTimeout(() => safely(review), Math.max(0, at + deps.slackMs - performance.now()) + 100).unref?.();
 }
 
 function settle(p: Prompt, why: string) {
@@ -243,28 +249,30 @@ function settle(p: Prompt, why: string) {
 
 /** Show pending prompts on the runs they hold, tell the human once, and let go of what is over. */
 function review() {
-  if (!pending.size) return;
+  if (!watching || !pending.size) return;
   const runs = watchedRuns();
   for (const p of [...pending.values()]) {
-    if (Date.now() - p.since > deps.giveUpMs) {
+    if (performance.now() - p.first > deps.giveUpMs) {
       settle(p, "nobody answered");
       givenUp.push(p);
       if (givenUp.length > 20) givenUp.shift();
       continue;
     }
-    const holding = runs.filter((r) => holds(p, r));
-    if (!holding.length && p.held.size) {
+    // Right after macOS asked, every run still looks silent: the ones at work show once they wrote again.
+    if (performance.now() < p.at + deps.slackMs) continue;
+    const holding = runs.filter((r) => inStep(r) && silentSince(p, r));
+    // The stream reads the answer; without it, runs that go on again are the sign (a command that timed out goes on too).
+    if (!stream && !holding.length && p.held.size) {
       settle(p, "its runs went on");
       continue;
     }
     for (const r of holding) p.held.add(r.runId);
-    if (!p.told) {
-      p.told = true;
+    if (Date.now() - (told.get(p.service) ?? 0) > TELL_EVERY_MS) {
+      told.set(p.service, Date.now());
       tell(p, holding.length ? holding : runs);
     }
     const label = `Waiting for you on ${computerName()}: macOS asks whether Godmode may ${p.act}`;
     for (const r of holding) {
-      if (!inStep(r)) continue;
       p.shown.add(r.runId);
       noteRunActivity(r.runId, label);
     }
@@ -303,6 +311,8 @@ export interface MacPromptDeps {
   silentMs: number;
   /** Nobody answered in this long: the prompt is given up, and named when the watchdog stops a run it held. */
   giveUpMs: number;
+  /** A run that wrote nothing since this long after macOS asked waits for it (its lines are read a little later). */
+  slackMs: number;
 }
 
 const defaults: MacPromptDeps = {
@@ -313,6 +323,7 @@ const defaults: MacPromptDeps = {
   tickMs: 15_000,
   silentMs: 45_000,
   giveUpMs: 2 * 3_600_000,
+  slackMs: 5_000,
 };
 let deps = defaults;
 
@@ -323,11 +334,11 @@ export function setMacPromptDeps(overrides: Partial<MacPromptDeps> | null) {
 
 let unsubscribe: (() => void) | null = null;
 let watching = false;
+/** null: no stream (it ended, or this user may not run it), so `log show` reads the log while a step is silent. */
 let stream: LogProcess | null = null;
-/** No stream (it ended, or this user may not run it): `log show` while a step is silent. */
-let polling = false;
-/** The stream ended right after it started: not tried again until Godmode restarts. */
-let streamRefused = false;
+let streamEndedAt = 0;
+/** Streams in a row that ended right after they started. */
+let quickEnds = 0;
 let linger: ReturnType<typeof setTimeout> | null = null;
 let ticker: ReturnType<typeof setInterval> | null = null;
 let shownAt = 0;
@@ -368,11 +379,12 @@ function update() {
   }
 }
 
+const mayStream = () => quickEnds < 3;
+
 function watch() {
   if (watching) return;
   watching = true;
-  polling = streamRefused;
-  if (!polling) follow();
+  if (mayStream()) follow();
   ticker = setInterval(tick, deps.tickMs);
   ticker.unref?.();
 }
@@ -390,7 +402,7 @@ function unwatch() {
   }
   for (const p of [...pending.values()]) settle(p, "no run left");
   givenUp.length = 0;
-  watching = polling = false;
+  watching = false;
   shownAt = 0;
 }
 
@@ -401,7 +413,7 @@ function follow() {
     s = deps.spawn([LOG, "stream", "--style", "ndjson", "--predicate", PREDICATE]);
   } catch (err) {
     log.warn("could not follow the macOS privacy log", err);
-    streamRefused = polling = true;
+    quickEnds = 3;
     return;
   }
   stream = s;
@@ -410,8 +422,8 @@ function follow() {
     // Stopped on purpose.
     if (stream !== s) return;
     stream = null;
-    if (Date.now() - startedAt < 10_000) streamRefused = true;
-    polling = true;
+    streamEndedAt = Date.now();
+    quickEnds = Date.now() - startedAt < 10_000 ? quickEnds + 1 : 0;
     log.info("the macOS privacy log stream ended: reading the log while a step is silent instead");
   };
   s.exited.then(ended, ended);
@@ -426,15 +438,29 @@ async function eachLine(stdout: ReadableStream<Uint8Array>, onLine: (line: strin
     buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
     const lines = buf.split("\n");
     buf = done ? "" : lines.pop()!;
-    for (const line of lines) onLine(line);
+    for (const line of lines) safely(() => onLine(line));
     if (done) return;
   }
 }
 
+function safely(fn: () => void) {
+  try {
+    fn();
+  } catch (err) {
+    log.warn("could not handle a macOS privacy prompt", err);
+  }
+}
+
 function tick() {
-  const silent = () => watchedRuns().some((r) => !r.waiting && inStep(r) && performance.now() - r.lastOutputAt > deps.silentMs);
-  if (polling && !showing && Date.now() - shownAt >= SHOW_EVERY_MS && silent()) void show();
-  review();
+  safely(() => {
+    // A run that ended without telling (it crashed) leaves no event behind.
+    if (!busy()) update();
+    if (!watching) return;
+    if (!stream && mayStream() && Date.now() - streamEndedAt >= RESTREAM_MS) follow();
+    const silent = () => watchedRuns().some((r) => !r.waiting && inStep(r) && performance.now() - r.lastOutputAt > deps.silentMs);
+    if (!stream && !showing && Date.now() - shownAt >= SHOW_EVERY_MS && silent()) void show();
+    review();
+  });
 }
 
 async function show() {
@@ -442,7 +468,7 @@ async function show() {
   shownAt = Date.now();
   try {
     const out = await deps.show([LOG, "show", "--last", SHOW_LAST, "--style", "ndjson", "--predicate", PREDICATE]);
-    for (const line of out.split("\n")) onLine(line);
+    for (const line of out.split("\n")) safely(() => onLine(line));
   } catch (err) {
     log.warn("could not read the macOS privacy log", err);
   } finally {

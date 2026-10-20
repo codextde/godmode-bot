@@ -393,8 +393,7 @@ export function fullDiskAccess(): boolean | null {
         fdaAskedAt = Date.now();
       });
   }
-  const { fullDiskAccess: fresh, fullDiskAccessHere: here } = known;
-  return fresh === true || here === true ? true : fresh === false || here === false ? false : null;
+  return known.fullDiskAccess ?? known.fullDiskAccessHere;
 }
 
 /**

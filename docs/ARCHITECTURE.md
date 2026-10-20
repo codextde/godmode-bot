@@ -270,8 +270,8 @@ can't stream, `log show --last 90s` while a step has been silent for 45 s) for `
 responsible process is this program or Godmode's app. A pending prompt labels the silent runs it holds ("Waiting for
 you on <computer>: macOS asks whether Godmode may open your Desktop folder"), sends one warning notification (a
 runner's reaches its controller like any other) and keeps the watchdog from stopping a silent run. It is over with its
-`AUTHREQ_RESULT` or `TCCDEvent`, once the runs it held go on, or after 2 hours; a run stopped after that names the
-dialog in its report. Without Full Disk Access (the cached probe in `services/permissions.ts`, also sent as
+`AUTHREQ_RESULT` or `TCCDEvent` (without the stream: once the runs it held go on), or after 2 hours; a run stopped
+after that names the dialog in its report. Without Full Disk Access (the cached probe in `services/permissions.ts`, also sent as
 `RunnerInfo.fullDiskAccess`), the system prompt tells agents to keep out of those folders or say so first.
 
 ### Ultracode
