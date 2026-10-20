@@ -22,6 +22,16 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   SpendReport,
   Agent,
   AgentFileEntry,
+  AgentFileInfo,
+  AgentFileMoveResult,
+  AgentFileRestoreResult,
+  AgentFileSearchHit,
+  AgentFileSize,
+  AgentFilesDeleteResult,
+  AgentFilesOverview,
+  AgentNote,
+  DeletedAgentFile,
+  FileReview,
   AgentMemory,
   AgentHeartbeatState,
   AgentInput,
@@ -562,6 +572,22 @@ export const api = {
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
     writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
+    /** Sizes of what lies directly in a folder (every file below counted). */
+    fileSizes: (id: string, path = "") => get<AgentFileSize[]>(`/api/agents/${id}/files/sizes`, { path }),
+    /** Size, what names them and whether they may go, before a move or delete. */
+    inspectFiles: (id: string, paths: string[]) => post<AgentFileInfo[]>(`/api/agents/${id}/files/inspect`, { paths }),
+    fileReview: (id: string, fresh = false) => get<FileReview>(`/api/agents/${id}/files/review`, fresh ? { fresh: "1" } : undefined),
+    notes: (id: string) => get<AgentNote[]>(`/api/agents/${id}/files/notes`),
+    searchFiles: (id: string, q: string) => get<AgentFileSearchHit[]>(`/api/agents/${id}/files/search`, { q }),
+    createFolder: (id: string, path: string) => post<{ path: string }>(`/api/agents/${id}/files/folder`, { path }),
+    /** Rename or move inside workspace/ or memory/; mentions in the memory follow. */
+    moveFile: (id: string, from: string, to: string) => post<AgentFileMoveResult>(`/api/agents/${id}/files/move`, { from, to }),
+    /** Into the agent's bin, from where they can be put back. */
+    deleteFiles: (id: string, paths: string[]) => post<AgentFilesDeleteResult>(`/api/agents/${id}/files/delete`, { paths }),
+    deletedFiles: (id: string) => get<DeletedAgentFile[]>(`/api/agents/${id}/files/deleted`),
+    restoreDeleted: (id: string, entryId: string) => post<AgentFileRestoreResult>(`/api/agents/${id}/files/deleted/${entryId}/restore`),
+    purgeDeleted: (id: string, entryId: string) => del<{ removed: number; bytes: number }>(`/api/agents/${id}/files/deleted/${entryId}`),
+    emptyBin: (id: string) => del<{ removed: number; bytes: number }>(`/api/agents/${id}/files/deleted`),
     commits: (id: string) => get<GitCommit[]>(`/api/agents/${id}/commits`),
     /** MEMORY.md with its size budget and the notes under memory/ it can link to. */
     memory: (id: string) => get<AgentMemory>(`/api/agents/${id}/memory`),
@@ -861,6 +887,8 @@ export const api = {
     resolve: (conversationId: string, messages: string[][]) => post<ChatFiles>(`/api/conversations/${conversationId}/files`, { messages }),
     /** Show a file or folder in the file manager; refused unless the app runs on the core's machine. */
     reveal: (path: string) => post<{ ok: true }>("/api/files/reveal", { path }),
+    /** Per agent: what its files take, its notes and memory length (Files page). */
+    overview: () => get<AgentFilesOverview[]>("/api/files/overview"),
   },
 
   runs: {
