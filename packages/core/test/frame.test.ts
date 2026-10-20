@@ -60,6 +60,8 @@ describe("a turn that ended early", () => {
     expect(runEndOf("Timed out after 60 minutes")).toEqual({ kind: "timeout", minutes: 60 });
     expect(runEndOf("Cancelled by user")).toEqual({ kind: "stopped", byUser: true });
     expect(runEndOf("Claude Code is not signed in (or the API key is invalid).")?.kind).toBe("auth");
+    expect(runEndOf("Failed to authenticate: OAuth session expired and could not be refreshed")?.kind).toBe("auth");
+    expect(runEndOf("Failed to authenticate. API Error: 403 Request not allowed")).toBeNull();
     expect(runEndOf("Prompt is too long")?.kind).toBe("context");
     expect(runEndOf("This work is set to run in a virtual machine, but virtual machines are turned off (Settings → Virtual machines).")).toEqual({ kind: "vm", off: true });
     expect(runEndOf("The virtual machine can't be used: boot timed out")).toEqual({ kind: "vm" });

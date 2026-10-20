@@ -10,6 +10,7 @@
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   AUTH_403    fail like Claude Code when Claude's API refuses the sign-in ("Failed to authenticate. API Error: 403 …")
+ *   AUTH_EXPIRED  fail like Claude Code when its sign-in ran out ("Failed to authenticate: OAuth session expired …")
  *   CALL_MCP    call the Godmode MCP gateway from --mcp-config (initialize, tools/list, report_missing_login)
  *   CALL_COMPUTER  call the `computer` MCP server from --mcp-config (initialize, tools/list, computer_info) and answer
  *              with a JSON summary; "no computer server" when the run has none
@@ -853,6 +854,12 @@ if (slash?.[1] === "clear") {
   const text = "Failed to authenticate. API Error: 403 Request not allowed";
   out({ type: "assistant", message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
   out({ type: "result", subtype: "success", is_error: true, api_error_status: 403, result: text, session_id: sessionId, total_cost_usd: 0, duration_ms: 7, num_turns: 1 });
+  process.exit(1);
+} else if (prompt.includes("AUTH_EXPIRED")) {
+  out(init);
+  const text = "Failed to authenticate: OAuth session expired and could not be refreshed";
+  out({ type: "assistant", message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
+  out({ type: "result", subtype: "success", is_error: true, api_error_status: 401, result: text, session_id: sessionId, total_cost_usd: 0, duration_ms: 7, num_turns: 1 });
   process.exit(1);
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);

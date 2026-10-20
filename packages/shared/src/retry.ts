@@ -30,7 +30,7 @@ export function runEndOf(text: string): RunEnd | null {
   if (t.startsWith(RUN_WATCHDOG)) return { kind: "stalled" };
   if (/prompt is too long|context (?:length|window)|conversation is too long/i.test(t)) return { kind: "context" };
   if (t.startsWith(RUN_COST_LIMIT)) return { kind: "budget" };
-  if (/^Claude Code is not signed in/.test(t) || /^(?:invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low)/i.test(t)) return { kind: "auth" };
+  if (/^Claude Code is not signed in/.test(t) || /^(?:failed to authenticate: )?(?:invalid api key|authentication_error|oauth (?:token|session) (?:has )?expired|credit balance is too low)/i.test(t)) return { kind: "auth" };
   if (t.startsWith(RUN_CLI_MISSING)) return { kind: "cli" };
   if (/Pick another folder for this chat\.|Change the default folder in /.test(t)) return { kind: "folder" };
   if (/virtual machines are turned off/i.test(t)) return { kind: "vm", off: true };
