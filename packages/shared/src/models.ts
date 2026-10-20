@@ -1632,6 +1632,13 @@ export interface ClaudeLoginStatus {
   /** Sign-in link for when the browser didn't open by itself (the page then shows a code to paste). */
   url: string | null;
   message: string | null;
+  /**
+   * A run found Claude Code signed out (its sign-in ran out, or Claude refused the API key) and nothing has worked since.
+   * `apiKey`: the runs use an Anthropic API key, so signing in again doesn't help. Older cores leave it out.
+   */
+  signedOut?: { at: ISODate; apiKey: boolean } | null;
+  /** When Godmode last signed Claude Code in (since it started). */
+  signedInAt?: ISODate | null;
 }
 
 export interface DoctorReport {

@@ -19,6 +19,7 @@ import { clientIp as relayedClientIp, isRelayed, rateLimitLogin, resetLoginAttem
 import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
+import { noteAnthropicKeyChanged } from "../../services/claudeLogin";
 
 /** App-level secrets the UI always lists (set or not). */
 const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key", ...CAPTCHA_SECRETS];
@@ -221,6 +222,7 @@ export function registerVaultRoutes(app: Hono): void {
     const { value } = await body(c, z.object({ value: z.string().max(16_384) }));
     const trimmed = value.trim();
     vault.setAppSecret(key, trimmed || null);
+    if (key === "anthropic_api_key") noteAnthropicKeyChanged();
     audit("user", trimmed ? "secret.set" : "secret.delete", key);
     return c.json({ ok: true as const });
   });
@@ -228,6 +230,7 @@ export function registerVaultRoutes(app: Hono): void {
   app.delete("/api/vault/secrets/:key", (c) => {
     const key = secretKeyParam(c);
     vault.setAppSecret(key, null);
+    if (key === "anthropic_api_key") noteAnthropicKeyChanged();
     audit("user", "secret.delete", key);
     return c.json({ ok: true as const });
   });

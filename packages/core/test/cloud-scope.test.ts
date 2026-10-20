@@ -79,6 +79,20 @@ describe("cloud route classification", () => {
     }
   });
 
+  test("only the owner signs Claude Code in again from afar", async () => {
+    const body = async () => null;
+    for (const [method, path] of [
+      ["POST", "/api/doctor/claude-login"],
+      ["DELETE", "/api/doctor/claude-login"],
+      ["POST", "/api/doctor/claude-login/code"],
+    ] as const) {
+      expect(await cloudRefusal(method, path, "owner", body)).toBeNull();
+      expect(await cloudRefusal(method, path, "operator", body)).not.toBeNull();
+      expect(await cloudRefusal(method, path, "viewer", body)).not.toBeNull();
+    }
+    expect(await cloudRefusal("GET", "/api/doctor/claude-login", "viewer", body)).toBeNull();
+  });
+
   test("an unclassified route is refused", async () => {
     expect(isCloudRouteClassified("GET", "/api/brand-new")).toBe(false);
     expect(await cloudRefusal("GET", "/api/brand-new", "owner", async () => null)).toBe(

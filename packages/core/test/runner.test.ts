@@ -9,6 +9,7 @@ import { all, get, insert, run as sql } from "../src/db";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { config } from "../src/config";
 import { listMissingLogins } from "../src/services/missingLogins";
+import { claudeLoginStatus } from "../src/services/claudeLogin";
 import {
   createConversation,
   deleteConversation,
@@ -341,6 +342,18 @@ describe("runner end-to-end with fake claude", () => {
     expect(finished.error).toStartWith("Claude Code is not signed in");
     await new Promise((r) => setTimeout(r, 200));
     expect(listMissingLogins({}).filter((m) => m.runId === run.id)).toHaveLength(0);
+    await until(() => !!claudeLoginStatus().signedOut);
+    expect(claudeLoginStatus().signedOut?.apiKey).toBe(false);
+    expect(all<{ title: string }>("SELECT title FROM notifications WHERE title = 'Claude is signed out'")).toHaveLength(1);
+
+    // A second failure says nothing new; the next answer from Claude ends it.
+    const again = await startChat({ agentId: agent.id, content: "AUTH_EXPIRED" });
+    expect((await waitForRun(again.run.id, 20_000)).status).toBe("failed");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(all<{ title: string }>("SELECT title FROM notifications WHERE title = 'Claude is signed out'")).toHaveLength(1);
+    const ok = await startChat({ agentId: agent.id, content: "hello" });
+    expect((await waitForRun(ok.run.id, 20_000)).status).toBe("succeeded");
+    expect(claudeLoginStatus().signedOut).toBeNull();
   });
 
   test("runs reach the MCP gateway; an explicit report disables the heuristic", async () => {
