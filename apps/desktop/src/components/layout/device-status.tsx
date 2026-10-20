@@ -204,7 +204,7 @@ function GroupPopover({ group, working, canHandOff, onClose }: { group: DeviceGr
       </ul>
       {canHandOff && (
         <div className="border-t px-3 py-3">
-          <HandoffButton stacked size="sm" variant={working > 0 ? "default" : "outline"} />
+          <HandoffButton stacked size="sm" variant="outline" className={working > 0 ? "[&>svg]:text-brand" : undefined} />
         </div>
       )}
       <Link

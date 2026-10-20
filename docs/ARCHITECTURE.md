@@ -1728,11 +1728,13 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
 ## Device groups
 
 Several full Godmode apps on different computers that work as one (`packages/core/src/remote/devices.ts`, shared
-types in `packages/shared/src/devices.ts`). One computer is the **primary**: it holds what is shared — agents,
-workspaces, logins, settings, the task board, automations, My tasks, questions — and runs the schedules. Every other
-computer is a **secondary**. Each chat lives on one computer of the group and can move between them, also while it
-works. The use case: work on a laptop, hand the running work to the always-on Mac before the lid closes, open the lid
-and see everything it did.
+types in `packages/shared/src/devices.ts`). One computer is the **primary**: it runs the schedules and is what the
+apps of the others show while it is there. Every other computer is a **secondary**. Every computer keeps a full copy of
+what is shared — agents, workspaces, logins, passkeys, cards, settings, the task board, automations, My tasks, paired
+phones — so a secondary keeps every feature while the primary is away and stands in for it. Each chat lives on one
+computer of the group and can move between them, also while it works. The use case: work on a laptop, hand the running
+work to the always-on Mac before the lid closes, open the lid and see everything it did; and when the always-on Mac is
+off, the laptop (and the phone) carry on.
 
 * **Built on runners.** A secondary and its primary are paired both ways with the runner link (pairing codes, pinned
   keys, the encrypted channel): each has a `runners` row for the other with `kind = 'device'` (migration 95) and is a
@@ -1764,11 +1766,54 @@ and see everything it did.
   own events still go to the computers linked to it (`WsData.link`), and windows still get what is about this machine
   (its screens, phones, VMs, the browser tab of a chat that lives here). Live views of other chats and `runner:` screens
   subscribe through the primary. Nothing that arrives over a link is forwarded again.
-* **While the primary is away** a secondary answers from its own data: its chats work, the setup copy is read only,
-  and changes to what is shared are refused with `409 primary_offline`. The desktop shows a banner.
+* **The shared data on every computer** (`replica.ts`, `replicaSync.ts`, migration 99). Triggers on the shared tables
+  (the setup tables of `snapshot.ts` without VMs, plus goals, tickets with their events and dependencies, automations,
+  heartbeats, My tasks, missing logins, notifications, passkeys, cards and purchases, messaging, paired phones) note
+  each change in `replica_rows`: one row per table row with its order (`seq`), when it was made (`at`, the time on the
+  computer that made it, kept when copied) and where (`origin`: the runner id it came from, NULL = here). Writes of
+  another computer's changes run inside `asPeer()` (table `replica_ctx`), so they are never sent back. Each computer
+  pulls the other's changes (`GET /api/link/replica/changes?after=`; asking after N says everything up to N arrived,
+  `POST /api/link/replica/ack` after the last page): a secondary from its primary (without the setup, which still comes
+  as the snapshot), the primary from every secondary (everything). Pulls run when a link comes up, 300 ms after the other
+  side's `replica.changed` (sent to linked computers only, never to windows), and once a minute. Of two changes to a row
+  the newer wins; on a tie a deletion, then the primary's. A row that points at one that isn't there yet (a My task of a
+  chat not copied yet) waits in `replica_deferred` and the chat is fetched. Columns that describe the computer (an
+  agent's folder and status, a ticket's checkout, a phone's last address) are never copied. A secondary applying the
+  snapshot leaves the rows it changed itself and the primary hasn't taken yet (`pendingKeys`). The triggers are kept in
+  step with the schema at start (`ensureReplica`); they write with an update plus an insert, because a foreign key's
+  `ON DELETE SET NULL` runs them with its own conflict handling and `INSERT OR REPLACE` fails there.
+* **A copy of the primary's chats.** A secondary mirrors the primary's own chats like a runner's (`catchUp` with
+  `lite: true`: messages without screenshots, and only for chats with messages in the last 30 days; live events too).
+  Their events aren't sent back to the primary (`setLinkEventFilter`). When a chat comes back from the computer that
+  stood in, the screenshots the primary still has are kept (`keepWhole` in `mirror.ts`).
+* **While the primary is away** a secondary is a Godmode of its own at once: nothing is read only, the Godmode tools of
+  its agents run here (`runsOnPrimary` only while forwarding), and what changes goes to the primary once it is back.
+  After `standInMinutes` (default 2; at once when the primary said goodbye, `POST /api/link/devices/away` when it quits)
+  it **stands in** (`standIn.ts`, meta `link.group.standIn.since`): `runsShared()` turns true and `index.ts` starts the
+  shared services here, the chats that were working on the primary continue here from a recap (`continueHere`:
+  `moveChatHere` without a handover), and scheduled automations that came due since the primary was last seen run once
+  (`runMissedSince`). Turns the core starts in a chat of a computer that is away continue here while this computer runs
+  the shared work (`setRemoteSender`). When the primary is back (`primaryArrived`): its changes come here, the chats taken
+  over are handed back as this computer's (`POST /api/link/devices/release-chats`: the primary stops what still works in
+  them and mirrors them from here, keeping their messages), the secondary waits until the primary has pulled what changed
+  here (at most 30 s), stops standing in, and then forwards again. Setting `standInEnabled`/`standInMinutes` lives on the
+  primary (PATCH /api/devices) and secondaries keep the copy they got with the device list.
+* **Not twice.** A primary that starts (`groupSettled`) holds its schedules, its board and the chats its stop cut off
+  until each secondary that comes online within 20 s was pulled. A late automation tick (the Mac slept, `onTick`
+  `scheduledAt` more than a minute ago) waits until the group's copies are in and is skipped when the automation's
+  `last_run_at` shows another computer ran that time already. The board leaves a ticket whose chat works on another
+  computer to that computer, and tickets that arrive in Todo start where the board runs (`ticketsArrived`).
+* **Phones.** Paired phones are shared data, so a phone paired with one computer of the group works with all of them
+  (a computer that gets a phone switches its phone access on). `GET /api/mobile/me` lists the group's computers with
+  their phone addresses (`group`, from `RunnerInfo.phone`, kept in meta `link.group.phone.<id>` for while one is away).
+  The phone app tries the computer that answered last, then the primary, then the others, accepts any listed instance,
+  and only the computer it was paired with can unpair it (`apps/mobile/src/lib/peers.ts`).
+* **The same computer twice.** A computer that was a runner before it joined with the app is paired twice; both report a
+  hashed hardware id (`RunnerInfo.machineId`, `identity.ts`). `GroupDevice.runnerTwin` names the runner, and
+  `POST /api/devices/retire-runner` moves its chats to the app, switches its service off there and removes it.
 * **Shared services** (scheduler, automations, app triggers, messaging, the board, heartbeats, dreaming, run notices,
-  calls) run on the primary only; `index.ts` stops them when a computer becomes a secondary and starts them again when
-  it leaves.
+  calls) run where `runsShared()` says: on the primary, or on a secondary while it stands in; `index.ts` starts and stops
+  them when that changes.
 * **Agents on a secondary** call the Godmode tools about shared things on the primary (`deviceTools.ts`,
   `SHARED_TOOLS`, `POST /api/link/devices/tool` in the run's name: the primary has the run as a copy). A turn the core
   starts by itself in a chat that lives elsewhere (a human task closes, a ticket answers a question) starts there
@@ -1783,8 +1828,10 @@ and see everything it did.
 * **New chats** start where this computer sends them by default (`defaultRunOn`: this Mac, another device, or
   `"primary"`), picked otherwise in the composer's "Run on". A chat started for this Mac from a secondary keeps its
   folder, shared screen, VM and phones: they are this computer's.
-* **Desktop:** Settings → Devices, the sidebar indicator, the offline banner, `lib/places.ts` (what "This Mac" means on
-  each computer), the "Run on" chip, the chat pill and the move dialog. The runners page lists runners only.
+* **Desktop:** Settings → Devices (stand-in and browser sign-in settings, Full Disk Access per computer, the runner
+  twin), the sidebar indicator and its popover, the away banner (countdown, then "stands in"), `lib/places.ts` (what
+  "This Mac" means on each computer; a runner twin is listed after its computer and tagged "Runner"), the "Run on"
+  chip, the chat pill and the move dialog. The runners page lists runners only.
 
 ## Memory
 

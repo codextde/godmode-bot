@@ -125,6 +125,7 @@ const HAND_BACK_WAIT_MS = 30_000;
 const PRIMARY_MESSAGES_DAYS = 30;
 const WAKE_GAP_MS = 90_000;
 const SETTLE_MS = 45_000;
+const START_SETTLE_MS = 20_000;
 
 interface LinkHandler {
   app: Hono;
@@ -491,6 +492,24 @@ function startWakeWatch(): void {
 function stopWakeWatch(): void {
   if (wakeTimer) clearInterval(wakeTimer);
   wakeTimer = null;
+}
+
+/**
+ * A primary that just started: the shared work (schedules, the board) and the chats its stop cut off wait until every
+ * computer of its group that comes online within a short while has been pulled — one may have stood in meanwhile and
+ * done some of it already.
+ */
+export async function groupSettled(): Promise<void> {
+  if (!isPrimary() || !deviceRows().length) return;
+  const end = Date.now() + START_SETTLE_MS;
+  for (;;) {
+    const waiting = deviceRows().filter((d) => {
+      const up = linkUpAt.get(d.id);
+      return !up || (lastPulledAt(d.id) ?? 0) < up;
+    });
+    if (!waiting.length || Date.now() > end) return;
+    await sleep(500);
+  }
 }
 
 /**

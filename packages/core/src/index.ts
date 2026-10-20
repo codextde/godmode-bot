@@ -19,7 +19,7 @@ import type { CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
-import { openDb, closeDb, setMeta, getDb } from "./db";
+import { openDb, closeDb, get, setMeta, getDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -62,7 +62,7 @@ import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
 import { startLinkServer, stopLinkServer } from "./remote/linkServer";
-import { sayGoodbye, startDevices, stopDevices } from "./remote/devices";
+import { groupSettled, sayGoodbye, startDevices, stopDevices } from "./remote/devices";
 import { ensureReplica } from "./remote/replica";
 import { onGroupChange, runsShared } from "./remote/group";
 import { deliverForwarded } from "./server/ws";
@@ -232,7 +232,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopCalls();
   };
   if (!runner) {
-    if (runsShared()) startShared();
+    if (runsShared()) void groupSettled().then(startShared);
     startModUpdates();
     onGroupChange(() => {
       if (runsShared()) startShared();
@@ -336,7 +336,12 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   }
 
   // Once the API (the runs' tool gateway) listens, that work goes on where it stopped.
-  if (interrupted) void resumeInterruptedWork(interrupted).catch((err) => log.warn("could not continue the work the restart cut off", err));
+  if (interrupted) {
+    void groupSettled()
+      // A chat another computer of the group continued meanwhile lives there now.
+      .then(() => resumeInterruptedWork({ ...interrupted, runs: interrupted.runs.filter((r) => !get("SELECT 1 FROM conversations WHERE id = ? AND runner_id IS NOT NULL", r.conversation_id)) }))
+      .catch((err) => log.warn("could not continue the work the restart cut off", err));
+  }
   if (!runner) startOutageRecovery();
 
   // Background doctor check so the UI has fresh dependency info.
