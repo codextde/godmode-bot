@@ -261,6 +261,19 @@ Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-con
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
 works in its own tabs (see Browser).
 
+The watchdog (`runner/watchdog.ts`) looks at every running run twice a minute and stops one that shows no sign of life
+for too long (`settings.runner.stallMinutes`, longer inside a step) or goes in circles. macOS asks the person at the
+computer before a program may open the Desktop, Documents, Downloads, iCloud Drive or a removable drive (or control
+another app, record the screen, …), and whatever asked — a command, or Claude Code itself — stands still until someone
+answers. While runs work on a Mac, `services/macPrompts.ts` follows tccd's log (`log stream --style ndjson`; where it
+can't stream, `log show --last 90s` while a step has been silent for 45 s) for `AUTHREQ_PROMPTING` lines whose
+responsible process is this program or Godmode's app. A pending prompt labels the silent runs it holds ("Waiting for
+you on <computer>: macOS asks whether Godmode may open your Desktop folder"), sends one warning notification (a
+runner's reaches its controller like any other) and keeps the watchdog from stopping a silent run. It is over with its
+`AUTHREQ_RESULT` or `TCCDEvent`, once the runs it held go on, or after 2 hours; a run stopped after that names the
+dialog in its report. Without Full Disk Access (the cached probe in `services/permissions.ts`, also sent as
+`RunnerInfo.fullDiskAccess`), the system prompt tells agents to keep out of those folders or say so first.
+
 ### Ultracode
 
 Claude Code's Ultracode — dynamic workflows on every task, at any effort level — is a setting of the session, not a

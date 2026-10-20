@@ -54,6 +54,7 @@ import { checkPermissions } from "./services/permissions";
 import { startHeartbeats, stopHeartbeats } from "./services/heartbeats";
 import { startCalls, stopCalls } from "./calls/calls";
 import { startWatchdog, stopWatchdog } from "./runner/watchdog";
+import { startMacPrompts, stopMacPrompts } from "./services/macPrompts";
 import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
@@ -199,6 +200,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   startHumanTasks();
   startBudgets();
   startWatchdog();
+  startMacPrompts();
   // What only the Godmode that holds the shared setup does: on a secondary of a device group, its primary does it.
   let sharedOn = false;
   const startShared = () => {
@@ -356,6 +358,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopPauses();
     stopBudgets();
     stopWatchdog();
+    stopMacPrompts();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();

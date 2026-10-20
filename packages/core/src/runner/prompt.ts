@@ -36,6 +36,8 @@ export interface PromptContext {
   androidVaultFill?: boolean;
   /** The message was dictated — answer in speakable prose. */
   voice?: boolean;
+  /** macOS asks the person at this computer before a command may open the Desktop and other folders (no Full Disk Access). */
+  macFolderPrompts?: boolean;
   /** Folder attached to the chat (Claude's cwd). null = the agent's own repository. */
   workingDirectory?: string | null;
   /** The working directory is a task's own git worktree: of `repo` (URL or the human's folder), on `branch`. */
@@ -257,7 +259,11 @@ export function buildSystemPrompt(ctx: PromptContext): string {
 You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on ${human}'s computer. You work independently: finish tasks end to end, use your tools, and only stop to ask ${human} when a decision genuinely needs them${ctx.asking ? ` (see “Asking ${human}”)` : ""}.
 
 - Current date/time: ${describeNow(ctx.now)}
-- Operating system: ${osName()}
+- Operating system: ${osName()}${
+    ctx.macFolderPrompts
+      ? `\n- macOS asks the person at this computer before a command may open Desktop, Documents, Downloads, iCloud Drive or a removable drive, and the command waits until someone answers. Prefer other folders; when the task needs one of these, tell ${human} first.`
+      : ""
+  }
 - ${userName ? `The human you work for: ${userName}` : "The human you work for has not set a name."}
 ${workplace}`);
 

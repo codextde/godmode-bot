@@ -76,6 +76,7 @@ import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { projectOfChat } from "../services/projects";
 import { getSettings } from "../services/settings";
+import { fullDiskAccess } from "../services/permissions";
 import { reportMissingLogin } from "../services/missingLogins";
 import { BROWSER_LLM_TOOLS, browserLlmKey, chatProfileId, chatWorkspaceId, currentPage, getProfile, onLaunchProblem, releaseChatBrowser, resolveProfileForAgent } from "../browser/manager";
 import { chatLeaseUrl } from "../browser/proxy";
@@ -1408,6 +1409,17 @@ function emitActivity(job: Job, text: string) {
   bus.emit({ type: "run.activity", runId: job.runId, agentId: job.agentId, label });
 }
 
+/** What a run does right now, in plain words. */
+function activityOf(job: Job): string {
+  return job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel(activityNames(job));
+}
+
+/** Show `note` as what a running run does (a macOS dialog it waits for); null puts its own activity back. */
+export function noteRunActivity(runId: string, note: string | null): void {
+  const job = jobs.get(runId);
+  if (job?.status === "running") emitActivity(job, note ?? activityOf(job));
+}
+
 /* ------------------------------------------------------------------ */
 /* The in-flight message                                               */
 /* ------------------------------------------------------------------ */
@@ -1784,7 +1796,7 @@ async function spawnClaude(
       job.answersSettled = true;
       settleAnswers(job);
     }
-    emitActivity(job, job.pause && !job.cancelReason ? (job.pause.reason === "question" ? "Asking you…" : "Pausing…") : job.acc.activityLabel(activityNames(job)));
+    emitActivity(job, activityOf(job));
   });
   job.catchUpOutput = tail.catchUp;
   try {
@@ -2185,6 +2197,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         android: phones,
         androidVaultFill: settings.android.vaultFill && agent.permissions.secretAccess === "reveal" && !fillOnly,
         voice: job.voice,
+        macFolderPrompts: process.platform === "darwin" && fullDiskAccess() !== true,
         workingDirectory: folder,
         taskWorktree: task ? { repo: task.repo_path || task.repo_url, branch: task.branch } : null,
         sources: promptSources,
