@@ -19,7 +19,7 @@ const KINDS: Record<FileReviewKind, { title: string; hint: string; icon: Compone
   build: { title: "Installed packages and build output", hint: "Installing or building again brings them back.", icon: Boxes, safe: true },
   junk: { title: "Junk files", hint: "Logs, temporary files and Finder leftovers.", icon: Wind, safe: true },
   empty: { title: "Empty files and folders", hint: "Nothing in them.", icon: FolderX, safe: true },
-  duplicate: { title: "Copies", hint: "The same content lies somewhere else too; the copy that stays is named.", icon: Copy, safe: true },
+  duplicate: { title: "Copies", hint: "The same content lies somewhere else too — the other copy stays.", icon: Copy, safe: true },
   large: { title: "Large files", hint: "Check whether they are still needed.", icon: HardDrive, safe: false },
   scratch: { title: "Large scratch in tmp/", hint: "Goes by itself a week after its last change — delete now to free the space today.", icon: Clock3, safe: false },
   stale: { title: "Untouched for 30 days", hint: "Old reports, exports and experiments: keep what still matters.", icon: Clock3, safe: false },
@@ -146,7 +146,7 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
                       <ReviewRow
                         key={`${item.kind}:${item.path}`}
                         item={item}
-                        active={selected === item.path || selected === item.related}
+                        active={!!selected && (selected === item.path || selected === item.related)}
                         checked={chosen.has(item.path)}
                         onCheck={deletable(item) ? (v) => toggle([item.path], v) : undefined}
                         actions={actions}

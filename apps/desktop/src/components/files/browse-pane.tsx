@@ -345,8 +345,8 @@ export function BrowsePane({
       </div>
 
       <div className="flex items-center gap-2 border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-        <span>{plural(entries.length, "item")}</span>
-        {total > 0 && <span className="tabular-nums">· {formatBytes(total)}</span>}
+        <span>{needle ? `${entries.length} of ${plural(listing.data?.length ?? 0, "item")}` : plural(entries.length, "item")}</span>
+        {total > 0 && !needle && <span className="tabular-nums">· {formatBytes(total)}</span>}
         {sizesQ.isFetching && <span className="ml-auto">counting…</span>}
       </div>
     </div>

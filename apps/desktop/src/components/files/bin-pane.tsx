@@ -96,7 +96,7 @@ export function BinPane({ agent, frozen }: { agent: Agent; frozen: boolean }) {
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {formatBytes(e.bytes)}
-                      {e.type === "dir" && ` · ${plural(e.files, "file")}`} · deleted {formatDistanceToNowStrict(new Date(e.deletedAt), { addSuffix: true })} · {left ? `${left} days left` : "goes today"}
+                      {e.type === "dir" && (e.files ? ` · ${plural(e.files, "file")}` : " · empty folder")} · deleted {formatDistanceToNowStrict(new Date(e.deletedAt), { addSuffix: true })} · {left ? `${left} days left` : "goes today"}
                     </p>
                   </div>
                   <Button size="sm" variant="outline" disabled={frozen || restore.isPending} onClick={() => restore.mutate(e.id)}>
