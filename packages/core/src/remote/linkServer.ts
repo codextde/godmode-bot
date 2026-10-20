@@ -21,6 +21,7 @@ import { listActiveRuns } from "../runner/runner";
 import { getAccessToken } from "../server/auth";
 import type { WsData } from "../server/ws";
 import { audit } from "../services/audit";
+import { fullDiskAccess } from "../services/permissions";
 import { newId, now } from "../util";
 import * as vault from "../vault/vault";
 import { LinkError, SecureChannel, type LinkPeer, type Transport } from "./channel";
@@ -149,6 +150,7 @@ export function runnerInfo(): RunnerInfo {
     vault: { initialized: v.initialized, unlocked: v.unlocked },
     configDigest: appliedDigest(),
     activeRuns: listActiveRuns().length,
+    fullDiskAccess: fullDiskAccess(),
   };
 }
 

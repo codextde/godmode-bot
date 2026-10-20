@@ -327,6 +327,7 @@ let probeOverride: (() => Promise<PrivacyProbe | null>) | undefined;
 export function __setPrivacyProbeForTests(fn: (() => Promise<PrivacyProbe | null>) | undefined) {
   probeOverride = fn;
   lastProbe = null;
+  fdaAskedAt = 0;
 }
 
 let lastProbe: { at: number; value: Promise<PrivacyProbe | null> } | null = null;
@@ -358,12 +359,42 @@ function probePrivacy(): Promise<PrivacyProbe | null> {
       fullDiskAccess: pick(fresh, known.fullDiskAccess),
       fullDiskAccessHere: probeFullDiskAccess(),
     };
+    fdaAskedAt = Date.now();
     return known;
   })().finally(() => {
     lastProbe = { at: Date.now(), value: inflight! };
     inflight = null;
   });
   return inflight;
+}
+
+const FDA_EVERY_MS = 10 * 60_000;
+let fdaAskedAt = 0;
+let fdaAsking = false;
+
+/**
+ * Full Disk Access of what Godmode starts (agents and their commands) as last found; null = not a Mac, or not known
+ * yet. Never waits: an old answer is asked again in the background.
+ */
+export function fullDiskAccess(): boolean | null {
+  if (process.platform !== "darwin" && !probeOverride) return null;
+  if (!fdaAsking && !inflight && Date.now() - fdaAskedAt > FDA_EVERY_MS) {
+    fdaAsking = true;
+    const asked = probeOverride
+      ? probeOverride().then((p) => ({ fresh: p?.fullDiskAccess ?? null, here: p?.fullDiskAccessHere ?? null }))
+      : probeFullDiskAccessFresh((argv) => runCommand(argv, { timeoutMs: 5_000, maxOutput: 4_000 })).then((fresh) => ({ fresh, here: probeFullDiskAccess() }));
+    void asked
+      .then(({ fresh, here }) => {
+        known = { ...known, fullDiskAccess: fresh ?? known.fullDiskAccess, fullDiskAccessHere: here ?? known.fullDiskAccessHere };
+      })
+      .catch((err) => log.debug("could not check Full Disk Access", err))
+      .finally(() => {
+        fdaAsking = false;
+        fdaAskedAt = Date.now();
+      });
+  }
+  const { fullDiskAccess: fresh, fullDiskAccessHere: here } = known;
+  return fresh === true || here === true ? true : fresh === false || here === false ? false : null;
 }
 
 /**
