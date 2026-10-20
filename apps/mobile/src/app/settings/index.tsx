@@ -15,6 +15,7 @@ import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
+import { computersOf } from "@/lib/peers";
 import { qk } from "@/lib/query";
 import { isGatewayUrl, useSession } from "@/lib/session";
 import { firstLine, patchSettings, useSettings } from "@/lib/setup";
@@ -35,6 +36,8 @@ export default function Settings() {
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
   const status = useLive((s) => s.status);
+  const linked = useLive((s) => s.computer);
+  const primaryAway = useLive((s) => s.primaryAway);
   const me = useQuery({ queryKey: qk.me, queryFn: api.me });
   const settings = useSettings();
   const catalog = useModelCatalog();
@@ -50,6 +53,12 @@ export default function Settings() {
   const s = settings.data;
   const model = s ? (findModel(catalog.data?.models ?? [], s.runner.model)?.label ?? s.runner.model) : undefined;
   const projects = workspaces.reduce((n, w) => n + w.projects.length, 0);
+  const computers = computersOf(connection);
+  const activeId = linked ?? connection.activeInstanceId;
+  const computerState = (id: string, primary: boolean) => {
+    if (id === activeId) return status === "online" ? "Connected" : status === "connecting" ? "Connecting…" : null;
+    return primary && primaryAway && status === "online" ? "Away" : null;
+  };
 
   const toggleLock = async (on: boolean) => {
     const result = await LocalAuthentication.authenticateAsync({ promptMessage: on ? "Turn on Face ID for Godmode" : "Turn off Face ID for Godmode" });
@@ -91,6 +100,19 @@ export default function Settings() {
           </Row>
         </View>
       </Card>
+
+      {computers.length > 1 ? (
+        <Group title="Computers" footer="When one is out of reach, this phone uses another computer of the group.">
+          {computers.map((p) => (
+            <Info
+              key={p.instance.id}
+              icon="display"
+              label={p.instance.name}
+              value={[p.role === "primary" ? "Primary" : null, computerState(p.instance.id, p.role === "primary")].filter(Boolean).join(" · ")}
+            />
+          ))}
+        </Group>
+      ) : null}
 
       <Group title="Preferences" footer="Changes apply to your computer right away. Running chats pick them up with their next message.">
         {s ? <FieldRow label="Your name" value={s.general.userName} placeholder="Add your name" maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}

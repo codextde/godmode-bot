@@ -2,7 +2,8 @@ import { Image } from "expo-image";
 import { useState } from "react";
 import { StyleSheet, Text, View, type ImageStyle, type StyleProp } from "react-native";
 import { Icon } from "./icon";
-import { addressOrder, useSession } from "@/lib/session";
+import { pictureBases } from "@/lib/api";
+import { useSession } from "@/lib/session";
 import { radius, space, type, useColors } from "@/lib/theme";
 
 /**
@@ -15,7 +16,7 @@ export function RemoteImage({ path, alt, style }: { path: string; alt: string; s
   const [ratio, setRatio] = useState(4 / 3);
   const [attempt, setAttempt] = useState(0);
   if (!connection) return null;
-  const bases = addressOrder(connection);
+  const bases = pictureBases(connection);
   if (attempt >= bases.length) {
     return (
       <View style={[styles.missing, { backgroundColor: c.sunken }]}>
