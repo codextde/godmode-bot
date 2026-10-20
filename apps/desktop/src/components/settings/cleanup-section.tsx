@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient, type UseMutationResult } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { motion } from "motion/react";
-import { ArrowDown, ArrowUpRight, BroomSparkles, CalendarClock, CircleAlert, CircleArrowDown, CircleCheck, CircleX, HardDrive, RefreshCw, Stethoscope } from "lucide-react";
+import { ArrowDown, ArrowUpRight, BroomSparkles, CalendarClock, CircleAlert, CircleArrowDown, CircleCheck, CircleX, FolderOpen, HardDrive, RefreshCw, Stethoscope } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
 import type { CleanupReport, HealthCheck, Settings, StorageArea } from "@godmode/shared";
@@ -62,6 +62,15 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
       )}
       <SelfCheck report={report.data} failed={report.isError} rescan={rescan} />
       {report.data ? <CleanupItems report={report.data} refreshing={scanning} /> : !report.isError && <ItemsSkeleton />}
+      <SettingsGroup title="Agents' files" description="Look through each agent's workspace, notes and memory yourself: what takes space, copies, junk and notes nothing links to." icon={<FolderOpen />}>
+        <SettingRow label="Files" description="Rename, move and delete by hand. Deleted files wait 30 days in the agent's bin.">
+          <Button asChild size="sm" variant="outline">
+            <Link to="/files">
+              Open Files <ArrowUpRight />
+            </Link>
+          </Button>
+        </SettingRow>
+      </SettingsGroup>
       {settings && <AutoCleanup settings={settings} />}
     </div>
   );
