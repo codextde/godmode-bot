@@ -187,7 +187,7 @@ const PAUSE_GRACE_MS = 8000;
 /** Continuations a Stop hook (`/goal`) forces in a row without a tool call before Godmode ends the run. */
 const GOAL_IDLE_LIMIT = 2;
 const SESSION_MISSING = /no conversation found|session(?: id)? [^\n]{0,80}not found|could not find session|no such session/i;
-const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth token (?:has )?expired|credit balance is too low/i;
+const AUTH_PROBLEM = /not logged in|please run \/login|invalid api key|authentication_error|oauth (?:token|session) (?:has )?expired|credit balance is too low/i;
 /** Built-in Claude Code tools of a dream run: reading and editing the memory files, nothing else. */
 const DREAM_TOOLS = "Read,Write,Edit,Glob,Grep";
 /**
@@ -2786,7 +2786,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (!wasRunning || !finished || !agent) return;
   // A dream's summary may talk about past login trouble — that is no new missing login. Neither is Claude Code's own
   // error ("Failed to authenticate. API Error: 403") standing in for the answer.
-  const claudeError = outcome.status === "failed" && (text.trim() === error?.trim() || /^(?:Failed to authenticate\.|API Error:)/.test(text.trim()));
+  const claudeError = outcome.status === "failed" && (text.trim() === error?.trim() || /^(?:Failed to authenticate[.:]|API Error:)/.test(text.trim()));
   if (outcome.status !== "cancelled" && job.trigger !== "dream" && !claudeError) await detectMissingLogin(job, agent, text);
 
   // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their

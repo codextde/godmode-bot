@@ -334,6 +334,15 @@ describe("runner end-to-end with fake claude", () => {
     expect(listMissingLogins({}).filter((m) => m.runId === run.id)).toHaveLength(0);
   });
 
+  test("an expired Claude sign-in asks to sign in again", async () => {
+    const { run } = await startChat({ agentId: agent.id, content: "AUTH_EXPIRED" });
+    const finished = await waitForRun(run.id, 20_000);
+    expect(finished.status).toBe("failed");
+    expect(finished.error).toStartWith("Claude Code is not signed in");
+    await new Promise((r) => setTimeout(r, 200));
+    expect(listMissingLogins({}).filter((m) => m.runId === run.id)).toHaveLength(0);
+  });
+
   test("runs reach the MCP gateway; an explicit report disables the heuristic", async () => {
     const { run } = await startChat({ agentId: agent.id, content: "CALL_MCP" });
     const finished = await waitForRun(run.id, 20_000);
