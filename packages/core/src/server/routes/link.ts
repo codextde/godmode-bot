@@ -3,6 +3,7 @@ import type { RunnerFixResult } from "@godmode/shared";
 import { importChromeSession } from "../../browser/manager";
 import { config } from "../../config";
 import { logger } from "../../log";
+import { acceptedCookies } from "../../remote/browserSessions";
 import { readHandover } from "../../remote/handover";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
@@ -75,9 +76,10 @@ export function registerLinkRoutes(app: Hono): void {
   // A chat of this runner moves to the controller: its Claude session and transcript go along.
   app.get("/api/link/conversations/:id/handover", (c) => c.json(readHandover(c.req.param("id"))));
 
+  // The sessions the controller copies here (remote/browserSessions.ts); one from before sends no mode and replaces.
   app.post("/api/link/browser/:profileId/cookies", async (c) => {
-    const { cookies } = await body(c, z.object({ cookies: z.array(z.unknown()).max(20_000) }));
-    return c.json(await importChromeSession(c.req.param("profileId"), { cookiesJson: JSON.stringify(cookies) }));
+    const { cookies, mode = "replace" } = await body(c, z.object({ cookies: z.array(z.unknown()).max(20_000), mode: z.enum(["seed", "replace"]).optional() }));
+    return c.json(await importChromeSession(c.req.param("profileId"), { cookiesJson: JSON.stringify(cookies) }, (incoming, existing) => acceptedCookies(incoming, mode, existing)));
   });
 
   // Commands for the "fix with Claude" chat on the controller: its agent diagnoses and repairs the runner from there.

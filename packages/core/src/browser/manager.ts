@@ -17,7 +17,7 @@ import { getAppSecret, isUnlocked } from "../vault/vault";
 import { onSettingsApplied } from "../services/runtime";
 import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
-import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type PageSession, type PageTarget } from "./cdp";
+import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type CdpCookieParam, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
 import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
 import { solveInBrowser, type SolveOptions, type SolveResult } from "./captcha";
@@ -1077,8 +1077,15 @@ export async function exportProfileCookies(profileId: string): Promise<CdpCookie
   }
 }
 
-/** Import cookies/sessions from the user's Chrome (profile-use technique) or a cookie JSON into a Godmode profile. */
-export async function importChromeSession(profileId: string, input: ChromeImportInput): Promise<ChromeImportResult> {
+/**
+ * Import cookies/sessions from the user's Chrome (profile-use technique) or a cookie JSON into a Godmode profile.
+ * `keep`: picks what goes in, knowing what the profile has already (cookies another computer copies here).
+ */
+export async function importChromeSession(
+  profileId: string,
+  input: ChromeImportInput,
+  keep?: (cookies: CdpCookieParam[], existing: CdpCookie[]) => CdpCookieParam[],
+): Promise<ChromeImportResult> {
   requireRow(profileId);
   const { cookies, skipped, source, method } = await importer.collectCookies(input);
   if (cookies.length === 0) {
@@ -1098,8 +1105,10 @@ export async function importChromeSession(profileId: string, input: ChromeImport
   // (Browser.close flushes the cookie store to disk).
   const rb = await ensureBrowser(profileId, { headless: true, transient: true });
   let result: { set: number; failed: number; total: number };
+  let picked = cookies;
   try {
-    result = await importer.injectCookies(rb.client, cookies);
+    if (keep) picked = keep(cookies, await getCookies(rb.client));
+    result = await importer.injectCookies(rb.client, picked);
   } finally {
     await giveBack(rb);
   }
@@ -1112,6 +1121,6 @@ export async function importChromeSession(profileId: string, input: ChromeImport
   });
   emitProfile(profileId);
   bus.changed("browser-profiles");
-  const domains = [...new Set(cookies.map((c) => (c.domain ?? (c.url ? new URL(c.url).hostname : "")).replace(/^\./, "")).filter(Boolean))].sort();
-  return { imported: result.set, skipped: skipped + result.failed, domains, method };
+  const domains = [...new Set(picked.map((c) => (c.domain ?? (c.url ? new URL(c.url).hostname : "")).replace(/^\./, "")).filter(Boolean))].sort();
+  return { imported: result.set, skipped: skipped + result.failed + cookies.length - picked.length, domains, method };
 }

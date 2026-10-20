@@ -13,13 +13,14 @@ import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 import { bus } from "../src/events/bus";
 import { appBundle, findChrome, isProcessAlive, launchChrome, type ChromeProcess } from "../src/browser/chrome";
-import { CdpClient, attachToPage, getCookies, listPages, type PageSession } from "../src/browser/cdp";
+import { CdpClient, attachToPage, getCookies, listPages, type CdpCookie, type CdpCookieParam, type PageSession } from "../src/browser/cdp";
 import { getRunning, unregisterBrowser } from "../src/browser/state";
 import { updateSettings } from "../src/services/settings";
 import { websocketHandler, type WsData } from "../src/server/ws";
 import { startLiveView, stopLiveView, dispatchInput } from "../src/browser/screencast";
 import * as manager from "../src/browser/manager";
 import { loginFillScope, originRefusal } from "../src/browser/fill";
+import { acceptedCookies, type CookieMode } from "../src/remote/browserSessions";
 import type { McpServerJson } from "../src/types";
 
 const chrome = findChrome();
@@ -652,6 +653,25 @@ suite("managed Chromium (CDP integration)", () => {
     expect(byName.has("cdp")).toBe(false);
     expect(manager.getProfile(profileId).cookieCount).toBe(cookies.length);
   });
+
+  test("cookies another computer copies here: never a session-bound site's, and a seed keeps the profile's own sessions", async () => {
+    const linked = manager.createProfile({ name: "Linked", workspaceId: null });
+    const future = Math.floor(Date.now() / 1000) + 86_400;
+    const sent = (name: string, domain: string, value: string) => ({ name, value, domain, path: "/", expires: future, httpOnly: true, secure: true, session: false });
+    const take = (mode: CookieMode) => (incoming: CdpCookieParam[], existing: CdpCookie[]) => acceptedCookies(incoming, mode, existing);
+
+    const first = [sent("SID", ".google.com", "first"), sent("own", "app.linked.test", "first")];
+    expect(await manager.importChromeSession(linked.id, { cookiesJson: JSON.stringify(first) }, take("replace"))).toMatchObject({ imported: 1, skipped: 1, domains: ["app.linked.test"] });
+    const second = [sent("SID", ".google.com", "second"), sent("own", "app.linked.test", "second"), sent("new", ".fresh.test", "second")];
+    expect(await manager.importChromeSession(linked.id, { cookiesJson: JSON.stringify(second) }, take("seed"))).toMatchObject({ imported: 1, skipped: 2, domains: ["fresh.test"] });
+
+    await manager.launchBrowser(linked.id, { headless: true });
+    const cookies = await getCookies(getRunning(linked.id)!.client);
+    expect(cookies.find((c) => c.name === "own")?.value).toBe("first");
+    expect(cookies.find((c) => c.name === "new")?.value).toBe("second");
+    expect(cookies.find((c) => c.name === "SID")).toBeUndefined();
+    await manager.stopBrowser(linked.id);
+  }, 60_000);
 
   test("idle browsers are stopped unless another CDP client (e.g. browser-use) is attached", async () => {
     updateSettings({ browser: { keepAliveMinutes: 1 } });

@@ -1675,7 +1675,10 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
   its keychain). The runner upserts by primary key, keeps its own columns (paths, last use, status), never deletes an
   agent with an active run and rewrites changed agents' CLAUDE.md. Agent memory is merged three ways after each run and
   before each start (`memorySync.ts`, base in `runner_memory`; no line is dropped), and the chat's browser profile's
-  cookies are copied when they changed (`runners.sync_browser`).
+  cookies are copied when what goes there changed (`runners.sync_browser`, `remote/browserSessions.ts`). Sites that sign
+  a session out everywhere when it shows up on a second computer (Google, Microsoft, Apple, Amazon, PayPal, Meta,
+  LinkedIn, X, TikTok, Shopify accounts, banks and payment providers) are left out: the runner signs in to them itself
+  with the saved logins and 2FA codes, and drops their cookies when an older controller still sends them.
 * **Chats on a runner.** `POST /api/chat` with `runnerId` syncs, forwards the start to the runner (without folders,
   shared screens and VMs, which are this computer's) and adopts the answer. The chat keeps `conversations.runner_id`;
   its messages and runs are copies under the runner's ids. `mirror.ts` applies the runner's events — only for chats
@@ -1743,11 +1746,15 @@ and see everything it did.
   the link (`POST /api/link/devices/join`); the primary pairs back. Star topology: secondaries don't link to each other.
   Leaving (`/api/devices/leave`) removes both pairings; the primary removing a device or leaving dissolves it.
 * **Primary → secondary** is a runner link with less: the setup copy (`snapshot.ts`, without VMs, which are machines of
-  the computer they were made on), memory merges, cookies, the mirror of the chats that live on the secondary
+  the computer they were made on), memory merges, browser sign-ins, the mirror of the chats that live on the secondary
   (`mirror.ts`, now also its questions and, for devices, a chat's folder and shared screen there), and forwarding of
   what concerns them (`routing.ts`). No Godmode updates (each app updates itself) and no runner health checks. Only the
   primary sends the setup; agents with the slug of a copied agent (each install's "godmode") hand their chats and runs
   to the copy's agent when the first copy arrives.
+* **Browser sign-ins in the group** follow meta `link.group.browserSignIns` (`DeviceGroup.browserSignIns`): `own`, the
+  default, copies no cookies to a device, each computer signs in by itself; `seed` sends the same as to a runner with
+  `mode: "seed"`, and the device only takes the sites (registrable domains) its profile has no cookies for yet, so the
+  sessions it signed in to itself stay.
 * **Secondary → primary** carries the app. While the primary is connected (`forwarding()`), `deviceRouting.ts` sends
   every API request there except what is about this computer (doctor, computer, VMs, Android, folders, logs, phone
   pairing, cloud, licence, voice, devices, a chat-less browser view). Settings are merged: `server`, `mobile`, `cloud`,
