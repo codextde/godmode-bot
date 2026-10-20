@@ -56,7 +56,7 @@ import { notify } from "../services/notifications";
 import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import * as vault from "../vault/vault";
-import { remoteRuns } from "./activeRuns";
+import { remoteRuns, setRunnerReachability } from "./activeRuns";
 import { browserSignIns, cookiesFor } from "./browserSessions";
 import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
@@ -257,6 +257,13 @@ export function getRunner(id: string): RemoteRunner {
 /** What a runner said about itself at its last connect. */
 export function runnerInfoOf(id: string): RunnerInfo | undefined {
   return infos.get(id);
+}
+
+/** A chat that moved back to `runnerId` before it was let go there: nothing to let go anymore. */
+export function forgetRelease(runnerId: string, conversationId: string): void {
+  const left = pendingReleases(runnerId).filter((id) => id !== conversationId);
+  if (left.length) setMeta(releaseKey(runnerId), JSON.stringify(left));
+  else deleteMeta(releaseKey(runnerId));
 }
 
 /** Chats that moved here from `runnerId` and that it still has to let go. */
@@ -594,6 +601,7 @@ export function startRunners(): void {
   if (started) return;
   started = true;
   wireHub();
+  setRunnerReachability((id) => links.get(id)?.state.state === "online");
   setUpdateHost({
     row: (id) => {
       const r = row(id);
@@ -639,6 +647,7 @@ export function startRunners(): void {
 
 export function stopRunners(): void {
   started = false;
+  setRunnerReachability(null);
   offBus?.();
   offBus = null;
   if (autoUpdateTimer) clearInterval(autoUpdateTimer);

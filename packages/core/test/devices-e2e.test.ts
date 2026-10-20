@@ -18,6 +18,7 @@ import { deliverForwarded, websocketHandler, type HubSocket } from "../src/serve
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { startChat } from "../src/services/conversations";
 import { startDevices, stopDevices } from "../src/remote/devices";
+import { startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
 import { forwarding, groupRole, primaryRunnerId, resetGroupCache, runsShared } from "../src/remote/group";
 import { startLinkServer, stopLinkServer } from "../src/remote/linkServer";
 import { startRunners, stopRunners } from "../src/remote/runners";
@@ -150,6 +151,8 @@ beforeAll(async () => {
   const before = await startChat({ agentId: agent.id, content: "Before joining" });
   beforeJoinChat = before.conversation.id;
   await waitForRun(before.run.id, 20_000);
+  // Like the app: My tasks run on every computer of the group.
+  startHumanTasks();
   startDevices({ app, websocket: websocketHandler }, deliverForwarded);
   startRunners();
 }, 120_000);
@@ -164,6 +167,7 @@ afterAll(async () => {
   if (savedClaudeConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = savedClaudeConfig;
   stopDevices();
+  stopHumanTasks();
   stopRunners();
   stopLinkServer();
   await stopPrimary();
@@ -282,6 +286,11 @@ describe("a device group, end to end", () => {
       30_000,
       "the question on the primary",
     );
+    // One ticket in My tasks for it, made where the run asks and shared with the primary.
+    await until(async () => (await onPrimary<{ questionId: string | null }[]>("/api/human-tasks")).body.some((t) => t.questionId === question!.id), 20_000, "the question's ticket on the primary");
+    await sleep(2_000);
+    expect((await onPrimary<{ questionId: string | null }[]>("/api/human-tasks")).body.filter((t) => t.questionId === question!.id)).toHaveLength(1);
+    expect(all("SELECT id FROM human_tasks WHERE question_id = ?", question!.id)).toHaveLength(1);
     const answered = await here(`/api/questions/${question!.id}/answer`, { method: "POST", body: JSON.stringify({ optionId: question!.options[0]!.id }) });
     expect(answered.status).toBe(200);
     await until(() => runsOf(id).some((r) => r.status === "succeeded"), 30_000, "the run to continue here");

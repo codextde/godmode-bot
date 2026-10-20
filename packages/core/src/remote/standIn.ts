@@ -16,6 +16,8 @@ const log = logger("devices");
 const ENABLED_META = "link.group.standIn";
 const MINUTES_META = "link.group.standInMinutes";
 const DEFAULT_MINUTES = 2;
+const GOODBYE_WAIT_MS = 45_000;
+const RECHECK_MS = 60_000;
 
 export interface TakeOver {
   /** When the primary was last seen: automations due since then run here once. */
@@ -26,11 +28,16 @@ let waiting: { timer: ReturnType<typeof setTimeout>; at: string; lostAt: string 
 let goodbye = false;
 let takeOver: ((t: TakeOver) => Promise<void>) | null = null;
 let changed: (() => void) | null = null;
+let online: (() => Promise<boolean>) | null = null;
 
-/** remote/devices.ts: what taking over means (continue the primary's work here), and how the UI hears of it. */
-export function setStandInHooks(hooks: { takeOver: (t: TakeOver) => Promise<void>; changed: () => void } | null): void {
+/**
+ * remote/devices.ts: what taking over means (continue the primary's work here), how the UI hears of it, and whether
+ * this computer itself is online (one that lost the internet is the one cut off: it doesn't take over).
+ */
+export function setStandInHooks(hooks: { takeOver: (t: TakeOver) => Promise<void>; changed: () => void; online: () => Promise<boolean> } | null): void {
   takeOver = hooks?.takeOver ?? null;
   changed = hooks?.changed ?? null;
+  online = hooks?.online ?? null;
   if (!hooks) cancelWaiting();
 }
 
@@ -69,8 +76,10 @@ export function primaryWentAway(lastSeen: string | null): void {
   if (!isSecondary() || standingIn() || waiting || !takeOver) return;
   const settings = standInSettings();
   if (!settings.standInEnabled) return;
-  // GODMODE_STAND_IN_MS: tests don't wait minutes.
-  const wait = goodbye ? 0 : Number(process.env.GODMODE_STAND_IN_MS) || settings.standInMinutes * 60_000;
+  // GODMODE_STAND_IN_MS: tests don't wait minutes. A primary that said goodbye may only be restarting (an update): a
+  // short wait still, so its chats keep their sessions when it is back within it.
+  const full = Number(process.env.GODMODE_STAND_IN_MS) || settings.standInMinutes * 60_000;
+  const wait = goodbye ? Math.min(full, GOODBYE_WAIT_MS) : full;
   const at = new Date(Date.now() + wait).toISOString();
   const lostAt = lastSeen ?? now();
   const timer = setTimeout(() => {
@@ -83,13 +92,13 @@ export function primaryWentAway(lastSeen: string | null): void {
   changed?.();
 }
 
-/** The primary said it goes away now (Godmode quits there): no grace time. */
+/** The primary said it goes away now (Godmode quits or restarts there): a shorter grace time. */
 export function primaryLeftNow(): void {
   goodbye = true;
   if (!waiting) return;
   const lostAt = waiting.lostAt;
   cancelWaiting();
-  void begin(lostAt);
+  primaryWentAway(lostAt);
 }
 
 /** The primary can be reached again: a take-over that waited doesn't happen. */
@@ -101,6 +110,19 @@ export function primaryIsBack(): void {
 }
 
 async function begin(lostAt: string): Promise<void> {
+  if (!isSecondary() || standingIn() || !takeOver) return;
+  if (online && !(await online().catch(() => true))) {
+    // Cut off itself (no internet): it looks again in a minute instead of running the group's work twice later.
+    log.info("this computer is offline itself; it doesn't stand in yet");
+    const timer = setTimeout(() => {
+      waiting = null;
+      void begin(lostAt);
+    }, RECHECK_MS);
+    timer.unref?.();
+    waiting = { timer, at: new Date(Date.now() + RECHECK_MS).toISOString(), lostAt };
+    changed?.();
+    return;
+  }
   if (!isSecondary() || standingIn() || !takeOver) return;
   setStandingIn(now());
   log.info("standing in for the primary");

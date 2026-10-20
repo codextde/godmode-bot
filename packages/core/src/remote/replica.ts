@@ -17,7 +17,9 @@ import { all, get, getDb, getMeta, run as sql, setMeta, tx } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { now } from "../util";
-import { SETUP_TABLES, unsafe } from "./snapshot";
+import { listActiveRuns } from "../runner/runner";
+import { isSecondary, primaryRunnerId } from "./group";
+import { LOCAL_SETTINGS, SETUP_TABLES, unsafe, withOwnFields } from "./snapshot";
 
 const log = logger("replica");
 
@@ -32,6 +34,8 @@ export interface ReplicaTable {
   key: string[];
   /** Only rows with this value are shared. */
   only?: { column: string; value: string };
+  /** Rows with one of these values are never shared (the settings that describe one computer). */
+  skip?: { column: string; values: string[] };
   /** Own columns a new row can't take the column default for. */
   onInsert?: (row: Record<string, Value>) => Record<string, Value>;
   /** Part of the setup: from the primary it comes as the snapshot. */
@@ -68,6 +72,7 @@ const STATE: Omit<ReplicaTable, "setup">[] = [
 /** VMs are machines of the computer they were made on. */
 const NOT_SHARED = new Set(["vms"]);
 
+
 let tablesCache: ReplicaTable[] | null = null;
 
 /** A table's key columns, as the schema says (the settings-like tables are keyed by `key`, not `id`). */
@@ -87,7 +92,12 @@ export function replicaTables(): ReplicaTable[] {
   const setup = SETUP_TABLES.filter((t) => !NOT_SHARED.has(t.table)).map(
     (t): ReplicaTable => ({ ...t, own: [...t.own, ...(OWN_HERE[t.table] ?? [])], key: keyOf(t.table), setup: true }),
   );
-  tablesCache = [...setup, ...STATE.map((t) => ({ ...t, key: keyOf(t.table), setup: false }))];
+  // Settings come from the primary as part of the snapshot too; what a secondary changes goes back from here. The
+  // sections that describe one computer stay where they are.
+  // The sections of one computer: snapshot.ts LOCAL_SETTINGS and what a secondary keeps while it forwards.
+  const ownSections = [...new Set([...LOCAL_SETTINGS, "vm"])];
+  const settings: ReplicaTable = { table: "settings", own: [], entity: "settings", key: ["key"], setup: true, skip: { column: "key", values: ownSections } };
+  tablesCache = [...setup, settings, ...STATE.map((t) => ({ ...t, key: keyOf(t.table), setup: false }))];
   return tablesCache;
 }
 
@@ -123,7 +133,10 @@ function keyExpr(t: ReplicaTable, alias: "NEW" | "OLD"): string {
 function triggerSql(t: ReplicaTable): string[] {
   const columns = columnsOf(t.table);
   const shared = columns.filter((c) => !t.own.includes(c) && c !== "updated_at");
-  const only = (alias: "NEW" | "OLD") => (t.only ? ` AND ${alias}.${q(t.only.column)} = '${t.only.value.replace(/'/g, "''")}'` : "");
+  const lit = (v: string) => `'${v.replace(/'/g, "''")}'`;
+  const only = (alias: "NEW" | "OLD") =>
+    (t.only ? ` AND ${alias}.${q(t.only.column)} = ${lit(t.only.value)}` : "") +
+    (t.skip ? ` AND ${alias}.${q(t.skip.column)} NOT IN (${t.skip.values.map(lit).join(", ")})` : "");
   // An update and an insert instead of INSERT OR REPLACE: a foreign key action (ON DELETE SET NULL) runs the trigger
   // with its own conflict handling, and a replace would fail there.
   const key = (alias: "NEW" | "OLD") => keyExpr(t, alias);
@@ -178,18 +191,21 @@ export function ensureReplica(): void {
 
 /** Rows from before the replica: known, as old as can be, so any real change wins over them. */
 function backfill(tables: ReplicaTable[]): void {
+  // On a secondary what is here already came from its primary: nothing of it goes back.
+  const origin = isSecondary() ? primaryRunnerId() : null;
   tx(() => {
     let n = get<{ n: number }>("SELECT n FROM replica_seq WHERE id = 1")?.n ?? 0;
     for (const t of tables) {
-      const where = t.only ? ` WHERE ${q(t.only.column)} = ?` : "";
-      const rows = all<Record<string, unknown>>(`SELECT ${t.key.map(q).join(", ")} FROM ${q(t.table)}${where}`, ...(t.only ? [t.only.value] : []));
+      const where = t.only ? ` WHERE ${q(t.only.column)} = ?` : t.skip ? ` WHERE ${q(t.skip.column)} NOT IN (${t.skip.values.map(() => "?").join(", ")})` : "";
+      const rows = all<Record<string, unknown>>(`SELECT ${t.key.map(q).join(", ")} FROM ${q(t.table)}${where}`, ...(t.only ? [t.only.value] : t.skip ? t.skip.values : []));
       for (const r of rows) {
         n++;
         sql(
-          "INSERT OR IGNORE INTO replica_rows (tbl, pk, seq, at, deleted, origin) VALUES (?, ?, ?, '1970-01-01T00:00:00.000Z', 0, NULL)",
+          "INSERT OR IGNORE INTO replica_rows (tbl, pk, seq, at, deleted, origin) VALUES (?, ?, ?, '1970-01-01T00:00:00.000Z', 0, ?)",
           t.table,
           t.key.map((k) => String(r[k])).join(KEY_SEP),
           n,
+          origin,
         );
       }
     }
@@ -274,6 +290,24 @@ export function onAck(fn: (peer: string, after: number) => void): () => void {
   return () => ackListeners.delete(fn);
 }
 
+/** Joining a group: what this computer had before stays its own and is never sent (the primary's setup replaces it). */
+export function keepPreJoinLocal(primary: string): void {
+  try {
+    sql("UPDATE replica_rows SET origin = ? WHERE origin IS NULL", primary);
+  } catch (err) {
+    log.warn("could not set this computer's earlier data aside", err);
+  }
+}
+
+/** Keys of `table` this computer made itself (not copies): the setup copy doesn't delete them, a deletion arrives here. */
+export function madeHere(table: string): Set<string> {
+  try {
+    return new Set(all<{ pk: string }>("SELECT pk FROM replica_rows WHERE tbl = ? AND origin IS NULL AND deleted = 0", table).map((r) => r.pk));
+  } catch {
+    return new Set();
+  }
+}
+
 /** Forget what a computer that left the group took or gave. */
 export function forgetPeer(peer: string): void {
   try {
@@ -333,7 +367,8 @@ export function changesFor(peer: string, after: number, opts: { setup: boolean; 
   for (const r of page) {
     if (r.origin === peer) continue;
     const t = spec(r.tbl);
-    if (!t || (!opts.setup && t.setup) || !exists(t.table)) continue;
+    // Without the setup a secondary still gets its deletions: the snapshot doesn't delete what that computer made itself.
+    if (!t || (!opts.setup && t.setup && !r.deleted) || !exists(t.table)) continue;
     if (r.deleted) {
       changes.push({ t: r.tbl, k: r.pk, at: r.at, d: 1 });
       continue;
@@ -436,7 +471,13 @@ export function applyChanges(peer: string, changes: ReplicaChange[], opts: { pee
         });
       } catch (one) {
         partial.failed++;
-        log.warn(`could not take a change of ${c.t}`, { peer, key: c.k, error: one instanceof Error ? one.message : String(one) });
+        // Kept and tried again with the next pulls (a name taken here may be free by then); never just dropped.
+        try {
+          defer(peer, c);
+        } catch {
+          /* the database is in trouble: the next pull brings it again */
+        }
+        log.warn(`could not take a change of ${c.t} yet`, { peer, key: c.k, error: one instanceof Error ? one.message : String(one) });
       }
     }
     Object.assign(result, partial);
@@ -456,6 +497,11 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   const keep = !!local && (local.at > c.at || (tie && !c.d && (local.deleted === 1 || (local.origin !== peer && !opts.peerWinsTies))));
   if (keep) {
     result.kept++;
+    // This computer's version is newer: it goes to the peer again (it pulled past it already, or never got it).
+    if (local!.at > c.at) {
+      sql("UPDATE replica_seq SET n = n + 1 WHERE id = 1");
+      sql("UPDATE replica_rows SET seq = (SELECT n FROM replica_seq WHERE id = 1) WHERE tbl = ? AND pk = ?", t.table, c.k);
+    }
     return;
   }
   const columns = cachedColumns(t.table);
@@ -464,7 +510,14 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
     result.entities.add(t.entity);
     (result.keys[t.table] ??= []).push(c.k);
   };
+  if (c.d && t.skip && t.key.length === 1 && t.skip.column === t.key[0] && t.skip.values.includes(parts[0]!)) return;
   if (c.d) {
+    // Never an agent out from under a run: the deletion waits until its work ends here.
+    if (t.table === "agents" && listActiveRuns().some((r) => r.agentId === parts[0])) {
+      defer(peer, c);
+      result.deferred++;
+      return;
+    }
     const before = t.table === "agents" ? get<{ slug: string }>("SELECT slug FROM agents WHERE id = ?", parts[0]!) : null;
     const res = asPeer(peer, c.at, () => sql(`DELETE FROM ${q(t.table)} WHERE ${keyWhere(t)}`, ...parts));
     if (res.changes === 0) {
@@ -492,6 +545,10 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   }
   for (const [i, k] of t.key.entries()) row[k] = parts[i]!;
   if (t.only && row[t.only.column] !== t.only.value) return;
+  if (t.skip && t.skip.values.includes(String(row[t.skip.column]))) return;
+  if (t.table === "settings" && typeof row.value === "string") {
+    row.value = withOwnFields(String(row.key), row.value, get<{ value: string }>("SELECT value FROM settings WHERE key = ?", String(row.key))?.value ?? null);
+  }
   // Ids and names that become folder names here are checked like the setup copy checks them.
   const problem = unsafe(t.table, row);
   if (problem) {
@@ -501,14 +558,7 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   }
   const missing = missingParent(row, t.table, incoming);
   if (missing) {
-    sql(
-      "INSERT INTO replica_deferred (peer, tbl, pk, change, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(peer, tbl, pk) DO UPDATE SET change = excluded.change",
-      peer,
-      t.table,
-      c.k,
-      JSON.stringify(c),
-      now(),
-    );
+    defer(peer, c);
     result.deferred++;
     opts.onMissing?.(missing.table, missing.id);
     return;
@@ -536,6 +586,18 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   }
 }
 
+/** Kept to try again: a change that can't be written yet (a row it points at, a name taken here, an agent at work). */
+function defer(peer: string, c: ReplicaChange): void {
+  sql(
+    "INSERT INTO replica_deferred (peer, tbl, pk, change, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(peer, tbl, pk) DO UPDATE SET change = excluded.change",
+    peer,
+    c.t,
+    c.k,
+    JSON.stringify(c),
+    now(),
+  );
+}
+
 /** Changes of `peer` that waited for a row they point at: tried again (after a pull, after a chat arrived). */
 export function retryDeferred(peer: string, opts: { peerWinsTies: boolean; onMissing?: (table: string, id: string) => void }): ApplyResult {
   const cutoff = new Date(Date.now() - DEFERRED_DAYS * 86_400_000).toISOString();
@@ -555,10 +617,12 @@ export function retryDeferred(peer: string, opts: { peerWinsTies: boolean; onMis
 }
 
 /** Deletions older than this are forgotten (every computer of the group has long taken them). */
-export function pruneTombstones(): void {
+export function pruneTombstones(peers: string[]): void {
   try {
     const cutoff = new Date(Date.now() - TOMBSTONE_DAYS * 86_400_000).toISOString();
-    sql("DELETE FROM replica_rows WHERE deleted = 1 AND at < ?", cutoff);
+    // Only what every computer of the group has taken: one that was away for long still learns about the deletion.
+    const taken = peers.length ? Math.min(...peers.map((p) => Number(getMeta(ackedKey(p)) ?? 0))) : Number.MAX_SAFE_INTEGER;
+    sql("DELETE FROM replica_rows WHERE deleted = 1 AND at < ? AND seq <= ?", cutoff, taken);
   } catch (err) {
     log.warn("could not prune old deletions", err);
   }

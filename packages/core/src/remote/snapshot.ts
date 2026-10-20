@@ -28,7 +28,7 @@ import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/s
 import { badRequest, parseJson } from "../util";
 import { decrypt, sha256 } from "../vault/crypto";
 import { isSecondary, primaryRunnerId } from "./group";
-import { asPeer, pendingKeys } from "./replica";
+import { asPeer, madeHere, pendingKeys } from "./replica";
 import * as vault from "../vault/vault";
 
 const log = logger("snapshot");
@@ -132,6 +132,18 @@ function columnsOf(table: string): { name: string; pk: number }[] {
 /** Fields of a settings section that keep the runner's value: they name programs and endpoints on that computer. */
 function keptFields(section: string): string[] {
   return [...(EXECUTABLE_SETTINGS[section] ?? []), ...(RUNNER_SETTINGS[section] ?? [])];
+}
+
+/** A settings section another computer sent (JSON), with this computer's own programs and endpoints kept in it. */
+export function withOwnFields(section: string, incoming: string, local: string | null): string {
+  const next = parseJson<unknown>(incoming, null);
+  const mine = parseJson<unknown>(local, null);
+  if (!isObject(next)) return incoming;
+  for (const field of keptFields(section)) {
+    delete next[field];
+    if (isObject(mine) && field in mine) next[field] = mine[field];
+  }
+  return JSON.stringify(next);
 }
 
 /* ------------------------------------------------------------------ */
@@ -270,6 +282,8 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
   // primary takes them and sends them back with its next copy), and what this copy writes is the primary's.
   const primary = isSecondary() ? primaryRunnerId() : null;
   const mineNow = (table: string) => (primary ? pendingKeys(primary, table) : new Set<string>());
+  // What this computer made itself is never deleted by a copy: a deletion of it arrives from the primary by itself.
+  const madeByMe = (table: string) => (primary ? madeHere(table) : new Set<string>());
   const writing = <T>(fn: () => T): T => (primary ? asPeer(primary, null, fn) : fn());
 
   writing(() => tx(() => {
@@ -306,6 +320,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
       const keys = new Set<string>();
       const rows: Record<string, Value>[] = [];
       const ownChanges = mineNow(spec.table);
+      const ownRows = madeByMe(spec.table);
       for (const raw of incoming as unknown[]) {
         if (!isObject(raw) || typeof raw[pk] !== "string" || !raw[pk]) continue;
         if (spec.only && raw[spec.only.column] !== spec.only.value) continue;
@@ -321,10 +336,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
       for (const local of all<Record<string, unknown>>(`SELECT * FROM ${q(spec.table)}${filter}`, ...(spec.only ? [spec.only.value] : []))) {
         const key = String(local[pk]);
         if (keys.has(key)) continue;
-        if (ownChanges.has(key)) {
-          pending = true;
-          continue;
-        }
+        if (ownChanges.has(key) || ownRows.has(key)) continue;
         if (spec.table === "agents" && busy.has(key)) {
           pending = true;
           warnings.push(

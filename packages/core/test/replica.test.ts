@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import { all, closeDb, get, openDb, run, setDb } from "../src/db";
 import { setLogLevel } from "../src/log";
+import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { applyChanges, changesFor, ensureReplica, pendingFor, pendingKeys, replicaSeq, replicaTables, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
 
 let dir: string;
@@ -207,6 +208,24 @@ describe("between two computers", () => {
     const evil: ReplicaChange = { t: "agents", k: "agt_evil", at: T(20), row: { id: "agt_evil", name: "Evil", slug: "../../outside", created_at: T(0), updated_at: T(0) } };
     expect(applyChanges("rnr_a", [evil], { peerWinsTies: true }).failed).toBe(1);
     expect(get("SELECT id FROM agents WHERE id = 'agt_evil'")).toBeNull();
+  });
+
+  test("a settings change goes to the other computer, which keeps its own programs and its own sections", () => {
+    use(a);
+    resetSettingsCache();
+    updateSettings({ general: { theme: "dark" }, runner: { claudePath: "/on/a/claude" }, mobile: { enabled: true } } as never);
+    const page = changesFor("rnr_b", 0, { setup: true });
+    const sections = page.changes.filter((c) => c.t === "settings").map((c) => c.k);
+    expect(sections).toContain("general");
+    expect(sections).not.toContain("mobile");
+    use(b);
+    resetSettingsCache();
+    updateSettings({ runner: { claudePath: "/on/b/claude" } } as never);
+    applyChanges("rnr_a", page.changes, { peerWinsTies: false });
+    resetSettingsCache();
+    expect(getSettings().general.theme).toBe("dark");
+    expect(getSettings().runner.claudePath).toBe("/on/b/claude");
+    resetSettingsCache();
   });
 
   test("the setup can be left out (a secondary gets it as the snapshot)", () => {

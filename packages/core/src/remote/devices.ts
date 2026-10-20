@@ -96,6 +96,7 @@ import {
   connectRunner,
   removeRunner,
   takenFrom,
+  forgetRelease,
   runnerExec,
   runnerInfoOf,
   runnerOfConversation,
@@ -103,7 +104,7 @@ import {
   setDeviceLinkHooks,
 } from "./runners";
 import { browserSignIns, setBrowserSignIns } from "./browserSessions";
-import { forgetPeer, pendingFor, replicaSeq } from "./replica";
+import { forgetPeer, keepPreJoinLocal, pendingFor, replicaSeq } from "./replica";
 import { pendingChanges, pullFrom, replicaHint, startReplicaSync, stopReplicaSync } from "./replicaSync";
 import { endStandIn, forgetStandIn, primaryIsBack, primaryLeftNow, primaryWentAway, setStandInHooks, setStandInSettings, standInSettings, standInState, type TakeOver } from "./standIn";
 import { SERVICE_LABEL } from "./launchd";
@@ -128,6 +129,7 @@ const PRIMARY_MESSAGES_DAYS = 30;
 const WAKE_GAP_MS = 90_000;
 const SETTLE_MS = 45_000;
 const START_SETTLE_MS = 20_000;
+const FETCHES_AT_ONCE = 3;
 
 interface LinkHandler {
   app: Hono;
@@ -183,7 +185,7 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
     deviceConnected: (id) => (isSecondary() && id === primaryRunnerId() ? primaryArrived(id) : deviceArrived(id)),
     replicaHint: (id) => replicaHint(id),
   });
-  setStandInHooks({ takeOver, changed: emitGroupSoon });
+  setStandInHooks({ takeOver, changed: emitGroupSoon, online: internetReachable });
   startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id) });
   setLinkEventFilter(echoToPrimary);
   setScheduleGroup({ active: () => groupRole() !== null, settle: settled });
@@ -290,6 +292,16 @@ export function peerAway(peer: string): void {
   else if (isPrimary()) goneNow.add(peer);
 }
 
+/** Whether this computer reaches the internet at all (any answer from Anthropic's API counts). */
+async function internetReachable(): Promise<boolean> {
+  try {
+    await fetch("https://api.anthropic.com/", { method: "HEAD", signal: AbortSignal.timeout(8_000) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Phones                                                               */
 /* ------------------------------------------------------------------ */
@@ -368,10 +380,22 @@ async function deviceArrived(id: string): Promise<void> {
     if (taken.ids?.length) await releaseChatsTo(id, taken.ids);
     // Its own link to here may still be waiting to retry: it hands everything back now instead.
     await l.json("POST", "/api/link/devices/hello", {}, { timeoutMs: 10_000 });
+    // Nothing runs twice: the shared work starts here once it stopped standing in.
+    const end = Date.now() + HAND_BACK_WAIT_MS + 10_000;
+    while (Date.now() < end && l.state.state === "online") {
+      const there = await l.json<{ standingIn: boolean }>("GET", "/api/link/devices/state", undefined, { timeoutMs: 10_000 });
+      if (!there.standingIn) break;
+      await sleep(500);
+    }
   } catch (err) {
     log.info("could not settle the hand-back with a device", { error: err instanceof Error ? err.message : String(err) });
   }
   arrivedAt.set(id, Date.now());
+}
+
+/** Over the link: where this computer stands (the primary asks before it starts the shared work again). */
+export function deviceState(): { standingIn: boolean } {
+  return { standingIn: standingIn() };
 }
 
 /** When each device was last caught up with after its link came up (ms). */
@@ -403,19 +427,25 @@ async function primaryArrived(id: string): Promise<void> {
   } catch (err) {
     log.info("could not take the primary's changes yet", { error: err instanceof Error ? err.message : String(err) });
   }
+  // Chats continued here while it was away (also before standing in began) live here now.
+  await releaseChatsNow(id);
   const since = standingInSince();
-  if (since) await handBack(id, since);
+  if (since && !(await handBack(id, since))) return;
   if (link(id).state.state === "online") setPrimaryUp(true);
   emitGroupSoon();
   void catchUpWithPrimary(id);
 }
 
-async function handBack(id: string, since: string): Promise<void> {
-  await releaseChatsNow(id);
+/** False when the primary went away again meanwhile: this computer keeps standing in. */
+async function handBack(id: string, since: string): Promise<boolean> {
   // Tells the primary there is something to pull; then wait until it has it (it pulls when its link to here is up).
   bus.emit({ type: "replica.changed", seq: replicaSeq() });
   const end = Date.now() + HAND_BACK_WAIT_MS;
   while (pendingFor(id) > 0 && Date.now() < end && link(id).state.state === "online") await sleep(250);
+  if (link(id).state.state !== "online") {
+    log.info("the primary went away again during the hand-back; still standing in");
+    return false;
+  }
   const left = pendingFor(id);
   endStandIn();
   const minutes = Math.max(1, Math.round((Date.now() - Date.parse(since)) / 60_000));
@@ -426,6 +456,7 @@ async function handBack(id: string, since: string): Promise<void> {
     `${computerName()} stood in for ${minutes === 1 ? "a minute" : `${minutes} minutes`}. ${left ? "What changed here goes over in a moment." : "Everything that changed here is there now."}`,
     "/settings/devices",
   );
+  return true;
 }
 
 /** A copy of the primary's chats, for while it is away (messages without screenshots; old chats without messages). */
@@ -437,20 +468,41 @@ async function catchUpWithPrimary(id: string): Promise<void> {
   }
 }
 
-/** A change of the shared data points at a chat that isn't here yet. */
-async function fetchChatFrom(peer: string, conversationId: string): Promise<void> {
-  if (fetching.has(conversationId)) return;
+/** A change of the shared data points at a chat that isn't here yet: fetched, a few at a time. */
+function fetchChatFrom(peer: string, conversationId: string): Promise<void> {
+  if (fetching.has(conversationId)) return Promise.resolve();
   fetching.add(conversationId);
-  try {
-    const l = link(peer);
-    if (l.state.state !== "online") return;
-    if (await fetchConversation(peer, l, conversationId, { lite: isSecondary() && peer === primaryRunnerId() })) replicaHint(peer);
-  } finally {
-    fetching.delete(conversationId);
-  }
+  return new Promise((done) => {
+    fetchQueue.push(async () => {
+      try {
+        const l = link(peer);
+        if (l.state.state !== "online") return;
+        if (await fetchConversation(peer, l, conversationId, { lite: isSecondary() && peer === primaryRunnerId() })) replicaHint(peer);
+      } catch (err) {
+        log.info(`could not fetch chat ${conversationId}`, { error: err instanceof Error ? err.message : String(err) });
+      } finally {
+        fetching.delete(conversationId);
+        done();
+      }
+    });
+    drainFetches();
+  });
 }
 
 const fetching = new Set<string>();
+const fetchQueue: (() => Promise<void>)[] = [];
+let fetchesRunning = 0;
+
+function drainFetches(): void {
+  while (fetchesRunning < FETCHES_AT_ONCE && fetchQueue.length) {
+    const next = fetchQueue.shift()!;
+    fetchesRunning++;
+    void next().finally(() => {
+      fetchesRunning--;
+      drainFetches();
+    });
+  }
+}
 
 /**
  * Events this secondary only keeps a copy of (its primary's chats) don't go back to the primary: it has them. Its own
@@ -910,6 +962,8 @@ export async function releaseChatsTo(peer: string, ids: string[]): Promise<{ rel
     clearQueue(id);
     const state: RunnerChatState = { running: false, paused: null, followup: null };
     sql("UPDATE conversations SET runner_id = ?, runner_state = ?, working_directory = NULL, computer_target = NULL, updated_at = ? WHERE id = ?", peer, JSON.stringify(state), now(), id);
+    // It lives there now: an older plan of this computer to hand it back there is done with.
+    forgetRelease(peer, id);
     emitConversationUpdated(id);
     released++;
     void fetchChatFrom(peer, id);
@@ -1000,6 +1054,7 @@ export async function joinGroup(text: string): Promise<DeviceGroup> {
       prepared: (id) => {
         primaryId = id;
         setGroup("secondary", id);
+        keepPreJoinLocal(id);
       },
     });
     const l = await waitOnline(primary.id);

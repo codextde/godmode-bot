@@ -15,7 +15,7 @@ import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
 import { HttpError, badRequest, childEnv, notFound } from "../../util";
-import { acceptJoin, adoptPushedChat, chatsTakenFrom, deviceIdOf, groupForSecondary, makeInvite, peerAway, peerHello, peerLeft, releaseChatsTo } from "../../remote/devices";
+import { acceptJoin, adoptPushedChat, chatsTakenFrom, deviceIdOf, deviceState, groupForSecondary, makeInvite, peerAway, peerHello, peerLeft, releaseChatsTo } from "../../remote/devices";
 import { ackFrom, changesFor } from "../../remote/replica";
 import { isSecondary } from "../../remote/group";
 import { callForDevice } from "../../remote/deviceTools";
@@ -173,6 +173,11 @@ export function registerLinkRoutes(app: Hono): void {
 
   // The calling computer is back: which of its chats this one continued meanwhile.
   app.get("/api/link/devices/taken", (c) => c.json(chatsTakenFrom(groupPeer(c))));
+
+  app.get("/api/link/devices/state", (c) => {
+    groupPeer(c);
+    return c.json(deviceState());
+  });
 
   // The calling computer (the primary) is back: connect to it now.
   app.post("/api/link/devices/hello", (c) => {

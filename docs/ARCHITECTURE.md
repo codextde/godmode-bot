@@ -1780,8 +1780,9 @@ off, the laptop (and the phone) carry on.
   (its screens, phones, VMs, the browser tab of a chat that lives here). Live views of other chats and `runner:` screens
   subscribe through the primary. Nothing that arrives over a link is forwarded again.
 * **The shared data on every computer** (`replica.ts`, `replicaSync.ts`, migration 99). Triggers on the shared tables
-  (the setup tables of `snapshot.ts` without VMs, plus goals, tickets with their events and dependencies, automations,
-  heartbeats, My tasks, missing logins, notifications, passkeys, cards and purchases, messaging, paired phones) note
+  (the setup tables of `snapshot.ts` without VMs, the settings sections that aren't about one computer, plus goals,
+  tickets with their events and dependencies, automations, heartbeats, My tasks, missing logins, notifications,
+  passkeys, cards and purchases, messaging, paired phones; keys come from the schema) note
   each change in `replica_rows`: one row per table row with its order (`seq`), when it was made (`at`, the time on the
   computer that made it, kept when copied) and where (`origin`: the runner id it came from, NULL = here). Writes of
   another computer's changes run inside `asPeer()` (table `replica_ctx`), so they are never sent back. Each computer
@@ -1790,9 +1791,15 @@ off, the laptop (and the phone) carry on.
   as the snapshot), the primary from every secondary (everything). Pulls run when a link comes up, 300 ms after the other
   side's `replica.changed` (sent to linked computers only, never to windows), and once a minute. Of two changes to a row
   the newer wins; on a tie a deletion, then the primary's. A row that points at one that isn't there yet (a My task of a
-  chat not copied yet) waits in `replica_deferred` and the chat is fetched. Columns that describe the computer (an
-  agent's folder and status, a ticket's checkout, a phone's last address) are never copied. A secondary applying the
-  snapshot leaves the rows it changed itself and the primary hasn't taken yet (`pendingKeys`). The triggers are kept in
+  chat not copied yet, three fetched at a time), a change that can't be written yet (a name taken here, an agent at
+  work) waits in `replica_deferred` and is tried with every pull. When this computer's version wins it is sent again,
+  so both copies end up the same. Columns that describe the computer (an agent's folder and status, a ticket's
+  checkout, a phone's last address, the program paths in settings) are never copied. A secondary applying the
+  snapshot leaves the rows it changed and the primary hasn't taken yet (`pendingKeys`) and never deletes rows it made
+  itself (`madeHere`): a deletion of those arrives through the change feed, which also carries the setup's deletions to
+  a secondary. Rows from before a computer joined (or from before this feature) are set aside as the primary's and never
+  sent. Deletions are forgotten after 45 days once every computer took them. Backups leave the replica tables out, and a
+  computer in a group doesn't restore a backup (leave the group first). The triggers are kept in
   step with the schema at start (`ensureReplica`); they write with an update plus an insert, because a foreign key's
   `ON DELETE SET NULL` runs them with its own conflict handling and `INSERT OR REPLACE` fails there.
 * **A copy of the primary's chats.** A secondary mirrors the primary's own chats like a runner's (`catchUp` with
@@ -1801,21 +1808,27 @@ off, the laptop (and the phone) carry on.
   stood in, the screenshots the primary still has are kept (`keepWhole` in `mirror.ts`).
 * **While the primary is away** a secondary is a Godmode of its own at once: nothing is read only, the Godmode tools of
   its agents run here (`runsOnPrimary` only while forwarding), and what changes goes to the primary once it is back.
-  After `standInMinutes` (default 2; at once when the primary said goodbye, `POST /api/link/devices/away` when it quits)
-  it **stands in** (`standIn.ts`, meta `link.group.standIn.since`): `runsShared()` turns true and `index.ts` starts the
+  After `standInMinutes` (default 2; at most 45 s when the primary said goodbye, `POST /api/link/devices/away` when it
+  quits or restarts, so a quick restart keeps its chats' sessions), and only while this computer itself reaches the
+  internet (one that lost it is the one cut off), it **stands in** (`standIn.ts`, meta `link.group.standIn.since`): `runsShared()` turns true and `index.ts` starts the
   shared services here, the chats that were working on the primary continue here from a recap (`continueHere`:
   `moveChatHere` without a handover), and scheduled automations that came due since the primary was last seen run once
   (`runMissedSince`). Turns the core starts in a chat of a computer that is away continue here while this computer runs
   the shared work (`setRemoteSender`). When the primary is back (`primaryArrived`): its changes come here, the chats taken
   over are handed back as this computer's (`POST /api/link/devices/release-chats`: the primary stops what still works in
-  them and mirrors them from here, keeping their messages), the secondary waits until the primary has pulled what changed
-  here (at most 30 s), stops standing in, and then forwards again. Setting `standInEnabled`/`standInMinutes` lives on the
+  them and mirrors them from here, keeping their messages; a copy from another computer of the group never deletes
+  messages), the secondary waits until the primary has pulled what changed here (at most 30 s), stops standing in, and
+  then forwards again. If the primary drops during this, the secondary keeps standing in. The primary's side of it
+  (`deviceArrived`): pull, ask which of its chats were continued there (`GET /api/link/devices/taken`) and let them go,
+  tell the secondary to connect now (`POST /api/link/devices/hello`), and wait until it stopped standing in. Setting `standInEnabled`/`standInMinutes` lives on the
   primary (PATCH /api/devices) and secondaries keep the copy they got with the device list.
 * **Not twice.** A primary that starts (`groupSettled`) holds its schedules, its board and the chats its stop cut off
   until each secondary that comes online within 20 s was pulled. A late automation tick (the Mac slept, `onTick`
   `scheduledAt` more than a minute ago) waits until the group's copies are in and is skipped when the automation's
-  `last_run_at` shows another computer ran that time already. The board leaves a ticket whose chat works on another
-  computer to that computer, and tickets that arrive in Todo start where the board runs (`ticketsArrived`).
+  `last_run_at` shows another computer ran that time already (`dueSlot`: the slot from croner, two seconds ahead). The
+  board leaves a ticket whose chat lives on another computer that can be reached to that computer, picks it up when that
+  one is away, and starts tickets that arrive in Todo where the board runs (`ticketsArrived`). A question's ticket in
+  My tasks is made only on the computer whose chat asks it (a runner's chats get theirs on its controller).
 * **Phones.** Paired phones are shared data, so a phone paired with one computer of the group works with all of them
   (a computer that gets a phone switches its phone access on). `GET /api/mobile/me` lists the group's computers with
   their phone addresses (`group`, from `RunnerInfo.phone`, kept in meta `link.group.phone.<id>` for while one is away).

@@ -11,9 +11,9 @@ import { computerName } from "../mobile/devices";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { notify } from "../services/notifications";
 import { applyRuntimeSettings } from "../services/runtime";
-import { getSettings, updateSettings } from "../services/settings";
+import { getSettings, resetSettingsCache, updateSettings } from "../services/settings";
 import { ticketsArrived } from "../tasks/service";
-import { getMeta, setMeta } from "../db";
+import { get, getMeta, setMeta } from "../db";
 import { groupRole, isSecondary, primaryRunnerId } from "./group";
 import {
   type ApplyResult,
@@ -37,6 +37,7 @@ const PULL_EVERY_MS = 60_000;
 const HINT_DELAY_MS = 300;
 const WATCH_MS = 1_500;
 const MAX_PAGES = 200;
+const PHONE_ON_META = "link.group.phoneAccessOn";
 
 const chains = new Map<string, Promise<ApplyResult | null>>();
 const hintTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -127,16 +128,22 @@ async function afterApply(from: string, result: ApplyResult): Promise<void> {
   for (const agentId of result.agents) {
     await refreshAgentFiles(agentId, `Changes from ${from}`).catch((err) => log.warn(`could not write the files of agent ${agentId}`, err));
   }
+  if (result.keys.settings?.length) {
+    resetSettingsCache();
+    applyRuntimeSettings(getSettings());
+  }
   if (result.keys.routines?.length) reloadSchedules();
   if (result.keys.tasks?.length) ticketsArrived([...new Set(result.keys.tasks)]);
-  if (result.keys.mobile_devices?.length) phonesArrived(from);
+  if (result.keys.mobile_devices?.some((id) => get("SELECT 1 FROM mobile_devices WHERE id = ?", id))) phonesArrived(from);
   announce(result);
 }
 
 /** A phone paired with another computer of the group: it works with this one too once phone access is on here. */
 function phonesArrived(from: string): void {
   const settings = getSettings();
-  if (settings.mobile.enabled) return;
+  // Once: a computer whose phone access the human switched off afterwards keeps it off.
+  if (settings.mobile.enabled || getMeta(PHONE_ON_META)) return;
+  setMeta(PHONE_ON_META, "1");
   try {
     applyRuntimeSettings(updateSettings({ mobile: { enabled: true } } as never));
     notify("info", "Your phone works with this computer too", `It was paired on ${from}. When that computer is away, the Godmode app on your phone connects to ${computerName()}.`, "/settings/phone");
@@ -184,7 +191,7 @@ export function startReplicaSync(opts: { fetchChat: (peer: string, conversationI
   }, WATCH_MS);
   watchTimer.unref?.();
   pullTimer ??= setInterval(() => {
-    pruneTombstones();
+    pruneTombstones(peers());
     for (const peer of peers()) void pullFrom(peer).catch(() => undefined);
   }, PULL_EVERY_MS);
   pullTimer.unref?.();

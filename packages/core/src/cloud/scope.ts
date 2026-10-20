@@ -311,6 +311,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/link/devices/release-chats", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/devices/taken", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/devices/hello", refused(COMPUTER_ONLY)],
+  ["GET", "/api/link/devices/state", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/devices/away", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/replica/changes", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/replica/ack", refused(COMPUTER_ONLY)],

@@ -16,7 +16,7 @@
  * Descriptions are Markdown and may link files (screenshots, PDFs…, see ./attachments.ts): the agent gets a copy of
  * each and is told to read them first.
  */
-import { remoteRuns } from "../remote/activeRuns";
+import { remoteRuns, runnerReachable } from "../remote/activeRuns";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2325,8 +2325,10 @@ export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): 
   let restarts = 0;
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
     if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
-    // Its chat works on another computer of the group (one that stood in for this one): that computer finishes it.
-    if (t.conversation_id && remoteRuns().some((r) => r.conversationId === t.conversation_id)) continue;
+    // Its chat lives on another computer that can be reached (one that stood in for this one): that computer finishes
+    // it. One that is away can't: then the work is picked up here.
+    const owner = t.conversation_id ? get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", t.conversation_id)?.runner_id : null;
+    if (owner && (runnerReachable(owner) || remoteRuns().some((r) => r.conversationId === t.conversation_id))) continue;
     // It waits for its parts: it keeps waiting, or continues when they were finished meanwhile.
     if (waitsForParts(t)) {
       if (!openParts(t.id).length) partClosed(t.id);
