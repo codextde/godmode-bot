@@ -26,6 +26,8 @@ export interface TakeOver {
 
 let waiting: { timer: ReturnType<typeof setTimeout>; at: string; lostAt: string } | null = null;
 let goodbye = false;
+/** Counts the primary's returns: a take-over that started before one doesn't go on after it. */
+let returns = 0;
 let takeOver: ((t: TakeOver) => Promise<void>) | null = null;
 let changed: (() => void) | null = null;
 let online: (() => Promise<boolean>) | null = null;
@@ -103,6 +105,7 @@ export function primaryLeftNow(): void {
 
 /** The primary can be reached again: a take-over that waited doesn't happen. */
 export function primaryIsBack(): void {
+  returns++;
   goodbye = false;
   if (!waiting) return;
   cancelWaiting();
@@ -111,7 +114,11 @@ export function primaryIsBack(): void {
 
 async function begin(lostAt: string): Promise<void> {
   if (!isSecondary() || standingIn() || !takeOver) return;
-  if (online && !(await online().catch(() => true))) {
+  const since = returns;
+  // GODMODE_STAND_IN_MS (tests) also skips the internet check.
+  const reachable = online && !process.env.GODMODE_STAND_IN_MS ? await online().catch(() => true) : true;
+  if (returns !== since) return;
+  if (!reachable) {
     // Cut off itself (no internet): it looks again in a minute instead of running the group's work twice later.
     log.info("this computer is offline itself; it doesn't stand in yet");
     const timer = setTimeout(() => {

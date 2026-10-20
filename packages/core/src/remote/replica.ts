@@ -449,7 +449,7 @@ function emptyResult(): ApplyResult {
  * Write what `peer` changed. `peerWinsTies`: the peer is the primary. Each row is checked against its last change here
  * first; a row that points at one that isn't here yet waits (replica_deferred) and is tried with the next pull.
  */
-export function applyChanges(peer: string, changes: ReplicaChange[], opts: { peerWinsTies: boolean; onMissing?: (table: string, id: string) => void }): ApplyResult {
+export function applyChanges(peer: string, changes: ReplicaChange[], opts: ApplyOptions): ApplyResult {
   ensureReplica();
   const result = emptyResult();
   const incoming = new Set(changes.filter((c) => !c.d).map((c) => `${c.t}${KEY_SEP}${c.k}`));
@@ -485,7 +485,14 @@ export function applyChanges(peer: string, changes: ReplicaChange[], opts: { pee
   return result;
 }
 
-function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean; onMissing?: (table: string, id: string) => void }, incoming: Set<string>, result: ApplyResult): void {
+export interface ApplyOptions {
+  peerWinsTies: boolean;
+  onMissing?: (table: string, id: string) => void;
+  /** These changes were tried before (replica_deferred). */
+  retry?: boolean;
+}
+
+function applyOne(peer: string, c: ReplicaChange, opts: ApplyOptions, incoming: Set<string>, result: ApplyResult): void {
   const t = spec(c.t);
   if (!t || !exists(t.table) || typeof c.k !== "string" || typeof c.at !== "string") return;
   const parts = keyParts(t, c.k);
@@ -497,8 +504,10 @@ function applyOne(peer: string, c: ReplicaChange, opts: { peerWinsTies: boolean;
   const keep = !!local && (local.at > c.at || (tie && !c.d && (local.deleted === 1 || (local.origin !== peer && !opts.peerWinsTies))));
   if (keep) {
     result.kept++;
+    // Lost: nothing to try again.
+    sql("DELETE FROM replica_deferred WHERE peer = ? AND tbl = ? AND pk = ?", peer, t.table, c.k);
     // This computer's version is newer: it goes to the peer again (it pulled past it already, or never got it).
-    if (local!.at > c.at) {
+    if (local!.at > c.at && !opts.retry) {
       sql("UPDATE replica_seq SET n = n + 1 WHERE id = 1");
       sql("UPDATE replica_rows SET seq = (SELECT n FROM replica_seq WHERE id = 1) WHERE tbl = ? AND pk = ?", t.table, c.k);
     }
@@ -599,7 +608,7 @@ function defer(peer: string, c: ReplicaChange): void {
 }
 
 /** Changes of `peer` that waited for a row they point at: tried again (after a pull, after a chat arrived). */
-export function retryDeferred(peer: string, opts: { peerWinsTies: boolean; onMissing?: (table: string, id: string) => void }): ApplyResult {
+export function retryDeferred(peer: string, opts: ApplyOptions): ApplyResult {
   const cutoff = new Date(Date.now() - DEFERRED_DAYS * 86_400_000).toISOString();
   sql("DELETE FROM replica_deferred WHERE peer = ? AND created_at < ?", peer, cutoff);
   const waiting = all<{ change: string }>("SELECT change FROM replica_deferred WHERE peer = ? ORDER BY created_at", peer);
@@ -613,7 +622,7 @@ export function retryDeferred(peer: string, opts: { peerWinsTies: boolean; onMis
     }
   }
   // Not counted again as waiting when it still can't: its entry stays as it is.
-  return applyChanges(peer, changes, { ...opts, onMissing: undefined });
+  return applyChanges(peer, changes, { ...opts, onMissing: undefined, retry: true });
 }
 
 /** Deletions older than this are forgotten (every computer of the group has long taken them). */

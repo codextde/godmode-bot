@@ -17,7 +17,7 @@ import { notify } from "../services/notifications";
 import { automationConversation } from "../automations/conversation";
 import { runConditionCheck } from "../automations/conditions";
 import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from "../automations/events";
-import { HttpError, badRequest, conflict, now } from "../util";
+import { HttpError, badRequest, conflict, now, parseJson } from "../util";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { exhaustedBudget } from "../services/budgets";
@@ -234,8 +234,8 @@ async function onTick(routineId: string, scheduledAt: Date | null = null) {
 export async function runMissedSince(since: string): Promise<number> {
   const from = Date.parse(since);
   if (!Number.isFinite(from)) return 0;
-  const due = all<{ id: string; cron: string; timezone: string; last_run_at: string | null }>(
-    `SELECT r.id, r.cron, r.timezone, r.last_run_at FROM routines r JOIN agents a ON a.id = r.agent_id
+  const due = all<{ id: string; cron: string; timezone: string; last_run_at: string | null; trigger: string }>(
+    `SELECT r.id, r.cron, r.timezone, r.last_run_at, r.trigger FROM routines r JOIN agents a ON a.id = r.agent_id
       WHERE r.enabled = 1 AND a.enabled = 1 AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
   ).filter((r) => {
     let slot: Date | null = null;
@@ -245,6 +245,9 @@ export async function runMissedSince(since: string): Promise<number> {
       return false;
     }
     if (!slot || slot.getTime() < from - LATE_MS) return false;
+    // A start window still open: this computer's own random start for it runs it (once) within the window.
+    const window = startWindowOf(parseJson(r.trigger, { type: "schedule" }) as Routine["trigger"]);
+    if (window && Date.now() < slot.getTime() + window * 60_000) return false;
     return !r.last_run_at || Date.parse(r.last_run_at) < slot.getTime() - LATE_MS;
   });
   let started = 0;

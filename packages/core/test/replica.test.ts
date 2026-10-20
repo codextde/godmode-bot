@@ -148,6 +148,22 @@ describe("between two computers", () => {
     expect(get<{ title: string }>("SELECT title FROM goals WHERE id = 'gol_4'")?.title).toBe("Newer on B");
   });
 
+  test("when this computer's version wins it is sent again, and a change that lost isn't tried again", () => {
+    use(b);
+    goal("gol_9", "Newer here");
+    const before = get<{ seq: number }>("SELECT seq FROM replica_rows WHERE tbl = 'goals' AND pk = 'gol_9'")!.seq;
+    run("INSERT INTO replica_deferred (peer, tbl, pk, change, created_at) VALUES ('rnr_a', 'goals', 'gol_9', '{}', ?)", T(0));
+    const older: ReplicaChange = { t: "goals", k: "gol_9", at: "2000-01-01T00:00:00.000Z", row: { id: "gol_9", title: "Older there", created_at: T(0), updated_at: T(0) } };
+    expect(applyChanges("rnr_a", [older], { peerWinsTies: true }).kept).toBe(1);
+    const after = get<{ seq: number }>("SELECT seq FROM replica_rows WHERE tbl = 'goals' AND pk = 'gol_9'")!.seq;
+    expect(after).toBeGreaterThan(before);
+    expect(changesFor("rnr_a", before, { setup: true }).changes.map((c) => c.k)).toContain("gol_9");
+    expect(all("SELECT * FROM replica_deferred WHERE pk = 'gol_9'")).toHaveLength(0);
+    // Tried again (a deferred change): it loses again without sending the row once more.
+    applyChanges("rnr_a", [older], { peerWinsTies: true, retry: true });
+    expect(get<{ seq: number }>("SELECT seq FROM replica_rows WHERE tbl = 'goals' AND pk = 'gol_9'")!.seq).toBe(after);
+  });
+
   test("on a tie the primary's change wins", () => {
     use(b);
     goal("gol_5", "B's");

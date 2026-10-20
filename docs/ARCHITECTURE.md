@@ -1822,6 +1822,10 @@ off, the laptop (and the phone) carry on.
   (`deviceArrived`): pull, ask which of its chats were continued there (`GET /api/link/devices/taken`) and let them go,
   tell the secondary to connect now (`POST /api/link/devices/hello`), and wait until it stopped standing in. Setting `standInEnabled`/`standInMinutes` lives on the
   primary (PATCH /api/devices) and secondaries keep the copy they got with the device list.
+* **Two computers that can't see each other** both believe the other is away: a laptop on another network without a
+  way back (Tailscale) stands in while the primary at home keeps working, and both run the shared work until they meet
+  again; then the newer changes win. A computer that has no internet doesn't stand in. A real fence needs a meeting
+  point outside the networks (the cloud link), which this doesn't have yet.
 * **Not twice.** A primary that starts (`groupSettled`) holds its schedules, its board and the chats its stop cut off
   until each secondary that comes online within 20 s was pulled. A late automation tick (the Mac slept, `onTick`
   `scheduledAt` more than a minute ago) waits until the group's copies are in and is skipped when the automation's

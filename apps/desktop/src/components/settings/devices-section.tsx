@@ -568,7 +568,7 @@ function StandInGroup({ group, now }: { group: DeviceGroup; now: number }) {
   const elsewhere = primary ? "" : ` Change this on ${group.primaryName}.`;
 
   return (
-    <SettingsGroup title="While the primary is away" icon={<MonitorPause />} description="Every computer has a copy of everything, so nothing stops when the primary sleeps or its lid closes.">
+    <SettingsGroup title="While the primary is away" icon={<MonitorPause />} description="Every computer has a copy of everything, so nothing stops when the primary sleeps or its lid closes. With Tailscale on each computer they also find each other on different networks, so only one of them does the work.">
       {group.role === "secondary" && !group.primaryOnline && (
         <div className="py-4">
           <StandInNow group={group} now={now} />

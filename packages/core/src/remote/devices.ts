@@ -585,13 +585,15 @@ function stopWakeWatch(): void {
  */
 export async function groupSettled(): Promise<void> {
   if (!isPrimary() || !deviceRows().length) return;
-  const end = Date.now() + START_SETTLE_MS;
+  const start = Date.now();
   for (;;) {
     const waiting = deviceRows().filter((d) => {
       const up = linkUpAt.get(d.id);
-      return !up || (arrivedAt.get(d.id) ?? 0) < up;
+      // One that doesn't connect within a short while is away; one that did is waited for until it handed back.
+      if (!up) return Date.now() - start < START_SETTLE_MS;
+      return (arrivedAt.get(d.id) ?? 0) < up && Date.now() - start < START_SETTLE_MS + HAND_BACK_WAIT_MS + 20_000;
     });
-    if (!waiting.length || Date.now() > end) return;
+    if (!waiting.length) return;
     await sleep(500);
   }
 }
@@ -955,7 +957,10 @@ export async function releaseChatsTo(peer: string, ids: string[]): Promise<{ rel
     if (!row || row.runner_id !== null) continue;
     const reason = `Stopped: ${name} continued this chat while this computer was away`;
     const active = activeRunForConversation(id);
-    if (active) await cancelRun(active, reason, { byHuman: true }).catch(() => undefined);
+    if (active) {
+      await cancelRun(active, reason, { byHuman: true }).catch(() => undefined);
+      await waitForRun(active, STOP_WAIT_MS).catch(() => undefined);
+    }
     const paused = pauseOf(id);
     if (paused) await cancelRun(paused.run_id, reason, { byHuman: true }).catch(() => undefined);
     cancelFollowup(id);
@@ -1068,6 +1073,7 @@ export async function joinGroup(text: string): Promise<DeviceGroup> {
     return await deviceGroup();
   } catch (err) {
     if (primaryId) await removeRunner(primaryId).catch(() => undefined);
+    if (primaryId) forgetPeer(primaryId);
     forgetPeerKey(key);
     clearGroup();
     deleteMeta(SELF_META);

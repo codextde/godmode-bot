@@ -17,6 +17,7 @@
  * each and is told to read them first.
  */
 import { remoteRuns, runnerReachable } from "../remote/activeRuns";
+import { groupRole } from "../remote/group";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2327,8 +2328,11 @@ export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): 
     if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
     // Its chat lives on another computer that can be reached (one that stood in for this one): that computer finishes
     // it. One that is away can't: then the work is picked up here.
-    const owner = t.conversation_id ? get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", t.conversation_id)?.runner_id : null;
+    const chat = t.conversation_id ? get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", t.conversation_id) : null;
+    const owner = chat?.runner_id ?? null;
     if (owner && (runnerReachable(owner) || remoteRuns().some((r) => r.conversationId === t.conversation_id))) continue;
+    // In a group of three a ticket can work in a chat of another secondary that this computer doesn't know: left alone.
+    if (t.conversation_id && !chat && groupRole()) continue;
     // It waits for its parts: it keeps waiting, or continues when they were finished meanwhile.
     if (waitsForParts(t)) {
       if (!openParts(t.id).length) partClosed(t.id);
