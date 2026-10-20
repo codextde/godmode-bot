@@ -22,7 +22,7 @@ export function memoryDigestOf(text: string): string {
 }
 
 /** Markdown notes under memory/, sorted; hidden entries and symlinks are skipped. */
-function memoryTopics(repoPath: string): string[] {
+export function memoryTopics(repoPath: string): string[] {
   const out: string[] = [];
   const walk = (rel: string, depth: number) => {
     if (depth > 6 || out.length >= MAX_TOPICS) return;
