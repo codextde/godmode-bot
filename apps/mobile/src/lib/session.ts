@@ -1,16 +1,16 @@
 import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import { CLOUD_GATEWAY_PREFIX, isPhoneUrlAllowed, type MobileInstance } from "@godmode/shared";
+import { baseUrl, withDefaults, withGroup, type Computers } from "./peers";
 
-/** A pairing with one Godmode computer. Kept in the Keychain / Android Keystore, never backed up to other devices. */
-export interface Connection {
+/**
+ * A pairing with a Godmode computer, which the other computers of its device group take too. Kept in the Keychain /
+ * Android Keystore, never backed up to other devices.
+ */
+export interface Connection extends Computers {
   token: string;
   deviceId: string;
   deviceName: string;
-  instance: MobileInstance;
-  urls: string[];
-  /** The address that answered last; tried first. */
-  activeUrl: string;
   pairedAt: string;
 }
 
@@ -26,11 +26,14 @@ interface SessionState {
   endedBecause: "removed" | null;
   load: () => Promise<void>;
   connect: (connection: Connection) => Promise<void>;
-  setActiveUrl: (url: string) => void;
+  /** The address and computer that answered. */
+  setActive: (url: string, instanceId: string) => void;
   /** Keep the addresses current: the computer lists them again, e.g. with its Godmode Cloud gateway once linked. */
   setUrls: (urls: string[]) => void;
   /** Keep the computer's name and version current (they can change after pairing). */
   setInstance: (instance: MobileInstance) => void;
+  /** Keep the device group current, as a computer of it lists it (`GET /api/mobile/me`). */
+  setGroup: (group: unknown) => void;
   disconnect: (reason?: "removed") => Promise<void>;
   setAppLock: (on: boolean) => Promise<void>;
 }
@@ -48,7 +51,7 @@ export const useSession = create<SessionState>((set, get) => ({
     ]);
     let connection: Connection | null = null;
     try {
-      connection = raw ? (JSON.parse(raw) as Connection) : null;
+      connection = raw ? withDefaults(JSON.parse(raw) as Connection) : null;
     } catch {
       connection = null;
     }
@@ -60,10 +63,10 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ connection, endedBecause: null });
   },
 
-  setActiveUrl: (url) => {
+  setActive: (url, instanceId) => {
     const current = get().connection;
-    if (!current || current.activeUrl === url) return;
-    const connection = { ...current, activeUrl: url };
+    if (!current || (current.activeUrl === url && current.activeInstanceId === instanceId)) return;
+    const connection = { ...current, activeUrl: url, activeInstanceId: instanceId };
     set({ connection });
     void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
   },
@@ -86,6 +89,15 @@ export const useSession = create<SessionState>((set, get) => ({
     void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
   },
 
+  setGroup: (group) => {
+    const current = get().connection;
+    if (!current) return;
+    const connection = withGroup(current, group, isPhoneUrlAllowed);
+    if (JSON.stringify(connection) === JSON.stringify(current)) return;
+    set({ connection });
+    void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
+  },
+
   disconnect: async (reason) => {
     await SecureStore.deleteItemAsync(CONNECTION_KEY, STORE_OPTIONS).catch(() => undefined);
     set({ connection: null, endedBecause: reason ?? null });
@@ -96,16 +108,6 @@ export const useSession = create<SessionState>((set, get) => ({
     set({ appLock: on });
   },
 }));
-
-/** An address without trailing slashes, so `${base}/api/…` also works for a gateway address with a path. */
-export function baseUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "");
-}
-
-/** Addresses in the order to try them: the one that worked last, then the others. */
-export function addressOrder(connection: Connection): string[] {
-  return [...new Set([connection.activeUrl, ...connection.urls].map(baseUrl))];
-}
 
 const GATEWAY_PATH = new RegExp(`^https://[^?#]+${CLOUD_GATEWAY_PREFIX}/[^/?#]+$`, "i");
 

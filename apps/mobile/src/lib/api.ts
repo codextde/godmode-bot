@@ -53,7 +53,8 @@ import type {
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
 import { withPending } from "./pending-queue";
-import { addressOrder, baseUrl, useSession, type Connection } from "./session";
+import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
+import { useSession, type Connection } from "./session";
 
 const TIMEOUT_MS = 12_000;
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -141,9 +142,10 @@ function timeoutFor(bytes: number): number {
   return TIMEOUT_MS + Math.round(bytes / 100);
 }
 
-const verified = new Set<string>();
+/** Addresses and the computer that answered there. */
+const verified = new Map<string, string>();
 /** Probes on their way, shared by the requests that wait for the same address. */
-const probing = new Map<string, Promise<true | ApiError | null>>();
+const probing = new Map<string, Promise<string | ApiError | null>>();
 /**
  * Addresses whose probe didn't answer lately. They are skipped for a while — but only while another address is known to
  * answer, so a hiccup never makes the phone give up on the only way to the computer.
@@ -151,65 +153,100 @@ const probing = new Map<string, Promise<true | ApiError | null>>();
 const unreachable = new Map<string, number>();
 const UNREACHABLE_FOR_MS = 20_000;
 
-/** One of the addresses after `index` answered as the computer and still counts as reachable. */
-function laterAnswers(bases: string[], index: number, instanceId: string): boolean {
-  return bases.slice(index + 1).some((base) => verified.has(`${instanceId} ${base}`));
+type Takes = (instanceId: string | undefined) => boolean;
+
+/** One of the addresses after `index` answered as a computer that takes the key and still counts as reachable. */
+function laterAnswers(candidates: Candidate[], index: number, takes: Takes): boolean {
+  return candidates.slice(index + 1).some(({ base }) => takes(verified.get(base)));
 }
 
 /**
- * Does this address answer as the paired computer? Asked (without the key) before the key goes to an address, so an
- * address that isn't the computer can't collect it. True when it does; else the cloud gateway's own sentence on why the
- * computer is out of reach there (offline, plan limit), when it gave one.
+ * Which computer answers at this address? Asked (without the key) before the key goes to an address, so an address
+ * that isn't a computer that `takes` it can't collect it. That computer's id when it does; else the cloud gateway's own
+ * sentence on why the computer is out of reach there (offline, plan limit), when it gave one.
  */
-async function isInstance(base: string, instanceId: string, skipIfDown = false): Promise<true | ApiError | null> {
-  const key = `${instanceId} ${base}`;
-  if (verified.has(key)) return true;
+async function isInstance(base: string, takes: Takes, skipIfDown = false): Promise<string | ApiError | null> {
+  const known = verified.get(base);
+  if (known && takes(known)) return known;
   if (!isPhoneUrlAllowed(base)) return null;
-  if (skipIfDown && (unreachable.get(key) ?? 0) > Date.now()) return null;
-  let probe = probing.get(key);
+  if (skipIfDown && (unreachable.get(base) ?? 0) > Date.now()) return null;
+  let probe = probing.get(base);
   if (!probe) {
-    probe = probeInstance(base, instanceId).then((found) => {
-      if (found === true) verified.add(key);
-      else unreachable.set(key, Date.now() + UNREACHABLE_FOR_MS);
+    probe = probeInstance(base).then((found) => {
+      if (typeof found === "string") verified.set(base, found);
+      else unreachable.set(base, Date.now() + UNREACHABLE_FOR_MS);
       return found;
     });
-    probing.set(key, probe);
-    void probe.finally(() => probing.delete(key));
+    probing.set(base, probe);
+    void probe.finally(() => probing.delete(base));
   }
-  return probe;
+  const found = await probe;
+  if (typeof found !== "string" || takes(found)) return found;
+  unreachable.set(base, Date.now() + UNREACHABLE_FOR_MS);
+  return null;
 }
 
-async function probeInstance(base: string, instanceId: string): Promise<true | ApiError | null> {
+/** The instance id Godmode answers with at this address. */
+async function probeInstance(base: string): Promise<string | ApiError | null> {
   try {
     const res = await send(`${base}/api/health`, { method: "GET" }, PROBE_TIMEOUT_MS);
     if (!res.ok) {
       const { error, code } = await failure(res);
       return error && isUnreachable(res.status, code) ? new ApiError(res.status, error, code) : null;
     }
-    return ((await res.json()) as { instance?: string }).instance === instanceId ? true : null;
+    const { instance } = (await res.json()) as { instance?: unknown };
+    return typeof instance === "string" && instance ? instance : null;
   } catch {
     return null;
   }
 }
 
 /**
- * The address to use right now: the one that worked last, else the first other one that answers as the computer.
- * Otherwise the cloud gateway's reason when it gave one, else null.
+ * The address to use right now and the computer there: the one that worked last, else the first other address that
+ * answers as a computer of the group (`onTry` hears whose address is next; the addresses in `last` come after the
+ * others). Otherwise the cloud gateway's reason when it gave one, else null.
  */
-export async function reachableBase(connection: Connection): Promise<string | ApiError | null> {
+export async function reachableBase(
+  connection: Connection,
+  onTry?: (instanceId: string) => void,
+  last?: Set<string>,
+): Promise<{ base: string; instanceId: string } | ApiError | null> {
   let refused: ApiError | null = null;
-  const bases = addressOrder(connection);
-  for (const [i, base] of bases.entries()) {
-    const found = await isInstance(base, connection.instance.id, laterAnswers(bases, i, connection.instance.id));
-    if (found === true) return base;
+  const takes: Takes = (id) => accepts(connection, id);
+  const order = candidateOrder(connection);
+  const candidates = last?.size ? [...order.filter((c) => !last.has(c.base)), ...order.filter((c) => last.has(c.base))] : order;
+  for (const [i, { base, instanceId }] of candidates.entries()) {
+    onTry?.(instanceId);
+    const found = await isInstance(base, takes, laterAnswers(candidates, i, takes));
+    if (typeof found === "string") return { base, instanceId: found };
     refused ??= found;
   }
   return refused;
 }
 
-/** Asks this address for the computer again before its next use. */
-export function forget(base: string) {
-  for (const key of verified) if (key.endsWith(` ${base}`)) verified.delete(key);
+/** Whether this computer of the group answers at one of its addresses now, asked afresh (without the key). */
+export async function answersNow(connection: Connection, instanceId: string): Promise<boolean> {
+  const bases = [...new Set(computerOf(connection, instanceId).urls.map(baseUrl))].filter(isPhoneUrlAllowed);
+  return (await Promise.all(bases.map(probeInstance))).includes(instanceId);
+}
+
+/**
+ * Where pictures load from with the key, in the order to try them: the paired computer's addresses, another computer's
+ * once it answered there as one of the group.
+ */
+export function pictureBases(connection: Connection): string[] {
+  return candidateOrder(connection)
+    .filter(({ base, instanceId }) => instanceId === connection.instance.id || accepts(connection, verified.get(base)))
+    .map(({ base }) => base);
+}
+
+/**
+ * Asks this address for the computer again before its next use. `down`: and skips it for a while, while another
+ * address answers.
+ */
+export function forget(base: string, down = false) {
+  verified.delete(base);
+  if (down) unreachable.set(base, Date.now() + UNREACHABLE_FOR_MS);
 }
 
 /** Every address gets a fresh chance (the app came back, the network changed, the human pulled to refresh). */
@@ -218,8 +255,9 @@ export function retryAddresses() {
 }
 
 /**
- * Calls the paired computer. Reads fall through to its other addresses; writes are sent once, so a slow answer never
- * turns into a second message or run. A write moves on only when the answer shows it never reached the computer.
+ * Calls the paired computer, or another computer of its group. Reads fall through to the other addresses; writes are
+ * sent once, so a slow answer never turns into a second message or run. A write moves on only when the answer shows it
+ * never reached the computer.
  */
 export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0): Promise<T> {
   const connection = useSession.getState().connection;
@@ -230,10 +268,11 @@ export async function request<T>(method: string, path: string, body?: unknown, m
   const payload = body === undefined ? undefined : form ? body : JSON.stringify(body);
   const timeout = Math.max(minTimeoutMs, typeof payload === "string" ? timeoutFor(payload.length) : form ? timeoutFor(MAX_UPLOAD_BYTES) : TIMEOUT_MS);
   let refused: ApiError | null = null;
-  const bases = addressOrder(connection);
-  for (const [i, base] of bases.entries()) {
-    const found = await isInstance(base, connection.instance.id, laterAnswers(bases, i, connection.instance.id));
-    if (found !== true) {
+  const takes: Takes = (id) => accepts(connection, id);
+  const candidates = candidateOrder(connection);
+  for (const [i, { base }] of candidates.entries()) {
+    const found = await isInstance(base, takes, laterAnswers(candidates, i, takes));
+    if (typeof found !== "string") {
       refused ??= found;
       continue;
     }
@@ -246,17 +285,22 @@ export async function request<T>(method: string, path: string, body?: unknown, m
       throw new ApiError(0, NO_ANSWER_MESSAGE, "timeout");
     }
     if (res.ok) {
-      useSession.getState().setActiveUrl(base);
+      useSession.getState().setActive(base, found);
       const type = res.headers.get("content-type") ?? "";
       return (type.includes("application/json") ? await res.json() : await res.text()) as T;
     }
     const { error, code } = await failure(res);
     if (isRemoved(res.status, code)) {
-      await useSession.getState().disconnect("removed");
-      throw new ApiError(401, "This phone was removed from Godmode.", "unauthorized");
+      if (removedBy(connection, found)) {
+        await useSession.getState().disconnect("removed");
+        throw new ApiError(401, "This phone was removed from Godmode.", "unauthorized");
+      }
+      // Another computer of the group that doesn't have this phone's key yet; it refused before doing anything.
+      forget(base, true);
+      continue;
     }
     if (!isUnreachable(res.status, code)) {
-      useSession.getState().setActiveUrl(base);
+      useSession.getState().setActive(base, found);
       if (code === LICENSE_REQUIRED) throw new ApiError(res.status, LICENSE_MESSAGE, code);
       throw new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
     }
@@ -307,8 +351,8 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
   let offline = true;
   let refused: ApiError | null = null;
   for (const base of urls) {
-    const found = await isInstance(base, payload.id);
-    if (found !== true) {
+    const found = await isInstance(base, (id) => id === payload.id);
+    if (typeof found !== "string") {
       refused ??= found;
       continue;
     }
@@ -329,6 +373,8 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
       instance: result.instance,
       urls,
       activeUrl: base,
+      peers: [],
+      activeInstanceId: result.instance.id,
       pairedAt: result.device.createdAt,
     };
   }

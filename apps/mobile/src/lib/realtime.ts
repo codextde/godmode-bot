@@ -1,11 +1,12 @@
 import { AppState, type AppStateStatus } from "react-native";
 import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
-import { api, forget, reachableBase, retryAddresses } from "./api";
+import { answersNow, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
 import { noteQueue, upsertMessage } from "./chat-cache";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
+import { primaryOf, removedBy } from "./peers";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
 
@@ -14,6 +15,14 @@ let attempt = 0;
 let running = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
+let awayTimer: ReturnType<typeof setInterval> | null = null;
+/** The computer of the group the open socket goes to. */
+let socketComputer: string | null = null;
+/**
+ * Addresses whose socket was refused (a computer of the group that doesn't have this phone's key yet answers the
+ * handshake with 401) or closed for a removed phone there: the next attempts try them after the others.
+ */
+const refusedSockets = new Set<string>();
 const counts = new Map<string, number>();
 
 const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> = {
@@ -101,17 +110,34 @@ function replaySubscriptions() {
   }
 }
 
-async function catchUp() {
+async function catchUp(instanceId: string) {
+  const token = useSession.getState().connection?.token;
   try {
     const [runs, me] = await Promise.all([api.runs.list({ status: "queued,running", limit: 50 }), api.me()]);
     useLive.getState().seedRuns(runs);
-    useSession.getState().setInstance(me.instance);
-    // Older Godmodes don't list their addresses; the ones from pairing stay then.
-    const { urls } = me as typeof me & { urls?: unknown };
-    if (Array.isArray(urls)) useSession.getState().setUrls(urls);
+    const session = useSession.getState();
+    // Paired again meanwhile: this answer is the old pairing's.
+    if (session.connection?.token !== token) return;
+    // Another computer of the group answered: its name and addresses aren't the paired one's.
+    if (me.instance.id === session.connection?.instance.id) {
+      session.setInstance(me.instance);
+      // Older Godmodes don't list their addresses; the ones from pairing stay then.
+      const { urls } = me as typeof me & { urls?: unknown };
+      if (Array.isArray(urls)) session.setUrls(urls);
+    }
+    session.setGroup(me.group);
   } catch {
     /* the next reconnect tries again */
   }
+  await checkPrimary(instanceId);
+}
+
+/** Whether the socket goes to another computer of the group because the primary doesn't answer. */
+async function checkPrimary(instanceId: string) {
+  const connection = useSession.getState().connection;
+  const primary = connection ? primaryOf(connection) : undefined;
+  const away = !!connection && !!primary && primary.instance.id !== instanceId && !(await answersNow(connection, primary.instance.id));
+  if (socketComputer === instanceId) useLive.getState().setPrimaryAway(away);
 }
 
 /**
@@ -296,8 +322,10 @@ function handle(event: ServerEvent) {
 function clearTimers() {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   if (pingTimer) clearInterval(pingTimer);
+  if (awayTimer) clearInterval(awayTimer);
   reconnectTimer = null;
   pingTimer = null;
+  awayTimer = null;
 }
 
 let connecting = false;
@@ -315,36 +343,47 @@ async function connect() {
   if (!running || !connection || socket || connecting) return;
   connecting = true;
   useLive.getState().setStatus("connecting");
-  const base = await reachableBase(connection);
+  const found = await reachableBase(connection, (id) => useLive.getState().setComputer(id), refusedSockets);
   connecting = false;
   if (!running || socket) return;
   // Paired again while this attempt looked for the computer: the new pairing's attempt was skipped, so make it now.
   if (useSession.getState().connection?.token !== connection.token) return void connect();
-  if (typeof base !== "string") {
-    useLive.getState().setStatus("offline", base?.message);
+  if (!found || found instanceof ApiError) {
+    useLive.getState().setComputer(null);
+    useLive.getState().setStatus("offline", found?.message);
     scheduleReconnect();
     return;
   }
+  const { base, instanceId } = found;
   const ws = new (WebSocket as unknown as new (url: string, protocols: string[] | null, options: { headers: Record<string, string> }) => WebSocket)(
     `${base.replace(/^http/, "ws")}/api/ws`,
     null,
     { headers: { authorization: `Bearer ${connection.token}` } },
   );
   socket = ws;
+  let opened = false;
   ws.onopen = () => {
+    opened = true;
+    refusedSockets.clear();
     attempt = 0;
-    useSession.getState().setActiveUrl(base);
+    // Another computer of the group than before: what it has may differ.
+    const moved = useSession.getState().connection?.activeInstanceId !== instanceId;
+    useSession.getState().setActive(base, instanceId);
+    socketComputer = instanceId;
+    useLive.getState().setComputer(instanceId);
     useLive.getState().setStatus("online");
     // Streaming replies as what changed, not the whole block list five times a second (megabytes in a long run).
     sendEvent({ type: "deltas.patch" });
     replaySubscriptions();
     if (viewing) sendView();
-    void catchUp();
+    void checkPrimary(instanceId);
+    void catchUp(instanceId);
     // Events were missed while the link was down, so everything is asked again (lists are small and chats come as a
-    // window). Not on the first connect: every screen has just fetched its own.
-    if (wasOpen) void queryClient.invalidateQueries();
+    // window). Not on the first connect to the same computer: every screen has just fetched its own.
+    if (wasOpen || moved) void queryClient.invalidateQueries();
     wasOpen = true;
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
+    awayTimer = setInterval(() => void checkPrimary(instanceId), 60_000);
   };
   ws.onmessage = (msg) => {
     try {
@@ -356,14 +395,18 @@ async function connect() {
   ws.onclose = (e) => {
     if (socket !== ws) return;
     socket = null;
+    socketComputer = null;
     clearTimers();
     // Ask again before reconnecting: the gateway may have lost the computer while Tailscale still reaches it.
     forget(base);
     useLive.getState().setStatus("offline");
     if (e.code === 4003) {
-      void useSession.getState().disconnect("removed");
-      return;
+      const current = useSession.getState().connection;
+      if (!current || removedBy(current, instanceId)) return void useSession.getState().disconnect("removed");
+      // Another computer of the group: the paired one or the primary says whether the phone was removed.
+      forget(base, true);
     }
+    if (e.code === 4003 || !opened) refusedSockets.add(base);
     scheduleReconnect();
   };
   ws.onerror = () => ws.close();
@@ -382,6 +425,7 @@ function onAppState(state: AppStateStatus) {
   } else if (state === "background" && socket) {
     const ws = socket;
     socket = null;
+    socketComputer = null;
     clearTimers();
     ws.close();
     useLive.getState().setStatus("offline");
@@ -393,6 +437,7 @@ export function startRealtime(): () => void {
   running = true;
   attempt = 0;
   wasOpen = false;
+  refusedSockets.clear();
   void connect();
   const sub = AppState.addEventListener("change", onAppState);
   return () => {
@@ -401,6 +446,7 @@ export function startRealtime(): () => void {
     clearTimers();
     const ws = socket;
     socket = null;
+    socketComputer = null;
     ws?.close();
   };
 }

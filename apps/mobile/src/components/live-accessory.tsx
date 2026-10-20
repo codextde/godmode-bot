@@ -7,10 +7,9 @@ import { Icon } from "./icon";
 import { LiveDot, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { activityText } from "@/lib/format";
-import { useLive } from "@/lib/live";
+import { useLinkComputer, useLive } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
-import { useSession } from "@/lib/session";
 import { useWorkspaceRuns } from "@/lib/workspace";
 import { space, useColors } from "@/lib/theme";
 
@@ -19,7 +18,7 @@ export function LiveAccessory() {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const c = useColors();
   const offline = useLive((s) => s.status === "offline");
-  const computer = useSession((s) => s.connection?.instance.name ?? "your computer");
+  const computer = useLinkComputer().name ?? "your computer";
   const { data: agents } = useQuery({ queryKey: qk.agents, queryFn: api.agents.list });
   const list = useWorkspaceRuns();
   const first = list[0];

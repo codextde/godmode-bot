@@ -18,6 +18,11 @@ Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and head
 2. On the computer: Godmode → **Settings → Phone → Connect a phone**.
 3. In the app: **Scan QR code**. The camera app works too (`godmode://pair?d=…` opens the app).
 
+When the computer is in a device group, `GET /api/mobile/me` lists the group's computers that take the phone's key too.
+When the one the app uses is out of reach it continues on another: the one it used last first, then the primary, then
+the rest. A refused key only unpairs the phone when the paired computer or the primary refuses it; another computer of
+the group may not have it yet (`src/lib/peers.ts`, tested with `bun test src/lib/peers.test.ts`).
+
 See [Phone app in docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#phone-app) for how pairing and access work.
 
 ## Develop
@@ -69,7 +74,8 @@ src/app/                routes (Expo Router)
   compose.tsx           new chat (sheet)
   settings.tsx          connection, Face ID lock, disconnect (sheet)
   welcome.tsx scan.tsx pair.tsx   pairing
-src/lib/                api (address failover), realtime (WebSocket, patches the caches), chat-cache (message windows),
-                        persist (lists kept between launches), session (Keychain), live state, attachments, theme
+src/lib/                api (address failover), peers (the device group's computers), realtime (WebSocket, patches the
+                        caches), chat-cache (message windows), persist (lists kept between launches), session
+                        (Keychain), live state, attachments, theme
 src/components/         glass, icons (SF Symbols / Material Symbols), rows, markdown, composer, attachments, live views
 ```
