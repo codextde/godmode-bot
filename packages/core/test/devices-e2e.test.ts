@@ -408,6 +408,11 @@ describe("a device group, end to end", () => {
     await until(async () => (await onPrimary<Conversation>(`/api/conversations/${standInChat}`)).body.runnerId === selfId, 30_000, "the primary to hand the chat over");
     expect(localChat(standInChat)?.runner_id).toBeNull();
     await until(async () => (await here<DeviceGroup>("/api/devices")).body.pendingChanges === 0, 30_000, "everything to be taken");
+    // The primary didn't pick the chat up again after its restart: every run it shows there is one of this computer's.
+    await sleep(3_000);
+    const theirs = (await onPrimary<{ id: string }[]>(`/api/runs?conversationId=${standInChat}&limit=50`)).body.map((r) => r.id);
+    const mine = new Set(runsOf(standInChat).map((r) => r.id));
+    expect(theirs.filter((id) => !mine.has(id))).toEqual([]);
   }, 150_000);
 
   test("leaving makes both computers a Godmode of their own again", async () => {

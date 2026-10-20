@@ -15,7 +15,7 @@ import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
 import { HttpError, badRequest, childEnv, notFound } from "../../util";
-import { acceptJoin, adoptPushedChat, deviceIdOf, groupForSecondary, makeInvite, peerAway, peerLeft, releaseChatsTo } from "../../remote/devices";
+import { acceptJoin, adoptPushedChat, chatsTakenFrom, deviceIdOf, groupForSecondary, makeInvite, peerAway, peerHello, peerLeft, releaseChatsTo } from "../../remote/devices";
 import { ackFrom, changesFor } from "../../remote/replica";
 import { isSecondary } from "../../remote/group";
 import { callForDevice } from "../../remote/deviceTools";
@@ -169,6 +169,15 @@ export function registerLinkRoutes(app: Hono): void {
     const peer = groupPeer(c);
     const { ids } = await body(c, z.object({ ids: z.array(z.string().min(1).max(100)).max(2000) }));
     return c.json(await releaseChatsTo(peer, ids));
+  });
+
+  // The calling computer is back: which of its chats this one continued meanwhile.
+  app.get("/api/link/devices/taken", (c) => c.json(chatsTakenFrom(groupPeer(c))));
+
+  // The calling computer (the primary) is back: connect to it now.
+  app.post("/api/link/devices/hello", (c) => {
+    peerHello(groupPeer(c));
+    return c.json({ ok: true as const });
   });
 
   // The calling computer goes away right now (Godmode quits there).

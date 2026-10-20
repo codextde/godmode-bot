@@ -477,7 +477,9 @@ function StatusCard({ group }: { group: DeviceGroup }) {
             <RoleBadge role={standing ? "standIn" : secondary ? "secondary" : "primary"} />
           </div>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            {secondary
+            {standing
+              ? `${group.primaryName} is away, so ${THIS_COMPUTER_INLINE} runs the automations, the task board and the phone app until it's back. Everything that changes here goes back to it then.`
+              : secondary
               ? `${group.primaryName} runs the schedules. ${THIS_COMPUTER} has a copy of everything and keeps working while it's away. Chats can run here or on any other computer of the group.`
               : `It runs the schedules for ${count === 1 ? "the group" : `all ${count} computers`}. Keep it on and awake${group.standInEnabled && count > 1 ? " — while it's away, another computer stands in" : ""}.`}
           </p>

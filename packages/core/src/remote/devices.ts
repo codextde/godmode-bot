@@ -93,7 +93,9 @@ import {
   pairWithCode,
   prepareRemoteMessage,
   releaseChatsNow,
+  connectRunner,
   removeRunner,
+  takenFrom,
   runnerExec,
   runnerInfoOf,
   runnerOfConversation,
@@ -102,7 +104,7 @@ import {
 } from "./runners";
 import { browserSignIns, setBrowserSignIns } from "./browserSessions";
 import { forgetPeer, pendingFor, replicaSeq } from "./replica";
-import { lastPulled as lastPulledAt, pendingChanges, pullFrom, replicaHint, startReplicaSync, stopReplicaSync } from "./replicaSync";
+import { pendingChanges, pullFrom, replicaHint, startReplicaSync, stopReplicaSync } from "./replicaSync";
 import { endStandIn, forgetStandIn, primaryIsBack, primaryLeftNow, primaryWentAway, setStandInHooks, setStandInSettings, standInSettings, standInState, type TakeOver } from "./standIn";
 import { SERVICE_LABEL } from "./launchd";
 import { runMissedSince, setScheduleSettle } from "../scheduler/scheduler";
@@ -359,6 +361,36 @@ function awayDevice(id: string): boolean {
 async function deviceArrived(id: string): Promise<void> {
   goneNow.delete(id);
   await pullFrom(id);
+  const l = link(id);
+  try {
+    // Chats it continued while this computer was away are its own now: nothing here may pick them up again.
+    const taken = await l.json<{ ids: string[] }>("GET", "/api/link/devices/taken", undefined, { timeoutMs: 30_000 });
+    if (taken.ids?.length) await releaseChatsTo(id, taken.ids);
+    // Its own link to here may still be waiting to retry: it hands everything back now instead.
+    await l.json("POST", "/api/link/devices/hello", {}, { timeoutMs: 10_000 });
+  } catch (err) {
+    log.info("could not settle the hand-back with a device", { error: err instanceof Error ? err.message : String(err) });
+  }
+  arrivedAt.set(id, Date.now());
+}
+
+/** When each device was last caught up with after its link came up (ms). */
+const arrivedAt = new Map<string, number>();
+
+/** Over the link: chats this computer took over from the asking one (it is back), not handed back yet. */
+export function chatsTakenFrom(peer: string): { ids: string[] } {
+  return { ids: takenFrom(peer) };
+}
+
+/** Over the link: the primary is there again; this secondary connects to it now instead of at its next retry. */
+export function peerHello(peer: string): void {
+  if (isSecondary() && peer === primaryRunnerId() && !primaryOnline()) {
+    try {
+      connectRunner(peer);
+    } catch {
+      /* gone meanwhile */
+    }
+  }
 }
 
 /**
@@ -505,7 +537,7 @@ export async function groupSettled(): Promise<void> {
   for (;;) {
     const waiting = deviceRows().filter((d) => {
       const up = linkUpAt.get(d.id);
-      return !up || (lastPulledAt(d.id) ?? 0) < up;
+      return !up || (arrivedAt.get(d.id) ?? 0) < up;
     });
     if (!waiting.length || Date.now() > end) return;
     await sleep(500);
@@ -523,7 +555,7 @@ async function settled(): Promise<void> {
     const waiting = deviceRows().filter((d) => {
       const up = linkUpAt.get(d.id);
       if (!up) return Date.now() < wokeAt + SETTLE_MS;
-      return (lastPulledAt(d.id) ?? 0) < up;
+      return (arrivedAt.get(d.id) ?? 0) < up;
     });
     if (!waiting.length || Date.now() > end) return;
     await sleep(500);

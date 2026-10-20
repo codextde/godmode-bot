@@ -259,6 +259,11 @@ export function runnerInfoOf(id: string): RunnerInfo | undefined {
   return infos.get(id);
 }
 
+/** Chats that moved here from `runnerId` and that it still has to let go. */
+export function takenFrom(runnerId: string): string[] {
+  return pendingReleases(runnerId);
+}
+
 /** The chats that moved here from `runnerId` are let go there now (it just connected, or the primary is back). */
 export function releaseChatsNow(runnerId: string): Promise<void> {
   return releaseChats(runnerId);
