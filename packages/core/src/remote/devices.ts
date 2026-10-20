@@ -263,6 +263,9 @@ export function primaryView(): GroupDevice[] {
     latencyMs: null,
     activeRuns: listActiveRuns().length,
     conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id IS NULL")?.c ?? 0,
+    standingIn: false,
+    fullDiskAccess: null,
+    runnerTwin: null,
   };
   const others = listRunners()
     .filter((r) => r.kind === "device")
@@ -279,6 +282,9 @@ export function primaryView(): GroupDevice[] {
         latencyMs: r.latencyMs,
         activeRuns: r.activeRuns,
         conversations: r.conversations,
+        standingIn: false,
+        fullDiskAccess: null,
+        runnerTwin: null,
       }),
     );
   return [self, ...others];
@@ -287,7 +293,16 @@ export function primaryView(): GroupDevice[] {
 export async function deviceGroup(): Promise<DeviceGroup> {
   const role = groupRole();
   const defaultRunOn = getMeta(DEFAULT_RUN_META);
-  const base = { port: linkServerPort(), defaultRunOn: role ? defaultRunOn : null, ...failoverSettings() };
+  const base = {
+    port: linkServerPort(),
+    defaultRunOn: role ? defaultRunOn : null,
+    ...failoverSettings(),
+    standInEnabled: true,
+    standInMinutes: 2,
+    standIn: { state: "off" as const, since: null, takesOverAt: null },
+    pendingChanges: 0,
+    browserSignIns: "own" as const,
+  };
   if (!role) return { ...base, role: null, primaryName: null, primaryOnline: false, primaryError: null, selfId: null, devices: [] };
   if (role === "primary") {
     return { ...base, role, primaryName: computerName(), primaryOnline: true, primaryError: null, selfId: null, devices: primaryView() };
@@ -321,6 +336,9 @@ export async function deviceGroup(): Promise<DeviceGroup> {
         latencyMs: state?.latencyMs ?? null,
         activeRuns: state?.activeRuns ?? 0,
         conversations: 0,
+        standingIn: false,
+        fullDiskAccess: null,
+        runnerTwin: null,
       },
       {
         id: selfId,
@@ -334,6 +352,9 @@ export async function deviceGroup(): Promise<DeviceGroup> {
         latencyMs: null,
         activeRuns: listActiveRuns().length,
         conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id IS NULL")?.c ?? 0,
+        standingIn: false,
+        fullDiskAccess: null,
+        runnerTwin: null,
       },
     ];
   }

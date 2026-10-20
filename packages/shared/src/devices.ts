@@ -1,8 +1,9 @@
 /**
  * Device groups: several full Godmode apps on different computers that work as one. One computer is the primary: it
- * holds what is shared (agents, logins, settings, the task board, automations, My tasks) and runs the schedules. The
- * others are secondaries: their app shows the primary's Godmode, and the chats that work on them stay theirs. Any chat
- * can run on any computer of the group and move between them.
+ * runs the schedules and is where the apps of the others look while it is there. Every computer keeps a full copy of
+ * what is shared (agents, logins, settings, the task board, automations, My tasks, phones) and changes travel both
+ * ways, so a secondary keeps every feature while the primary is away and stands in for it: the automations, the board
+ * and the phones work there until the primary is back. Any chat can run on any computer and move between them.
  */
 import type { RunnerState } from "./remote";
 import type { ID, ISODate } from "./models";
@@ -26,7 +27,36 @@ export interface GroupDevice {
   activeRuns: number;
   /** Chats that live there. */
   conversations: number;
+  /** It stands in for the primary right now (the primary is away). */
+  standingIn: boolean;
+  /**
+   * macOS: whether Godmode there may open the Desktop, Documents and Downloads folders without macOS asking first
+   * (Full Disk Access). Without it a command that opens them waits until someone clicks Allow on that computer.
+   * null = not a Mac, or not known yet.
+   */
+  fullDiskAccess: boolean | null;
+  /** The same computer is also paired as a runner from an older setup: that runner's id. */
+  runnerTwin: ID | null;
 }
+
+/**
+ * A secondary while its primary is away. `waiting`: it takes over at `takesOverAt`; `active`: it stands in since
+ * `since` — automations, the board, messaging and phones work here, and what changes here goes back once the primary
+ * is there again.
+ */
+export interface StandIn {
+  state: "off" | "waiting" | "active";
+  since: ISODate | null;
+  takesOverAt: ISODate | null;
+}
+
+/**
+ * How browser sign-ins reach the other computers of the group. `own`: each computer signs in by itself with the saved
+ * logins, 2FA codes and passkeys (recommended: Google, Microsoft and others sign you out everywhere when the same
+ * session shows up on a second computer). `seed`: a computer that has no session for a site yet starts with the
+ * primary's, except for sites that bind sessions to one computer.
+ */
+export type BrowserSignIns = "own" | "seed";
 
 export interface DeviceGroup {
   /** This computer's role; null when it isn't part of a group. */
@@ -49,6 +79,14 @@ export interface DeviceGroup {
    */
   failover: boolean;
   failoverMinutes: number;
+  /** Secondaries take over while the primary is away (`standInMinutes` after it went, at once when it said goodbye). */
+  standInEnabled: boolean;
+  standInMinutes: number;
+  /** Secondaries: where this computer stands while its primary is away. */
+  standIn: StandIn;
+  /** Changes made here that the other computers haven't taken yet. */
+  pendingChanges: number;
+  browserSignIns: BrowserSignIns;
 }
 
 /** POST /api/devices/invite */
@@ -73,6 +111,20 @@ export interface DeviceGroupPatch {
   /** Primary only. */
   failover?: boolean;
   failoverMinutes?: number;
+  standInEnabled?: boolean;
+  standInMinutes?: number;
+  browserSignIns?: BrowserSignIns;
+}
+
+/** POST /api/devices/retire-runner: the computer runs the app now, its old runner goes (chats move to the app). */
+export interface RetireRunnerInput {
+  runnerId: ID;
+}
+
+export interface RetireRunnerResult {
+  moved: number;
+  /** The runner's background service was switched off there too. */
+  uninstalled: boolean;
 }
 
 /** POST /api/conversations/:id/move */
