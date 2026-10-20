@@ -488,7 +488,7 @@ function writeMessage(runnerId: string, incoming: MessageRow): "inserted" | "upd
  * were inserted: messages the runner dropped are deleted and new ones at the end appended; when one was missed in the
  * middle (or the order differs), the chat's messages are written again, in order. Returns what the UI doesn't know yet.
  */
-function writeMessages(conversationId: string, incoming: unknown): { created: string[]; updated: string[]; removed: number } {
+function writeMessages(conversationId: string, incoming: unknown, keepOwn = false): { created: string[]; updated: string[]; removed: number } {
   const stored = all<MessageRow>(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY created_at ASC, rowid ASC`, conversationId);
   const known = new Map(stored.map((m) => [m.id, m]));
   const rows: MessageRow[] = [];
@@ -504,6 +504,17 @@ function writeMessages(conversationId: string, incoming: unknown): { created: st
   const kept = stored.filter((m) => ids.has(m.id));
   const created = rows.filter((r) => !known.has(r.id)).map((r) => r.id);
   const updated = rows.filter((r) => known.has(r.id) && changed(known.get(r.id)!, r)).map((r) => r.id);
+  // Another computer of the group may have only part of a chat (a copy without old messages): what is here stays.
+  if (keepOwn) {
+    for (const row of rows) {
+      if (!known.has(row.id)) insert("messages", row);
+      else if (updated.includes(row.id)) {
+        const { id, conversation_id: _chat, ...rest } = row;
+        update("messages", id, rest);
+      }
+    }
+    return { created, updated, removed: 0 };
+  }
   const removed = stored.length - kept.length;
 
   if (kept.every((m, i) => rows[i]!.id === m.id)) {
@@ -1011,7 +1022,7 @@ function reconcile(runnerId: string, remote: unknown, runs: unknown, was?: strin
   // An answer without a message list is not a chat without messages: the copy must not be emptied over it.
   if (!chat || !Array.isArray((remote as Raw).messages)) throw refused();
   const before = was === undefined ? viewOf(chat.id) : was;
-  const messages = tx(() => (writeConversation(runnerId, chat) ? writeMessages(chat.id, (remote as Raw).messages) : null));
+  const messages = tx(() => (writeConversation(runnerId, chat) ? writeMessages(chat.id, (remote as Raw).messages, isDevice(runnerId)) : null));
   if (!messages) throw refused();
 
   const runEvents: { type: RunEvent; id: string }[] = [];
