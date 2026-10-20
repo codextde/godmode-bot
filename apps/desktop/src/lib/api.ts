@@ -1,4 +1,4 @@
-import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput,
+import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
   AndroidConnectInput,
   AndroidConnectResult,
@@ -817,6 +817,8 @@ export const api = {
     remove: (id: string) => del<DeviceGroup>(`/api/devices/${id}`),
     /** Every working chat of `from` continues on `to` (null = the primary). */
     handoff: (input: HandoffInput) => post<HandoffResult>("/api/devices/handoff", input),
+    /** A computer of the group that is also paired as an old runner: the runner goes, its chats move to the app there. */
+    retireRunner: (runnerId: string) => post<RetireRunnerResult>("/api/devices/retire-runner", { runnerId } satisfies RetireRunnerInput),
   },
 
   /** Godmode Cloud link of this computer. Answered only on the computer itself, never through the cloud. */

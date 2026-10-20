@@ -43,6 +43,15 @@ export function RunnerStateDot({ state, className }: { state: RunnerState; class
   );
 }
 
+/** "Runner" next to a name, where a runner and a computer of the device group may be called the same. */
+export function RunnerTag({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-flex h-[18px] shrink-0 items-center rounded-[4px] border bg-secondary px-1 text-[10.5px] leading-none font-medium text-muted-foreground", className)}>
+      Runner
+    </span>
+  );
+}
+
 const STATE_BADGE: Record<RunnerState, string> = {
   online: "border-brand/25 bg-brand-soft text-brand-strong",
   connecting: "border-border bg-secondary text-foreground",
