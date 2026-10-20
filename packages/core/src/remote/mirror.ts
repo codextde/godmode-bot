@@ -51,7 +51,9 @@ import {
 } from "../services/conversations";
 import { HttpError, now, truncate } from "../util";
 import { getQuestion } from "../services/questions";
+import { liteMessage } from "../services/liteMessage";
 import { clearRemoteRun, clearRunner, remoteRuns, setRemoteRun } from "./activeRuns";
+import { primaryRunnerId } from "./group";
 
 const log = logger("mirror");
 
@@ -178,6 +180,8 @@ interface Chat {
   state: RunnerChatState;
   /** Its folder and shared screen there: kept only for another computer of the group, whose app shows them. */
   place: { working_directory: string | null; computer_target: string | null };
+  /** The other computer only mirrors it too: it lives on a third one. */
+  elsewhere: boolean;
   /** The columns that stay the runner's: written when the chat is adopted and on every update. */
   columns: {
     title: string;
@@ -218,6 +222,7 @@ function readConversation(v: unknown): Chat | null {
     archived: c.archived === true,
     createdAt,
     state,
+    elsewhere: typeof c.runnerId === "string" && c.runnerId.length > 0,
     place: {
       working_directory: typeof c.workingDirectory === "string" && c.workingDirectory.startsWith("/") ? text(c.workingDirectory, 4096) : null,
       computer_target: record(c.computerTarget) ? JSON.stringify(c.computerTarget).slice(0, 4000) : null,
@@ -396,6 +401,8 @@ function isDevice(runnerId: string): boolean {
 
 /** Adopt a chat the runner reports for the first time, or bring its copy up to date. False: it isn't this runner's to write. */
 function writeConversation(runnerId: string, chat: Chat): boolean {
+  // A secondary keeps a copy of its primary's own chats only: those of the other computers it mirrors are theirs.
+  if (chat.elsewhere && runnerId === primaryRunnerId()) return false;
   const row = get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", chat.id);
   const place = isDevice(runnerId) ? chat.place : {};
   if (row) {
@@ -422,15 +429,53 @@ function writeConversation(runnerId: string, chat: Chat): boolean {
   return true;
 }
 
+/**
+ * A light copy of a message (screenshots as links, long output cut: liteMessage) doesn't replace what this computer
+ * already has of it: a chat that comes back from the computer that stood in keeps its screenshots here.
+ */
+function keepWhole(stored: MessageRow, row: MessageRow): MessageRow {
+  if (!row.blocks.includes('"imageUrl"') && !row.blocks.includes('"resultTruncated"')) return row;
+  let mine: MessageBlock[];
+  let theirs: MessageBlock[];
+  try {
+    mine = JSON.parse(stored.blocks) as MessageBlock[];
+    theirs = JSON.parse(row.blocks) as MessageBlock[];
+  } catch {
+    return row;
+  }
+  const byId = new Map(mine.flatMap((b) => (b.type === "tool_use" ? [[b.id, b] as const] : [])));
+  let kept = false;
+  const blocks = theirs.map((b) => {
+    if (b.type !== "tool_use") return b;
+    const old = byId.get(b.id);
+    if (!old || old.type !== "tool_use") return b;
+    const lite = b as typeof b & { imageUrl?: string; resultTruncated?: boolean };
+    let next: MessageBlock = b;
+    if (lite.imageUrl && !b.image && old.image) {
+      const { imageUrl: _url, ...rest } = lite;
+      next = { ...rest, image: old.image };
+      kept = true;
+    }
+    if (lite.resultTruncated && old.result && old.result.length > (b.result?.length ?? 0) && old.result.startsWith(b.result ?? "")) {
+      const { resultTruncated: _cut, ...rest } = next as typeof lite;
+      next = { ...rest, result: old.result };
+      kept = true;
+    }
+    return next;
+  });
+  return kept ? { ...row, blocks: JSON.stringify(blocks) } : row;
+}
+
 /** Store one message of a runner's chat. Null: the chat isn't this runner's, or the id is taken by a message elsewhere. */
-function writeMessage(runnerId: string, row: MessageRow): "inserted" | "updated" | null {
-  if (!ownChat(runnerId, row.conversation_id)) return null;
-  const stored = get<MessageRow>(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE id = ?`, row.id);
+function writeMessage(runnerId: string, incoming: MessageRow): "inserted" | "updated" | null {
+  if (!ownChat(runnerId, incoming.conversation_id)) return null;
+  const stored = get<MessageRow>(`SELECT ${MESSAGE_COLUMNS} FROM messages WHERE id = ?`, incoming.id);
   if (!stored) {
-    insert("messages", row);
+    insert("messages", incoming);
     return "inserted";
   }
-  if (stored.conversation_id !== row.conversation_id) return null;
+  if (stored.conversation_id !== incoming.conversation_id) return null;
+  const row = keepWhole(stored, incoming);
   if (changed(stored, row)) {
     const { id, conversation_id: _chat, ...rest } = row;
     update("messages", id, rest);
@@ -454,7 +499,7 @@ function writeMessages(conversationId: string, incoming: unknown): { created: st
     // An id that is a message of another chat here is never taken over.
     if (!known.has(row.id) && get<{ id: string }>("SELECT id FROM messages WHERE id = ?", row.id)) continue;
     ids.add(row.id);
-    rows.push(row);
+    rows.push(known.has(row.id) ? keepWhole(known.get(row.id)!, row) : row);
   }
   const kept = stored.filter((m) => ids.has(m.id));
   const created = rows.filter((r) => !known.has(r.id)).map((r) => r.id);
@@ -639,7 +684,8 @@ function onQueue(runnerId: string, e: Raw): boolean {
 }
 
 function onMessage(runnerId: string, type: "message.created" | "message.updated", raw: unknown): boolean {
-  const row = readMessage(raw);
+  // The copy of the primary's chats is for while it is away: screenshots stay there.
+  const row = readMessage(runnerId === primaryRunnerId() && record(raw) ? liteMessage(raw as unknown as Message) : raw);
   if (!row || !writeMessage(runnerId, row)) return false;
   bus.emit({ type, message: getMessage(row.id) });
   return true;
@@ -1050,8 +1096,9 @@ export function forgetHeavyChats(runnerId: string): void {
  * or updated; those whose copy is behind get their messages and runs fetched; the registry of working runs is rebuilt
  * from the runner's answer. Chats the runner no longer has stay as they are.
  */
-export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conversations: number; refreshed: number }> {
+export async function catchUp(runnerId: string, api: RunnerApi, opts: CatchUpOptions = {}): Promise<{ conversations: number; refreshed: number }> {
   const lists = [await api.json<unknown>("GET", "/api/conversations?limit=500"), await api.json<unknown>("GET", "/api/conversations?limit=500&archived=1")];
+  const since = opts.messagesSince ? Date.parse(opts.messagesSince) : null;
   let conversations = 0;
   let refreshed = 0;
   for (const item of lists.flatMap(list)) {
@@ -1061,10 +1108,12 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
     const before = viewOf(chat.id);
     if (!writeConversation(runnerId, chat)) continue;
     conversations++;
-    if (stale && !skipHeavy(runnerId, chat.id)) {
+    // Old and quiet: the copy keeps the chat itself, its messages come once it moves on.
+    const quiet = since !== null && !chat.state.running && !chat.state.paused && Date.parse(chat.columns.last_message_at ?? chat.columns.updated_at) < since;
+    if (stale && !quiet && !skipHeavy(runnerId, chat.id)) {
       try {
         const path = encodeURIComponent(chat.id);
-        const detail = await api.json<unknown>("GET", `/api/conversations/${path}`);
+        const detail = await api.json<unknown>("GET", `/api/conversations/${path}${opts.lite ? "?lite=1" : ""}`);
         const runs = await api.json<unknown>("GET", `/api/runs?conversationId=${path}&limit=500`);
         if (record(detail)?.id !== chat.id) throw refused();
         heavy.delete(`${runnerId}:${chat.id}`);
@@ -1092,6 +1141,28 @@ export async function catchUp(runnerId: string, api: RunnerApi): Promise<{ conve
   }
   log.info("caught up with a runner", { runnerId, conversations, refreshed, working: remoteRuns(runnerId).length });
   return { conversations, refreshed };
+}
+
+export interface CatchUpOptions {
+  /** Messages without screenshots and with tool output cut (a secondary's copy of its primary's chats). */
+  lite?: boolean;
+  /** Only chats with messages since then get their messages; older ones keep the chat alone. */
+  messagesSince?: string;
+}
+
+/** One chat of the runner, fetched now (a change of the shared data points at it). */
+export async function fetchConversation(runnerId: string, api: RunnerApi, conversationId: string, opts: CatchUpOptions = {}): Promise<boolean> {
+  const path = encodeURIComponent(conversationId);
+  try {
+    const detail = await api.json<unknown>("GET", `/api/conversations/${path}${opts.lite ? "?lite=1" : ""}`);
+    if (record(detail)?.id !== conversationId) return false;
+    const runs = await api.json<unknown>("GET", `/api/runs?conversationId=${path}&limit=500`);
+    reconcile(runnerId, detail, runs);
+    return true;
+  } catch (err) {
+    log.info(`could not fetch conversation ${conversationId} of runner ${runnerId}`, { error: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
 }
 
 /** A chat of this runner moved to this computer: nothing of it works there for this computer anymore. */

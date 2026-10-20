@@ -112,6 +112,10 @@ export interface DeviceLinkHooks {
   deviceState(id: string, state: LinkState): void;
   /** A device went away while these chats worked there (told before the copies forget what worked). */
   deviceLost(id: string, conversationIds: string[]): void;
+  /** The link to a device came up: what it changed is taken before this computer copies anything there. */
+  deviceConnected(id: string): Promise<void>;
+  /** The device says its shared data changed. */
+  replicaHint(id: string): void;
 }
 
 let deviceHooks: DeviceLinkHooks | null = null;
@@ -434,8 +438,15 @@ function startLink(r: RunnerRow) {
     name: r.name,
     ownName: computerName(),
     onEvent: (event) => {
-      if (toPrimary(r)) deviceHooks?.primaryEvent(event);
-      else applyRunnerEvent(id, event);
+      if (event.type === "replica.changed") {
+        if (r.kind === "device") deviceHooks?.replicaHint(id);
+        return;
+      }
+      if (toPrimary(r)) {
+        // A copy of the primary's chats stays here for while it is away; its windows see the primary's own events.
+        applyRunnerEvent(id, event);
+        deviceHooks?.primaryEvent(event);
+      } else applyRunnerEvent(id, event);
     },
     onState: (state) => {
       if (r.kind === "device") deviceHooks?.deviceState(id, state);
@@ -481,7 +492,13 @@ async function connected(id: string, state: LinkState) {
   l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
   const r = row(id);
-  if (!r || toPrimary(r)) return;
+  if (!r) return;
+  if (toPrimary(r)) {
+    await deviceHooks?.deviceConnected(id).catch((err) => log.warn("could not catch up with the primary", err instanceof Error ? err.message : err));
+    return;
+  }
+  if (r.kind === "device") await deviceHooks?.deviceConnected(id).catch((err) => log.warn(`could not take the changes of ${r.name}`, err instanceof Error ? err.message : err));
+  if (dropped()) return;
   await releaseChats(id);
   const catchUpNow = async () => {
     try {

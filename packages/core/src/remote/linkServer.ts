@@ -351,7 +351,7 @@ function onReady(ws: ServerWebSocket<LinkSocketData>, channel: SecureChannel<Lin
     nextStream: 1,
   };
   link.client = {
-    data: { id: newId("ws"), subscriptions: new Set(), auth: "token", link: true },
+    data: { id: newId("ws"), subscriptions: new Set(), auth: "token", link: true, linkPeer: row.id },
     send: (payload) => sendEvent(link, payload),
     close: () => channel.close(),
   };

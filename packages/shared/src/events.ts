@@ -170,6 +170,8 @@ export type ServerEvent =
    * the primary's Godmode (or its own while the primary is away), so everything it shows is fetched again.
    */
   | { type: "devices.updated"; group: DeviceGroup }
+  /** Between the computers of a device group only: shared data changed here, the other one pulls it. */
+  | { type: "replica.changed"; seq: number }
   | { type: "entity.changed"; entity: EntityName };
 
 export type EntityName =

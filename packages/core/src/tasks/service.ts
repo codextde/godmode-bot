@@ -16,6 +16,7 @@
  * Descriptions are Markdown and may link files (screenshots, PDFs…, see ./attachments.ts): the agent gets a copy of
  * each and is told to read them first.
  */
+import { remoteRuns } from "../remote/activeRuns";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -2324,6 +2325,8 @@ export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): 
   let restarts = 0;
   for (const t of all<TaskRow>("SELECT * FROM tasks WHERE status = 'in_progress'")) {
     if (openRuns(t.conversation_id).length || (t.conversation_id && getFollowup(t.conversation_id))) continue;
+    // Its chat works on another computer of the group (one that stood in for this one): that computer finishes it.
+    if (t.conversation_id && remoteRuns().some((r) => r.conversationId === t.conversation_id)) continue;
     // It waits for its parts: it keeps waiting, or continues when they were finished meanwhile.
     if (waitsForParts(t)) {
       if (!openParts(t.id).length) partClosed(t.id);
@@ -2346,6 +2349,19 @@ export function reconcileTasks(reason: string, opts: { retry?: boolean } = {}): 
       continue;
     }
     block(t.id, reason, { kind: "interrupted", from: ["in_progress"] });
+  }
+}
+
+/**
+ * Tickets another computer of the group changed (its copy came over): the board shows them, and new work in Todo
+ * starts here like a ticket made here — only while the board runs on this computer.
+ */
+export function ticketsArrived(ids: string[]): void {
+  for (const id of ids) {
+    const t = row(id);
+    if (!t) continue;
+    emit(id);
+    if (unsubscribe && t.status === "todo" && t.agent_id && !t.archived_at) void dispatch(id);
   }
 }
 

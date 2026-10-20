@@ -34,7 +34,7 @@ const log = logger("snapshot");
 type Row = Record<string, DumpValue>;
 type Value = string | number | null | Uint8Array;
 
-interface TableSpec {
+export interface TableSpec {
   table: string;
   /** Columns that stay the runner's own: never copied, never overwritten, not part of the digest. */
   own: string[];
@@ -50,7 +50,7 @@ interface TableSpec {
  * The mirrored tables. Every other column is taken from the live schema, so columns added by later migrations are
  * mirrored without a change here. Listed parents first; applied in reverse (see `apply`).
  */
-const TABLES: TableSpec[] = [
+export const SETUP_TABLES: TableSpec[] = [
   { table: "workspaces", own: [], entity: "workspaces" },
   { table: "projects", own: [], entity: "workspaces" },
   {
@@ -85,6 +85,7 @@ const TABLES: TableSpec[] = [
   },
   { table: "vms", own: ["provisioned_at", "last_error", "last_started_at", "last_used_at"], entity: "vms" },
 ];
+const TABLES = SETUP_TABLES;
 
 /** Settings that describe the computer they are on (how it is reached, what it logs, whether it was set up). */
 // maintenance: how this computer keeps its own tools fixed and up to date — a runner, alone most of the time, keeps its own.
@@ -92,7 +93,7 @@ const TABLES: TableSpec[] = [
 // android: the phones plugged into this computer and the adb that reaches them.
 // phone: calls are placed and read back by this computer only.
 // power: whether this Mac stays awake with its lid closed.
-const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "power", "onboardingComplete"]);
+export const LOCAL_SETTINGS = new Set(["server", "mobile", "cloud", "diagnostics", "maintenance", "selfRepair", "android", "phone", "power", "onboardingComplete"]);
 /** A runner's vault is opened by a sync, not by a human with the passphrase: it must not lock itself in between. */
 const RUNNER_SETTINGS: Record<string, string[]> = { security: ["autoLockMinutes"] };
 /** VM ids become Tart VM names and folder names. */

@@ -14,7 +14,8 @@ import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
 import { HttpError, badRequest, childEnv, notFound } from "../../util";
-import { acceptJoin, adoptPushedChat, deviceIdOf, groupForSecondary, makeInvite, peerLeft } from "../../remote/devices";
+import { acceptJoin, adoptPushedChat, deviceIdOf, groupForSecondary, makeInvite, peerAway, peerLeft, releaseChatsTo } from "../../remote/devices";
+import { ackFrom, changesFor } from "../../remote/replica";
 import { isSecondary } from "../../remote/group";
 import { callForDevice } from "../../remote/deviceTools";
 import { welcomeFor } from "../ws";
@@ -139,6 +140,40 @@ export function registerLinkRoutes(app: Hono): void {
   });
 
   app.get("/api/link/devices/whoami", (c) => c.json({ id: deviceIdOf(viaLink(c) ?? "") }));
+
+  const groupPeer = (c: Context): string => {
+    const peer = deviceIdOf(viaLink(c) ?? "");
+    if (!peer) throw new HttpError(403, "Only computers of this device group take part in that.", "not_in_group");
+    return peer;
+  };
+
+  // What changed in the shared data since `after` (remote/replica.ts); asking after N also says everything up to N arrived.
+  app.get("/api/link/replica/changes", (c) => {
+    const peer = groupPeer(c);
+    const after = Number(c.req.query("after") ?? 0);
+    const limit = Number(c.req.query("limit") ?? 0);
+    return c.json(changesFor(peer, Number.isFinite(after) && after >= 0 ? after : 0, { setup: c.req.query("setup") !== "0", ...(limit > 0 ? { limit } : {}) }));
+  });
+
+  app.post("/api/link/replica/ack", async (c) => {
+    const peer = groupPeer(c);
+    const { after } = await body(c, z.object({ after: z.number().int().min(0) }));
+    ackFrom(peer, after);
+    return c.json({ ok: true as const });
+  });
+
+  // Chats of this computer that the calling one took over while this one was away: they live there now.
+  app.post("/api/link/devices/release-chats", async (c) => {
+    const peer = groupPeer(c);
+    const { ids } = await body(c, z.object({ ids: z.array(z.string().min(1).max(100)).max(2000) }));
+    return c.json(await releaseChatsTo(peer, ids));
+  });
+
+  // The calling computer goes away right now (Godmode quits there).
+  app.post("/api/link/devices/away", (c) => {
+    peerAway(groupPeer(c));
+    return c.json({ ok: true as const });
+  });
 
   app.post("/api/link/devices/leave", (c) => {
     peerLeft(viaLink(c) ?? "");
