@@ -403,7 +403,7 @@ async function connect() {
     if (e.code === 4003) {
       const current = useSession.getState().connection;
       if (!current || removedBy(current, instanceId)) return void useSession.getState().disconnect("removed");
-      // Another computer of the group: the paired one or the primary says whether the phone was removed.
+      // Another computer of the group: the paired one says whether the phone was removed.
       forget(base, true);
     }
     if (e.code === 4003 || !opened) refusedSockets.add(base);

@@ -83,21 +83,23 @@ describe("accepts", () => {
 });
 
 describe("removedBy", () => {
-  test("the paired computer and the primary say the phone was removed", () => {
-    const c = grouped("c", C[0]!);
-    expect(removedBy(c, "home")).toBe(true);
-    expect(removedBy(c, "a")).toBe(true);
+  test("the paired computer says the phone was removed", () => {
+    expect(removedBy(grouped("c", C[0]!), "home")).toBe(true);
   });
 
-  test("another secondary only may not have the key yet", () => {
+  test("the primary may not have the key yet", () => {
+    expect(removedBy(grouped("c", C[0]!), "a")).toBe(false);
+  });
+
+  test("another secondary may not have the key yet", () => {
     expect(removedBy(grouped("c", C[0]!), "c")).toBe(false);
   });
 
-  test("the primary as listed now", () => {
-    const c = grouped("home", HOME[0]!);
-    c.peers = [peer("a", "secondary", A), peer("home", "secondary", HOME), peer("c", "primary", C)];
+  test("the paired computer as the primary", () => {
+    const c = grouped("a", A[0]!);
+    c.peers = [peer("a", "secondary", A), peer("home", "primary", HOME), peer("c", "secondary", C)];
+    expect(removedBy(c, "home")).toBe(true);
     expect(removedBy(c, "a")).toBe(false);
-    expect(removedBy(c, "c")).toBe(true);
   });
 
   test("alone: the paired computer", () => {

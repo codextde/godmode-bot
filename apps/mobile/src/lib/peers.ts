@@ -80,10 +80,11 @@ export function accepts(c: Computers, instanceId: string | null | undefined): bo
 
 /**
  * Whether a refused key (401, or the socket closed with 4003) from this computer means the phone was removed: only the
- * paired computer and the group's primary say so. Another computer of the group may not have the key yet.
+ * paired computer says so. The group copies pairings and removals between its computers, so another one, the primary
+ * too, may just not have the key yet.
  */
 export function removedBy(c: Computers, instanceId: string): boolean {
-  return instanceId === c.instance.id || primaryOf(c)?.instance.id === instanceId;
+  return instanceId === c.instance.id;
 }
 
 /**

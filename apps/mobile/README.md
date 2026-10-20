@@ -20,8 +20,8 @@ Built with [Expo](https://expo.dev) SDK 57 and Expo Router: native tabs and head
 
 When the computer is in a device group, `GET /api/mobile/me` lists the group's computers that take the phone's key too.
 When the one the app uses is out of reach it continues on another: the one it used last first, then the primary, then
-the rest. A refused key only unpairs the phone when the paired computer or the primary refuses it; another computer of
-the group may not have it yet (`src/lib/peers.ts`, tested with `bun test src/lib/peers.test.ts`).
+the rest. A refused key only unpairs the phone when the paired computer refuses it; another computer of the group, the
+primary too, may not have it yet (`src/lib/peers.ts`, tested with `bun test src/lib/peers.test.ts`).
 
 See [Phone app in docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md#phone-app) for how pairing and access work.
 
