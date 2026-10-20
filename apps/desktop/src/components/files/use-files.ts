@@ -18,9 +18,20 @@ export function joinPath(dir: string, name: string) {
   return dir ? `${dir}/${name}` : name;
 }
 
-/** Where new entries may go and entries may be moved: inside workspace/ or memory/. */
+/** tmp/ is cleared without the bin, uploads/ holds the human's attachments: nothing is made or moved there. */
+export function reservedPlace(path: string) {
+  const lower = path.toLowerCase();
+  return ["workspace/tmp", "workspace/uploads"].some((r) => lower === r || lower.startsWith(`${r}/`));
+}
+
+/** Where new entries may go and entries may be moved: inside workspace/ or memory/, not tmp/ or uploads/. */
 export function placeable(path: string) {
-  return path.startsWith("workspace/") || path.startsWith("memory/") || path === "workspace" || path === "memory";
+  return (path.startsWith("workspace/") || path.startsWith("memory/") || path === "workspace" || path === "memory") && !reservedPlace(path);
+}
+
+/** Of what names a path, what Godmode can't rewrite on a move: the agent's instructions, automations and follow-ups. */
+export function pinsAmong(names: string[]) {
+  return names.filter((n) => /^(the instructions|the automation |a follow-up)/.test(n));
 }
 
 export function plural(n: number, one: string, many = `${one}s`) {

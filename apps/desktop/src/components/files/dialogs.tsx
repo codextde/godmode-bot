@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { fileIcon, nameOf, parentOf } from "./file-editor";
-import { joinPath, plural, useDeleteFiles, useMoveFiles } from "./use-files";
+import { joinPath, pinsAmong, plural, reservedPlace, useDeleteFiles, useMoveFiles } from "./use-files";
 
 /* ------------------------------------------------------------------ */
 /* Delete                                                               */
@@ -139,13 +139,22 @@ export function DeleteDialog({
 
 export type NameDialogMode = { kind: "rename"; path: string } | { kind: "note"; dir: string } | { kind: "folder"; dir: string };
 
-function nameProblem(name: string, taken: Set<string>, current?: string): string | null {
+/** The file a new note becomes: "plan" is plan.md. */
+function noteFile(name: string) {
+  const n = name.trim();
+  return /\.(md|markdown|txt)$/i.test(n) ? n : `${n}.md`;
+}
+
+function nameProblem(name: string, taken: Set<string>, kind: NameDialogMode["kind"], current?: string): string | null {
   const n = name.trim();
   if (!n) return "Give it a name.";
   if (n.includes("/") || n.includes("\\")) return "A name can't contain a slash — use Move to put it elsewhere.";
   if (n === "." || n === ".." || n.startsWith(".")) return "Names can't start with a dot here.";
   if (n.length > 200) return "That name is too long.";
-  if (n !== current && taken.has(n.toLowerCase())) return "Something with this name is already there.";
+  const final = kind === "note" ? noteFile(n) : n;
+  // A new spelling of its own name (Notes.md → notes.md) is fine.
+  if (current && final.toLowerCase() === current.toLowerCase()) return null;
+  if (taken.has(final.toLowerCase())) return `${final} is already there.`;
   return null;
 }
 
@@ -159,8 +168,8 @@ export function NameDialog({
 }: {
   agentId: string;
   mode: NameDialogMode | null;
-  /** Names already in the folder (lowercase), so nothing is overwritten. */
-  siblings: string[];
+  /** Names already in the folder, so nothing is overwritten; null while they load. */
+  siblings: string[] | null;
   onClose: () => void;
   onCreated?: (path: string, kind: "note" | "folder") => void;
   onRenamed?: (from: string, to: string) => void;
@@ -170,8 +179,17 @@ export function NameDialog({
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const move = useMoveFiles(agentId, (moves) => moves[0] && onRenamed?.(moves[0].from, moves[0].to));
+  const renaming = mode?.kind === "rename" ? mode.path : null;
+  const info = useQuery({
+    queryKey: ["files", agentId, "inspect", [renaming]],
+    queryFn: () => api.agents.inspectFiles(agentId, [renaming!]),
+    enabled: !!renaming,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const pins = pinsAmong(info.data?.[0]?.namedBy ?? []);
   const current = mode?.kind === "rename" ? nameOf(mode.path) : undefined;
-  const taken = useMemo(() => new Set(siblings.map((s) => s.toLowerCase())), [siblings]);
+  const taken = useMemo(() => new Set((siblings ?? []).map((s) => s.toLowerCase())), [siblings]);
 
   useEffect(() => {
     if (!mode) return;
@@ -187,11 +205,12 @@ export function NameDialog({
     });
   }, [mode]);
 
-  const problem = mode ? nameProblem(name, taken, current) : null;
+  const problem = mode ? nameProblem(name, taken, mode.kind, current) : null;
+  const loading = siblings === null;
   const dir = mode ? (mode.kind === "rename" ? parentOf(mode.path) : mode.dir) : "";
 
   const submit = async () => {
-    if (!mode || problem || busy) return;
+    if (!mode || problem || busy || loading) return;
     const n = name.trim();
     if (mode.kind === "rename") {
       if (n === current) return onClose();
@@ -204,10 +223,11 @@ export function NameDialog({
         const r = await api.agents.createFolder(agentId, joinPath(dir, n));
         onCreated?.(r.path, "folder");
       } else {
-        const file = /\.(md|markdown|txt)$/i.test(n) ? n : `${n}.md`;
+        const file = noteFile(n);
         const path = joinPath(dir, file);
         const title = file.replace(/\.(md|markdown|txt)$/i, "").replace(/[-_]+/g, " ");
-        await api.agents.writeFile(agentId, path, /\.txt$/i.test(file) ? "" : `# ${title.charAt(0).toUpperCase()}${title.slice(1)}\n\n`);
+        // Create-only: if something took the name meanwhile, the server says so instead of overwriting it.
+        await api.agents.writeFile(agentId, path, /\.txt$/i.test(file) ? "" : `# ${title.charAt(0).toUpperCase()}${title.slice(1)}\n\n`, true);
         onCreated?.(path, "note");
       }
       onClose();
@@ -238,12 +258,20 @@ export function NameDialog({
         >
           <Input ref={inputRef} value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" aria-invalid={!!problem && name !== current} className="font-mono text-[13px]" />
           {(error || (problem && name)) && <p className="text-xs text-destructive">{error ?? problem}</p>}
+          {pins.length > 0 && (
+            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+              <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
+              <span>
+                Named in {pins.slice(0, 2).join(", ")} — change the name there too, or the agent looks for the old one.
+              </span>
+            </p>
+          )}
         </form>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!!problem || busy || move.isPending} onClick={() => void submit()}>
+          <Button disabled={!!problem || busy || loading || move.isPending} onClick={() => void submit()}>
             {(busy || move.isPending) && <Spinner />}
             {mode?.kind === "rename" ? "Rename" : "Create"}
           </Button>
@@ -282,7 +310,7 @@ function FolderTree({
     <ul className="space-y-px">
       {dirs.map((e) => {
         const isOpen = open.has(e.path);
-        const disabled = [...blocked].some((b) => e.path === b || e.path.startsWith(`${b}/`));
+        const disabled = reservedPlace(e.path) || [...blocked].some((b) => e.path === b || e.path.startsWith(`${b}/`));
         return (
           <li key={e.path}>
             <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
@@ -335,6 +363,14 @@ export function MoveDialog({
 }) {
   const [picked, setPicked] = useState("workspace");
   const move = useMoveFiles(agentId, onMoved);
+  const info = useQuery({
+    queryKey: ["files", agentId, "inspect", paths],
+    queryFn: () => api.agents.inspectFiles(agentId, paths!),
+    enabled: !!paths?.length,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  const pinned = (info.data ?? []).map((e) => ({ path: e.path, pins: pinsAmong(e.namedBy) })).filter((e) => e.pins.length);
   useEffect(() => {
     if (paths?.length) setPicked(parentOf(paths[0]!).startsWith("memory") ? "memory" : "workspace");
   }, [paths]);
@@ -364,6 +400,20 @@ export function MoveDialog({
           ))}
         </div>
         <p className="truncate font-mono text-xs text-muted-foreground">To {picked}/</p>
+        {pinned.length > 0 && (
+          <div className="flex gap-2.5 rounded-lg border border-warning/25 bg-warning/[0.07] px-3 py-2.5 text-xs">
+            <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
+            <div className="space-y-1">
+              <p className="font-medium text-foreground">Not updated by the move</p>
+              {pinned.slice(0, 4).map((e) => (
+                <p key={e.path} className="text-muted-foreground">
+                  <span className="font-mono">{nameOf(e.path)}</span> is named in {e.pins.slice(0, 2).join(", ")}
+                </p>
+              ))}
+              <p className="text-muted-foreground">Change the path there too, or the agent looks for it in the old place.</p>
+            </div>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Cancel
@@ -377,7 +427,7 @@ export function MoveDialog({
               )
             }
           >
-            {move.isPending && <Spinner />} Move here
+            {move.isPending && <Spinner />} {pinned.length ? "Move anyway" : "Move here"}
           </Button>
         </DialogFooter>
       </DialogContent>

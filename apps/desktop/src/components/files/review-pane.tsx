@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useMemo, useState, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Boxes, CircleCheck, Clock3, Copy, FileWarning, Folder, FolderInput, FolderX, HardDrive, RefreshCw, Sparkles, Trash2, Unlink, Unplug, Wind } from "lucide-react";
@@ -47,26 +47,22 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
     mutationFn: () => api.agents.fileReview(agent.id, true),
     onSuccess: (data) => qc.setQueryData(qk.agentFileReview(agent.id), data),
   });
-  const [picked, setPicked] = useState<Set<string> | null>(null);
+  /** What the human ticked or unticked; everything else follows the defaults (kept across refreshes). */
+  const [picked, setPicked] = useState<Map<string, boolean>>(() => new Map());
   const items = review.data?.items ?? [];
   const deletable = (i: FileReviewItem) => i.kind !== "broken-link";
-  // Safe kinds start ticked, unless the agent still names the item.
-  const defaults = useMemo(() => new Set(items.filter((i) => KINDS[i.kind].safe && !i.namedBy).map((i) => i.path)), [items]);
-  const chosen = picked ?? defaults;
+  // Safe kinds start ticked, unless the agent still names the item or it is a backup copy.
+  const defaults = useMemo(() => new Set(items.filter((i) => KINDS[i.kind].safe && !i.namedBy && !/\.bak$/i.test(i.path)).map((i) => i.path)), [items]);
+  const chosen = useMemo(() => new Set(items.map((i) => i.path).filter((p) => picked.get(p) ?? defaults.has(p))), [items, picked, defaults]);
   const groups = useMemo(() => ORDER.map((kind) => ({ kind, items: items.filter((i) => i.kind === kind) })).filter((g) => g.items.length), [items]);
   const chosenItems = items.filter((i) => chosen.has(i.path) && deletable(i));
   const chosenBytes = chosenItems.reduce((n, i) => n + i.bytes, 0);
   const totalBytes = items.filter(deletable).reduce((n, i) => n + i.bytes, 0);
 
-  useEffect(() => setPicked(null), [review.data]);
-
   const toggle = (paths: string[], on: boolean) =>
-    setPicked(() => {
-      const next = new Set(chosen);
-      for (const p of paths) {
-        if (on) next.add(p);
-        else next.delete(p);
-      }
+    setPicked((prev) => {
+      const next = new Map(prev);
+      for (const p of paths) next.set(p, on);
       return next;
     });
 
@@ -221,7 +217,7 @@ function ReviewRow({
           </span>
         )}
         {item.kind === "loose" && (
-          <Button size="xs" variant="ghost" className="h-5 opacity-0 group-hover/row:opacity-100" disabled={frozen} onClick={() => actions.onMove([item.path])}>
+          <Button size="xs" variant="ghost" className="h-5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100" disabled={frozen} onClick={() => actions.onMove([item.path])}>
             <FolderInput /> Move
           </Button>
         )}

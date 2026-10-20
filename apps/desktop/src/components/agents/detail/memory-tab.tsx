@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ChevronRight, Folder, FolderOpen, FolderSearch } from "lucide-react";
 import type { Agent, AgentFileEntry } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
@@ -83,7 +84,14 @@ export function MemoryTab({ agent }: { agent: Agent }) {
               <p className="text-xs text-muted-foreground">Agent repository</p>
             </div>
             <Button asChild variant="ghost" size="xs" title="Sizes, cleanup suggestions, moves and deletes">
-              <Link to={`/files/${agent.id}`}>
+              <Link
+                to={`/files/${agent.id}`}
+                onClick={(e) => {
+                  if (!dirty) return;
+                  e.preventDefault();
+                  toast.warning("Save or revert your edits first", { description: `${selected?.path ?? "The file"} has unsaved changes.` });
+                }}
+              >
                 <FolderSearch /> Tidy up
               </Link>
             </Button>

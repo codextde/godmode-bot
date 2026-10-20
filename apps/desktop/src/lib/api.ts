@@ -571,7 +571,8 @@ export const api = {
     run: (id: string, prompt?: string, workspaceId?: string) => post<StartChatResult>(`/api/agents/${id}/run`, { prompt, workspaceId }),
     files: (id: string, path = "") => get<AgentFileEntry[]>(`/api/agents/${id}/files`, { path }),
     readFile: (id: string, path: string) => get<{ path: string; content: string }>(`/api/agents/${id}/file`, { path }),
-    writeFile: (id: string, path: string, content: string) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content }),
+    /** `create`: only a new file (409 when one is there). */
+    writeFile: (id: string, path: string, content: string, create?: boolean) => put<{ ok: true }>(`/api/agents/${id}/file`, { path, content, ...(create ? { create } : {}) }),
     /** Sizes of what lies directly in a folder (every file below counted). */
     fileSizes: (id: string, path = "") => get<AgentFileSize[]>(`/api/agents/${id}/files/sizes`, { path }),
     /** Size, what names them and whether they may go, before a move or delete. */

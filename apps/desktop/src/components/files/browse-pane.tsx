@@ -95,7 +95,8 @@ export function BrowsePane({
   dir: string;
   onDir: (dir: string) => void;
   selected: string | null;
-  onSelect: (entry: { path: string; size: number }) => void;
+  /** `dir`: the folder it lies in, when that isn't the one shown (a search hit). */
+  onSelect: (entry: { path: string; size: number }, dir?: string) => void;
   actions: BrowseActions;
   /** Moves and deletes wait (the agent dreams). */
   frozen: boolean;
@@ -272,7 +273,7 @@ export function BrowsePane({
                     {locked ? (
                       <Lock className="size-3 text-muted-foreground/50" aria-label="Kept by Godmode" />
                     ) : (
-                      <Checkbox aria-label={`Select ${nameOf(e.path)}`} checked={on} onCheckedChange={(v) => toggle(e.path, v === true)} className={cn(!on && !checkedList.length && "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100")} />
+                      <Checkbox aria-label={`Select ${nameOf(e.path)}`} checked={on} onCheckedChange={(v) => toggle(e.path, v === true)} className={cn(!on && !checkedList.length && "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100")} />
                     )}
                   </span>
                   <button
@@ -324,8 +325,7 @@ export function BrowsePane({
                       type="button"
                       onClick={() => {
                         if (h.type === "dir") return onDir(h.path);
-                        onDir(parentOf(h.path));
-                        onSelect({ path: h.path, size: 0 });
+                        onSelect({ path: h.path, size: 0 }, parentOf(h.path));
                       }}
                       className="w-full rounded-md px-2 py-1.5 text-left transition hover:bg-accent/50"
                     >
@@ -357,7 +357,7 @@ function RowMenu({ path, isDir, locked, frozen, actions, onOpen }: { path: strin
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${nameOf(path)}`} className="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
+        <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${nameOf(path)}`} className="opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-100">
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>

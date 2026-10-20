@@ -96,11 +96,10 @@ function OverviewSkeleton() {
   );
 }
 
-function AgentPicker({ agent, agents }: { agent: Agent; agents: Agent[] }) {
-  const navigate = useNavigate();
+function AgentPicker({ agent, agents, onPick }: { agent: Agent; agents: Agent[]; onPick: (id: string) => void }) {
   const sorted = useMemo(() => [...agents].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name)), [agents]);
   return (
-    <Select value={agent.id} onValueChange={(id) => navigate(`/files/${id}`)}>
+    <Select value={agent.id} onValueChange={onPick}>
       <SelectTrigger className="h-9 w-64 bg-card" aria-label="Agent">
         <SelectValue />
       </SelectTrigger>
@@ -119,6 +118,7 @@ function AgentPicker({ agent, agents }: { agent: Agent; agents: Agent[] }) {
 }
 
 function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
+  const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.find((t) => t === params.get("tab")) ?? "browse") as Tab;
   const dir = params.get("dir") ?? "workspace";
@@ -138,7 +138,7 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
   const bin = useBin(agent.id);
   const namingDir = naming ? (naming.kind === "rename" ? parentOf(naming.path) : naming.dir) : dir;
   const listing = useQuery({ queryKey: qk.agentFiles(agent.id, namingDir), queryFn: () => api.agents.files(agent.id, namingDir), enabled: !!naming });
-  const siblings = (listing.data ?? []).map((e) => e.path.slice(e.path.lastIndexOf("/") + 1));
+  const siblings = listing.data ? listing.data.map((e) => e.path.slice(e.path.lastIndexOf("/") + 1)) : null;
   const reviewCount = review.data?.items.length ?? 0;
   const binCount = bin.data?.length ?? 0;
 
@@ -160,33 +160,45 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
 
   /** Leave unsaved edits only after asking. */
   const guard = (go: () => void) => (dirty ? setPending(() => go) : go());
-  const openFile = (path: string, size = 0) =>
+  /** Open a file (and the folder it lies in, in the same URL change: two changes in one tick would undo each other). */
+  const openFile = (path: string, size = 0, inDir?: string) =>
     guard(() => {
       setFileSize(size);
-      update({ file: path });
+      update(inDir === undefined ? { file: path } : { file: path, dir: inDir });
     });
+  const affectsOpenFile = (paths: string[]) => !!filePath && paths.some((p) => filePath === p || filePath.startsWith(`${p}/`));
+  /** Rename, move or delete of the open file: its unsaved edits would be lost, so ask first. */
+  const guardOpen = (paths: string[], go: () => void) => (affectsOpenFile(paths) ? guard(go) : go());
   const setTab = (t: Tab) => update({ tab: t }, false);
   const setDir = (d: string) => update({ dir: d }, false);
 
   const afterDelete = (paths: string[]) => {
-    if (filePath && paths.some((p) => filePath === p || filePath.startsWith(`${p}/`))) {
+    const patch: Partial<Record<"dir" | "file", string | null>> = {};
+    if (affectsOpenFile(paths)) {
       setDirty(false);
-      update({ file: null });
+      patch.file = null;
     }
-    if (paths.some((p) => dir === p || dir.startsWith(`${p}/`))) update({ dir: parentOf(paths.find((p) => dir === p || dir.startsWith(`${p}/`))!) || "workspace" });
+    const gone = paths.find((p) => dir === p || dir.startsWith(`${p}/`));
+    if (gone !== undefined) patch.dir = parentOf(gone) || "workspace";
+    if (Object.keys(patch).length) update(patch);
   };
   const afterMove = (moves: { from: string; to: string }[]) => {
+    const patch: Partial<Record<"dir" | "file", string | null>> = {};
     for (const m of moves) {
-      if (filePath === m.from) update({ file: m.to });
-      else if (filePath?.startsWith(`${m.from}/`)) update({ file: `${m.to}${filePath.slice(m.from.length)}` });
-      if (dir === m.from || dir.startsWith(`${m.from}/`)) update({ dir: `${m.to}${dir.slice(m.from.length)}` });
+      if (filePath === m.from) patch.file = m.to;
+      else if (filePath?.startsWith(`${m.from}/`)) patch.file = `${m.to}${filePath.slice(m.from.length)}`;
+      if (dir === m.from || dir.startsWith(`${m.from}/`)) patch.dir = `${m.to}${dir.slice(m.from.length)}`;
+    }
+    if (Object.keys(patch).length) {
+      if (patch.file !== undefined) setDirty(false);
+      update(patch);
     }
   };
 
   const fileActions = {
-    onRename: (path: string) => setNaming({ kind: "rename", path }),
-    onMove: (paths: string[]) => setMoving(paths),
-    onDelete: (paths: string[]) => setDeleting(paths),
+    onRename: (path: string) => guardOpen([path], () => setNaming({ kind: "rename", path })),
+    onMove: (paths: string[]) => guardOpen(paths, () => setMoving(paths)),
+    onDelete: (paths: string[]) => guardOpen(paths, () => setDeleting(paths)),
     onReveal: reveal,
     onOpenFile: (path: string) => openFile(path),
     onSaved: () => refresh(),
@@ -208,12 +220,10 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
         icon={<FolderOpen />}
         actions={
           <>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/files">
-                <ArrowLeft /> All agents
-              </Link>
+            <Button variant="ghost" size="sm" onClick={() => guard(() => navigate("/files"))}>
+              <ArrowLeft /> All agents
             </Button>
-            <AgentPicker agent={agent} agents={agents} />
+            <AgentPicker agent={agent} agents={agents} onPick={(id) => guard(() => navigate(`/files/${id}`))} />
           </>
         }
       />
@@ -256,13 +266,13 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
                 dir={dir}
                 onDir={(d) => setDir(d)}
                 selected={filePath}
-                onSelect={(e) => openFile(e.path, e.size)}
+                onSelect={(e, inDir) => openFile(e.path, e.size, inDir)}
                 frozen={dreaming}
                 actions={{ ...fileActions, onNew: (kind, d) => setNaming({ kind, dir: d }) }}
               />
             )}
             {tab === "notes" && <NotesPane agent={agent} selected={filePath} onSelect={(n) => openFile(n.path, n.bytes)} />}
-            {tab === "review" && <ReviewPane agent={agent} selected={filePath} frozen={dreaming} actions={{ onOpen: openReviewItem, onDelete: setDeleting, onMove: setMoving }} />}
+            {tab === "review" && <ReviewPane agent={agent} selected={filePath} frozen={dreaming} actions={{ onOpen: openReviewItem, onDelete: fileActions.onDelete, onMove: fileActions.onMove }} />}
             {tab === "bin" && <BinPane agent={agent} frozen={dreaming} />}
           </section>
           {tab !== "bin" && (
