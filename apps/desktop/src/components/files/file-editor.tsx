@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -91,6 +91,7 @@ export function FileEditor({
   onSaved,
   fill = false,
   defaultView,
+  actions,
 }: {
   agentId: string;
   agentName: string;
@@ -105,6 +106,8 @@ export function FileEditor({
   /** Grow with the pane instead of a fixed height. */
   fill?: boolean;
   defaultView?: View;
+  /** More buttons for the file (rename, move, delete), at the end of the bar. */
+  actions?: ReactNode;
 }) {
   const qc = useQueryClient();
   const file = useQuery({ queryKey: qk.agentFile(agentId, path), queryFn: () => api.agents.readFile(agentId, path), retry: false });
@@ -281,6 +284,7 @@ export function FileEditor({
               </Button>
             </>
           )}
+          {actions}
         </div>
       </div>
 

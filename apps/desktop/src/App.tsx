@@ -24,6 +24,7 @@ const ArchivedPage = lazy(() => import("@/pages/chat/archived-page"));
 const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
+const FilesPage = lazy(() => import("@/pages/files/files-page"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
 const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
@@ -202,6 +203,8 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
+          <Route path="/files" element={<FilesPage />} />
+          <Route path="/files/:agentId" element={<FilesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/my-tasks" element={<HumanTasksPage />} />
           <Route path="/automations" element={<AutomationsPage />} />

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CreditCard,
   Fingerprint,
+  FolderOpen,
   Globe,
   MonitorUp,
   Inbox,
@@ -191,6 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/my-tasks", label: "My tasks", icon: <ListTodo />, badge: myTasks || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
+    { to: "/files", label: "Files", icon: <FolderOpen /> },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/calls", label: "Calls", icon: <Phone /> },
@@ -225,6 +227,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/integrations", "Connected apps"),
   ];
   const easyMore: NavItem[] = [
+    easyItem("/files", "Files"),
     easyItem("/activity", "History"),
     easyItem("/calls", "Phone calls"),
     easyItem("/messaging", "Chat apps"),
