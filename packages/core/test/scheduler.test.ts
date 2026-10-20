@@ -13,8 +13,9 @@ import { createAgent, updateAgent } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
 import * as routines from "../src/services/routines";
 import { createRoutine, getRoutine, runRoutineNow, updateRoutine } from "../src/services/routines";
-import { reloadSchedules, scheduledRoutines, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
+import { dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
 import { HttpError, newId, now } from "../src/util";
+import { Cron } from "croner";
 
 let dataDir: string;
 let agent: Agent;
@@ -358,5 +359,34 @@ describe("triggering", () => {
     const manual = await triggerRoutine(routine.id);
     finish(manual);
     expect(sent).toHaveLength(1);
+  });
+
+  test("a computer that starts standing in runs the automations that came due since the primary went, once", async () => {
+    const hourly = createRoutine({ agentId: agent.id, name: "Hourly", cron: "0 * * * *", timezone: "UTC", prompt: "hourly" });
+    const ranThere = createRoutine({ agentId: agent.id, name: "Ran there", cron: "0 * * * *", timezone: "UTC", prompt: "done there" });
+    const before = createRoutine({ agentId: agent.id, name: "Before", cron: "0 0 1 1 *", timezone: "UTC", prompt: "yearly" });
+    const slot = dueSlot(new Cron("0 * * * *", { timezone: "UTC", paused: true }), new Date())!;
+    // The primary ran this one in the current slot already (its copy says so).
+    exec("UPDATE routines SET last_run_at = ? WHERE id = ?", new Date(slot.getTime() + 5_000).toISOString(), ranThere.id);
+    startScheduler();
+    const lostAt = new Date(slot.getTime() - 5 * 60_000).toISOString();
+    expect(await runMissedSince(lostAt)).toBe(1);
+    expect(sent.map((m) => m.routineId)).toEqual([hourly.id]);
+    expect(sent.some((m) => m.routineId === before.id)).toBe(false);
+    for (const r of [hourly, ranThere, before]) updateRoutine(r.id, { enabled: false });
+  });
+});
+
+describe("when a tick was due", () => {
+  const job = new Cron("0 9 * * *", { timezone: "UTC", paused: true });
+  const at = (iso: string) => new Date(iso);
+
+  test("a tick on time is due now, not the day before", () => {
+    expect(dueSlot(job, at("2026-10-20T09:00:00.004Z"))?.toISOString()).toBe("2026-10-20T09:00:00.000Z");
+    expect(dueSlot(job, at("2026-10-20T08:59:59.600Z"))?.toISOString()).toBe("2026-10-20T09:00:00.000Z");
+  });
+
+  test("a tick a Mac fires after waking up is due at its time slot", () => {
+    expect(dueSlot(job, at("2026-10-20T09:31:00.000Z"))?.toISOString()).toBe("2026-10-20T09:00:00.000Z");
   });
 });

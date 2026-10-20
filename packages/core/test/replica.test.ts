@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import { all, closeDb, get, openDb, run, setDb } from "../src/db";
 import { setLogLevel } from "../src/log";
-import { applyChanges, changesFor, ensureReplica, pendingFor, pendingKeys, replicaSeq, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
+import { applyChanges, changesFor, ensureReplica, pendingFor, pendingKeys, replicaSeq, replicaTables, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
 
 let dir: string;
 let a: Database;
@@ -63,6 +63,30 @@ describe("the change log", () => {
     expect(row.origin).toBeNull();
     run("DELETE FROM goals WHERE id = 'gol_1'");
     expect(get<{ deleted: number }>("SELECT deleted FROM replica_rows WHERE tbl = 'goals' AND pk = 'gol_1'")!.deleted).toBe(1);
+  });
+
+  test("every shared table can be written, changed and emptied with the triggers in place", () => {
+    use(a);
+    run("PRAGMA foreign_keys = OFF");
+    try {
+      for (const t of replicaTables()) {
+        const cols = all<{ name: string; type: string; notnull: number; dflt_value: string | null; pk: number }>(`PRAGMA table_info("${t.table}")`);
+        const value = (c: { type: string }, n: number) => (/INT|REAL|NUM/i.test(c.type) ? n : `v${n}_${t.table}`);
+        const row: Record<string, string | number> = {};
+        for (const c of cols) if (c.pk || (c.notnull && c.dflt_value === null)) row[c.name] = value(c, 1);
+        if (t.only) row[t.only.column] = t.only.value;
+        const names = Object.keys(row);
+        run(`INSERT INTO "${t.table}" (${names.map((n) => `"${n}"`).join(", ")}) VALUES (${names.map(() => "?").join(", ")})`, ...Object.values(row));
+        const key = t.key.map((k) => String(row[k])).join("\u001f");
+        expect(get<{ deleted: number }>("SELECT deleted FROM replica_rows WHERE tbl = ? AND pk = ?", t.table, key)?.deleted).toBe(0);
+        const other = cols.find((c) => !c.pk && !t.own.includes(c.name) && c.name !== "updated_at" && !(t.only && c.name === t.only.column));
+        if (other) run(`UPDATE "${t.table}" SET "${other.name}" = ? WHERE ${t.key.map((k) => `"${k}" = ?`).join(" AND ")}`, value(other, 2), ...t.key.map((k) => row[k]!));
+        run(`DELETE FROM "${t.table}" WHERE ${t.key.map((k) => `"${k}" = ?`).join(" AND ")}`, ...t.key.map((k) => row[k]!));
+        expect(get<{ deleted: number }>("SELECT deleted FROM replica_rows WHERE tbl = ? AND pk = ?", t.table, key)?.deleted).toBe(1);
+      }
+    } finally {
+      run("PRAGMA foreign_keys = ON");
+    }
   });
 
   test("a change of only the bookkeeping (updated_at) is not a change", () => {

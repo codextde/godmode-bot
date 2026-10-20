@@ -70,10 +70,24 @@ const NOT_SHARED = new Set(["vms"]);
 
 let tablesCache: ReplicaTable[] | null = null;
 
+/** A table's key columns, as the schema says (the settings-like tables are keyed by `key`, not `id`). */
+function keyOf(table: string): string[] {
+  const pk = all<{ name: string; pk: number }>(`PRAGMA table_info(${q(table)})`)
+    .filter((c) => c.pk > 0)
+    .sort((a, b) => a.pk - b.pk)
+    .map((c) => c.name);
+  return pk.length ? pk : ["id"];
+}
+
+/** Columns the setup copy sends one way but that stay each computer's own here (an agent's folder exists on one computer). */
+const OWN_HERE: Record<string, string[]> = { agents: ["working_directory"] };
+
 export function replicaTables(): ReplicaTable[] {
   if (tablesCache) return tablesCache;
-  const setup = SETUP_TABLES.filter((t) => !NOT_SHARED.has(t.table)).map((t): ReplicaTable => ({ ...t, key: ["id"], setup: true }));
-  tablesCache = [...setup, ...STATE.map((t) => ({ ...t, setup: false }))];
+  const setup = SETUP_TABLES.filter((t) => !NOT_SHARED.has(t.table)).map(
+    (t): ReplicaTable => ({ ...t, own: [...t.own, ...(OWN_HERE[t.table] ?? [])], key: keyOf(t.table), setup: true }),
+  );
+  tablesCache = [...setup, ...STATE.map((t) => ({ ...t, key: keyOf(t.table), setup: false }))];
   return tablesCache;
 }
 
@@ -157,6 +171,8 @@ export function ensureReplica(): void {
     });
   }
   if (getMeta("replica.backfilled") !== "1") backfill(tables);
+  // A crash in the middle of writing another computer's changes must not make this computer's own writes look like theirs.
+  sql("UPDATE replica_ctx SET origin = NULL, at = NULL WHERE id = 1");
   ensured = getDb();
 }
 
@@ -185,6 +201,7 @@ function backfill(tables: ReplicaTable[]): void {
 /** Tests open several databases one after another. */
 export function resetReplicaCache(): void {
   ensured = null;
+  tablesCache = null;
   fkCache.clear();
   columnCache.clear();
 }

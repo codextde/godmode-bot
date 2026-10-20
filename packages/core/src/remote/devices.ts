@@ -107,7 +107,7 @@ import { forgetPeer, pendingFor, replicaSeq } from "./replica";
 import { pendingChanges, pullFrom, replicaHint, startReplicaSync, stopReplicaSync } from "./replicaSync";
 import { endStandIn, forgetStandIn, primaryIsBack, primaryLeftNow, primaryWentAway, setStandInHooks, setStandInSettings, standInSettings, standInState, type TakeOver } from "./standIn";
 import { SERVICE_LABEL } from "./launchd";
-import { runMissedSince, setScheduleSettle } from "../scheduler/scheduler";
+import { runMissedSince, setScheduleGroup } from "../scheduler/scheduler";
 import { instanceInfo } from "../mobile/devices";
 import { mobileUrls } from "../mobile/access";
 import { getSettings } from "../services/settings";
@@ -186,7 +186,7 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
   setStandInHooks({ takeOver, changed: emitGroupSoon });
   startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id) });
   setLinkEventFilter(echoToPrimary);
-  setScheduleSettle(settled);
+  setScheduleGroup({ active: () => groupRole() !== null, settle: settled });
   setPhoneInfo(() => (getSettings().mobile.enabled ? { instance: instanceInfo(), urls: mobileUrls() } : null));
   startWakeWatch();
   let wasForwarding = forwarding();
@@ -254,7 +254,7 @@ export function stopDevices(): void {
   setStandInHooks(null);
   stopReplicaSync();
   setLinkEventFilter(null);
-  setScheduleSettle(null);
+  setScheduleGroup(null);
   setPhoneInfo(null);
   stopWakeWatch();
   setForwarding(null);

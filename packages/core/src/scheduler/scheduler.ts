@@ -50,6 +50,14 @@ function signature(r: WantedRoutine): string {
   return `${r.type}\u0000${r.cron}\u0000${r.timezone}\u0000${r.start_window ?? 0}\u0000${r.runs ?? 1}`;
 }
 
+/**
+ * The time a cron tick was due (croner tells when it fired): a Mac that slept fires it late. Looked up two seconds
+ * ahead: at fire time croner counts the current slot as still to come, and it compares whole seconds.
+ */
+export function dueSlot(job: Cron, firedAt: Date): Date | null {
+  return job.previousRuns(1, new Date(firedAt.getTime() + 2_000))[0] ?? null;
+}
+
 function cronJob(r: WantedRoutine): Cron {
   return new Cron(
     r.cron,
@@ -59,7 +67,7 @@ function cronJob(r: WantedRoutine): Cron {
       protect: true,
       catch: (err) => log.error(`routine ${r.id} tick crashed`, err),
     },
-    (self: Cron) => onTick(r.id, self.currentRun()),
+    (self: Cron) => onTick(r.id, dueSlot(self, new Date())),
   );
 }
 
@@ -76,7 +84,7 @@ function randomStartJob(r: WantedRoutine, windowMinutes: number, runs: number, h
       jobs.delete(r.id);
       log.warn(`routine ${r.id} has no next start`, err);
     }
-    return onTick(r.id, slot);
+    return onTick(r.id, at);
   });
   return job;
 }
@@ -153,18 +161,21 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   }
 }
 
-/** Late ticks (this computer slept or was away) wait until the device group's copies are in (remote/devices.ts). */
-let settle: (() => Promise<void>) | null = null;
+/**
+ * In a device group (remote/devices.ts): late ticks (this computer slept or was away) wait until the group's copies are
+ * in, and are skipped when another computer ran that time already (it stood in).
+ */
+let group: { active: () => boolean; settle: () => Promise<void> } | null = null;
 
-export function setScheduleSettle(fn: (() => Promise<void>) | null): void {
-  settle = fn;
+export function setScheduleGroup(hooks: { active: () => boolean; settle: () => Promise<void> } | null): void {
+  group = hooks;
 }
 
 const LATE_MS = 60_000;
 
 async function onTick(routineId: string, scheduledAt: Date | null = null) {
-  const late = !!scheduledAt && Date.now() - scheduledAt.getTime() > LATE_MS;
-  if (late && settle) await settle().catch(() => undefined);
+  const late = !!group?.active() && !!scheduledAt && Date.now() - scheduledAt.getTime() > LATE_MS;
+  if (late) await group!.settle().catch(() => undefined);
   let routine: Routine;
   try {
     routine = getRoutine(routineId);
@@ -216,19 +227,25 @@ async function onTick(routineId: string, scheduledAt: Date | null = null) {
 }
 
 /**
- * A computer that starts standing in for its primary: scheduled automations that came due since the primary was last
- * seen and didn't run there run now, once each.
+ * A computer that starts standing in for its primary: scheduled automations whose last time slot came since the primary
+ * was last seen and that didn't run since (anywhere in the group) run now, once each. The slot comes from the schedule
+ * itself — the stored next run is rewritten as soon as the scheduler starts here.
  */
 export async function runMissedSince(since: string): Promise<number> {
   const from = Date.parse(since);
   if (!Number.isFinite(from)) return 0;
-  const due = all<{ id: string; next_run_at: string; last_run_at: string | null }>(
-    `SELECT r.id, r.next_run_at, r.last_run_at FROM routines r JOIN agents a ON a.id = r.agent_id
-      WHERE r.enabled = 1 AND a.enabled = 1 AND r.next_run_at IS NOT NULL
-        AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
+  const due = all<{ id: string; cron: string; timezone: string; last_run_at: string | null }>(
+    `SELECT r.id, r.cron, r.timezone, r.last_run_at FROM routines r JOIN agents a ON a.id = r.agent_id
+      WHERE r.enabled = 1 AND a.enabled = 1 AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
   ).filter((r) => {
-    const at = Date.parse(r.next_run_at);
-    return at >= from - LATE_MS && at <= Date.now() && (!r.last_run_at || Date.parse(r.last_run_at) < at - LATE_MS);
+    let slot: Date | null = null;
+    try {
+      slot = dueSlot(new Cron(r.cron, { timezone: r.timezone, mode: "5-or-6-parts", paused: true }), new Date());
+    } catch {
+      return false;
+    }
+    if (!slot || slot.getTime() < from - LATE_MS) return false;
+    return !r.last_run_at || Date.parse(r.last_run_at) < slot.getTime() - LATE_MS;
   });
   let started = 0;
   for (const r of due) {
