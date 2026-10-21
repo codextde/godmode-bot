@@ -39,6 +39,8 @@ const firedSlots = new Map<string, number>();
 /** Time slot a catch-up last ran per routine: a late tick or random start for it is skipped. */
 const caughtUp = new Map<string, number>();
 let started = false;
+/** Changes with every start and stop: a catch-up of an earlier one stops starting runs. */
+let generation = 0;
 
 interface WantedRoutine {
   id: string;
@@ -179,13 +181,39 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
  * In a device group (remote/devices.ts): late ticks (this computer slept or was away) wait until the group's copies are
  * in, and are skipped when another computer ran that time already (it stood in).
  */
-let group: { active: () => boolean; settle: () => Promise<void> } | null = null;
+interface ScheduleGroup {
+  active: () => boolean;
+  settle: () => Promise<void>;
+  /** This computer schedules only while it stands in for its primary: runMissedSince covers what came due. */
+  standingIn?: () => boolean;
+}
 
-export function setScheduleGroup(hooks: { active: () => boolean; settle: () => Promise<void> } | null): void {
+let group: ScheduleGroup | null = null;
+
+export function setScheduleGroup(hooks: ScheduleGroup | null): void {
   group = hooks;
 }
 
 const LATE_MS = 60_000;
+
+/** A scheduled start that didn't happen: skipped (409) is logged, anything else is told. */
+function startFailed(routine: Routine, err: unknown): void {
+  if (err instanceof HttpError && err.status === 409) {
+    log.info(`routine ${routine.id} skipped: ${err.message}`);
+    return;
+  }
+  if (err instanceof HttpError && err.status === 404) {
+    reloadSchedules();
+    return;
+  }
+  if (isLicenseRequired(err)) {
+    if (routine.trigger.type !== "condition") recordEvent(routine.id, { source: "schedule", title: "Scheduled time reached", status: "failed", note: err.message });
+    noteLicenseRefusal(`Automation “${routine.name}”`, err);
+    return;
+  }
+  log.error(`routine ${routine.id} failed to start`, err);
+  notify("error", `Automation “${routine.name}” could not start`, err instanceof Error ? err.message : String(err), `/agents/${routine.agentId}`);
+}
 
 async function onTick(routineId: string, scheduledAt: Date | null = null, slot: Date | null = null) {
   const late = !!group?.active() && !!scheduledAt && Date.now() - scheduledAt.getTime() > LATE_MS;
@@ -218,26 +246,7 @@ async function onTick(routineId: string, scheduledAt: Date | null = null, slot: 
         : await triggerRoutine(routineId, { scheduled: true });
     log.info(`routine ${routineId} started ${run.trigger === "check" ? "a check" : "run"} ${run.id}`);
   } catch (err) {
-    if (err instanceof HttpError && err.status === 409) {
-      log.info(`routine ${routineId} skipped: ${err.message}`);
-      return;
-    }
-    if (err instanceof HttpError && err.status === 404) {
-      reloadSchedules();
-      return;
-    }
-    if (isLicenseRequired(err)) {
-      if (routine.trigger.type !== "condition") recordEvent(routineId, { source: "schedule", title: "Scheduled time reached", status: "failed", note: err.message });
-      noteLicenseRefusal(`Automation “${routine.name}”`, err);
-      return;
-    }
-    log.error(`routine ${routineId} failed to start`, err);
-    notify(
-      "error",
-      `Automation “${routine.name}” could not start`,
-      err instanceof Error ? err.message : String(err),
-      `/agents/${routine.agentId}`,
-    );
+    startFailed(routine, err);
   } finally {
     const next = jobs.get(routineId)?.job.nextRun()?.toISOString() ?? null;
     if (exec("UPDATE routines SET next_run_at = ? WHERE id = ? AND next_run_at IS NOT ?", next, routineId, next).changes > 0) emitRoutine(routineId);
@@ -298,8 +307,10 @@ function slotTaken(id: string, slot: number): boolean {
 export async function runMissedSince(since: string): Promise<number> {
   const from = Date.parse(since);
   if (!Number.isFinite(from)) return 0;
+  const gen = generation;
   let ran = 0;
   for (const r of scheduleRows()) {
+    if (gen !== generation) break;
     const due = lastSlot(r, Date.now());
     // A drawn start still to come: this computer's own random start runs it.
     if (!due || due.slot < from - LATE_MS || due.start > Date.now() || slotTaken(r.id, due.slot)) continue;
@@ -318,6 +329,8 @@ const ALIVE_KEY = "scheduler.alive_at";
 const BEAT_MS = 60_000;
 /** The wall clock jumped this much more than a heartbeat: the computer slept (Node's timers stand still meanwhile). */
 const WAKE_GAP_MS = 2 * 60_000;
+/** After a wake: croner's late ticks come first, and a device group notices the wake before it settles. */
+const WAKE_CATCH_UP_DELAY_MS = 10_000;
 const CATCH_UP_MAX_AGE_MS = 12 * 3_600_000;
 const CATCH_UP_MIN_LEAD_MS = 2 * 3_600_000;
 let beatTimer: ReturnType<typeof setInterval> | null = null;
@@ -340,10 +353,13 @@ function beat(): void {
  */
 export async function catchUpMissed(reason: "start" | "wake", aliveAt: number): Promise<number> {
   if (!Number.isFinite(aliveAt) || aliveAt <= 0) return 0;
+  if (group?.standingIn?.()) return 0;
+  const gen = generation;
   if (group?.active()) await group.settle().catch(() => undefined);
   if (!started) return 0;
   let ran = 0;
   for (const r of scheduleRows()) {
+    if (gen !== generation) break;
     const t = Date.now();
     const due = lastSlot(r, t);
     if (!due || due.start > t || due.start <= aliveAt - LATE_MS || Date.parse(r.created_at) >= due.slot || slotTaken(r.id, due.slot)) continue;
@@ -360,7 +376,11 @@ export async function catchUpMissed(reason: "start" | "wake", aliveAt: number): 
       ran++;
       log.info(`routine ${r.id} caught up its missed ${slot} slot (${reason}): run ${run.id}`);
     } catch (err) {
-      log.info(`routine ${r.id} didn't catch up its missed ${slot} slot (${reason})`, { error: err instanceof Error ? err.message : String(err) });
+      try {
+        startFailed(getRoutine(r.id), err);
+      } catch {
+        log.info(`routine ${r.id} didn't catch up its missed ${slot} slot (${reason})`, { error: err instanceof Error ? err.message : String(err) });
+      }
     }
   }
   return ran;
@@ -427,20 +447,23 @@ export function startScheduler(): void {
   repairStaleStatuses();
   reloadSchedules();
   log.info(`scheduler started with ${jobs.size} routine(s)`);
+  generation++;
   const aliveAt = lastBeat || Date.parse(getMeta(ALIVE_KEY) ?? "");
   beat();
   beatTimer = setInterval(() => {
     const before = lastBeat;
     beat();
-    if (lastBeat - before > BEAT_MS + WAKE_GAP_MS) void catchUpMissed("wake", before);
+    if (lastBeat - before > BEAT_MS + WAKE_GAP_MS) setTimeout(() => void catchUpMissed("wake", before), WAKE_CATCH_UP_DELAY_MS).unref?.();
   }, BEAT_MS);
   beatTimer.unref?.();
-  void catchUpMissed("start", aliveAt);
+  // After the services that start next: runs started now are told and counted like any other.
+  setTimeout(() => void catchUpMissed("start", aliveAt), 0);
 }
 
 export function stopScheduler(): void {
   if (started) beat();
   started = false;
+  generation++;
   if (beatTimer) clearInterval(beatTimer);
   beatTimer = null;
   firedSlots.clear();

@@ -13,7 +13,7 @@ import { createAgent, updateAgent } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
 import * as routines from "../src/services/routines";
 import { createRoutine, getRoutine, runRoutineNow, updateRoutine } from "../src/services/routines";
-import { catchUpMissed, dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
+import { catchUpMissed, dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, setScheduleGroup, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
 import { HttpError, newId, now } from "../src/util";
 import { Cron } from "croner";
 
@@ -493,6 +493,18 @@ describe("triggering", () => {
       await back(new Date(at.getTime() - 1_000).toISOString());
       expect(runsOf(r.id)).toBe(0);
       expect(scheduledRoutines().find((s) => s.routineId === r.id)!.nextRunAt).toBe(at.toISOString());
+    });
+
+    test("a computer standing in for its primary leaves missed slots to the stand-in catch-up", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      setScheduleGroup({ active: () => true, settle: async () => {}, standingIn: () => true });
+      try {
+        await back();
+        expect(runsOf(r.id)).toBe(0);
+      } finally {
+        setScheduleGroup(null);
+      }
     });
 
     test("without a heartbeat (the first start) nothing is caught up", async () => {

@@ -87,7 +87,8 @@ function isDeviceMetaKey(key: string): boolean {
     key.startsWith("composio.session.") ||
     key.startsWith("mobile.") ||
     key.startsWith("link.") ||
-    key.startsWith("cloud.")
+    key.startsWith("cloud.") ||
+    key.startsWith("scheduler.")
   );
 }
 
