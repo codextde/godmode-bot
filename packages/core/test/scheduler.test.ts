@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,7 @@ import { createAgent, updateAgent } from "../src/agents/service";
 import * as repo from "../src/agents/repo";
 import * as routines from "../src/services/routines";
 import { createRoutine, getRoutine, runRoutineNow, updateRoutine } from "../src/services/routines";
-import { dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
+import { catchUpMissed, dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, setScheduleGroup, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
 import { HttpError, newId, now } from "../src/util";
 import { Cron } from "croner";
 
@@ -374,6 +374,145 @@ describe("triggering", () => {
     expect(sent.map((m) => m.routineId)).toEqual([hourly.id]);
     expect(sent.some((m) => m.routineId === before.id)).toBe(false);
     for (const r of [hourly, ranThere, before]) updateRoutine(r.id, { enabled: false });
+  });
+
+  describe("slots missed while the scheduler wasn't running", () => {
+    // Tuesday, 16:06 in Berlin: Godmode was off from 14:38 to 16:06.
+    const wentAt = "2026-10-20T12:38:00.000Z";
+    const backAt = "2026-10-20T14:06:01.000Z";
+
+    beforeEach(() => {
+      stopScheduler();
+      exec("UPDATE routines SET enabled = 0");
+    });
+
+    afterEach(() => {
+      stopScheduler();
+      setSystemTime();
+    });
+
+    /** The scheduler ran until `until`, then Godmode was off until `back`. */
+    function offline(until: string) {
+      setSystemTime(new Date(until));
+      startScheduler();
+      stopScheduler();
+    }
+
+    function routine(cron: string, trigger: { type: "schedule"; startWindowMinutes?: number } = { type: "schedule" }) {
+      const r = createRoutine({ agentId: agent.id, name: `Replies ${cron}`, trigger, cron, timezone: "Europe/Berlin", prompt: "answer replies" });
+      exec("UPDATE routines SET created_at = ? WHERE id = ?", "2026-10-01T00:00:00.000Z", r.id);
+      return r;
+    }
+
+    async function back(at = backAt) {
+      setSystemTime(new Date(at));
+      startScheduler();
+      await Bun.sleep(20);
+    }
+
+    const runsOf = (id: string) => sent.filter((m) => m.routineId === id).length;
+
+    test("a slot that fell while Godmode was off runs once when it starts", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      await back();
+      expect(runsOf(r.id)).toBe(1);
+      const event = get<{ source: string; note: string | null }>("SELECT source, note FROM automation_events WHERE routine_id = ?", r.id);
+      expect(event?.source).toBe("schedule");
+      expect(event?.note).toContain("Caught up");
+      expect(await catchUpMissed("start", Date.parse(wentAt))).toBe(0);
+      expect(await catchUpMissed("wake", Date.parse(wentAt))).toBe(0);
+      expect(runsOf(r.id)).toBe(1);
+    });
+
+    test("a late tick for a slot that was caught up already is skipped", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      await back();
+      expect(runsOf(r.id)).toBe(1);
+      exec("UPDATE runs SET status = 'succeeded', finished_at = ? WHERE routine_id = ?", now(), r.id);
+      exec("UPDATE routines SET last_run_at = NULL WHERE id = ?", r.id);
+      exec("DELETE FROM automation_events WHERE routine_id = ?", r.id);
+      expect(await catchUpMissed("wake", Date.parse(wentAt))).toBe(0);
+      expect(runsOf(r.id)).toBe(1);
+    });
+
+    test("no catch-up when the next slot comes within 2 hours or the slot is older than 12 hours", async () => {
+      offline("2026-10-19T20:00:00.000Z");
+      const soon = routine("0 * * * *");
+      const old = routine("0 3 * * *");
+      await back();
+      expect(runsOf(soon.id)).toBe(0);
+      expect(runsOf(old.id)).toBe(0);
+    });
+
+    test("slots the running scheduler saw are not caught up", async () => {
+      offline("2026-10-20T13:05:00.000Z");
+      const r = routine("0 15 * * 1-5");
+      await back();
+      expect(runsOf(r.id)).toBe(0);
+    });
+
+    test("a routine created after its slot doesn't catch it up", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      exec("UPDATE routines SET created_at = ? WHERE id = ?", "2026-10-20T13:30:00.000Z", r.id);
+      await back();
+      expect(runsOf(r.id)).toBe(0);
+    });
+
+    test("a slot that ran already (here or on another computer) is not caught up", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      exec("UPDATE routines SET last_run_at = ? WHERE id = ?", "2026-10-20T13:00:05.000Z", r.id);
+      await back();
+      expect(runsOf(r.id)).toBe(0);
+    });
+
+    test("a start window whose drawn start passed while Godmode was off runs once now", async () => {
+      offline(wentAt);
+      const r = routine("0 16 * * 1-5", { type: "schedule", startWindowMinutes: 45 });
+      const at = routines.drawnStart(r.id, new Date("2026-10-20T14:00:00.000Z"), 45);
+      await back(new Date(at.getTime() + 1_000).toISOString());
+      expect(runsOf(r.id)).toBe(1);
+      expect(Date.parse(scheduledRoutines().find((s) => s.routineId === r.id)!.nextRunAt!)).toBeGreaterThan(Date.parse("2026-10-21T14:00:00.000Z") - 1);
+      expect(await catchUpMissed("start", Date.parse(wentAt))).toBe(0);
+      expect(runsOf(r.id)).toBe(1);
+    });
+
+    test("a start window whose drawn start is still to come is left to its random start", async () => {
+      offline(wentAt);
+      const slot = new Date("2026-10-20T14:00:00.000Z");
+      let r = routine("0 16 * * 1-5", { type: "schedule", startWindowMinutes: 45 });
+      // A start drawn right at the slot leaves no time before it.
+      while (routines.drawnStart(r.id, slot, 45).getTime() - slot.getTime() < 2_000) {
+        updateRoutine(r.id, { enabled: false });
+        r = routine("0 16 * * 1-5", { type: "schedule", startWindowMinutes: 45 });
+      }
+      const at = routines.drawnStart(r.id, slot, 45);
+      await back(new Date(at.getTime() - 1_000).toISOString());
+      expect(runsOf(r.id)).toBe(0);
+      expect(scheduledRoutines().find((s) => s.routineId === r.id)!.nextRunAt).toBe(at.toISOString());
+    });
+
+    test("a computer standing in for its primary leaves missed slots to the stand-in catch-up", async () => {
+      offline(wentAt);
+      const r = routine("0 15 * * 1-5");
+      setScheduleGroup({ active: () => true, settle: async () => {}, standingIn: () => true });
+      try {
+        await back();
+        expect(runsOf(r.id)).toBe(0);
+      } finally {
+        setScheduleGroup(null);
+      }
+    });
+
+    test("without a heartbeat (the first start) nothing is caught up", async () => {
+      const r = routine("0 15 * * 1-5");
+      setSystemTime(new Date(backAt));
+      expect(await catchUpMissed("start", Number.NaN)).toBe(0);
+      expect(runsOf(r.id)).toBe(0);
+    });
   });
 });
 

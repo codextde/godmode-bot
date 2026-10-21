@@ -188,7 +188,7 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
   setStandInHooks({ takeOver, changed: emitGroupSoon, online: internetReachable });
   startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id) });
   setLinkEventFilter(echoToPrimary);
-  setScheduleGroup({ active: () => groupRole() !== null, settle: settled });
+  setScheduleGroup({ active: () => groupRole() !== null, settle: settled, standingIn: isSecondary });
   setPhoneInfo(() => (getSettings().mobile.enabled ? { instance: instanceInfo(), urls: mobileUrls() } : null));
   startWakeWatch();
   let wasForwarding = forwarding();
