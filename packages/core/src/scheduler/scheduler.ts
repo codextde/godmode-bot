@@ -125,7 +125,7 @@ function nextRunAt(routine: Routine): string | null {
  * Run a schedule automation now: same path as a cron tick. Throws 409 when the agent is disabled or the routine is
  * already running. `scheduled` ticks additionally skip routines that were disabled meanwhile.
  */
-export async function triggerRoutine(id: string, opts: { scheduled?: boolean; byHuman?: boolean; note?: string } = {}): Promise<Run> {
+export async function triggerRoutine(id: string, opts: { scheduled?: boolean; byHuman?: boolean; title?: string; note?: string } = {}): Promise<Run> {
   ensureRunListener();
   const routine = getRoutine(id);
   if (routine.trigger.type !== "schedule") throw badRequest(`“${routine.name}” is not a scheduled automation`);
@@ -158,7 +158,7 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
     const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id, source: "automation", byHuman: opts.byHuman });
     recordEvent(id, {
       source: opts.scheduled ? "schedule" : "manual",
-      title: opts.scheduled ? "Scheduled time reached" : "Started manually",
+      title: opts.title ?? (opts.scheduled ? "Scheduled time reached" : "Started manually"),
       status: "running",
       runId: run.id,
       note: opts.note,
