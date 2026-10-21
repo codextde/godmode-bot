@@ -23,6 +23,7 @@ const MAX_AGE_MS = 24 * 3_600_000;
 /** Its next time slot is this close: it runs then anyway. */
 const NEXT_SLOT_MS = 2 * 3_600_000;
 const KEEP_HANDLED = 300;
+const RETRY_TITLE = "Ran again once Claude was signed in";
 
 interface FailedRun {
   id: string;
@@ -54,6 +55,11 @@ function markHandled(runIds: string[]): void {
   setMeta(HANDLED_META, JSON.stringify([...handled(), ...runIds].slice(-KEEP_HANDLED)));
 }
 
+/** Started as the one more run (here, or by another computer of the group that stood in). */
+function wasRetry(r: FailedRun): boolean {
+  return !!get("SELECT 1 FROM automation_events WHERE routine_id = ? AND run_id = ? AND title = ?", r.routine_id, r.id, RETRY_TITLE);
+}
+
 /** Why the automation doesn't run again now, or null. */
 function skipReason(routineId: string): string | null {
   let routine: ReturnType<typeof getRoutine>;
@@ -78,7 +84,7 @@ function skipReason(routineId: string): string | null {
 export async function retryAfterSignIn(runnerId: string | null): Promise<Run[]> {
   const done = new Set(handled());
   // Each failure is looked at once: a second try that failed again waits for the automation's next time slot.
-  const failed = signedOutFailures().filter((r) => r.runner_id === runnerId && !done.has(r.id));
+  const failed = signedOutFailures().filter((r) => r.runner_id === runnerId && !done.has(r.id) && !wasRetry(r));
   if (!failed.length) return [];
   markHandled(failed.map((r) => r.id));
   const started: Run[] = [];
@@ -90,7 +96,7 @@ export async function retryAfterSignIn(runnerId: string | null): Promise<Run[]> 
       continue;
     }
     try {
-      const run = await triggerRoutine(r.routine_id, { scheduled: true, title: "Ran again once Claude was signed in" });
+      const run = await triggerRoutine(r.routine_id, { scheduled: true, title: RETRY_TITLE });
       started.push(run);
       markHandled([run.id]);
     } catch (err) {
@@ -127,7 +133,7 @@ function onFinished(run: Run): void {
       if (!watching) return;
       await retryAfterSignIn(runnerId);
       const done = new Set(handled());
-      if (!signedOutFailures().some((r) => !done.has(r.id))) watching = false;
+      if (!signedOutFailures().some((r) => !done.has(r.id) && !wasRetry(r))) watching = false;
     })
     .catch((err) => log.warn("could not run the automations again that failed while Claude was signed out", err));
 }

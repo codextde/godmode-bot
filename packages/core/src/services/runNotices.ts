@@ -5,7 +5,7 @@
  */
 import type { Run } from "@godmode/shared";
 import { runEndOf } from "@godmode/shared";
-import { get, run as sql } from "../db";
+import { all, get, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { isConversationViewed, setConversationViewHandler } from "../server/ws";
@@ -56,18 +56,48 @@ function automationNotice(r: Run, conversationId: string, viewed: boolean): void
   const setting = routine.notify ?? "failures";
   if (setting === "never" || viewed || runNotifiedUser(r.id) || reportedMissingLogin(r.id)) return;
   if (r.status === "failed") {
-    // Claude being signed out has one notice of its own for all the runs it fails (services/claudeLogin.ts).
-    if (runEndOf(r.error ?? "")?.kind === "auth") return;
-    const before = get<{ status: string; error: string | null }>(
-      "SELECT status, error FROM runs WHERE routine_id = ? AND trigger = 'routine' AND id != ? AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",
+    // Claude being signed out has a notice of its own for all the runs it fails (services/claudeLogin.ts), a moment later.
+    if (runEndOf(r.error ?? "")?.kind === "auth") {
+      setTimeout(() => {
+        try {
+          if (!signOutNoticed(r)) failureNotice(r, routine.name, conversationId);
+        } catch (err) {
+          log.warn(`could not handle the end of run ${r.id}`, err);
+        }
+      }, signOutWaitMs).unref?.();
+      return;
+    }
+    // Once until it works again; a run that failed over the sign-in says nothing about that.
+    const before = all<{ status: string; error: string | null }>(
+      "SELECT status, error FROM runs WHERE routine_id = ? AND trigger = 'routine' AND id != ? AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 20",
       r.routineId!,
       r.id,
-    );
-    if (before?.status === "failed" && runEndOf(before.error ?? "")?.kind !== "auth") return;
-    notify("error", `“${routine.name}” failed`, shorten(r.error ?? "Its last run failed."), `/chat/${conversationId}`);
+    ).find((b) => runEndOf(b.error ?? "")?.kind !== "auth");
+    if (before?.status === "failed") return;
+    failureNotice(r, routine.name, conversationId);
   } else if (setting === "always") {
     notify("success", `“${routine.name}” finished`, shorten((r.result ?? "").replace(/\s+/g, " ").trim()), `/chat/${conversationId}`);
   }
+}
+
+function failureNotice(r: Run, name: string, conversationId: string): void {
+  notify("error", `“${name}” failed`, shorten(r.error ?? "Its last run failed."), `/chat/${conversationId}`);
+}
+
+/** Claude's sign-in notice went out since anything last worked before this run (on this computer or a runner). */
+function signOutNoticed(r: Run): boolean {
+  const worked = get<{ at: string }>("SELECT finished_at AS at FROM runs WHERE status = 'succeeded' AND finished_at <= ? ORDER BY finished_at DESC LIMIT 1", r.createdAt)?.at;
+  return !!get(
+    "SELECT 1 FROM notifications WHERE created_at >= ? AND (title LIKE 'Claude is signed out%' OR title LIKE 'Claude refused the API key%') LIMIT 1",
+    worked ?? new Date(Date.parse(r.createdAt) - 86_400_000).toISOString(),
+  );
+}
+
+let signOutWaitMs = 10_000;
+
+/** Tests: how long a failure over the sign-in waits for Claude's sign-in notice. */
+export function __setSignOutWaitForTests(ms: number): void {
+  signOutWaitMs = ms;
 }
 
 let unsubscribe: (() => void) | null = null;

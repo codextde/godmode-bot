@@ -1,14 +1,17 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Run } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
-import { all, getMeta } from "../src/db";
+import { all, getMeta, insert } from "../src/db";
+import { bus } from "../src/events/bus";
+import { automationConversation } from "../src/automations/conversation";
+import { newId, now } from "../src/util";
 import { createRoutine, updateRoutine } from "../src/services/routines";
 import { startChat } from "../src/services/conversations";
 import { claudeLoginStatus } from "../src/services/claudeLogin";
-import { startRunNotices, stopRunNotices } from "../src/services/runNotices";
+import { __setSignOutWaitForTests, startRunNotices, stopRunNotices } from "../src/services/runNotices";
 import { triggerRoutine } from "../src/scheduler/scheduler";
 import { signInRetryIdle, startSignInRetry, stopSignInRetry } from "../src/automations/signInRetry";
-import { waitForRun } from "../src/runner/runner";
+import { getRun, waitForRun } from "../src/runner/runner";
 
 let env: TestEnv;
 let agent: Agent;
@@ -16,6 +19,7 @@ let agent: Agent;
 beforeAll(async () => {
   env = await setupEnv("godmode-sign-in-retry-");
   agent = await makeAgent({ name: "Sign-in Retry Bot" });
+  __setSignOutWaitForTests(300);
   startRunNotices();
   startSignInRetry();
 });
@@ -49,7 +53,7 @@ describe("automations that failed while Claude was signed out", () => {
       expect((await waitForRun(run.id, 20_000)).status).toBe("failed");
     }
     await until(() => !!claudeLoginStatus().signedOut);
-    await Bun.sleep(200);
+    await Bun.sleep(600);
     // Several runs failed: one notice for all of them, none per automation.
     expect(signedOutNotices()).toHaveLength(1);
     expect(signedOutNotices()[0]!.kind).toBe("error");
@@ -75,4 +79,13 @@ describe("automations that failed while Claude was signed out", () => {
     expect(runsOf(yearly.id)).toHaveLength(2);
     expect(runsOf(often.id)).toHaveLength(1);
   }, 60_000);
+
+  test("a failure that reads like a sign-in problem without a sign-in notice is still told", async () => {
+    const routine = createRoutine({ agentId: agent.id, name: "Lone failure", cron: "0 5 1 1 *", timezone: "UTC", prompt: "go" });
+    const id = newId("run");
+    const error = "Claude Code is not signed in (or the API key is invalid).";
+    insert("runs", { id, agent_id: agent.id, conversation_id: automationConversation(routine), routine_id: routine.id, trigger: "routine", status: "failed", prompt: "go", error, created_at: now(), finished_at: now() });
+    bus.emit({ type: "run.finished", run: getRun(id) });
+    await until(() => all("SELECT id FROM notifications WHERE title = '“Lone failure” failed'").length === 1, 5_000);
+  });
 });
