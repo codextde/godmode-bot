@@ -362,6 +362,8 @@ describe("triggering", () => {
   });
 
   test("a computer that starts standing in runs the automations that came due since the primary went, once", async () => {
+    // Only this test's automations: earlier ones may come due at the time of day the suite runs.
+    exec("UPDATE routines SET enabled = 0");
     const hourly = createRoutine({ agentId: agent.id, name: "Hourly", cron: "0 * * * *", timezone: "UTC", prompt: "hourly" });
     const ranThere = createRoutine({ agentId: agent.id, name: "Ran there", cron: "0 * * * *", timezone: "UTC", prompt: "done there" });
     const before = createRoutine({ agentId: agent.id, name: "Before", cron: "0 0 1 1 *", timezone: "UTC", prompt: "yearly" });

@@ -18,7 +18,9 @@ const cached = (body: string, seconds: number) => new Response(body, { headers: 
 
 /**
  * Latest published release, cached at the edge for five minutes. Without a token the API allows 60 calls an hour
- * per Cloudflare IP, so when it refuses, the last known release (kept a week) or the public release pages answer.
+ * per Cloudflare IP, so when it refuses, github.com says which release is the latest (no API call): the last known
+ * copy (kept a week) answers while it is still that one, the public release pages once a newer one is out. Never an
+ * older release just because the API was busy: the app would not see the update.
  */
 export async function latestRelease(): Promise<Release> {
   const cache = await caches.open('godmode-releases');
@@ -32,9 +34,11 @@ export async function latestRelease(): Promise<Release> {
     await Promise.all([cache.put(fresh, cached(body, 300)), cache.put(known, cached(body, 604800))]);
     return JSON.parse(body);
   }
-  const old = await cache.match(known);
-  if (old) return old.json();
-  const release = await releaseFromPages(await latestTag());
+  const old = (await cache.match(known)?.then((r) => r?.json() as Promise<Release> | undefined)) ?? null;
+  const tag = await latestTag().catch(() => null);
+  if (old && (!tag || old.tag_name === tag)) return old;
+  if (!tag) throw new Error(`GitHub latest release: API ${res?.status ?? 'unreachable'}, release page unreadable`);
+  const release = await releaseFromPages(tag);
   await cache.put(fresh, cached(JSON.stringify(release), 300));
   return release;
 }
