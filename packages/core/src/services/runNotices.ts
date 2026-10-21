@@ -4,6 +4,7 @@
  * itself (notify_user), or it stopped on a missing login (that has its own notice).
  */
 import type { Run } from "@godmode/shared";
+import { runEndOf } from "@godmode/shared";
 import { get, run as sql } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -55,12 +56,14 @@ function automationNotice(r: Run, conversationId: string, viewed: boolean): void
   const setting = routine.notify ?? "failures";
   if (setting === "never" || viewed || runNotifiedUser(r.id) || reportedMissingLogin(r.id)) return;
   if (r.status === "failed") {
-    const before = get<{ status: string }>(
-      "SELECT status FROM runs WHERE routine_id = ? AND trigger = 'routine' AND id != ? AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",
+    // Claude being signed out has one notice of its own for all the runs it fails (services/claudeLogin.ts).
+    if (runEndOf(r.error ?? "")?.kind === "auth") return;
+    const before = get<{ status: string; error: string | null }>(
+      "SELECT status, error FROM runs WHERE routine_id = ? AND trigger = 'routine' AND id != ? AND status IN ('succeeded', 'failed') ORDER BY created_at DESC LIMIT 1",
       r.routineId!,
       r.id,
     );
-    if (before?.status === "failed") return;
+    if (before?.status === "failed" && runEndOf(before.error ?? "")?.kind !== "auth") return;
     notify("error", `“${routine.name}” failed`, shorten(r.error ?? "Its last run failed."), `/chat/${conversationId}`);
   } else if (setting === "always") {
     notify("success", `“${routine.name}” finished`, shorten((r.result ?? "").replace(/\s+/g, " ").trim()), `/chat/${conversationId}`);
