@@ -10,9 +10,11 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClaudeLoginStatus } from "@godmode/shared";
+import { config } from "../config";
 import { deleteMeta, getMeta, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
+import { computerName } from "../mobile/devices";
 import { childEnv, now, parseJson } from "../util";
 import { resetDoctorCache, resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
 import { notify } from "./notifications";
@@ -113,8 +115,17 @@ export async function noteClaudeSignedOut({ apiKey, since }: { apiKey: boolean; 
   if (claudeSignedOut() || session || works !== seen) return;
   log.warn(`a run found Claude Code signed out${apiKey ? " (Anthropic API key refused)" : ""}`);
   setSignedOut({ at: now(), apiKey, stamp });
-  if (apiKey) notify("warning", "Claude refused the API key", "Your agents can't work until the Anthropic API key works again.", "/integrations?tab=api-keys");
-  else notify("warning", "Claude is signed out", "Your agents can't work until you sign in to Claude again. It's one click in Godmode.", "/settings/system");
+  // One notice for the whole outage, the runner's too (it reaches the computer it works for): runs fail until it's over.
+  const on = config().role === "runner" ? ` on ${computerName()}` : "";
+  if (apiKey) notify("error", `Claude refused the API key${on}`, "Your agents and scheduled automations fail until the Anthropic API key works again.", "/integrations?tab=api-keys");
+  else {
+    notify(
+      "error",
+      `Claude is signed out${on}`,
+      "Your agents and scheduled automations fail until you sign in again: run `claude` in a terminal and type /login, or sign in from Godmode with one click. Automations that failed meanwhile get one more run then, unless they are due again soon.",
+      "/settings/system",
+    );
+  }
 }
 
 /** Claude answered a run: whatever found it signed out is over. */
