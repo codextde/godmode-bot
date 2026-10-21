@@ -263,6 +263,17 @@ function startOffsetMs(routineId: string, slot: Date, windowMs: number): number 
   return Math.floor(((hash.readUInt32BE(0) / 2 ** 32) * windowMs) / 1000) * 1000;
 }
 
+/** Length of one part of a start window: the whole window, or a `runs`-th of it. */
+export function windowPartMs(windowMinutes: number, runs = 1): number {
+  const windowMs = windowMinutes * 60_000;
+  return runs > 1 ? Math.floor(windowMs / runs / 1000) * 1000 : windowMs;
+}
+
+/** The start drawn for a time slot (a part of a window with several runs) of a schedule with a random start window. */
+export function drawnStart(routineId: string, slot: Date, windowMinutes: number, runs = 1): Date {
+  return new Date(slot.getTime() + startOffsetMs(routineId, slot, windowPartMs(windowMinutes, runs)));
+}
+
 /** First part of a window after `from`: with several runs per window each scheduled time splits into `runs` equal parts. */
 function nextPart(cron: string, timezone: string, from: number, windowMs: number, runs: number): Date {
   if (runs <= 1) return nextRunFor(cron, timezone, new Date(from));
@@ -292,12 +303,11 @@ export function nextRandomStart(
   handledUntil = 0,
   runs = 1,
 ): { slot: Date; at: Date } {
-  const windowMs = windowMinutes * 60_000;
-  const partMs = runs > 1 ? Math.floor(windowMs / runs / 1000) * 1000 : windowMs;
+  const partMs = windowPartMs(windowMinutes, runs);
   let from = Math.max(after.getTime() - partMs, handledUntil);
   for (let i = 0; i < 100 * runs; i++) {
-    const slot = nextPart(cron, timezone, from, windowMs, runs);
-    const at = new Date(slot.getTime() + startOffsetMs(routineId, slot, partMs));
+    const slot = nextPart(cron, timezone, from, windowMinutes * 60_000, runs);
+    const at = drawnStart(routineId, slot, windowMinutes, runs);
     if (at > after) return { slot, at };
     from = slot.getTime();
   }
