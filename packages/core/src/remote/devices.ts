@@ -93,6 +93,7 @@ import {
   pairWithCode,
   prepareRemoteMessage,
   releaseChatsNow,
+  refreshRunnerInfo,
   connectRunner,
   removeRunner,
   takenFrom,
@@ -186,7 +187,7 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
     replicaHint: (id) => replicaHint(id),
   });
   setStandInHooks({ takeOver, changed: emitGroupSoon, online: internetReachable });
-  startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id) });
+  startReplicaSync({ fetchChat: (peer, id) => void fetchChatFrom(peer, id), refreshInfo: refreshPeer });
   setLinkEventFilter(echoToPrimary);
   setScheduleGroup({ active: () => groupRole() !== null, settle: settled });
   setPhoneInfo(() => (getSettings().mobile.enabled ? { instance: instanceInfo(), urls: mobileUrls() } : null));
@@ -322,6 +323,13 @@ function phoneOf(id: string): RunnerInfo["phone"] | null {
     return told;
   }
   return parseJson<RunnerInfo["phone"] | null>(getMeta(phoneKey(id)), null);
+}
+
+/** What another computer of the group says about itself, asked again: phones and windows hear when its phone address changed. */
+async function refreshPeer(id: string): Promise<void> {
+  const before = JSON.stringify(phoneOf(id) ?? null);
+  await refreshRunnerInfo(id);
+  if (JSON.stringify(phoneOf(id) ?? null) !== before) emitGroupSoon();
 }
 
 /**

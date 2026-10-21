@@ -316,6 +316,20 @@ function handle(event: ServerEvent) {
     case "entity.changed":
       for (const key of ENTITY_KEYS[event.entity] ?? []) refreshSoon({ queryKey: key });
       break;
+    case "devices.updated":
+      // A computer joined, left or can take this phone now: the list of where to go when one is away follows.
+      void refreshGroup();
+      break;
+  }
+}
+
+async function refreshGroup() {
+  const token = useSession.getState().connection?.token;
+  try {
+    const me = await api.me();
+    if (useSession.getState().connection?.token === token) useSession.getState().setGroup(me.group);
+  } catch {
+    /* the next connect asks again */
   }
 }
 

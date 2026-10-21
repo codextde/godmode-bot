@@ -7,6 +7,7 @@
 import { refreshAgentFiles, trashAgentRepo } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
+import { refreshMobileAccess } from "../mobile/access";
 import { computerName } from "../mobile/devices";
 import { reloadSchedules } from "../scheduler/scheduler";
 import { notify } from "../services/notifications";
@@ -47,6 +48,7 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 let pullTimer: ReturnType<typeof setInterval> | null = null;
 let lastSeq = 0;
 let fetchChat: ((peer: string, conversationId: string) => void) | null = null;
+let infoChanged: ((peer: string) => Promise<void>) | null = null;
 
 /** Computers this one exchanges the shared data with: its primary, or (on the primary) every secondary. */
 function peers(): string[] {
@@ -108,6 +110,8 @@ async function pullNow(peer: string): Promise<ApplyResult | null> {
   // Says how far this computer got: the other one counts what is still waiting for it from there.
   await l.json("POST", "/api/link/replica/ack", { after }, { timeoutMs: 30_000 }).catch(() => undefined);
   mergeResults(total, retryDeferred(peer, opts));
+  // What it says about itself can change between connects (phone access switched on there).
+  await infoChanged?.(peer).catch(() => undefined);
   pulledAt.set(peer, Date.now());
   if (total.applied || total.failed) log.info("took changes from another computer", { peer: r.name, applied: total.applied, kept: total.kept, deferred: total.deferred, failed: total.failed });
   await afterApply(r.name, total);
@@ -146,6 +150,10 @@ function phonesArrived(from: string): void {
   setMeta(PHONE_ON_META, "1");
   try {
     applyRuntimeSettings(updateSettings({ mobile: { enabled: true } } as never));
+    // Listening now: the other computers learn where phones reach this one (their next pull asks), and tell the phones.
+    void refreshMobileAccess()
+      .catch(() => undefined)
+      .then(() => bus.emit({ type: "replica.changed", seq: replicaSeq() }));
     notify("info", "Your phone works with this computer too", `It was paired on ${from}. When that computer is away, the Godmode app on your phone connects to ${computerName()}.`, "/settings/phone");
   } catch (err) {
     log.warn("could not switch phone access on for a phone of the group", err);
@@ -178,8 +186,9 @@ export function pendingChanges(): number {
  * `chat`: asks the computer a change came from for a chat it points at (the mirror). Watches this computer's own
  * changes and tells the others (`replica.changed` goes to the linked computers only), and pulls once a minute.
  */
-export function startReplicaSync(opts: { fetchChat: (peer: string, conversationId: string) => void }): void {
+export function startReplicaSync(opts: { fetchChat: (peer: string, conversationId: string) => void; refreshInfo: (peer: string) => Promise<void> }): void {
   fetchChat = opts.fetchChat;
+  infoChanged = opts.refreshInfo;
   ensureReplica();
   lastSeq = replicaSeq();
   watchTimer ??= setInterval(() => {
@@ -205,4 +214,5 @@ export function stopReplicaSync(): void {
   for (const t of hintTimers.values()) clearTimeout(t);
   hintTimers.clear();
   fetchChat = null;
+  infoChanged = null;
 }
