@@ -11,10 +11,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { timeAgo } from "@/components/ssh/ssh-parts";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
-import { usePlaces, type Place } from "@/lib/places";
+import { isRunnerPlace, placeName, usePlaces, type Place } from "@/lib/places";
 import { upsertRunner } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
-import { RUNNER_STATE_LABEL, RunnerStateDot, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "./runner-parts";
+import { RUNNER_STATE_LABEL, RunnerStateDot, RunnerTag, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "./runner-parts";
 
 /** Why a runner can or can't take a chat right now, in a few words. */
 function runnerLine(runner: RemoteRunner): string {
@@ -35,7 +35,7 @@ function runnerLine(runner: RemoteRunner): string {
 
 function placeLine(place: Place): string {
   if (place.here) return "Works here, with your folders, screen and VMs";
-  if (place.runner) return runnerLine(place.runner);
+  if (place.runner) return place.twinOf ? `${runnerLine(place.runner)} · older setup` : runnerLine(place.runner);
   return place.state === "online" ? "Online · the primary of your group" : "Offline";
 }
 
@@ -74,11 +74,15 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
             {current ? (
               <button
                 type="button"
-                aria-label={`Runs on ${current.name} (${RUNNER_STATE_LABEL[current.state].toLowerCase()})`}
-                className="flex h-8 max-w-[12rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                aria-label={`Runs on ${placeName(current)} (${RUNNER_STATE_LABEL[current.state].toLowerCase()})`}
+                className={cn(
+                  "flex h-8 min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+                  isRunnerPlace(current, inGroup) ? "max-w-[16rem]" : "max-w-[12rem]",
+                )}
               >
                 <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate font-medium">{current.name}</span>
+                {isRunnerPlace(current, inGroup) && <RunnerTag />}
                 <RunnerStateDot state={current.state} />
                 <ChevronDown className="size-3.5 shrink-0 opacity-60" />
               </button>
@@ -98,7 +102,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
             )}
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>{current ? `This chat will work on ${current.name}` : "Work on another computer"}</TooltipContent>
+        <TooltipContent>{current ? `This chat will work on ${placeName(current)}` : "Work on another computer"}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
@@ -193,7 +197,7 @@ function PlaceItem({ place, selected, onSelect }: { place: Place; selected: bool
 
 /** The line under a new chat's composer once another computer is picked: what happens before the work starts there. */
 export function RunnerNote({ place }: { place: Place | null }) {
-  const name = place?.name ?? "a runner";
+  const name = place ? placeName(place) : "a runner";
   if (place && place.state !== "online") {
     return (
       <p className="flex items-start gap-1.5 px-1 pt-2 text-xs text-warning" role="status">
@@ -233,17 +237,19 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
   const { inGroup } = usePlaces();
   const [open, setOpen] = useState(false);
   const name = place?.name ?? "a runner";
+  const full = place ? placeName(place) : "a runner";
+  const tagged = isRunnerPlace(place, inGroup);
   const tooltip = !place
     ? "This chat works on a runner"
     : place.here
-      ? "This chat works on this Mac"
+      ? `This chat works on ${THIS_COMPUTER_INLINE}`
       : place.state === "online"
-        ? `This chat works on ${place.name} — it keeps going while ${THIS_COMPUTER_INLINE} sleeps`
+        ? `This chat works on ${full} — it keeps going while ${THIS_COMPUTER_INLINE} sleeps`
         : place.state === "connecting"
-          ? `This chat works on ${place.name} — connecting…`
+          ? `This chat works on ${full} — connecting…`
           : place.state === "offline"
-            ? `This chat works on ${place.name}, which is offline`
-            : `This chat works on ${place.name}, which needs an update`;
+            ? `This chat works on ${full}, which is offline`
+            : `This chat works on ${full}, which needs an update`;
   const act = (fn: () => void) => {
     setOpen(false);
     fn();
@@ -255,7 +261,7 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={place ? `On ${place.name} (${RUNNER_STATE_LABEL[place.state].toLowerCase()})` : "On a runner"}
+              aria-label={place ? `On ${full} (${RUNNER_STATE_LABEL[place.state].toLowerCase()})` : "On a runner"}
               className={cn(
                 "flex h-8 max-w-[15rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                 open && "bg-accent",
@@ -265,6 +271,7 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
               <span className="truncate">
                 On <span className="font-medium">{name}</span>
               </span>
+              {tagged && <RunnerTag />}
               {place && !place.here && <RunnerStateDot state={place.state} />}
               <ChevronDown className="size-3.5 shrink-0 opacity-60" />
             </button>
@@ -278,7 +285,10 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
             {place?.here ? <Laptop /> : <MonitorSmartphone />}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium">{place?.name ?? "A runner"}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-[13px] font-medium">{place?.name ?? "A runner"}</span>
+              {tagged && <RunnerTag />}
+            </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {place && <RunnerStateDot state={place.state} />}
               <span className="truncate">{place ? placeLine(place) : "Removed"}</span>
@@ -295,7 +305,10 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
                       <PlaceIcon place={t} />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate">{t.name}</span>
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span className="truncate">{t.name}</span>
+                        {isRunnerPlace(t, inGroup) && <RunnerTag />}
+                      </span>
                       <span className="block truncate text-[11px] text-muted-foreground">Continue there with the whole conversation</span>
                     </span>
                   </CommandItem>

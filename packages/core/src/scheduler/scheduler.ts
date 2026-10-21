@@ -17,7 +17,7 @@ import { notify } from "../services/notifications";
 import { automationConversation } from "../automations/conversation";
 import { runConditionCheck } from "../automations/conditions";
 import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from "../automations/events";
-import { HttpError, badRequest, conflict, now } from "../util";
+import { HttpError, badRequest, conflict, now, parseJson } from "../util";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { exhaustedBudget } from "../services/budgets";
@@ -50,6 +50,14 @@ function signature(r: WantedRoutine): string {
   return `${r.type}\u0000${r.cron}\u0000${r.timezone}\u0000${r.start_window ?? 0}\u0000${r.runs ?? 1}`;
 }
 
+/**
+ * The time a cron tick was due (croner tells when it fired): a Mac that slept fires it late. Looked up two seconds
+ * ahead: at fire time croner counts the current slot as still to come, and it compares whole seconds.
+ */
+export function dueSlot(job: Cron, firedAt: Date): Date | null {
+  return job.previousRuns(1, new Date(firedAt.getTime() + 2_000))[0] ?? null;
+}
+
 function cronJob(r: WantedRoutine): Cron {
   return new Cron(
     r.cron,
@@ -59,7 +67,7 @@ function cronJob(r: WantedRoutine): Cron {
       protect: true,
       catch: (err) => log.error(`routine ${r.id} tick crashed`, err),
     },
-    () => onTick(r.id),
+    (self: Cron) => onTick(r.id, dueSlot(self, new Date())),
   );
 }
 
@@ -76,7 +84,7 @@ function randomStartJob(r: WantedRoutine, windowMinutes: number, runs: number, h
       jobs.delete(r.id);
       log.warn(`routine ${r.id} has no next start`, err);
     }
-    return onTick(r.id);
+    return onTick(r.id, at);
   });
   return job;
 }
@@ -153,12 +161,31 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   }
 }
 
-async function onTick(routineId: string) {
+/**
+ * In a device group (remote/devices.ts): late ticks (this computer slept or was away) wait until the group's copies are
+ * in, and are skipped when another computer ran that time already (it stood in).
+ */
+let group: { active: () => boolean; settle: () => Promise<void> } | null = null;
+
+export function setScheduleGroup(hooks: { active: () => boolean; settle: () => Promise<void> } | null): void {
+  group = hooks;
+}
+
+const LATE_MS = 60_000;
+
+async function onTick(routineId: string, scheduledAt: Date | null = null) {
+  const late = !!group?.active() && !!scheduledAt && Date.now() - scheduledAt.getTime() > LATE_MS;
+  if (late) await group!.settle().catch(() => undefined);
   let routine: Routine;
   try {
     routine = getRoutine(routineId);
   } catch {
     reloadSchedules();
+    return;
+  }
+  // Another computer of the group ran this time already (it stood in while this one was away).
+  if (late && routine.lastRunAt && Date.parse(routine.lastRunAt) >= scheduledAt!.getTime() - LATE_MS) {
+    log.info(`routine ${routineId} already ran at ${routine.lastRunAt}; this late tick is skipped`);
     return;
   }
   try {
@@ -197,6 +224,42 @@ async function onTick(routineId: string) {
     const next = jobs.get(routineId)?.job.nextRun()?.toISOString() ?? null;
     if (exec("UPDATE routines SET next_run_at = ? WHERE id = ? AND next_run_at IS NOT ?", next, routineId, next).changes > 0) emitRoutine(routineId);
   }
+}
+
+/**
+ * A computer that starts standing in for its primary: scheduled automations whose last time slot came since the primary
+ * was last seen and that didn't run since (anywhere in the group) run now, once each. The slot comes from the schedule
+ * itself — the stored next run is rewritten as soon as the scheduler starts here.
+ */
+export async function runMissedSince(since: string): Promise<number> {
+  const from = Date.parse(since);
+  if (!Number.isFinite(from)) return 0;
+  const due = all<{ id: string; cron: string; timezone: string; last_run_at: string | null; trigger: string }>(
+    `SELECT r.id, r.cron, r.timezone, r.last_run_at, r.trigger FROM routines r JOIN agents a ON a.id = r.agent_id
+      WHERE r.enabled = 1 AND a.enabled = 1 AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
+  ).filter((r) => {
+    let slot: Date | null = null;
+    try {
+      slot = dueSlot(new Cron(r.cron, { timezone: r.timezone, mode: "5-or-6-parts", paused: true }), new Date());
+    } catch {
+      return false;
+    }
+    if (!slot || slot.getTime() < from - LATE_MS) return false;
+    // A start window still open: this computer's own random start for it runs it (once) within the window.
+    const window = startWindowOf(parseJson(r.trigger, { type: "schedule" }) as Routine["trigger"]);
+    if (window && Date.now() < slot.getTime() + window * 60_000) return false;
+    return !r.last_run_at || Date.parse(r.last_run_at) < slot.getTime() - LATE_MS;
+  });
+  let started = 0;
+  for (const r of due) {
+    try {
+      await triggerRoutine(r.id, { scheduled: true });
+      started++;
+    } catch (err) {
+      log.info(`routine ${r.id} didn't catch up`, { error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return started;
 }
 
 /** Re-read routines from DB and reschedule (after CRUD). Unchanged jobs keep running. */

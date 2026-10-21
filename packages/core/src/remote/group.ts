@@ -13,8 +13,10 @@ import { deleteMeta, getMeta, setMeta } from "../db";
 
 const ROLE_META = "link.group.role";
 const PRIMARY_META = "link.group.primary";
+const STAND_IN_META = "link.group.standIn.since";
 
 let cached: { role: DeviceRole | null; primary: string | null } | null = null;
+let standInCache: string | null | undefined;
 let primaryUp = false;
 const listeners = new Set<() => void>();
 
@@ -72,6 +74,36 @@ export function primaryOnline(): boolean {
   return primaryUp;
 }
 
+/** On a secondary: since when it stands in for its primary (it is away), or null. */
+export function standingInSince(): string | null {
+  try {
+    if (!isSecondary()) return null;
+    if (standInCache === undefined) standInCache = getMeta(STAND_IN_META);
+    return standInCache;
+  } catch {
+    return null;
+  }
+}
+
+export function standingIn(): boolean {
+  return standingInSince() !== null;
+}
+
+/**
+ * This computer runs what only one computer of a group runs — the schedules, the board, messaging, phone calls: the
+ * primary, a computer alone, or a secondary while it stands in.
+ */
+export function runsShared(): boolean {
+  return !isSecondary() || standingIn();
+}
+
+export function setStandingIn(since: string | null): void {
+  if (since) setMeta(STAND_IN_META, since);
+  else deleteMeta(STAND_IN_META);
+  standInCache = since;
+  changed();
+}
+
 export function setGroup(role: DeviceRole, primaryId: string | null = null): void {
   setMeta(ROLE_META, role);
   if (role === "secondary" && primaryId) setMeta(PRIMARY_META, primaryId);
@@ -84,6 +116,8 @@ export function setGroup(role: DeviceRole, primaryId: string | null = null): voi
 export function clearGroup(): void {
   deleteMeta(ROLE_META);
   deleteMeta(PRIMARY_META);
+  deleteMeta(STAND_IN_META);
+  standInCache = undefined;
   cached = null;
   primaryUp = false;
   changed();
@@ -114,5 +148,6 @@ function changed(): void {
 /** Tests open several databases one after another. */
 export function resetGroupCache(): void {
   cached = null;
+  standInCache = undefined;
   primaryUp = false;
 }

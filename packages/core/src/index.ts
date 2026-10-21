@@ -19,7 +19,7 @@ import type { CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
-import { openDb, closeDb, setMeta, getDb } from "./db";
+import { openDb, closeDb, get, setMeta, getDb } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -54,6 +54,7 @@ import { checkPermissions } from "./services/permissions";
 import { startHeartbeats, stopHeartbeats } from "./services/heartbeats";
 import { startCalls, stopCalls } from "./calls/calls";
 import { startWatchdog, stopWatchdog } from "./runner/watchdog";
+import { startMacPrompts, stopMacPrompts } from "./services/macPrompts";
 import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
@@ -62,8 +63,9 @@ import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
 import { startLinkServer, stopLinkServer } from "./remote/linkServer";
-import { startDevices, stopDevices } from "./remote/devices";
-import { isSecondary, onGroupChange } from "./remote/group";
+import { groupSettled, sayGoodbye, startDevices, stopDevices } from "./remote/devices";
+import { ensureReplica } from "./remote/replica";
+import { onGroupChange, runsShared } from "./remote/group";
 import { deliverForwarded } from "./server/ws";
 import { RESTART_EXIT_CODE, executableDigest, setRestartHandler, settleUpdate } from "./remote/selfUpdate";
 import { startRunners, stopRunners } from "./remote/runners";
@@ -161,6 +163,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   setLogDir(cfg.logsDir);
   startDiagnostics();
   openDb(cfg.dbPath);
+  // Before anything writes: the device group's change log notes every change of what is shared.
+  if (!runner) ensureReplica();
 
   const settings = getSettings();
   // CLI flags > env > settings
@@ -199,6 +203,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   startHumanTasks();
   startBudgets();
   startWatchdog();
+  startMacPrompts();
   // What only the Godmode that holds the shared setup does: on a secondary of a device group, its primary does it.
   let sharedOn = false;
   const startShared = () => {
@@ -229,11 +234,11 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopCalls();
   };
   if (!runner) {
-    if (!isSecondary()) startShared();
+    if (runsShared()) void groupSettled().then(startShared);
     startModUpdates();
     onGroupChange(() => {
-      if (isSecondary()) void stopShared().catch((err) => log.warn("could not hand the shared work to the primary", err));
-      else startShared();
+      if (runsShared()) startShared();
+      else void stopShared().catch((err) => log.warn("could not hand the shared work to the primary", err));
     });
   }
   // Adopt VMs that kept running while Godmode was closed.
@@ -333,7 +338,12 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   }
 
   // Once the API (the runs' tool gateway) listens, that work goes on where it stopped.
-  if (interrupted) void resumeInterruptedWork(interrupted).catch((err) => log.warn("could not continue the work the restart cut off", err));
+  if (interrupted) {
+    void groupSettled()
+      // A chat another computer of the group continued meanwhile lives there now.
+      .then(() => resumeInterruptedWork({ ...interrupted, runs: interrupted.runs.filter((r) => !get("SELECT 1 FROM conversations WHERE id = ? AND runner_id IS NOT NULL", r.conversation_id)) }))
+      .catch((err) => log.warn("could not continue the work the restart cut off", err));
+  }
   if (!runner) startOutageRecovery();
 
   // Background doctor check so the UI has fresh dependency info.
@@ -356,12 +366,15 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopPauses();
     stopBudgets();
     stopWatchdog();
+    stopMacPrompts();
     if (runner) {
       stopLinkServer();
       stopKeepAwake();
       // Only its own: a runner.json that names another process is that runner's way of saying it serves.
       if (runningRunner(cfg.dataDir)?.pid === process.pid) rmSync(runnerFile(cfg.dataDir), { force: true });
     } else {
+      // The other computers of the group take over at once instead of waiting to see whether this one is back.
+      await sayGoodbye();
       stopOutageRecovery();
       await stopPower();
       await stopShared();

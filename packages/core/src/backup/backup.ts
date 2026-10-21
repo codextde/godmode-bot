@@ -48,6 +48,8 @@ import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/
 import { badRequest, conflict, HttpError, slugify } from "../util";
 import { reconcileTasks, recomputeTicketTotals } from "../tasks/service";
 
+import { groupRole } from "../remote/group";
+
 const log = logger("backup");
 
 export const BACKUP_EXTENSION = ".godmode-backup";
@@ -55,7 +57,20 @@ export const MAX_BACKUP_BYTES = 2 * 1024 ** 3;
 const FILE_PREFIX = "godmode-backup-";
 
 /** Never exported: login sessions, paired phones, paired runners and controllers, and the migration ledger. */
-const EXCLUDED_TABLES = new Set(["sessions", "mobile_devices", "connectors", "runners", "link_controllers", "runner_memory", "_migrations"]);
+const EXCLUDED_TABLES = new Set([
+  "sessions",
+  "mobile_devices",
+  "connectors",
+  "runners",
+  "link_controllers",
+  "runner_memory",
+  "_migrations",
+  // What the computers of a device group exchanged: about this computer's link, never part of a backup.
+  "replica_seq",
+  "replica_ctx",
+  "replica_rows",
+  "replica_deferred",
+]);
 /** Vault key material travels in vault.json, not db.json. */
 const VAULT_META_KEYS = new Set(["vault.kdf", "vault.wrapped_dek", "vault.canary"]);
 /** Settings sections that belong to this machine (bind address, remote access, allowed origins, phone and cloud access). */
@@ -740,6 +755,8 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
 
     const active = get<{ c: number }>("SELECT COUNT(*) AS c FROM runs WHERE status IN ('queued', 'running')")?.c ?? 0;
     if (active > 0) throw conflict("Wait for running tasks to finish (or cancel them) before restoring a backup");
+    // The other computers keep the group's data and would hand it straight back (or take this backup over theirs).
+    if (groupRole()) throw conflict("This computer is part of a device group. Leave the group in Settings → Devices first, then restore the backup.");
 
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     stopScheduler();

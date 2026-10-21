@@ -1,6 +1,7 @@
 import type { Context, Hono } from "hono";
 import type { MobileSession } from "@godmode/shared";
 import { isCloudOnline, phoneGatewayUrl } from "../../cloud/state";
+import { phonePeers } from "../../remote/devices";
 import { mobileStatus, mobileUrls, refreshMobileAccess } from "../../mobile/access";
 import { cancelPairingOffer, claimPairing, createPairingOffer, instanceInfo, renameDevice, revokeDevice } from "../../mobile/devices";
 import { getSettings, updateSettings } from "../../services/settings";
@@ -85,7 +86,8 @@ export function registerMobileRoutes(app: Hono) {
   app.get("/api/mobile/me", (c) => {
     const device = requestDevice(c);
     if (!device) throw new HttpError(400, "Only for the phone app", "not_a_phone");
-    return c.json({ device, instance: instanceInfo(), urls: mobileUrls() } satisfies MobileSession);
+    const group = phonePeers();
+    return c.json({ device, instance: instanceInfo(), urls: mobileUrls(), ...(group.length ? { group } : {}) } satisfies MobileSession);
   });
 
   /** The phone unpairs itself. */

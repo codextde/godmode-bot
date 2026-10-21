@@ -106,6 +106,19 @@ export interface MobileSession {
    * (`https://<cloud>/gw/<deviceId>`) while the computer is linked with phone access on. Older cores omit it.
    */
   urls: string[];
+  /**
+   * The computers of this one's device group that take this phone too, this one included: when one is out of reach
+   * the phone talks to another (they forward to the primary, or stand in for it). Older cores and computers that
+   * aren't in a group omit it.
+   */
+  group?: MobilePeer[];
+}
+
+/** A computer of the group as a phone reaches it. */
+export interface MobilePeer {
+  instance: MobileInstance;
+  urls: string[];
+  role: "primary" | "secondary";
 }
 
 export const MOBILE_DEFAULT_PORT = 7787;

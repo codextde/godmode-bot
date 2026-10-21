@@ -18,7 +18,8 @@ import { deliverForwarded, websocketHandler, type HubSocket } from "../src/serve
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { startChat } from "../src/services/conversations";
 import { startDevices, stopDevices } from "../src/remote/devices";
-import { forwarding, groupRole, resetGroupCache } from "../src/remote/group";
+import { startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
+import { forwarding, groupRole, primaryRunnerId, resetGroupCache, runsShared } from "../src/remote/group";
 import { startLinkServer, stopLinkServer } from "../src/remote/linkServer";
 import { startRunners, stopRunners } from "../src/remote/runners";
 import { callTool } from "../src/mcp/tools";
@@ -131,7 +132,8 @@ beforeAll(async () => {
   await startPrimary();
   primaryToken = Bun.spawnSync([process.execPath, INDEX, "token", "--data-dir", primaryDir], { env: childEnvFor(), stdout: "pipe" }).stdout.toString().trim();
 
-  // This process is the secondary, with its own fake Claude Code.
+  // This process is the secondary, with its own fake Claude Code. It stands in for the primary 1.5 s after it went.
+  process.env.GODMODE_STAND_IN_MS = "1500";
   process.env.FAKE_CLAUDE_STATE = join(secondaryDir, "fake-claude");
   process.env.CLAUDE_CONFIG_DIR = join(secondaryDir, "claude-config");
   __setClaudeBinaryForTests([process.execPath, FAKE_CLAUDE]);
@@ -149,6 +151,8 @@ beforeAll(async () => {
   const before = await startChat({ agentId: agent.id, content: "Before joining" });
   beforeJoinChat = before.conversation.id;
   await waitForRun(before.run.id, 20_000);
+  // Like the app: My tasks run on every computer of the group.
+  startHumanTasks();
   startDevices({ app, websocket: websocketHandler }, deliverForwarded);
   startRunners();
 }, 120_000);
@@ -159,9 +163,11 @@ afterAll(async () => {
     await waitForRun(r.runId, 10_000).catch(() => undefined);
   }
   __setClaudeBinaryForTests(null);
+  delete process.env.GODMODE_STAND_IN_MS;
   if (savedClaudeConfig === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = savedClaudeConfig;
   stopDevices();
+  stopHumanTasks();
   stopRunners();
   stopLinkServer();
   await stopPrimary();
@@ -261,8 +267,8 @@ describe("a device group, end to end", () => {
       expect(res.body.conversation.runnerId).toBeNull();
       const id = res.body.conversation.id;
       await until(() => seen.some((e) => e.type === "run.finished" && e.run.conversationId === id), 30_000, "run.finished from the primary");
-      // Not this computer's chat: it works on the primary only.
-      expect(localChat(id)).toBeNull();
+      // Not this computer's chat: it works on the primary, this computer keeps a copy for while the primary is away.
+      await until(() => localChat(id)?.runner_id === primaryRunnerId(), 20_000, "the copy of the primary's chat");
     } finally {
       websocketHandler.close(ws);
     }
@@ -280,6 +286,11 @@ describe("a device group, end to end", () => {
       30_000,
       "the question on the primary",
     );
+    // One ticket in My tasks for it, made where the run asks and shared with the primary.
+    await until(async () => (await onPrimary<{ questionId: string | null }[]>("/api/human-tasks")).body.some((t) => t.questionId === question!.id), 20_000, "the question's ticket on the primary");
+    await sleep(2_000);
+    expect((await onPrimary<{ questionId: string | null }[]>("/api/human-tasks")).body.filter((t) => t.questionId === question!.id)).toHaveLength(1);
+    expect(all("SELECT id FROM human_tasks WHERE question_id = ?", question!.id)).toHaveLength(1);
     const answered = await here(`/api/questions/${question!.id}/answer`, { method: "POST", body: JSON.stringify({ optionId: question!.options[0]!.id }) });
     expect(answered.status).toBe(200);
     await until(() => runsOf(id).some((r) => r.status === "succeeded"), 30_000, "the run to continue here");
@@ -298,7 +309,8 @@ describe("a device group, end to end", () => {
     expect(out.isError).toBeUndefined();
     const tasks = (await onPrimary<{ title: string }[]>("/api/human-tasks")).body;
     expect(tasks.map((t) => t.title)).toContain("Sign the contract");
-    expect(get("SELECT id FROM human_tasks WHERE title = ?", "Sign the contract")).toBeNull();
+    // Made there, and then copied here like everything the group shares.
+    await until(() => !!get("SELECT id FROM human_tasks WHERE title = ?", "Sign the contract"), 20_000, "the copy of the task");
   }, 60_000);
 
   test("a chat of the primary moves to this computer with its Claude session and continues here", async () => {
@@ -343,7 +355,8 @@ describe("a device group, end to end", () => {
     expect(handed.status).toBe(200);
     expect(handed.body.moved).toContain(id);
     await until(async () => (await onPrimary<Conversation>(`/api/conversations/${id}`)).body.runnerId === null, 20_000, "the chat on the primary");
-    await until(() => !localChat(id), 20_000, "this computer to drop its copy");
+    // It lives on the primary now; this computer keeps its messages as a copy of it.
+    await until(() => localChat(id)?.runner_id === primaryRunnerId(), 20_000, "this computer's chat to become a copy");
   }, 90_000);
 
   test("when this computer goes away with work running, the primary continues it and this computer drops its copy", async () => {
@@ -360,28 +373,56 @@ describe("a device group, end to end", () => {
       20_000,
       "the moved marker",
     );
-    // The lid opens again: this computer drops its copy, and what it still did there ends.
+    // The lid opens again: the chat lives on the primary, this computer keeps it as a copy, and what it still did ends.
     startLinkServer({ app, websocket: websocketHandler });
-    await until(() => !localChat(id), 60_000, "this computer to drop its copy");
+    await until(() => localChat(id)?.runner_id === primaryRunnerId(), 60_000, "this computer's chat to become a copy");
+    expect(listActiveRuns().some((r) => r.conversationId === id)).toBe(false);
   }, 120_000);
 
-  test("while the primary is away this computer keeps its own chats and copy, and shared changes wait", async () => {
-    const own = all<{ id: string }>("SELECT id FROM conversations WHERE runner_id IS NULL ORDER BY created_at DESC LIMIT 1")[0]!.id;
+  let standInChat = "";
+
+  test("while the primary is away this computer keeps every feature, and stands in for it", async () => {
+    rmSync(join(primaryDir, "fake-claude", "finish"), { force: true });
+    const started = await onPrimary<StartChatResult>("/api/chat", { method: "POST", body: JSON.stringify({ content: "WAIT_TO_FINISH on the desk" }) });
+    standInChat = started.body.conversation.id;
+    await until(() => localChat(standInChat)?.runner_id === primaryRunnerId(), 20_000, "the copy of the working chat");
+    await until(() => (get<{ runner_state: string | null }>("SELECT runner_state FROM conversations WHERE id = ?", standInChat)?.runner_state ?? "").includes('"running":true'), 20_000, "the copy to know it works");
+
     await stopPrimary();
     await until(() => !forwarding(), 30_000, "the primary to be gone");
-    const agents = await here<{ name: string }[]>("/api/agents");
-    expect(agents.status).toBe(200);
-    expect(agents.body.map((a) => a.name)).toContain("Researcher");
-    const refused = await here<{ code: string }>("/api/agents", { method: "POST", body: JSON.stringify({ name: "Offline agent" }) });
-    expect(refused.status).toBe(409);
-    expect(refused.body.code).toBe("primary_offline");
-    const sent = await here(`/api/conversations/${own}/messages`, { method: "POST", body: JSON.stringify({ content: "Still works offline" }) });
-    expect(sent.status).toBe(201);
+    // Nothing is read only: agents, the board and everything else change here.
+    const agent = await here<{ id: string; name: string }>("/api/agents", { method: "POST", body: JSON.stringify({ name: "Offline agent" }) });
+    expect(agent.status).toBeLessThan(300);
+    const ticket = await here<{ id: string }>("/api/tasks", { method: "POST", body: JSON.stringify({ title: "Written on the laptop" }) });
+    expect(ticket.status).toBeLessThan(300);
+    expect((await here<{ name: string }[]>("/api/agents")).body.map((a) => a.name)).toContain("Researcher");
 
+    // A moment later it stands in: the shared work runs here, and the chat that worked on the primary continues here.
+    await until(async () => (await here<DeviceGroup>("/api/devices")).body.standIn.state === "active", 20_000, "standing in");
+    expect(runsShared()).toBe(true);
+    expect((await here<DeviceGroup>("/api/devices")).body.pendingChanges).toBeGreaterThan(0);
+    await until(() => localChat(standInChat)?.runner_id === null, 20_000, "the primary's chat to continue here");
+    await until(() => runsOf(standInChat).some((r) => r.status === "succeeded"), 30_000, "the continued run here");
+  }, 120_000);
+
+  test("when the primary is back, what changed here is there, its chat stays here, and standing in ends", async () => {
     await startPrimary();
     primaryToken = Bun.spawnSync([process.execPath, INDEX, "token", "--data-dir", primaryDir], { env: childEnvFor(), stdout: "pipe" }).stdout.toString().trim();
     await until(() => forwarding(), 60_000, "the primary to be back");
-  }, 120_000);
+    expect(runsShared()).toBe(false);
+    expect((await here<DeviceGroup>("/api/devices")).body.standIn.state).toBe("off");
+    await until(async () => (await onPrimary<{ name: string }[]>("/api/agents")).body.some((a) => a.name === "Offline agent"), 30_000, "the new agent on the primary");
+    await until(async () => (await onPrimary<{ title: string }[]>("/api/tasks")).body.some((t) => t.title === "Written on the laptop"), 30_000, "the ticket on the primary");
+    // The chat continued here while the primary was away: it lives here now, and the primary shows it as this computer's.
+    await until(async () => (await onPrimary<Conversation>(`/api/conversations/${standInChat}`)).body.runnerId === selfId, 30_000, "the primary to hand the chat over");
+    expect(localChat(standInChat)?.runner_id).toBeNull();
+    await until(async () => (await here<DeviceGroup>("/api/devices")).body.pendingChanges === 0, 30_000, "everything to be taken");
+    // The primary didn't pick the chat up again after its restart: every run it shows there is one of this computer's.
+    await sleep(3_000);
+    const theirs = (await onPrimary<{ id: string }[]>(`/api/runs?conversationId=${standInChat}&limit=50`)).body.map((r) => r.id);
+    const mine = new Set(runsOf(standInChat).map((r) => r.id));
+    expect(theirs.filter((id) => !mine.has(id))).toEqual([]);
+  }, 150_000);
 
   test("leaving makes both computers a Godmode of their own again", async () => {
     const left = await here<DeviceGroup>("/api/devices/leave", { method: "POST" });

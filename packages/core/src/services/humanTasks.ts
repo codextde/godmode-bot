@@ -528,8 +528,17 @@ function questionBody(q: AgentQuestion): string {
 }
 
 /** An agent asked (`ask_human`, `request_approval`): the question also waits on the board, as a ticket that stands for it. */
+/**
+ * The question's chat lives on another computer of the device group: that computer makes its ticket and the group
+ * shares it (remote/replica.ts). A runner's chats get theirs here, runners share nothing.
+ */
+function askedOnDevice(conversationId: string | null): boolean {
+  if (!conversationId) return false;
+  return !!get("SELECT 1 FROM conversations c JOIN runners r ON r.id = c.runner_id WHERE c.id = ? AND r.kind = 'device'", conversationId);
+}
+
 function mirrorQuestion(q: AgentQuestion): void {
-  if (q.status !== "open" || get("SELECT 1 FROM human_tasks WHERE question_id = ?", q.id)) return;
+  if (q.status !== "open" || askedOnDevice(q.conversationId) || get("SELECT 1 FROM human_tasks WHERE question_id = ?", q.id)) return;
   add({
     title: q.title,
     body: questionBody(q),
@@ -573,6 +582,8 @@ function syncQuestions(): void {
     safely(() => mirrorQuestion(q));
   }
   for (const r of all<Row>(`SELECT * FROM human_tasks WHERE question_id IS NOT NULL AND status IN ${ACTIVE_SQL}`)) {
+    // Another computer of the group asked it: that computer keeps its ticket in step.
+    if (askedOnDevice(r.conversation_id)) continue;
     safely(() => {
       let q: AgentQuestion | null = null;
       try {

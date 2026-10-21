@@ -34,6 +34,7 @@ import {
   parseRunnerView,
 } from "@godmode/shared";
 import { getAgent, getDefaultAgentId } from "../agents/service";
+import type { CdpCookie } from "../browser/cdp";
 import { exportProfileCookies, resolveProfileForAgent } from "../browser/manager";
 import { all, deleteMeta, get, getMeta, insert, run as sql, setMeta, tx, update } from "../db";
 import { projectOfChat } from "../services/projects";
@@ -55,7 +56,8 @@ import { notify } from "../services/notifications";
 import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import * as vault from "../vault/vault";
-import { remoteRuns } from "./activeRuns";
+import { remoteRuns, setRunnerReachability } from "./activeRuns";
+import { browserSignIns, cookiesFor } from "./browserSessions";
 import { canonicalKey, fingerprint } from "./crypto";
 import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
@@ -112,6 +114,10 @@ export interface DeviceLinkHooks {
   deviceState(id: string, state: LinkState): void;
   /** A device went away while these chats worked there (told before the copies forget what worked). */
   deviceLost(id: string, conversationIds: string[]): void;
+  /** The link to a device came up: what it changed is taken before this computer copies anything there. */
+  deviceConnected(id: string): Promise<void>;
+  /** The device says its shared data changed. */
+  replicaHint(id: string): void;
 }
 
 let deviceHooks: DeviceLinkHooks | null = null;
@@ -246,6 +252,28 @@ export function listRunners(): RemoteRunner[] {
 
 export function getRunner(id: string): RemoteRunner {
   return toRunner(requireRow(id));
+}
+
+/** What a runner said about itself at its last connect. */
+export function runnerInfoOf(id: string): RunnerInfo | undefined {
+  return infos.get(id);
+}
+
+/** A chat that moved back to `runnerId` before it was let go there: nothing to let go anymore. */
+export function forgetRelease(runnerId: string, conversationId: string): void {
+  const left = pendingReleases(runnerId).filter((id) => id !== conversationId);
+  if (left.length) setMeta(releaseKey(runnerId), JSON.stringify(left));
+  else deleteMeta(releaseKey(runnerId));
+}
+
+/** Chats that moved here from `runnerId` and that it still has to let go. */
+export function takenFrom(runnerId: string): string[] {
+  return pendingReleases(runnerId);
+}
+
+/** The chats that moved here from `runnerId` are let go there now (it just connected, or the primary is back). */
+export function releaseChatsNow(runnerId: string): Promise<void> {
+  return releaseChats(runnerId);
 }
 
 /** The runner a chat works on (null for a chat of this computer). */
@@ -434,8 +462,15 @@ function startLink(r: RunnerRow) {
     name: r.name,
     ownName: computerName(),
     onEvent: (event) => {
-      if (toPrimary(r)) deviceHooks?.primaryEvent(event);
-      else applyRunnerEvent(id, event);
+      if (event.type === "replica.changed") {
+        if (r.kind === "device") deviceHooks?.replicaHint(id);
+        return;
+      }
+      if (toPrimary(r)) {
+        // A copy of the primary's chats stays here for while it is away; its windows see the primary's own events.
+        applyRunnerEvent(id, event);
+        deviceHooks?.primaryEvent(event);
+      } else applyRunnerEvent(id, event);
     },
     onState: (state) => {
       if (r.kind === "device") deviceHooks?.deviceState(id, state);
@@ -481,7 +516,13 @@ async function connected(id: string, state: LinkState) {
   l.sendClientEvent({ type: "deltas.patch" });
   for (const event of subscriptions.get(id)?.values() ?? []) l.sendClientEvent(event);
   const r = row(id);
-  if (!r || toPrimary(r)) return;
+  if (!r) return;
+  if (toPrimary(r)) {
+    await deviceHooks?.deviceConnected(id).catch((err) => log.warn("could not catch up with the primary", err instanceof Error ? err.message : err));
+    return;
+  }
+  if (r.kind === "device") await deviceHooks?.deviceConnected(id).catch((err) => log.warn(`could not take the changes of ${r.name}`, err instanceof Error ? err.message : err));
+  if (dropped()) return;
   await releaseChats(id);
   const catchUpNow = async () => {
     try {
@@ -560,6 +601,7 @@ export function startRunners(): void {
   if (started) return;
   started = true;
   wireHub();
+  setRunnerReachability((id) => links.get(id)?.state.state === "online");
   setUpdateHost({
     row: (id) => {
       const r = row(id);
@@ -605,6 +647,7 @@ export function startRunners(): void {
 
 export function stopRunners(): void {
   started = false;
+  setRunnerReachability(null);
   offBus?.();
   offBus = null;
   if (autoUpdateTimer) clearInterval(autoUpdateTimer);
@@ -734,7 +777,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
     }
     if (opts.profileId && r.sync_browser === 1) {
       try {
-        cookies = await copyCookies(id, l, opts.profileId);
+        cookies = await copyCookies(r, l, opts.profileId);
       } catch (err) {
         warnings.push(`Couldn't copy the browser sessions to ${r.name}: ${message(err)}`);
       }
@@ -771,15 +814,27 @@ async function exchangeMemory(runnerId: string, l: RemoteLink, name: string, age
   return changedLocal || changedRemote;
 }
 
-/** The sessions (cookies) of a browser profile, copied when they changed since the last copy to this runner. */
-async function copyCookies(runnerId: string, l: RemoteLink, profileId: string): Promise<boolean> {
-  const cookies = await exportProfileCookies(profileId);
+/**
+ * The sessions (cookies) of a browser profile that go to this runner or device (browserSessions.ts), copied when they
+ * changed since the last copy there. `read`: tests.
+ */
+export async function copyCookies(
+  target: { id: string; kind: RunnerKind },
+  l: Pick<RemoteLink, "json">,
+  profileId: string,
+  read: (profileId: string) => Promise<CdpCookie[]> = exportProfileCookies,
+): Promise<boolean> {
+  const policy = browserSignIns();
+  // Each device signs in by itself: its profile's browser isn't even started for this.
+  if (target.kind === "device" && policy === "own") return false;
+  const { cookies, mode } = cookiesFor(target.kind, policy, await read(profileId));
+  if (!cookies.length) return false;
   const digest = createHash("sha256")
-    .update(JSON.stringify(cookies.map((c) => [c.domain, c.path, c.name, c.value, c.expires]).sort()))
+    .update(JSON.stringify([mode, ...cookies.map((c) => [c.domain, c.path, c.name, c.value, c.expires]).sort()]))
     .digest("hex");
-  const key = `link.cookies.${runnerId}.${profileId}`;
-  if (getMeta(key) === digest || !cookies.length) return false;
-  await l.json("POST", `/api/link/browser/${encodeURIComponent(profileId)}/cookies`, { cookies }, { timeoutMs: SYNC_TIMEOUT_MS });
+  const key = `link.cookies.${target.id}.${profileId}`;
+  if (getMeta(key) === digest) return false;
+  await l.json("POST", `/api/link/browser/${encodeURIComponent(profileId)}/cookies`, { cookies, mode }, { timeoutMs: SYNC_TIMEOUT_MS });
   setMeta(key, digest);
   return true;
 }
@@ -884,14 +939,26 @@ function pendingReleases(runnerId: string): string[] {
 
 /**
  * The runner drops its copy of the chats that moved to this computer. What it can't drop now is tried again after its
- * next connect and every 15 minutes. Never throws.
+ * next connect and every 15 minutes. Never throws. Another computer of the group keeps its messages and mirrors the
+ * chat from here instead (it took the chat over while this one was away, or the other way round).
  */
 async function releaseChats(runnerId: string): Promise<void> {
   const wanted = pendingReleases(runnerId);
   if (!wanted.length) return;
   const l = links.get(runnerId);
   const done = new Set<string>();
-  if (l?.state.state === "online") {
+  let drop = row(runnerId)?.kind !== "device";
+  if (l?.state.state === "online" && !drop) {
+    try {
+      await l.json("POST", "/api/link/devices/release-chats", { ids: wanted }, { timeoutMs: 120_000 });
+      for (const id of wanted) done.add(id);
+    } catch (err) {
+      // A computer from before keeping each other's chats: it drops them like a runner.
+      if (err instanceof HttpError && err.status === 404) drop = true;
+      else log.info(`${row(runnerId)?.name ?? runnerId} didn't take back its chats yet`, { error: message(err) });
+    }
+  }
+  if (l?.state.state === "online" && drop) {
     for (const id of wanted) {
       try {
         await l.json("DELETE", `/api/conversations/${encodeURIComponent(id)}`, undefined, { timeoutMs: 30_000 });

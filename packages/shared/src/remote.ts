@@ -205,6 +205,12 @@ export interface RunnerInfo {
   /** Digest of the config snapshot it last applied; null = never synced. */
   configDigest: string | null;
   activeRuns: number;
+  /** Where phones reach this computer (a full Godmode with phone access on); missing on runners and older apps. */
+  phone?: { instance: { id: string; name: string; version: string; platform: string }; urls: string[] } | null;
+  /** macOS Full Disk Access of this program; null = not a Mac or unknown. Older computers omit it. */
+  fullDiskAccess?: boolean | null;
+  /** The computer's own name for itself and its hardware id: the same computer paired twice (a runner and the app). */
+  machineId?: string | null;
 }
 
 export type RunnerCheckGroup = "software" | "permissions" | "access" | "system";

@@ -1608,4 +1608,37 @@ UPDATE missing_logins SET status = 'dismissed', updated_at = strftime('%Y-%m-%dT
 WHERE status = 'open' AND service = 'Unknown service' AND url = '';
 `,
   },
+  {
+    id: 99,
+    name: "device_group_replica",
+    sql: /* sql */ `
+-- What changed in the shared tables, for the other computers of a device group (remote/replica.ts). One row per
+-- table row: its last change here (seq orders them), when it was made (at, where it was made) and which computer it came
+-- from (origin: a runner id, NULL = this computer). The triggers that fill it are kept by remote/replica.ts.
+CREATE TABLE replica_seq (id INTEGER PRIMARY KEY CHECK (id = 1), n INTEGER NOT NULL);
+INSERT INTO replica_seq (id, n) VALUES (1, 0);
+-- While a change from another computer is written: whose it is and when it was made there.
+CREATE TABLE replica_ctx (id INTEGER PRIMARY KEY CHECK (id = 1), origin TEXT, at TEXT);
+INSERT INTO replica_ctx (id, origin, at) VALUES (1, NULL, NULL);
+CREATE TABLE replica_rows (
+  tbl TEXT NOT NULL,
+  pk TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  at TEXT NOT NULL,
+  deleted INTEGER NOT NULL DEFAULT 0,
+  origin TEXT,
+  PRIMARY KEY (tbl, pk)
+);
+CREATE INDEX idx_replica_rows_seq ON replica_rows(seq);
+-- Changes that came before the rows they point at (a chat, a ticket): written once those are here.
+CREATE TABLE replica_deferred (
+  peer TEXT NOT NULL,
+  tbl TEXT NOT NULL,
+  pk TEXT NOT NULL,
+  change TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (peer, tbl, pk)
+);
+`,
+  },
 ];

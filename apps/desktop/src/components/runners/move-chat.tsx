@@ -17,10 +17,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { followupWhen } from "@/components/chat/followup";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
-import type { Place } from "@/lib/places";
+import { placeName, type Place } from "@/lib/places";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { RunnerStateDot } from "./runner-parts";
+import { RunnerStateDot, RunnerTag, THIS_COMPUTER_INLINE } from "./runner-parts";
 
 /** Why a runner's chat can't move right now (its run works or stands still there), or null. */
 export function moveBlocker(chat: { running: boolean; paused: boolean }): string | null {
@@ -40,6 +40,7 @@ function PlaceTag({ place, active }: { place: Place | null; active?: boolean }) 
     >
       <Icon className={cn("size-3.5 shrink-0", !active && "text-muted-foreground")} aria-hidden />
       <span className="truncate font-medium">{place?.name ?? "Another computer"}</span>
+      {place?.twinOf && <RunnerTag className={cn(active && "border-brand/25 bg-transparent text-brand-strong")} />}
       {place && !active && <RunnerStateDot state={place.state} />}
     </span>
   );
@@ -78,9 +79,9 @@ export function MoveChatDialog({
   const shown = useRef(from);
   if (open) shown.current = from;
   const origin = shown.current;
-  const name = origin?.name ?? "The other computer";
+  const name = origin ? placeName(origin) : "The other computer";
   const away = !!origin && origin.state !== "online";
-  const dest = to?.here ? "this Mac" : (to?.name ?? "the other computer");
+  const dest = to?.here ? THIS_COMPUTER_INLINE : to ? placeName(to) : "the other computer";
   const move = useMutation({
     mutationFn: () => api.conversations.move(conversation.id, { to: to!.runnerId, force: working || undefined }),
     onSuccess: (moved) => {
@@ -129,7 +130,7 @@ export function MoveChatDialog({
                 )}
               >
                 {t.here ? <Laptop className="size-3" /> : <MonitorSmartphone className="size-3" />}
-                {t.name}
+                {placeName(t)}
               </button>
             ))}
           </div>

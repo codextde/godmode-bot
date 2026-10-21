@@ -3,7 +3,7 @@
  * with. It lives in `<dataDir>/link-key`, readable by its owner only, and is created the first time it is needed. The
  * private half never leaves this file.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, linkSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { config } from "../config";
@@ -74,4 +74,27 @@ function ownerOnly(file: string): void {
   } catch {
     /* ignore */
   }
+}
+
+let machine: string | null | undefined;
+
+/**
+ * This computer's hardware id, hashed (never the id itself): two Godmode installs on one computer — an old runner and
+ * the app — report the same one. Null where it can't be read.
+ */
+export function machineId(): string | null {
+  if (machine !== undefined) return machine;
+  let raw: string | null = null;
+  try {
+    if (process.platform === "darwin") {
+      const out = Bun.spawnSync(["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"], { stdout: "pipe", stderr: "ignore" });
+      raw = /"IOPlatformUUID"\s*=\s*"([^"]+)"/.exec(out.stdout.toString())?.[1] ?? null;
+    } else if (process.platform === "linux") {
+      raw = readFileSync("/etc/machine-id", "utf8").trim() || null;
+    }
+  } catch {
+    raw = null;
+  }
+  machine = raw ? createHash("sha256").update(`godmode-machine:${raw}`).digest("hex").slice(0, 32) : null;
+  return machine;
 }

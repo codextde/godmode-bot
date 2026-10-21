@@ -3,6 +3,7 @@ import type { RunnerFixResult } from "@godmode/shared";
 import { importChromeSession } from "../../browser/manager";
 import { config } from "../../config";
 import { logger } from "../../log";
+import { acceptedCookies } from "../../remote/browserSessions";
 import { readHandover } from "../../remote/handover";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
@@ -14,7 +15,8 @@ import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
 import { runCommand, toolPath } from "../../services/doctor";
 import { HttpError, badRequest, childEnv, notFound } from "../../util";
-import { acceptJoin, adoptPushedChat, deviceIdOf, groupForSecondary, makeInvite, peerLeft } from "../../remote/devices";
+import { acceptJoin, adoptPushedChat, chatsTakenFrom, deviceIdOf, deviceState, groupForSecondary, makeInvite, peerAway, peerHello, peerLeft, releaseChatsTo } from "../../remote/devices";
+import { ackFrom, changesFor } from "../../remote/replica";
 import { isSecondary } from "../../remote/group";
 import { callForDevice } from "../../remote/deviceTools";
 import { welcomeFor } from "../ws";
@@ -74,9 +76,10 @@ export function registerLinkRoutes(app: Hono): void {
   // A chat of this runner moves to the controller: its Claude session and transcript go along.
   app.get("/api/link/conversations/:id/handover", (c) => c.json(readHandover(c.req.param("id"))));
 
+  // The sessions the controller copies here (remote/browserSessions.ts); one from before sends no mode and replaces.
   app.post("/api/link/browser/:profileId/cookies", async (c) => {
-    const { cookies } = await body(c, z.object({ cookies: z.array(z.unknown()).max(20_000) }));
-    return c.json(await importChromeSession(c.req.param("profileId"), { cookiesJson: JSON.stringify(cookies) }));
+    const { cookies, mode = "replace" } = await body(c, z.object({ cookies: z.array(z.unknown()).max(20_000), mode: z.enum(["seed", "replace"]).optional() }));
+    return c.json(await importChromeSession(c.req.param("profileId"), { cookiesJson: JSON.stringify(cookies) }, (incoming, existing) => acceptedCookies(incoming, mode, existing)));
   });
 
   // Commands for the "fix with Claude" chat on the controller: its agent diagnoses and repairs the runner from there.
@@ -139,6 +142,54 @@ export function registerLinkRoutes(app: Hono): void {
   });
 
   app.get("/api/link/devices/whoami", (c) => c.json({ id: deviceIdOf(viaLink(c) ?? "") }));
+
+  const groupPeer = (c: Context): string => {
+    const peer = deviceIdOf(viaLink(c) ?? "");
+    if (!peer) throw new HttpError(403, "Only computers of this device group take part in that.", "not_in_group");
+    return peer;
+  };
+
+  // What changed in the shared data since `after` (remote/replica.ts); asking after N also says everything up to N arrived.
+  app.get("/api/link/replica/changes", (c) => {
+    const peer = groupPeer(c);
+    const after = Number(c.req.query("after") ?? 0);
+    const limit = Number(c.req.query("limit") ?? 0);
+    return c.json(changesFor(peer, Number.isFinite(after) && after >= 0 ? after : 0, { setup: c.req.query("setup") !== "0", ...(limit > 0 ? { limit } : {}) }));
+  });
+
+  app.post("/api/link/replica/ack", async (c) => {
+    const peer = groupPeer(c);
+    const { after } = await body(c, z.object({ after: z.number().int().min(0) }));
+    ackFrom(peer, after);
+    return c.json({ ok: true as const });
+  });
+
+  // Chats of this computer that the calling one took over while this one was away: they live there now.
+  app.post("/api/link/devices/release-chats", async (c) => {
+    const peer = groupPeer(c);
+    const { ids } = await body(c, z.object({ ids: z.array(z.string().min(1).max(100)).max(2000) }));
+    return c.json(await releaseChatsTo(peer, ids));
+  });
+
+  // The calling computer is back: which of its chats this one continued meanwhile.
+  app.get("/api/link/devices/taken", (c) => c.json(chatsTakenFrom(groupPeer(c))));
+
+  app.get("/api/link/devices/state", (c) => {
+    groupPeer(c);
+    return c.json(deviceState());
+  });
+
+  // The calling computer (the primary) is back: connect to it now.
+  app.post("/api/link/devices/hello", (c) => {
+    peerHello(groupPeer(c));
+    return c.json({ ok: true as const });
+  });
+
+  // The calling computer goes away right now (Godmode quits there).
+  app.post("/api/link/devices/away", (c) => {
+    peerAway(groupPeer(c));
+    return c.json({ ok: true as const });
+  });
 
   app.post("/api/link/devices/leave", (c) => {
     peerLeft(viaLink(c) ?? "");

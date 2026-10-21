@@ -33,6 +33,8 @@ export interface WsData {
   androidNeedsKey?: Set<string>;
   /** A computer at the other end of an encrypted link (remote/linkServer.ts): it always gets this computer's own events. */
   link?: boolean;
+  /** That computer's controller id here. */
+  linkPeer?: string;
 }
 
 /** Chats someone has open right now: they read what happens there, so it isn't unread and doesn't notify. */
@@ -385,14 +387,28 @@ function congested(ws: HubSocket): boolean {
 }
 
 bus.on((event) => {
+  if (event.type === "replica.changed") return deliver(event, (ws) => !!ws.data.link);
   // The windows show the primary's: this computer's own events still go to the computers linked to it.
   if (forwarded() && !ownEvent(event)) deliver(event, (ws) => !!ws.data.link);
   else deliver(event, null);
 });
 
+let linkSkip: ((peer: string, event: ServerEvent) => boolean) | null = null;
+
+/**
+ * Events a linked computer already has: this computer only keeps a copy of them (a secondary's copy of its primary's
+ * chats), so they aren't sent back.
+ */
+export function setLinkEventFilter(fn: ((peer: string, event: ServerEvent) => boolean) | null): void {
+  linkSkip = fn;
+}
+
 function deliver(event: ServerEvent, only: ((ws: HubSocket) => boolean) | null) {
   const before = audienceFilter;
-  audienceFilter = only;
+  const skip = linkSkip;
+  audienceFilter = skip
+    ? (ws) => (!only || only(ws)) && !(ws.data.link && ws.data.linkPeer && skip(ws.data.linkPeer, event))
+    : only;
   try {
     deliverNow(event);
   } finally {

@@ -10,7 +10,7 @@ import { logger } from "../log";
 import { sleep } from "../util";
 import { HttpError } from "../util";
 import { callTool, type ToolCallResult } from "../mcp/tools";
-import { isSecondary } from "./group";
+import { forwarding } from "./group";
 
 const log = logger("devices");
 
@@ -70,9 +70,12 @@ export const SHARED_TOOLS: ReadonlySet<string> = new Set([
 const TOOL_TIMEOUT_MS = 10 * 60_000;
 const RUN_WAIT_MS = 5_000;
 
-/** On a secondary: does this call run on the primary? Connected apps call this computer's own tools. */
+/**
+ * On a secondary: does this call run on the primary? Only while it is there; while it is away the call runs here on
+ * the group's copy and its changes go to the primary afterwards. Connected apps call this computer's own tools.
+ */
 export function runsOnPrimary(ctx: RunContext, name: string): boolean {
-  return !ctx.connector && isSecondary() && SHARED_TOOLS.has(name);
+  return !ctx.connector && forwarding() && SHARED_TOOLS.has(name);
 }
 
 export async function callOnPrimary(ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {

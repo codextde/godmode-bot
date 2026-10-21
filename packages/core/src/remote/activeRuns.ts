@@ -50,3 +50,14 @@ export function remoteRuns(runnerId?: string): RemoteRun[] {
 export function clearRunner(runnerId: string): void {
   for (const run of [...runs.values()]) if (run.runnerId === runnerId) runs.delete(run.runId);
 }
+
+let reachable: ((runnerId: string) => boolean) | null = null;
+
+/** remote/runners.ts tells whether the link to a runner (or another computer of the group) is up. */
+export function setRunnerReachability(fn: ((runnerId: string) => boolean) | null): void {
+  reachable = fn;
+}
+
+export function runnerReachable(runnerId: string): boolean {
+  return reachable?.(runnerId) ?? false;
+}

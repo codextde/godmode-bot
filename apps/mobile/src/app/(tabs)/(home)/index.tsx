@@ -18,11 +18,10 @@ import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { greeting, needsYou, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
-import { useLive, useRunningChats } from "@/lib/live";
+import { useLinkComputer, useLive, useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
-import { useSession } from "@/lib/session";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
@@ -34,7 +33,8 @@ const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "
 
 export default function Home() {
   const c = useColors();
-  const computer = useSession((s) => s.connection?.instance.name ?? "Your computer");
+  const link = useLinkComputer();
+  const computer = link.name ?? "Your computer";
   const status = useLive((s) => s.status);
   const offlineReason = useLive((s) => s.offlineReason);
   const { data: allAgents } = useAgents();
@@ -73,7 +73,13 @@ export default function Home() {
       <Pressable onPress={() => router.push("/settings")} style={styles.status}>
         <LiveDot live={status === "online"} color={status === "offline" ? c.warning : undefined} size={7} />
         <T variant="footnote" muted numberOfLines={1}>
-          {status === "online" ? `${computer} · connected` : status === "connecting" ? `Connecting to ${computer}…` : `${computer} is out of reach`}
+          {status === "online"
+            ? link.away
+              ? `Connected through ${computer} — ${link.away} is away`
+              : `${computer} · connected`
+            : status === "connecting"
+              ? `Connecting to ${computer}…`
+              : `${computer} is out of reach`}
         </T>
       </Pressable>
 
