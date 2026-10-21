@@ -31,6 +31,7 @@ import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { interruptedWork, resumeInterruptedWork, startOutageRecovery, stopOutageRecovery } from "./services/resume";
 import { clearRunMods, startModUpdates, stopModUpdates } from "./mods/service";
 import { startScheduler, stopScheduler } from "./scheduler/scheduler";
+import { startSignInRetry, stopSignInRetry } from "./automations/signInRetry";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
@@ -211,6 +212,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     sharedOn = true;
     // A runner's runs are told by the computer it works for (they arrive there as its own runs).
     startScheduler();
+    startSignInRetry();
     startRunNotices();
     startDreaming();
     startAutomationEvents();
@@ -224,6 +226,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     if (!sharedOn) return;
     sharedOn = false;
     stopScheduler();
+    stopSignInRetry();
     stopRunNotices();
     stopDreaming();
     stopAppTriggers();
