@@ -259,6 +259,15 @@ export function runnerInfoOf(id: string): RunnerInfo | undefined {
   return infos.get(id);
 }
 
+/** Ask again what a connected runner (or another computer of the group) says about itself; returns the new answer. */
+export async function refreshRunnerInfo(id: string): Promise<RunnerInfo | undefined> {
+  const l = links.get(id);
+  if (!l || l.state.state !== "online") return infos.get(id);
+  const info = await l.json<RunnerInfo>("GET", "/api/link/info", undefined, { timeoutMs: 15_000 });
+  infos.set(id, info);
+  return info;
+}
+
 /** A chat that moved back to `runnerId` before it was let go there: nothing to let go anymore. */
 export function forgetRelease(runnerId: string, conversationId: string): void {
   const left = pendingReleases(runnerId).filter((id) => id !== conversationId);

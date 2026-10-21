@@ -21,7 +21,8 @@ import { startDevices, stopDevices } from "../src/remote/devices";
 import { startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
 import { forwarding, groupRole, primaryRunnerId, resetGroupCache, runsShared } from "../src/remote/group";
 import { startLinkServer, stopLinkServer } from "../src/remote/linkServer";
-import { startRunners, stopRunners } from "../src/remote/runners";
+import { pullFrom } from "../src/remote/replicaSync";
+import { runnerInfoOf, startRunners, stopRunners } from "../src/remote/runners";
 import { callTool } from "../src/mcp/tools";
 import { setLogLevel } from "../src/log";
 import { childEnv, sleep } from "../src/util";
@@ -272,6 +273,19 @@ describe("a device group, end to end", () => {
     } finally {
       websocketHandler.close(ws);
     }
+  }, 60_000);
+
+  test("what the primary says about itself is asked again with each pull (a phone address it gets later reaches phones)", async () => {
+    rmSync(join(primaryDir, "fake-claude", "finish"), { force: true });
+    const started = await onPrimary<StartChatResult>("/api/chat", { method: "POST", body: JSON.stringify({ content: "WAIT_TO_FINISH while asked" }) });
+    const pid = primaryRunnerId()!;
+    await until(async () => {
+      await pullFrom(pid);
+      return (runnerInfoOf(pid)?.activeRuns ?? 0) > 0;
+    }, 20_000, "the primary's new answer about itself");
+    writeFileSync(join(primaryDir, "fake-claude", "finish"), "");
+    await until(async () => (await onPrimary<{ status: string }>(`/api/runs/${started.body.run.id}`)).body.status === "succeeded", 30_000, "the run to end");
+    rmSync(join(primaryDir, "fake-claude", "finish"), { force: true });
   }, 60_000);
 
   test("a question asked in a chat on this computer is answered through the primary", async () => {
