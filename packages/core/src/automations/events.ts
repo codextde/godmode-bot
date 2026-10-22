@@ -21,6 +21,8 @@ import { remindWaitingAutomation } from "../services/questions";
 import { onCheckRunFinished } from "./conditions";
 import { HttpError, badRequest, conflict, newId, now, parseJson, truncate } from "../util";
 import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
+import { localizePaths } from "../remote/localPaths";
+import { standInHold } from "../remote/standIn";
 
 const log = logger("automations");
 
@@ -375,6 +377,12 @@ export async function dispatch(routineId: string, opts: { byHuman?: boolean } = 
     emitRoutine(routineId);
     return null;
   }
+  const held = opts.byHuman ? null : standInHold(routine.agentId, routine.prompt);
+  if (held) {
+    setEventStatus(ids, "skipped", held);
+    emitRoutine(routineId);
+    return null;
+  }
   if (rateLimited(routine)) return null;
 
   dispatching.add(routineId);
@@ -464,9 +472,10 @@ function attr(value: string): string {
  * Schedule ticks (and running a schedule by hand) get the plain prompt, like before automations.
  */
 export function buildEventPrompt(routine: Routine, events: AutomationEvent[]): string {
-  if (routine.trigger.type === "schedule" || events.every((e) => e.source === "schedule")) return routine.prompt;
+  const prompt = localizePaths(routine.prompt);
+  if (routine.trigger.type === "schedule" || events.every((e) => e.source === "schedule")) return prompt;
   const test = events.every((e) => e.source === "manual");
-  const parts: string[] = [routine.prompt.trim(), "", "---", ""];
+  const parts: string[] = [prompt.trim(), "", "---", ""];
   if (test) {
     parts.push(
       `This is a test of the automation “${routine.name}”, started by the human — no real event happened. Do a dry run: check that you can reach everything the task needs and say briefly what you would do for a typical event, but don't send, post, buy, delete or change anything.`,

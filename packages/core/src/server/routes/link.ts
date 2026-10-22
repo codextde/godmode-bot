@@ -8,6 +8,7 @@ import { readHandover } from "../../remote/handover";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
 import { readMemoryState, writeMemoryState } from "../../remote/memorySync";
+import { storeMemoryBase } from "../../remote/runners";
 import { MAX_UPDATE_BYTES, applyUpdate, downloadUpdate, receiveChunk } from "../../remote/selfUpdate";
 import { applySnapshot, type ConfigSnapshot } from "../../remote/snapshot";
 import { audit } from "../../services/audit";
@@ -70,7 +71,11 @@ export function registerLinkRoutes(app: Hono): void {
 
   app.put("/api/link/agents/:id/memory", async (c) => {
     const input = await body(c, z.object({ snapshot: z.object({ files: z.record(z.string(), z.unknown()) }).passthrough() }));
-    return c.json(await writeMemoryState(c.req.param("id"), input.snapshot as never, "Memory from Godmode"));
+    const state = await writeMemoryState(c.req.param("id"), input.snapshot as never, "Memory from Godmode");
+    // A device of the group: this side knows the agreed state too (and that the agent's memory came over).
+    const peer = deviceIdOf(viaLink(c) ?? "");
+    if (peer) storeMemoryBase(peer, c.req.param("id"), state);
+    return c.json(state);
   });
 
   // A chat of this runner moves to the controller: its Claude session and transcript go along.

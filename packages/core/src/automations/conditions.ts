@@ -13,6 +13,7 @@ import { createConversation, sendMessage, setConversationState } from "../servic
 import { chatFitsAutomation } from "./conversation";
 import { ensureRunListener, isAutomationBusy, receiveEvent } from "./events";
 import { badRequest, conflict, now, truncate } from "../util";
+import { standInHold } from "../remote/standIn";
 
 const MAX_OBSERVATION = 2000;
 /** Messages kept in a check conversation (older checks are pruned). */
@@ -90,6 +91,8 @@ export async function runConditionCheck(routineId: string, opts: { scheduled?: b
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`“${routine.name}” is paused`);
+  const held = opts.scheduled ? standInHold(agent.id, routine.prompt) : null;
+  if (held) throw conflict(`“${routine.name}”: ${held}`);
   const state = readTriggerState(routineId);
   if (starting.has(routineId) || (state.checkRunId && runActive(state.checkRunId))) {
     throw conflict(`“${routine.name}” is already checking its condition`);

@@ -23,6 +23,8 @@ import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
 import { exhaustedBudget } from "../services/budgets";
 import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
+import { localizePaths } from "../remote/localPaths";
+import { standInHold } from "../remote/standIn";
 
 const log = logger("scheduler");
 
@@ -132,6 +134,11 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
+  const held = opts.scheduled ? standInHold(agent.id, routine.prompt) : null;
+  if (held) {
+    recordEvent(id, { source: "schedule", title: opts.title ?? "Scheduled time reached", status: "skipped", note: held });
+    throw conflict(`Routine "${routine.name}": ${held}`);
+  }
   const active = triggering.has(id) ? null : activeMainRun(id);
   if (triggering.has(id) || active) {
     if (opts.scheduled) {
@@ -155,7 +162,7 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
       nextRunAt(routine),
       id,
     );
-    const { run } = await sendMessage(conversationId, { content: routine.prompt, trigger: "routine", routineId: routine.id, source: "automation", byHuman: opts.byHuman });
+    const { run } = await sendMessage(conversationId, { content: localizePaths(routine.prompt), trigger: "routine", routineId: routine.id, source: "automation", byHuman: opts.byHuman });
     recordEvent(id, {
       source: opts.scheduled ? "schedule" : "manual",
       title: opts.title ?? (opts.scheduled ? "Scheduled time reached" : "Started manually"),

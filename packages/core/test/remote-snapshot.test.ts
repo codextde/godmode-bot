@@ -766,6 +766,15 @@ describe("merging an agent's memory", () => {
     expect(merged.files).toEqual({ "MEMORY.md": "local\nremote\n", "memory/a.md": "a\n", "memory/b.md": "b\n" });
   });
 
+  test("on the first sync the owner's version of a file both have wins; files only one side has are kept", () => {
+    const primary = snap({ "MEMORY.md": "# Memory\n- real facts\n", "memory/leads.md": "leads\n" });
+    const standIn = snap({ "MEMORY.md": "# Memory\n- first dream from activity\n", "memory/dream.md": "d\n" });
+    expect(mergeMemory(null, standIn, primary, "remote").merged.files).toEqual({ "MEMORY.md": "# Memory\n- real facts\n", "memory/dream.md": "d\n", "memory/leads.md": "leads\n" });
+    expect(mergeMemory(null, primary, standIn, "local").merged.files["MEMORY.md"]).toBe("# Memory\n- real facts\n");
+    // With a base both sides worked on the same memory: their lines are merged as always.
+    expect(mergeMemory(primary, primary, standIn, "local").merged.files["MEMORY.md"]).toBe(standIn.files["MEMORY.md"]);
+  });
+
   test("a file deleted on one side and untouched on the other is deleted", () => {
     const base = snap({ "MEMORY.md": "a\n", "memory/old.md": "old\n", "memory/stale.md": "stale\n" });
     const local = snap({ "MEMORY.md": "a\n", "memory/stale.md": "stale\n" });

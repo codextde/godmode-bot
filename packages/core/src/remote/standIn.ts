@@ -6,10 +6,11 @@
  * working on the primary continue here from a recap. remote/devices.ts hands it all back when the primary returns.
  */
 import type { StandIn } from "@godmode/shared";
-import { deleteMeta, getMeta, setMeta } from "../db";
+import { deleteMeta, get, getMeta, setMeta } from "../db";
 import { logger } from "../log";
 import { badRequest, now } from "../util";
-import { isSecondary, setStandingIn, standingIn, standingInSince } from "./group";
+import { isSecondary, primaryRunnerId, setStandingIn, standingIn, standingInSince } from "./group";
+import { missingFolders } from "./localPaths";
 
 const log = logger("devices");
 
@@ -155,4 +156,20 @@ export function forgetStandIn(): void {
   goodbye = false;
   deleteMeta(ENABLED_META);
   deleteMeta(MINUTES_META);
+}
+
+/**
+ * Why a stand-in doesn't start an agent's dream or automation on its own, or null. The agent's memory never came over
+ * from the primary (its folder here is the empty template), or the prompt names folders this computer doesn't have:
+ * that work would run blind and its memory would clash with the primary's when it is back.
+ */
+export function standInHold(agentId: string, prompt?: string): string | null {
+  if (!standingIn()) return null;
+  const primary = primaryRunnerId();
+  if (primary && !get("SELECT 1 FROM runner_memory WHERE runner_id = ? AND agent_id = ?", primary, agentId)) {
+    return "Waits for the primary: this agent's memory never came over to this computer";
+  }
+  const missing = prompt ? missingFolders(prompt) : [];
+  if (missing.length) return `Waits for the primary: ${missing.join(", ")} ${missing.length === 1 ? "isn't" : "aren't"} on this computer`;
+  return null;
 }
