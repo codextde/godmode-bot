@@ -63,19 +63,6 @@ async function releaseFromPages(tag: string): Promise<Release> {
   return { tag_name: tag, name: `Godmode Bot ${tag}`, body: null, published_at: '', draft: false, prerelease: tag.includes('-'), assets };
 }
 
-/** Recent published releases for the changelog, cached at the edge for five minutes. */
-export async function recentReleases(): Promise<Release[]> {
-  const cache = await caches.open('godmode-releases');
-  const cacheKey = new Request(`https://cache.internal/releases/recent`);
-  const hit = await cache.match(cacheKey);
-  if (hit) return hit.json();
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases?per_page=20`, { headers: headers() });
-  if (!res.ok) throw new Error(`GitHub releases: ${res.status}`);
-  const releases = ((await res.json()) as Release[]).filter((r) => !r.draft);
-  await cache.put(cacheKey, new Response(JSON.stringify(releases), { headers: { 'cache-control': 'max-age=300' } }));
-  return releases;
-}
-
 /** A release by tag (`v0.2.0`) or the latest one. */
 export async function releaseFor(version: string | null): Promise<Release> {
   if (!version || version === 'latest') return latestRelease();
