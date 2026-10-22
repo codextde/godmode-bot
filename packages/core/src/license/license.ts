@@ -3,8 +3,8 @@
  *
  * The key and the licence server's last answer live in meta keys `license.*` (not in Settings, which paired phones can
  * read). The key is checked at start, every 6 hours and on demand against `<site>/api/license`; network errors and 5xx
- * keep the last answer. Release builds refuse new runs while the licence is missing, invalid or expired; existing
- * installs get 7 days to add a key, and a key that could not be checked yet counts for 7 days.
+ * keep the last answer. Release builds refuse new runs while the licence is missing, invalid or expired; an install
+ * without a key runs free for 7 days from its first start, and a key that could not be checked yet counts for 7 days.
  */
 import {
   LICENSE_INVALID,
@@ -17,12 +17,11 @@ import {
   type LicenseStatus,
 } from "@godmode/shared";
 import { COMPILED, VERSION, config } from "../config";
-import { deleteMeta, get, getMeta, setMeta } from "../db";
+import { deleteMeta, getMeta, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
 import { notify } from "../services/notifications";
-import { getSettings } from "../services/settings";
 import { HttpError, parseJson } from "../util";
 
 const log = logger("license");
@@ -42,8 +41,9 @@ const META = {
   verdict: "license.verdict",
   /** Since when a key has waited for its first answer; kept across key changes until one is answered. */
   unverifiedSince: "license.unverified_since",
+  /** The end of the free week; set once, never moved or cleared. */
   graceEndsAt: "license.grace_ends_at",
-  /** When this install first ran a version with licences (the grace period is decided then, once). */
+  /** When this install first ran a version with licences. */
   firstStart: "license.first_start",
 };
 
@@ -208,13 +208,13 @@ export function licenseState(): LicenseState {
   let message: string | null = null;
   if (blocked) {
     if (status === "missing" && graceEndsAt) {
-      message = `The 7 days to add a licence key ended on ${shortDate(graceEndsAt)}. Add your key or start the free trial to keep your agents working.`;
+      message = `Your 7 free days ended on ${shortDate(graceEndsAt)}. Add your licence key or start the free trial to keep your agents working.`;
     } else if (status === "missing") message = "Godmode needs a licence to start new work. Add your licence key or start the 14-day free trial.";
     else if (status === "unverified") message = "Godmode couldn't check your licence key for 7 days. Connect to the internet, then refresh the licence.";
     else if (status === "invalid") message = refusedKeyMessage(verdict!);
     else message = "Your Godmode licence has ended. Renew it or add another key to keep your agents working.";
   } else if (status === "grace" && graceEndsAt) {
-    message = `Add your licence key by ${shortDate(graceEndsAt)}. Until then everything works as before.`;
+    message = `Free until ${shortDate(graceEndsAt)}. Then add your licence key or start the 14-day free trial.`;
   } else if (status === "unverified" && unverifiedUntil) {
     message = `Your key couldn't be checked yet. Godmode accepts it until ${shortDate(unverifiedUntil)} and tries again every few hours.`;
   } else if (status === "past_due") {
@@ -415,16 +415,11 @@ export function noteLicenseRefusal(what: string, err: HttpError) {
   notify("warning", "Godmode needs an active licence", `${what} couldn't start. ${err.message}`, "/settings/license");
 }
 
-/** An install that was used before this version (set up, or with chats, runs or more than the default agent). */
-function usedBefore(): boolean {
-  const count = (table: string) => get<{ c: number }>(`SELECT COUNT(*) AS c FROM ${table}`)?.c ?? 0;
-  return getSettings().onboardingComplete || count("runs") > 0 || count("conversations") > 0 || count("agents") > 1;
-}
-
 /**
  * Before anything can start a run: takes the key from `GODMODE_LICENSE` (and keeps it from child processes) — at once
- * when none is stored, after the next check when it differs from the stored one — and, on the first start with
- * licences, gives an install that was already used 7 days to add a key.
+ * when none is stored, after the next check when it differs from the stored one — and, in builds that check licences,
+ * gives the install its 7 free days once, from the first start without a key (a new install: its very first start).
+ * Restarts never extend them.
  */
 export function initLicense(): void {
   const fromEnv = process.env.GODMODE_LICENSE;
@@ -439,12 +434,10 @@ export function initLicense(): void {
       log.info("licence key taken from GODMODE_LICENSE", { key: key.slice(-5) });
     } else if (stored !== key) pendingEnvKey = key;
   }
-  if (!getMeta(META.firstStart)) {
-    setMeta(META.firstStart, iso(clock()));
-    if (!getMeta(META.key) && usedBefore()) {
-      setMeta(META.graceEndsAt, iso(clock() + LICENSE_GRACE_MS));
-      log.info("existing install without a licence key: 7 days to add one");
-    }
+  if (!getMeta(META.firstStart)) setMeta(META.firstStart, iso(clock()));
+  if (licenseEnforced() && !getMeta(META.key) && !getMeta(META.graceEndsAt)) {
+    setMeta(META.graceEndsAt, iso(clock() + LICENSE_GRACE_MS));
+    log.info("no licence key: free for 7 days");
   }
   signature = JSON.stringify(licenseState());
 }

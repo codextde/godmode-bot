@@ -14,7 +14,7 @@ export function isLicenseKey(input: string): boolean {
 
 /**
  * - `active`, `trial`, `past_due` (Stripe still retries the payment): the key is good.
- * - `grace`: an install from before licences has 7 days to add a key.
+ * - `grace`: the free week: an install without a key runs free for 7 days from its first start.
  * - `unverified`: a key that could not be checked yet; accepted for 7 days after it was entered.
  * - `missing`, `invalid`, `expired`: new runs are refused (in release builds).
  */
@@ -31,7 +31,7 @@ export interface LicenseState {
   trialEndsAt: ISODate | null;
   renewsAt: ISODate | null;
   cancelAtPeriodEnd: boolean;
-  /** Existing installs: the end of the 7-day window to add a key (set once, never extended). */
+  /** The end of the free week of an install without a key (set once, never extended). */
   graceEndsAt: ISODate | null;
   /** The end of the window an unverified key is accepted for. */
   unverifiedUntil: ISODate | null;
