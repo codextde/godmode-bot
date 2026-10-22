@@ -10,6 +10,7 @@ import { COUPON, PRICING } from '@/config/site';
     <span class="min-w-0 flex-1 truncate text-[13.5px] whitespace-nowrap text-text-2 sm:flex-none">
       <span class="text-text">{PRICING.trialDays} days free</span><span class="hidden min-[400px]:inline"> · then ${PRICING.plans.monthly.price}/mo</span><span class="hidden sm:inline"> · code <b class="font-mono text-brand-2">{COUPON.code}</b> −{COUPON.percentOff}% ends in </span><Countdown class="hidden sm:inline-flex" />
     </span>
+    <a href="/download" class="btn btn-ghost btn-sm hidden lg:inline-flex" data-track="sticky_download">Try without a card</a>
     <CheckoutButton plan="monthly" label="Start free trial" source="sticky" size="sm" />
   </div>
 </div>
