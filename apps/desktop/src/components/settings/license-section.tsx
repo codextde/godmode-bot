@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { format, formatDistanceToNow } from "date-fns";
+import { differenceInCalendarDays, format, formatDistanceToNow } from "date-fns";
 import { ExternalLink, KeyRound, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import type { LicensePlan, LicenseState, LicenseStatus } from "@godmode/shared";
@@ -31,7 +31,7 @@ const STATUS: Record<LicenseStatus, { label: string; tone: "live" | "neutral" | 
   active: { label: "Active", tone: "live" },
   trial: { label: "Free trial", tone: "live" },
   past_due: { label: "Payment due", tone: "warning" },
-  grace: { label: "Key needed", tone: "warning" },
+  grace: { label: "Free week", tone: "live" },
   unverified: { label: "Not checked yet", tone: "warning" },
   missing: { label: "No licence", tone: "neutral" },
   invalid: { label: "Invalid key", tone: "danger" },
@@ -45,6 +45,11 @@ const PLAN: Record<LicensePlan, string> = {
 };
 
 const day = (iso: string) => format(new Date(iso), "MMMM d, yyyy");
+
+function daysLeft(iso: string): string {
+  const days = differenceInCalendarDays(new Date(iso), new Date());
+  return days <= 0 ? "ends today" : days === 1 ? "1 day left" : `${days} days left`;
+}
 
 export function LicenseSection() {
   const license = useLicense();
@@ -98,15 +103,22 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
   });
 
   if (!s.keyHint) {
+    const freeWeek = s.status === "grace" && s.graceEndsAt ? s.graceEndsAt : null;
     return (
       <>
-        {s.message && <Callout tone={s.blocked ? "warning" : "info"}>{s.message}</Callout>}
+        {s.message && !freeWeek && <Callout tone={s.blocked ? "warning" : "info"}>{s.message}</Callout>}
         <SettingsGroup
           title="Activate Godmode"
           icon={<Sparkles />}
           description="Every feature in every plan. Your agents, chats and logins stay on this computer."
-          actions={<ToneBadge tone={s.status === "grace" ? "warning" : "neutral"}>{STATUS[s.status].label}</ToneBadge>}
+          actions={<ToneBadge tone={status.tone}>{status.label}</ToneBadge>}
         >
+          {freeWeek && (
+            <InfoRow label="Free until">
+              {day(freeWeek)}
+              <span className="text-muted-foreground"> · {daysLeft(freeWeek)}</span>
+            </InfoRow>
+          )}
           <div className="py-5">{local ? <ActivatePanel source="settings" /> : <Callout>Add the licence key in Godmode on the computer itself.</Callout>}</div>
         </SettingsGroup>
         {!s.enforced && <NotEnforced />}

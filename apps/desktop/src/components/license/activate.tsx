@@ -114,6 +114,16 @@ export function LicenseKeyForm({
   );
 }
 
+export function KeyDivider({ className }: { className?: string }) {
+  return (
+    <div className={cn("flex items-center gap-3 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase", className)}>
+      <span className="h-px flex-1 bg-border" />
+      Already have a key?
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  );
+}
+
 /** Everything it takes to get a licence: the trial, the plans, a key, and help when the key is lost. */
 export function ActivatePanel({
   source,
@@ -143,14 +153,10 @@ export function ActivatePanel({
         </Button>
       </div>
       <p className="mt-2.5 text-center text-xs text-muted-foreground">
-        {opened ? "Finish the checkout in your browser, then paste your licence key below." : "7 days free, then $39 a month. Cancel any time."}
+        {opened ? "Finish the checkout in your browser, then paste your licence key below." : "14 days free, then $39 a month. Cancel any time."}
       </p>
 
-      <div className="my-6 flex items-center gap-3 text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-        <span className="h-px flex-1 bg-border" />
-        Already have a key?
-        <span className="h-px flex-1 bg-border" />
-      </div>
+      <KeyDivider className="my-6" />
 
       <LicenseKeyForm onActivated={onActivated} autoFocus={autoFocus} />
 

@@ -1,7 +1,7 @@
 import { format } from "date-fns";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Gift } from "lucide-react";
 import type { LicenseState } from "@godmode/shared";
-import { ActivatePanel } from "@/components/license/activate";
+import { ActivatePanel, KeyDivider, LicenseKeyForm } from "@/components/license/activate";
 import { Button } from "@/components/ui/button";
 import { useLicense } from "@/lib/hooks";
 import { SubmitButton } from "./auth-layout";
@@ -9,11 +9,41 @@ import { StepCard, StepFooter, StepHeader } from "./step-kit";
 
 const READY: LicenseState["status"][] = ["active", "trial", "past_due", "unverified"];
 
-/** Start the trial or enter a key. Skippable while nothing is refused yet (grace, builds from source). */
+/** Start the trial or enter a key. Skippable while nothing is refused yet (free week, builds from source). */
 export function ActivateStep({ onBack, onDone }: { onBack: () => void; onDone: (state: LicenseState | null) => void }) {
   const { data: state } = useLicense();
   const ready = !!state && !!state.keyHint && READY.includes(state.status) && !state.blocked;
   const skippable = !!state && !state.blocked;
+  const freeUntil = state?.enforced && state.status === "grace" && state.graceEndsAt ? new Date(state.graceEndsAt) : null;
+
+  if (freeUntil) {
+    return (
+      <div>
+        <StepHeader
+          eyebrow="Godmode Pro"
+          title="Your free week starts now."
+          description="Every feature, no card needed. When the week is up, add your licence key or start the 14-day free trial."
+        />
+        <StepCard>
+          <div className="flex items-center gap-3 rounded-lg border border-brand/25 bg-brand-soft p-4 text-sm">
+            <Gift className="size-5 shrink-0 text-brand-strong" />
+            <span>
+              Free until <span className="font-medium">{format(freeUntil, "EEEE, MMMM d")}</span>.
+            </span>
+          </div>
+
+          <KeyDivider className="my-6" />
+          <LicenseKeyForm onActivated={(next) => onDone(next)} />
+
+          <StepFooter onBack={onBack}>
+            <SubmitButton busy={false} type="button" onClick={() => onDone(state ?? null)} className="w-auto px-6">
+              Continue
+            </SubmitButton>
+          </StepFooter>
+        </StepCard>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -49,7 +79,7 @@ export function ActivateStep({ onBack, onDone }: { onBack: () => void; onDone: (
           ) : (
             skippable && (
               <Button type="button" variant="ghost" onClick={() => onDone(state ?? null)}>
-                {state?.status === "grace" && state.graceEndsAt ? `Later — until ${format(new Date(state.graceEndsAt), "MMM d")}` : "Skip for now"}
+                Skip for now
               </Button>
             )
           )}
