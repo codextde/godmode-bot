@@ -435,6 +435,7 @@ async function primaryArrived(id: string): Promise<void> {
   } catch (err) {
     log.info("could not take the primary's changes yet", { error: err instanceof Error ? err.message : String(err) });
   }
+  await stopWaitingWork(id, primaryName());
   // Chats continued here while it was away (also before standing in began) live here now.
   await releaseChatsNow(id);
   const since = standingInSince();
@@ -442,6 +443,28 @@ async function primaryArrived(id: string): Promise<void> {
   if (link(id).state.state === "online") setPrimaryUp(true);
   emitGroupSoon();
   void catchUpWithPrimary(id);
+}
+
+/**
+ * On a secondary: chats it took over from `primary` while it was away don't go on by themselves later (a usage limit
+ * or budget that resets, a follow-up). The primary is back and does its own work again; days later they would only
+ * repeat it. What waits for the human (a question, a pause they chose) stays.
+ */
+export async function stopWaitingWork(primary: string, name: string): Promise<number> {
+  const reason = `Stopped: ${name} is back and does its own work again. Continue this chat yourself if it still needs it`;
+  let stopped = 0;
+  for (const id of takenFrom(primary)) {
+    const paused = pauseOf(id);
+    if (paused && (paused.reason === "limit" || paused.reason === "budget")) {
+      await cancelRun(paused.run_id, reason, { byHuman: true }).then(
+        () => stopped++,
+        (err) => log.info(`could not stop the waiting run ${paused.run_id}`, { error: err instanceof Error ? err.message : String(err) }),
+      );
+    }
+    if (cancelFollowup(id)) stopped++;
+  }
+  if (stopped) log.info("the primary is back; work waiting in chats taken over from it stops", { stopped });
+  return stopped;
 }
 
 /** False when the primary went away again meanwhile: this computer keeps standing in. */

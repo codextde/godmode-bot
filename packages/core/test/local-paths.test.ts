@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { localizePaths, missingFolders } from "../src/remote/localPaths";
 
@@ -12,7 +12,7 @@ afterAll(() => rmSync(home, { recursive: true, force: true }));
 describe("paths of another computer's home", () => {
   test("map to this computer's home; existing folders and this home stay", () => {
     expect(localizePaths("Log to /Users/someone-else-xyz/.godmode/shared/sales/sent.md.", home)).toBe(`Log to ${home}/.godmode/shared/sales/sent.md.`);
-    expect(localizePaths(`See ${home}/notes.md and /Users/Shared/x`, home)).toBe(`See ${home}/notes.md and /Users/Shared/x`);
+    expect(localizePaths(`See ${home}/notes.md and ${homedir()}/x`, home)).toBe(`See ${home}/notes.md and ${homedir()}/x`);
     expect(localizePaths("cd /home/other-user-xyz/work && ls", home)).toBe(`cd ${home}/work && ls`);
     expect(localizePaths("no paths here, just text/Users/a/b", home)).toBe("no paths here, just text/Users/a/b");
   });
