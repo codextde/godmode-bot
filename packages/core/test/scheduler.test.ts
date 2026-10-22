@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Conversation, Run } from "@godmode/shared";
 import { loadConfig } from "../src/config";
@@ -15,6 +15,7 @@ import * as routines from "../src/services/routines";
 import { createRoutine, getRoutine, runRoutineNow, updateRoutine } from "../src/services/routines";
 import { catchUpMissed, dueSlot, reloadSchedules, runMissedSince, scheduledRoutines, setScheduleGroup, startScheduler, stopScheduler, triggerRoutine } from "../src/scheduler/scheduler";
 import { HttpError, newId, now } from "../src/util";
+import { resetGroupCache, setGroup, setStandingIn, clearGroup } from "../src/remote/group";
 import { Cron } from "croner";
 
 let dataDir: string;
@@ -376,6 +377,34 @@ describe("triggering", () => {
     expect(sent.map((m) => m.routineId)).toEqual([hourly.id]);
     expect(sent.some((m) => m.routineId === before.id)).toBe(false);
     for (const r of [hourly, ranThere, before]) updateRoutine(r.id, { enabled: false });
+  });
+
+  test("a stand-in leaves automations of agents whose memory never came over, or whose folders aren't here, to the primary", async () => {
+    const ts = now();
+    insert("runners", { id: "rnr_primary", name: "Primary", public_key: "pk-primary", port: 7787, kind: "device", created_at: ts, updated_at: ts });
+    setGroup("secondary", "rnr_primary");
+    setStandingIn(ts);
+    try {
+      const routine = createRoutine({ agentId: agent.id, name: "Mailing", cron: "0 6 * * *", prompt: "send the mails", enabled: true });
+      expect((await catchHttp(triggerRoutine(routine.id, { scheduled: true }))).status).toBe(409);
+      expect(get<{ status: string; note: string }>("SELECT status, note FROM automation_events WHERE routine_id = ? ORDER BY rowid DESC LIMIT 1", routine.id)).toEqual({
+        status: "skipped",
+        note: "Waits for the primary: this agent's memory never came over to this computer",
+      });
+
+      exec("INSERT INTO runner_memory (runner_id, agent_id, digest, snapshot, updated_at) VALUES ('rnr_primary', ?, 'd', '{}', ?)", agent.id, ts);
+      updateRoutine(routine.id, { prompt: `Read ${join(homedir(), `.godmode-missing-${newId("x")}`, "sent-log.md")} first` });
+      expect((await catchHttp(triggerRoutine(routine.id, { scheduled: true }))).status).toBe(409);
+
+      updateRoutine(routine.id, { prompt: "send the mails" });
+      finish(await triggerRoutine(routine.id, { scheduled: true }));
+      expect(sent.map((m) => m.routineId)).toEqual([routine.id]);
+      updateRoutine(routine.id, { enabled: false });
+    } finally {
+      clearGroup();
+      resetGroupCache();
+      exec("DELETE FROM runners WHERE id = 'rnr_primary'");
+    }
   });
 
   describe("slots missed while the scheduler wasn't running", () => {

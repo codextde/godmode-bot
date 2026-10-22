@@ -66,12 +66,14 @@ function mergeLines(local: string, remote: string): string {
  * Pure. `base` = what both sides had at the last sync (null = first time). Per file: changed on one side only → that
  * side; changed on both → local's lines plus the remote lines local doesn't have; deleted on one side and untouched on
  * the other → deleted; deleted on one side but changed on the other → kept. Files either side couldn't read are left
- * alone on both (they end up in `merged.skipped`).
+ * alone on both (they end up in `merged.skipped`). `owner`: on the first sync, the side whose version of a file both
+ * have wins (the primary's real memory over the template or a stand-in's first dream); without it, both are merged.
  */
 export function mergeMemory(
   base: MemorySnapshot | null,
   local: MemorySnapshot,
   remote: MemorySnapshot,
+  owner?: "local" | "remote",
 ): { merged: MemorySnapshot; changedLocal: boolean; changedRemote: boolean } {
   const skipped = [...new Set([...local.skipped, ...remote.skipped])].sort();
   const unknown = (path: string) => skipped.some((p) => path === p || path.startsWith(`${p}/`));
@@ -86,6 +88,7 @@ export function mergeMemory(
     else if (mine === was) text = theirs;
     else if (mine === null) text = theirs;
     else if (theirs === null) text = mine;
+    else if (!base && owner) text = owner === "local" ? mine : theirs;
     else text = mergeLines(mine, theirs);
     if (text !== null) files[path] = text;
   }

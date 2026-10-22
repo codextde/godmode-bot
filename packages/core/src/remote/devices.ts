@@ -435,6 +435,7 @@ async function primaryArrived(id: string): Promise<void> {
   } catch (err) {
     log.info("could not take the primary's changes yet", { error: err instanceof Error ? err.message : String(err) });
   }
+  await stopWaitingWork(id, primaryName(), standingInSince());
   // Chats continued here while it was away (also before standing in began) live here now.
   await releaseChatsNow(id);
   const since = standingInSince();
@@ -442,6 +443,39 @@ async function primaryArrived(id: string): Promise<void> {
   if (link(id).state.state === "online") setPrimaryUp(true);
   emitGroupSoon();
   void catchUpWithPrimary(id);
+}
+
+/**
+ * On a secondary: work for `primary` doesn't go on by itself later (a usage limit or budget that resets, a follow-up)
+ * in chats it took over from there, or in automations it started while standing in since `since`. The primary is back
+ * and does its own work again; days later it would only be repeated. What waits for the human stays.
+ */
+export async function stopWaitingWork(primary: string, name: string, since: string | null = null): Promise<number> {
+  const reason = `Stopped: ${name} is back and does its own work again. Continue this chat yourself if it still needs it`;
+  const taken = takenFrom(primary);
+  const runs = new Set(
+    since
+      ? all<{ run_id: string }>(
+          `SELECT p.run_id FROM paused_runs p JOIN runs r ON r.id = p.run_id
+             WHERE p.reason IN ('limit', 'budget') AND r.trigger IN ('routine', 'heartbeat', 'check', 'dream', 'followup') AND r.created_at >= ?`,
+          since,
+        ).map((r) => r.run_id)
+      : [],
+  );
+  for (const id of taken) {
+    const paused = pauseOf(id);
+    if (paused && (paused.reason === "limit" || paused.reason === "budget")) runs.add(paused.run_id);
+  }
+  let stopped = 0;
+  for (const runId of runs) {
+    await cancelRun(runId, reason, { byHuman: true }).then(
+      () => stopped++,
+      (err) => log.info(`could not stop the waiting run ${runId}`, { error: err instanceof Error ? err.message : String(err) }),
+    );
+  }
+  for (const id of taken) if (cancelFollowup(id)) stopped++;
+  if (stopped) log.info("the primary is back; work waiting for it here stops", { stopped });
+  return stopped;
 }
 
 /** False when the primary went away again meanwhile: this computer keeps standing in. */

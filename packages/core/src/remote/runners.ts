@@ -796,30 +796,34 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
   });
 }
 
+/** What this computer and `runnerId` last agreed on for an agent's memory: the base of their next merge. */
+export function storeMemoryBase(runnerId: string, agentId: string, state: { digest: string; snapshot: unknown }): void {
+  sql(
+    "INSERT INTO runner_memory (runner_id, agent_id, digest, snapshot, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(runner_id, agent_id) DO UPDATE SET digest = excluded.digest, snapshot = excluded.snapshot, updated_at = excluded.updated_at",
+    runnerId,
+    agentId,
+    state.digest,
+    JSON.stringify(state.snapshot),
+    now(),
+  );
+}
+
 /** Three-way merge of an agent's memory files with the runner's; both sides end up with the same files. */
 async function exchangeMemory(runnerId: string, l: RemoteLink, name: string, agentId: string): Promise<boolean> {
   const remote = await l.json<{ digest: string; snapshot: Parameters<typeof mergeMemory>[2] }>("GET", `/api/link/agents/${encodeURIComponent(agentId)}/memory`);
   const local = readMemoryState(agentId);
   const baseRow = get<{ digest: string; snapshot: string }>("SELECT digest, snapshot FROM runner_memory WHERE runner_id = ? AND agent_id = ?", runnerId, agentId);
-  const store = (digest: string, snapshot: unknown) =>
-    sql(
-      "INSERT INTO runner_memory (runner_id, agent_id, digest, snapshot, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(runner_id, agent_id) DO UPDATE SET digest = excluded.digest, snapshot = excluded.snapshot, updated_at = excluded.updated_at",
-      runnerId,
-      agentId,
-      digest,
-      JSON.stringify(snapshot),
-      now(),
-    );
   if (remote.digest === local.digest) {
-    if (baseRow?.digest !== local.digest) store(local.digest, local.snapshot);
+    if (baseRow?.digest !== local.digest) storeMemoryBase(runnerId, agentId, local);
     return false;
   }
   const base = baseRow ? parseJson<Parameters<typeof mergeMemory>[0]>(baseRow.snapshot, null) : null;
-  const { merged, changedLocal, changedRemote } = mergeMemory(base, local.snapshot, remote.snapshot);
+  const owner = isSecondary() && runnerId === primaryRunnerId() ? "remote" : "local";
+  const { merged, changedLocal, changedRemote } = mergeMemory(base, local.snapshot, remote.snapshot, owner);
   let digest = local.digest;
   if (changedLocal) digest = (await writeMemoryState(agentId, merged, `Memory from ${name}`)).digest;
   if (changedRemote) digest = (await l.json<{ digest: string }>("PUT", `/api/link/agents/${encodeURIComponent(agentId)}/memory`, { snapshot: merged })).digest;
-  store(digest, merged);
+  storeMemoryBase(runnerId, agentId, { digest, snapshot: merged });
   return changedLocal || changedRemote;
 }
 
