@@ -71,13 +71,9 @@ export async function releaseFor(version: string | null): Promise<Release> {
   return res?.ok ? res.json() : releaseFromPages(tag);
 }
 
-/** A redirect to a short-lived download URL for one release asset. */
+/** The repo is public: GitHub's own download link needs no API call, so launch traffic can't use up the token. */
 export async function assetRedirect(asset: Asset): Promise<Response> {
-  if (!env.GITHUB_TOKEN || asset.id < 0) return Response.redirect(asset.browser_download_url, 302);
-  const res = await fetch(asset.url, { headers: headers('application/octet-stream'), redirect: 'manual' });
-  const location = res.headers.get('location');
-  if (!location) throw new Error(`GitHub asset ${asset.name}: ${res.status}`);
-  return new Response(null, { status: 302, headers: { location, 'cache-control': 'no-store' } });
+  return new Response(null, { status: 302, headers: { location: asset.browser_download_url, 'cache-control': 'no-store' } });
 }
 
 export async function assetText(asset: Asset): Promise<string> {
