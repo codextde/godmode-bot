@@ -34,8 +34,8 @@
     "STRIPE_MANAGED_PAYMENTS": "false",
     "STRIPE_REQUIRE_TOS": "false",
     "STRIPE_COLLECT_PROMOTIONS": "false",
-    // Needs usegodmode.com onboarded in Cloudflare Email Sending (MAIL_FROM's domain).
-    "LIFECYCLE_EMAILS": "off",
+    // usegodmode.com is onboarded in Cloudflare Email Sending (MAIL_FROM's domain).
+    "LIFECYCLE_EMAILS": "on",
     "MAIL_FROM": "daniel@usegodmode.com",
     "MAIL_REPLY_TO": "daniel.ehrhardt@codext.de"
   }
