@@ -27,6 +27,13 @@ import { COUPON, FOUNDING, PRICING, yearlySavings } from '@/config/site';
       <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="final" size="lg" />
       <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="final" variant="ghost" size="lg" />
     </div>
+    <div class="mt-5" data-reveal style="--d:500">
+      <a href="/download" class="group inline-flex items-center gap-2 text-[14px] text-text-2 transition-colors hover:text-text" data-track="final_download">
+        <Icon name="download" size={15} class="text-brand" />
+        No card? Download it and use it free for 7 days
+        <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
+      </a>
+    </div>
     <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:550">
       <Icon name="shield-check" size={14} class="text-brand" />
       $0 today · price locked for life · founding offer ends in <Countdown />

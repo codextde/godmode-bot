@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { motion } from "motion/react";
 import { ArrowRight, Bot, CircleCheck, CircleDashed, Plug, ShieldCheck } from "lucide-react";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState } from "@godmode/shared";
@@ -62,10 +63,11 @@ export function DoneStep({
   ];
   const license = summary.license;
   const licensed = !!license?.keyHint && !license.blocked && ["active", "trial", "past_due", "unverified"].includes(license.status);
+  const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? format(new Date(license.graceEndsAt), "MMM d") : null;
   items.push({
     label: "Godmode Pro",
-    ok: licensed ? true : license?.blocked ? false : null,
-    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : license?.status === "grace" ? "Add your key in Settings → License" : "Skipped",
+    ok: licensed || freeUntil ? true : license?.blocked ? false : null,
+    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : freeUntil ? `Free until ${freeUntil}` : "Skipped",
   });
   if (serverMode)
     items.push({

@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { differenceInCalendarDays, format } from "date-fns";
-import { CreditCard, KeyRound, Sparkles, X } from "lucide-react";
+import { CreditCard, Gift, KeyRound, Sparkles, X } from "lucide-react";
 import type { LicenseState } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
@@ -12,6 +12,7 @@ import { openExternal } from "@/lib/desktop";
 import { useLicense } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { checkoutUrl } from "./activate";
 
 const DAY_MS = 86_400_000;
 
@@ -22,7 +23,13 @@ interface Notice {
   tone: "info" | "warning";
   icon: ReactNode;
   text: ReactNode;
-  action: { label: string; run: () => void } | null;
+  action: Action | null;
+  secondary?: Action;
+}
+
+interface Action {
+  label: string;
+  run: () => void;
 }
 
 const today = () => format(new Date(), "yyyy-MM-dd");
@@ -41,7 +48,7 @@ function inDays(iso: string): string {
   return days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
 }
 
-function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () => void; refresh: () => void }): Notice | null {
+function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () => void; refresh: () => void; trial: () => void }): Notice | null {
   if (s.blocked) return null;
   if (s.status === "trial" && s.trialEndsAt) {
     const left = new Date(s.trialEndsAt).getTime() - Date.now();
@@ -72,9 +79,10 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
     return {
       kind: "grace",
       tone: "info",
-      icon: <KeyRound />,
-      text: <>Add your licence key by {format(new Date(s.graceEndsAt), "MMMM d")}. Until then everything works as before.</>,
-      action: { label: "Add key", run: actions.settings },
+      icon: <Gift />,
+      text: <>Free until {format(new Date(s.graceEndsAt), "MMMM d")}. Then add your licence key or start the 14-day free trial.</>,
+      action: { label: "Start free trial", run: actions.trial },
+      secondary: { label: "Add key", run: actions.settings },
     };
   }
   if (s.status === "unverified" && s.unverifiedUntil) {
@@ -89,9 +97,10 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
   return null;
 }
 
-/** One slim line above the page when the licence needs attention soon; dismissed, it stays away for the day. */
+/** One slim line above the page when the licence needs attention soon (not on the licence page); dismissed, it stays away for the day. */
 export function LicenseBanner() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const qc = useQueryClient();
   const { data } = useLicense();
   const [, setDismissed] = useState(0);
@@ -101,9 +110,13 @@ export function LicenseBanner() {
         settings: () => navigate("/settings/license"),
         manage: () => data.manageUrl && void openExternal(data.manageUrl),
         refresh: () => refresh.mutate(),
+        trial: () => {
+          navigate("/settings/license");
+          void openExternal(checkoutUrl("banner"));
+        },
       })
     : null;
-  const shown = notice && !dismissedToday(notice.kind) ? notice : null;
+  const shown = notice && !dismissedToday(notice.kind) && !pathname.startsWith("/settings/license") ? notice : null;
 
   const dismiss = (kind: Kind) => {
     try {
@@ -135,6 +148,11 @@ export function LicenseBanner() {
             >
               <span className={cn("shrink-0 [&_svg]:size-4", shown.tone === "warning" ? "text-warning" : "text-brand-strong")}>{shown.icon}</span>
               <p className="min-w-0 flex-1 leading-snug">{shown.text}</p>
+              {shown.secondary && (
+                <Button size="sm" variant="ghost" className="h-7 shrink-0" onClick={shown.secondary.run}>
+                  {shown.secondary.label}
+                </Button>
+              )}
               {shown.action && (
                 <Button size="sm" variant="outline" className="h-7 shrink-0 bg-card" onClick={shown.action.run}>
                   {shown.action.label}
