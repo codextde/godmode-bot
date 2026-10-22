@@ -10,29 +10,29 @@ import ComputerUse from '@/components/sections/ComputerUse.astro';
 import { PRICING, SITE, yearlySavings } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
-const checked = 'October 8, 2026';
+const checked = 'October 22, 2026';
 
 type Mark = 'yes' | 'no' | 'partial';
 const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Where the work happens',
     us: ['yes', 'On your Mac, Windows or Linux computer, plus a separate Mac of its own on your Mac'],
-    them: ['partial', 'One cloud computer that all your Bots share'],
+    them: ['partial', 'One cloud computer that all your Bots share. It can run commands on yours if you approve each one'],
   },
   {
     label: 'Your existing logins',
     us: ['yes', 'Bring over your Chrome logins once and it is already signed in'],
-    them: ['no', 'A fresh cloud browser. You sign in to every site again'],
+    them: ['no', 'Its own cloud browser. You sign in to each site once yourself'],
   },
   {
     label: 'Passwords and 2FA codes',
-    us: ['yes', 'Encrypted vault on your device fills them into the page. The model only sees [secret hidden]'],
-    them: ['partial', 'Passwords from 1Password once you approve each fill. For passkeys and 2FA codes you take over and type them'],
+    us: ['yes', 'A built-in vault on your device fills them into the page and signs in with saved passkeys. The model only sees [secret hidden]'],
+    them: ['partial', 'You type them yourself: take over its computer or use a form in the chat. Or approve each 1Password fill from a shared vault'],
   },
   {
     label: 'Desktop apps',
     us: ['yes', 'Any app window on your computer, controlled in the background. Your cursor stays yours'],
-    them: ['partial', 'Only apps installed on the cloud computer'],
+    them: ['partial', 'Apps on its cloud computer. On yours, only commands you approve'],
   },
   {
     label: 'Its own machine',
@@ -42,17 +42,17 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Model',
     us: ['yes', `${SITE.model} on every task, and every newer Claude the day you get it`],
-    them: ['partial', 'Picked per task by xAI: a fast Grok 4.8 for most requests, Claude Opus 5.5 and others for some'],
+    them: ['partial', 'Picked for you per request, with no model picker: a Grok model or a third-party one such as Claude Opus 5.5'],
   },
   {
     label: 'Usage limits',
     us: ['yes', 'No Godmode cap. You use your own Claude plan or API key'],
-    them: ['no', 'Weekly allowance with no published number, then pay-as-you-go'],
+    them: ['no', 'A weekly usage pool shared with the rest of your plan, no absolute numbers published, then paid top-ups'],
   },
   {
     label: 'Automations',
     us: ['yes', 'Schedules, new emails and Slack messages, and changes you describe in plain words'],
-    them: ['yes', 'Re-run a learned skill on a schedule'],
+    them: ['yes', 'Routines on a schedule or on events: Slack messages, emails, webhooks'],
   },
   {
     label: 'A team of agents',
@@ -72,7 +72,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Talk to it from',
     us: ['yes', 'Desktop app, web dashboard, Slack, Telegram, Microsoft Teams, voice'],
-    them: ['yes', 'Desktop app, iPhone, iPad and Android'],
+    them: ['yes', 'Desktop app, iPhone, iPad, Android, Slack and @bot on X'],
   },
   {
     label: 'Keeps working with your laptop shut',
@@ -82,7 +82,7 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Price',
     us: ['yes', `${PRICING.trialDays} days free, then $${monthly.price}/mo or $${yearly.perMonth}/mo yearly, plus your Claude plan`],
-    them: ['partial', 'Inside Cursor (from $20/mo) or SuperGrok (from $30/mo). Heavy users report limits even on $200–$300 plans'],
+    them: ['partial', 'In the X Subscription from $30/mo (Premium; Plus doesn’t include it). Older Cursor and SuperGrok plans keep it'],
   },
 ];
 
@@ -101,12 +101,12 @@ const reasons = [
   {
     icon: 'key-round',
     title: '2FA without you on standby',
-    text: 'In Grok Bot you take over and type codes yourself. Godmode’s vault fills passwords and authenticator codes into the page, so a 06:00 job at six portals just runs.',
+    text: 'In Grok Bot you take over or type codes into a form yourself. Godmode’s vault fills passwords and authenticator codes into the page, so a 06:00 job at six portals just runs.',
   },
   {
     icon: 'gauge',
-    title: 'No weekly meter',
-    text: 'Grok Bot’s allowance resets weekly and the number isn’t published. Godmode adds no cap of its own: your agents run on the Claude plan or API key you choose.',
+    title: 'No usage meter of its own',
+    text: 'Grok Bot draws from a weekly usage pool whose size isn’t published. Godmode adds no cap of its own: your agents run on the Claude plan or API key you choose.',
   },
   {
     icon: 'mouse-pointer-click',
@@ -115,8 +115,8 @@ const reasons = [
   },
   {
     icon: 'sparkles',
-    title: 'Claude, not a mystery model',
-    text: `Godmode thinks with ${SITE.model} on every task, the Claude model known for long, careful work. You always know which AI did the job.`,
+    title: 'Claude on every task',
+    text: `Godmode thinks with ${SITE.model} on every task, the Claude model known for long, careful work. Grok Bot picks a model for each request and shows which one afterwards.`,
   },
   {
     icon: 'hard-drive',
@@ -128,10 +128,10 @@ const reasons = [
 const sameTask = {
   prompt: 'On the 1st of every month, download last month’s invoices from our 6 supplier portals, file them in Drive and send the totals to #finance.',
   them: [
-    ['cloud', 'Opens a fresh browser on its cloud computer'],
-    ['hand', 'Asks you to approve the login at portal 1 of 6'],
+    ['cloud', 'Works in its own browser on the cloud computer'],
+    ['hand', 'Hands you the computer to sign in at each portal'],
     ['smartphone', 'Waits while you type each 2FA code yourself'],
-    ['clock', 'Next month: sessions expired, you are needed again'],
+    ['clock', 'Next month: where a session expired, you are needed again'],
   ],
   us: [
     ['cookie', 'Continues your Chrome sessions on your computer'],
@@ -150,15 +150,15 @@ const steps = [
 const faqs = [
   {
     q: 'Is Godmode a good Grok Bot alternative?',
-    a: `Yes, if you want an AI coworker that works on your own computer with the logins you already have. Both give you persistent agents with memory that use a browser and apps to finish real work. Grok Bot does it on a cloud computer with a model xAI picks for each task; Godmode's agent works on your device and thinks with ${SITE.model} on every task, with an encrypted vault for passwords and 2FA and no usage cap of its own.`,
+    a: `Yes, if you want an AI coworker that works on your own computer with the logins you already have. Both give you persistent agents with memory that use a browser and apps to finish real work. Grok Bot does it on a cloud computer with a model picked for each task; Godmode's agent works on your device and thinks with ${SITE.model} on every task, with an encrypted vault for passwords and 2FA and no usage cap of its own.`,
   },
   {
     q: 'Is Godmode cheaper than Grok Bot?',
-    a: `Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after a ${PRICING.trialDays}-day free trial, plus the Claude plan or API key you already have. Grok Bot comes inside Cursor plans (from $20 a month) or SuperGrok (from $30 a month) with a weekly allowance; heavy users report hitting limits even on $200–$300 plans. If you run agents every day, a predictable Godmode subscription plus Claude Max is usually the calmer bill.`,
+    a: `No, Grok Bot is cheaper to start. It comes with the X Subscription from $30 a month (Premium; Plus doesn’t include it), and older Cursor and SuperGrok plans keep it. Its usage comes out of a weekly pool shared with the rest of your plan, then paid top-ups. Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after a ${PRICING.trialDays}-day free trial, plus the Claude plan or API key you already have. You pay more for agents that work on your own computer with the logins you already have.`,
   },
   {
     q: 'Doesn’t Grok Bot use Claude now?',
-    a: `For some tasks. On October 7, 2026 xAI announced that Grok Bot will route each request to the model it judges best, including Claude Opus 5.5, while most simple requests go to a fast Grok 4.8. Godmode runs Claude on every task, on the Claude plan or API key you choose, so you always know which model did the work. The bigger difference is where the work happens: on your own computer with the logins you already have, and a vault that fills passwords and 2FA codes.`,
+    a: `For some requests. Since October 7, 2026 Grok Bot sends each request to a model picked for it: a Grok model or a third-party one such as Claude Opus 5.5. There is no model picker; its usage analytics show which model served each request. Godmode runs Claude on every task, on the Claude plan or API key you choose. The bigger difference is where the work happens: on your own computer with the logins you already have, and a vault that fills passwords and 2FA codes.`,
   },
   {
     q: 'Does Godmode use Grok?',
@@ -166,7 +166,7 @@ const faqs = [
   },
   {
     q: 'What happens to my logins in Grok Bot compared with Godmode?',
-    a: 'Grok Bot can fill passwords from a shared 1Password vault after you approve each fill; for passkeys and 2FA codes you take over its cloud computer and type them yourself. The signed-in session then persists on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an encrypted vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
+    a: 'Grok Bot’s docs say you take over its cloud computer for passwords, passkeys and 2FA codes, or type them into a form in the chat; secrets you enter there are not shown to the model. On Cursor’s forum, Cursor describes 1Password fills from a shared vault that you approve one by one. The signed-in session then stays on that shared cloud computer. In Godmode, logins and 2FA secrets sit in an encrypted vault on your device and are typed straight into the page. The model only learns that a secret was filled, never its value.',
   },
   {
     q: 'Can Godmode keep working when my laptop is closed, like Grok Bot?',
@@ -178,7 +178,7 @@ const faqs = [
   },
   {
     q: 'When is Grok Bot the better choice?',
-    a: 'If you already pay for Cursor or SuperGrok, want xAI to pick the model for each task, need agents on your phone without any computer at home, or never want to run anything on your own hardware, Grok Bot is a fine pick. Godmode is for people who want the agent where their logins, files and apps already are.',
+    a: 'If you already pay for an X Subscription (Premium or higher), Cursor or SuperGrok, are happy for Grok Bot to pick the model for each task, need agents on your phone without any computer at home, or never want to run anything on your own hardware, Grok Bot is a fine pick. Godmode is for people who want the agent where their logins, files and apps already are.',
   },
 ];
 
@@ -212,7 +212,7 @@ const jsonLd = {
             <a href="#table" class="btn btn-ghost btn-lg" data-track="vs_grok_table">See the full comparison</a>
           </div>
           <ul class="mt-9 flex flex-wrap gap-2" data-reveal style="--d:420">
-            {['Your computer, not their cloud', 'Already signed in as you', '2FA filled for you', 'No weekly usage meter', 'Powered by Claude'].map((t) => (
+            {['Your computer, not their cloud', 'Already signed in as you', '2FA filled for you', 'No usage meter of its own', 'Powered by Claude'].map((t) => (
               <li class="chip chip-brand"><Icon name="check" size={11} stroke={2.4} /> {t}</li>
             ))}
           </ul>
@@ -235,9 +235,9 @@ const jsonLd = {
         <div class="card p-7 sm:p-9" data-reveal style="--d:80">
           <p class="flex items-center gap-2.5 text-[15px] font-medium text-text-2"><Icon name="cloud" size={20} class="text-muted" /> Grok Bot is fine if you want</p>
           <ul class="mt-6 space-y-3.5 text-[15px] leading-relaxed text-muted">
-            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />xAI picking the model for each task, mostly Grok</li>
+            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Grok Bot picking the model for each task</li>
             <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Agents without any computer of your own switched on</li>
-            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Something bundled into a Cursor or SuperGrok plan you already pay for</li>
+            <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />Something included in an X Subscription, Cursor or SuperGrok plan you already pay for</li>
             <li class="flex gap-3"><Icon name="minus" size={17} stroke={2.2} class="mt-0.5 flex-none text-dim" />To sign in and type 2FA codes yourself whenever a session expires</li>
           </ul>
         </div>
@@ -264,7 +264,7 @@ const jsonLd = {
                   </li>
                 ))}
               </ol>
-              <p class="mt-5 text-[13px] text-dim">You: needed 6 times, every month.</p>
+              <p class="mt-5 text-[13px] text-dim">You: needed whenever a portal asks for a login or a 2FA code.</p>
             </div>
             <div class="vs-us p-6 sm:p-8">
               <p class="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-brand uppercase"><Logo size={16} /> Godmode</p>
@@ -321,8 +321,8 @@ const jsonLd = {
         </div>
         <p class="mt-4 text-[12px] leading-relaxed text-dim" data-reveal>
           Grok Bot facts from the <a href="https://docs.x.ai/grok-bot/overview" rel="noopener nofollow" class="underline decoration-line-3 underline-offset-2 hover:text-text">xAI</a> and
-          <a href="https://cursor.com/docs/grok-bot" rel="noopener nofollow" class="underline decoration-line-3 underline-offset-2 hover:text-text">Cursor</a> docs, plan pages
-          and press coverage as of {checked}. Grok Bot is in beta and changes quickly. Spotted something out of date?
+          <a href="https://cursor.com/docs/grok-bot" rel="noopener nofollow" class="underline decoration-line-3 underline-offset-2 hover:text-text">Cursor</a> docs, the <a href="https://docs.x.ai/x-subscription/pricing" rel="noopener nofollow" class="underline decoration-line-3 underline-offset-2 hover:text-text">X Subscription plans</a>
+          and press coverage as of {checked}. Grok Bot changes quickly. Spotted something out of date?
           <a href={`mailto:${SITE.email}`} class="underline decoration-line-3 underline-offset-2 hover:text-text">Tell us</a> and we’ll fix it.
           Grok is a trademark of its owner; Godmode is not affiliated with xAI or Cursor.
         </p>
