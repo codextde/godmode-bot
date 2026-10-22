@@ -40,6 +40,7 @@ import { Thread } from "@/components/chat/thread";
 import { TurnEnd } from "@/components/chat/turn-end";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
+import { CompressBar, ContextMeter, useContextGauge } from "@/components/chat/context-meter";
 import { VoiceMode } from "@/components/chat/voice-mode";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useVoiceSettings } from "@/hooks/use-voice";
@@ -258,6 +259,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       if (!isLicenseRequired(err)) toast.error("Message not sent", { description: errorMessage(err) });
     },
   });
+
+  // Chat memory: the ring in the composer, and a bar once the chat gets long (hidden until it grows further).
+  const gauge = useContextGauge(conv?.context);
+  const compressing = !!live && live.status === "running" && liveActivityLabel(live).startsWith("Compressing");
+  const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
+  const compress = () => send.mutate({ content: "/compress", queueId: newQueueId() });
+  const compressQueued = queue.some((m) => /^\/(compress|compact)\b/.test(m.content.trim()));
 
   const choose = useMutation({
     mutationFn: (patch: Partial<ModelChoice>) => api.conversations.update(conversationId, patch),
@@ -614,6 +622,26 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                   </motion.div>
                 )}
               </AnimatePresence>
+              <AnimatePresence initial={false}>
+                {gauge &&
+                  gauge.tone !== "calm" &&
+                  gauge.compressible &&
+                  !compressing &&
+                  !compressQueued &&
+                  !runnerAway &&
+                  (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) && (
+                    <motion.div
+                      key="compress"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                      className="overflow-hidden"
+                    >
+                      <CompressBar gauge={gauge} agentName={agent?.name ?? "The agent"} running={!!activeRunId} onCompress={compress} onDismiss={() => setCompressHiddenAt(gauge.tokens)} />
+                    </motion.div>
+                  )}
+              </AnimatePresence>
               {(!conv.runnerId || inGroup) && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? "The agent"} />}
               <QueueTray
                 ref={queueRef}
@@ -724,6 +752,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                           ? `Message ${agent.name} — it goes along when the run continues`
                           : `Message ${agent.name} — it goes along when the limit resets`
                         : `Message ${agent.name} — or type / for commands`
+                }
+                status={
+                  gauge && (
+                    <ContextMeter
+                      gauge={gauge}
+                      agentName={agent?.name ?? "The agent"}
+                      running={!!activeRunId}
+                      compressing={compressing || compressQueued}
+                      disabled={runnerAway || send.isPending}
+                      onCompress={compress}
+                    />
+                  )
                 }
                 trailing={
                   <ModelPicker

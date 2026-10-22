@@ -58,9 +58,11 @@ import {
   WORKFLOW_TOOL,
   isModelId,
   memoryBudget,
+  compactAlias,
   modelProvider,
   parseSlashCommand,
   type ActivityNames,
+  type ConversationContext,
 } from "@godmode/shared";
 import { config } from "../config";
 import { all, get, insert, run as sql, tx } from "../db";
@@ -413,6 +415,8 @@ interface Job {
    * reports the total of the whole session, earlier runs of the chat included.
    */
   sessionCostBefore?: number | null;
+  /** The context the chat was last told about mid-run (tokens), and when. */
+  contextShown?: { tokens: number; at: number };
   timedOut: boolean;
   /** The watchdog stopped it: its report (the run's error). */
   stalled?: string;
@@ -1350,6 +1354,10 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
   // hears back from them. The watchdog and the run timeout decide when a run has gone quiet for too long instead.
   env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ??= "0";
+  // Long chats are summarized by Claude Code itself once the session fills this share of the window (never above its own threshold).
+  const compactAt = getSettings().runner.autoCompactPercent;
+  if (compactAt === 0) env.DISABLE_AUTO_COMPACT = "1";
+  else if (compactAt != null) env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE = String(compactAt);
   if (getSettings().memory.backend === "claude-mem" && claudeMemPluginDir()) Object.assign(env, claudeMemEnv(agent));
   // API tools that hand their key to runs (Integrations → Tools).
   if (apiKeys) Object.assign(env, apiToolEnv(agent));
@@ -1789,6 +1797,7 @@ async function spawnClaude(
     const logged = logLineOf(event, line);
     if (logged !== null) logSink.write(`${redact(logged)}\n`);
     if (job.acc.push(event)) scheduleDelta(job);
+    showContext(job);
     if (job.acc.goalIdle >= GOAL_IDLE_LIMIT && !job.goalPaused && !job.pause && !halted(job) && !job.timedOut && !job.stalled) pauseGoal(job, proc);
     // Claude has read the human's answer the moment it starts replying: settle it now, so a crash later in the run
     // can't hand the same answer (an approval: "Do it now") to the next turn again.
@@ -1910,7 +1919,7 @@ function describeFailure(job: Job, attempt: Attempt): string {
  */
 function bodyOf(job: Job, agent: Agent): string {
   const resumed = job.resumed;
-  if (!resumed) return job.prompt;
+  if (!resumed) return compactAlias(job.prompt);
   const taken = takeQueued(job.conversationId, agent);
   for (const { message } of taken) job.acc.addUserMessage(message);
   if (taken.length) scheduleDelta(job);
@@ -2350,7 +2359,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const resuming = !!sessionId;
     if (!sessionId) {
       sessionId = randomUUID();
-      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow });
+      setConversationState(job.conversationId, { claudeSessionId: sessionId, instructionsDigest: digest, memoryDigest: memoryNow, context: null });
     }
     job.memorySeen = memoryNow;
     job.sessionCostBefore = resuming ? conv.claude_session_cost_usd : null;
@@ -2580,7 +2589,35 @@ function saveConversation(job: Job, agent: Agent | null, succeeded: boolean, ts:
       : {}),
     ...(title && title !== DEFAULT_CONVERSATION_TITLE ? { title } : {}),
     ...(succeeded ? commandOverrides(acc.localCommand) : {}),
+    ...(acc.contextCleared ? {} : contextOf(job)),
   });
+}
+
+const CONTEXT_EVERY_MS = 30_000;
+const CONTEXT_STEP_TOKENS = 2_000;
+
+/** The chat's context meter follows the run: a compaction right away, growth at most every few seconds. */
+function showContext(job: Job) {
+  const tokens = job.acc.contextTokens;
+  if (tokens === null || job.acc.contextCleared) return;
+  const shown = job.contextShown;
+  const shrank = !!shown && tokens < shown.tokens;
+  if (shown && !shrank && (tokens - shown.tokens < CONTEXT_STEP_TOKENS || performance.now() - shown.at < CONTEXT_EVERY_MS)) return;
+  job.contextShown = { tokens, at: performance.now() };
+  safely("show the chat's context", () => {
+    const ctx = contextOf(job).context;
+    if (!ctx) return;
+    setConversationState(job.conversationId, { context: ctx });
+    emitConversationUpdated(job.conversationId);
+  });
+}
+
+/** How full the session is, when the stretch said (a stretch without a model turn leaves it as it was). */
+function contextOf(job: Job): { context?: ConversationContext } {
+  const acc = job.acc;
+  if (acc.contextTokens === null) return {};
+  const row = acc.contextWindow === null ? get<{ w: number | null }>("SELECT context_window AS w FROM conversations WHERE id = ?", job.conversationId) : null;
+  return { context: { tokens: acc.contextTokens, window: acc.contextWindow ?? row?.w ?? null } };
 }
 
 /** Claude read the human's answers this stretch carried: they are not owed anymore. */

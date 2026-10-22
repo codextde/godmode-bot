@@ -68,6 +68,8 @@ interface ComposerProps {
   leading?: ReactNode;
   /** Rendered before the voice and send buttons (e.g. model picker) */
   trailing?: ReactNode;
+  /** Always in the toolbar, also in Easy mode (e.g. the context meter) */
+  status?: ReactNode;
   /** Setup chips (folder, machines, profile…): in the tray after `leading`; Easy mode keeps them and `trailing` behind one Options button. */
   options?: ReactNode;
   size?: "md" | "lg";
@@ -99,6 +101,7 @@ export function Composer({
   onRecall,
   leading,
   trailing,
+  status,
   options,
   size = "md",
   draftKey,
@@ -498,6 +501,7 @@ export function Composer({
             )}
           </AnimatePresence>
 
+          {status}
           {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}
 
           <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode} disabled={disabled}>

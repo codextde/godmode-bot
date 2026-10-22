@@ -1,5 +1,5 @@
 import type { Settings } from "@godmode/shared";
-import { DEFAULT_CLOUD_SETTINGS, DEFAULT_FALLBACK_MODEL, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_CLOUD_SETTINGS, DEFAULT_FALLBACK_MODEL, DEFAULT_LOOP_REPEATS, DEFAULT_MEMORY_CHARS, DEFAULT_MODEL, DEFAULT_PORT, DEFAULT_STALL_MINUTES, MOBILE_DEFAULT_PORT } from "@godmode/shared";
 import { all, run } from "../db";
 import { bus } from "../events/bus";
 import { parseJson } from "../util";
@@ -29,6 +29,7 @@ export const DEFAULT_SETTINGS: Settings = {
     watchdog: true,
     stallMinutes: DEFAULT_STALL_MINUTES,
     loopRepeats: DEFAULT_LOOP_REPEATS,
+    autoCompactPercent: DEFAULT_AUTO_COMPACT_PERCENT,
     spendTracking: false,
     defaultMaxBudgetUsd: null,
     monthlyBudgetUsd: null,

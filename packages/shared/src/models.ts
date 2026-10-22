@@ -423,6 +423,15 @@ export interface Conversation {
   paused?: RunPause | null;
   /** A chat another agent handed over: who asked, from which chat (null when that chat was deleted) and which run. */
   delegatedFrom?: { agentId: ID; conversationId: ID | null; runId: ID } | null;
+  /** How full the chat's Claude session is, as of its last turn; null = not known yet (no turn, or a fresh session). */
+  context?: ConversationContext | null;
+}
+
+export interface ConversationContext {
+  /** Tokens the session sends with every turn now. */
+  tokens: number;
+  /** The model's context window; null = not reported. */
+  window: number | null;
 }
 
 export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt">;
@@ -591,7 +600,7 @@ export type MessageBlock =
     }
   | { type: "error"; text: string }
   /** `mod`: the note comes from a Claude Code mod (its plugin name), not from Godmode. */
-  | { type: "notice"; level: "info" | "warning" | "success"; text: string; mod?: string }
+  | { type: "notice"; level: "info" | "warning" | "success"; text: string; mod?: string; compacted?: CompactInfo }
   /** Output of a Claude Code slash command that ran locally (e.g. /context, /usage, /model). */
   | { type: "command"; name: string; args: string; output: string }
   /** Marks where the agent continued the chat on its own (the system message of a follow-up run). */
@@ -1307,6 +1316,13 @@ export interface GeneralSettings {
   language: string;
 }
 
+/** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */
+export interface CompactInfo {
+  auto: boolean;
+  preTokens: number | null;
+  postTokens: number | null;
+}
+
 export interface RunnerSettings {
   /** Path to claude CLI; empty = auto-detect */
   claudePath: string;
@@ -1333,6 +1349,11 @@ export interface RunnerSettings {
   stallMinutes: number;
   /** The same tool with the same input and the same result this many times in a row = going in circles. */
   loopRepeats: number;
+  /**
+   * A chat's Claude session is summarized by itself once it fills this share of the model's context window (percent).
+   * 0 = never by itself (only /compress), null = Claude Code's own threshold (close to full).
+   */
+  autoCompactPercent: number | null;
   /**
    * Shows what runs cost in USD and enables budgets. Off (Claude subscription, where Claude Code's costs are API prices
    * nobody pays): nothing about cost is shown and no budget applies. Costs are recorded either way.

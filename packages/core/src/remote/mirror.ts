@@ -12,6 +12,7 @@
  * dropped without an answer. Nothing here imports remote/runners.ts; it calls back through `setMirrorHooks`.
  */
 import type {
+  ConversationContext,
   AppNotification,
   Attachment,
   Conversation,
@@ -170,6 +171,13 @@ function readFollowup(v: unknown): ConversationFollowup | null {
   return { note: text(f.note, MAX_INSTRUCTIONS_LENGTH) ?? "", dueAt, createdAt: isoDate(f.createdAt) ?? dueAt };
 }
 
+function readContext(v: unknown): ConversationContext | null {
+  const c = record(v);
+  const count = (n: unknown) => (typeof n === "number" && Number.isInteger(n) && n >= 0 && n < 1e9 ? n : null);
+  const tokens = count(c?.tokens);
+  return tokens === null ? null : { tokens, window: count(c?.window) };
+}
+
 /** A chat as a runner reports it, reduced to what this computer keeps of it. */
 interface Chat {
   id: string;
@@ -214,7 +222,7 @@ function readConversation(v: unknown): Chat | null {
   const updatedAt = isoDate(c?.updatedAt);
   const title = text(c?.title, TITLE_MAX);
   if (!c || !id || !agentId || !origin || !createdAt || !updatedAt || title === null) return null;
-  const state: RunnerChatState = { running: c.running === true, paused: readPause(c.paused), followup: readFollowup(c.followup) };
+  const state: RunnerChatState = { running: c.running === true, paused: readPause(c.paused), followup: readFollowup(c.followup), context: readContext(c.context) };
   return {
     id,
     agentId,

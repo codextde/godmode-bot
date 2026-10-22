@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Agent, ConversationWithMessages, Message, RetryMode, Run } from "@godmode/shared";
 import { needsFix, retryHelps, retryModeOf, runEndOf, type RunEnd } from "@godmode/shared";
-import { ArrowUpRight, LogIn, MessageSquarePlus, Play, RotateCcw, Workflow } from "lucide-react";
+import { ArrowUpRight, FoldVertical, LogIn, MessageSquarePlus, Play, RotateCcw, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
@@ -52,6 +52,11 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   const chat = useStartAgentChat();
   const runRoutine = useRunRoutine();
   const name = agent?.name ?? "The agent";
+  const compress = useMutation({
+    mutationFn: () => api.conversations.send(conversation.id, { content: "/compress" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.conversation(conversation.id) }),
+    onError: (err) => toast.error("Couldn't compress the chat", { description: errorMessage(err) }),
+  });
   const retry = useMutation({
     mutationFn: () => api.conversations.retry(conversation.id, message.runId!),
     onSuccess: (res) => {
@@ -122,12 +127,15 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   if (!retryHelps(end)) {
     return (
       <Row>
-        <span className="min-w-0">
-          This chat is too long for {name} to go on — type <code className="font-mono text-foreground">/compact</code> to shorten it, or start fresh.
+        <span className="min-w-0">This chat is too long for {name} to go on. Compress it into a summary and carry on, or start fresh.</span>
+        <span className="flex shrink-0 items-center gap-1">
+          <Button size="xs" disabled={compress.isPending} aria-busy={compress.isPending} onClick={() => compress.mutate()}>
+            {compress.isPending ? <Spinner /> : <FoldVertical />} Compress
+          </Button>
+          <Button size="xs" variant="ghost" disabled={chat.isPending} onClick={() => agent && chat.mutate(agent)}>
+            {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
+          </Button>
         </span>
-        <Button size="xs" variant="outline" disabled={chat.isPending} onClick={() => agent && chat.mutate(agent)}>
-          {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
-        </Button>
       </Row>
     );
   }

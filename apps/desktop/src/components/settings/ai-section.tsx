@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -252,6 +252,30 @@ export function AiSection({ settings }: { settings: Settings }) {
         </SettingRow>
         <SettingRow label="Run timeout" htmlFor="timeout" description="A run is stopped after this long.">
           <NumberField id="timeout" min={1} max={1440} suffix="min" value={r.runTimeoutMinutes} onCommit={(v) => v !== null && patch({ runner: { runTimeoutMinutes: v } })} />
+        </SettingRow>
+        <SettingRow
+          label="Compress long chats"
+          htmlFor="auto-compact"
+          description="Once a chat fills this much of the model's memory, it is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper; later keeps more detail. Compress by hand any time with the ring next to the model, or /compress."
+        >
+          <Select
+            value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
+            onValueChange={(v) => patch({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
+          >
+            <SelectTrigger id="auto-compact" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              {[30, 40, 50, 60, 70, 80].map((p) => (
+                <SelectItem key={p} value={String(p)}>
+                  At {p}%{p === DEFAULT_AUTO_COMPACT_PERCENT ? " (default)" : ""}
+                </SelectItem>
+              ))}
+              <SelectItem value="claude">When nearly full</SelectItem>
+              <SelectSeparator />
+              <SelectItem value="0">Never by itself</SelectItem>
+            </SelectContent>
+          </Select>
         </SettingRow>
         <SettingRow
           label="Continue after a usage limit"

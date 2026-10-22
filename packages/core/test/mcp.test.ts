@@ -1495,6 +1495,7 @@ describe("settings tools", () => {
         "runner.resumeAfterRestart",
         "runner.stallMinutes",
         "runner.loopRepeats",
+        "runner.autoCompactPercent",
         "browser.headless",
         "browser.keepAliveMinutes",
         "browser.stealth",

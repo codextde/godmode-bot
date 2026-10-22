@@ -127,7 +127,11 @@ function commandsFrom(line: string): SlashCommand[] | null {
       name,
       description: builtin ? description : description.replace(/\s*\((?:project|user)\)$/, ""),
       argumentHint: typeof c.argumentHint === "string" ? c.argumentHint : "",
-      aliases: Array.isArray(c.aliases) ? c.aliases.filter((a): a is string => typeof a === "string") : [],
+      aliases: [
+        ...(Array.isArray(c.aliases) ? c.aliases.filter((a): a is string => typeof a === "string") : []),
+        // Godmode's name for it (runner.ts turns /compress into /compact).
+        ...(builtin && name === "compact" ? ["compress"] : []),
+      ],
       builtin,
     });
   }
