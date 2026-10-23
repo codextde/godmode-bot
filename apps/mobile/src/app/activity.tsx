@@ -9,12 +9,13 @@ import type { Run, RunStatus } from "@godmode/shared";
 import { FilterChips } from "@/components/filter-chips";
 import { Icon } from "@/components/icon";
 import { isLiveRun, RunRow } from "@/components/run-row";
+import { SpendStrip } from "@/components/spend-strip";
 import { Button, Card, EmptyState, ErrorState, Hairline, LiveDot, Row, SectionTitle, SkeletonRows, T } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { runDayLabel } from "@/lib/desktop-parity";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { qk } from "@/lib/query";
+import { qk, queryClient } from "@/lib/query";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { useWorkspace } from "@/lib/workspace";
@@ -56,7 +57,7 @@ export default function Activity() {
   const { byId } = agents;
   // The runs themselves, not what they are doing: an activity label of one run doesn't re-render the list.
   const liveRuns = useLive(useShallow((s) => Object.values(s.runs).map((r) => r.run)));
-  const pull = usePullRefresh(list.refetch);
+  const pull = usePullRefresh(() => Promise.all([list.refetch(), queryClient.invalidateQueries({ queryKey: ["spend"] })]));
   // A workspace's runs are known once its agents are.
   const loading = list.isLoading || (!!workspaceId && agents.isLoading);
 
@@ -154,11 +155,12 @@ function DayTitle({ title }: { title: string }) {
   );
 }
 
-/** Three numbers of the fetched runs, then what to show of them. */
+/** What the team cost (with spend tracking on), three numbers of the fetched runs, then what to show of them. */
 const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }: { stats: Stats; filter: Filter; onFilter: (filter: Filter) => void }) {
   const c = useColors();
   return (
     <View style={styles.header}>
+      <SpendStrip />
       <WorkspaceChip />
       <Row style={{ gap: space.sm }}>
         <Stat label="Working now" value={stats.working} mark={<LiveDot size={7} live={stats.working > 0} />} />

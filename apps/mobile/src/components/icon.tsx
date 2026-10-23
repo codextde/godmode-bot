@@ -100,6 +100,7 @@ const ICONS = {
   callOut: ["phone.arrow.up.right.fill", "call_made"],
   inbox: ["tray.fill", "inbox"],
   checkAll: ["checkmark.circle", "done_all"],
+  share: ["square.and.arrow.up", "share"],
 } as const satisfies Record<string, readonly [SFSymbol, AndroidSymbol]>;
 
 export type IconName = keyof typeof ICONS;
