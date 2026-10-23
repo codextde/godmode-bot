@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { Conversation, ConversationWithMessages } from "@godmode/shared";
+import { useQueryClient } from "@tanstack/react-query";
+import type { Conversation } from "@godmode/shared";
 import { ArrowRight, Laptop, MonitorSmartphone } from "lucide-react";
-import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -15,11 +14,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { followupWhen } from "@/components/chat/followup";
-import { toastApiError } from "@/components/vault/vault-utils";
-import { api } from "@/lib/api";
 import { placeName, type Place } from "@/lib/places";
-import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useChatMoves } from "@/stores/chatMoves";
+import { startChatMove } from "./chat-move-progress";
 import { RunnerStateDot, RunnerTag, THIS_COMPUTER_INLINE } from "./runner-parts";
 
 /** Why a runner's chat can't move right now (its run works or stands still there), or null. */
@@ -47,8 +45,8 @@ function PlaceTag({ place, active }: { place: Place | null; active?: boolean }) 
 }
 
 /**
- * Asks before a chat moves to another computer, then moves it with its Claude session. While a run works the move
- * stops it and the agent continues there (`working`).
+ * Asks before a chat moves to another computer, then moves it with its Claude session in the background (a card in the
+ * corner shows how far it is). While a run works the move stops it and the agent continues there (`working`).
  */
 export function MoveChatDialog({
   conversation,
@@ -82,23 +80,15 @@ export function MoveChatDialog({
   const name = origin ? placeName(origin) : "The other computer";
   const away = !!origin && origin.state !== "online";
   const dest = to?.here ? THIS_COMPUTER_INLINE : to ? placeName(to) : "the other computer";
-  const move = useMutation({
-    mutationFn: () => api.conversations.move(conversation.id, { to: to!.runnerId, force: working || undefined }),
-    onSuccess: (moved) => {
-      qc.setQueryData<ConversationWithMessages>(qk.conversation(conversation.id), (old) => (old ? { ...old, ...moved } : old));
-      void qc.invalidateQueries({ queryKey: qk.conversation(conversation.id) });
-      void qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      void qc.invalidateQueries({ queryKey: qk.runners });
-      onOpenChange(false);
-      toast.success(`Moved to ${dest}`, {
-        description: working ? `${agentName} continues there where it stopped.` : `${agentName} continues this chat there, with the whole conversation.`,
-      });
-    },
-    onError: (err) => toastApiError(err, "Couldn't move the chat", qc),
-  });
+  const moving = useChatMoves((s) => !!s.moves[conversation.id]);
+  const move = () => {
+    if (!to) return;
+    startChatMove(qc, { conversationId: conversation.id, input: { to: to.runnerId, force: working || undefined }, from: name, dest, agentName, working });
+    onOpenChange(false);
+  };
 
   return (
-    <AlertDialog open={open} onOpenChange={(next) => !move.isPending && onOpenChange(next)}>
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Move this chat to {dest}?</AlertDialogTitle>
@@ -146,9 +136,9 @@ export function MoveChatDialog({
         </ul>
 
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={move.isPending}>Cancel</AlertDialogCancel>
-          <Button onClick={() => move.mutate()} disabled={move.isPending || !to}>
-            {move.isPending ? <Spinner /> : to?.here ? <Laptop /> : <MonitorSmartphone />} {working ? "Move and continue" : "Move"}
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button onClick={move} disabled={moving || !to}>
+            {moving ? <Spinner /> : to?.here ? <Laptop /> : <MonitorSmartphone />} {moving ? "Moving" : working ? "Move and continue" : "Move"}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

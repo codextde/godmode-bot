@@ -285,6 +285,13 @@ export class SecureChannel<R = RunnerInfo | LinkPeer> {
     } while (offset < bytes.byteLength);
   }
 
+  /** Bytes of streams still arriving: how far a large answer is. */
+  get incoming(): number {
+    let size = 0;
+    for (const stream of this.streams.values()) size += stream.size;
+    return size;
+  }
+
   /** Ends the link from this side. Also what the owner calls when the transport closed underneath. */
   close(): void {
     this.shutdown(null);

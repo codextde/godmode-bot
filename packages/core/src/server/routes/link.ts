@@ -80,6 +80,7 @@ export function registerLinkRoutes(app: Hono): void {
 
   // A chat of this runner moves to the controller: its Claude session and transcript go along.
   app.get("/api/link/conversations/:id/handover", (c) => c.json(readHandover(c.req.param("id"))));
+  app.get("/api/link/conversations/:id/handover/size", (c) => c.json({ bytes: Buffer.byteLength(JSON.stringify(readHandover(c.req.param("id")))) }));
 
   // The sessions the controller copies here (remote/browserSessions.ts); one from before sends no mode and replaces.
   app.post("/api/link/browser/:profileId/cookies", async (c) => {

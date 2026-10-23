@@ -63,6 +63,7 @@ import { loadIdentity } from "./identity";
 import { RemoteLink, type LinkState } from "./linkClient";
 import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
 import { parseHandover, writeSession, writeTranscript, type ChatHandover } from "./handover";
+import { moveBytes, moveStage } from "./chatMoves";
 import { adoptChat, applyRunnerEvent, catchUp, chatMovedHere, forgetHeavyChats, reconcileConversation, runnerDisconnected, setMirrorHooks } from "./mirror";
 import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
@@ -991,6 +992,9 @@ function offline(err: unknown): boolean {
   return err instanceof HttpError && err.code === "runner_offline";
 }
 
+/** A session of up to 64 MB on a slow connection: the move shows how far it is meanwhile. */
+const HANDOVER_TIMEOUT_MS = 15 * 60_000;
+
 /** Chats on their way here: nothing new starts in them on the runner meanwhile (routing.ts). */
 const moving = new Set<string>();
 
@@ -1022,11 +1026,20 @@ async function handoverFrom(r: RunnerRow, conversationId: string): Promise<ChatH
     const runs = await l.json<Run[]>("GET", `/api/runs?conversationId=${path}&limit=500`).catch(() => undefined);
     const chat = reconcileConversation(r.id, remote, runs);
     if (chat.activeRunId || chat.running || chat.paused) throw busyOnRunner(r);
+    // A runner from before the size can't say how much comes: the move shows the bytes without a total.
+    const size = await l.json<{ bytes?: unknown }>("GET", `/api/link/conversations/${path}/handover/size`).catch(() => null);
+    moveStage(conversationId, "copying", typeof size?.bytes === "number" && size.bytes > 0 ? size.bytes : null);
+    const ticker = setInterval(() => moveBytes(conversationId, l.incomingBytes()), 250);
+    ticker.unref?.();
     // A runner from before moving chats has no handover: the next turn here starts a new session with a recap.
-    return await l.json<unknown>("GET", `/api/link/conversations/${path}/handover`, undefined, { timeoutMs: 120_000 }).then(parseHandover, (err) => {
-      if (gone(err)) return null;
-      throw err;
-    });
+    try {
+      return await l.json<unknown>("GET", `/api/link/conversations/${path}/handover`, undefined, { timeoutMs: HANDOVER_TIMEOUT_MS }).then(parseHandover, (err) => {
+        if (gone(err)) return null;
+        throw err;
+      });
+    } finally {
+      clearInterval(ticker);
+    }
   } catch (err) {
     if (offline(err)) throw new HttpError(409, `${r.name} went away while the chat was moving. Nothing changed — try again.`, "runner_offline");
     if (err instanceof HttpError && err.code === "runner_chat_busy") throw err;
@@ -1068,6 +1081,7 @@ export async function moveChatHere(conversationId: string): Promise<Conversation
     if (!conv || conv.runner_id !== runnerId) throw notFound("Conversation");
     // Something started there while the chat was being copied (a follow-up on the runner).
     if (links.get(runnerId)?.state.state === "online" && remoteRuns(runnerId).some((x) => x.conversationId === conversationId)) throw busyOnRunner(r);
+    moveStage(conversationId, "saving");
     const agent = getAgent(conv.agent_id);
     const session = !!handover?.sessionId && !!handover.session && writeSession(agent.workingDirectory ?? agent.repoPath, handover.sessionId, handover.session);
     if (handover?.transcript) writeTranscript(transcriptPath(agent, conversationId), handover.transcript);

@@ -65,6 +65,7 @@ import { HttpError, badRequest, now, parseJson, sleep } from "../util";
 import { remoteRuns } from "./activeRuns";
 import { canonicalKey } from "./crypto";
 import { readHandover, writeSession, writeTranscript } from "./handover";
+import { moveStage, trackMove } from "./chatMoves";
 import { loadIdentity } from "./identity";
 import { forgetController, linkServerPort, runnerInfo, setPhoneInfo, startLinkServer, stopLinkServer } from "./linkServer";
 import { adoptChat, catchUp, fetchConversation, importChat } from "./mirror";
@@ -1338,7 +1339,7 @@ async function pushChat(conversationId: string, targetId: string, extra: Message
       handover: readHandover(conversationId),
       followup: followup ? { note: followup.note, dueAt: followup.dueAt } : null,
     },
-    { timeoutMs: 180_000 },
+    { timeoutMs: 15 * 60_000 },
   );
   const state: RunnerChatState = { running: false, paused: null, followup: followup ? { note: followup.note, dueAt: followup.dueAt, createdAt: followup.createdAt } : null };
   sql("UPDATE conversations SET runner_id = ?, runner_state = ?, working_directory = NULL, computer_target = NULL, updated_at = ? WHERE id = ?", targetId, JSON.stringify(state), now(), conversationId);
@@ -1429,20 +1430,27 @@ export async function moveChat(conversationId: string, input: MoveChatInput): Pr
   const queued = owner === null ? listQueue(conversationId).map((q) => q.content) : [];
   if (queued.length && !input.force) throw new HttpError(409, "Messages are waiting in this chat's queue. Send or remove them first, or move it anyway.", "chat_queued");
 
-  if (working) await stopWork(conversationId, owner, dest);
-  if (queued.length) clearQueue(conversationId);
   const resume = working || queued.length > 0;
-  if (owner !== null) await moveChatHere(conversationId);
+  await trackMove(conversationId, from, dest, async () => {
+    if (working) await stopWork(conversationId, owner, dest);
+    if (queued.length) clearQueue(conversationId);
+    if (owner !== null) await moveChatHere(conversationId);
 
-  const blocks = marker(from, dest, resume);
-  if (to !== null) {
-    await pushChat(conversationId, to, resume ? null : blocks);
-    if (resume) await sendThere(conversationId, to, { content: `Continued on ${dest}`, prompt: continuePrompt(from, dest, queued), marker: blocks });
-  } else if (resume) {
-    await sendMessage(conversationId, { content: `Continued on ${dest}`, prompt: continuePrompt(from, dest, queued), marker: blocks, trigger: "chat" });
-  } else {
-    addMessage({ conversationId, role: "system", content: "", blocks });
-  }
+    const blocks = marker(from, dest, resume);
+    if (to !== null) {
+      moveStage(conversationId, "sending");
+      await pushChat(conversationId, to, resume ? null : blocks);
+      if (resume) {
+        moveStage(conversationId, "continuing");
+        await sendThere(conversationId, to, { content: `Continued on ${dest}`, prompt: continuePrompt(from, dest, queued), marker: blocks });
+      }
+    } else if (resume) {
+      moveStage(conversationId, "continuing");
+      await sendMessage(conversationId, { content: `Continued on ${dest}`, prompt: continuePrompt(from, dest, queued), marker: blocks, trigger: "chat" });
+    } else {
+      addMessage({ conversationId, role: "system", content: "", blocks });
+    }
+  });
   log.info("moved a chat", { conversationId, from, to: dest, resume });
   audit("user", "device.chat.move", conversationId, { from, to: dest, resume });
   emitConversationUpdated(conversationId);
