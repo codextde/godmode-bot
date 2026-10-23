@@ -132,7 +132,7 @@ import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../in
 import { chatSources, createProject, getProject, projectOfChat, updateProject } from "../services/projects";
 import { all, get } from "../db";
 import { config } from "../config";
-import { fixRunner, runnerExec, runnerHealth } from "../remote/runners";
+import { fixRunner, link, runnerExec, runnerHealth } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
 import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
@@ -142,7 +142,7 @@ import { getSettings } from "../services/settings";
 import { agentSettingsRefusal, applyAgentSettings, humanOnlySettings, settingsSections } from "../services/agentSettings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
-import { getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
+import { cancelRun, getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
 import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
@@ -400,6 +400,16 @@ function protectedLeadRefusal(agent: Agent, ctx: RunContext, leadId: string | nu
 function reachableAgents(agent: Agent): Agent[] {
   if (isManager(agent)) return listAgents({ workspaceId: "all" }).filter((a) => a.id !== agent.id);
   return peersFor(agent);
+}
+
+/** The run and the runs that handed it its work, up to the top. */
+function runsAbove(runId: string): string[] {
+  const chain: string[] = [];
+  for (let id: string | null = runId; id && !chain.includes(id); ) {
+    chain.push(id);
+    id = get<{ parent_run_id: string | null }>("SELECT parent_run_id FROM runs WHERE id = ?", id)?.parent_run_id ?? null;
+  }
+  return chain;
 }
 
 function requireReachable(agent: Agent, targetId: string): Agent {
@@ -2896,6 +2906,37 @@ const TOOLS: ToolDef[] = [
       if (refusal) return fail(refusal);
       const run = await continueCutOffRun(runId);
       return `Continued: ${getAgent(run.agentId).name} picks the work up in run ${run.id} (conversation ${run.conversationId}).`;
+    },
+  }),
+
+  defineTool({
+    name: "run_cancel",
+    description:
+      "Stop a run for good: one that works, waits in the queue or stands still (paused on a usage limit, a budget or a question). The work it handed to other agents stops too, and a paused run never resumes by itself. Runs of chats that work on another computer of the group are stopped there. Use it for runs that would repeat work already done or are no longer wanted; never for your own run or the ones that handed you your task.",
+    schema: z.object({
+      runId: z.string(),
+      reason: z.string().trim().min(1).max(200).optional().describe("Why, shown in its chat"),
+    }),
+    when: managesSetup,
+    run: async ({ runId, reason }, { agent, ctx }) => {
+      const run = getRun(runId);
+      if (run.status === "succeeded" || run.status === "failed" || run.status === "cancelled") return `Run ${runId} already ended (${run.status}).`;
+      if (runsAbove(ctx.runId).includes(runId)) return fail("That run is yours or handed you your task: stopping it would stop you too. End your turn instead.");
+      const target = run.agentId === agent.id ? agent : requireReachable(agent, run.agentId);
+      const refusal = offHostRefusal(ctx, target, "stop its work") ?? revealTargetRefusal(agent, ctx, target, "stop its work");
+      if (refusal) return fail(refusal);
+      const text = `Stopped by ${agent.name}${reason ? `: ${reason}` : ""}`;
+      const runnerId = get<{ runner_id: string | null }>("SELECT c.runner_id FROM runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.id = ?", runId)?.runner_id ?? null;
+      if (runnerId) {
+        const l = link(runnerId);
+        l.assertOnline();
+        const path = encodeURIComponent(runId);
+        await l.json("POST", `/api/link/runs/${path}/stop`, { reason: text }).catch(() => l.json("POST", `/api/runs/${path}/cancel`, {}));
+      } else {
+        await cancelRun(runId, text);
+      }
+      audit(`agent:${agent.id}`, "run.cancel", runId, { agentId: run.agentId, status: run.status, ...(runnerId ? { runnerId } : {}), ...(reason ? { reason } : {}) });
+      return `Stopped run ${runId} of ${target.name} (it was ${run.status}${runnerId ? ", on another computer" : ""}).`;
     },
   }),
 
