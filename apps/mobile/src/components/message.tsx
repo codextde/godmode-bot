@@ -114,7 +114,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       )}
       {streaming ? <BackgroundAgents parts={parts} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-      {!streaming && content?.trim() ? <CopyReply text={content} /> : null}
+      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <CopyReply text={content} /> : null}
     </View>
   );
 });
