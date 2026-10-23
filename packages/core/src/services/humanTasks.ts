@@ -608,13 +608,16 @@ function safely(fn: () => void): void {
   }
 }
 
+const DISMISSED = "Dismissed: this no longer needs an answer, it may be solved already. Don't wait for it or ask it again: check where things stand now and carry on.";
+
 /** The human answers a question from its ticket: the run that stands still for it continues. */
 function answerFromTicket(r: Row, input: HumanTaskCloseInput, by: Answerer): HumanTaskCloseResult {
   const note = (input.note ?? "").trim();
   const files = input.attachments ?? [];
   let answer: AnswerQuestionInput;
+  const dismissed = r.kind !== "approval" && input.outcome === "declined";
   if (r.kind === "approval") answer = { decision: input.outcome === "done" ? "approve" : "decline", ...(note ? { note } : {}) };
-  else if (input.outcome === "declined") throw badRequest("The agent stands still until you answer. If the question no longer matters, stop it in its chat.");
+  else if (dismissed) answer = { text: [DISMISSED, note].filter(Boolean).join("\n\n") };
   else if (input.optionId && !note && !files.length) answer = { optionId: input.optionId };
   else {
     const picked = input.optionId ? parseJson<QuestionOption[]>(r.options, []).find((o) => o.id === input.optionId)?.label : "";
@@ -622,6 +625,11 @@ function answerFromTicket(r: Row, input: HumanTaskCloseInput, by: Answerer): Hum
   }
   const { question } = answerQuestion(r.question_id!, answer, by);
   settleMirror(question);
+  if (dismissed) {
+    const ts = now();
+    sql("UPDATE human_tasks SET status = 'declined', response = ?, response_option = NULL, closed_at = COALESCE(closed_at, ?), updated_at = ? WHERE id = ?", note || null, ts, ts, r.id);
+    changed();
+  }
   return { task: getHumanTask(r.id), continued: true };
 }
 

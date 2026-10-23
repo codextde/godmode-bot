@@ -418,6 +418,11 @@ export class RemoteLink {
     if (!this.current || this._state.state !== "online") throw this.offlineError();
   }
 
+  /** Bytes of answers still arriving from the runner (a chat's handover on a slow connection). */
+  incomingBytes(): number {
+    return this.current?.channel.incoming ?? 0;
+  }
+
   /** A request into the runner's API. Throws `runner_offline` when the link is down. */
   request(
     method: string,

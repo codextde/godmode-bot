@@ -446,22 +446,22 @@ function CloseBox({
           </Button>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {/* A question the agent stands still for can only be answered. */}
-          {!(decision && task.questionId) &&
-            (decision ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
-                    <X /> {words.declined}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">Nothing to decide here. {agentName ?? "The agent"} isn't woken.</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
-                {approval ? <X /> : <CircleSlash />} {words.declined}
-              </Button>
-            ))}
+          {decision ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
+                  <X /> {words.declined}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {task.questionId ? `No answer needed anymore. ${agentName ?? "The agent"} goes on without it.` : `Nothing to decide here. ${agentName ?? "The agent"} isn't woken.`}
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button variant="outline" size="sm" disabled={pending} onClick={() => finish("declined")}>
+              {approval ? <X /> : <CircleSlash />} {words.declined}
+            </Button>
+          )}
           <Button size="sm" disabled={pending || !ready} onClick={() => finish("done")}>
             {pending ? <Spinner /> : decision ? <SendHorizontal /> : <Check />} {words.done}
             <Hint>{modKey}↵</Hint>

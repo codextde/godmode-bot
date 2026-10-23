@@ -3,7 +3,7 @@ import type { Task, TaskEvent } from "./tasks";
 import type { Vm } from "./vm";
 import type { MobileDevice } from "./mobile";
 import type { RemoteRunner } from "./remote";
-import type { DeviceGroup } from "./devices";
+import type { ChatMove, DeviceGroup } from "./devices";
 import type {
   Agent,
   AgentQuestion,
@@ -170,6 +170,8 @@ export type ServerEvent =
    * the primary's Godmode (or its own while the primary is away), so everything it shows is fetched again.
    */
   | { type: "devices.updated"; group: DeviceGroup }
+  /** A chat moving between computers made progress (`move`), or arrived or failed (`move: null`). */
+  | { type: "chat.move"; conversationId: ID; move: ChatMove | null }
   /** Between the computers of a device group only: shared data changed here, the other one pulls it. */
   | { type: "replica.changed"; seq: number }
   | { type: "entity.changed"; entity: EntityName };

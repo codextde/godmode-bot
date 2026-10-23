@@ -482,9 +482,7 @@ describe("questions and approvals have a ticket", () => {
     expect(attention.some((i) => i.id === `question:${question.id}`)).toBe(true);
     expect(attention.some((i) => i.id === `todo:${task.id}`)).toBe(false);
 
-    const declined = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "declined" });
-    expect(declined.status).toBe(400);
-    // The run stands still for it: the ticket can't be dismissed or deleted from under it.
+    // The run stands still for it: the ticket can't be deleted from under it.
     expect((await api("DELETE", `/api/human-tasks/${task.id}`)).status).toBe(400);
     const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "done", optionId: "2" });
     expect(res.status).toBe(200);
@@ -499,6 +497,17 @@ describe("questions and approvals have a ticket", () => {
     answerQuestion(question.id, { text: "Green, like the logo" }, { actor: "user", via: "app" });
     expect(getHumanTask(task.id)).toMatchObject({ status: "done", response: { text: "Green, like the logo", optionId: null } });
     await waitForRun(run.id, 10_000);
+  }, 30_000);
+
+  test("dismissing the ticket tells the run the question no longer matters", async () => {
+    const { run, question, task } = await asking();
+    const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "declined", note: "Solved it myself" });
+    expect(res.status).toBe(200);
+    expect(res.json.continued).toBe(true);
+    expect(getQuestion(question.id).status).toBe("answered");
+    expect(getQuestion(question.id).answer?.text).toContain("Solved it myself");
+    expect(getHumanTask(task.id)).toMatchObject({ status: "declined", response: { text: "Solved it myself" } });
+    expect((await waitForRun(run.id, 10_000)).result).toBe("CONTINUED");
   }, 30_000);
 
   test("an approval is approved or declined from its ticket", async () => {

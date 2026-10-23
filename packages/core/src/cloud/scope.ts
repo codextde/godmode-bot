@@ -305,6 +305,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|PUT", "/api/link/agents/:id/memory", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/browser/:profileId/cookies", refused(COMPUTER_ONLY)],
   ["GET", "/api/link/conversations/:id/handover", refused(COMPUTER_ONLY)],
+  ["GET", "/api/link/conversations/:id/handover/size", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/exec", refused(COMPUTER_ONLY)],
   ["POST", "/api/link/forget", refused(COMPUTER_ONLY)],
   ["PUT", "/api/link/update/chunk", refused(COMPUTER_ONLY)],
