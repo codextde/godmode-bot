@@ -8,7 +8,7 @@ import { Icon, type IconName } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { activityText, elapsed, shortTime, whenText } from "@/lib/format";
-import { useNow } from "@/lib/hooks";
+import { useAgents, useNow } from "@/lib/hooks";
 import type { LiveRun } from "@/lib/live";
 import { alpha, radius, space, useColors } from "@/lib/theme";
 
@@ -65,7 +65,9 @@ export function ConversationRow({
   project?: Pick<Project, "name" | "icon">;
 }) {
   const c = useColors();
-  const origin = conversation.origin === "delegation" && from ? `From ${from.name}` : ORIGIN_LABEL[conversation.origin];
+  const { byId } = useAgents();
+  const handedBy = from ?? (conversation.delegatedFrom ? byId.get(conversation.delegatedFrom.agentId) : undefined);
+  const origin = conversation.origin === "delegation" && handedBy ? `From ${handedBy.name}` : ORIGIN_LABEL[conversation.origin];
   const status = chatStatus(conversation, { running, queued });
   const unread = conversation.unread;
   const statusColor = status?.tone === "warning" ? c.warning : status?.tone === "brand" ? c.brandStrong : c.textMuted;
