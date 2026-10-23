@@ -57,6 +57,8 @@ const STATE: Omit<ReplicaTable, "setup">[] = [
   { table: "routines", own: [], entity: "routines", key: ["id"] },
   { table: "heartbeats", own: [], entity: "heartbeats", key: ["id"] },
   { table: "human_tasks", own: [], entity: "human-tasks", key: ["id"] },
+  { table: "artifacts", own: [], entity: "artifacts", key: ["id"] },
+  { table: "artifact_versions", own: [], entity: "artifacts", key: ["artifact_id", "version"] },
   { table: "missing_logins", own: [], entity: "missing-logins", key: ["id"] },
   { table: "notifications", own: [], entity: "notifications", key: ["id"] },
   { table: "passkeys", own: ["last_used_at"], entity: "passkeys", key: ["id"] },

@@ -163,6 +163,7 @@ const REFRESH = [
   qk.humanTasks,
   qk.questions,
   qk.missingLogins,
+  qk.artifacts,
 ];
 
 /** Runs moves and their undos: the list shows the result right away and the sidebar's scope follows what moved. */

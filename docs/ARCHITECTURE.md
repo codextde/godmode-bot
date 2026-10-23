@@ -620,6 +620,7 @@ the core, the desktop and the phone alike.
 | `settings_get({ section? })`, `settings_update({ changes })` | Only for agents with `canManageAgents`, not on a runner: Godmode's own settings (models, effort, run limits, browser and computer behaviour, VMs, memory and dreaming, voice, upkeep, logs). `changes` is a partial object by section, checked like a change in the app and written to the audit log. Agents change only what `AGENT_SETTINGS` in `services/agentSettings.ts` lists, down to the single setting (`dreaming.model`); a new setting is closed until it is added there. Security, the server, phone and cloud access, self-repair, the user's name and the instructions for every agent (both reach reveal-mode agents), program paths, endpoints and extra CLI flags, permission bypass, the browser and computer control switches, live views, notifications, the watchdog, the VM switch and VM isolation, automatic cleanup and spending limits stay with the human. Not in a run kept in a VM. Connected apps: `settings_get` with any key, `settings_update` with full access, so `godmode call settings_update '{"changes":{...}}'` works from a terminal |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `my_routines()`, `my_routine_set_enabled({ routineId, enabled, reason? })` | For agents without `canManageAgents`, not on a runner: list their own automations and switch one off or back on (e.g. the human asked them to stop a scheduled job). Other agents' automations stay the human's. Switching back on only undoes its own pause (its `routine.pause` audit entry is the last change), and follows the `routine_update` rule (a fill-only run makes it fill-only); audited as `routine.pause` / `routine.resume` |
+| `artifact_create`, `artifact_update`, `artifact_get`, `artifact_list` | Build and change artifacts: small web apps shown next to the chat and on the Artifacts page (see Artifacts); not in condition checks or dreams, not on a runner |
 | `followup_schedule({ at \| inMinutes, note })`, `followup_cancel()` | Continue this chat later on its own (see Follow-ups); not in condition checks |
 | `api_tools_list()`, `api_tool_docs({ tool })`, `api_tool_request({ tool, method, path, json \| form \| body, query, saveAs })` | Only for agents with API tools: list them, read one's docs, call its API with the key added by Godmode (see Integrations) |
 
@@ -1174,6 +1175,45 @@ use the watched account.
 
 The Godmode agent sets automations up from one sentence ("when X happens, do Y"): `automation_triggers_list` shows the
 connected Composio accounts and each app's events with their settings schema; `routine_create` takes the trigger.
+
+## Artifacts
+
+Small web apps agents build in a chat (a sales dashboard, a KPI tracker, a deal board). `services/artifacts.ts`,
+`routes/artifacts.ts`, `server/artifactFrame.ts`, types in `@godmode/shared` `artifacts.ts`, UI in
+`components/artifacts/` and `pages/artifacts/`.
+
+* **Storage** (migration 102). `artifacts`: one HTML document (`html`, at most 400k characters), its data as JSON
+  (`data`, 1M), `version` (+1 for every change to the code), `refresh_prompt`, `pinned`, the agent, the chat it was made
+  in and its workspace. `artifact_versions` keeps the code of the last 50 versions with the agent's note. Data is never
+  versioned: the agent writes it (a refresh) and so does the app (`godmode.setData`). Artifacts move with their workspace
+  (`SCOPE_ITEMS`), stay on the computer they were made on (not replicated in a device group) and are not offered on a
+  runner.
+* **Tools** (every agent, in chats; not in condition checks or dreams): `artifact_create({ title, description, html,
+  data, refreshPrompt })`, `artifact_update({ id, html | edits, data, title, description, refreshPrompt, note })` — `edits`
+  are exact find/replace pairs, each found exactly once unless `all` — `artifact_get({ id, part })` and
+  `artifact_list({ thisChat })`. Agents change their own, managers anyone's. The system prompt's *Artifacts* section
+  tells agents when to build one and to keep numbers in the data.
+* **Talking to the agent.** `POST /api/artifacts/:id/message` sends the human's words to the artifact's chat (queued while
+  the agent works there; a new chat with its agent when that one is gone) with a first line
+  `[About the artifact "…" (art_…)]`; `/refresh` sends the refresh prompt; `POST /api/artifacts/start {prompt, agentId}`
+  starts a chat that builds a new one.
+* **Sandbox.** The app can't host artifacts as `srcdoc` (it would inherit the app's strict `script-src`). The core serves
+  a page without data at `GET /api/artifacts/frame` (no sign-in, may be framed): its own policy is `sandbox
+  allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads` — an opaque origin,
+  no cookies (the core's are `SameSite=Strict`), no storage — with scripts, styles and fonts from https, `connect-src
+  https: wss:` (never the core on http) and `form-action 'none'`. The app frames it (Tauri's CSP allows `frame-src` to the
+  core on 127.0.0.1/localhost) and posts `{type: "gm:load", doc}`: the bridge script plus the artifact's HTML, which
+  the page writes into itself. Messages are only taken from that frame's window and carry a per-load token.
+* **Bridge** (`window.godmode`, `ARTIFACT_BRIDGE_DOC`): `data`, `onData(fn)`, `setData(next)` (saved with
+  `PUT /api/artifacts/:id/data`, answered so the promise resolves or fails), `ask(text)` (the app shows "Send to …" and
+  the human confirms), `refresh()`, `theme` / `onTheme(fn)` and `--gm-*` CSS variables for light and dark. New data from
+  the agent reaches an open artifact without a reload; new code reloads it. Script errors show a bar that asks the agent
+  to fix them.
+* **UI.** A card in the chat for `artifact_create` / `artifact_update` opens the side panel (it opens by itself when the
+  agent builds or changes one while the chat is on screen): preview, code, data, versions with restore, refresh, full
+  screen, download as one HTML file (data inside, `setData` in memory). The Artifacts page lists them with live previews
+  and starts new ones from a sentence or a starter; `/artifacts/:id` shows one full screen with a line to ask for
+  changes. Godmode Cloud doesn't frame computers' pages, so there the preview points to the app.
 
 ## Follow-ups
 
