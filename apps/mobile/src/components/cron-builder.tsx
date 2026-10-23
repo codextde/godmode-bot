@@ -1,5 +1,6 @@
 import { DatePicker, Host } from "@expo/ui/swift-ui";
 import { datePickerStyle, labelsHidden } from "@expo/ui/swift-ui/modifiers";
+import { Cron } from "croner";
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import {
@@ -8,6 +9,7 @@ import {
   ordinal,
   parseCron,
   scheduleToHuman,
+  startWindowLimit,
   startWindowTooLong,
   validateCron,
   WEEKDAYS,
@@ -73,14 +75,20 @@ function buildCron(d: CronDraft): string {
   }
 }
 
-/** Longest random start window the schedule leaves room for: an hourly one an hour, the presets a day or more apart. */
-function maxStartWindow(cron: string): number {
-  return !validateCron(cron) && parseCron(cron).kind === "hourly" ? 60 : MAX_START_WINDOW_MINUTES;
+/** Longest random start window the schedule leaves room for (same rule as the core and the desktop). */
+function maxStartWindow(cron: string, timezone: string): number {
+  if (validateCron(cron)) return MAX_START_WINDOW_MINUTES;
+  try {
+    const job = new Cron(cron.trim(), { paused: true, timezone, mode: "5-or-6-parts" });
+    return startWindowLimit((after) => job.nextRun(after), timezone);
+  } catch {
+    return MAX_START_WINDOW_MINUTES;
+  }
 }
 
 /** A start window longer than the gap between runs, in the core's words; null when it fits. */
-export function startWindowProblem(cron: string, minutes: number): string | null {
-  const max = maxStartWindow(cron);
+export function startWindowProblem(cron: string, timezone: string, minutes: number): string | null {
+  const max = maxStartWindow(cron, timezone);
   return minutes > max ? startWindowTooLong(max) : null;
 }
 
@@ -253,12 +261,12 @@ function CustomCronRow({ value, invalid, onChange }: { value: string; invalid: b
 }
 
 /** "Random start time": the run begins somewhere in a window after the scheduled time, 0 = on time (desktop: start-window-field.tsx). */
-export function StartWindowField({ cron, value, onChange }: { cron: string; value: number; onChange: (minutes: number) => void }) {
+export function StartWindowField({ cron, timezone, value, onChange }: { cron: string; timezone: string; value: number; onChange: (minutes: number) => void }) {
   const c = useColors();
   const [initial] = useState(value);
   const [remembered, setRemembered] = useState(value || 60);
   const on = value > 0;
-  const max = maxStartWindow(cron);
+  const max = maxStartWindow(cron, timezone);
   const options = [...new Set([...START_WINDOW_PRESETS.filter((m) => m <= max), ...(initial ? [initial] : []), ...(on ? [value] : [])])].sort((a, b) => a - b);
 
   return (

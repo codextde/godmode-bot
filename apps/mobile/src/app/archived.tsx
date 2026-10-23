@@ -95,7 +95,10 @@ function GroupTitle({ title, hint }: { title: string; hint?: string }) {
   );
 }
 
-const refreshChats = () => void queryClient.invalidateQueries({ queryKey: qk.conversations });
+const refreshChats = () => {
+  void queryClient.invalidateQueries({ queryKey: qk.conversations });
+  void queryClient.invalidateQueries({ queryKey: ["archived-count"] });
+};
 
 /** Out of every cached archive right away; the refetch brings it back if the computer refused. */
 function dropFromArchive(id: string) {

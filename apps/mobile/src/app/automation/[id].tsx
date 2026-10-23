@@ -227,7 +227,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
       ) : null}
 
       <Group title="Trigger" footer={editable ? undefined : "Change the trigger in Godmode on your computer."}>
-        <Info label={TRIGGER_TITLES[t.type]} value={triggerText(routine)} />
+        <Info label={TRIGGER_TITLES[t.type]} value={triggerText(routine, false)} />
         {t.type === "schedule" || t.type === "condition" ? <Info label={t.type === "condition" ? "Next check" : "Next run"} value={next} /> : null}
         <Info label="Last run" value={last} tone={routine.lastStatus === "failed" ? "danger" : undefined} />
         {routine.filter ? <Info label="Only when…" value={routine.filter} /> : null}
@@ -268,6 +268,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         />
         <Info label="Tell me" value={NOTIFY_LABELS[routine.notify]} />
         <Info label="Keep one chat" value={routine.reuseConversation ? "On" : "Off"} />
+        <Info label="Logins" value={routine.fillOnly ? "Filled in, raw passwords stay hidden" : "Like its agent"} />
       </Group>
 
       <View>

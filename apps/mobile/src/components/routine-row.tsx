@@ -39,9 +39,9 @@ export function runLabel(type: RoutineTriggerType): string {
   return type === "condition" ? "Check now" : type === "schedule" ? "Run now" : "Send test event";
 }
 
-/** What starts an automation, in one line: its schedule and next run, the app event, the condition or the webhook. */
-export function triggerText(r: Routine): string {
-  const next = r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
+/** What starts an automation, in one line: its schedule and next run (`withNext`), the app event, the condition or the webhook. */
+export function triggerText(r: Routine, withNext = true): string {
+  const next = withNext && r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
   const t = r.trigger;
   switch (t.type) {
     case "schedule": {

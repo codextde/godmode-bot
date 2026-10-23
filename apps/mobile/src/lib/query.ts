@@ -48,7 +48,7 @@ export const qk = {
   humanTaskList: (status: "active" | "all") => ["human-tasks", "list", status],
   chatHumanTasks: (conversationId: string) => ["human-tasks", "chat", conversationId],
   run: (id: string) => ["runs", "detail", id],
-  runLog: (id: string) => ["runs", "log", id],
+  runLog: (id: string) => ["run-log", id],
   spend: (period: string, agentId: string | null = null) => ["spend", period, agentId ?? "all"],
   routineEvents: (id: string) => ["routines", "events", id],
   followups: ["followups"],

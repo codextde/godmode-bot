@@ -410,6 +410,23 @@ describe("phone access", () => {
     expect((await phone(`/api/projects/${created.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
   });
 
+  test("automations set up or changed on a phone run without raw secrets", async () => {
+    const { token: device } = await pair("Automations");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const agent = (await (await desktop("/api/agents", { method: "POST", body: JSON.stringify({ name: "Reporter" }) })).json()) as { id: string };
+    const made = await phone("/api/routines", json("POST", { agentId: agent.id, name: "Weekly report", prompt: "Sum up the week.", cron: "0 9 * * 1", timezone: "Europe/Berlin" }));
+    expect(made.status).toBe(200);
+    expect((await made.json()) as { fillOnly: boolean; webhookPath: string | null }).toMatchObject({ fillOnly: true, webhookPath: null });
+
+    const desk = (await (await desktop("/api/routines", { method: "POST", body: JSON.stringify({ agentId: agent.id, name: "Inbox", prompt: "Read the inbox.", cron: "0 8 * * *" }) })).json()) as { id: string; fillOnly: boolean };
+    expect(desk.fillOnly).toBe(false);
+    const paused = await phone(`/api/routines/${desk.id}`, json("PATCH", { enabled: false }));
+    expect(((await paused.json()) as { fillOnly: boolean }).fillOnly).toBe(false);
+    const reworded = await phone(`/api/routines/${desk.id}`, json("PATCH", { prompt: "Read the inbox and reply." }));
+    expect(((await reworded.json()) as { fillOnly: boolean }).fillOnly).toBe(true);
+    expect((await phone(`/api/routines/${desk.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
+  });
+
   test("phones create and follow tasks in a workspace", async () => {
     const { token: device } = await pair("Tasks");
     const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });

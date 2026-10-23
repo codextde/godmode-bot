@@ -72,13 +72,13 @@ export default function Chats() {
     placeholderData: (previous) => previous,
   });
   const hasArchived = useQuery({
-    queryKey: [...qk.conversations, "has-archived", workspaceId ?? "all"],
+    queryKey: ["archived-count", "any", workspaceId ?? "all"],
     queryFn: async () => (await api.conversations.list({ archived: true, limit: 1, workspaceId })).length > 0,
   }).data;
   // Archived chats that still work, wait or come back on their own.
   const archivedOngoing =
     useQuery({
-      queryKey: [...qk.conversations, "archived-ongoing", workspaceId ?? "all"],
+      queryKey: ["archived-count", "ongoing", workspaceId ?? "all"],
       queryFn: async () => (await api.conversations.list({ archived: true, ongoing: true, limit: 100, workspaceId })).length,
       enabled: !!hasArchived,
     }).data ?? 0;
@@ -236,7 +236,7 @@ export default function Chats() {
 function MarkRead({ onPress }: { onPress: () => void }) {
   const c = useColors();
   return (
-    <Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}>
+    <Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={({ pressed }) => ({ marginLeft: "auto", opacity: pressed ? 0.5 : 1 })}>
       <T variant="footnote" color={c.textMuted} style={{ fontWeight: "500" }}>
         Mark all read
       </T>
@@ -288,7 +288,10 @@ function changeChat(id: string, patch: { pinned?: boolean; archived?: boolean })
   api.conversations
     .update(id, patch)
     .catch((err) => Alert.alert("Couldn't change the chat", errorText(err)))
-    .finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }));
+    .finally(() => {
+      void queryClient.invalidateQueries({ queryKey: qk.conversations });
+      if (patch.archived !== undefined) void queryClient.invalidateQueries({ queryKey: ["archived-count"] });
+    });
 }
 
 const ChatItem = memo(function ChatItem({

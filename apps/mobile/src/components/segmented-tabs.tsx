@@ -94,14 +94,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
   },
   tab: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: "auto",
     minWidth: 0,
     height: 34,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   count: {
     flexDirection: "row",

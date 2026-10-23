@@ -134,7 +134,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
       <View style={{ gap: space.md }}>
         <SectionTitle title="Changes" />
         {files.length ? (
-          files.map((f) => <FileChangeCard key={f.file.path} file={f.file} diff={f.diff} />)
+          files.map((f, i) => <FileChangeCard key={`${i}-${f.file.path}`} file={f.file} diff={f.diff} />)
         ) : (
           <Card style={{ padding: space.lg }}>
             <T variant="footnote" muted style={{ textAlign: "center" }}>
@@ -144,6 +144,11 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
         )}
       </View>
 
+      {d.files.some((path) => path !== "MEMORY.md") ? (
+        <T variant="footnote" muted style={{ textAlign: "center" }}>
+          The phone shows MEMORY.md. The other memory files this dream changed are in Godmode on your computer.
+        </T>
+      ) : null}
       {d.workspace.length > 0 ? <WorkspaceMoves moves={d.workspace} stuck={rolledBack} /> : null}
     </ScrollView>
   );

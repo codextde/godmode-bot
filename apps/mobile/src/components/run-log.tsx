@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { type ReactNode, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Share, StyleSheet, View } from "react-native";
 import { Segmented } from "./form";
 import { Icon, type IconName } from "./icon";
@@ -153,7 +153,15 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
   const [mode, setMode] = useState<"steps" | "raw">("steps");
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
-  const log = useQuery({ queryKey: qk.runLog(runId), queryFn: () => fetchLog(runId), refetchInterval: live ? 3000 : false });
+  // A finished run's log doesn't change; a live one is fetched again every few seconds, never on other runs' events.
+  const log = useQuery({ queryKey: qk.runLog(runId), queryFn: () => fetchLog(runId), refetchInterval: live ? 10_000 : false, staleTime: live ? 0 : Infinity });
+  const { refetch } = log;
+  const wasLive = useRef(live);
+  useEffect(() => {
+    // The run just ended: its last lines came after the last fetch.
+    if (wasLive.current && !live) void refetch();
+    wasLive.current = live;
+  }, [live, refetch]);
   const text = log.data ?? "";
   const entries = useMemo(() => parseRunLog(text), [text]);
   const tools = useMemo(() => {
@@ -162,7 +170,7 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
     return m;
   }, [entries]);
   const streamCount = useMemo(() => entries.filter((e) => e.kind === "stream").length, [entries]);
-  const visible = useMemo(() => (showStream ? entries : entries.filter((e) => e.kind !== "stream")), [entries, showStream]);
+  const visible = useMemo(() => entries.flatMap((entry, at) => (showStream || entry.kind !== "stream" ? [{ entry, at }] : [])), [entries, showStream]);
 
   if (log.isLoading) {
     return (
@@ -223,8 +231,8 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
         <Pre text={text} />
       ) : (
         <View style={[styles.steps, { borderColor: c.border }]}>
-          {visible.slice(0, limit).map((e, i) => (
-            <LogRow key={i} entry={e} tools={tools} spendTracking={spendTracking} />
+          {visible.slice(0, limit).map(({ entry, at }) => (
+            <LogRow key={at} entry={entry} tools={tools} spendTracking={spendTracking} />
           ))}
         </View>
       )}

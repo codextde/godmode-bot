@@ -151,7 +151,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   const eventTrigger = !phoneTrigger;
   const timezone = routine?.timezone || phoneTimezone() || "UTC";
   const zone = timezone !== phoneTimezone() ? timezone.replace(/_/g, " ") : null;
-  const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, draft.startWindow) : null;
+  const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, timezone, draft.startWindow) : null;
   const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
   const problems = {
     agentId: !draft.agentId ? "Pick an agent" : null,
@@ -208,14 +208,15 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: c.background }}>
+    <ScrollView
+      style={{ backgroundColor: c.background }}
+      stickyHeaderIndices={[0]}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+      automaticallyAdjustKeyboardInsets
+    >
       <Header title={editing ? "Edit automation" : "New automation"} action={editing ? "Save" : "Create"} saving={saving} onSave={() => void save()} />
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
-        automaticallyAdjustKeyboardInsets
-      >
+      <View style={styles.content}>
         <T variant="subhead" muted>
           When it happens, the agent gets to work — even while you&apos;re away.
         </T>
@@ -296,7 +297,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
               zone={zone}
               problem={windowProblem}
             />
-            <StartWindowField cron={draft.cron} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
+            <StartWindowField cron={draft.cron} timezone={timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
           </View>
         ) : null}
 
@@ -362,7 +363,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           <Problem text={touched ? problems.prompt : null} />
         </View>
 
-        <Group footer={NOTIFY_HINTS[draft.notify]}>
+        <Group footer={`${NOTIFY_HINTS[draft.notify]} Set up or changed on the phone, its runs fill in logins but never read raw passwords.`}>
           <SwitchRow
             title="Keep one chat"
             detail={
@@ -381,8 +382,8 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           />
           <PickerRow title="Tell me" value={draft.notify} options={NOTIFY_OPTIONS} onChange={(v) => set("notify", v)} />
         </Group>
-      </ScrollView>
-    </View>
+      </View>
+    </ScrollView>
   );
 }
 
@@ -390,7 +391,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
 function Header({ title, action, saving, onSave }: { title: string; action?: string; saving?: boolean; onSave?: () => void }) {
   const c = useColors();
   return (
-    <View style={[styles.header, { borderBottomColor: c.border }]}>
+    <View style={[styles.header, { borderBottomColor: c.border, backgroundColor: c.background }]}>
       <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={styles.headerSide}>
         <T variant="callout" color={c.textMuted}>
           Cancel
