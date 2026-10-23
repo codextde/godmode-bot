@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyRunDelta, type Conversation, type Message, type RunDelta, type RunDeltaState, type ServerEvent, type StartChatResult } from "@godmode/shared";
+import { applyRunDelta, type ChatFiles, type Conversation, type Message, type RunDelta, type RunDeltaState, type ServerEvent, type StartChatResult } from "@godmode/shared";
 import { loadConfig, config } from "../src/config";
 import { all, closeDb, get, getMeta, openDb, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
@@ -202,6 +202,11 @@ describe("a runner, end to end", () => {
     const viaApi = (await (await api(`/api/conversations/${id}`)).json()) as { runnerId: string; messages: Message[] };
     expect(viaApi.runnerId).toBe(runnerId);
     expect(viaApi.messages.map((m) => m.id)).toContain(started.message.id);
+
+    // The paths its messages name are the runner's first.
+    const named = join(runnerDir, "fake-claude");
+    const files = (await (await api(`/api/conversations/${id}/files`, { method: "POST", body: JSON.stringify({ messages: [[named]] }) })).json()) as ChatFiles;
+    expect(files.files[0]!.map((f) => [f.path, f.remote])).toEqual([[named, true]]);
   }, 60_000);
 
   test("a turn that failed on the runner is tried again there, from here", async () => {
@@ -245,8 +250,11 @@ describe("a runner, end to end", () => {
     const refused = await api(`/api/conversations/${id}/messages`, { method: "POST", body: JSON.stringify({ content: "Are you there?" }) });
     expect(refused.status).toBe(409);
     expect(((await refused.json()) as { code: string }).code).toBe("runner_offline");
-    // The copy here still answers.
+    // The copy here still answers, and so do the paths its messages name.
     expect((await api(`/api/conversations/${id}`)).status).toBe(200);
+    const named = join(runnerDir, "fake-claude");
+    const files = (await (await api(`/api/conversations/${id}/files`, { method: "POST", body: JSON.stringify({ messages: [[named]] }) })).json()) as ChatFiles;
+    expect(files.files[0]!.map((f) => [f.path, f.remote])).toEqual([[named, undefined]]);
 
     await startChild();
     connectRunner(runnerId);
