@@ -8,6 +8,7 @@
  *   USE_TOOL    replay stream-tooluse.jsonl       → Bash tool + "DONE"
  *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
  *   SLEEP       emit init, then hang (cancel / timeout tests)
+ *   BIG_CONTEXT  one answer whose message fills 421.6k tokens of a 1M window
  *   LOGIN_FAIL  answer with a login-failure sentence
  *   AUTH_403    fail like Claude Code when Claude's API refuses the sign-in ("Failed to authenticate. API Error: 403 …")
  *   AUTH_EXPIRED  fail like Claude Code when its sign-in ran out ("Failed to authenticate: OAuth session expired …")
@@ -302,6 +303,8 @@ appendFileSync(
       CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD: process.env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD ?? null,
       CLAUDE_CODE_PLUGIN_DIR_WATCH: process.env.CLAUDE_CODE_PLUGIN_DIR_WATCH ?? null,
       CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: process.env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ?? null,
+      CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: process.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE ?? null,
+      DISABLE_AUTO_COMPACT: process.env.DISABLE_AUTO_COMPACT ?? null,
       ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? null,
       ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ?? null,
       ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
@@ -861,6 +864,11 @@ if (slash?.[1] === "clear") {
   out({ type: "assistant", message: { id: crypto.randomUUID(), model: "<synthetic>", role: "assistant", content: [{ type: "text", text }] }, parent_tool_use_id: null, session_id: sessionId });
   out({ type: "result", subtype: "success", is_error: true, api_error_status: 401, result: text, session_id: sessionId, total_cost_usd: 0, duration_ms: 7, num_turns: 1 });
   process.exit(1);
+} else if (prompt.includes("BIG_CONTEXT")) {
+  out(init);
+  const usage = { input_tokens: 2, cache_read_input_tokens: 420_000, cache_creation_input_tokens: 1_000, output_tokens: 600 };
+  out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "long" }], usage }, parent_tool_use_id: null, session_id: sessionId });
+  result("long", { modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } } });
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);
   const text = "I opened the dashboard. I couldn't log in to example.com because there are no saved credentials for it.";

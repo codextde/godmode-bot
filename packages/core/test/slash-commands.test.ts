@@ -64,15 +64,42 @@ describe("StreamAccumulator — local slash commands", () => {
     expect(acc.push({ type: "conversation_reset", new_conversation_id: "x", trigger: "clear" })).toBe(true);
     expect(acc.contextCleared).toBe(true);
     acc.push({ type: "system", subtype: "status", status: "compacting" });
-    expect(acc.activityLabel()).toBe("Compacting conversation…");
+    expect(acc.activityLabel()).toBe("Compressing the chat…");
     acc.push({ type: "system", subtype: "status", status: null, compact_result: "success" });
     expect(acc.compacted).toBe(false);
     acc.push({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "manual", pre_tokens: 58279, post_tokens: 2556 } });
     expect(acc.compacted).toBe(true);
+    expect(acc.contextTokens).toBe(2556);
     expect(acc.blocks).toEqual([
       { type: "notice", level: "info", text: "Context cleared — your next message starts a fresh session." },
-      { type: "notice", level: "success", text: "Conversation compacted · 58.3k → 2.6k tokens" },
+      {
+        type: "notice",
+        level: "success",
+        text: "Conversation compressed · 58.3k → 2.6k tokens",
+        compacted: { auto: false, preTokens: 58279, postTokens: 2556 },
+      },
     ]);
+  });
+
+  test("the context the session fills: latest top-level message, the main model's window", () => {
+    const acc = new StreamAccumulator();
+    const usage = { input_tokens: 2, cache_read_input_tokens: 133_132, cache_creation_input_tokens: 445, output_tokens: 884 };
+    acc.push({ type: "assistant", message: { id: "m1", model: "claude-opus-5-5", content: [{ type: "text", text: "hi" }], usage } });
+    acc.push({ type: "assistant", parent_tool_use_id: "t1", message: { id: "m2", model: "claude-haiku-5-5", content: [{ type: "text", text: "sub" }], usage: { input_tokens: 9, output_tokens: 1 } } });
+    expect(acc.contextTokens).toBe(134_463);
+    acc.push({
+      type: "result",
+      subtype: "success",
+      is_error: false,
+      result: "hi",
+      modelUsage: { "claude-haiku-5-5": { contextWindow: 200_000 }, "claude-opus-5-5": { contextWindow: 1_000_000 } },
+    });
+    expect(acc.contextWindow).toBe(1_000_000);
+    acc.push({ type: "system", subtype: "compact_boundary", compact_metadata: { trigger: "auto", pre_tokens: 134_463, post_tokens: 9_000 } });
+    expect(acc.contextTokens).toBe(9_000);
+    expect(acc.blocks.at(-1)).toMatchObject({ compacted: { auto: true } });
+    acc.push({ type: "conversation_reset", new_conversation_id: "y", trigger: "clear" });
+    expect(acc.contextTokens).toBeNull();
   });
 });
 
@@ -89,6 +116,17 @@ describe("slash commands in chat runs", () => {
     const answer = conv.messages.at(-1)!;
     expect(answer.blocks).toEqual([{ type: "command", name: "goal", args: "the report is sent", output: "Ran /goal the report is sent" }]);
     expect(answer.content).toBe("Ran /goal the report is sent");
+  });
+
+  test("the chat knows how full its session is; /compress compacts it", async () => {
+    const big = await send(conversationId, "BIG_CONTEXT");
+    expect(big.conv.context).toEqual({ tokens: 421_602, window: 1_000_000 });
+    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("50");
+    const { inv, conv } = await send(conversationId, "/compress keep the open tasks");
+    expect(inv.prompt).toBe("/compact keep the open tasks");
+    expect(conv.messages.at(-2)!.content).toBe("/compress keep the open tasks");
+    expect(conv.context).toEqual({ tokens: 100, window: 1_000_000 });
+    expect(conv.messages.at(-1)!.blocks).toContainEqual(expect.objectContaining({ type: "notice", compacted: { auto: false, preTokens: 900, postTokens: 100 } }));
   });
 
   test("plain messages keep the context prefix", async () => {

@@ -108,6 +108,16 @@ export function effortForModel(efforts: readonly Effort[], effort: Effort | null
   return below.length ? below[below.length - 1]! : efforts[0]!;
 }
 
+/** A chat is summarized by itself once its session fills this much of the context window (percent). */
+export const DEFAULT_AUTO_COMPACT_PERCENT = 50;
+/** Below this a summary saves next to nothing: Compress is not offered. */
+export const COMPRESS_MIN_TOKENS = 20_000;
+
+/** `/compress` is Godmode's name for Claude Code's `/compact`; the rest of the text (what to keep) goes along. */
+export function compactAlias(text: string): string {
+  return text.replace(/^(\s*)\/compress(?=\s|$)/, "$1/compact");
+}
+
 /** `/goal ship it` → { name: "goal", args: "ship it" }; null for plain text and paths like `/Users/me`. */
 export function parseSlashCommand(text: string): { name: string; args: string } | null {
   const m = /^\/([\w][\w:.-]*)(?:\s+([\s\S]*))?$/.exec(text.trim());

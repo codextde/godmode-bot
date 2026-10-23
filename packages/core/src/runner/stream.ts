@@ -171,6 +171,19 @@ function workflowAgents(progress: unknown): ToolTaskAgent[] | null {
   return agents;
 }
 
+/** The context window of the model that ran the turn (subagents may use smaller models), from a result's `modelUsage`. */
+function contextWindowOf(modelUsage: unknown, model: string | null): number | null {
+  if (!isObj(modelUsage)) return null;
+  const own = model ? modelUsage[model] : undefined;
+  if (isObj(own) && num(own.contextWindow)) return num(own.contextWindow);
+  let max: number | null = null;
+  for (const m of Object.values(modelUsage)) {
+    const w = isObj(m) ? num(m.contextWindow) : null;
+    if (w !== null && (max === null || w > max)) max = w;
+  }
+  return max;
+}
+
 export function addUsage(a: RunUsage | null, b: RunUsage | null): RunUsage | null {
   if (!a || !b) return a ?? b;
   return {
@@ -202,11 +215,17 @@ export class StreamAccumulator {
   contextCleared = false;
   /** The session was compacted: earlier turns are only a summary now. */
   compacted = false;
+  /** Tokens the session sends with a turn, as of its latest top-level message (after a compaction: the summary's). */
+  contextTokens: number | null = null;
+  /** The main model's context window, from the turn's result. */
+  contextWindow: number | null = null;
   /** A Stop hook (`/goal`) kept the turn going this many times in a row while the agent did nothing (no tool call). */
   goalIdle = 0;
   /** The hook's latest verdict, without the goal it restates. */
   goalFeedback: string | null = null;
   private compacting = false;
+  /** The model of the latest top-level message (subagents may run smaller ones). */
+  private mainModel: string | null = null;
   private toolCalls = 0;
   private toolCallsAtGoalCheck = 0;
 
@@ -242,6 +261,7 @@ export class StreamAccumulator {
         return true;
       case "conversation_reset":
         this.contextCleared = true;
+        this.contextTokens = null;
         this.addNotice("info", "Context cleared — your next message starts a fresh session.");
         return true;
       case "rate_limit_event": {
@@ -275,7 +295,7 @@ export class StreamAccumulator {
     const background = this.backgroundWork();
     if (this.final && !background) return this.final.isError ? "Failed" : "Done";
     if (this.limit) return "Waiting for rate limit…";
-    if (this.compacting) return "Compacting conversation…";
+    if (this.compacting) return "Compressing the chat…";
     const last = this.blocks[this.blocks.length - 1];
     if (!last) return "Starting…";
     if (background) return background;
@@ -344,7 +364,13 @@ export class StreamAccumulator {
       const meta = isObj(e.compact_metadata) ? e.compact_metadata : {};
       const pre = num(meta.pre_tokens);
       const post = num(meta.post_tokens);
-      this.addNotice("success", `Conversation compacted${pre !== null && post !== null ? ` · ${kTokens(pre)} → ${kTokens(post)} tokens` : ""}`);
+      if (post !== null) this.contextTokens = post;
+      this.blocks.push({
+        type: "notice",
+        level: "success",
+        text: `Conversation compressed${pre !== null && post !== null ? ` · ${kTokens(pre)} → ${kTokens(post)} tokens` : ""}`,
+        compacted: { auto: meta.trigger === "auto", preTokens: pre, postTokens: post },
+      });
       return true;
     } else if (e.subtype === "task_started" || e.subtype === "task_progress" || e.subtype === "task_updated" || e.subtype === "task_notification") {
       return this.onTask(e);
@@ -586,6 +612,12 @@ export class StreamAccumulator {
       if (LIMIT_TEXT.test(line)) this.limitLine = line.trim();
     }
     if (str(msg.model) && !synthetic) this.model = str(msg.model);
+    if (!parent && !synthetic && str(msg.model)) this.mainModel = str(msg.model);
+    if (!parent && !synthetic && isObj(msg.usage)) {
+      const u = mapUsage(msg.usage)!;
+      const tokens = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens + u.outputTokens;
+      if (tokens > 0) this.contextTokens = tokens;
+    }
     let changed = false;
 
     for (const c of msg.content) {
@@ -716,6 +748,7 @@ export class StreamAccumulator {
     // session's so far.
     const prev = this.final;
     this.results++;
+    this.contextWindow = contextWindowOf(e.modelUsage, this.mainModel ?? this.model) ?? this.contextWindow;
     this.final = {
       text: resultText !== null && isPlaceholderReply(resultText) ? "" : (resultText ?? this.lastTurnText()),
       isError: e.is_error === true || (subtype !== null && subtype !== "success"),
