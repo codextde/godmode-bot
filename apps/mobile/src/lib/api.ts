@@ -49,6 +49,19 @@ import type {
   TaskType,
   Vm,
   Workspace,
+  AgentHeartbeatState,
+  AutomationEvent,
+  AwaySummary,
+  Dream,
+  DreamDetail,
+  DreamOverview,
+  Followup,
+  Goal,
+  GoalInput,
+  HeartbeatBeat,
+  RoutineInput,
+  SpendPeriod,
+  SpendReport,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
@@ -475,6 +488,38 @@ export const api = {
     saveMemory: (id: string, content: string, digest?: string) => put<AgentMemory>(`/api/agents/${id}/memory`, { content, ...(digest ? { digest } : {}) }),
     /** Roles to start a new agent from, by department. Their automations are set up on the computer. */
     templates: () => get<AgentTemplate[]>("/api/agent-templates"),
+    /** The human has seen the agent's last failed run. */
+    dismissFailure: (id: string) => del<Agent>(`/api/agents/${id}/failed-run`),
+    heartbeat: (id: string) => get<AgentHeartbeatState>(`/api/agents/${id}/heartbeat`),
+    /** "Wake now": one beat right away (400 when the agent is switched off). */
+    beat: (id: string) => post<HeartbeatBeat>(`/api/agents/${id}/heartbeat/beat`, {}),
+  },
+
+  dreams: {
+    overview: (agentId: string) => get<DreamOverview>(`/api/agents/${agentId}/dreams`),
+    /** Dream now; a dream is undone on the computer. */
+    start: (agentId: string) => post<Dream>(`/api/agents/${agentId}/dreams`, {}),
+    get: (id: string) => get<DreamDetail>(`/api/dreams/${id}`),
+  },
+
+  /** What the team did between `since` and `until` (Home's "while you were away"). */
+  away: (since: string, until?: string) => get<AwaySummary>("/api/away", until ? { since, until } : { since }),
+
+  spend: {
+    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", agentId ? { period, agentId } : { period }),
+  },
+
+  goals: {
+    /** A workspace's goals with the global ones, or every goal (null). */
+    list: (workspaceId: string | null) => get<Goal[]>("/api/goals", { workspaceId: workspaceId ?? "all" }),
+    create: (input: GoalInput) => post<Goal>("/api/goals", input),
+    update: (id: string, input: Partial<GoalInput>) => patch<Goal>(`/api/goals/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/goals/${id}`),
+  },
+
+  followups: {
+    /** Every chat that continues by itself later, soonest first. */
+    list: (q: { agentId?: string } = {}) => get<Followup[]>("/api/followups", q),
   },
 
   models: (refresh = false) => get<ModelCatalog>("/api/models", refresh ? { refresh: 1 } : {}),
@@ -510,6 +555,8 @@ export const api = {
       sendNow: (id: string) => post<{ ok: true }>(`/api/conversations/${id}/queue/send`, {}, 30_000),
     },
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
+    /** "Mark all read": every chat, or these. */
+    read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
     /** Make the chat's run stand still; it continues where it stopped. */
@@ -565,6 +612,9 @@ export const api = {
 
   runs: {
     list: (q: { status?: string; limit?: number; agentId?: string } = {}) => get<Run[]>("/api/runs", q),
+    get: (id: string) => get<Run>(`/api/runs/${id}`),
+    /** The run's raw stream-json log. */
+    log: (id: string) => get<string>(`/api/runs/${id}/log`),
     cancel: (id: string) => post<{ ok: true }>(`/api/runs/${id}/cancel`),
   },
 
@@ -572,6 +622,11 @@ export const api = {
     list: (q: { agentId?: string } = {}) => get<Routine[]>("/api/routines", q),
     run: (id: string) => post<Run>(`/api/routines/${id}/run`),
     setEnabled: (id: string, enabled: boolean) => patch<Routine>(`/api/routines/${id}`, { enabled }),
+    /** Schedules and conditions only: app and webhook triggers are set up on the computer. */
+    create: (input: RoutineInput) => post<Routine>("/api/routines", input),
+    update: (id: string, input: Partial<RoutineInput>) => patch<Routine>(`/api/routines/${id}`, input),
+    delete: (id: string) => del<{ ok: true }>(`/api/routines/${id}`),
+    events: (id: string, limit = 50) => get<AutomationEvent[]>(`/api/routines/${id}/events`, { limit }),
   },
 
   browser: {

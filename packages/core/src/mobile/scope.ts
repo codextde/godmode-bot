@@ -32,6 +32,9 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PUT", /^\/api\/settings$/],
   ["GET", /^\/api\/notifications$/],
   ["POST", /^\/api\/notifications\/read$/],
+  // What waits for the human and what the team did while they were away.
+  ["GET", /^\/api\/attention$/],
+  ["GET", /^\/api\/away$/],
   // Logins agents miss: seen, dismissed or opened again. Logins themselves are added on the computer.
   ["GET", /^\/api\/missing-logins$/],
   ["PATCH", new RegExp(`^/api/missing-logins/${ID}$`)],
@@ -54,12 +57,20 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/agents/${ID}$`)],
   ["PATCH", new RegExp(`^/api/agents/${ID}$`)],
   ["GET", new RegExp(`^/api/agents/${ID}/commands$`)],
+  // A failed run the human has seen, the heartbeat (seen, woken now) and dreams (seen, started, read); a dream is undone on the computer.
+  ["DELETE", new RegExp(`^/api/agents/${ID}/failed-run$`)],
+  ["GET", new RegExp(`^/api/agents/${ID}/heartbeat$`)],
+  ["POST", new RegExp(`^/api/agents/${ID}/heartbeat/beat$`)],
+  ["GET", new RegExp(`^/api/agents/${ID}/dreams$`)],
+  ["POST", new RegExp(`^/api/agents/${ID}/dreams$`)],
+  ["GET", new RegExp(`^/api/dreams/${ID}$`)],
   // Only MEMORY.md, through the memory editor: the rest of the agent's repository stays on the computer.
   ["GET", new RegExp(`^/api/agents/${ID}/memory$`)],
   ["PUT", new RegExp(`^/api/agents/${ID}/memory$`)],
   ["GET", /^\/api\/models$/],
 
   ["GET", /^\/api\/conversations$/],
+  ["POST", /^\/api\/conversations\/read$/],
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
@@ -75,6 +86,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["DELETE", new RegExp(`^/api/conversations/${ID}/followup$`)],
   ["POST", new RegExp(`^/api/conversations/${ID}/followup/run$`)],
   ["POST", /^\/api\/chat$/],
+  ["GET", /^\/api\/followups$/],
 
   ["GET", /^\/api\/tasks$/],
   ["POST", /^\/api\/tasks\/attachments$/],
@@ -85,13 +97,24 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PATCH", new RegExp(`^/api/tasks/${ID}$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/messages$`)],
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`)],
+  ["GET", /^\/api\/goals$/],
+  ["POST", /^\/api\/goals$/],
+  ["PATCH", new RegExp(`^/api/goals/${ID}$`)],
+  ["DELETE", new RegExp(`^/api/goals/${ID}$`)],
 
   ["GET", /^\/api\/runs$/],
+  ["GET", new RegExp(`^/api/runs/${ID}$`)],
+  ["GET", new RegExp(`^/api/runs/${ID}/log$`)],
   ["POST", new RegExp(`^/api/runs/${ID}/cancel$`)],
+  ["GET", /^\/api\/spend$/],
 
+  // Scheduled and condition automations are set up from the phone too; app events and webhooks only on the computer.
   ["GET", /^\/api\/routines$/],
+  ["POST", /^\/api\/routines$/],
   ["PATCH", new RegExp(`^/api/routines/${ID}$`)],
+  ["DELETE", new RegExp(`^/api/routines/${ID}$`)],
   ["POST", new RegExp(`^/api/routines/${ID}/run$`)],
+  ["GET", new RegExp(`^/api/routines/${ID}/events$`)],
 
   ["GET", /^\/api\/browser\/profiles$/],
   ["POST", new RegExp(`^/api/browser/profiles/${ID}/launch$`)],
@@ -112,7 +135,7 @@ const ROUTES: [method: string, path: RegExp][] = [
  * phone listener and the cloud link stay on the computer.
  */
 const SETTINGS: Record<string, string[]> = {
-  general: ["userName", "desktopNotifications", "theme"],
+  general: ["userName", "desktopNotifications", "theme", "mode"],
   runner: [
     "model",
     "fallbackModel",
@@ -142,6 +165,9 @@ const NULLABLE_SETTINGS = new Set(["defaultMaxBudgetUsd", "monthlyBudgetUsd"]);
 const WORKSPACE_KEYS = ["name", "description", "color", "icon", "instructions", "autoMerge", "browserProfileId", "sources"];
 const PROJECT_KEYS = ["name", "description", "color", "icon", "instructions", "browserProfileId", "sources"];
 /** What an agent is, looks like and how it thinks; its permissions, tools, folders and machines are set on the computer. */
+/** Never `fillOnly`: only the human on the computer lets an automation's runs read raw secrets. */
+const ROUTINE_KEYS = ["agentId", "name", "trigger", "cron", "timezone", "prompt", "filter", "enabled", "reuseConversation", "notify"];
+const GOAL_KEYS = ["title", "why", "workspaceId", "targetDate", "status"];
 const AGENT_KEYS = ["name", "role", "description", "instructions", "personality", "avatar", "color", "character", "model", "effort", "ultracode", "enabled", "projectId", "heartbeat"];
 
 /** Requests whose JSON body may only carry these fields when a phone sends them. */
@@ -165,7 +191,13 @@ const BODIES: [method: string, path: RegExp, keys: string[]][] = [
   ["POST", new RegExp(`^/api/tasks/${ID}/approve$`), []],
   ["PATCH", new RegExp(`^/api/conversations/${ID}/followup$`), ["dueAt"]],
   ["POST", new RegExp(`^/api/conversations/${ID}/followup/run$`), []],
-  ["PATCH", new RegExp(`^/api/routines/${ID}$`), ["enabled"]],
+  ["POST", /^\/api\/routines$/, ROUTINE_KEYS],
+  ["PATCH", new RegExp(`^/api/routines/${ID}$`), ROUTINE_KEYS],
+  ["POST", /^\/api\/goals$/, GOAL_KEYS],
+  ["PATCH", new RegExp(`^/api/goals/${ID}$`), GOAL_KEYS],
+  ["POST", /^\/api\/conversations\/read$/, ["ids"]],
+  ["POST", new RegExp(`^/api/agents/${ID}/heartbeat/beat$`), []],
+  ["POST", new RegExp(`^/api/agents/${ID}/dreams$`), []],
   ["POST", new RegExp(`^/api/questions/${ID}/answer$`), ["optionId", "decision", "note", "text"]],
   ["POST", /^\/api\/human-tasks$/, ["title", "body", "url", "priority", "workspaceId", "status"]],
   ["PATCH", new RegExp(`^/api/human-tasks/${ID}$`), ["status", "beforeId", "priority", "title", "body"]],
@@ -202,6 +234,7 @@ export function deviceQueryRefusal(method: string, path: string, query: URLSearc
  */
 export function deviceBodyRefusal(method: string, path: string, body: Record<string, unknown>): string | null {
   if (path === "/api/settings") return settingsRefusal(body);
+  if (path.startsWith("/api/routines")) return routineRefusal(body);
   if (!("sources" in body)) return null;
   const sources = body.sources;
   if (!Array.isArray(sources)) return null;
@@ -209,6 +242,15 @@ export function deviceBodyRefusal(method: string, path: string, body: Record<str
   if (!folders.length) return null;
   const known = new Set(existingFolders(method, path));
   return folders.every((f) => typeof f.path === "string" && known.has(f.path)) ? null : "Add folders of your computer in Godmode there. From the phone you can add git repositories.";
+}
+
+/** A phone sets up schedules and conditions; app events and webhooks need connections and secret URLs that live on the computer. */
+function routineRefusal(body: Record<string, unknown>): string | null {
+  const trigger = body.trigger as { type?: unknown } | undefined;
+  if (trigger === undefined || trigger === null) return null;
+  return typeof trigger === "object" && (trigger.type === "schedule" || trigger.type === "condition")
+    ? null
+    : "Set up app and webhook automations in Godmode on your computer.";
 }
 
 function existingFolders(method: string, path: string): string[] {
