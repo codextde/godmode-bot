@@ -39,6 +39,15 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   AgentTemplate,
   AnswerQuestionInput,
   AnswerQuestionResult,
+  Artifact,
+  ArtifactDataInput,
+  ArtifactMessageResult,
+  ArtifactPatch,
+  ArtifactStartInput,
+  ArtifactStartResult,
+  ArtifactSummary,
+  ArtifactVersion,
+  ArtifactVersionDetail,
   HumanTask,
   HumanTaskCloseInput,
   HumanTaskCloseResult,
@@ -916,6 +925,22 @@ export const api = {
     /** The agent that gave it continues its chat with the outcome and the note. */
     close: (id: string, input: HumanTaskCloseInput) => post<HumanTaskCloseResult>(`/api/human-tasks/${id}/close`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/human-tasks/${id}`),
+  },
+
+  artifacts: {
+    list: (q: { workspaceId?: string; agentId?: string; conversationId?: string } = {}) => get<ArtifactSummary[]>("/api/artifacts", q),
+    get: (id: string) => get<Artifact>(`/api/artifacts/${id}`),
+    update: (id: string, input: ArtifactPatch) => patch<ArtifactSummary>(`/api/artifacts/${id}`, input),
+    /** Data the app saved (`godmode.setData`). */
+    saveData: (id: string, input: ArtifactDataInput) => put<{ dataUpdatedAt: string }>(`/api/artifacts/${id}/data`, input),
+    versions: (id: string) => get<ArtifactVersion[]>(`/api/artifacts/${id}/versions`),
+    version: (id: string, version: number) => get<ArtifactVersionDetail>(`/api/artifacts/${id}/versions/${version}`),
+    restore: (id: string, version: number) => post<Artifact>(`/api/artifacts/${id}/restore`, { version }),
+    /** The human's words for its agent, sent to the artifact's chat. */
+    message: (id: string, content: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/message`, { content }),
+    refresh: (id: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/refresh`),
+    start: (input: ArtifactStartInput) => post<ArtifactStartResult>("/api/artifacts/start", input),
+    delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),
   },
 
   missingLogins: {

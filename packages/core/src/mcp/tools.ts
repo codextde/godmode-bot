@@ -26,6 +26,8 @@ import type {
   WorkspaceSourceInput,
 } from "@godmode/shared";
 import {
+  ARTIFACT_BRIDGE_DOC,
+  MAX_ARTIFACT_HTML,
   AGENT_COLORS,
   GLM_MODELS,
   AGENT_TEMPLATE_CATEGORIES,
@@ -147,6 +149,7 @@ import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
 import { zaiKey } from "../runner/claude";
+import { artifactExists, createArtifact, getArtifact, listArtifacts, updateArtifact } from "../services/artifacts";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
@@ -899,6 +902,17 @@ function isDreamRun(ctx: RunContext): boolean {
   } catch {
     return false;
   }
+}
+
+/** Artifacts belong to a chat: not in condition checks, dreams or connected apps, and not on a runner (its chats show on the controller). */
+const canArtifact = (_agent: Agent, ctx: RunContext) => config().role !== "runner" && !!ctx.conversationId && !isCheckRun(ctx) && !isDreamRun(ctx);
+
+/** Agents change their own artifacts; managers anyone's. */
+function artifactRefusal(agent: Agent, id: string): string | null {
+  if (!artifactExists(id.trim())) return `There is no artifact ${id}. artifact_list shows yours.`;
+  const owner = getArtifact(id).agentId;
+  if (owner && owner !== agent.id && !isManager(agent)) return "That artifact belongs to another agent: ask it, or your lead, to change it.";
+  return null;
 }
 
 const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy"]);
@@ -1726,6 +1740,92 @@ const TOOLS: ToolDef[] = [
     run: (_args, { ctx }) => (cancelFollowup(ctx.conversationId) ? "Follow-up removed." : "This chat had no follow-up."),
   }),
 
+  defineTool({
+    name: "artifact_create",
+    description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or a file they asked for). It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to.
+Write one complete HTML document (\`html\`) and put the numbers and records into \`data\` (JSON), not into the code: a refresh then only rewrites the data. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again (a shop, Stripe, a spreadsheet, a website).
+${ARTIFACT_BRIDGE_DOC}
+Make it look like a polished 2026 product: clean layout, real hierarchy, readable charts, good empty and loading states, responsive from 360 px, light and dark through the --gm-* variables; no emojis as icons, no lorem ipsum. Sample data is fine when real data isn't reachable yet — say so in the app and in your answer.`,
+    schema: z.object({
+      title: z.string().min(1).max(120).describe("Short name, e.g. \"Sales dashboard\""),
+      description: z.string().max(1000).optional().describe("One line: what it shows or does"),
+      html: z.string().min(1).max(MAX_ARTIFACT_HTML).describe("The complete HTML document"),
+      data: z.unknown().optional().describe("The artifact's data as JSON (an object); the app reads it as godmode.data"),
+      refreshPrompt: z.string().max(4000).optional().describe("How to get fresh data when the human presses Refresh: where from and what to update"),
+    }),
+    when: canArtifact,
+    run: ({ title, description, html, data, refreshPrompt }, { agent, ctx }) => {
+      const a = createArtifact({ title, description, html, data, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
+      return `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page. In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.`;
+    },
+  }),
+
+  defineTool({
+    name: "artifact_update",
+    description: `Change an artifact you made: its code, its data, its title or how it refreshes. For a small code change pass \`edits\` (each \`find\` copied exactly from the current HTML — read it with artifact_get — and its \`replace\`); for a big one the whole new \`html\`. A code change is a new version (say what changed in \`note\`). \`data\` replaces the whole data (read it first: the app may have saved entries the human made). After a refresh, pass only \`data\`.`,
+    schema: z.object({
+      id: z.string().min(1).max(100).describe("The artifact's id"),
+      html: z.string().min(1).max(MAX_ARTIFACT_HTML).optional().describe("The whole new HTML document"),
+      edits: z
+        .array(z.object({ find: z.string().min(1), replace: z.string(), all: z.boolean().optional().describe("Replace every occurrence") }))
+        .max(50)
+        .optional()
+        .describe("Text replacements in the current HTML, applied in order"),
+      data: z.unknown().optional().describe("The new data (replaces all of it)"),
+      title: z.string().min(1).max(120).optional(),
+      description: z.string().max(1000).optional(),
+      refreshPrompt: z.string().max(4000).optional(),
+      note: z.string().max(500).optional().describe("What changed in the code, in a few words"),
+    }),
+    when: canArtifact,
+    run: ({ id, html, edits, data, title, description, refreshPrompt, note }, { agent }) => {
+      const refused = artifactRefusal(agent, id);
+      if (refused) return fail(refused);
+      const before = getArtifact(id);
+      const a = updateArtifact(id, { html, edits, data, title, description, refreshPrompt, note }, `agent:${agent.id}`);
+      const parts = [a.version !== before.version ? `the code is version ${a.version}` : null, data !== undefined ? "the data is saved" : null].filter(Boolean);
+      return `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`;
+    },
+  }),
+
+  defineTool({
+    name: "artifact_get",
+    description: "Read an artifact: its code (to edit it with artifact_update) and its current data, including what the human entered in the app.",
+    schema: z.object({
+      id: z.string().min(1).max(100),
+      part: z.enum(["all", "html", "data"]).optional().describe("all (default), only the html or only the data"),
+    }),
+    when: canArtifact,
+    run: ({ id, part }, { agent }) => {
+      const refused = artifactRefusal(agent, id);
+      if (refused) return fail(refused);
+      const a = getArtifact(id);
+      const head = { id: a.id, title: a.title, description: a.description, version: a.version, refreshPrompt: a.refreshPrompt || undefined, dataUpdatedAt: a.dataUpdatedAt };
+      if (part === "data") return json({ ...head, data: a.data });
+      if (part === "html") return `${json(head)}\n\nHTML:\n${a.html}`;
+      return `${json({ ...head, data: a.data })}\n\nHTML:\n${a.html}`;
+    },
+  }),
+
+  defineTool({
+    name: "artifact_list",
+    description: "The artifacts you made (managers: every agent's), newest first — to find one the human talks about.",
+    schema: z.object({ thisChat: z.boolean().optional().describe("Only the ones made in this chat") }),
+    when: canArtifact,
+    run: ({ thisChat }, { agent, ctx }) => {
+      const list = listArtifacts({ agentId: isManager(agent) ? undefined : agent.id, conversationId: thisChat ? ctx.conversationId : undefined });
+      if (!list.length) return thisChat ? "No artifacts in this chat yet." : "No artifacts yet.";
+      return json(list.slice(0, 50).map((a) => ({
+        id: a.id,
+        title: a.title,
+        description: a.description || undefined,
+        version: a.version,
+        ...(a.agentId !== agent.id ? { agent: a.agentName } : {}),
+        ...(a.conversationId === ctx.conversationId ? { thisChat: true } : {}),
+        updatedAt: a.updatedAt,
+      })));
+    },
+  }),
   defineTool({
     name: "api_tools_list",
     description:

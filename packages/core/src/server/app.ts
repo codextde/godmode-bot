@@ -16,6 +16,8 @@ import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
 import { registerQuestionRoutes } from "./routes/questions";
 import { registerHumanTaskRoutes } from "./routes/humanTasks";
+import { registerArtifactRoutes } from "./routes/artifacts";
+import { serveArtifactFrame } from "./artifactFrame";
 import { registerIntegrationRoutes } from "./routes/integrations";
 import { registerBrowserRoutes } from "./routes/browser";
 import { registerBackupRoutes } from "./routes/backup";
@@ -105,6 +107,11 @@ export function createApp() {
     else if (!c.req.path.startsWith("/api/logs")) log.debug("request", details);
   });
 
+  // The artifact sandbox is meant to be framed by the app; it carries its own policy.
+  app.use("/api/artifacts/frame", async (c, next) => {
+    await next();
+    c.res.headers.delete("X-Frame-Options");
+  });
   app.use(
     "*",
     secureHeaders({
@@ -148,6 +155,8 @@ export function createApp() {
 
   // Public
   app.get("/api/health", (c) => c.json({ ok: true, name: "godmode-bot" }));
+  // The sandbox artifacts run in: a page without data, framed by the app.
+  app.get("/api/artifacts/frame", serveArtifactFrame);
   registerAuthRoutes(app); // handles its own auth for protected auth endpoints
 
   // MCP gateway for agent runs and connected apps (authenticated by per-run tokens and app keys, not user auth)
@@ -179,6 +188,7 @@ export function createApp() {
   registerMissingLoginRoutes(app);
   registerQuestionRoutes(app);
   registerHumanTaskRoutes(app);
+  registerArtifactRoutes(app);
   registerIntegrationRoutes(app);
   registerMessagingRoutes(app);
   registerBrowserRoutes(app);

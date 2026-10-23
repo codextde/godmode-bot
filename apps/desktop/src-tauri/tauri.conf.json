@@ -40,7 +40,8 @@
         "media-src": "'self' blob: data:",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "script-src": "'self' 'wasm-unsafe-eval'"
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "frame-src": "http://127.0.0.1:* http://localhost:*"
       },
       "dangerousDisableAssetCspModification": [
         "style-src"

@@ -692,6 +692,28 @@ if (slash?.[1] === "clear") {
     textTurn(text);
     result(text);
   }
+} else if (/ARTIFACT_FROM:(\S+)/.test(prompt)) {
+  // Calls an artifact tool with the arguments in a JSON file ({ tool, args, answer }) and shows the call in the chat.
+  out(init);
+  const spec = JSON.parse(readFileSync(/ARTIFACT_FROM:(\S+)/.exec(prompt)![1]!, "utf8")) as { tool: string; args: Record<string, unknown>; answer?: string };
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as {
+    mcpServers: Record<string, { url: string; headers: Record<string, string> }>;
+  };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const name = `mcp__godmode__${spec.tool}`;
+  out({ type: "assistant", message: { id: "msg_art", role: "assistant", content: [{ type: "tool_use", id: "toolu_art", name, input: spec.args }] }, parent_tool_use_id: null, session_id: sessionId });
+  const call = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: spec.tool, arguments: spec.args } });
+  const text = call.result.content[0].text as string;
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_art", content: text, is_error: call.result.isError === true }] }, parent_tool_use_id: null, session_id: sessionId });
+  const answer = spec.answer ?? `ARTIFACT ${JSON.stringify({ text, isError: call.result.isError === true })}`;
+  textTurn(answer);
+  result(answer);
 } else if (/SPLIT_TO:(\S+)/.test(prompt)) {
   out(init);
   const agentId = /SPLIT_TO:(\S+)/.exec(prompt)![1]!;

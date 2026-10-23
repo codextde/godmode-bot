@@ -1660,4 +1660,37 @@ UPDATE settings SET value = json_set(value, '$.autoCompactPercent', 70)
 WHERE key = 'runner' AND json_valid(value) AND json_extract(value, '$.autoCompactPercent') = 50;
 `,
   },
+  {
+    id: 102,
+    name: "artifacts",
+    sql: /* sql */ `
+-- Small web apps agents build in a chat (services/artifacts.ts): the current code and data, and the code's history.
+CREATE TABLE artifacts (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  html TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT 'null',
+  version INTEGER NOT NULL DEFAULT 1,
+  refresh_prompt TEXT NOT NULL DEFAULT '',
+  pinned INTEGER NOT NULL DEFAULT 0,
+  agent_id TEXT REFERENCES agents(id) ON DELETE SET NULL,
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL,
+  workspace_id TEXT REFERENCES workspaces(id) ON DELETE SET NULL,
+  data_updated_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_artifacts_conversation ON artifacts(conversation_id);
+CREATE INDEX idx_artifacts_updated ON artifacts(updated_at);
+CREATE TABLE artifact_versions (
+  artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  html TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (artifact_id, version)
+);
+`,
+  },
 ];

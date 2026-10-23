@@ -425,6 +425,10 @@ const GODMODE_TOOLS = new Set([
   "task_message",
   "task_note",
   "task_report_blocked",
+  "artifact_create",
+  "artifact_update",
+  "artifact_get",
+  "artifact_list",
 ]);
 
 /** "task #12" for a task reference ("#12", "12" or an id). */
@@ -583,6 +587,14 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: MessageSquareReply, title: `Sent a message into ${taskRef(input)}`, detail: truncate(str(input.content), 120) || undefined };
     case "task_note":
       return { kind: "agents", icon: NotebookPen, title: "Left a note on the task", detail: truncate(str(input.text), 120) || undefined };
+    case "artifact_create":
+      return { kind: "other", icon: AppWindow, title: `Built ${str(input.title) || "an artifact"}` };
+    case "artifact_update":
+      return { kind: "other", icon: AppWindow, title: "Changed an artifact", detail: truncate(str(input.note), 120) || undefined };
+    case "artifact_get":
+      return { kind: "other", icon: AppWindow, title: "Read an artifact" };
+    case "artifact_list":
+      return { kind: "other", icon: AppWindow, title: "Looked at its artifacts" };
     case "task_report_blocked":
       return { kind: "agents", icon: OctagonAlert, title: "Reported what it needs", detail: truncate(str(input.reason), 120) || undefined };
     default:

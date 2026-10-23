@@ -30,6 +30,7 @@ import { InstructionsChip } from "@/components/instructions/instructions";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
 import { PhonePanel, PhoneToggle, useChatPhones } from "@/components/android/phone-panel";
+import { ArtifactPanel, ArtifactScopeProvider, ArtifactToggle, useArtifactPanel, useAutoOpenArtifacts } from "@/components/artifacts/artifact-panel";
 import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
 import { MoveChatDialog } from "@/components/runners/move-chat";
 import { usePlaces, type Place } from "@/lib/places";
@@ -127,21 +128,28 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   ];
   // A chat that works in a VM does everything there: its panel shows the VM, not this Mac's browser or screen.
   const chatVm = useChatVm(onRunner ? null : (conv?.vmId ?? null), onRunner ? NO_INHERITED_VMS : vmInherited);
+  // An artifact the agent built or the human opened takes the side panel while it is open.
+  const chatArtifacts = useAutoOpenArtifacts(conversationId, wide);
+  const artifactId = useArtifactPanel((s) => s.open[conversationId] ?? null);
+  const showArtifact = useArtifactPanel((s) => s.show);
+  const hideArtifact = useArtifactPanel((s) => s.hide);
+  const showArtifactPanel = wide && !!artifactId;
   const vmPanel = useUi((s) => s.vmPanel);
   const setVmPanel = useUi((s) => s.setVmPanel);
   const [vmFocus, setVmFocus] = useState(false);
-  const showVmPanel = !!chatVm && !!agent && wide && vmPanel;
+  const showVmPanel = !!chatVm && !!agent && wide && vmPanel && !showArtifactPanel;
   // Something shared takes the side panel; the browser stays one click away in the header.
-  const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel;
+  const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel && !showArtifactPanel;
   // Phones are plugged into this computer: a runner's chat has none.
   const navigate = useNavigate();
   const chatPhones = useChatPhones(onRunner ? undefined : conv?.androidDeviceIds, onRunner ? undefined : agent?.androidDeviceIds);
   const phonePanel = useUi((s) => s.phonePanel);
   const setPhonePanel = useUi((s) => s.setPhonePanel);
-  const showPhonePanel = !chatVm && !showComputerPanel && chatPhones.length > 0 && !!agent && wide && phonePanel;
+  const showPhonePanel = !chatVm && !showComputerPanel && !showArtifactPanel && chatPhones.length > 0 && !!agent && wide && phonePanel;
   // On a runner this computer can't see the chat's tab before frames come: the panel shows while the agent works there.
   const browserActive = !!chatTab || (onRunner && !!live);
-  const showBrowserPanel = !chatVm && !!browser && !!agent && wide && !showComputerPanel && !showPhonePanel && (browserOpened || (browserActive && browserPanel));
+  const showBrowserPanel =
+    !chatVm && !!browser && !!agent && wide && !showComputerPanel && !showPhonePanel && !showArtifactPanel && (browserOpened || (browserActive && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -489,7 +497,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
           move={(onRunner || inGroup) && moveTargets.length ? { onSelect: () => openMove(onRunner ? (placeOf(hereId) ?? moveTargets[0]!) : moveTargets[0]!), blocked: null, label: onRunner ? undefined : "Move to another computer" } : undefined}
           browserToggle={
-            chatVm ? (
+            <>
+            {chatArtifacts.length > 0 && !showArtifactPanel && wide && (
+              <ArtifactToggle count={chatArtifacts.length} onClick={() => showArtifact(conversationId, chatArtifacts[0]!.id)} />
+            )}
+            {chatVm ? (
               !showVmPanel && <VmToggle working={!!activeRunId} onClick={() => (wide ? setVmPanel(true) : setVmFocus(true))} />
             ) : (
             <>
@@ -510,7 +522,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 />
               )}
             </>
-            )
+            )}
+            </>
           }
         />
 
@@ -526,6 +539,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         />
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
+          <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
             <Thread
               messages={visibleMessages}
@@ -542,6 +556,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               }
             />
           </QuestionScopeProvider>
+          </ArtifactScopeProvider>
         </ChatFilesScope>
 
         {dreamLog ? (
@@ -795,6 +810,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         )}
       </ChatDropZone>
       <AnimatePresence initial={false}>
+        {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}
         {showVmPanel && (
           <VmPanel
             key="vm"
