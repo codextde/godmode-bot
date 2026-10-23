@@ -11,6 +11,7 @@ import {
   BotMessageSquare,
   Box,
   Camera,
+  CircleStop,
   Code2,
   Eye,
   FileDown,
@@ -406,6 +407,7 @@ const GODMODE_TOOLS = new Set([
   "automation_check_result",
   "runs_list",
   "run_continue",
+  "run_cancel",
   "workspaces_list",
   "workspace_create",
   "workspace_update",
@@ -547,6 +549,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "agents", icon: History, title: "Checked recent runs" };
     case "run_continue":
       return { kind: "agents", icon: Play, title: "Continued work a restart cut off" };
+    case "run_cancel":
+      return { kind: "agents", icon: CircleStop, title: "Stopped a run", detail: truncate(str(input.reason), 120) || undefined };
     case "workspaces_list":
       return { kind: "agents", icon: Layers, title: "Listed workspaces" };
     case "workspace_create":
@@ -771,6 +775,8 @@ function easyMeta(meta: ToolMeta, input: Input, ctx: ToolContext): { title: stri
       return { title: "Checked recent work" };
     case "run_continue":
       return { title: "Picked up where it left off" };
+    case "run_cancel":
+      return { title: "Stopped a teammate's run" };
     case "routine_create":
     case "routine_update":
       // The detail is the cron line or the trigger's name.
