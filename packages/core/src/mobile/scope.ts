@@ -32,8 +32,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["PUT", /^\/api\/settings$/],
   ["GET", /^\/api\/notifications$/],
   ["POST", /^\/api\/notifications\/read$/],
-  // What waits for the human and what the team did while they were away.
-  ["GET", /^\/api\/attention$/],
+  // What the team did while the human was away (Home's card).
   ["GET", /^\/api\/away$/],
   // Logins agents miss: seen, dismissed or opened again. Logins themselves are added on the computer.
   ["GET", /^\/api\/missing-logins$/],
