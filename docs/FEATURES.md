@@ -79,6 +79,10 @@ Everything Godmode does, the screenshots, and the setup guides for each part. Ba
     <td width="50%"><img src="screenshots/agents.png" alt="Agents" /><br /><sub><b>Agents</b> — persistent coworkers with memory, schedules and tools</sub></td>
   </tr>
   <tr>
+    <td><img src="screenshots/artifacts.png" alt="A sales dashboard artifact open next to the chat that built it" /><br /><sub><b>Artifacts</b> — dashboards and small apps, built and changed by chatting</sub></td>
+    <td><img src="screenshots/artifacts-gallery.png" alt="The Artifacts page with live previews and starters" /><br /><sub><b>Artifacts page</b> — every app your agents built, with live previews</sub></td>
+  </tr>
+  <tr>
     <td><img src="screenshots/tasks.png" alt="Kanban task board with tickets agents work on" /><br /><sub><b>Task board</b> — tickets for your agents; Todo starts them, coding tickets end in a pull request</sub></td>
     <td><img src="screenshots/task-detail.png" alt="A coding task with its branch and open pull request" /><br /><sub><b>Task detail</b> — live progress, branch, pull request and follow-ups</sub></td>
   </tr>
