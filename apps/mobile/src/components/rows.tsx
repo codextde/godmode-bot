@@ -4,22 +4,43 @@ import type { Agent, Conversation, Project } from "@godmode/shared";
 import { presenceLabel } from "@godmode/shared";
 import { CharacterAvatar, moodOf, useAgentPresence } from "./character";
 import { ProjectTag } from "./project-picker";
-import { Icon } from "./icon";
+import { Icon, type IconName } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
-import { activityText, elapsed, shortTime } from "@/lib/format";
-import { useNow } from "@/lib/hooks";
+import { activityText, elapsed, shortTime, whenText } from "@/lib/format";
+import { useAgents, useNow } from "@/lib/hooks";
 import type { LiveRun } from "@/lib/live";
 import { alpha, radius, space, useColors } from "@/lib/theme";
 
 const ORIGIN_LABEL: Partial<Record<Conversation["origin"], string>> = {
   routine: "Automation",
   delegation: "Handed over",
+  heartbeat: "Heartbeat",
   slack: "Slack",
   telegram: "Telegram",
   teams: "Teams",
   api: "Chat",
 };
+
+type ChatStatus = { text: string; icon: IconName; tone: "warning" | "brand" | "muted" };
+
+/** What a chat still has ahead, the way the desktop's chat lists say it. Null: nothing. */
+export function chatStatus(c: Pick<Conversation, "paused" | "followup">, live: { running?: boolean; queued?: boolean }): ChatStatus | null {
+  if (live.running && !c.paused) return null;
+  if (live.queued && !c.paused) return { text: "Queued — waiting for a free slot", icon: "clock", tone: "muted" };
+  const p = c.paused;
+  if (p?.reason === "question") {
+    const what = p.question?.kind === "approval" ? "Needs your OK" : "Needs your answer";
+    return { text: p.question?.title ? `${what} · ${p.question.title}` : what, icon: "question", tone: "warning" };
+  }
+  if (p) {
+    const text =
+      p.reason === "user" ? "Paused" : p.reason === "budget" ? "Held — budget used up" : p.auto && p.resumeAt ? `Continues ${whenText(p.resumeAt)}` : "Waiting for the limit";
+    return { text, icon: p.reason === "user" ? "pause" : "clock", tone: p.reason === "user" ? "muted" : "warning" };
+  }
+  if (c.followup) return { text: `Continues ${whenText(c.followup.dueAt)}`, icon: "clock", tone: "brand" };
+  return null;
+}
 
 export function openChat(id: string) {
   tap();
@@ -29,33 +50,58 @@ export function openChat(id: string) {
 export function ConversationRow({
   conversation,
   agent,
+  from,
   running,
+  queued,
   project,
 }: {
   conversation: Conversation;
   agent?: Agent;
+  /** The agent that handed the chat over. */
+  from?: Agent;
   running?: boolean;
+  queued?: boolean;
   /** The project it works on, when the list isn't scoped to it already. */
   project?: Pick<Project, "name" | "icon">;
 }) {
   const c = useColors();
-  const origin = ORIGIN_LABEL[conversation.origin];
+  const { byId } = useAgents();
+  const handedBy = from ?? (conversation.delegatedFrom ? byId.get(conversation.delegatedFrom.agentId) : undefined);
+  const origin = conversation.origin === "delegation" && handedBy ? `From ${handedBy.name}` : ORIGIN_LABEL[conversation.origin];
+  const status = chatStatus(conversation, { running, queued });
+  const unread = conversation.unread;
+  const statusColor = status?.tone === "warning" ? c.warning : status?.tone === "brand" ? c.brandStrong : c.textMuted;
   return (
     <Pressable onPress={() => openChat(conversation.id)} style={({ pressed }) => [styles.convo, pressed && { backgroundColor: c.sunken }]}>
       <CharacterAvatar agent={agent} size={44} running={running} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Row style={{ gap: space.sm }}>
           {conversation.pinned && <Icon name="pin" size={11} color={c.textMuted} />}
-          <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16 }}>
+          <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: unread ? "700" : undefined }}>
             {conversation.title || "New chat"}
           </T>
+          {unread ? (
+            <View
+              accessibilityRole="image"
+              accessibilityLabel={unread.failed ? "Something went wrong here" : "New reply"}
+              style={[styles.unread, { backgroundColor: unread.failed ? c.danger : c.brandStrong }]}
+            />
+          ) : null}
           {project ? <ProjectTag project={project} /> : null}
           <View style={{ flex: 1 }} />
           <T variant="footnote" color={running ? c.brandStrong : c.textMuted} style={running ? { fontWeight: "500" } : undefined}>
             {running ? "Working" : shortTime(conversation.lastMessageAt ?? conversation.createdAt)}
           </T>
         </Row>
-        <T variant="subhead" muted numberOfLines={2}>
+        {status ? (
+          <Row style={{ gap: 5 }}>
+            <Icon name={status.icon} size={12} color={statusColor} />
+            <T variant="subhead" numberOfLines={1} color={status.tone === "warning" ? c.text : c.textMuted} style={{ flex: 1 }}>
+              {status.text}
+            </T>
+          </Row>
+        ) : null}
+        <T variant="subhead" muted numberOfLines={status ? 1 : 2}>
           {origin ? <T variant="subhead" color={c.text} style={{ fontWeight: "500" }}>{`${origin} · `}</T> : null}
           {agent ? `${agent.name}: ` : ""}
           {conversation.preview || "No messages yet"}
@@ -141,6 +187,11 @@ export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; ru
 }
 
 const styles = StyleSheet.create({
+  unread: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+  },
   convo: {
     flexDirection: "row",
     gap: space.md,

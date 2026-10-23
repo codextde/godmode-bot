@@ -1,11 +1,13 @@
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { Stack } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { router, Stack, useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, View } from "react-native";
 import type { Routine } from "@godmode/shared";
-import { RoutineRow } from "@/components/routine-row";
 import { FilterChips } from "@/components/filter-chips";
+import { FollowupsSection } from "@/components/followup-row";
+import { HeaderActions } from "@/components/header-actions";
+import { RoutineRow } from "@/components/routine-row";
 import { Button, EmptyState, ErrorState, Hairline, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
@@ -30,28 +32,42 @@ function useWorkingRoutines(): Set<string> {
   return useMemo(() => new Set(key ? key.split("\n") : []), [key]);
 }
 
-/** Every automation of the picked workspace's agents (or project's), the ones that are on first. */
+const openNew = () => router.push("/automation-edit");
+
+/** Every automation of the picked workspace's agents (or project's), the ones that are on first, and the chats they'll pick up again. */
 export default function Automations() {
   const { id: workspaceId, projectId } = useWorkspace();
   const list = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list() });
+  const followups = useQuery({ queryKey: qk.followups, queryFn: () => api.followups.list() });
   const agents = useAgents();
   const { byId } = agents;
   const working = useWorkingRoutines();
-  const pull = usePullRefresh(list.refetch);
+  const pull = usePullRefresh(() => Promise.all([list.refetch(), followups.refetch()]));
   const [filter, setFilter] = useState<Filter>("all");
   // A workspace's automations are known once its agents are.
   const loading = list.isLoading || (!!workspaceId && agents.isLoading);
 
-  const scoped = useMemo(
-    () =>
-      (list.data ?? []).filter((r) => {
-        if (!workspaceId) return true;
-        const agent = byId.get(r.agentId);
-        if (!agent) return false;
-        return projectId ? agent.projectId === projectId : !agent.workspaceId || agent.workspaceId === workspaceId;
-      }),
-    [list.data, workspaceId, projectId, byId],
+  // Follow-ups move with the chats they belong to: fresh each time the screen comes back to the front.
+  const shown = useRef(false);
+  const refetchFollowups = followups.refetch;
+  useFocusEffect(
+    useCallback(() => {
+      if (shown.current) void refetchFollowups();
+      shown.current = true;
+    }, [refetchFollowups]),
   );
+
+  const inScope = useCallback(
+    (agentId: string) => {
+      if (!workspaceId) return true;
+      const agent = byId.get(agentId);
+      if (!agent) return false;
+      return projectId ? agent.projectId === projectId : !agent.workspaceId || agent.workspaceId === workspaceId;
+    },
+    [workspaceId, projectId, byId],
+  );
+  const scoped = useMemo(() => (list.data ?? []).filter((r) => inScope(r.agentId)), [list.data, inScope]);
+  const scopedFollowups = useMemo(() => (followups.data ?? []).filter((f) => inScope(f.agentId)), [followups.data, inScope]);
   const visible = useMemo(
     () =>
       scoped
@@ -68,6 +84,7 @@ export default function Automations() {
   return (
     <>
       <Stack.Title>Automations</Stack.Title>
+      <HeaderActions actions={[{ icon: "plus", label: "New automation", onPress: openNew }]} />
       <FlashList
         data={loading ? [] : visible}
         keyExtractor={(r) => r.id}
@@ -77,6 +94,7 @@ export default function Automations() {
         ListHeaderComponent={
           <View style={{ paddingHorizontal: space.sm, paddingVertical: space.sm, gap: space.md }}>
             <WorkspaceChip />
+            <FollowupsSection followups={scopedFollowups} agents={byId} />
             {scoped.length > 0 && (
               <FilterChips
                 bleed={space.lg}
@@ -108,7 +126,8 @@ export default function Automations() {
             <EmptyState
               icon="clock"
               title="No automations yet"
-              body="Set one up in Godmode on your computer — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
+              body="Set one up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
+              action={<Button title="New automation" icon="plus" variant="outline" onPress={openNew} />}
             />
           )
         }

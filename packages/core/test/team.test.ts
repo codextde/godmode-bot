@@ -326,7 +326,7 @@ describe("last run failed", () => {
     expect(dismissFailedRun(agent.id).failedRunId).toBeNull();
     const res = await api("DELETE", `/api/agents/${agent.id}/failed-run`);
     expect(res.status).toBe(200);
-    expect(deviceMayCall("DELETE", `/api/agents/${agent.id}/failed-run`)).toBe(false);
+    expect(deviceMayCall("DELETE", `/api/agents/${agent.id}/failed-run`)).toBe(true);
     expect(deviceMayCall("POST", `/api/agents/${agent.id}/duplicate`)).toBe(false);
 
     // Deleting the chat of the failed run forgets the failure (there would be nothing to open).

@@ -162,7 +162,23 @@ describe("device scope", () => {
     expect(deviceMayCall("PATCH", "/api/conversations/conv_1/followup")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/conversations/conv_1/followup")).toBe(true);
     expect(deviceMayCall("POST", "/api/conversations/conv_1/followup/run")).toBe(true);
-    expect(deviceMayCall("GET", "/api/followups")).toBe(false);
+    expect(deviceMayCall("GET", "/api/followups")).toBe(true);
+    expect(deviceMayCall("POST", "/api/conversations/read")).toBe(true);
+    expect(deviceMayCall("GET", "/api/goals")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/goals/gol_1")).toBe(true);
+    expect(deviceMayCall("GET", "/api/runs/run_1")).toBe(true);
+    expect(deviceMayCall("GET", "/api/runs/run_1/log")).toBe(true);
+    expect(deviceMayCall("GET", "/api/spend")).toBe(true);
+    expect(deviceMayCall("GET", "/api/away")).toBe(true);
+    expect(deviceMayCall("POST", "/api/routines")).toBe(true);
+    expect(deviceMayCall("DELETE", "/api/routines/rtn_1")).toBe(true);
+    expect(deviceMayCall("GET", "/api/routines/rtn_1/events")).toBe(true);
+    expect(deviceMayCall("POST", "/api/routines/rtn_1/test-event")).toBe(false);
+    expect(deviceMayCall("POST", "/api/routines/rtn_1/webhook/rotate")).toBe(false);
+    expect(deviceMayCall("GET", "/api/agents/a1/heartbeat")).toBe(true);
+    expect(deviceMayCall("POST", "/api/agents/a1/dreams")).toBe(true);
+    expect(deviceMayCall("GET", "/api/dreams/drm_1")).toBe(true);
+    expect(deviceMayCall("POST", "/api/dreams/drm_1/revert")).toBe(false);
     expect(deviceMayCall("GET", "/api/conversations/conv_1/messages")).toBe(true);
     expect(deviceMayCall("GET", "/api/conversations/conv_1/messages/msg_1/images/toolu_1")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/conversations/conv_1/messages/msg_1")).toBe(false);
@@ -296,8 +312,10 @@ describe("phone access", () => {
     expect((await phone("/api/conversations/cnv_missing/messages", json("POST", { content: "hi", workingDirectory: "/" }))).status).toBe(403);
     expect((await phone("/api/conversations/cnv_missing/queue/qmsg_x", json("PATCH", { content: "reworded", attachments: [] }))).status).toBe(403);
     expect((await phone("/api/chat", json("POST", { content: "hi", computerTarget: { kind: "desktop" } }))).status).toBe(403);
-    expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "rm -rf" }))).status).toBe(403);
+    expect((await phone("/api/routines/rtn_missing", json("PATCH", { prompt: "Summarize my inbox" }))).status).toBe(404);
     expect((await phone("/api/routines/rtn_missing", json("PATCH", { enabled: true, fillOnly: false }))).status).toBe(403);
+    expect((await phone("/api/routines/rtn_missing", json("PATCH", { trigger: { type: "webhook" } }))).status).toBe(403);
+    expect((await phone("/api/routines", json("POST", { agentId: "a1", name: "Hook", prompt: "x", trigger: { type: "app", connectionId: "c1", triggerSlug: "GMAIL_NEW" } }))).status).toBe(403);
     expect((await phone("/api/tasks", json("POST", { title: "Fork it", repoUrl: "https://evil.example.com/x.git" }))).status).toBe(403);
     expect((await phone("/api/tasks/tsk_missing", json("PATCH", { repoPath: "/" }))).status).toBe(403);
     expect((await phone("/api/tasks/tsk_missing", json("PATCH", { status: "todo" }))).status).toBe(404);
@@ -315,7 +333,7 @@ describe("phone access", () => {
 
     const settings = await phone("/api/settings", { bearer: device });
     expect(settings.status).toBe(200);
-    const saved = await phone("/api/settings", json("PUT", { runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
+    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
     expect(saved.status).toBe(200);
     expect(((await saved.json()) as { runner: { appendSystemPrompt: string; monthlyBudgetUsd: number } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only.", monthlyBudgetUsd: 50 });
     expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: null } }))).status).toBe(200);
@@ -390,6 +408,23 @@ describe("phone access", () => {
     expect((await phone(`/api/workspaces/${workspace.id}`, { bearer: device, method: "DELETE" })).status).toBe(409);
     expect((await phone("/api/workspaces", json("POST", { name: "Drive", sources: [{ kind: "git", url: "C:/Users/me/secret" }] }))).status).toBe(400);
     expect((await phone(`/api/projects/${created.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
+  });
+
+  test("automations set up or changed on a phone run without raw secrets", async () => {
+    const { token: device } = await pair("Automations");
+    const json = (method: string, body: unknown) => ({ bearer: device, method, body: JSON.stringify(body) });
+    const agent = (await (await desktop("/api/agents", { method: "POST", body: JSON.stringify({ name: "Reporter" }) })).json()) as { id: string };
+    const made = await phone("/api/routines", json("POST", { agentId: agent.id, name: "Weekly report", prompt: "Sum up the week.", cron: "0 9 * * 1", timezone: "Europe/Berlin" }));
+    expect(made.status).toBe(200);
+    expect((await made.json()) as { fillOnly: boolean; webhookPath: string | null }).toMatchObject({ fillOnly: true, webhookPath: null });
+
+    const desk = (await (await desktop("/api/routines", { method: "POST", body: JSON.stringify({ agentId: agent.id, name: "Inbox", prompt: "Read the inbox.", cron: "0 8 * * *" }) })).json()) as { id: string; fillOnly: boolean };
+    expect(desk.fillOnly).toBe(false);
+    const paused = await phone(`/api/routines/${desk.id}`, json("PATCH", { enabled: false }));
+    expect(((await paused.json()) as { fillOnly: boolean }).fillOnly).toBe(false);
+    const reworded = await phone(`/api/routines/${desk.id}`, json("PATCH", { prompt: "Read the inbox and reply." }));
+    expect(((await reworded.json()) as { fillOnly: boolean }).fillOnly).toBe(true);
+    expect((await phone(`/api/routines/${desk.id}`, { bearer: device, method: "DELETE" })).status).toBe(200);
   });
 
   test("phones create and follow tasks in a workspace", async () => {

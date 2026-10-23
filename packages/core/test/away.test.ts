@@ -82,7 +82,7 @@ describe("while you were away", () => {
     expect(quiet).toMatchObject({ finished: 0, delivered: 0, highlights: [] });
   }, 60_000);
 
-  test("over HTTP, only with a time in the past; the phone can't ask", async () => {
+  test("over HTTP, only with a time in the past, also from the phone", async () => {
     const get = (since: string) => fetch(`${env.baseUrl}/api/away?since=${encodeURIComponent(since)}`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
     const ok = await get(new Date(Date.now() - 3_600_000).toISOString());
     expect(ok.status).toBe(200);
@@ -91,6 +91,6 @@ describe("while you were away", () => {
     expect((await get(new Date(Date.now() + 60_000).toISOString())).status).toBe(400);
     const until = await fetch(`${env.baseUrl}/api/away?since=${encodeURIComponent(new Date(Date.now() - 3_600_000).toISOString())}&until=${encodeURIComponent(new Date(Date.now() - 7_200_000).toISOString())}`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
     expect(until.status).toBe(400);
-    expect(deviceMayCall("GET", "/api/away")).toBe(false);
+    expect(deviceMayCall("GET", "/api/away")).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import {
   CHARACTER_BODIES,
   CHARACTER_EYES,
@@ -28,7 +28,7 @@ import {
 import { AGENT_TEMPLATES } from "../../agents/templates";
 import { TEAM_TEMPLATES, installTeam } from "../../agents/teams";
 import { listSlashCommands } from "../../runner/commands";
-import type { RoutineTrigger } from "@godmode/shared";
+import type { Routine, RoutineTrigger } from "@godmode/shared";
 import { createRoutine, deleteRoutine, getRoutine, listRoutines, resolveAppTrigger, runRoutineNow, updateRoutine } from "../../services/routines";
 import { listEvents, sendTestEvent } from "../../automations/events";
 import { rotateWebhookToken } from "../../automations/webhooks";
@@ -376,18 +376,26 @@ export function registerAgentRoutes(app: Hono): void {
 
   app.post("/api/agents/:id/dreams", async (c) => c.json(await startDream(c.req.param("id"), "manual")));
 
-  app.get("/api/dreams/:id", (c) => c.json(getDream(c.req.param("id"))));
+  app.get("/api/dreams/:id", (c) => {
+    const dream = getDream(c.req.param("id"));
+    // A phone reads MEMORY.md, as in its memory editor; the agent's other files stay on the computer.
+    return c.json(requestDevice(c) ? { ...dream, fileChanges: dream.fileChanges.filter((f) => f.path === "MEMORY.md") } : dream);
+  });
 
   app.post("/api/dreams/:id/revert", async (c) => c.json(await revertDream(c.req.param("id"))));
 
   /* Routines ---------------------------------------------------------- */
 
-  app.get("/api/routines", (c) => c.json(listRoutines({ agentId: c.req.query("agentId") || undefined })));
+  // A phone never gets a webhook's secret URL: webhooks are set up on the computer.
+  const forCaller = (c: Context, r: Routine): Routine => (requestDevice(c) ? { ...r, webhookPath: null } : r);
+
+  app.get("/api/routines", (c) => c.json(listRoutines({ agentId: c.req.query("agentId") || undefined }).map((r) => forCaller(c, r))));
 
   app.post("/api/routines", async (c) => {
     const input = await body(c, routineSchema);
     const trigger = await resolveAppTrigger(input.trigger as RoutineTrigger | undefined, input.agentId);
-    return c.json(createRoutine({ ...input, trigger }));
+    // Set up from a phone, its runs fill logins but read no raw secrets, like an agent made there.
+    return c.json(forCaller(c, createRoutine({ ...input, trigger, ...(requestDevice(c) ? { fillOnly: true } : {}) })));
   });
 
   app.patch("/api/routines/:id", async (c) => {
@@ -398,7 +406,9 @@ export function registerAgentRoutes(app: Hono): void {
     const trigger = patch.trigger
       ? await resolveAppTrigger(patch.trigger as RoutineTrigger, patch.agentId ?? getRoutine(routineId).agentId)
       : undefined;
-    return c.json(updateRoutine(routineId, { ...patch, trigger }));
+    // What a phone writes runs without raw secrets from then on; switching it on or off changes nothing it does.
+    const fromPhone = requestDevice(c) && Object.keys(patch).some((k) => k !== "enabled");
+    return c.json(forCaller(c, updateRoutine(routineId, { ...patch, trigger, ...(fromPhone ? { fillOnly: true } : {}) })));
   });
 
   app.delete("/api/routines/:id", (c) => {

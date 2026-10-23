@@ -7,6 +7,7 @@ import { TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/
 import { HeaderActions } from "@/components/header-actions";
 import { HumanTaskRow } from "@/components/human-task-row";
 import { FilterChips } from "@/components/filter-chips";
+import { GoalsStrip } from "@/components/goals-strip";
 import { STATUS_META, TaskRow } from "@/components/task-row";
 import { Button, Card, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
@@ -30,7 +31,7 @@ export default function Tasks() {
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }) });
   const { byId: agents } = useAgents();
   const names = useMemo(() => new Map(workspaces.map((w) => [w.id, w.name])), [workspaces]);
-  const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch()]));
+  const pull = usePullRefresh(() => Promise.all([tasks.refetch(), mine.refetch(), queryClient.invalidateQueries({ queryKey: qk.goals(workspaceId) })]));
   const [view, setView] = useState<Shown>("active");
   const newTask = () => router.push("/new-task");
 
@@ -105,6 +106,7 @@ export default function Tasks() {
                 </Card>
               </View>
             )}
+            <GoalsStrip workspaceId={workspaceId} bleed={space.lg} />
             {board.length > 0 && (
               <FilterChips
                 bleed={space.lg}

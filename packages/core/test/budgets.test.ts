@@ -66,7 +66,7 @@ describe("what the team spent", () => {
     const res = await api("GET", "/api/spend?period=week");
     expect(res.status).toBe(200);
     expect((await api("GET", "/api/spend?period=year")).status).toBe(400);
-    expect(deviceMayCall("GET", "/api/spend")).toBe(false);
+    expect(deviceMayCall("GET", "/api/spend")).toBe(true);
     expect(deviceMayCall("GET", "/api/budgets")).toBe(false);
   }, 30_000);
 

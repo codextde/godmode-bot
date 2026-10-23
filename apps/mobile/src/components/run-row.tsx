@@ -1,10 +1,10 @@
+import { router } from "expo-router";
 import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { formatUsd } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
-import { openChat } from "./rows";
-import { Badge, Row, T, type Tone } from "./ui";
+import { Badge, Row, T, tap, type Tone } from "./ui";
 import { activityText, shortTime } from "@/lib/format";
 import { useRunActivity } from "@/lib/live";
 import { useSpendTracking } from "@/lib/setup";
@@ -50,7 +50,8 @@ function firstLine(text: string | null | undefined, max = 120): string {
 }
 
 /** "850ms", "12s", "3m 04s", "1h 12m" */
-function duration(ms: number): string {
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms == null || !Number.isFinite(ms)) return "—";
   if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;
@@ -59,15 +60,41 @@ function duration(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-export function RunStatusBadge({ run }: { run: Run }) {
-  // A paused run that waits for the human says so.
-  const question = run.status === "paused" && run.pause?.reason === "question" ? (run.pause.question?.kind ?? "question") : null;
-  if (question) return <Badge label={question === "approval" ? "Needs your OK" : "Needs your answer"} tone="warning" />;
-  const meta = STATUS_META[run.status] ?? STATUS_META.queued;
-  return <Badge label={meta.label} tone={meta.tone} live={run.status === "running"} />;
+/** Live timer format: 0:07, 1:23, 1:02:03 */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-/** One run in a list: what was asked, how it went, who did it, what started it and what it took. Tapping it opens its chat. */
+/** "850", "12.3k", "120k", "1.2M" */
+export function formatTokens(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/** The run's own screen: status, what it took, its result and its log. */
+export function openRun(id: string) {
+  tap();
+  router.push({ pathname: "/run/[id]", params: { id } });
+}
+
+/**
+ * `status`: the live one when it is fresher than the run's. A paused run that waits for the human says so (`waitingFor`,
+ * else what a run list says about its pause).
+ */
+export function RunStatusBadge({ run, status = run.status, waitingFor }: { run: Run; status?: RunStatus; waitingFor?: "answer" | "approval" | null }) {
+  const asked = waitingFor ?? (run.pause?.reason === "question" ? (run.pause.question?.kind === "approval" ? "approval" : "answer") : null);
+  if (status === "paused" && asked) return <Badge label={asked === "approval" ? "Needs your OK" : "Needs your answer"} tone="warning" />;
+  const meta = STATUS_META[status] ?? STATUS_META.queued;
+  return <Badge label={meta.label} tone={meta.tone} live={status === "running"} />;
+}
+
+/** One run in a list: what was asked, how it went, who did it, what started it and what it took. Tapping it opens the run. */
 export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: Agent }) {
   const c = useColors();
   const live = isLiveRun(run);
@@ -79,13 +106,13 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
     agent?.name ?? "Agent",
     TRIGGER_LABEL[run.trigger] ?? "Manual",
     shortTime(run.createdAt),
-    finished && run.durationMs != null ? duration(run.durationMs) : null,
+    finished && run.durationMs != null ? formatDuration(run.durationMs) : null,
     spendTracking && run.costUsd ? formatUsd(run.costUsd) : null,
   ].filter(Boolean);
   const error = run.status === "failed" ? firstLine(run.error, 200) : "";
 
   return (
-    <Pressable onPress={() => openChat(run.conversationId)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
+    <Pressable onPress={() => openRun(run.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
       <CharacterAvatar agent={agent} size={40} running={run.status === "running"} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>

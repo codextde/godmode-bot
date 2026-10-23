@@ -2,7 +2,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router } from "expo-router";
 import { memo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from "react-native";
-import { cronToHuman, scheduleToHuman, type Agent, type Routine } from "@godmode/shared";
+import { cronToHuman, scheduleToHuman, type Agent, type Routine, type RoutineTriggerType } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
@@ -13,11 +13,12 @@ import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** "gmail" → "Gmail", "google_calendar" → "Google Calendar". */
-function appName(slug: string): string {
+export function appName(slug: string): string {
   return slug.replace(/[_-]+/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-function phoneTimezone(): string | null {
+/** This phone's timezone, e.g. "Europe/Berlin"; null when the system doesn't say. */
+export function phoneTimezone(): string | null {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
   } catch {
@@ -25,9 +26,22 @@ function phoneTimezone(): string | null {
   }
 }
 
-/** What starts an automation, in one line: its schedule and next run, the app event, the condition or the webhook. */
-export function triggerText(r: Routine): string {
-  const next = r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
+/** What starts an automation, in the desktop's words (trigger-meta.ts). */
+export const TRIGGER_TITLES: Record<RoutineTriggerType, string> = {
+  schedule: "On a schedule",
+  app: "When something happens in an app",
+  condition: "When a condition is met",
+  webhook: "When a webhook is called",
+};
+
+/** Schedule: run now · condition: check now · app/webhook: run with a test event. */
+export function runLabel(type: RoutineTriggerType): string {
+  return type === "condition" ? "Check now" : type === "schedule" ? "Run now" : "Send test event";
+}
+
+/** What starts an automation, in one line: its schedule and next run (`withNext`), the app event, the condition or the webhook. */
+export function triggerText(r: Routine, withNext = true): string {
+  const next = withNext && r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
   const t = r.trigger;
   switch (t.type) {
     case "schedule": {
@@ -75,7 +89,7 @@ export function runRoutine(routine: Routine): Promise<void> {
     .finally(refreshRoutines);
 }
 
-/** One automation in a list: whose it is, what starts it, a switch and Run now. Tapping it opens its agent. */
+/** One automation in a list: whose it is, what starts it, a switch and Run now. Tapping it opens the automation. */
 export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: { routine: Routine; agent?: Agent; working?: boolean }) {
   const c = useColors();
   const [starting, setStarting] = useState(false);
@@ -88,7 +102,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
     <Pressable
       onPress={() => {
         tap();
-        router.push({ pathname: "/agent/[id]", params: { id: routine.agentId } });
+        router.push({ pathname: "/automation/[id]", params: { id: routine.id } });
       }}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
     >
@@ -126,7 +140,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         accessibilityLabel={`Run ${routine.name} now`}
         accessibilityState={{ disabled: !canRun, busy: starting }}
         hitSlop={6}
-        // Not `disabled`: a press on it must not fall through to the row and open the agent.
+        // Not `disabled`: a press on it must not fall through to the row and open the automation.
         onPress={() => {
           if (!canRun) return;
           setStarting(true);

@@ -4,6 +4,9 @@ import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
 import { findModel, leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
+import { AgentHistory, FailedRunBanner } from "@/components/agent-history";
+import { DreamsCard } from "@/components/dreams-card";
+import { HeartbeatCard } from "@/components/heartbeat-card";
 import { Icon } from "@/components/icon";
 import { CharacterAvatar, moodOf, useAgentPresence } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
@@ -47,7 +50,10 @@ export default function AgentScreen() {
   return <AgentView agent={agent} team={agents.data ?? []} />;
 }
 
-/** The desktop's agent header (role, presence, lead, scope, model), what is on its plate, its automations and chats. */
+/**
+ * The desktop's agent header (role, presence, lead, scope, model), a failed last run, what is on its plate, its recent
+ * runs, memory and dreams, automations, heartbeat and chats.
+ */
 function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   const id = agent.id;
   const { workspaces } = useWorkspace();
@@ -109,13 +115,23 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
         </Row>
       </View>
 
+      <FailedRunBanner agent={agent} />
+
       <Plate agent={agent} onRunTask={runTask} onSwitchOn={() => toggle.mutate(true)} switching={toggle.isPending} />
+
+      <AgentHistory agent={agent} />
 
       <MemoryCard agent={agent} />
 
+      <DreamsCard agent={agent} />
+
       <View>
-        <SectionTitle title="Automations" />
-        <Card>
+        <SectionTitle
+          title="Automations"
+          action={agent.enabled ? "New automation" : undefined}
+          onAction={() => router.push({ pathname: "/automation-edit", params: { agentId: agent.id } })}
+        />
+        <Card style={{ overflow: "hidden" }}>
           {routines.data?.length ? (
             routines.data.map((r, i) => (
               <View key={r.id}>
@@ -127,11 +143,13 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
             <SkeletonRows count={2} avatar={0} />
           ) : (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              No automations yet. Set them up in Godmode on your computer.
+              {`No automations yet. Let ${agent.name} get to work on its own — even while you're away.`}
             </T>
           )}
         </Card>
       </View>
+
+      <HeartbeatCard agent={agent} />
 
       <View>
         <SectionTitle title="Recent chats" />
@@ -359,8 +377,16 @@ function RoutineRow({ routine }: { routine: Routine }) {
     onError: (err) => Alert.alert("Couldn't run it", errorText(err)),
   });
   const enabled = toggle.isPending ? !!toggle.variables : routine.enabled;
+  const canRun = routine.enabled && !run.isPending;
   return (
-    <Row style={{ gap: space.md, padding: space.lg }}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => {
+        tap();
+        router.push({ pathname: "/automation/[id]", params: { id: routine.id } });
+      }}
+      style={({ pressed }) => [styles.routine, pressed && { backgroundColor: c.sunken }]}
+    >
       <View style={{ flex: 1, gap: 2 }}>
         <T variant="subhead" style={{ fontWeight: "600" }} numberOfLines={1}>
           {routine.name}
@@ -371,9 +397,13 @@ function RoutineRow({ routine }: { routine: Routine }) {
         </T>
       </View>
       <Pressable
+        accessibilityRole="button"
         accessibilityLabel={`Run ${routine.name} now`}
-        disabled={run.isPending || !routine.enabled}
+        accessibilityState={{ disabled: !canRun }}
+        hitSlop={6}
+        // Not `disabled`: a press on it must not fall through to the row and open the automation.
         onPress={() => {
+          if (!canRun) return;
           tap();
           run.mutate();
         }}
@@ -382,7 +412,7 @@ function RoutineRow({ routine }: { routine: Routine }) {
         <Icon name="play" size={12} color={c.text} />
       </Pressable>
       <Switch value={enabled} onValueChange={(v) => toggle.mutate(v)} trackColor={{ true: c.brand, false: c.sunken }} />
-    </Row>
+    </Pressable>
   );
 }
 
@@ -416,6 +446,12 @@ const styles = StyleSheet.create({
   more: {
     paddingHorizontal: space.sm,
     paddingTop: 2,
+  },
+  routine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: space.md,
+    padding: space.lg,
   },
   runNow: {
     width: 34,
