@@ -18,12 +18,12 @@ import { getAccessToken } from "../src/server/auth";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { createCredential } from "../src/vault/credentials";
 import * as vault from "../src/vault/vault";
-import { connectRunner, getRunner, link, listRunners, pairWithCode, removeRunner, startAutofix, startRunners, stopRunners } from "../src/remote/runners";
+import { connectRunner, getRunner, link, linkGone, listRunners, pairWithCode, removeRunner, startAutofix, startRunners, stopRunners } from "../src/remote/runners";
 import { Database } from "bun:sqlite";
 import { callTool, listToolsFor } from "../src/mcp/tools";
 import { getAgent } from "../src/agents/service";
 import { transcriptPath } from "../src/services/conversations";
-import { childEnv, sleep } from "../src/util";
+import { HttpError, childEnv, sleep } from "../src/util";
 import { __setClaudeBinaryForTests, cancelRun, listActiveRuns, waitForRun } from "../src/runner/runner";
 
 const INDEX = join(import.meta.dir, "..", "src", "index.ts");
@@ -417,4 +417,16 @@ describe("a runner, end to end", () => {
     expect(runnerDb.query("SELECT COUNT(*) AS c FROM link_controllers").get()).toEqual({ c: 0 });
     runnerDb.close();
   }, 30_000);
+});
+
+describe("link failures", () => {
+  test("a runner that went away or stalled is no problem for the log, other failures are", () => {
+    expect(linkGone(new HttpError(409, "Mac is offline", "runner_offline"))).toBe(true);
+    expect(linkGone(new HttpError(504, "Mac didn't answer in time.", "runner_timeout"))).toBe(true);
+    const wrapped = Object.assign(new HttpError(502, "Couldn't copy your setup", "runner_sync_failed"), { cause: new HttpError(504, "", "runner_timeout") });
+    expect(linkGone(wrapped)).toBe(true);
+    expect(linkGone(new HttpError(502, "Couldn't copy your setup", "runner_sync_failed"))).toBe(false);
+    expect(linkGone(new Error("disk full"))).toBe(false);
+    expect(linkGone("offline")).toBe(false);
+  });
 });

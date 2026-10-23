@@ -332,6 +332,9 @@ describe("workspace repositories", () => {
       "sign in to git",
     );
     expect(gitFailure({ stderr: "", timedOut: true }, "git@github.com:a/b.git", null)).toBe("Timed out talking to github.com.");
+    expect(
+      gitFailure({ stderr: "fatal: unable to access 'https://github.com/a/b.git/': Resolving timed out after 987676 milliseconds", timedOut: false }, "https://github.com/a/b.git", null),
+    ).toBe("Can't reach github.com — check the URL and your internet connection.");
   });
 });
 
