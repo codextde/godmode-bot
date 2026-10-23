@@ -226,6 +226,15 @@ export function namedBy(agent: Owner): (rel: string) => string | null {
   return (rel) => pinnedBy(agent, refs, rel) ?? memoryMentions(refs, rel)[0] ?? null;
 }
 
+/** Every place that names `workspace/<rel>` or something in it, read once for many entries: what keeps it, then the memory files. */
+export function namesOf(agent: Owner): (rel: string) => string[] {
+  const refs = references(agent);
+  return (rel) => {
+    const pin = pinnedBy(agent, refs, rel);
+    return [...(pin ? [pin] : []), ...memoryMentions(refs, rel)];
+  };
+}
+
 /** Paths in tmp/ the agent's notes name (`tmp/...`, existing ones only) → where they are named. */
 function namedScratch(root: string, refs: References): Map<string, string[]> {
   const found = new Map<string, string[]>();
@@ -256,14 +265,14 @@ function inProject(root: string, rel: string): boolean {
   return false;
 }
 
-interface Note {
+export interface Note {
   rel: string;
   bytes: number;
   modified: number;
 }
 
 /** The agent's notes: Markdown files in the workspace, outside tmp/, uploads/, hidden folders, packages and projects. */
-function listNotes(root: string): Note[] {
+export function listNotes(root: string): Note[] {
   const notes: Note[] = [];
   const walk = (dir: string, depth: number) => {
     let names: string[];
@@ -292,7 +301,7 @@ function listNotes(root: string): Note[] {
 }
 
 /** The note's first line as a title. */
-function noteTitle(abs: string): string {
+export function noteTitle(abs: string): string {
   try {
     const head = readFileSync(abs, "utf8").slice(0, 2_000);
     const line = head.split("\n").find((l) => l.trim()) ?? "";

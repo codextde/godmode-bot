@@ -13,6 +13,8 @@ export interface ChatFile {
   kind: "file" | "folder";
   /** Where the core serves the file, when it is a picture the chat can show. */
   image: string | null;
+  /** It is on the chat's runner, not on the core's machine. */
+  remote?: boolean;
 }
 
 export interface ChatFiles {

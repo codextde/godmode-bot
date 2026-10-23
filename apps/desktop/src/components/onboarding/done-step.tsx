@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { format } from "date-fns";
 import { motion } from "motion/react";
-import { ArrowRight, Bot, CircleCheck, CircleDashed, Plug, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, CircleCheck, CircleDashed, KeyRound, ShieldCheck } from "lucide-react";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState } from "@godmode/shared";
 import { Character } from "@/components/character";
 import { FormError, SubmitButton } from "./auth-layout";
@@ -16,8 +17,8 @@ export interface OnboardingSummary {
 
 const NEXT = [
   { to: "/agents/new", icon: <Bot />, title: "Hire your first agent", body: "Pick a template or describe the job." },
+  { to: "/vault/logins", icon: <KeyRound />, title: "Save your logins", body: "Agents sign in like you, 2FA included. No connectors needed." },
   { to: "/vault/2fa?import=1", icon: <ShieldCheck />, title: "Import 2FA codes", body: "Scan Google Authenticator exports." },
-  { to: "/integrations", icon: <Plug />, title: "Connect your apps", body: "Gmail, Slack, GitHub and more via Composio." },
 ];
 
 export function DoneStep({
@@ -62,10 +63,11 @@ export function DoneStep({
   ];
   const license = summary.license;
   const licensed = !!license?.keyHint && !license.blocked && ["active", "trial", "past_due", "unverified"].includes(license.status);
+  const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? format(new Date(license.graceEndsAt), "MMM d") : null;
   items.push({
     label: "Godmode Pro",
-    ok: licensed ? true : license?.blocked ? false : null,
-    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : license?.status === "grace" ? "Add your key in Settings → License" : "Skipped",
+    ok: licensed || freeUntil ? true : license?.blocked ? false : null,
+    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : freeUntil ? `Free until ${freeUntil}` : "Skipped",
   });
   if (serverMode)
     items.push({

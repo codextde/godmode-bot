@@ -562,6 +562,7 @@ describe("the chat the API returns", () => {
       createdAt: local.createdAt,
       updatedAt: local.updatedAt,
       preview: "",
+      context: null,
       running: false,
       followup: null,
       paused: null,

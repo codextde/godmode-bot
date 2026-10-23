@@ -99,10 +99,9 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
   });
   return useMemo(() => {
     if (!data?.files.length) return null;
-    const files = runnerId ? data.files.map((f) => (f.image ? { ...f, image: onRunner(f.image, runnerId) } : f)) : data.files;
+    const files = runnerId ? data.files.map((f) => (f.remote && f.image ? { ...f, image: onRunner(f.image, runnerId) } : f)) : data.files;
     const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
-    // The runner answers for its own machine; this computer's file manager has nothing to show for its paths.
-    return { byRef: new Map(files.map((f) => [f.ref, f])), pictures: [...pictures.values()], local: runnerId ? false : data.local };
+    return { byRef: new Map(files.map((f) => [f.ref, f])), pictures: [...pictures.values()], local: data.local };
   }, [data, runnerId]);
 }
 
@@ -114,20 +113,24 @@ const SHOW_IN_FOLDER = isMac ? "Show in Finder" : "Show in folder";
 
 const MessageScope = createContext<{ local: boolean; preview: (path: string) => void }>({ local: false, preview: () => {} });
 
-/** What a click on a file does: it opens the file manager there, or — from another computer — copies the path. */
-function useShowInFolder(): { label: string; icon: LucideIcon; show: (file: ChatFile) => void } {
+/**
+ * What a click on a file does: it opens the file manager there, or — from another computer, or for a file on the chat's
+ * runner, which this computer's file manager can't show — copies the path.
+ */
+function useShowInFolder(): (file: ChatFile) => { label: string; icon: LucideIcon; show: () => void } {
   const { local } = useContext(MessageScope);
-  const show = useCallback(
+  return useCallback(
     (file: ChatFile) => {
-      if (!local) return void copyText(file.path, "Path copied");
-      api.files.reveal(file.path).catch((err) => {
-        const gone = err instanceof ApiRequestError && err.status === 404;
-        toast.error(gone ? `${file.name} doesn't exist anymore` : `Couldn't open ${isMac ? "Finder" : "the file manager"}`, gone ? undefined : { description: errorMessage(err) });
-      });
+      if (!local || file.remote) return { label: "Copy path", icon: Copy, show: () => void copyText(file.path, "Path copied") };
+      const show = () =>
+        void api.files.reveal(file.path).catch((err) => {
+          const gone = err instanceof ApiRequestError && err.status === 404;
+          toast.error(gone ? `${file.name} doesn't exist anymore` : `Couldn't open ${isMac ? "Finder" : "the file manager"}`, gone ? undefined : { description: errorMessage(err) });
+        });
+      return { label: SHOW_IN_FOLDER, icon: FolderOpen, show };
     },
     [local],
   );
-  return local ? { label: SHOW_IN_FOLDER, icon: FolderOpen, show } : { label: "Copy path", icon: Copy, show };
 }
 
 /** Everything the files of one message share: where they are, and the preview its pictures open in. */
@@ -145,14 +148,14 @@ export function MessageFilesScope({ files, children }: { files: MessageFiles | n
 
 /** A file or folder named in a message; `chip` when it was written as code or a bare path. */
 export function FileLink({ file, chip, children }: { file: ChatFile; chip?: boolean; children?: ReactNode }) {
-  const { label, show } = useShowInFolder();
+  const { label, show } = useShowInFolder()(file);
   const Icon = file.kind === "folder" ? Folder : fileIcon(file.image ? "image/" : "", file.name);
   // The icon stays with the first letter: a long path wraps as a whole, and must not leave its icon behind.
   const start = typeof children === "string" ? [...children][0] : undefined;
   const activate = (e: { preventDefault: () => void; stopPropagation: () => void }) => {
     e.preventDefault();
     e.stopPropagation();
-    show(file);
+    show();
   };
   return (
     <span
@@ -200,7 +203,7 @@ const NAME_END = 9;
 /** A picture a message names, right in the chat: a click (or its button) opens the preview. */
 export function Picture({ file }: { file: ChatFile }) {
   const { preview } = useContext(MessageScope);
-  const { label, icon: ShowIcon, show } = useShowInFolder();
+  const { label, icon: ShowIcon, show } = useShowInFolder()(file);
   const blob = useCoreFileUrl(file.image ?? undefined, true);
   if (blob.failed) {
     return (
@@ -231,7 +234,7 @@ export function Picture({ file }: { file: ChatFile }) {
         <TileAction label="Preview" onClick={() => preview(file.path)}>
           <Maximize2 />
         </TileAction>
-        <TileAction label={label} onClick={() => show(file)}>
+        <TileAction label={label} onClick={show}>
           <ShowIcon />
         </TileAction>
       </span>
@@ -241,7 +244,7 @@ export function Picture({ file }: { file: ChatFile }) {
 
 /** The pictures of a message at full size, one at a time: ← and → step through them. */
 function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; path: string | null; onChange: (path: string | null) => void }) {
-  const { label, icon: ShowIcon, show } = useShowInFolder();
+  const showFor = useShowInFolder();
   const index = pictures.findIndex((p) => p.path === path);
   const current = pictures[index];
   // While the dialog closes, and while the next picture loads, the last one stays.
@@ -267,6 +270,7 @@ function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; pa
   }, [index, many, step]);
 
   if (!file) return null;
+  const { label, icon: ShowIcon, show } = showFor(file);
   return (
     <Lightbox
       src={src}
@@ -292,7 +296,7 @@ function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; pa
                 </Button>
               </>
             )}
-            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => show(file)}>
+            <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={show}>
               <ShowIcon className="size-3.5" /> {label}
             </Button>
             {!isTauri && file.image && (

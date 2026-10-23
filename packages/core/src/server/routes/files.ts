@@ -7,10 +7,11 @@ import { isLocalRequest } from "../auth";
 import { body, z } from "../validate";
 
 const refs = z.array(z.string().max(1024)).max(MAX_CHAT_FILE_REFS);
+export const chatFilesBody = z.object({ messages: z.array(refs).max(200) });
 
 export function registerFileRoutes(app: Hono): void {
   app.post("/api/conversations/:id/files", async (c) => {
-    const { messages } = await body(c, z.object({ messages: z.array(refs).max(200) }));
+    const { messages } = await body(c, chatFilesBody);
     return c.json<ChatFiles>({ local: isLocalRequest(c), files: resolveChatFiles(c.req.param("id"), messages) });
   });
 

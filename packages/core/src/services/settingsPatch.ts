@@ -36,6 +36,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     // Claude stays every agent's default: GLM is picked per agent, chat or delegated task.
     if (typeof value === "string" && modelProvider(value) !== "anthropic") throw badRequest(`runner.${key} must be a Claude model; pick GLM per agent or chat`);
   }
+  const compactAt = (runner as { autoCompactPercent?: unknown } | undefined)?.autoCompactPercent;
+  if (compactAt !== undefined && compactAt !== null && !(typeof compactAt === "number" && Number.isInteger(compactAt) && compactAt >= 0 && compactAt <= 95)) {
+    throw badRequest("Auto-compress must be a whole percent between 0 (off) and 95, or empty for Claude Code's own threshold");
+  }
   const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
   if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
     throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");

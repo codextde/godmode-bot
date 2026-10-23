@@ -7,9 +7,13 @@
  * only makes sense here (pinning and archiving a chat) stays here.
  */
 import type { Context, MiddlewareHandler } from "hono";
-import { parseRunnerView, type ConversationWithMessages, type Run } from "@godmode/shared";
+import { parseRunnerView, type ChatFile, type ChatFiles, type ConversationWithMessages, type Run } from "@godmode/shared";
 import { get, run as sql } from "../db";
 import { logger } from "../log";
+import { isLocalRequest } from "../server/auth";
+import { chatFilesBody } from "../server/routes/files";
+import { body } from "../server/validate";
+import { resolveChatFiles } from "../services/chatFiles";
 import { conversationExists, deleteConversation, emitConversationUpdated, getConversation, messageWindow, windowConversation } from "../services/conversations";
 import { HttpError, badRequest } from "../util";
 import { requireLicense } from "../license/license";
@@ -61,6 +65,28 @@ async function jsonBody(c: Context): Promise<Record<string, unknown> | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The paths a runner's chat names are looked up on the runner first, then here: its agent may have worked on this
+ * computer (before the chat moved, or while the runner was away), and an offline runner still leaves its files here.
+ */
+async function chatFiles(c: Context, runnerId: string, id: string): Promise<Response> {
+  const { messages } = await body(c, chatFilesBody);
+  let there: ChatFile[][] = [];
+  try {
+    const answer = await forward(c, runnerId, pathAndQuery(c), JSON.stringify({ messages }), READ_TIMEOUT_MS);
+    if (!answer.ok) return answer;
+    there = ((await answer.json()) as ChatFiles).files;
+  } catch (err) {
+    if (!isUnanswered(err)) throw err;
+  }
+  const here = resolveChatFiles(id, messages);
+  const files = messages.map((refs, n) => {
+    const found = new Map([...(here[n] ?? []), ...(there[n] ?? []).map((f) => ({ ...f, remote: true }))].map((f) => [f.ref, f]));
+    return [...new Set(refs)].flatMap((ref) => found.get(ref) ?? []);
+  });
+  return c.json<ChatFiles>({ local: isLocalRequest(c), files });
 }
 
 /** Forward the request as it is (method, path and query, content type, body) and answer with what the runner says. */
@@ -186,6 +212,7 @@ async function conversationRequest(c: Context, runnerId: string, id: string, res
     }
     return null;
   }
+  if (method === "POST" && rest === "/files") return chatFiles(c, runnerId, id);
   // Pages of older messages and pictures come from the copy here: the runner's chat was just mirrored for its window.
   if (method === "GET" && rest.startsWith("/messages")) return null;
   if (!FORWARDED.test(rest)) return null;

@@ -36,7 +36,9 @@ export function LicenseGate({ state }: { state: LicenseState }) {
         >
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} mood="idle" follow title="Godmode" />
           <p className="eyebrow mt-7">Godmode Pro</p>
-          <h1 className="heading-display mt-2 text-[32px] sm:text-[36px]">Activate Godmode</h1>
+          <h1 className="heading-display mt-2 text-[32px] sm:text-[36px]">
+            {state.status === "missing" && state.graceEndsAt ? "Your free week is over" : "Activate Godmode"}
+          </h1>
           <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-balance text-muted-foreground">
             {state.message ?? "Start your free trial, or enter your licence key to keep your agents working."}
           </p>

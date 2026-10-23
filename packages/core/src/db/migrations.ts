@@ -1641,4 +1641,14 @@ CREATE TABLE replica_deferred (
 );
 `,
   },
+  {
+    id: 100,
+    name: "conversation_context",
+    sql: /* sql */ `
+-- How full a chat's Claude session is after its last turn (tokens sent with every turn, the model's window), for the
+-- context meter and Compress in the chat.
+ALTER TABLE conversations ADD COLUMN context_tokens INTEGER;
+ALTER TABLE conversations ADD COLUMN context_window INTEGER;
+`,
+  },
 ];

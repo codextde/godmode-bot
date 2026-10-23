@@ -25,74 +25,149 @@ const ua = Astro.request.headers.get('user-agent') ?? '';
 const phone = /iPhone|iPad|iPod|Android/i.test(ua);
 const guess = /Windows/i.test(ua) ? 'windows' : /Linux/i.test(ua) && !phone ? 'linux' : 'mac';
 const asked = Astro.url.searchParams.get('platform') ?? '';
-const selected = PLATFORMS[asked] ? asked : guess;
-const invalid = Astro.url.searchParams.has('invalid');
+const selected = Object.hasOwn(PLATFORMS, asked) ? asked : guess;
+
+const apps = [
+  { id: 'mac', name: 'macOS', note: 'Apple silicon', icon: 'apple' },
+  { id: 'windows', name: 'Windows', note: '64-bit installer', icon: 'monitor' },
+  { id: 'linux', name: 'Linux', note: 'AppImage', icon: 'terminal' },
+];
+const more = [
+  { id: 'mac-intel', label: 'macOS Intel' },
+  { id: 'windows-msi', label: 'Windows MSI' },
+  { id: 'linux-deb', label: '.deb' },
+  { id: 'linux-rpm', label: '.rpm' },
+];
+const servers = Object.entries(PLATFORMS)
+  .filter(([id]) => id.startsWith('server-'))
+  .map(([id, p]) => ({ id, label: p.label.replace('Headless server · ', '') }));
+const install = `curl -fsSL ${SITE.url}/install.sh | sh`;
+const pageUrl = `${SITE.url}/download`;
+const handoff = `mailto:?subject=${encodeURIComponent('Download Godmode')}&body=${encodeURIComponent(`Godmode for Mac, Windows and Linux, free for 7 days:\n${pageUrl}\n`)}`;
 Astro.response.headers.set('cache-control', 'no-store');
 Astro.response.headers.set('referrer-policy', 'same-origin');
 ---
 
-<Base title="Download" description="Download Godmode with your license key." noindex>
+<Base title="Download" description="Download Godmode for Mac, Windows and Linux. Free for 7 days, no card. Then add a licence key.">
   <Nav home={false} />
   <main class="pt-36 pb-24">
-    <div class="container-x max-w-[640px]">
-      <p class="eyebrow"><span class="n">●</span> Customers</p>
-      <h1 class="h-section mt-5">{key && !invalid ? 'Your download is ready' : 'Download Godmode'}</h1>
-      <p class="lead mt-5">
-        {key && !invalid ? 'Your license key is filled in. Check the system and download.' : 'Enter the license key from your welcome page, invoice or billing portal.'}
-      </p>
+    <div class="container-x max-w-[720px]">
+      <p class="eyebrow"><span class="n">●</span> Download</p>
+      <h1 class="h-section mt-5">Download Godmode</h1>
+      <p class="lead mt-5">Free for 7 days, no card. Then add a licence key.</p>
+
       {
-        phone && (
-          <p class="mt-6 flex items-start gap-2 rounded-xl p-3 text-[13.5px] text-text-2 ring-1 ring-line-2">
-            <Icon name="laptop" size={16} class="mt-0.5 flex-none text-brand" />
-            Godmode installs on a Mac, Windows or Linux computer. Open this page there to download.
-          </p>
+        phone ? (
+          <div class="card mt-10 p-6 sm:p-8">
+            <div class="flex items-start gap-4">
+              <span class="grid size-11 flex-none place-items-center rounded-xl bg-brand-soft text-brand">
+                <Icon name="laptop" size={20} />
+              </span>
+              <div>
+                <p class="h-card">Send it to your computer</p>
+                <p class="mt-1.5 text-[14px] leading-relaxed text-muted">Godmode runs on a Mac, Windows or Linux computer. Open this page there to download.</p>
+              </div>
+            </div>
+            <div class="mt-5 flex flex-col gap-2 sm:flex-row">
+              <a href={handoff} class="btn btn-primary sm:flex-1" data-track="download_handoff_email">
+                <Icon name="mail" size={16} /> Email me the link
+              </a>
+              <button type="button" class="btn btn-ghost sm:flex-1" data-copy={pageUrl} data-track="download_handoff_copy">
+                <Icon name="link" size={15} /> <span data-copy-label>Copy link</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <a href={`/download/${selected}`} class="btn btn-primary btn-lg mt-10 w-full sm:w-auto" data-track={`download_${selected}`}>
+            <Icon name="download" size={17} /> Download for {PLATFORMS[selected].label}
+          </a>
         )
       }
 
-      <form method="post" action="/download/go" class="card mt-10 grid gap-4 p-6 sm:p-8">
+      <div class="mt-4 grid gap-3 sm:grid-cols-3">
         {
-          invalid && (
-            <p class="flex items-start gap-2 rounded-xl p-3 text-[13.5px] text-text-2 ring-1 ring-[rgb(240_82_91/0.35)]" style="background: rgb(240 82 91 / 0.06)">
-              <Icon name="triangle-alert" size={16} class="mt-0.5 flex-none text-danger" />
-              That key isn’t active. Check for typos — or email {SITE.email} and we’ll sort it out.
-            </p>
-          )
+          apps.map((a) => (
+            <a
+              href={`/download/${a.id}`}
+              class:list={['card flex items-center gap-4 p-5', !phone && a.id === selected && 'ring-1 ring-[var(--brand-line)]']}
+              data-track={`download_${a.id}`}
+            >
+              <Icon name={a.icon} size={22} />
+              <span>
+                <b class="block text-[15px] font-medium">{a.name}</b>
+                <span class="text-[12.5px] text-muted">{a.note}</span>
+              </span>
+            </a>
+          ))
         }
-        <label class="grid gap-2">
-          <span class="text-[13px] text-muted">License key</span>
-          <input
-            name="key"
-            value={key || (invalid ? rawKey.slice(0, 40) : '')}
-            required
-            autocomplete="off"
-            spellcheck="false"
-            placeholder="GM-XXXXX-XXXXX-XXXXX-XXXXX"
-            pattern="\s*[Gg][Mm](-[0-9A-Za-z]{5}){4}\s*"
-            class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 font-mono text-[15px] tracking-[0.06em] text-text uppercase ring-1 ring-line-2 outline-none placeholder:text-dim focus:ring-brand"
-          />
-        </label>
-        <label class="grid gap-2">
-          <span class="text-[13px] text-muted">Platform</span>
-          <select name="platform" data-platform class="h-[50px] rounded-xl bg-[rgb(0_0_0/0.3)] px-4 text-[15px] text-text ring-1 ring-line-2 outline-none focus:ring-brand">
-            {Object.entries(PLATFORMS).map(([id, p]) => <option value={id} selected={id === selected}>{p.label}</option>)}
-          </select>
-        </label>
-        <button type="submit" class="btn btn-primary btn-lg mt-2">
-          <Icon name="download" size={16} /> <span data-download-label>Download for {PLATFORMS[selected].label}</span>
-        </button>
-      </form>
-      <p class="mt-6 text-[14px] text-muted">
-        Don’t have a license yet? <a href="/#pricing" class="text-text underline decoration-line-3 underline-offset-2">See pricing</a>.
+      </div>
+      <p class="mt-3 text-center text-[12.5px] text-dim">
+        Also:
+        {
+          more.map((m, i) => (
+            <>
+              {i > 0 && ' · '}
+              <a class="underline decoration-line-2 underline-offset-2 hover:text-text" href={`/download/${m.id}`} data-track={`download_${m.id}`}>
+                {m.label}
+              </a>
+            </>
+          ))
+        }
+      </p>
+
+      {
+        key && (
+          <div class="card mt-10 p-6 sm:p-8">
+            <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Your licence key</p>
+            <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+              <code class="flex-1 rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3.5 font-mono text-[16px] tracking-[0.04em] break-all text-text ring-1 ring-line-2 sm:text-[18px] sm:tracking-[0.06em]">
+                {key}
+              </code>
+              <button type="button" class="btn btn-ghost" data-copy={key}>
+                <Icon name="copy" size={15} /> <span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <p class="mt-3 text-[13px] text-muted">Paste it into Godmode during setup, or later in Settings → License.</p>
+          </div>
+        )
+      }
+
+      <div class="mt-10 rounded-[22px] p-6 ring-1 ring-line sm:p-8">
+        <div class="flex items-start gap-4">
+          <span class="grid size-11 flex-none place-items-center rounded-xl bg-[rgb(255_250_240/0.05)] text-text-2">
+            <Icon name="server" size={20} />
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="h-card">Always-on server</p>
+            <p class="mt-1.5 text-[14px] leading-relaxed text-muted">For a spare Mac or PC you reach from any browser. Same free week.</p>
+          </div>
+        </div>
+        <div class="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
+          <code class="min-w-0 flex-1 overflow-x-auto rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3 font-mono text-[13px] whitespace-nowrap text-text-2 ring-1 ring-line-2">{install}</code>
+          <button type="button" class="btn btn-ghost btn-sm" data-copy={install} data-track="download_install_copy">
+            <Icon name="copy" size={14} /> <span data-copy-label>Copy</span>
+          </button>
+        </div>
+        <p class="mt-3 text-[12.5px] leading-relaxed text-dim">
+          Or the binary:
+          {
+            servers.map((s, i) => (
+              <>
+                {i > 0 && ' · '}
+                <a class="underline decoration-line-2 underline-offset-2 hover:text-text" href={`/download/${s.id}`} data-track={`download_${s.id}`}>
+                  {s.label}
+                </a>
+              </>
+            ))
+          }
+        </p>
+      </div>
+
+      <p class="mt-8 text-[14px] leading-relaxed text-muted">
+        After the free week, add your licence key in the app or start the 14-day free trial.
+        <a href="/#pricing" class="text-text underline decoration-line-3 underline-offset-2">See pricing</a>.
       </p>
     </div>
   </main>
   <Footer />
-  <script>
-    const select = document.querySelector<HTMLElement>('[data-platform]');
-    const label = document.querySelector<HTMLElement>('[data-download-label]');
-    select?.addEventListener('change', () => {
-      const option = select.querySelector<HTMLElement>('option:checked');
-      if (label && option) label.textContent = `Download for ${option.textContent}`;
-    });
-  </script>
 </Base>

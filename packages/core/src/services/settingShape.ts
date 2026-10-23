@@ -6,6 +6,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "runner.runTimeoutMinutes": [0, 1440],
   "runner.stallMinutes": [3, 240],
   "runner.loopRepeats": [3, 50],
+  "runner.autoCompactPercent": [0, 95],
   "runner.defaultMaxBudgetUsd": [0.01, 10_000],
   "runner.monthlyBudgetUsd": [0.01, 1_000_000],
   "browser.keepAliveMinutes": [0, 1440],

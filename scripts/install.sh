@@ -1,10 +1,11 @@
 #!/bin/sh
 # Installs the standalone Godmode Bot server (`godmode`) on Linux or macOS.
 #
-#   curl -fsSL https://usegodmode.com/install.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
+#   curl -fsSL https://usegodmode.com/install.sh | sh
 #
 # Environment:
-#   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required; also stored for `godmode serve`
+#   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal), stored for `godmode serve`;
+#                         optional: Godmode runs free for 7 days without one
 #   GODMODE_VERSION       release tag to install, e.g. v0.2.0 (default: latest)
 #   GODMODE_INSTALL_DIR   target directory (default: ~/.local/bin)
 #
@@ -67,17 +68,15 @@ if [ "$os" = linux ]; then
   fi
 fi
 
-[ -n "$LICENSE_KEY" ] || err "set GODMODE_LICENSE to your license key — get one at $SITE"
-
 asset="godmode-$os-$arch"
 case "$VERSION" in latest | v*) ;; *) VERSION="v$VERSION" ;; esac
-query="key=$LICENSE_KEY&version=$VERSION"
+query="version=$VERSION"
 
 tmp=$(mktemp -d 2>/dev/null || mktemp -d -t godmode)
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 say "Downloading $asset ($VERSION)…"
-download "$SITE/download/file/$asset?$query" "$tmp/godmode" || err "download failed — check your license key ($SITE/download)"
+download "$SITE/download/file/$asset?$query" "$tmp/godmode" || err "download failed — try again, or download it from $SITE/download"
 
 if download "$SITE/download/file/$asset.sha256?$query" "$tmp/godmode.sha256" 2>/dev/null; then
   expected=$(cut -d' ' -f1 < "$tmp/godmode.sha256")
@@ -102,8 +101,8 @@ mv -f "$tmp/godmode" "$INSTALL_DIR/godmode"
 installed=$("$INSTALL_DIR/godmode" version 2>/dev/null) || err "the installed binary does not run: $INSTALL_DIR/godmode"
 say "Installed Godmode Bot $installed → $INSTALL_DIR/godmode"
 
-# The server checks the same key: store it in its data folder (GODMODE_HOME, default ~/.godmode).
-if ! "$INSTALL_DIR/godmode" license "$LICENSE_KEY" < /dev/null > /dev/null 2>&1; then
+# The server checks the key: store it in its data folder (GODMODE_HOME, default ~/.godmode).
+if [ -n "$LICENSE_KEY" ] && ! "$INSTALL_DIR/godmode" license "$LICENSE_KEY" < /dev/null > /dev/null 2>&1; then
   say "warning: the license key could not be stored; add it later with: godmode license <key>"
 fi
 

@@ -12,6 +12,7 @@ import {
   BrainCircuit,
   Cloud,
   CreditCard,
+  FolderOpen,
   DatabaseBackup,
   Gauge,
   Globe,
@@ -349,6 +350,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
             <Puzzle /> {named("/plugins", "Plugins")}
+          </CommandItem>
+          <CommandItem value="files workspace notes memory cleanup tidy delete" keywords={alias("/files", "Files")} onSelect={() => go("/files")}>
+            <FolderOpen /> {named("/files", "Files")}
           </CommandItem>
           <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
             <Activity /> {named("/activity", "Activity")}

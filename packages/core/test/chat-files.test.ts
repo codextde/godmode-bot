@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Agent, ChatFile, ChatFiles, Conversation } from "@godmode/shared";
 import { barePaths, fileRefs, isPathLike } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, openDb } from "../src/db";
+import { closeDb, openDb, run as sql } from "../src/db";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
 import { createApp } from "../src/server/app";
@@ -182,6 +182,20 @@ describe("files of a chat", () => {
     const inFolder = (await call<Conversation>("POST", "/api/conversations", { agentId: agent.id, workingDirectory: folder })).data;
     const { data } = await call<ChatFiles>("POST", `/api/conversations/${inFolder.id}/files`, { messages: [["workspace/shots/01-positions.png", "workspace/report.pdf"]] });
     expect(data.files[0]!.map((f) => f.path)).toEqual([join(folder, "workspace", "shots", "01-positions.png"), join(agent.repoPath, "workspace", "report.pdf")]);
+  });
+
+  test("a chat on a runner that is away still finds the files on this computer", async () => {
+    const away = (await call<Conversation>("POST", "/api/conversations", { agentId: agent.id })).data;
+    const now = new Date().toISOString();
+    sql("INSERT INTO runners (id, name, public_key, port, kind, created_at, updated_at) VALUES ('rnr_away', 'Other Mac', 'key-away', 7789, 'device', ?, ?)", now, now);
+    sql("UPDATE conversations SET runner_id = 'rnr_away' WHERE id = ?", away.id);
+    const { status, data } = await call<ChatFiles>("POST", `/api/conversations/${away.id}/files`, { messages: [["workspace/shots/", "workspace/report.pdf", "missing.png"]] });
+    expect(status).toBe(200);
+    expect(data.files[0]!.map((f) => [f.path, f.remote])).toEqual([
+      [shots, undefined],
+      [join(agent.repoPath, "workspace", "report.pdf"), undefined],
+    ]);
+    expect((await call("POST", `/api/conversations/${away.id}/files`, { messages: "a.png" })).status).toBe(400);
   });
 
   test("only pictures are served", async () => {

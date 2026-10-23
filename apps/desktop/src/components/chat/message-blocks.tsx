@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import type { Agent, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
+import type { Agent, CompactInfo, Credential, MessageBlock, ToolTaskAgent } from "@godmode/shared";
 import { WORKFLOW_TOOL, isPlaceholderReply } from "@godmode/shared";
 import { ArrowUpRight, Brain, CheckCircle2, ChevronRight, Circle, CircleDot, CornerDownRight, Info, Loader2, Lock, Puzzle, ShieldAlert, Square, SquareSlash, TriangleAlert, Workflow, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { AgentAvatar } from "@/components/common";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
 import { ThinkingReasoning } from "@/components/aicss/ThinkingReasoning";
 import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
+import { CompactedDivider } from "./context-meter";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { formatDuration, formatElapsed, formatTokens } from "@/components/runs/run-status";
@@ -42,7 +43,7 @@ type Item =
   | { kind: "text"; key: string; text: string }
   | { kind: "thinking"; key: string; text: string }
   | { kind: "error"; key: string; text: string }
-  | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string; mod?: string }
+  | { kind: "notice"; key: string; level: "info" | "warning" | "success"; text: string; mod?: string; compacted?: CompactInfo }
   | { kind: "command"; key: string; name: string; args: string; output: string }
   | { kind: "user-message"; key: string; block: UserMessageBlock }
   | { kind: "pause"; key: string; block: PauseBlock }
@@ -123,8 +124,10 @@ function buildItems(blocks: MessageBlock[]): Item[] {
     if (b.type === "text") {
       if (b.text.trim()) items.push({ kind: "text", key, text: b.text });
     } else if (b.type === "error") items.push({ kind: "error", key, text: b.text });
-    else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text, mod: b.mod });
-    else if (b.type === "command") items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
+    else if (b.type === "notice") items.push({ kind: "notice", key, level: b.level, text: b.text, mod: b.mod, compacted: b.compacted });
+    // The compression divider already says what /compact did.
+    else if (b.type === "command" && !(b.name === "compact" && blocks.some((x) => x.type === "notice" && x.compacted)))
+      items.push({ kind: "command", key, name: b.name, args: b.args, output: b.output });
     else if (b.type === "user_message") items.push({ kind: "user-message", key: b.id, block: b });
     // A run that stands still for a question: the card says so.
     else if (b.type === "pause" && b.reason !== "question") items.push({ kind: "pause", key, block: b });
@@ -213,6 +216,8 @@ export function MessageBlocks({
           case "notice":
             return item.mod ? (
               <ModNote key={item.key} level={item.level} text={item.text} name={item.mod} />
+            ) : item.compacted ? (
+              <CompactedDivider key={item.key} info={item.compacted} />
             ) : (
               <NoticeItem key={item.key} level={item.level} text={item.text} />
             );

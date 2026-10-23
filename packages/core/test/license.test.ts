@@ -1,12 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { LicenseState } from "@godmode/shared";
 import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { get, getMeta, run as sql } from "../src/db";
+import { get, getMeta, run as sql, setMeta } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { waitForRun } from "../src/runner/runner";
 import { startChat } from "../src/services/conversations";
-import { updateSettings } from "../src/services/settings";
 import { createRoutine } from "../src/services/routines";
 import { triggerRoutine } from "../src/scheduler/scheduler";
 import { listNotifications } from "../src/services/notifications";
@@ -99,46 +98,74 @@ async function putKey(key: string): Promise<{ status: number; body: LicenseState
   return { status: res.status, body: await res.json() };
 }
 
-describe("grace for installs from before licences", () => {
-  test("a fresh install gets none and is gated", () => {
+describe("the free week", () => {
+  const day = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  test("a new install without a key runs free for 7 days from its first start, and restarts don't extend them", () => {
+    const firstStart = new Date(now).toISOString();
+    const ends = now + LICENSE_GRACE_MS;
     initLicense();
     const s = licenseState();
-    expect(s.status).toBe("missing");
-    expect(s.graceEndsAt).toBeNull();
-    expect(s.blocked).toBe(true);
+    expect(s.status).toBe("grace");
+    expect(s.blocked).toBe(false);
+    expect(s.graceEndsAt).toBe(new Date(ends).toISOString());
+    expect(s.message).toBe(`Free until ${day(ends)}. Then add your licence key or start the 14-day free trial.`);
+    expect(() => requireLicense()).not.toThrow();
+
+    now += 3 * DAY;
+    initLicense();
+    expect(licenseState().graceEndsAt).toBe(s.graceEndsAt);
+    expect(getMeta("license.first_start")).toBe(firstStart);
+
+    now += 5 * DAY;
+    initLicense();
+    const after = licenseState();
+    expect(after.status).toBe("missing");
+    expect(after.blocked).toBe(true);
+    expect(after.graceEndsAt).toBe(s.graceEndsAt);
+    expect(after.message).toBe(`Your 7 free days ended on ${day(ends)}. Add your licence key or start the free trial to keep your agents working.`);
     expect(() => requireLicense()).toThrow(LicenseRequiredError);
+    expect(getMeta("license.first_start")).toBe(firstStart);
   });
 
-  test("an install that was already used gets 7 days once, never extended", () => {
-    updateSettings({ onboardingComplete: true });
-    try {
-      initLicense();
-      const s = licenseState();
-      expect(s.status).toBe("grace");
-      expect(s.blocked).toBe(false);
-      expect(s.graceEndsAt).toBe(new Date(now + LICENSE_GRACE_MS).toISOString());
-      expect(s.message).toContain("Add your licence key by");
-
-      now += 3 * DAY;
-      initLicense();
-      expect(licenseState().graceEndsAt).toBe(s.graceEndsAt);
-
-      now += 5 * DAY;
-      const after = licenseState();
-      expect(after.status).toBe("missing");
-      expect(after.blocked).toBe(true);
-      expect(after.message).toContain("The 7 days to add a licence key ended");
-    } finally {
-      updateSettings({ onboardingComplete: false });
-    }
+  test("an install that already has its days keeps them as they are", () => {
+    setMeta("license.first_start", new Date(now - 6 * DAY).toISOString());
+    setMeta("license.grace_ends_at", new Date(now + DAY).toISOString());
+    initLicense();
+    expect(licenseState()).toMatchObject({ status: "grace", blocked: false, graceEndsAt: new Date(now + DAY).toISOString() });
   });
 
-  test("GODMODE_LICENSE seeds the key, and leaves the environment", () => {
+  test("an older install that was refused without a key gets its 7 days from this start", () => {
+    setMeta("license.first_start", new Date(now - 20 * DAY).toISOString());
+    initLicense();
+    expect(licenseState()).toMatchObject({ status: "grace", blocked: false, graceEndsAt: new Date(now + LICENSE_GRACE_MS).toISOString() });
+  });
+
+  test("a build that doesn't check licences doesn't start the clock", () => {
+    __setLicenseEnforcedForTests(false);
+    initLicense();
+    expect(licenseState()).toMatchObject({ status: "missing", graceEndsAt: null, message: null, blocked: false });
+  });
+
+  test("GODMODE_LICENSE seeds the key, and leaves the environment; an install with a key gets no free days", () => {
     process.env.GODMODE_LICENSE = ` ${KEY.toLowerCase()} `;
     initLicense();
     expect(process.env.GODMODE_LICENSE).toBeUndefined();
     expect(getMeta("license.key")).toBe(KEY);
-    expect(licenseState().status).toBe("unverified");
+    expect(licenseState()).toMatchObject({ status: "unverified", graceEndsAt: null });
+  });
+
+  test("a key that ends during the free week leaves the rest of the week", async () => {
+    initLicense();
+    const ends = now + LICENSE_GRACE_MS;
+    answer = trial();
+    await putKey(KEY);
+    answer = json({ valid: false, plan: "monthly", status: "canceled", trialEndsAt: null, renewsAt: null, cancelAtPeriodEnd: false, manageUrl: null });
+    const s = await refreshLicense();
+    expect(s).toMatchObject({ status: "expired", blocked: false });
+    expect(s.message).toBe(`This licence has ended. Everything keeps working until ${day(ends)}.`);
+    now = ends;
+    expect(licenseState()).toMatchObject({ status: "expired", blocked: true });
   });
 });
 

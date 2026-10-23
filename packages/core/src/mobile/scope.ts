@@ -125,6 +125,7 @@ const SETTINGS: Record<string, string[]> = {
     "watchdog",
     "stallMinutes",
     "loopRepeats",
+    "autoCompactPercent",
     "spendTracking",
     "defaultMaxBudgetUsd",
     "monthlyBudgetUsd",

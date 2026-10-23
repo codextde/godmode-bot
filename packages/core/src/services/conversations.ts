@@ -21,7 +21,7 @@ import type {
   RunPause,
   RunTrigger,
 } from "@godmode/shared";
-import type { ComputerTarget, ConversationPatch, ConversationWithMessages, MessagePage, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
+import type { ComputerTarget, ConversationContext, ConversationPatch, ConversationWithMessages, MessagePage, SendMessageInput, SendMessageResult, StartChatResult } from "@godmode/shared";
 import { computerTargetLabel, MAX_MESSAGE_ATTACHMENT_BYTES, modelProvider } from "@godmode/shared";
 import { liteMessage } from "./liteMessage";
 import { all, bool, get, insert, int, run as sql, tx, update } from "../db";
@@ -74,6 +74,8 @@ interface ConversationRow extends PauseQuestionCols {
   runner_id: string | null;
   runner_state: string | null;
   runner_tools_id: string | null;
+  context_tokens: number | null;
+  context_window: number | null;
   pinned: number;
   archived: number;
   last_message_at: string | null;
@@ -138,6 +140,7 @@ export interface RunnerChatState {
   running: boolean;
   paused: RunPause | null;
   followup: ConversationFollowup | null;
+  context?: ConversationContext | null;
 }
 
 function toConversation(r: ConversationRow): Conversation {
@@ -169,6 +172,7 @@ function toConversation(r: ConversationRow): Conversation {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     preview: previewOf(r.preview),
+    context: remote ? (remote.context ?? null) : r.context_tokens != null ? { tokens: r.context_tokens, window: r.context_window ?? null } : null,
     running: remote ? remoteRunForConversation(r.id) !== null || remote.running === true : activeRunForConversation(r.id) !== null,
     followup: remote
       ? (remote.followup ?? null)
@@ -580,8 +584,12 @@ export function setConversationState(
     effort?: Effort | null;
     ultracode?: boolean | null;
     archived?: boolean;
+    /** How full the session is after this turn; null = unknown (a new or cleared session). */
+    context?: ConversationContext | null;
   },
 ) {
+  // A cleared session starts empty.
+  const context = patch.context !== undefined ? patch.context : patch.claudeSessionId === null ? null : undefined;
   update("conversations", id, {
     claude_session_id: patch.claudeSessionId,
     claude_session_cost_usd: patch.claudeSessionCostUsd !== undefined ? patch.claudeSessionCostUsd : patch.claudeSessionId !== undefined ? null : undefined,
@@ -593,6 +601,7 @@ export function setConversationState(
     ultracode: patch.ultracode === null ? null : int(patch.ultracode),
     last_message_at: patch.lastMessageAt,
     title: patch.title,
+    ...(context !== undefined ? { context_tokens: context?.tokens ?? null, context_window: context?.window ?? null } : {}),
     updated_at: now(),
   });
 }
