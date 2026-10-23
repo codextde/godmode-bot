@@ -3,13 +3,18 @@
  *
  *  - Desktop (Tauri): the Rust shell spawns the core sidecar and exposes `{ url, token }` via the `core_info` command.
  *  - Web dashboard (served by `godmode serve`): same origin, HttpOnly session cookie.
- *  - Dev (vite on :1420): requests go through the vite proxy; the access token is injected at build time.
+ *  - Dev (vite on :1420): requests go through the vite proxy; the dev server puts the access token into the page.
  *  - Cloud (served by Godmode Cloud under `/d/<deviceId>/`): requests go to `<base>/api/…` on the cloud's origin,
  *    which relays them to the computer; the cloud's own session cookie signs them in.
  */
 import { CLOUD_UI_META, type CloudUiContext } from "@godmode/shared";
 
-declare const __DEV_TOKEN__: string;
+declare global {
+  interface Window {
+    /** Set by Vite's dev server (vite.config.ts): the core's access token, so `pnpm dev` needs no login. */
+    __DEV_TOKEN__?: string;
+  }
+}
 
 export interface CoreInfo {
   /** Base URL for HTTP requests ('' = same origin) */
@@ -81,7 +86,7 @@ export async function getCoreInfo(): Promise<CoreInfo> {
       }
       throw new Error("Godmode core did not start. Check the logs in ~/.godmode/logs.");
     }
-    const devToken = typeof __DEV_TOKEN__ === "string" && __DEV_TOKEN__ ? __DEV_TOKEN__ : null;
+    const devToken = window.__DEV_TOKEN__ || null;
     const stored = safeSession("gm_token");
     info = { baseUrl: "", token: devToken ?? stored, isTauri: false, cloud: null };
     return info;
