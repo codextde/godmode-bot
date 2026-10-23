@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { router, Stack } from "expo-router";
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
+import { AwaySummaryCard } from "@/components/away-summary";
 import { Glass } from "@/components/glass";
 import { HeaderActions } from "@/components/header-actions";
 import { openHumanTask } from "@/components/human-task-row";
@@ -16,6 +17,7 @@ import { openTask } from "@/components/task-row";
 import { Card, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { trackAway } from "@/lib/away";
 import { greeting, needsYou, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
 import { useLinkComputer, useLive, useRunningChats } from "@/lib/live";
@@ -44,6 +46,7 @@ export default function Home() {
     reconnectNow();
     await queryClient.invalidateQueries({ predicate: (q) => q.queryKey[1] !== "detail" });
   });
+  useEffect(() => trackAway(), []);
 
   const enabled = (allAgents ?? []).filter((a) => a.enabled);
   const agent = pickAgent(enabled);
@@ -144,6 +147,7 @@ export default function Home() {
         </Card>
       )}
 
+      <AwaySummaryCard />
       <NeedsYou vaultLocked={vaultLocked} />
       <WorkingNow />
       <LiveScreens />
