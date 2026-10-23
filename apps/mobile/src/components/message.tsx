@@ -5,8 +5,8 @@ import { format } from "date-fns";
 import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Attachment, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { isPlaceholderReply, toolActivity } from "@godmode/shared";
+import type { Attachment, CompactInfo, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
+import { isPlaceholderReply, tokensLabel, toolActivity } from "@godmode/shared";
 import { FileChip } from "./attachments";
 import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
@@ -64,6 +64,12 @@ function subagentState(block: ToolUse, streaming: boolean) {
   return { task, background, status, running, failed, result };
 }
 
+/** The compression divider already says what /compact did. */
+function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
+  if (!blocks.some((b) => b.type === "notice" && b.compacted)) return blocks;
+  return blocks.filter((b) => !(b.type === "command" && b.name === "compact"));
+}
+
 const SOURCE_CAPTION = { automation: "Automation", delegation: "From another agent", task: "Board ticket" } as const;
 
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
@@ -92,7 +98,7 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
 
 export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content }: { blocks: MessageBlock[]; streaming?: boolean; content?: string }) {
   // A reply stored without blocks is its text.
-  const parts = useMemo(() => group(blocks.length || !content ? blocks : [{ type: "text", text: content }]), [blocks, content]);
+  const parts = useMemo(() => group(blocks.length || !content ? withoutCompactCard(blocks) : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
   return (
     <View style={styles.assistant}>
@@ -108,7 +114,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
       )}
       {streaming ? <BackgroundAgents parts={parts} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
-      {!streaming && content?.trim() ? <CopyReply text={content} /> : null}
+      {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <CopyReply text={content} /> : null}
     </View>
   );
 });
@@ -168,6 +174,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
         </View>
       );
     case "notice":
+      if (block.compacted) return <CompactedDivider info={block.compacted} />;
       return (
         <View style={[styles.callout, { backgroundColor: block.level === "warning" ? c.warningSoft : block.level === "success" ? c.successSoft : c.sunken }]}>
           <Icon
@@ -661,6 +668,9 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     borderWidth: StyleSheet.hairlineWidth,
   },
+  compacted: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  compactedLine: { flex: 1, height: StyleSheet.hairlineWidth },
+  compactedPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: StyleSheet.hairlineWidth },
   callout: {
     flexDirection: "row",
     alignItems: "center",
@@ -732,3 +742,24 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
 });
+
+/** Where the chat was summarized: a quiet divider, earlier messages stay readable above it. */
+function CompactedDivider({ info }: { info: CompactInfo }) {
+  const c = useColors();
+  const sizes = info.preTokens !== null && info.postTokens !== null ? ` · ${tokensLabel(info.preTokens)} → ${tokensLabel(info.postTokens)}` : "";
+  return (
+    <View style={styles.compacted} accessibilityRole="text">
+      <View style={[styles.compactedLine, { backgroundColor: c.border }]} />
+      <View style={[styles.compactedPill, { borderColor: c.border, backgroundColor: c.surface }]}>
+        <Icon name="layers" size={12} color={c.success} />
+        <T variant="caption" muted>
+          <T variant="caption" style={{ fontWeight: "600" }}>
+            {info.auto ? "Compressed automatically" : "Chat compressed"}
+          </T>
+          {sizes}
+        </T>
+      </View>
+      <View style={[styles.compactedLine, { backgroundColor: c.border }]} />
+    </View>
+  );
+}

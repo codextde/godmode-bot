@@ -27,6 +27,7 @@ import { LiveStrip } from "@/components/live-strip";
 import { AssistantMessage, UserMessage } from "@/components/message";
 import { Icon } from "@/components/icon";
 import { ModelButton } from "@/components/model-button";
+import { ContextRing } from "@/components/context-ring";
 import { ChatScope, type ChatScopeValue } from "@/components/question-card";
 import { QueueTray } from "@/components/queue-tray";
 import { Button, ErrorState, Skeleton, T, tap } from "@/components/ui";
@@ -34,6 +35,7 @@ import { openHumanTask } from "@/components/human-task-row";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { fetchConversation, loadEarlier } from "@/lib/chat-cache";
+import { isCompressCommand, useContextGauge } from "@/lib/chat-memory";
 import { setQueue } from "@/lib/composer";
 import { whenText } from "@/lib/format";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
@@ -101,6 +103,7 @@ export default function Chat() {
   const { byId } = useAgents();
   const agent = conversation.data ? byId.get(conversation.data.agentId) : undefined;
   const run = useChatRun(id);
+  const activity = useRunActivity(run?.id);
   // Only which message streams: its text lives in the row that shows it, so the screen doesn't render with every word.
   const liveMessageId = useLive((s) => (run && s.drafts[id]?.runId === run.id ? s.drafts[id]!.messageId : null));
   const screens = useChatScreens(conversation.data, agent);
@@ -145,6 +148,12 @@ export default function Chat() {
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
   const queueing = !waiting && (!!run || !!paused || queue.length > 0);
   const followup = !run && !paused ? (conversation.data?.followup ?? null) : null;
+  // Chat memory: the ring next to the model, and a strip once the chat gets long (hidden until it grows further).
+  const gauge = useContextGauge(conversation.data?.context);
+  const compressing = (!!run && (activity ?? "").startsWith("Compressing")) || queue.some((m) => isCompressCommand(m.content));
+  const [compressHiddenAt, setCompressHiddenAt] = useState<number | null>(null);
+  const longChat =
+    !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
 
   const scope = useMemo<ChatScopeValue>(
     () => ({ conversationId: id, agentName: agent?.name ?? "The agent", openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
@@ -371,6 +380,8 @@ export default function Chat() {
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
         ) : followup ? (
           <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? "The agent"} />
+        ) : longChat ? (
+          <LongChatStrip pct={longChat.share === null ? null : Math.round(longChat.share * 100)} full={longChat.tone === "full"} onCompress={() => void send("/compress", [])} onHide={() => setCompressHiddenAt(longChat.tokens)} />
         ) : null}
         <QueueTray
           conversationId={id}
@@ -408,11 +419,14 @@ export default function Chat() {
             disabled={agent ? !agent.enabled : false}
             trailing={
               conversation.data ? (
+                <>
+                {gauge ? <ContextRing gauge={gauge} conversationId={id} /> : null}
                 <ModelButton
                   agent={agent}
                   conversationId={id}
                   choice={{ model: conversation.data.model ?? null, effort: conversation.data.effort ?? null, ultracode: conversation.data.ultracode ?? null }}
                 />
+                </>
               ) : null
             }
           />
@@ -662,6 +676,27 @@ function endedTurn(conv: ConversationWithMessages): { runId: string; mode: Retry
   const text = end?.type === "error" ? end.text : end?.type === "notice" && runEndOf(end.text) ? end.text : null;
   if (text === null || !retryHelps(runEndOf(text))) return null;
   return { runId: last.runId, mode: retryModeOf(last.blocks) === "continue" && conv.claudeSessionId ? "continue" : "again" };
+}
+
+/** Above the composer once the chat gets long. */
+function LongChatStrip({ pct, full, onCompress, onHide }: { pct: number | null; full: boolean; onCompress: () => void; onHide: () => void }) {
+  const c = useColors();
+  return (
+    <View style={[styles.paused, { backgroundColor: full ? c.dangerSoft : c.warningSoft, borderColor: c.border }]}>
+      <Icon name="layers" size={15} color={full ? c.danger : c.warning} />
+      <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
+        This chat is getting long{pct !== null ? ` · ${pct}%` : ""}
+      </T>
+      <Pressable onPress={() => { tap(); onCompress(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Compress the chat">
+        <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
+          Compress
+        </T>
+      </Pressable>
+      <Pressable onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide">
+        <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
+      </Pressable>
+    </View>
+  );
 }
 
 /** Above the composer when the last turn ended early. */

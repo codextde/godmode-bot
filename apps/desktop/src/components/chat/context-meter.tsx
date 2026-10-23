@@ -1,43 +1,18 @@
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { ArrowRight, FoldVertical, Loader2, X } from "lucide-react";
-import type { CompactInfo, ConversationContext } from "@godmode/shared";
-import { COMPRESS_MIN_TOKENS, DEFAULT_AUTO_COMPACT_PERCENT } from "@godmode/shared";
+import type { CompactInfo, ContextGauge, ConversationContext } from "@godmode/shared";
+import { contextGauge, tokensLabel } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
-/** Claude Code summarizes by itself close to a full window when Godmode sets no threshold. */
-const CLAUDE_DEFAULT_SHARE = 0.9;
-
-export function tokensLabel(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 100_000 ? 0 : 1)}k`;
-  return String(n);
-}
-
-export interface ContextGauge {
-  tokens: number;
-  window: number | null;
-  /** Share of the window in use, 0..1; null without a window. */
-  share: number | null;
-  /** Where Claude summarizes by itself (share of the window); null = never. */
-  autoAt: number | null;
-  tone: "calm" | "warn" | "full";
-  /** Worth a summary at all. */
-  compressible: boolean;
-}
+export { tokensLabel, type ContextGauge };
 
 export function useContextGauge(context: ConversationContext | null | undefined): ContextGauge | null {
-  const pct = useSettings().data?.runner.autoCompactPercent;
-  if (!context) return null;
-  const autoAt = pct === 0 ? null : pct === null ? CLAUDE_DEFAULT_SHARE : (pct ?? DEFAULT_AUTO_COMPACT_PERCENT) / 100;
-  const share = context.window ? Math.min(1, context.tokens / context.window) : null;
-  const limit = autoAt ?? CLAUDE_DEFAULT_SHARE;
-  const tone = share === null ? "calm" : share >= limit * 0.95 ? "full" : share >= limit * 0.75 ? "warn" : "calm";
-  return { tokens: context.tokens, window: context.window, share, autoAt, tone, compressible: context.tokens >= COMPRESS_MIN_TOKENS };
+  return contextGauge(context, useSettings().data?.runner.autoCompactPercent);
 }
 
 const TONE = {

@@ -266,7 +266,7 @@ export function AiSection({ settings }: { settings: Settings }) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent align="end">
-              {[30, 40, 50, 60, 70, 80].map((p) => (
+              {[40, 50, 60, 70, 80].map((p) => (
                 <SelectItem key={p} value={String(p)}>
                   At {p}%{p === DEFAULT_AUTO_COMPACT_PERCENT ? " (default)" : ""}
                 </SelectItem>
