@@ -38,7 +38,7 @@ let offlineRetryMs = [3_000, 8_000];
 export function __setOfflineRetryForTests(ms: number[]) {
   offlineRetryMs = ms;
 }
-const UNRESOLVED_HOST = /could not resolve host|name or service not known|nodename nor servname/i;
+const UNRESOLVED_HOST = /could not resolve host|name or service not known|nodename nor servname|resolving timed out/i;
 /** How long a run waits for a first clone; it goes on without it after that (the clone continues). */
 const RUN_CLONE_WAIT_MS = 90_000;
 const SAFE_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;

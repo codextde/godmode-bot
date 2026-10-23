@@ -528,10 +528,10 @@ async function connected(id: string, state: LinkState) {
   const r = row(id);
   if (!r) return;
   if (toPrimary(r)) {
-    await deviceHooks?.deviceConnected(id).catch((err) => log.warn("could not catch up with the primary", err instanceof Error ? err.message : err));
+    await deviceHooks?.deviceConnected(id).catch((err) => logFailure("could not catch up with the primary", err));
     return;
   }
-  if (r.kind === "device") await deviceHooks?.deviceConnected(id).catch((err) => log.warn(`could not take the changes of ${r.name}`, err instanceof Error ? err.message : err));
+  if (r.kind === "device") await deviceHooks?.deviceConnected(id).catch((err) => logFailure(`could not take the changes of ${r.name}`, err));
   if (dropped()) return;
   await releaseChats(id);
   const catchUpNow = async () => {
@@ -545,7 +545,7 @@ async function connected(id: string, state: LinkState) {
     try {
       await syncRunner(id);
     } catch (err) {
-      if (!dropped()) log.warn(`could not copy the setup to runner ${id}`, err instanceof Error ? err.message : err);
+      if (!dropped()) logFailure(`could not copy the setup to runner ${id}`, err);
     }
   };
   // A computer that just joined the group knows this setup's agents only after the copy: its chats come after it.
@@ -696,7 +696,7 @@ function scheduleSync(force: boolean) {
         emit(id);
         continue;
       }
-      void syncRunner(id, { force: forced }).catch((err) => log.warn(`could not copy the setup to runner ${id}`, err instanceof Error ? err.message : err));
+      void syncRunner(id, { force: forced }).catch((err) => logFailure(`could not copy the setup to runner ${id}`, err));
     }
   }, SYNC_DEBOUNCE_MS);
   syncTimer.unref?.();
@@ -730,6 +730,19 @@ function serialized<T>(id: string, fn: () => Promise<T>): Promise<T> {
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message.replace(/^Error:\s*/, "") : String(err);
+}
+
+/** The other computer went away or stopped answering: the next connect tries again on its own. */
+export function linkGone(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err instanceof HttpError && (err.code === "runner_offline" || err.code === "runner_timeout")) return true;
+  return linkGone(err.cause);
+}
+
+function logFailure(text: string, err: unknown): void {
+  const detail = err instanceof Error ? err.message : err;
+  if (linkGone(err)) log.info(text, detail);
+  else log.warn(text, detail);
 }
 
 /**
@@ -771,7 +784,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
         }
       } catch (err) {
         update("runners", id, { sync_error: `Couldn't copy your setup: ${message(err)}`, updated_at: now() });
-        throw new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed");
+        throw Object.assign(new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed"), { cause: err });
       } finally {
         syncing.delete(id);
         emit(id);
@@ -783,6 +796,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
         memory = await exchangeMemory(id, l, r.name, opts.agentId);
       } catch (err) {
         warnings.push(`Couldn't merge the agent's memory with ${r.name}: ${message(err)}`);
+        logFailure(warnings.at(-1)!, err);
       }
     }
     if (opts.profileId && r.sync_browser === 1) {
@@ -790,9 +804,9 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
         cookies = await copyCookies(r, l, opts.profileId);
       } catch (err) {
         warnings.push(`Couldn't copy the browser sessions to ${r.name}: ${message(err)}`);
+        logFailure(warnings.at(-1)!, err);
       }
     }
-    for (const w of warnings) log.warn(w);
     return { config, memory, cookies, warnings };
   });
 }
