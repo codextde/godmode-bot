@@ -41,6 +41,11 @@ const faqs: { key: string; q: string; a: string }[] = [
     a: `Your passwords and 2FA codes live in a vault on your computer, encrypted (AES-256). Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Every use is logged. One honest exception: on a separate Mac of its own, Godmode controls the whole machine, so signing in there is best effort and off until you allow it.`,
   },
   {
+    key: 'connectors',
+    q: 'Do I need connectors or integrations for my apps?',
+    a: `No. Many AI assistants need a connector (an “MCP server” or an app integration) for each app before they can work in it. Godmode signs in the way you do, with your own username, password and 2FA code from its encrypted vault, and then works in the website itself. Your CRM, a supplier portal, your shop admin, your accounting tool: most sites that open in your browser work right away, with no connector to set up. Connecting an app is optional and only makes an automation start the moment something arrives, like a new email.`,
+  },
+  {
     key: 'data',
     q: 'Where does my data go?',
     a: `Your passwords, logins, AI coworkers, their notes and their history stay on your computer. The app has no tracking and sends nothing to us unless you link it to Godmode Cloud. The tasks you give and the pages Godmode reads are processed by Claude under your own Anthropic account, exactly as when you use Claude directly.`,
