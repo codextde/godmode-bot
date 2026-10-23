@@ -90,7 +90,7 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
   const preview = selectedTotp && login ? outcomeText(selectedTotp, login, host, credById) : null;
 
   return (
-    <div className="flex max-h-[min(88vh,760px)] flex-col">
+    <div className="flex min-w-0 max-h-[min(88vh,760px)] flex-col">
       <div className="flex items-start gap-3.5 px-6 pt-6 pb-4">
         <Favicon domain={host} name={item.service || host} size="lg" />
         <div className="min-w-0 pr-8">
