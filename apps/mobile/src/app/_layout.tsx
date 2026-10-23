@@ -104,6 +104,11 @@ export default function RootLayout() {
                 <Stack.Screen name="model" options={{ presentation: "formSheet", sheetAllowedDetents: [0.8, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="chat-memory" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="workspaces" options={{ presentation: "formSheet", sheetAllowedDetents: [0.5, 1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="automation/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="automation-edit" options={{ presentation: "formSheet", sheetAllowedDetents: [1], sheetGrabberVisible: true, headerShown: false }} />
+                <Stack.Screen name="run/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
+                <Stack.Screen name="dream/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Dream" }} />
+                <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
                 <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
               </Stack.Protected>
