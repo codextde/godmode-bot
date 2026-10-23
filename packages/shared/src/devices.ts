@@ -138,6 +138,22 @@ export interface MoveChatInput {
   force?: boolean;
 }
 
+/**
+ * How far a chat on its way to another computer is: talking to where it is, copying its session and transcript
+ * (`bytes` of `total`, null when the other computer can't say), sending it on, saving it, continuing the run.
+ */
+export type ChatMoveStage = "checking" | "copying" | "sending" | "saving" | "continuing";
+
+export interface ChatMove {
+  conversationId: ID;
+  from: string;
+  to: string;
+  stage: ChatMoveStage;
+  bytes: number;
+  total: number | null;
+  startedAt: string;
+}
+
 /** POST /api/devices/handoff */
 export interface HandoffInput {
   /** The device whose chats move (its runner id), or null for the primary. */

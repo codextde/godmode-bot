@@ -2,6 +2,7 @@ import type { InvalidateQueryFilters, QueryClient } from "@tanstack/react-query"
 import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type DeviceGroup, type EntityName, type Message, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
+import { setChatMove, useChatMoves } from "@/stores/chatMoves";
 import { withPending } from "./pending-queue";
 import { qk } from "./queryKeys";
 
@@ -214,6 +215,8 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "hello":
       // A run.started for each active run follows; whatever else still looks live ended while we were away.
       if (event.activeRunIds) live.retainRuns(event.activeRunIds);
+      // Moves still on their way are told again right after.
+      useChatMoves.setState({ moves: {} });
       break;
     case "run.started":
       live.runStarted(event.run);
@@ -405,6 +408,9 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "runner.paired":
       qc.invalidateQueries({ queryKey: qk.runners });
       qc.invalidateQueries({ queryKey: qk.devices });
+      break;
+    case "chat.move":
+      setChatMove(event.conversationId, event.move);
       break;
     case "devices.updated": {
       const before = qc.getQueryData<DeviceGroup>(qk.devices);
