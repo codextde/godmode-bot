@@ -109,7 +109,7 @@ export function effortForModel(efforts: readonly Effort[], effort: Effort | null
 }
 
 /** A chat is summarized by itself once its session fills this much of the context window (percent). */
-export const DEFAULT_AUTO_COMPACT_PERCENT = 50;
+export const DEFAULT_AUTO_COMPACT_PERCENT = 70;
 /** Below this a summary saves next to nothing: Compress is not offered. */
 export const COMPRESS_MIN_TOKENS = 20_000;
 

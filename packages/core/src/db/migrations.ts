@@ -1651,4 +1651,13 @@ ALTER TABLE conversations ADD COLUMN context_tokens INTEGER;
 ALTER TABLE conversations ADD COLUMN context_window INTEGER;
 `,
   },
+  {
+    id: 101,
+    name: "auto_compact_70",
+    sql: /* sql */ `
+-- Long chats compress at 70% by default now (50% for one release): a runner section saved with the old default follows.
+UPDATE settings SET value = json_set(value, '$.autoCompactPercent', 70)
+WHERE key = 'runner' AND json_valid(value) AND json_extract(value, '$.autoCompactPercent') = 50;
+`,
+  },
 ];

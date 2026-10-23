@@ -121,7 +121,7 @@ describe("slash commands in chat runs", () => {
   test("the chat knows how full its session is; /compress compacts it", async () => {
     const big = await send(conversationId, "BIG_CONTEXT");
     expect(big.conv.context).toEqual({ tokens: 421_602, window: 1_000_000 });
-    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("50");
+    expect(big.inv.env.CLAUDE_AUTOCOMPACT_PCT_OVERRIDE).toBe("70");
     const { inv, conv } = await send(conversationId, "/compress keep the open tasks");
     expect(inv.prompt).toBe("/compact keep the open tasks");
     expect(conv.messages.at(-2)!.content).toBe("/compress keep the open tasks");

@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { ULTRACODE_HINT, effortForModel, findModel, type Effort } from "@godmode/shared";
+import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, effortForModel, findModel, type Effort } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { useModelCatalog } from "@/lib/composer";
@@ -116,6 +116,20 @@ export default function ModelAndLimits() {
           detail="Work cut off by a restart or a lost internet connection picks up by itself once Godmode and the connection are back."
           value={r.resumeAfterRestart ?? true}
           onChange={(resumeAfterRestart) => void patchSettings({ runner: { resumeAfterRestart } })}
+        />
+      </Group>
+
+      <Group title="Long chats" footer="A chat that fills this much of the model's memory is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper, later keeps more detail. Compress any chat by hand with the ring next to the model.">
+        <PickerRow
+          icon="layers"
+          title="Compress by itself"
+          value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
+          options={[
+            ...[40, 50, 60, 70, 80].map((p) => ({ value: String(p), label: `At ${p}%${p === DEFAULT_AUTO_COMPACT_PERCENT ? " (default)" : ""}` })),
+            { value: "claude", label: "When nearly full" },
+            { value: "0", label: "Never by itself" },
+          ]}
+          onChange={(v) => void patchSettings({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
         />
       </Group>
 
