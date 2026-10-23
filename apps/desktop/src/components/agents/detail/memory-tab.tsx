@@ -1,34 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { formatDistanceToNowStrict } from "date-fns";
-import {
-  Brain,
-  ChevronRight,
-  Eye,
-  FileCode2,
-  FileJson,
-  FileText,
-  Folder,
-  FolderOpen,
-  Lock,
-  Moon,
-  PencilLine,
-  RotateCcw,
-  Save,
-} from "lucide-react";
+import { ChevronRight, Folder, FolderOpen, FolderSearch } from "lucide-react";
 import type { Agent, AgentFileEntry } from "@godmode/shared";
-import { api, ApiRequestError, errorMessage } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { isMac, modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-import { Kbd } from "@/components/common";
-import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,39 +19,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { FileEditor, fileIcon, nameOf, parentOf } from "@/components/files/file-editor";
 import { DreamsPanel, useDreamingNow } from "./dreams-panel";
-import { BrokenLinks, brokenMemoryLinks, MemoryBudget, memoryLinkTarget, memorySections, SectionMenu, type MemorySection } from "./memory-editor-parts";
 
 const PINNED = ["MEMORY.md", "CLAUDE.md"];
 const HIDDEN = new Set([".git"]);
-const MAX_EDITABLE = 512 * 1024;
-
-/** Why a file can't be edited here (null = editable). */
-function readOnlyReason(path: string, size: number): string | null {
-  if (path === "CLAUDE.md") return "Generated from the agent's settings — edit the instructions in Settings instead.";
-  if (path.startsWith("state/")) return "Snapshot written by Godmode — changes would be overwritten.";
-  if (path.startsWith("runs/")) return "Raw run log — read-only.";
-  if (path.startsWith("conversations/")) return "Conversation transcript — read-only.";
-  if (size > MAX_EDITABLE) return "This file is too large to edit here.";
-  return null;
-}
-
-/** MEMORY.md and memory/** — a running dream owns these (the core refuses edits meanwhile). */
-function isMemoryPath(path: string) {
-  return path === "MEMORY.md" || path.startsWith("memory/");
-}
-
-/** The file changed on the server since the draft started — saving would overwrite someone else's edit. */
-class StaleDraftError extends Error {}
-
-function parentOf(path: string) {
-  const i = path.lastIndexOf("/");
-  return i === -1 ? "" : path.slice(0, i);
-}
-
-function nameOf(path: string) {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
 
 /** Normalise listing entries to repo-relative paths directly inside `dir`. */
 function childrenOf(entries: AgentFileEntry[], dir: string): AgentFileEntry[] {
@@ -94,20 +46,6 @@ function childrenOf(entries: AgentFileEntry[], dir: string): AgentFileEntry[] {
     if (a.type !== b.type) return a.type === "dir" ? -1 : 1;
     return a.path.localeCompare(b.path);
   });
-}
-
-function fileIcon(path: string) {
-  if (path === "MEMORY.md") return <Brain className="size-4 text-foreground" />;
-  if (path === "CLAUDE.md") return <Lock className="size-4 text-muted-foreground" />;
-  if (/\.(json|jsonl)$/.test(path)) return <FileJson className="size-4 text-muted-foreground" />;
-  if (/\.(ts|tsx|js|py|sh|yaml|yml|toml)$/.test(path)) return <FileCode2 className="size-4 text-muted-foreground" />;
-  return <FileText className="size-4 text-muted-foreground" />;
-}
-
-function formatSize(n: number) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 export function MemoryTab({ agent }: { agent: Agent }) {
@@ -140,11 +78,23 @@ export function MemoryTab({ agent }: { agent: Agent }) {
       <DreamsPanel agent={agent} />
       <div className="grid min-h-[32rem] grid-cols-1 gap-4 @3xl:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
-          <div className="flex items-center justify-between border-b px-4 py-3">
+          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
             <div>
               <h2 className="text-sm font-medium tracking-[-0.01em]">Files</h2>
               <p className="text-xs text-muted-foreground">Agent repository</p>
             </div>
+            <Button asChild variant="ghost" size="xs" title="Sizes, cleanup suggestions, moves and deletes">
+              <Link
+                to={`/files/${agent.id}`}
+                onClick={(e) => {
+                  if (!dirty) return;
+                  e.preventDefault();
+                  toast.warning("Save or revert your edits first", { description: `${selected?.path ?? "The file"} has unsaved changes.` });
+                }}
+              >
+                <FolderSearch /> Tidy up
+              </Link>
+            </Button>
           </div>
           <nav aria-label="Agent files" className="min-h-0 flex-1 overflow-y-auto p-2">
             <Tree agentId={agent.id} dir="" depth={0} expanded={expanded} onToggle={toggleDir} selected={selected?.path ?? null} onSelect={select} />
@@ -276,241 +226,5 @@ function Tree({
         );
       })}
     </ul>
-  );
-}
-
-function FileEditor({
-  agentId,
-  agentName,
-  path,
-  size,
-  dreaming,
-  onDirtyChange,
-  onOpenFile,
-}: {
-  agentId: string;
-  agentName: string;
-  path: string;
-  size: number;
-  /** A dream of the agent is running: memory files are locked until it ends. */
-  dreaming: boolean;
-  onDirtyChange: (dirty: boolean) => void;
-  /** A link in the preview points at another note in the repository. */
-  onOpenFile: (path: string) => void;
-}) {
-  const qc = useQueryClient();
-  const file = useQuery({ queryKey: qk.agentFile(agentId, path), queryFn: () => api.agents.readFile(agentId, path) });
-  const original = file.data?.content ?? "";
-  /** The edit and the file content it started from, so a rewrite underneath (e.g. by a dream) isn't silently overwritten. */
-  const [draft, setDraft] = useState<{ text: string; base: string } | null>(null);
-  const value = draft?.text ?? original;
-  const dirty = draft !== null && draft.text !== original;
-  const conflict = dirty && draft.base !== original;
-  const isMarkdown = /\.(md|markdown)$/i.test(path);
-  const fixedReason = readOnlyReason(path, Math.max(size, original.length));
-  const dreamLock = dreaming && isMemoryPath(path);
-  const readOnly = fixedReason ?? (dreamLock ? `${agentName} is dreaming — editing is paused until the dream ends.` : null);
-  const [view, setView] = useState<"edit" | "preview">(isMarkdown && fixedReason ? "preview" : "edit");
-  const edit = (text: string) => setDraft((d) => ({ text, base: d && d.text !== original ? d.base : original }));
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const previewRef = useRef<HTMLDivElement>(null);
-  const isMemory = path === "MEMORY.md";
-  const memory = useQuery({ queryKey: qk.agentMemory(agentId), queryFn: () => api.agents.memory(agentId), enabled: isMemory });
-  const sections = useMemo(() => (isMarkdown ? memorySections(value) : []), [isMarkdown, value]);
-  const broken = useMemo(() => (isMemory && memory.data ? brokenMemoryLinks(value, memory.data.topics) : []), [isMemory, memory.data, value]);
-
-  const jumpTo = (section: MemorySection) => {
-    if (view === "preview") {
-      const headings = previewRef.current?.querySelectorAll("h1, h2, h3");
-      headings?.[sections.indexOf(section)]?.scrollIntoView({ block: "start", behavior: "smooth" });
-      return;
-    }
-    const el = textareaRef.current;
-    if (!el) return;
-    const offset = value.split("\n").slice(0, section.line).reduce((n, l) => n + l.length + 1, 0);
-    el.focus();
-    el.setSelectionRange(offset, offset);
-    const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 21;
-    el.scrollTop = Math.max(0, section.line * lineHeight - 12);
-  };
-
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-
-  const save = useMutation({
-    mutationFn: async ({ content, base }: { content: string; base: string | null }) => {
-      // Not every writer announces itself (a chat run may rewrite MEMORY.md): check the file is still what the draft started from.
-      if (base !== null) {
-        const fresh = await api.agents.readFile(agentId, path).catch((err) => {
-          if (err instanceof ApiRequestError && err.status === 404) return { path, content: "" };
-          throw err;
-        });
-        if (fresh.content !== base) {
-          qc.setQueryData(qk.agentFile(agentId, path), fresh);
-          throw new StaleDraftError();
-        }
-      }
-      await api.agents.writeFile(agentId, path, content);
-      return content;
-    },
-    onSuccess: (content) => {
-      qc.setQueryData(qk.agentFile(agentId, path), { path, content });
-      qc.invalidateQueries({ queryKey: qk.agentCommits(agentId) });
-      qc.invalidateQueries({ queryKey: qk.agentFiles(agentId, parentOf(path)) });
-      if (isMemory) {
-        qc.invalidateQueries({ queryKey: qk.agentDreams(agentId) });
-        qc.invalidateQueries({ queryKey: qk.agentMemory(agentId) });
-      }
-      setDraft(null);
-      toast.success(`Saved ${nameOf(path)}`);
-    },
-    onError: (err) => {
-      if (err instanceof StaleDraftError) warnConflict();
-      else toast.error(`Couldn't save ${nameOf(path)}`, { description: errorMessage(err) });
-    },
-  });
-  const warnConflict = () =>
-    toast.warning(`${nameOf(path)} changed while you were editing`, { description: "Reload it, or overwrite it with your version." });
-
-  const saveRef = useRef<() => void>(() => {});
-  saveRef.current = () => {
-    if (!dirty || readOnly || save.isPending || !draft) return;
-    if (conflict) warnConflict();
-    else save.mutate({ content: value, base: draft.base });
-  };
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (mod && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        saveRef.current();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  const lines = value ? value.split("\n").length : 0;
-  const missing = file.isError && (file.error as { status?: number }).status === 404;
-
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2.5">
-        <span className="shrink-0">{fileIcon(path)}</span>
-        <span className="min-w-0 truncate font-mono text-[13px]">{path}</span>
-        {dirty && <span className="size-2 shrink-0 rounded-full bg-warning" aria-label="Unsaved changes" title="Unsaved changes" />}
-        <div className="ml-auto flex items-center gap-2">
-          <SectionMenu sections={sections} onPick={jumpTo} />
-          {isMarkdown && (
-            <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as "edit" | "preview")} aria-label="View mode">
-              <ToggleGroupItem value="edit" aria-label={readOnly ? "Source" : "Edit"} className="gap-1 px-2 text-xs">
-                <PencilLine className="size-3.5" /> {readOnly ? "Source" : "Edit"}
-              </ToggleGroupItem>
-              <ToggleGroupItem value="preview" aria-label="Preview" className="gap-1 px-2 text-xs">
-                <Eye className="size-3.5" /> Preview
-              </ToggleGroupItem>
-            </ToggleGroup>
-          )}
-          {!fixedReason && (
-            <>
-              <Button variant="ghost" size="sm" disabled={!dirty} onClick={() => setDraft(null)}>
-                <RotateCcw /> Revert
-              </Button>
-              <Button size="sm" disabled={!dirty || !!readOnly || conflict || save.isPending} onClick={() => saveRef.current()}>
-                {save.isPending ? <Spinner /> : <Save />} Save
-                <Kbd>{modKey}S</Kbd>
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {readOnly && (
-        <div className={cn("flex items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground", fixedReason ? "bg-paper-2" : "bg-dream-soft")} role={fixedReason ? undefined : "status"}>
-          {fixedReason ? <Lock className="size-3.5 shrink-0" /> : <Moon className="size-3.5 shrink-0 text-dream" aria-hidden />}
-          <span>{readOnly}</span>
-          {path === "CLAUDE.md" && (
-            <Link to={`/agents/${agentId}/settings`} className="ml-auto shrink-0 font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-              Open settings
-            </Link>
-          )}
-        </div>
-      )}
-
-      {conflict && (
-        <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warning/25 bg-warning/[0.07] px-4 py-2 text-xs">
-          <span className="min-w-0 flex-1 basis-64 text-muted-foreground">
-            <span className="font-medium text-foreground">{nameOf(path)} changed while you were editing</span> — {agentName} may have rewritten it. Reload to
-            see the new version (your edits are discarded), or overwrite it with yours.
-          </span>
-          <span className="flex shrink-0 gap-1.5">
-            <Button variant="outline" size="xs" onClick={() => setDraft(null)}>
-              <RotateCcw /> Reload
-            </Button>
-            <Button size="xs" disabled={!!readOnly || save.isPending} onClick={() => save.mutate({ content: value, base: null })}>
-              {save.isPending ? <Spinner /> : <Save />} Overwrite
-            </Button>
-          </span>
-        </div>
-      )}
-
-      <div className="relative min-h-0 flex-1">
-        {file.isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} className="h-4" style={{ width: `${40 + ((i * 37) % 55)}%` }} />
-            ))}
-          </div>
-        ) : file.isError && !missing ? (
-          <div className="p-6 text-sm text-muted-foreground">Couldn't open this file: {errorMessage(file.error)}</div>
-        ) : view === "preview" && isMarkdown ? (
-          <div
-            ref={previewRef}
-            className="max-h-[70vh] overflow-y-auto p-5"
-            onClickCapture={(e) => {
-              const target = memoryLinkTarget((e.target as HTMLElement).closest("a")?.getAttribute("href") ?? null);
-              if (!target) return;
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenFile(target);
-            }}
-          >
-            {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-sm text-muted-foreground italic">Empty file.</p>}
-          </div>
-        ) : (
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => edit(e.target.value)}
-            onKeyDown={(e) => {
-              // Tab inserts two spaces instead of leaving the editor
-              if (e.key === "Tab" && !e.shiftKey && !readOnly) {
-                e.preventDefault();
-                const el = e.currentTarget;
-                const { selectionStart: s, selectionEnd: end } = el;
-                edit(`${value.slice(0, s)}  ${value.slice(end)}`);
-                requestAnimationFrame(() => el.setSelectionRange(s + 2, s + 2));
-              }
-            }}
-            readOnly={!!readOnly}
-            spellCheck={isMarkdown}
-            aria-label={`Contents of ${path}`}
-            placeholder={missing ? "This file doesn't exist yet — start typing to create it." : undefined}
-            className="block h-[60vh] w-full resize-none bg-transparent p-4 font-mono text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground/70"
-          />
-        )}
-      </div>
-
-      <div className="flex items-center gap-3 overflow-hidden border-t px-4 py-2 text-[11px] whitespace-nowrap text-muted-foreground">
-        <span className="tabular-nums">{lines.toLocaleString()} lines</span>
-        <span className="tabular-nums">{formatSize(new Blob([value]).size)}</span>
-        {isMemory && memory.data && <MemoryBudget chars={value.length} memory={memory.data} />}
-        {isMemory && <BrokenLinks paths={broken} />}
-        {file.dataUpdatedAt > 0 && !dirty && (
-          <span className="ml-auto">loaded {formatDistanceToNowStrict(file.dataUpdatedAt, { addSuffix: true })}</span>
-        )}
-        {dirty && <span className="ml-auto text-warning">Unsaved changes</span>}
-      </div>
-    </>
   );
 }

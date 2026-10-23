@@ -23,6 +23,7 @@ export const EASY_PAGES: Record<string, { title?: string; description?: string }
   "/my-tasks": { title: "My to-dos" },
   "/tasks": { title: "Task board" },
   "/automations": { description: "Let your agents start work by themselves: on a schedule, or when something happens in your apps." },
+  "/files": { description: "What your agents keep: their files, notes and memory. Look through it, tidy it up, and put back what you deleted." },
   "/activity": { title: "History", description: "Everything your agents did." },
   "/calls": { title: "Phone calls" },
   "/plugins": { title: "Add-ons", description: "Extra skills for your agents. Add one, switch it off or remove it any time." },

@@ -1799,7 +1799,8 @@ export type CleanupId =
   | "vm-images"
   | "agent-scratch"
   | "agent-run-logs"
-  | "agent-history";
+  | "agent-history"
+  | "deleted-files";
 
 export interface CleanupEntry {
   name: string;

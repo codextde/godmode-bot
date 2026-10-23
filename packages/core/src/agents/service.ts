@@ -1087,9 +1087,9 @@ export async function readAgentFile(id: string, path: string): Promise<{ path: s
 }
 
 /** Write a file as the user and commit it ("Edit <path>"). CLAUDE.md edits last until the next settings update. */
-export async function writeAgentFile(id: string, path: string, content: string): Promise<void> {
+export async function writeAgentFile(id: string, path: string, content: string, opts: { create?: boolean } = {}): Promise<void> {
   const agent = await withRepo(id);
-  const rel = await repo.writeRepoFile(agent.repoPath, path, content);
+  const rel = await repo.writeRepoFile(agent.repoPath, path, content, opts);
   await repo.commitAll(agent.repoPath, `Edit ${rel}`);
 }
 

@@ -555,6 +555,116 @@ export interface AgentFileEntry {
   modifiedAt: string;
 }
 
+/* ------------------------------------------------------------------ */
+/* Files page: the human tidies an agent's repository                  */
+/* ------------------------------------------------------------------ */
+
+/** Size of a file or folder: every file below it counted, symlinks never followed. */
+export interface AgentFileSize {
+  path: string;
+  bytes: number;
+  files: number;
+  /** Newest change of a file in it (a folder without files: its own). */
+  modifiedAt: string | null;
+  /** The count stopped early (a very large folder): at least this much. */
+  partial: boolean;
+}
+
+/** GET /api/files/overview — one row per agent, for picking the one to tidy. */
+export interface AgentFilesOverview {
+  agentId: ID;
+  /** workspace/, memory/ and MEMORY.md together. */
+  bytes: number;
+  workspaceBytes: number;
+  /** Of that, what lies in workspace/tmp (Godmode clears it by itself). */
+  scratchBytes: number;
+  /** Markdown notes in memory/ and workspace/ (tmp/ and uploads/ left out). */
+  notes: number;
+  memoryChars: number;
+  /** Entries in the agent's bin (deleted on the Files page, not yet emptied). */
+  deleted: number;
+  partial: boolean;
+}
+
+/** What the agent keeps about a path, before it is moved or deleted. */
+export interface AgentFileInfo extends AgentFileSize {
+  type: "file" | "dir";
+  /** Where it is named ("MEMORY.md", "the automation …"); empty = nowhere. */
+  namedBy: string[];
+  /** Why it can't be moved or deleted here (null = it can). */
+  locked: string | null;
+}
+
+export type FileReviewKind = "build" | "junk" | "empty" | "duplicate" | "large" | "scratch" | "stale" | "loose" | "unlinked-note" | "broken-link";
+
+/** One thing on the Files page's Review list. */
+export interface FileReviewItem {
+  kind: FileReviewKind;
+  path: string;
+  type: "file" | "dir";
+  bytes: number;
+  files: number;
+  modifiedAt: string | null;
+  /** Why it is on the list, in a sentence. */
+  detail: string;
+  /** Where the agent names it (it may still need it); null = nowhere. */
+  namedBy: string | null;
+  /** duplicate: the copy that stays. broken-link: the file that links to the missing path. */
+  related: string | null;
+}
+
+export interface FileReview {
+  agentId: ID;
+  checkedAt: ISODate;
+  items: FileReviewItem[];
+  /** The look stopped early (a very large repository): there may be more. */
+  partial: boolean;
+}
+
+/** A Markdown note of the agent, for the Notes list. */
+export interface AgentNote {
+  path: string;
+  title: string;
+  bytes: number;
+  modifiedAt: string;
+  /** MEMORY.md, or a note MEMORY.md or another memory note links to (unlinked memory notes are rarely read). */
+  linked: boolean;
+  namedBy: string | null;
+}
+
+export interface AgentFileSearchHit {
+  path: string;
+  type: "file" | "dir";
+  /** 1-based line of the first match in the content; null = the name matched. */
+  line: number | null;
+  snippet: string | null;
+}
+
+/** An entry the human deleted on the Files page: kept in the agent's bin until it is put back or emptied. */
+export interface DeletedAgentFile {
+  id: string;
+  path: string;
+  type: "file" | "dir";
+  bytes: number;
+  files: number;
+  deletedAt: ISODate;
+}
+
+export interface AgentFilesDeleteResult {
+  deleted: DeletedAgentFile[];
+  refused: { path: string; reason: string }[];
+}
+
+export interface AgentFileMoveResult {
+  path: string;
+  /** Memory files whose mentions of the old path now point at the new one. */
+  rewritten: string[];
+}
+
+export interface AgentFileRestoreResult {
+  path: string;
+}
+
 export interface GitCommit {
   oid: string;
   message: string;
