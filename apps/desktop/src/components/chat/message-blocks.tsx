@@ -29,6 +29,7 @@ import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
 import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
+import { ArtifactCard } from "@/components/artifacts/artifact-panel";
 import { describeTool, describeToolEasy, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
@@ -52,6 +53,7 @@ type Item =
   | { kind: "missing-login"; key: string; block: ToolUseBlock }
   | { kind: "delegate"; key: string; block: ToolUseBlock }
   | { kind: "workflow"; key: string; block: ToolUseBlock }
+  | { kind: "artifact"; key: string; block: ToolUseBlock }
   | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] };
 
 const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
@@ -66,9 +68,10 @@ function bareName(name: string): string {
   return name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
 }
 
-function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | null {
+function isStandaloneTool(name: string): "missing-login" | "delegate" | "workflow" | "subagent" | "artifact" | null {
   const bare = name.includes("__") ? name.slice(name.lastIndexOf("__") + 2) : name;
   if (bare === "report_missing_login") return "missing-login";
+  if (bare === "artifact_create" || bare === "artifact_update") return "artifact";
   if (bare === "agent_delegate") return "delegate";
   if (name === WORKFLOW_TOOL) return "workflow";
   if (SUBAGENT_TOOLS.has(name)) return "subagent";
@@ -237,6 +240,8 @@ export function MessageBlocks({
             return <DelegateCard key={item.key} block={item.block} streaming={streaming} parentRunId={runId} />;
           case "workflow":
             return <WorkflowCard key={item.key} block={item.block} streaming={streaming} />;
+          case "artifact":
+            return <ArtifactCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
             return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming} />;
         }

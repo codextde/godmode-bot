@@ -225,7 +225,9 @@ export type EntityName =
   /** The cloud link: state, account, plan or billing changed. */
   | "cloud"
   /** The licence: key, verification or whether runs are refused changed. */
-  | "license";
+  | "license"
+  /** Artifacts: made, changed by the agent, data saved by the app, pinned, deleted. */
+  | "artifacts";
 
 /** Messages the UI may send over the WebSocket. */
 export type ClientEvent =

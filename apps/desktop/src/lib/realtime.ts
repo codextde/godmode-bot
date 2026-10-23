@@ -60,6 +60,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "missing-logins": [qk.missingLogins, qk.bootstrap],
   questions: [qk.questions, qk.bootstrap],
   "human-tasks": [qk.humanTasks, qk.bootstrap],
+  artifacts: [qk.artifacts],
   notifications: [qk.notifications, qk.bootstrap],
   settings: [qk.settings, qk.bootstrap, qk.spend],
   runs: [qk.runs],

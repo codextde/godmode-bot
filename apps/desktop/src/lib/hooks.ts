@@ -159,6 +159,25 @@ export function useHumanTasks() {
   return useQuery({ queryKey: qk.humanTasks, queryFn: () => api.humanTasks.list({ status: "all" }) });
 }
 
+/** Artifacts of the workspace picked in the sidebar. */
+export function useArtifacts() {
+  const scope = useUi((s) => s.workspace);
+  return useQuery({ queryKey: qk.artifactList(scope), queryFn: () => api.artifacts.list({ workspaceId: scope }) });
+}
+
+/** Artifacts made in one chat, for its cards and side panel. */
+export function useChatArtifacts(conversationId: string | undefined) {
+  return useQuery({
+    queryKey: qk.chatArtifacts(conversationId ?? ""),
+    queryFn: () => api.artifacts.list({ conversationId }),
+    enabled: !!conversationId,
+  });
+}
+
+export function useArtifact(id: string | null | undefined) {
+  return useQuery({ queryKey: qk.artifact(id ?? ""), queryFn: () => api.artifacts.get(id!), enabled: !!id });
+}
+
 export function useMissingLogins(status = "open") {
   return useQuery({ queryKey: [...qk.missingLogins, status], queryFn: () => api.missingLogins.list({ status }) });
 }

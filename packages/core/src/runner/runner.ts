@@ -2215,6 +2215,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation",
+        artifacts: job.trigger !== "check" && config().role !== "runner",
         calls:
           job.trigger !== "check" && job.trigger !== "delegation" && config().role !== "runner" && settings.phone.enabled && elevenLabsKey() !== null
             ? { owner: !!settings.phone.ownerNumber && settings.phone.callOwner }

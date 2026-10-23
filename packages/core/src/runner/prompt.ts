@@ -52,6 +52,8 @@ export interface PromptContext {
   memory?: PromptMemory | null;
   /** The run may schedule follow-ups (followup_schedule). */
   followups?: boolean;
+  /** The run can build artifacts (artifact_create): small web apps shown in Godmode. */
+  artifacts?: boolean;
   /** Phone calls are set up: the run may place them (`owner`: and call the human). */
   calls?: { owner: boolean } | null;
   /** No raw secrets in this chat, whatever the agent may read: its task came from an agent that could not read them. */
@@ -369,6 +371,11 @@ When ${human} describes one in a sentence ("when X happens, do Y"), set it up: p
   if (perms.canManageAgents && ctx.mods) {
     out.push(`### Plugins
 ${human} can add Claude Code plugins under Plugins; they load into the runs of the agents they are for. Two kinds: whole plugins installed from a git repository (skills, subagents, slash commands, hooks, MCP servers — e.g. Claude Video or oh-my-claudecode) and small plugins of TypeScript function hooks that run inside every turn (they refuse or rewrite tool calls, rewrite prompts, mask tool output and post notes). \`plugins_list\` shows the installed ones. When ${human} asks for a plugin from GitHub, install it with \`plugin_install\`. When ${human} asks for a small one, write it and save it with \`plugin_save\`: load Claude Code's \`plugin-authoring\` skill first for the API (it names the type declarations to read), keep it small, and give ${human} options through the manifest's \`userConfig\` instead of hard-coding what they will want to change. Write the files in a folder of your own (\`workspace/plugins/<name>/\`), not where the skill says — nothing loads from \`~/.claude/dev-mods\` in Godmode — and try them there with \`claude plugin validate\` and \`claude plugin test\` when the \`claude\` command is at hand. In Godmode a plugin's \`$.ui.log\`, \`$.ui.toast\` and \`$.ui.status\` show as notes in the chat; panes and bands aren't drawn, and nobody can be asked through \`$.ui\`. \`plugin_save\` checks the files with Claude Code's validator and returns the result — fix what it reports and save again until it passes. Whatever you install or save arrives switched off. A plugin from a repository you switch on yourself with \`plugin_update\` once its check passed and it is what the work needs, with \`runsFor\` set to the agents that need it (one with many tools or programs never for every agent); the same tool switches a plugin off or changes whose runs load it, and ${human} is told. Agents that read raw secrets or control the computer only get a plugin when you may set them up. A small plugin an agent wrote with \`plugin_save\` waits for ${human} to read the code and switch it on: never present it as active, and don't change the code of a plugin that is switched on.`);
+  }
+
+  if (ctx.artifacts) {
+    out.push(`### Artifacts
+When ${human} asks for a dashboard, a tracker, a small tool or app, or a page to look at numbers (a sales dashboard, KPIs, a deal board, a budget planner, a calculator), build an artifact with \`artifact_create\`: one HTML document plus its data as JSON. It opens next to this chat and on the Artifacts page, runs in a sandbox and reads its data through \`window.godmode\` (the tool says how). ${human} changes it by chatting: messages about one start with \`[About the artifact "…" (art_…)]\` — read it with \`artifact_get\`, change it with \`artifact_update\` (small \`edits\` for small changes), never rebuild it as a new artifact. Keep numbers in the data, not the code, and give it a \`refreshPrompt\` when the data can be fetched again; a refresh saves new \`data\` only. Use real data you can reach (browser, API tools, files); sample data only when you can't, clearly marked.`);
   }
 
   out.push(`### Notifications

@@ -94,6 +94,12 @@ export const qk = {
   questions: ["questions"] as unknown[],
   /** Tasks agents gave the human, and the human's own. */
   humanTasks: ["human-tasks"] as unknown[],
+  artifacts: ["artifacts"] as unknown[],
+  artifactList: (workspaceId: string) => ["artifacts", "list", workspaceId],
+  chatArtifacts: (conversationId: string) => ["artifacts", "chat", conversationId],
+  artifact: (id: string) => ["artifacts", "one", id],
+  artifactVersions: (id: string) => ["artifacts", "versions", id],
+  artifactVersion: (id: string, version: number) => ["artifacts", "version", id, version],
   mcpServers: ["mcp-servers"] as unknown[],
   apiTools: ["api-tools"] as unknown[],
   composio: ["composio"] as unknown[],
