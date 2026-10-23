@@ -7,7 +7,7 @@ import type { Context } from "hono";
  * app's own policy can't host it as srcdoc: a srcdoc frame inherits the app's strict script-src.
  */
 const FRAME_CSP = [
-  "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads",
+  "sandbox allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads",
   "default-src 'none'",
   "script-src 'unsafe-inline' 'unsafe-eval' https: blob: data:",
   "style-src 'unsafe-inline' https:",

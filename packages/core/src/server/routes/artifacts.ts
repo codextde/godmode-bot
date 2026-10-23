@@ -22,8 +22,8 @@ const patchSchema = z.object({
   refreshPrompt: z.string().max(4000).optional(),
 });
 
-const dataSchema = z.object({ data: z.unknown(), version: z.number().int().optional() });
-const messageSchema = z.object({ content: z.string().min(1).max(20_000) });
+const dataSchema = z.object({ data: z.unknown().refine((v) => v !== undefined, "data is required"), version: z.number().int().optional() });
+const messageSchema = z.object({ content: z.string().min(1).max(20_000), source: z.enum(["human", "app"]).optional() });
 const restoreSchema = z.object({ version: z.number().int().min(1) });
 const startSchema = z.object({
   prompt: z.string().min(1).max(20_000),
@@ -62,7 +62,10 @@ export function registerArtifactRoutes(app: Hono): void {
 
   app.post("/api/artifacts/:id/restore", async (c) => c.json(restoreArtifactVersion(c.req.param("id"), (await body(c, restoreSchema)).version)));
 
-  app.post("/api/artifacts/:id/message", async (c) => c.json(await messageArtifact(c.req.param("id"), (await body(c, messageSchema)).content)));
+  app.post("/api/artifacts/:id/message", async (c) => {
+    const input = await body(c, messageSchema);
+    return c.json(await messageArtifact(c.req.param("id"), input.content, input.source));
+  });
 
   app.post("/api/artifacts/:id/refresh", async (c) => c.json(await refreshArtifact(c.req.param("id"))));
 

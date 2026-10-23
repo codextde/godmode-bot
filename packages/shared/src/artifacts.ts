@@ -68,6 +68,8 @@ export interface ArtifactDataInput {
 /** A message for the artifact's agent: it goes to the artifact's chat (a new one when that chat is gone). */
 export interface ArtifactMessageInput {
   content: string;
+  /** `app`: the artifact's own code suggested it and the human confirmed (the agent is told). */
+  source?: "human" | "app";
 }
 
 export interface ArtifactMessageResult {
@@ -151,4 +153,4 @@ export const ARTIFACT_BRIDGE_DOC = `Inside the artifact, \`window.godmode\` is r
 - \`godmode.ask(text)\` — offer to send text to you in the chat (the human confirms), e.g. a "Ask for a chart" button.
 - \`godmode.refresh()\` — ask you to refresh the data (the human's Refresh button does the same).
 - \`godmode.theme\` ("light" | "dark") and \`godmode.onTheme(fn)\`; the CSS variables --gm-bg, --gm-card, --gm-fg, --gm-muted, --gm-border, --gm-accent, --gm-accent-fg, --gm-positive, --gm-negative and --gm-font follow the app's theme, and \`<html>\` gets class "dark" in dark mode.
-Scripts and styles may load from https CDNs (e.g. https://cdn.tailwindcss.com, https://cdn.jsdelivr.net/npm/chart.js); \`fetch\` may reach public https APIs only. No localStorage or cookies: keep state in godmode.setData.`;
+Scripts and styles may load from https CDNs (e.g. https://cdn.tailwindcss.com, https://cdn.jsdelivr.net/npm/chart.js); \`fetch\` may reach public https APIs only. Links open in the human's browser. No localStorage, cookies, alert, confirm or prompt: keep state in godmode.setData and build dialogs in the page.`;

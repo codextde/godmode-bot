@@ -911,7 +911,7 @@ const canArtifact = (_agent: Agent, ctx: RunContext) => config().role !== "runne
 function artifactRefusal(agent: Agent, id: string): string | null {
   if (!artifactExists(id.trim())) return `There is no artifact ${id}. artifact_list shows yours.`;
   const owner = getArtifact(id).agentId;
-  if (owner && owner !== agent.id && !isManager(agent)) return "That artifact belongs to another agent: ask it, or your lead, to change it.";
+  if (owner !== agent.id && !isManager(agent)) return "That artifact belongs to another agent: ask it, or your lead, to change it.";
   return null;
 }
 

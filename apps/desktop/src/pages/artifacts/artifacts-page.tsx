@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation } from "@tanstack/react-query";
 import { motion } from "motion/react";
@@ -146,8 +146,23 @@ function Composer({ prominent }: { prominent: boolean }) {
   );
 }
 
+/** True once the element came near the screen (and stays true): tiles load their artifact only then. */
+function useSeen<T extends Element>() {
+  const ref = useRef<T>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || seen) return;
+    const io = new IntersectionObserver(([e]) => e?.isIntersecting && setSeen(true), { rootMargin: "300px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  return [ref, seen] as const;
+}
+
 function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: number }) {
-  const { data: full } = useArtifact(artifact.id);
+  const [box, seen] = useSeen<HTMLDivElement>();
+  const { data: full } = useArtifact(seen ? artifact.id : null);
   const actions = useArtifactActions(artifact);
   const busy = useArtifactBusy(artifact);
   const { data: agents = [] } = useAgents("all");
@@ -162,7 +177,7 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
       className="group relative overflow-hidden rounded-xl border bg-card shadow-card transition hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-lg"
     >
       <Link to={`/artifacts/${artifact.id}`} className="block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-        <div className="relative aspect-[16/10] border-b bg-background">
+        <div ref={box} className="relative aspect-[16/10] border-b bg-background">
           {full ? (
             <ArtifactThumb html={full.html} data={full.data} title={artifact.title} className="absolute inset-0" />
           ) : (

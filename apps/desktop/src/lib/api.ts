@@ -937,7 +937,7 @@ export const api = {
     version: (id: string, version: number) => get<ArtifactVersionDetail>(`/api/artifacts/${id}/versions/${version}`),
     restore: (id: string, version: number) => post<Artifact>(`/api/artifacts/${id}/restore`, { version }),
     /** The human's words for its agent, sent to the artifact's chat. */
-    message: (id: string, content: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/message`, { content }),
+    message: (id: string, content: string, source: "human" | "app" = "human") => post<ArtifactMessageResult>(`/api/artifacts/${id}/message`, { content, source }),
     refresh: (id: string) => post<ArtifactMessageResult>(`/api/artifacts/${id}/refresh`),
     start: (input: ArtifactStartInput) => post<ArtifactStartResult>("/api/artifacts/start", input),
     delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),

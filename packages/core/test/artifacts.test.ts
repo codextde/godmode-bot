@@ -4,7 +4,7 @@ import { invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runne
 import { callTool } from "../src/mcp/tools";
 import { deleteConversation, getConversation, startChat } from "../src/services/conversations";
 import { applyEdits, getArtifact, listArtifacts, listArtifactVersions } from "../src/services/artifacts";
-import { listRuns, waitForRun } from "../src/runner/runner";
+import { listActiveRuns, listRuns, waitForRun } from "../src/runner/runner";
 import { getAccessToken } from "../src/server/auth";
 
 let env: TestEnv;
@@ -18,6 +18,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  for (const r of listActiveRuns()) await waitForRun(r.runId, 10_000).catch(() => undefined);
   await env.close();
 });
 
@@ -236,5 +237,45 @@ describe("through a real run", () => {
     expect(a).toMatchObject({ title: "Pipeline", agentId: agent.id, version: 1 });
     const blocks = getConversation(conversation.id).messages.at(-1)!.blocks ?? [];
     expect(blocks.some((b) => b.type === "tool_use" && b.name === "mcp__godmode__artifact_create" && (b.result ?? "").includes(a!.id))).toBe(true);
+  });
+});
+
+describe("review fixes", () => {
+  test("an artifact without an owner is for managers only, a save needs data, the app's strings stay strings", async () => {
+    const conversationId = await chat();
+    const a = await created(conversationId);
+    const { run: sqlRun } = await import("../src/db");
+    sqlRun("UPDATE artifacts SET agent_id = NULL WHERE id = ?", a.id);
+    const refused = await callTool(ctxFor(conversationId, other), "artifact_get", { id: a.id });
+    expect(refused.isError).toBe(true);
+    expect((await api("PUT", `/api/artifacts/${a.id}/data`, {})).status).toBe(400);
+    await api("PUT", `/api/artifacts/${a.id}/data`, { data: "[1,2]" });
+    expect(getArtifact(a.id).data).toBe("[1,2]");
+  });
+
+  test("text from the artifact's code is marked, and a second refresh while the agent works adds nothing", async () => {
+    const conversationId = await chat();
+    const a = await created(conversationId);
+    await api("POST", `/api/artifacts/${a.id}/message`, { content: "Add a chart", source: "app" });
+    await waitForRun(listRuns({ conversationId })[0]!.id, 10_000);
+    expect(invocations(env).at(-1)!.prompt).toContain("Sent from the artifact's own code");
+    const users = () => getConversation(conversationId).messages.filter((m) => m.role === "user").length;
+    const before = users();
+    const first = await api<{ queued: boolean }>("POST", `/api/artifacts/${a.id}/refresh`);
+    const second = await api<{ queued: boolean }>("POST", `/api/artifacts/${a.id}/refresh`);
+    expect(first.status).toBe(200);
+    expect(second.json.queued).toBe(true);
+    await waitForRun(listRuns({ conversationId })[0]!.id, 10_000);
+    expect(users()).toBe(before + 1);
+  });
+
+  test("only the last 50 versions are kept", async () => {
+    const conversationId = await chat();
+    const a = await created(conversationId);
+    for (let i = 2; i <= 53; i++) await callTool(ctxFor(conversationId), "artifact_update", { id: a.id, html: `<p>${i}</p>` });
+    const versions = listArtifactVersions(a.id);
+    expect(versions).toHaveLength(50);
+    expect(versions[0]!.version).toBe(53);
+    expect(versions.at(-1)!.version).toBe(4);
   });
 });

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import { cloudContext, coreUrl } from "@/lib/core";
+import { openExternal } from "@/lib/desktop";
 import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 
@@ -53,7 +54,7 @@ var g={data:${json(data)},theme:${json(theme)},
 onData:function(f){dl.push(f);call(f,g.data);return function(){dl=dl.filter(function(x){return x!==f;});};},
 onTheme:function(f){tl.push(f);return function(){tl=tl.filter(function(x){return x!==f;});};},
 setData:function(next){if(typeof next==="function")next=next(g.data);g.data=next;dl.forEach(function(f){call(f,next);});if(!P)return Promise.resolve(true);var id=++n;return new Promise(function(res,rej){w[id]=[res,rej];post({type:"setData",id:id,data:next});});},
-ask:function(text){post({type:"ask",text:String(text||"")});},
+ask:function(text){post({type:"ask",text:String(text||"").slice(0,500)});},
 refresh:function(){post({type:"refresh"});}};
 window.godmode=g;
 document.documentElement.classList.toggle("dark",g.theme==="dark");
@@ -61,6 +62,9 @@ window.addEventListener("message",function(e){if(e.source!==P)return;var m=e.dat
 if(m.type==="data"){g.data=m.data;dl.forEach(function(f){call(f,m.data);});}
 else if(m.type==="theme")setTheme(m.theme);
 else if(m.type==="reply"&&w[m.id]){var p=w[m.id];delete w[m.id];m.ok?p[0](true):p[1](new Error(m.error||"Not saved"));}});
+function open(u){try{u=new URL(String(u),location.href).href;}catch(x){return;}if(/^https?:/.test(u))post({type:"open",url:u});}
+window.open=function(u){open(u);return null;};
+document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a||a.hasAttribute("download")||/^(#|javascript:)/i.test(a.getAttribute("href")||""))return;e.preventDefault();open(a.href);},true);
 window.addEventListener("error",function(e){report(e.error||e.message);});
 window.addEventListener("unhandledrejection",function(e){report(e.reason);});
 })();</script>`;
@@ -68,19 +72,24 @@ window.addEventListener("unhandledrejection",function(e){report(e.reason);});
 
 /** The artifact's HTML with the bridge first in <head> (a fragment gets a document around it). */
 export function artifactDocument(html: string, bridge: string): string {
-  const head = /<head(\s[^>]*)?>/i.exec(html);
+  // Tags inside comments and scripts don't count: blank them out (same length) before looking.
+  const plain = html.replace(/<!--[\s\S]*?-->|<script\b[\s\S]*?<\/script>/gi, (m) => " ".repeat(m.length));
+  const head = /<head(\s[^>]*)?>/i.exec(plain);
   if (head) return html.slice(0, head.index + head[0].length) + bridge + html.slice(head.index + head[0].length);
-  const root = /<html(\s[^>]*)?>/i.exec(html);
+  const root = /<html(\s[^>]*)?>/i.exec(plain);
   if (root) return html.slice(0, root.index + root[0].length) + `<head>${bridge}</head>` + html.slice(root.index + root[0].length);
-  const doctype = /<!doctype[^>]*>/i.exec(html);
+  const doctype = /<!doctype[^>]*>/i.exec(plain);
   const body = doctype ? html.slice(doctype.index + doctype[0].length) : html;
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${bridge}</head><body>${body}</body></html>`;
 }
 
 /** A standalone copy to download: same bridge, data saved in the file, setData kept in memory. */
 export function standaloneDocument(html: string, data: unknown, theme: "light" | "dark"): string {
-  return artifactDocument(html, bridgeScript("standalone", data, theme, true));
+  return artifactDocument(html, STANDALONE_CSP + bridgeScript("standalone", data, theme, true));
 }
+
+/** The sandbox's rules for the downloaded copy too (the core's frame page sends them as a header). */
+const STANDALONE_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: blob: data:; style-src 'unsafe-inline' https:; img-src https: data: blob:; font-src https: data:; connect-src https: wss:; media-src https: data: blob:; worker-src blob:; frame-src https:">`;
 
 function hashOf(text: string): string {
   let h = 5381;
@@ -96,6 +105,20 @@ export interface ArtifactFrameHandlers {
   onAsk?: (text: string) => void;
   onRefresh?: () => void;
   onError?: (message: string) => void;
+}
+
+const SAVE_DELAY_MS = 300;
+
+interface Session {
+  key: string;
+  token: string;
+  loaded: boolean;
+  /** The data the frame has (it sent or was sent): the same data coming back isn't sent again. */
+  lastData: string;
+  /** Saves not answered yet: data from the server meanwhile may be older than what the frame has. */
+  pending: number;
+  /** Saves close together become one: the newest data, answered for all of them. */
+  queued: { data: unknown; ids: number[]; timer: ReturnType<typeof setTimeout> } | null;
 }
 
 export function ArtifactFrame({
@@ -123,16 +146,17 @@ export function ArtifactFrame({
   handlersRef.current = handlers;
   const key = useMemo(() => hashOf(html), [html]);
   // One token per loaded document; what it said it saved isn't sent back to it.
-  const session = useRef<{ key: string; token: string; loaded: boolean; lastData: string }>({ key: "", token: "", loaded: false, lastData: "" });
-  if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null) };
+  const session = useRef<Session>({ key: "", token: "", loaded: false, lastData: "", pending: 0, queued: null });
+  if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null), pending: 0, queued: null };
   const latest = useRef({ html, data, theme: resolved });
   latest.current = { html, data, theme: resolved };
 
-  useEffect(() => {
+  // Layout effect: listening before the frame's page can say it is there.
+  useLayoutEffect(() => {
     const onMessage = (e: MessageEvent) => {
       const frame = ref.current?.contentWindow;
       if (!frame || e.source !== frame) return;
-      const m = e.data as { type?: string; __gm?: string; id?: number; data?: unknown; text?: string; message?: string } | null;
+      const m = e.data as { type?: string; __gm?: string; id?: number; data?: unknown; text?: string; message?: string; url?: string } | null;
       if (!m || typeof m !== "object") return;
       const s = session.current;
       if (m.type === "gm:shell") {
@@ -142,20 +166,35 @@ export function ArtifactFrame({
         frame.postMessage({ type: "gm:load", doc: artifactDocument(h, bridgeScript(s.token, d, theme)) }, "*");
         return;
       }
-      if (m.__gm !== s.token || !interactive) return;
+      if (m.__gm !== s.token) return;
+      const reply = (id: number | undefined, ok: boolean, error?: string) => frame.postMessage({ __gm: s.token, type: "reply", id, ok, error }, "*");
       const h = handlersRef.current;
       if (m.type === "setData") {
-        const text = JSON.stringify(m.data ?? null);
-        s.lastData = text;
-        const reply = (ok: boolean, error?: string) => frame.postMessage({ __gm: s.token, type: "reply", id: m.id, ok, error }, "*");
-        if (!h.onSetData) return reply(false, "This view can't save");
-        h.onSetData(m.data).then(
-          () => reply(true),
-          (err: unknown) => reply(false, err instanceof Error ? err.message : "Not saved"),
-        );
-      } else if (m.type === "ask" && m.text?.trim()) h.onAsk?.(m.text.trim().slice(0, 4000));
+        if (!interactive || !h.onSetData) return reply(m.id, false, "This view can't save");
+        s.lastData = JSON.stringify(m.data ?? null);
+        s.pending++;
+        if (s.queued) clearTimeout(s.queued.timer);
+        const ids = [...(s.queued?.ids ?? []), m.id ?? 0];
+        const timer = setTimeout(() => {
+          const batch = s.queued!;
+          s.queued = null;
+          const done = (ok: boolean, error?: string) => {
+            s.pending -= batch.ids.length;
+            for (const id of batch.ids) reply(id, ok, error);
+          };
+          (handlersRef.current.onSetData ?? (() => Promise.reject(new Error("This view can't save"))))(batch.data).then(
+            () => done(true),
+            (err: unknown) => done(false, err instanceof Error ? err.message : "Not saved"),
+          );
+        }, SAVE_DELAY_MS);
+        s.queued = { data: m.data ?? null, ids, timer };
+        return;
+      }
+      if (!interactive) return;
+      if (m.type === "ask" && m.text?.trim()) h.onAsk?.(m.text.trim().slice(0, 500));
       else if (m.type === "refresh") h.onRefresh?.();
-      else if (m.type === "error" && m.message) h.onError?.(m.message.slice(0, 500));
+      else if (m.type === "error" && m.message) h.onError?.(m.message.slice(0, 300));
+      else if (m.type === "open" && m.url && /^https?:\/\//i.test(m.url)) void openExternal(m.url);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -165,7 +204,7 @@ export function ArtifactFrame({
   useEffect(() => {
     const s = session.current;
     const text = JSON.stringify(data ?? null);
-    if (!s.loaded || text === s.lastData) return;
+    if (!s.loaded || s.pending > 0 || text === s.lastData) return;
     s.lastData = text;
     ref.current?.contentWindow?.postMessage({ __gm: s.token, type: "data", data: data ?? null }, "*");
   }, [data]);
@@ -193,7 +232,7 @@ export function ArtifactFrame({
       key={key}
       title={title}
       src={coreUrl("/api/artifacts/frame")}
-      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
       loading={lazy ? "lazy" : undefined}
       tabIndex={interactive ? undefined : -1}
       aria-hidden={interactive ? undefined : true}
