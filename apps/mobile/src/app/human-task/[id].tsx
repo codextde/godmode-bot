@@ -291,16 +291,14 @@ export default function HumanTaskSheet() {
               onPress={() => move.mutate(task.status === "open" ? "doing" : "open")}
               style={{ flex: 1 }}
             />
-            {decision && task.questionId ? null : (
-              <Button
-                title={words.declined}
-                variant="secondary"
-                loading={close.isPending && close.variables === "declined"}
-                disabled={busy}
-                onPress={() => close.mutate("declined")}
-                style={{ flex: 1 }}
-              />
-            )}
+            <Button
+              title={words.declined}
+              variant="secondary"
+              loading={close.isPending && close.variables === "declined"}
+              disabled={busy}
+              onPress={() => close.mutate("declined")}
+              style={{ flex: 1 }}
+            />
           </Row>
           {task.status !== "backlog" && (
             <Pressable
