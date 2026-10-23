@@ -333,7 +333,7 @@ describe("phone access", () => {
 
     const settings = await phone("/api/settings", { bearer: device });
     expect(settings.status).toBe(200);
-    const saved = await phone("/api/settings", json("PUT", { runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
+    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
     expect(saved.status).toBe(200);
     expect(((await saved.json()) as { runner: { appendSystemPrompt: string; monthlyBudgetUsd: number } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only.", monthlyBudgetUsd: 50 });
     expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: null } }))).status).toBe(200);

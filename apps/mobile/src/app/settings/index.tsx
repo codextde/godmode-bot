@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { EFFORT_LABELS, findModel, type Theme } from "@godmode/shared";
+import { EFFORT_LABELS, findModel, type InterfaceMode, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
@@ -29,6 +29,16 @@ const THEME_OPTIONS = [
   { value: "dark", label: "Dark" },
   { value: "system", label: "System" },
 ] as const satisfies readonly { value: Theme; label: string }[];
+
+const MODE_OPTIONS = [
+  { value: "easy", label: "Easy" },
+  { value: "pro", label: "Professional" },
+] as const satisfies readonly { value: InterfaceMode; label: string }[];
+
+const MODE_BLURB: Record<InterfaceMode, string> = {
+  easy: "Plain words and only what you need day to day. Everything else is one click away.",
+  pro: "Every tool, setting and detail in view: models, runs, machines, logs.",
+};
 
 export default function Settings() {
   const c = useColors();
@@ -126,6 +136,15 @@ export default function Settings() {
               useAppearance.getState().setTheme(next);
               void patchSettings({ general: { theme: next } });
             }}
+          />
+        ) : null}
+        {s ? (
+          <SegmentRow
+            title="Interface"
+            detail={`${MODE_BLURB[s.general.mode === "easy" ? "easy" : "pro"]} The same on your computer.`}
+            options={MODE_OPTIONS}
+            value={s.general.mode === "easy" ? "easy" : "pro"}
+            onChange={(mode) => void patchSettings({ general: { mode } })}
           />
         ) : null}
         <LinkRow
