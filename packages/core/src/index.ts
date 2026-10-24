@@ -30,7 +30,7 @@ import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
 import { interruptedWork, resumeInterruptedWork, startOutageRecovery, stopOutageRecovery } from "./services/resume";
 import { clearRunMods, startModUpdates, stopModUpdates } from "./mods/service";
-import { startScheduler, stopScheduler } from "./scheduler/scheduler";
+import { reloadSchedules, startScheduler } from "./scheduler/scheduler";
 import { startSignInRetry, stopSignInRetry } from "./automations/signInRetry";
 import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
@@ -211,7 +211,6 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     if (sharedOn) return;
     sharedOn = true;
     // A runner's runs are told by the computer it works for (they arrive there as its own runs).
-    startScheduler();
     startSignInRetry();
     startRunNotices();
     startDreaming();
@@ -225,7 +224,6 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   const stopShared = async () => {
     if (!sharedOn) return;
     sharedOn = false;
-    stopScheduler();
     stopSignInRetry();
     stopRunNotices();
     stopDreaming();
@@ -237,11 +235,15 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopCalls();
   };
   if (!runner) {
-    if (runsShared()) void groupSettled().then(startShared);
+    // Every computer of a group fires the automations pinned to it; the rest only where the shared work runs.
+    const settled = groupSettled();
+    void settled.then(startScheduler);
+    if (runsShared()) void settled.then(startShared);
     startModUpdates();
     onGroupChange(() => {
       if (runsShared()) startShared();
       else void stopShared().catch((err) => log.warn("could not hand the shared work to the primary", err));
+      reloadSchedules();
     });
   }
   // Adopt VMs that kept running while Godmode was closed.

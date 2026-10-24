@@ -1693,4 +1693,12 @@ CREATE TABLE artifact_versions (
 );
 `,
   },
+  {
+    id: 103,
+    name: "routine_run_on",
+    sql: /* sql */ `
+-- Device groups: the computer an automation's schedule runs on ("primary" or a device id; NULL = any).
+ALTER TABLE routines ADD COLUMN run_on TEXT;
+`,
+  },
 ];

@@ -4,7 +4,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Conversation, Run } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, get, insert, openDb, run as exec } from "../src/db";
+import { closeDb, deleteMeta, get, insert, openDb, run as exec, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import { resetSettingsCache } from "../src/services/settings";
@@ -405,6 +405,150 @@ describe("triggering", () => {
       resetGroupCache();
       exec("DELETE FROM runners WHERE id = 'rnr_primary'");
     }
+  });
+
+  describe("automations pinned to one computer", () => {
+    const ts = now();
+
+    beforeEach(() => {
+      stopScheduler();
+      exec("UPDATE routines SET enabled = 0");
+      insert("runners", { id: "rnr_primary", name: "Desk Mac", public_key: "pk-primary", port: 7787, kind: "device", created_at: ts, updated_at: ts });
+      insert("runners", { id: "rnr_laptop", name: "Laptop", public_key: "pk-laptop", port: 7788, kind: "device", created_at: ts, updated_at: ts });
+      exec("INSERT OR IGNORE INTO runner_memory (runner_id, agent_id, digest, snapshot, updated_at) VALUES ('rnr_primary', ?, 'd', '{}', ?)", agent.id, ts);
+    });
+
+    afterEach(() => {
+      stopScheduler();
+      setScheduleGroup(null);
+      clearGroup();
+      resetGroupCache();
+      deleteMeta("link.group.self");
+      exec("UPDATE routines SET enabled = 0, run_on = NULL");
+      exec("DELETE FROM runners WHERE id IN ('rnr_primary', 'rnr_laptop')");
+    });
+
+    /** A secondary (its id in the primary's list: rnr_self) that may stand in for its primary. */
+    function secondary(standingIn: boolean) {
+      setGroup("secondary", "rnr_primary");
+      setMeta("link.group.self", "rnr_self");
+      if (standingIn) setStandingIn(now());
+    }
+
+    const scheduled = () => scheduledRoutines().map((s) => s.routineId);
+
+    test("names, ids and the primary's runner resolve to the stored pin", () => {
+      expect(() => createRoutine({ agentId: agent.id, name: "Alone", cron: "0 6 * * *", prompt: "x", runOn: "primary" })).toThrow("isn't part of a device group");
+      secondary(false);
+      const r = createRoutine({ agentId: agent.id, name: "Posts", cron: "0 12 * * *", prompt: "post", runOn: "Desk Mac", enabled: false });
+      expect(r.runOn).toBe("primary");
+      expect(updateRoutine(r.id, { runOn: "rnr_primary" }).runOn).toBe("primary");
+      expect(updateRoutine(r.id, { runOn: "rnr_self" }).runOn).toBe("rnr_self");
+      expect(updateRoutine(r.id, { runOn: "laptop" }).runOn).toBe("rnr_laptop");
+      expect(updateRoutine(r.id, { name: "Posts 2" }).runOn).toBe("rnr_laptop");
+      expect(updateRoutine(r.id, { runOn: "any" }).runOn).toBeNull();
+      expect(() => updateRoutine(r.id, { runOn: "Kitchen PC" })).toThrow("Unknown computer");
+    });
+
+    test("a stand-in never fires an automation pinned to the primary, nor catches it up", async () => {
+      secondary(true);
+      const slot = dueSlot(new Cron("0 * * * *", { timezone: "UTC", paused: true }), new Date())!;
+      const pinned = createRoutine({ agentId: agent.id, name: "Social posts", cron: "0 * * * *", timezone: "UTC", prompt: "post", runOn: "primary" });
+      const shared = createRoutine({ agentId: agent.id, name: "Inbox", cron: "0 * * * *", timezone: "UTC", prompt: "inbox" });
+      const theirNext = "2030-01-01T12:00:00.000Z";
+      exec("UPDATE routines SET next_run_at = ? WHERE id = ?", theirNext, pinned.id);
+      startScheduler();
+      expect(scheduled()).toContain(shared.id);
+      expect(scheduled()).not.toContain(pinned.id);
+      // Its next run is the primary's to tell.
+      expect(getRoutine(pinned.id).nextRunAt).toBe(theirNext);
+
+      expect(await runMissedSince(new Date(slot.getTime() - 5 * 60_000).toISOString())).toBe(1);
+      expect(sent.map((m) => m.routineId)).toEqual([shared.id]);
+      expect((await catchHttp(triggerRoutine(pinned.id, { scheduled: true }))).status).toBe(409);
+      expect(getRoutine(pinned.id).lastRunAt).toBeNull();
+    });
+
+    test("a secondary fires the automations pinned to it, also while it doesn't stand in", async () => {
+      secondary(false);
+      const mine = createRoutine({ agentId: agent.id, name: "Mine", cron: "0 6 * * *", timezone: "UTC", prompt: "x", runOn: "rnr_self" });
+      const other = createRoutine({ agentId: agent.id, name: "Laptop's", cron: "0 6 * * *", timezone: "UTC", prompt: "x", runOn: "rnr_laptop" });
+      const shared = createRoutine({ agentId: agent.id, name: "Shared", cron: "0 6 * * *", timezone: "UTC", prompt: "x" });
+      startScheduler();
+      expect(scheduled()).toEqual([mine.id]);
+      setStandingIn(now());
+      reloadSchedules();
+      expect(scheduled().sort()).toEqual([mine.id, shared.id].sort());
+      expect(scheduled()).not.toContain(other.id);
+      setStandingIn(null);
+      reloadSchedules();
+      expect(scheduled()).toEqual([mine.id]);
+    });
+
+    test("the primary leaves automations pinned to another computer to it, unless that one left the group", () => {
+      setGroup("primary");
+      const laptop = createRoutine({ agentId: agent.id, name: "On the laptop", cron: "0 6 * * *", timezone: "UTC", prompt: "x", runOn: "Laptop" });
+      const here = createRoutine({ agentId: agent.id, name: "Here", cron: "0 6 * * *", timezone: "UTC", prompt: "x", runOn: "primary" });
+      startScheduler();
+      expect(scheduled()).toContain(here.id);
+      expect(scheduled()).not.toContain(laptop.id);
+      exec("DELETE FROM runners WHERE id = 'rnr_laptop'");
+      reloadSchedules();
+      expect(scheduled()).toContain(laptop.id);
+    });
+
+    test("Run now elsewhere: refused clearly while the pinned computer can't be reached", async () => {
+      secondary(false);
+      const r = createRoutine({ agentId: agent.id, name: "Social posts", cron: "0 12 * * *", prompt: "post", runOn: "primary" });
+      const err = await catchHttp(runRoutineNow(r.id));
+      expect(err.status).toBe(409);
+      expect(err.code).toBe("device_offline");
+      expect(err.message).toContain("Desk Mac");
+      expect(sent).toHaveLength(0);
+      // Sent here as the pinned computer's (the other one passed it on): it runs here.
+      finish(await runRoutineNow(r.id, { here: true }));
+      expect(sent.map((m) => m.routineId)).toEqual([r.id]);
+    });
+
+    test("the pinned primary catches up a slot it missed while away, once; a stand-in that was there didn't run it", async () => {
+      setGroup("primary");
+      setSystemTime(new Date("2026-10-20T12:38:00.000Z"));
+      try {
+        startScheduler();
+        stopScheduler();
+        const r = createRoutine({ agentId: agent.id, name: "Social posts", cron: "0 15 * * 1-5", timezone: "Europe/Berlin", prompt: "post", runOn: "primary" });
+        exec("UPDATE routines SET created_at = ? WHERE id = ?", "2026-10-01T00:00:00.000Z", r.id);
+        setScheduleGroup({ active: () => true, settle: async () => {} });
+        setSystemTime(new Date("2026-10-20T14:06:01.000Z"));
+        startScheduler();
+        await Bun.sleep(20);
+        expect(sent.filter((m) => m.routineId === r.id)).toHaveLength(1);
+        expect(await catchUpMissed("wake", Date.parse("2026-10-20T12:38:00.000Z"))).toBe(0);
+        expect(sent.filter((m) => m.routineId === r.id)).toHaveLength(1);
+      } finally {
+        setSystemTime();
+      }
+    });
+
+    test("a secondary catches up the automations pinned to it after a sleep, not the group's", async () => {
+      secondary(false);
+      setSystemTime(new Date("2026-10-20T12:38:00.000Z"));
+      try {
+        startScheduler();
+        stopScheduler();
+        const mine = createRoutine({ agentId: agent.id, name: "Mine", cron: "0 15 * * 1-5", timezone: "Europe/Berlin", prompt: "x", runOn: "rnr_self" });
+        const shared = createRoutine({ agentId: agent.id, name: "Shared", cron: "0 15 * * 1-5", timezone: "Europe/Berlin", prompt: "x" });
+        exec("UPDATE routines SET created_at = ? WHERE id IN (?, ?)", "2026-10-01T00:00:00.000Z", mine.id, shared.id);
+        setStandingIn(now());
+        setScheduleGroup({ active: () => true, settle: async () => {}, standingIn: () => true });
+        setSystemTime(new Date("2026-10-20T14:06:01.000Z"));
+        startScheduler();
+        await Bun.sleep(20);
+        expect(sent.map((m) => m.routineId)).toEqual([mine.id]);
+      } finally {
+        setSystemTime();
+      }
+    });
   });
 
   describe("slots missed while the scheduler wasn't running", () => {

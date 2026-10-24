@@ -135,6 +135,35 @@ describe("between two computers", () => {
     expect(pendingFor("rnr_a")).toBe(0);
   });
 
+  test("the computer an automation is pinned to goes to the other computer", () => {
+    for (const db of [a, b]) {
+      use(db);
+      run("PRAGMA foreign_keys = OFF");
+      const cols = all<{ name: string; type: string; notnull: number; dflt_value: string | null; pk: number }>('PRAGMA table_info("agents")').filter((c) => c.pk || (c.notnull && c.dflt_value === null));
+      run(`INSERT OR REPLACE INTO agents (${cols.map((c) => `"${c.name}"`).join(", ")}) VALUES (${cols.map(() => "?").join(", ")})`, ...cols.map((c) => (c.name === "id" ? "agt_x" : /INT|REAL|NUM/i.test(c.type) ? 1 : `v_${c.name}`)));
+      run("INSERT OR REPLACE INTO routines (id, agent_id, name, cron, timezone, prompt, created_at, updated_at) VALUES ('rtn_pin', 'agt_x', 'Posts', '0 12 * * *', 'UTC', 'post', ?, ?)", T(0), T(0));
+      run("PRAGMA foreign_keys = ON");
+    }
+    use(a);
+    const start = replicaSeq();
+    run("UPDATE routines SET run_on = 'primary' WHERE id = 'rtn_pin'");
+    const page = changesFor("rnr_b", start, { setup: true });
+    expect(page.changes.map((c) => c.k)).toContain("rtn_pin");
+    use(b);
+    run("PRAGMA foreign_keys = OFF");
+    try {
+      applyChanges("rnr_a", page.changes, { peerWinsTies: true });
+    } finally {
+      run("PRAGMA foreign_keys = ON");
+    }
+    expect(get<{ run_on: string | null }>("SELECT run_on FROM routines WHERE id = 'rtn_pin'")?.run_on).toBe("primary");
+    for (const db of [a, b]) {
+      use(db);
+      run("DELETE FROM routines WHERE id = 'rtn_pin'");
+      run("DELETE FROM agents WHERE id = 'agt_x'");
+    }
+  });
+
   test("the newer change of a row wins, on both sides", () => {
     use(a);
     goal("gol_4", "Old");

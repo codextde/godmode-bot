@@ -828,6 +828,14 @@ const routineFields = {
     .boolean()
     .optional()
     .describe("Keep one conversation for all runs (continuity). Default: true for schedule and condition, false for app and webhook (one conversation per event)."),
+  runOn: z
+    .string()
+    .max(100)
+    .nullable()
+    .optional()
+    .describe(
+      'Device groups, schedule and condition triggers: the only computer that runs it — "primary", a device id or computer name from Settings → Devices; null = any (the primary, or a secondary standing in for it). Pin automations that need files, folders or browser profiles of one computer.',
+    ),
 };
 
 function triggerSummary(r: Routine) {
@@ -858,6 +866,7 @@ function routineSummary(r: Routine, promptMax = 500) {
     timezone: r.timezone,
     enabled: r.enabled,
     reuseConversation: r.reuseConversation,
+    ...(r.runOn ? { runOn: r.runOn } : {}),
     status: r.triggerStatus.state,
     ...(r.triggerStatus.message ? { statusMessage: r.triggerStatus.message } : {}),
     lastRunAt: r.lastRunAt,
@@ -2451,7 +2460,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
   defineTool({
     name: "routine_update",
     description:
-      "Change an automation's trigger, schedule, prompt, filter, name or enabled state. Changing one of an agent that may read secrets in plain text while you can't makes it fill-only (pausing it doesn't).",
+      "Change an automation's trigger, schedule, prompt, filter, name, enabled state or the computer it runs on (runOn). Changing one of an agent that may read secrets in plain text while you can't makes it fill-only (pausing it or picking its computer doesn't).",
     schema: z.object({
       routineId: z.string(),
       name: routineFields.name.optional(),
@@ -2462,6 +2471,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       timezone: routineFields.timezone,
       enabled: routineFields.enabled,
       reuseConversation: routineFields.reuseConversation,
+      runOn: routineFields.runOn,
     }),
     when: managesSetup,
     run: async ({ routineId, trigger, ...patch }, { agent, ctx }) => {
@@ -2476,8 +2486,8 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       const owner = getAgent(latest.agentId);
       const secrets = automationSecrets(agent, ctx, owner, "change its automations");
       if (typeof secrets === "string") return fail(secrets);
-      // What this caller writes or starts runs without raw secrets from now on. Pausing does neither.
-      const pauseOnly = fields.length === 1 && patch.enabled === false;
+      // What this caller writes or starts runs without raw secrets from now on. Pausing does neither, nor picking the computer.
+      const pauseOnly = fields.length > 0 && fields.every((f) => f === "runOn" || (f === "enabled" && patch.enabled === false));
       const fillOnly = secrets.fillOnly && !pauseOnly;
       const r = updateRoutine(routineId, { ...patch, ...(resolved ? { trigger: resolved } : {}), ...(fillOnly ? { fillOnly } : {}) });
       const became = fillOnly && !latest.fillOnly;

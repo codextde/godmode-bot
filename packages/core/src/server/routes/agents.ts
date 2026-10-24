@@ -55,7 +55,7 @@ import {
 } from "../../agents/files";
 import { getSettings } from "../../services/settings";
 import { conflict } from "../../util";
-import { requestDevice } from "../auth";
+import { requestDevice, requestVia } from "../auth";
 import { requireGrant } from "../grants";
 import { body, computerTargetSchema, z } from "../validate";
 
@@ -189,6 +189,7 @@ export const routineSchema = z.object({
   reuseConversation: z.boolean().optional(),
   notify: z.enum(["always", "failures", "never"]).optional(),
   fillOnly: z.boolean().optional(),
+  runOn: z.string().trim().max(100).nullable().optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {
@@ -416,7 +417,11 @@ export function registerAgentRoutes(app: Hono): void {
     return c.json({ ok: true });
   });
 
-  app.post("/api/routines/:id/run", async (c) => c.json(await runRoutineNow(c.req.param("id"), { byHuman: true })));
+  app.post("/api/routines/:id/run", async (c) => {
+    // Another computer of the group passes on a Run now for an automation pinned here (remote/routinePins.ts).
+    const hop = requestVia(c).via === "computer" ? ((await c.req.json().catch(() => null)) as { here?: unknown; byHuman?: unknown } | null) : null;
+    return c.json(await runRoutineNow(c.req.param("id"), { byHuman: hop?.byHuman !== false, here: hop?.here === true }));
+  });
 
   /* Automation events -------------------------------------------------- */
 
