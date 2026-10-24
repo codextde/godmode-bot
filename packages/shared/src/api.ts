@@ -4,6 +4,7 @@ import type { AgentCharacter } from "./character";
 import type { AgentComputerConfig, ComputerTarget } from "./computer";
 import type {
   RoutineNotify,
+  RoutineRunOn,
   Agent,
   AgentBrowserConfig,
   AgentPermissions,
@@ -290,6 +291,8 @@ export interface RoutineInput {
   notify?: RoutineNotify;
   /** Runs without raw secrets (see `Routine.fillOnly`). */
   fillOnly?: boolean;
+  /** See `Routine.runOn`. */
+  runOn?: RoutineRunOn | null;
 }
 
 export interface WebhookRotateResult {

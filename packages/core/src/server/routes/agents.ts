@@ -189,6 +189,7 @@ export const routineSchema = z.object({
   reuseConversation: z.boolean().optional(),
   notify: z.enum(["always", "failures", "never"]).optional(),
   fillOnly: z.boolean().optional(),
+  runOn: z.string().trim().max(100).nullable().optional(),
 });
 
 function scopeParam(value: string | undefined): string | null | "all" {

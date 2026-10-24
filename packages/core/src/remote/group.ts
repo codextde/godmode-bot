@@ -9,7 +9,7 @@
  * `link.*` meta never goes into backups, like the pairings it describes.
  */
 import type { DeviceRole } from "@godmode/shared";
-import { deleteMeta, getMeta, setMeta } from "../db";
+import { deleteMeta, get, getMeta, setMeta } from "../db";
 
 const ROLE_META = "link.group.role";
 const PRIMARY_META = "link.group.primary";
@@ -95,6 +95,26 @@ export function standingIn(): boolean {
  */
 export function runsShared(): boolean {
   return !isSecondary() || standingIn();
+}
+
+/**
+ * Whether this computer runs the schedule of an automation pinned to `runOn` ("primary", a device id, or null = any).
+ * Pinned ones run on their computer only, standing in or not; outside a group every pin is moot. On the primary, a pin
+ * to a computer that left the group runs here.
+ */
+export function runsRoutineHere(runOn: string | null | undefined): boolean {
+  const role = groupRole();
+  if (!role) return true;
+  if (!runOn) return runsShared();
+  if (role === "primary") {
+    if (runOn === "primary") return true;
+    try {
+      return !get("SELECT 1 FROM runners WHERE id = ? AND kind = 'device'", runOn);
+    } catch {
+      return false;
+    }
+  }
+  return runOn === selfDeviceId();
 }
 
 export function setStandingIn(since: string | null): void {

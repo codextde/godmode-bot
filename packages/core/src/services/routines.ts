@@ -20,6 +20,8 @@ import { cancelPendingEvents, sendTestEvent } from "../automations/events";
 import { clearWebhookToken, issueWebhookToken, webhookPathOf } from "../automations/webhooks";
 import { appTriggerHealth, getTriggerType, missingConfigFields, requestAppTriggerSync } from "../integrations/composioTriggers";
 import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
+import { runsRoutineHere } from "../remote/group";
+import { resolveRunOn, runPinnedElsewhere } from "../remote/routinePins";
 
 const log = logger("routines");
 
@@ -36,6 +38,7 @@ export interface RoutineRow {
   reuse_conversation: number;
   notify?: string | null;
   secret_access?: string | null;
+  run_on?: string | null;
   conversation_id: string | null;
   last_run_at: string | null;
   next_run_at: string | null;
@@ -147,6 +150,7 @@ function toModel(r: RoutineRow, pending = 0): Routine {
     reuseConversation: bool(r.reuse_conversation),
     notify: r.notify === "always" || r.notify === "never" ? r.notify : "failures",
     fillOnly: r.secret_access === "fill",
+    runOn: r.run_on ?? null,
     conversationId: r.conversation_id,
     lastRunAt: r.last_run_at,
     nextRunAt: r.next_run_at,
@@ -463,6 +467,7 @@ function syncRoutinesFile(agentId: string): void {
         reuseConversation: r.reuseConversation,
         notify: r.notify,
         fillOnly: r.fillOnly,
+        runOn: r.runOn,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
       }));
@@ -552,6 +557,7 @@ export function createRoutine(input: RoutineInput): Routine {
   const { cron, next } = scheduleFor(id, trigger, input.cron, timezone);
   const filter = trigger.type === "app" || trigger.type === "webhook" ? normalizeFilter(input.filter) : "";
   const enabled = input.enabled !== false;
+  const runOn = resolveRunOn(input.runOn) ?? null;
   // The webhook secret is sealed with the vault key: fail before anything is stored when the vault is locked.
   const webhook = trigger.type === "webhook" ? issueWebhookToken(id) : null;
   const ts = now();
@@ -569,6 +575,7 @@ export function createRoutine(input: RoutineInput): Routine {
     reuse_conversation: int(input.reuseConversation ?? usesCron(trigger))!,
     notify: input.notify ?? "failures",
     secret_access: input.fillOnly ? "fill" : null,
+    run_on: runOn,
     conversation_id: null,
     last_run_at: null,
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
@@ -620,6 +627,8 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     reuse_conversation: int(reuse),
     notify: patch.notify,
     secret_access: patch.fillOnly === undefined ? undefined : patch.fillOnly ? "fill" : null,
+    // Unchanged stays as it is: a pin to a computer that left the group can't be given again, but saves.
+    run_on: patch.runOn === current.runOn ? undefined : resolveRunOn(patch.runOn),
     updated_at: now(),
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
     webhook_token_hash: webhook?.hash,
@@ -678,8 +687,12 @@ export function deleteRoutine(id: string): void {
  * test event. Throws 409 when it is already running.
  */
 /** `byHuman`: the human clicked Run now (a scheduled automation then runs although a monthly budget is used up). */
-export async function runRoutineNow(id: string, opts: { byHuman?: boolean } = {}): Promise<Run> {
+/** `here`: another computer of the group sent it here as the one it is pinned to (routes/link.ts): no further hop. */
+export async function runRoutineNow(id: string, opts: { byHuman?: boolean; here?: boolean } = {}): Promise<Run> {
   const routine = getRoutine(id);
+  if (routine.runOn && usesCron(routine.trigger) && !opts.here && !runsRoutineHere(routine.runOn)) {
+    return runPinnedElsewhere({ id, name: routine.name, runOn: routine.runOn }, opts);
+  }
   switch (routine.trigger.type) {
     case "condition":
       return runConditionCheck(id, { manual: true });

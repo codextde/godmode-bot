@@ -4,7 +4,9 @@
  * a condition tick starts a condition check (automations/conditions.ts). Schedules with a random start window get a
  * one-off job at the start drawn for their next time slot, replaced by the next one when it fires; with several runs per
  * window every part of the window is such a slot. A slot that fell while the scheduler wasn't running (Godmode was off,
- * the computer slept) runs once when it is back (catchUpMissed).
+ * the computer slept) runs once when it is back (catchUpMissed). In a device group an automation pinned to one computer
+ * (`run_on`) fires there only, also while another computer stands in for the primary; the rest fire where the group's
+ * schedules run (remote/group.ts `runsRoutineHere`).
  */
 import { Cron } from "croner";
 import type { Routine, Run } from "@godmode/shared";
@@ -25,6 +27,8 @@ import { exhaustedBudget } from "../services/budgets";
 import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
 import { localizePaths } from "../remote/localPaths";
 import { standInHold } from "../remote/standIn";
+import { runsRoutineHere } from "../remote/group";
+import { runOnName } from "../remote/routinePins";
 
 const log = logger("scheduler");
 
@@ -51,6 +55,7 @@ interface WantedRoutine {
   type: string;
   start_window: number | null;
   runs: number | null;
+  run_on: string | null;
 }
 
 /** A schedule's start window and runs per window as the scheduler uses them: out-of-range values count as none. */
@@ -134,6 +139,9 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
+  if (opts.scheduled && !runsRoutineHere(routine.runOn)) {
+    throw conflict(`Routine "${routine.name}" runs on ${routine.runOn ? runOnName(routine.runOn) : "the computer that runs the group's schedules"}`);
+  }
   const held = opts.scheduled ? standInHold(agent.id, routine.prompt) : null;
   if (held) {
     recordEvent(id, { source: "schedule", title: opts.title ?? "Scheduled time reached", status: "skipped", note: held });
@@ -191,7 +199,10 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
 interface ScheduleGroup {
   active: () => boolean;
   settle: () => Promise<void>;
-  /** This computer schedules only while it stands in for its primary: runMissedSince covers what came due. */
+  /**
+   * A secondary: what came due for the group while it stood in is runMissedSince's; it catches up only automations
+   * pinned to it.
+   */
   standingIn?: () => boolean;
 }
 
@@ -232,6 +243,10 @@ async function onTick(routineId: string, scheduledAt: Date | null = null, slot: 
     reloadSchedules();
     return;
   }
+  if (!runsRoutineHere(routine.runOn)) {
+    reloadSchedules();
+    return;
+  }
   // Another computer of the group ran this time already (it stood in while this one was away).
   if (late && routine.lastRunAt && Date.parse(routine.lastRunAt) >= scheduledAt!.getTime() - LATE_MS) {
     log.info(`routine ${routineId} already ran at ${routine.lastRunAt}; this late tick is skipped`);
@@ -265,14 +280,16 @@ interface ScheduleRow {
   cron: string;
   timezone: string;
   trigger: string;
+  run_on: string | null;
   created_at: string;
 }
 
+/** Enabled schedules this computer fires. */
 function scheduleRows(): ScheduleRow[] {
   return all<ScheduleRow>(
-    `SELECT r.id, r.cron, r.timezone, r.trigger, r.created_at FROM routines r JOIN agents a ON a.id = r.agent_id
+    `SELECT r.id, r.cron, r.timezone, r.trigger, r.run_on, r.created_at FROM routines r JOIN agents a ON a.id = r.agent_id
       WHERE r.enabled = 1 AND a.enabled = 1 AND CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END = 'schedule'`,
-  );
+  ).filter((r) => runsRoutineHere(r.run_on));
 }
 
 /**
@@ -318,6 +335,8 @@ export async function runMissedSince(since: string): Promise<number> {
   let ran = 0;
   for (const r of scheduleRows()) {
     if (gen !== generation) break;
+    // Pinned here: this computer's own, caught up like any of its schedules (catchUpMissed).
+    if (r.run_on || !runsRoutineHere(null)) continue;
     const due = lastSlot(r, Date.now());
     // A drawn start still to come: this computer's own random start runs it.
     if (!due || due.slot < from - LATE_MS || due.start > Date.now() || slotTaken(r.id, due.slot)) continue;
@@ -360,13 +379,13 @@ function beat(): void {
  */
 export async function catchUpMissed(reason: "start" | "wake", aliveAt: number): Promise<number> {
   if (!Number.isFinite(aliveAt) || aliveAt <= 0) return 0;
-  if (group?.standingIn?.()) return 0;
   const gen = generation;
   if (group?.active()) await group.settle().catch(() => undefined);
   if (!started) return 0;
   let ran = 0;
   for (const r of scheduleRows()) {
     if (gen !== generation) break;
+    if (!r.run_on && group?.standingIn?.()) continue;
     const t = Date.now();
     const due = lastSlot(r, t);
     if (!due || due.start > t || due.start <= aliveAt - LATE_MS || Date.parse(r.created_at) >= due.slot || slotTaken(r.id, due.slot)) continue;
@@ -397,14 +416,14 @@ export async function catchUpMissed(reason: "start" | "wake", aliveAt: number): 
 export function reloadSchedules(): void {
   if (!started) return;
   const wanted = all<WantedRoutine>(
-    `SELECT id, cron, timezone, type, start_window, runs FROM (
-       SELECT r.id, r.cron, r.timezone,
+    `SELECT id, cron, timezone, type, start_window, runs, run_on FROM (
+       SELECT r.id, r.cron, r.timezone, r.run_on,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.type') END AS type,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.startWindowMinutes') END AS start_window,
          CASE WHEN json_valid(r.trigger) THEN json_extract(r.trigger, '$.runsPerWindow') END AS runs
        FROM routines r JOIN agents a ON a.id = r.agent_id WHERE r.enabled = 1 AND a.enabled = 1)
       WHERE type IN ('schedule', 'condition')`,
-  );
+  ).filter((r) => runsRoutineHere(r.run_on));
   const byId = new Map(wanted.map((r) => [r.id, r]));
 
   for (const [id, scheduled] of jobs) {
@@ -425,8 +444,9 @@ export function reloadSchedules(): void {
     }
   }
 
-  // Persist next run times so the UI shows when each routine fires next.
-  for (const row of all<{ id: string; next_run_at: string | null }>("SELECT id, next_run_at FROM routines")) {
+  // Persist next run times so the UI shows when each routine fires next. Another computer's pinned ones are its own.
+  for (const row of all<{ id: string; next_run_at: string | null; run_on: string | null }>("SELECT id, next_run_at, run_on FROM routines")) {
+    if (!runsRoutineHere(row.run_on)) continue;
     const next = jobs.get(row.id)?.job.nextRun()?.toISOString() ?? null;
     if (next === row.next_run_at) continue;
     exec("UPDATE routines SET next_run_at = ? WHERE id = ?", next, row.id);
@@ -439,11 +459,16 @@ export function reloadSchedules(): void {
  * while that run still stands still.
  */
 function repairStaleStatuses() {
+  const here = all<{ id: string; run_on: string | null }>("SELECT id, run_on FROM routines WHERE last_status IN ('queued', 'running', 'paused')")
+    .filter((r) => runsRoutineHere(r.run_on))
+    .map((r) => r.id);
+  if (!here.length) return;
   exec(
     `UPDATE routines SET last_status = COALESCE(
        (SELECT status FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' ORDER BY created_at DESC LIMIT 1), 'failed')
-     WHERE last_status IN ('queued', 'running', 'paused')
+     WHERE last_status IN ('queued', 'running', 'paused') AND id IN (SELECT value FROM json_each(?))
        AND NOT EXISTS (SELECT 1 FROM runs WHERE runs.routine_id = routines.id AND runs.trigger = 'routine' AND runs.status IN ('queued', 'running'))`,
+    JSON.stringify(here),
   );
 }
 

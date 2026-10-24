@@ -3,11 +3,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { ChevronRight, CircleCheck } from "lucide-react";
-import type { ComposioConnection, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
+import type { ComposioConnection, GroupDevice, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useModelCatalog } from "@/lib/hooks";
+import { useAllAgents, useDeviceGroup, useModelCatalog } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useEasyMode } from "@/lib/mode";
 import { clearDraft, useDraft } from "@/lib/drafts";
@@ -78,6 +78,8 @@ export interface RoutineDraft {
   enabled: boolean;
   reuseConversation: boolean;
   notify: RoutineNotify;
+  /** Device groups: "primary" or a device id; null = any. */
+  runOn: string | null;
 }
 
 /** Like the core: events get a conversation each (named after the event); schedules and conditions keep one. */
@@ -108,6 +110,7 @@ function initialDraft(routine: Routine | null | undefined, agentId: string | und
     enabled: routine?.enabled ?? initial?.enabled ?? true,
     reuseConversation: routine?.reuseConversation ?? initial?.reuseConversation ?? defaultReuse(triggerType),
     notify: routine?.notify ?? "failures",
+    runOn: routine?.runOn ?? initial?.runOn ?? null,
   };
 }
 
@@ -167,6 +170,8 @@ export function RoutineDialog({
   const type = draft.triggerType;
   const meta = TRIGGER_TYPES[type];
   const eventTrigger = isEventTrigger(type);
+  const { data: group } = useDeviceGroup();
+  const pinnable = !!group?.role && !eventTrigger;
   const appSchema = useAppTriggerSchema(draft.app);
 
   const windowProblem = useMemo(
@@ -233,6 +238,7 @@ export function RoutineDialog({
         enabled: draft.enabled,
         reuseConversation: draft.reuseConversation,
         notify: draft.notify,
+        runOn: pinnable ? draft.runOn : undefined,
       };
       if (!routine) return api.routines.create(input);
       if (!routine.fillOnly || !reveal) return api.routines.update(routine.id, input);
@@ -618,6 +624,8 @@ export function RoutineDialog({
               </p>
             </div>
 
+            {pinnable && <RunOnField devices={group.devices} value={draft.runOn} onChange={(v) => set("runOn", v)} />}
+
             <DialogFooter className="items-center sm:justify-between">
               {kept.saved ? (
                 <DraftStatus
@@ -651,6 +659,49 @@ export function RoutineDialog({
 }
 
 /** The expression behind a schedule, for the rare one the friendly picker can't express. */
+const ANY_DEVICE = "__any";
+
+/** Device groups: the one computer that runs a schedule or check (one with its files and browser profiles). */
+function RunOnField({ devices: list, value, onChange }: { devices: GroupDevice[]; value: string | null; onChange: (runOn: string | null) => void }) {
+  const devices = list.map((d) => ({
+    value: d.id ?? "primary",
+    name: d.name,
+    tag: [d.role === "primary" ? "primary" : null, d.self ? "this computer" : null].filter(Boolean).join(", "),
+    online: d.state === "online",
+  }));
+  const picked = value ? devices.find((d) => d.value === value) : null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      <Label htmlFor="routine-run-on" className="shrink-0">
+        Run on
+      </Label>
+      <Select value={value ?? ANY_DEVICE} onValueChange={(v) => onChange(v === ANY_DEVICE ? null : v)}>
+        <SelectTrigger id="routine-run-on" className="w-56" aria-describedby="routine-run-on-hint">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent position="popper">
+          <SelectItem value={ANY_DEVICE}>Any device</SelectItem>
+          <SelectSeparator />
+          {devices.map((d) => (
+            <SelectItem key={d.value} value={d.value}>
+              {d.name}
+              {d.tag && <span className="ml-1.5 text-xs text-muted-foreground">{d.tag}</span>}
+            </SelectItem>
+          ))}
+          {value && !picked && <SelectItem value={value}>Another computer</SelectItem>}
+        </SelectContent>
+      </Select>
+      <p id="routine-run-on-hint" className="basis-full text-xs text-muted-foreground">
+        {!value
+          ? "Runs where your schedules run: the primary, or another computer while it stands in."
+          : picked
+            ? `Only ${picked.name} runs it, also while another computer stands in. A time it misses while away runs when it's back${picked.online ? "" : " (it's offline now)"}.`
+            : "Pinned to a computer that isn't listed: one that left the group (the primary runs it then), or one this computer can't see while the primary is away."}
+      </p>
+    </div>
+  );
+}
+
 function RawCronField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (cron: string) => void }) {
   const problem = validateCron(value);
   return (

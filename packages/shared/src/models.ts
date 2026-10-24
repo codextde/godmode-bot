@@ -284,6 +284,9 @@ export interface RoutineTriggerStatus {
 /** When an automation tells the human that a run ended. A failure is told once until a run succeeds again. */
 export type RoutineNotify = "always" | "failures" | "never";
 
+/** "primary" or the id of a device of the group (its id in the primary's runner list). */
+export type RoutineRunOn = "primary" | ID;
+
 export interface Routine {
   id: ID;
   agentId: ID;
@@ -305,6 +308,11 @@ export interface Routine {
    * read them itself. Logins are still filled into pages. Only the human switches it off.
    */
   fillOnly: boolean;
+  /**
+   * Device groups: the computer that runs its schedule or checks — "primary" or a device's id (`GroupDevice.id`); null =
+   * whichever computer runs the group's schedules (the primary, or a secondary standing in for it).
+   */
+  runOn: RoutineRunOn | null;
   conversationId: ID | null;
   lastRunAt: ISODate | null;
   /** Next scheduled run (schedule) or check (condition). */
