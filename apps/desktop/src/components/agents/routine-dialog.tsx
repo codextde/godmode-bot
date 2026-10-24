@@ -688,7 +688,7 @@ function RunOnField({ devices: list, value, onChange }: { devices: GroupDevice[]
               {d.tag && <span className="ml-1.5 text-xs text-muted-foreground">{d.tag}</span>}
             </SelectItem>
           ))}
-          {value && !picked && <SelectItem value={value}>A computer that left the group</SelectItem>}
+          {value && !picked && <SelectItem value={value}>Another computer</SelectItem>}
         </SelectContent>
       </Select>
       <p id="routine-run-on-hint" className="basis-full text-xs text-muted-foreground">
@@ -696,7 +696,7 @@ function RunOnField({ devices: list, value, onChange }: { devices: GroupDevice[]
           ? "Runs where your schedules run: the primary, or another computer while it stands in."
           : picked
             ? `Only ${picked.name} runs it, also while another computer stands in. A time it misses while away runs when it's back${picked.online ? "" : " (it's offline now)"}.`
-            : "That computer isn't in the group anymore: the primary runs it."}
+            : "Pinned to a computer that isn't listed: one that left the group (the primary runs it then), or one this computer can't see while the primary is away."}
       </p>
     </div>
   );

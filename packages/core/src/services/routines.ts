@@ -627,7 +627,8 @@ export function updateRoutine(id: string, patch: Partial<RoutineInput>): Routine
     reuse_conversation: int(reuse),
     notify: patch.notify,
     secret_access: patch.fillOnly === undefined ? undefined : patch.fillOnly ? "fill" : null,
-    run_on: resolveRunOn(patch.runOn),
+    // Unchanged stays as it is: a pin to a computer that left the group can't be given again, but saves.
+    run_on: patch.runOn === current.runOn ? undefined : resolveRunOn(patch.runOn),
     updated_at: now(),
     next_run_at: enabled && agent.enabled && next ? next.toISOString() : null,
     webhook_token_hash: webhook?.hash,
@@ -686,7 +687,7 @@ export function deleteRoutine(id: string): void {
  * test event. Throws 409 when it is already running.
  */
 /** `byHuman`: the human clicked Run now (a scheduled automation then runs although a monthly budget is used up). */
-/** `here`: another computer of the group sent it here as the one it is pinned to: it runs here, no further hop. */
+/** `here`: another computer of the group sent it here as the one it is pinned to (routes/link.ts): no further hop. */
 export async function runRoutineNow(id: string, opts: { byHuman?: boolean; here?: boolean } = {}): Promise<Run> {
   const routine = getRoutine(id);
   if (routine.runOn && usesCron(routine.trigger) && !opts.here && !runsRoutineHere(routine.runOn)) {

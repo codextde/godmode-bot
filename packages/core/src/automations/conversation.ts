@@ -32,9 +32,15 @@ export function automationAgentReveals(routine: Pick<Routine, "agentId">): boole
  * became fill-only (or stopped being it) starts a new chat, and nothing read in the old one comes along. For an
  * agent that reads no raw secrets anyway, every chat of its own fits.
  */
-export function chatFitsAutomation(routine: Pick<Routine, "agentId" | "fillOnly">, conversationId: string): boolean {
-  const existing = get<{ secret_access: string | null }>("SELECT secret_access FROM conversations WHERE id = ? AND agent_id = ?", conversationId, routine.agentId);
+export function chatFitsAutomation(routine: Pick<Routine, "agentId" | "fillOnly"> & { runOn?: string | null }, conversationId: string): boolean {
+  const existing = get<{ secret_access: string | null; runner_id: string | null }>(
+    "SELECT secret_access, runner_id FROM conversations WHERE id = ? AND agent_id = ?",
+    conversationId,
+    routine.agentId,
+  );
   if (!existing) return false;
+  // Pinned to one computer: a chat that lives on another one would run there.
+  if (routine.runOn && existing.runner_id) return false;
   return (existing.secret_access === "fill") === routine.fillOnly || !automationAgentReveals(routine);
 }
 

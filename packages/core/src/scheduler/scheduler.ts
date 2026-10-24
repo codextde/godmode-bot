@@ -139,7 +139,9 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   const agent = getAgent(routine.agentId);
   if (!agent.enabled) throw conflict(`Agent "${agent.name}" is disabled`);
   if (opts.scheduled && !routine.enabled) throw conflict(`Routine "${routine.name}" is disabled`);
-  if (opts.scheduled && !runsRoutineHere(routine.runOn)) throw conflict(`Routine "${routine.name}" runs on ${runOnName(routine.runOn!)}`);
+  if (opts.scheduled && !runsRoutineHere(routine.runOn)) {
+    throw conflict(`Routine "${routine.name}" runs on ${routine.runOn ? runOnName(routine.runOn) : "the computer that runs the group's schedules"}`);
+  }
   const held = opts.scheduled ? standInHold(agent.id, routine.prompt) : null;
   if (held) {
     recordEvent(id, { source: "schedule", title: opts.title ?? "Scheduled time reached", status: "skipped", note: held });

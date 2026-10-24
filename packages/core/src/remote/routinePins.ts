@@ -51,8 +51,10 @@ export function runOnName(runOn: string): string {
 export async function runPinnedElsewhere(routine: { id: string; name: string; runOn: string }, opts: { byHuman?: boolean }): Promise<Run> {
   const target = isPrimary() ? routine.runOn : primaryRunnerId();
   const where = runOnName(routine.runOn);
+  // A secondary reaches the other secondaries through its primary.
+  const via = !isPrimary() && routine.runOn !== "primary" ? `${runOnName("primary")}, which passes it on there,` : where;
   const offline = () =>
-    new HttpError(409, `“${routine.name}” runs on ${where} only, and ${where} can't be reached right now. It runs there once it's back, or set Run on to Any device.`, "device_offline");
+    new HttpError(409, `“${routine.name}” runs on ${where} only, and ${via} can't be reached right now. It runs there at its next time, or set Run on to Any device.`, "device_offline");
   if (!target) throw offline();
   const { link } = await import("./runners");
   let l: ReturnType<typeof link>;
@@ -63,5 +65,5 @@ export async function runPinnedElsewhere(routine: { id: string; name: string; ru
     throw offline();
   }
   const here = isPrimary() || routine.runOn === "primary";
-  return l.json<Run>("POST", `/api/routines/${encodeURIComponent(routine.id)}/run`, { here, byHuman: opts.byHuman === true }, { timeoutMs: 120_000 });
+  return l.json<Run>("POST", `/api/link/routines/${encodeURIComponent(routine.id)}/run`, { here, byHuman: opts.byHuman === true }, { timeoutMs: 120_000 });
 }

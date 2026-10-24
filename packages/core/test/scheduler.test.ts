@@ -497,6 +497,27 @@ describe("triggering", () => {
       expect(scheduled()).toContain(laptop.id);
     });
 
+    test("an automation pinned to a computer that left the group still saves", () => {
+      setGroup("primary");
+      const r = createRoutine({ agentId: agent.id, name: "Laptop's", cron: "0 6 * * *", timezone: "UTC", prompt: "x", runOn: "rnr_laptop", enabled: false });
+      exec("DELETE FROM runners WHERE id = 'rnr_laptop'");
+      expect(updateRoutine(r.id, { prompt: "y", runOn: "rnr_laptop" }).runOn).toBe("rnr_laptop");
+      expect(() => updateRoutine(r.id, { runOn: "rnr_gone" })).toThrow("Unknown computer");
+    });
+
+    test("a pinned automation doesn't go on in a chat that lives on another computer", async () => {
+      secondary(false);
+      const r = createRoutine({ agentId: agent.id, name: "Posts", cron: "0 12 * * *", prompt: "post", runOn: "rnr_self" });
+      finish(await triggerRoutine(r.id));
+      const first = getRoutine(r.id).conversationId!;
+      // The chat moved to the primary meanwhile.
+      exec("UPDATE conversations SET runner_id = 'rnr_primary' WHERE id = ?", first);
+      finish(await triggerRoutine(r.id, { scheduled: true }));
+      expect(sent).toHaveLength(2);
+      expect(sent[1]!.conversationId).not.toBe(first);
+      expect(getRoutine(r.id).conversationId).toBe(sent[1]!.conversationId);
+    });
+
     test("Run now elsewhere: refused clearly while the pinned computer can't be reached", async () => {
       secondary(false);
       const r = createRoutine({ agentId: agent.id, name: "Social posts", cron: "0 12 * * *", prompt: "post", runOn: "primary" });

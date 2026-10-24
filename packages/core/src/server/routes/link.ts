@@ -23,6 +23,7 @@ import { callForDevice } from "../../remote/deviceTools";
 import { welcomeFor } from "../ws";
 import { get } from "../../db";
 import { getConversationSummary, sendMessage } from "../../services/conversations";
+import { runRoutineNow } from "../../services/routines";
 import type { MessageBlock, RunTrigger } from "@godmode/shared";
 import { cancelRun } from "../../runner/runner";
 import { body, z } from "../validate";
@@ -247,6 +248,13 @@ export function registerLinkRoutes(app: Hono): void {
       trigger,
     });
     return c.json({ ...result, conversation: getConversationSummary(id) });
+  });
+
+  // Run now for an automation pinned to one computer, passed on by another computer of the group (remote/routinePins.ts).
+  app.post("/api/link/routines/:id/run", async (c) => {
+    groupPeer(c);
+    const input = await body(c, z.object({ here: z.boolean().optional(), byHuman: z.boolean().optional() }));
+    return c.json(await runRoutineNow(c.req.param("id"), { byHuman: input.byHuman === true, here: input.here === true }));
   });
 
   app.post("/api/link/forget", (c) => {
