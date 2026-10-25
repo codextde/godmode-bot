@@ -65,7 +65,7 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
       <SettingsGroup title="Agents' files" description="Look through each agent's workspace, notes and memory yourself: what takes space, copies, junk and notes nothing links to." icon={<FolderOpen />}>
         <SettingRow label="Files" description="Rename, move and delete by hand. Deleted files wait 30 days in the agent's bin.">
           <Button asChild size="sm" variant="outline">
-            <Link to="/files">
+            <Link to="/settings/files">
               Open Files <ArrowUpRight />
             </Link>
           </Button>
