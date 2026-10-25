@@ -60,6 +60,7 @@ import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } fr
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
 import { resourceSnapshot, startDiagnostics, stopDiagnostics } from "./diagnostics/monitor";
+import { startSelfRepair, stopSelfRepair } from "./diagnostics/selfRepair";
 import { getModelCatalog } from "./runner/models";
 import { refreshMobileAccess, startMobileAccess, stopMobileAccess } from "./mobile/access";
 import { answerHealth, HEALTH_PATH, runnerFile, runningRunner, runRunnerCli, servingRunner, USAGE as RUNNER_USAGE, type RunnerProcess } from "./remote/cli";
@@ -217,6 +218,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startAutomationEvents();
     startAppTriggers();
     startMessaging();
+    startSelfRepair();
     startTasks();
     startHeartbeats();
     startCalls();
@@ -231,6 +233,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopAutomationEvents();
     await stopMessaging();
     stopTasks();
+    stopSelfRepair();
     stopHeartbeats();
     stopCalls();
   };
