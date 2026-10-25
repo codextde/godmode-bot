@@ -10,9 +10,7 @@ import { all, closeDb, get, getMeta, insert, openDb, run as sql } from "../src/d
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import type { MemorySnapshot } from "../src/memory/files";
-import { clearGroup, setGroup } from "../src/remote/group";
 import { mergeMemory, readMemoryState, writeMemoryState } from "../src/remote/memorySync";
-import { ensureReplica, resetReplicaCache } from "../src/remote/replica";
 import { appliedDigest, applySnapshot, buildSnapshot, snapshotDigest, type ConfigSnapshot } from "../src/remote/snapshot";
 import { clearGroup, setGroup } from "../src/remote/group";
 import { ensureReplica, madeHere, pendingKeys, resetReplicaCache } from "../src/remote/replica";
@@ -726,7 +724,7 @@ describe("applying a snapshot on a runner", () => {
     expect(vault.isUnlocked()).toBe(true);
   });
 
-  test("a secondary keeps a project it made with the same name as one of the primary's, and the rest of the copy lands", async () => {
+  test("a secondary keeps a project it made with the same name as one of the primary's under a free slug, and the rest of the copy lands", async () => {
     const secondary = mkdtempSync(join(tmpdir(), "godmode-snapshot-secondary-"));
     try {
       use(controller);
@@ -749,10 +747,10 @@ describe("applying a snapshot on a runner", () => {
 
       use(secondary);
       const result = await applySnapshot(copy);
-      expect(result.warnings).toEqual(['"Earshot" (projects) wasn\'t copied: this computer has its own one with the same name.']);
-      expect(exists("projects", "prj_here")).toBe(true);
-      expect(exists("projects", "prj_there")).toBe(false);
-      expect(row("agents", "agt_helper")).toMatchObject({ project_id: "prj_here", instructions: "Work on Earshot." });
+      expect(result.warnings).toEqual([]);
+      expect(row("projects", "prj_here").slug).toBe("earshot-2");
+      expect(row("projects", "prj_there").slug).toBe("earshot");
+      expect(row("agents", "agt_helper")).toMatchObject({ project_id: "prj_there", instructions: "Work on Earshot." });
       expect(appliedDigest()).toBe(copy.digest);
     } finally {
       clearGroup();
@@ -779,10 +777,11 @@ describe("applying a snapshot on a runner", () => {
 
       use(secondary);
       const result = await applySnapshot(copy);
-      expect(result.warnings.join("\n")).toContain('"Studio" (workspaces) wasn\'t copied');
+      expect(result.warnings).toEqual([]);
+      expect(row("workspaces", "ws_here").slug).toBe("studio-2");
+      expect(row("workspaces", "ws_there").slug).toBe("studio");
       expect(row("projects", "prj_here")).toMatchObject({ workspace_id: "ws_here", slug: "earshot" });
-      expect(exists("workspaces", "ws_there")).toBe(false);
-      expect(exists("projects", "prj_there")).toBe(false);
+      expect(row("projects", "prj_there")).toMatchObject({ workspace_id: "ws_there", slug: "earshot" });
       expect(exists("agents", "agt_helper")).toBe(true);
       expect(appliedDigest()).toBe(copy.digest);
     } finally {
