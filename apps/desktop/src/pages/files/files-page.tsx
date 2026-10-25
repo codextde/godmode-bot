@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, FolderOpen, HardDriveDownload, Moon } from "lucide-react";
+import { ArrowLeft, FolderOpen, Moon } from "lucide-react";
 import type { Agent, FileReviewItem } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { useAgents, useAllAgents } from "@/lib/hooks";
@@ -30,7 +30,6 @@ import { DetailPane } from "@/components/files/detail-pane";
 import { DeleteDialog, MoveDialog, NameDialog, type NameDialogMode } from "@/components/files/dialogs";
 import { NOTE_FILE, parentOf } from "@/components/files/file-editor";
 import { NotesPane } from "@/components/files/notes-pane";
-import { FilesOverview } from "@/components/files/overview";
 import { ReviewPane, useFileReview } from "@/components/files/review-pane";
 import { useRefreshFiles, useReveal } from "@/components/files/use-files";
 
@@ -45,14 +44,7 @@ export default function FilesPage() {
   const everyone = useAllAgents();
   const agent = everyone.data?.find((a) => a.id === agentId) ?? scoped.data?.find((a) => a.id === agentId);
 
-  if (!agentId) {
-    return (
-      <>
-        <PageHeader title="Files" description={DESCRIPTION} icon={<FolderOpen />} actions={<CleanupLink />} />
-        <PageBody>{scoped.isLoading ? <OverviewSkeleton /> : <FilesOverview agents={scoped.data ?? []} />}</PageBody>
-      </>
-    );
-  }
+  if (!agentId) return <Navigate to="/settings/files" replace />;
   if (everyone.isLoading) {
     return (
       <>
@@ -68,32 +60,12 @@ export default function FilesPage() {
       <>
         <PageHeader title="Files" icon={<FolderOpen />} />
         <PageBody>
-          <EmptyState icon={<FolderOpen />} title="This agent doesn't exist anymore" action={<Button asChild variant="outline"><Link to="/files">All agents</Link></Button>} />
+          <EmptyState icon={<FolderOpen />} title="This agent doesn't exist anymore" action={<Button asChild variant="outline"><Link to="/settings/files">All agents</Link></Button>} />
         </PageBody>
       </>
     );
   }
   return <AgentFiles key={agent.id} agent={agent} agents={everyone.data ?? []} />;
-}
-
-function CleanupLink() {
-  return (
-    <Button asChild variant="outline" size="sm">
-      <Link to="/settings/cleanup">
-        <HardDriveDownload /> Cleanup settings
-      </Link>
-    </Button>
-  );
-}
-
-function OverviewSkeleton() {
-  return (
-    <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
-      {Array.from({ length: 6 }, (_, i) => (
-        <Skeleton key={i} className="h-36 rounded-xl" />
-      ))}
-    </div>
-  );
 }
 
 function AgentPicker({ agent, agents, onPick }: { agent: Agent; agents: Agent[]; onPick: (id: string) => void }) {
@@ -220,7 +192,7 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
         icon={<FolderOpen />}
         actions={
           <>
-            <Button variant="ghost" size="sm" onClick={() => guard(() => navigate("/files"))}>
+            <Button variant="ghost" size="sm" onClick={() => guard(() => navigate("/settings/files"))}>
               <ArrowLeft /> All agents
             </Button>
             <AgentPicker agent={agent} agents={agents} onPick={(id) => guard(() => navigate(`/files/${id}`))} />
