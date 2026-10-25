@@ -129,6 +129,14 @@ function columnsOf(table: string): { name: string; pk: number }[] {
   return all<{ name: string; pk: number }>(`PRAGMA table_info(${q(table)})`);
 }
 
+/** The columns of each UNIQUE index of a table besides its primary key (a slug, a name). */
+function uniqueKeysOf(table: string): string[][] {
+  return all<{ name: string; unique: number; origin: string; partial: number }>(`PRAGMA index_list(${q(table)})`)
+    .filter((i) => i.unique === 1 && i.origin !== "pk" && !i.partial)
+    .map((i) => all<{ name: string | null }>(`PRAGMA index_info(${q(i.name)})`).map((c) => c.name))
+    .filter((cols): cols is string[] => cols.length > 0 && cols.every((c) => c !== null));
+}
+
 /** Fields of a settings section that keep the runner's value: they name programs and endpoints on that computer. */
 function keptFields(section: string): string[] {
   return [...(EXECUTABLE_SETTINGS[section] ?? []), ...(RUNNER_SETTINGS[section] ?? [])];
@@ -301,6 +309,10 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
   const removedAgents: { slug: string; repoPath: string }[] = [];
   /** An agent with an active run stood in the way: this sync isn't recorded as applied, so the next one tries again. */
   let pending = false;
+  /** Rows of the copy left out for a row of this computer with the same name, and that row. */
+  const sameName: { table: string; from: string; to: string }[] = [];
+  /** Per table, the rows this copy wrote (not this computer's own). */
+  const copied = new Map<string, Set<string>>();
   const touch = (spec: TableSpec, key: string) => {
     changed.add(spec.entity);
     touched.get(spec.table)!.add(key);
@@ -349,6 +361,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
       const rows: Record<string, Value>[] = [];
       const ownChanges = mineNow(spec.table);
       const ownRows = madeByMe(spec.table);
+      const uniqueKeys = !primary || spec.table === "agents" ? [] : uniqueKeysOf(spec.table);
       for (const raw of incoming as unknown[]) {
         if (!isObject(raw) || typeof raw[pk] !== "string" || !raw[pk]) continue;
         if (spec.only && raw[spec.only.column] !== spec.only.value) continue;
@@ -357,6 +370,7 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
         if (problem) warnings.push(problem);
         else rows.push(Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, decodeValue(v)])));
       }
+      copied.set(spec.table, new Set([...keys].filter((k) => !ownChanges.has(k) && !ownRows.has(k))));
 
       // Delete before insert: a row that goes may hold a slug (UNIQUE) a row that comes needs — a runner's own default
       // agent and the controller's are both "godmode".
@@ -422,6 +436,17 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
           const dir = row.working_directory;
           if (dir != null && (typeof dir !== "string" || workingDirectoryProblem(dir))) row.working_directory = null;
         }
+        // A row this computer made itself holds the same name (both made "earshot" while apart): it stays, and what the
+        // copy hangs on the other one moves to it, so the rest of the copy still lands.
+        const holder = uniqueKeys
+          .filter((cols) => cols.every((c) => row[c] != null))
+          .map((cols) => get<Record<string, unknown>>(`SELECT ${q(pk)} AS k FROM ${q(spec.table)} WHERE ${cols.map((c) => `${q(c)} = ?`).join(" AND ")} AND ${q(pk)} != ?`, ...cols.map((c) => row[c]!), key))
+          .find((h) => h && (ownRows.has(String(h.k)) || ownChanges.has(String(h.k))));
+        if (holder) {
+          sameName.push({ table: spec.table, from: key, to: String(holder.k) });
+          warnings.push(`"${String(row.name ?? key)}" (${spec.table}) wasn't copied: this computer has its own one with the same name.`);
+          continue;
+        }
         // Columns this schema doesn't have are ignored; columns the snapshot lacks keep their default.
         const names = mirrored.filter((n) => n in row);
         const extra = spec.onInsert?.(row) ?? {};
@@ -437,6 +462,29 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
           ...Object.values(extra),
         );
         if (res.changes > 0) touch(spec, key);
+      }
+    }
+
+    // Only what the copy wrote moves, and only off a row that isn't here; one that can't move (its own name is taken
+    // there) is left to the orphan pass below.
+    for (const { table, from, to } of sameName) {
+      const parentPk = columnsOf(table).find((c) => c.pk)?.name;
+      if (!parentPk || get(`SELECT 1 FROM ${q(table)} WHERE ${q(parentPk)} = ?`, from)) continue;
+      for (const spec of TABLES) {
+        const pk = columnsOf(spec.table).find((c) => c.pk)?.name;
+        const mine = copied.get(spec.table);
+        if (!pk || !mine) continue;
+        for (const fk of all<{ table: string; from: string }>(`PRAGMA foreign_key_list(${q(spec.table)})`)) {
+          if (fk.table !== table) continue;
+          for (const child of all<{ k: string }>(`SELECT ${q(pk)} AS k FROM ${q(spec.table)} WHERE ${q(fk.from)} = ?`, from)) {
+            if (!mine.has(child.k)) continue;
+            try {
+              if (run(`UPDATE ${q(spec.table)} SET ${q(fk.from)} = ? WHERE ${q(pk)} = ?`, to, child.k).changes > 0) changed.add(spec.entity);
+            } catch (err) {
+              log.warn(`could not move ${spec.table} ${child.k} to ${table} ${to}`, err instanceof Error ? err.message : err);
+            }
+          }
+        }
       }
     }
 
