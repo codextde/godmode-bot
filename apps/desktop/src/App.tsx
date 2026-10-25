@@ -206,7 +206,7 @@ export function App() {
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
           <Route path="/artifacts" element={<ArtifactsPage />} />
           <Route path="/artifacts/:artifactId" element={<ArtifactPage />} />
-          <Route path="/files" element={<FilesPage />} />
+          <Route path="/files" element={<Navigate to="/settings/files" replace />} />
           <Route path="/files/:agentId" element={<FilesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/my-tasks" element={<MyTasksRedirect />} />

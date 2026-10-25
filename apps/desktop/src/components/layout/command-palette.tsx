@@ -84,6 +84,7 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound" },
   { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
+  { id: "files", label: "Files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
   { id: "backup", label: "Backup", icon: DatabaseBackup, words: "restore export import" },
   { id: "phone", label: "Phone", icon: Smartphone, words: "mobile iphone android pair app" },
   { id: "devices", label: "Devices", icon: Laptop, words: "device group computers macs sync primary secondary hand off handoff lid invite join" },
@@ -350,9 +351,6 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
             <Puzzle /> {named("/plugins", "Plugins")}
-          </CommandItem>
-          <CommandItem value="files workspace notes memory cleanup tidy delete" keywords={alias("/files", "Files")} onSelect={() => go("/files")}>
-            <FolderOpen /> {named("/files", "Files")}
           </CommandItem>
           <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
             <Activity /> {named("/activity", "Activity")}

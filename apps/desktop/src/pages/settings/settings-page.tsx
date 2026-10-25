@@ -11,6 +11,7 @@ import {
   Cloud,
   CreditCard,
   DatabaseBackup,
+  FolderOpen,
   Globe,
   HeartPulse,
   Info,
@@ -40,6 +41,7 @@ import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { ConnectSection } from "@/components/settings/connect-section";
 import { DevicesSection } from "@/components/settings/devices-section";
+import { FilesSection } from "@/components/settings/files-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
 import { LicenseSection } from "@/components/settings/license-section";
@@ -68,6 +70,7 @@ const SECTIONS = [
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
   { id: "calls", label: "Phone calls", icon: <Phone />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
+  { id: "files", label: "Files", icon: <FolderOpen />, group: "Data & privacy" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
   { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
@@ -107,7 +110,7 @@ const EASY_ADVANCED_LABEL: Partial<Record<SectionId, string>> = {
 };
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
+const STANDALONE: SectionId[] = ["files", "backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -146,6 +149,7 @@ export default function SettingsPage() {
       voice: () => <VoiceSection settings={s} />,
       calls: () => <CallsSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
+      files: () => <FilesSection />,
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       phone: () => <PhoneSection settings={s} />,

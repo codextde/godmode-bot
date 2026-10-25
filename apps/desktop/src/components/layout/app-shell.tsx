@@ -11,7 +11,6 @@ import {
   CreditCard,
   Fingerprint,
   AppWindow,
-  FolderOpen,
   Globe,
   MonitorUp,
   Inbox,
@@ -190,7 +189,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/artifacts", label: "Artifacts", icon: <AppWindow /> },
-    { to: "/files", label: "Files", icon: <FolderOpen /> },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/calls", label: "Calls", icon: <Phone /> },
@@ -225,7 +223,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/integrations", "Connected apps"),
   ];
   const easyMore: NavItem[] = [
-    easyItem("/files", "Files"),
     easyItem("/activity", "History"),
     easyItem("/calls", "Phone calls"),
     easyItem("/messaging", "Chat apps"),
@@ -625,7 +622,7 @@ function FooterBar() {
       <ThemeToggle />
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant={location.pathname.startsWith("/settings") ? "secondary" : "ghost"} size="icon" className="size-8" asChild>
+          <Button variant={location.pathname.startsWith("/settings") || location.pathname.startsWith("/files") ? "secondary" : "ghost"} size="icon" className="size-8" asChild>
             <Link to="/settings/general">
               <Settings className="size-4" />
             </Link>
