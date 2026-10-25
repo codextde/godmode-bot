@@ -1211,6 +1211,13 @@ export async function runnerDiagnostics(runnerId: string): Promise<{ runner: Rem
   return { runner: getRunner(runnerId), entries, report: Buffer.from(res.body).toString("utf8"), health: health ? describeHealth(health) : null };
 }
 
+/** Empty a runner's diagnostic log (its fix was merged). */
+export async function clearRunnerLog(runnerId: string): Promise<void> {
+  const l = link(runnerId);
+  l.assertOnline();
+  await l.json("DELETE", "/api/logs", undefined, { timeoutMs: 30_000 });
+}
+
 /** For the autofix chat's tools: a command on the runner. */
 export async function runnerExec(runnerId: string, command: string, timeoutSec?: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return link(runnerId).json("POST", "/api/link/exec", { command, ...(timeoutSec ? { timeoutMs: Math.min(timeoutSec, 900) * 1000 } : {}) }, { timeoutMs: 16 * 60_000 });
