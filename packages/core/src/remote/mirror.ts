@@ -922,6 +922,21 @@ function onQuestion(runnerId: string, type: "question.created" | "question.updat
   return true;
 }
 
+/** A question fetched from the runner (its event never got here): kept like one it told. */
+export function adoptQuestion(runnerId: string, raw: unknown): boolean {
+  return onQuestion(runnerId, "question.created", raw);
+}
+
+/** What was asked in one of the runner's chats: a question asked while nobody listened has no event here. */
+async function pullQuestions(runnerId: string, api: RunnerApi, conversationId: string): Promise<void> {
+  try {
+    const asked = await api.json<unknown>("GET", `/api/questions?conversationId=${encodeURIComponent(conversationId)}&limit=50`);
+    for (const q of list(asked)) onQuestion(runnerId, "question.created", q);
+  } catch (err) {
+    log.info(`could not fetch the questions of conversation ${conversationId} of runner ${runnerId}`, { error: err instanceof Error ? err.message : String(err) });
+  }
+}
+
 function apply(runnerId: string, raw: unknown): boolean {
   const e = record(raw);
   if (!e || !runnerId) return false;
@@ -1137,6 +1152,7 @@ export async function catchUp(runnerId: string, api: RunnerApi, opts: CatchUpOpt
         if (record(detail)?.id !== chat.id) throw refused();
         heavy.delete(`${runnerId}:${chat.id}`);
         reconcile(runnerId, detail, runs, before);
+        await pullQuestions(runnerId, api, chat.id);
         refreshed++;
         continue;
       } catch (err) {
@@ -1177,6 +1193,7 @@ export async function fetchConversation(runnerId: string, api: RunnerApi, conver
     if (record(detail)?.id !== conversationId) return false;
     const runs = await api.json<unknown>("GET", `/api/runs?conversationId=${path}&limit=500`);
     reconcile(runnerId, detail, runs);
+    await pullQuestions(runnerId, api, conversationId);
     return true;
   } catch (err) {
     log.info(`could not fetch conversation ${conversationId} of runner ${runnerId}`, { error: err instanceof Error ? err.message : String(err) });

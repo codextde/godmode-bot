@@ -12,7 +12,8 @@ import { listNotifications } from "../src/services/notifications";
 import { updateSettings } from "../src/services/settings";
 import { closeHumanTask, getHumanTask, listHumanTasks, noteOpenDecision, sameAsk, startHumanTasks, stopHumanTasks } from "../src/services/humanTasks";
 import { run as sql } from "../src/db";
-import { answerQuestion, getQuestion, openQuestionOf } from "../src/services/questions";
+import { answerQuestion, getQuestion, openQuestionOf, setRemoteAnswerer, setRemoteQuestionFetcher } from "../src/services/questions";
+import { adoptQuestion } from "../src/remote/mirror";
 import { stopPauses } from "../src/services/pauses";
 import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { createTask, getTask, listTaskEvents, startTasks, stopTasks } from "../src/tasks/service";
@@ -518,6 +519,48 @@ describe("questions and approvals have a ticket", () => {
     expect(out.task.status).toBe("declined");
     expect(getQuestion(question.id)).toMatchObject({ status: "declined", answer: { text: "Call them first" } });
     await waitForRun(run.id, 10_000);
+  }, 30_000);
+
+  test("a ticket whose question was asked on another computer and never got here fetches it and answers there", async () => {
+    const { run, conversation, question, task } = await asking();
+    const ts = new Date().toISOString();
+    sql("INSERT INTO runners (id, name, public_key, port, kind, created_at, updated_at) VALUES ('rnr_asker', 'Other Mac', 'key-asker', 7790, 'device', ?, ?)", ts, ts);
+    const copy = getQuestion(question.id);
+    sql("DELETE FROM questions WHERE id = ?", question.id);
+    sql("UPDATE conversations SET runner_id = 'rnr_asker' WHERE id = ?", conversation.id);
+    const fetched: string[] = [];
+    const answered: { owner: string; id: string; input: unknown }[] = [];
+    setRemoteQuestionFetcher(async (owner, id) => {
+      fetched.push(id);
+      return adoptQuestion(owner, copy);
+    });
+    setRemoteAnswerer((owner, id, input) => answered.push({ owner, id, input }));
+    try {
+      const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "done", optionId: "2" });
+      expect(res.status).toBe(200);
+      expect(fetched).toEqual([question.id]);
+      expect(answered).toEqual([{ owner: "rnr_asker", id: question.id, input: { optionId: "2" } }]);
+      expect(getQuestion(question.id).id).toBe(question.id);
+    } finally {
+      setRemoteQuestionFetcher(null);
+      setRemoteAnswerer(null);
+      sql("UPDATE conversations SET runner_id = NULL WHERE id = ?", conversation.id);
+      sql("DELETE FROM runners WHERE id = 'rnr_asker'");
+      await cancelRun(run.id);
+    }
+  }, 30_000);
+
+  test("a ticket whose question is gone closes like a decision and its chat gets the answer", async () => {
+    const { run, conversation, question, task } = await asking();
+    await cancelRun(run.id);
+    sql("DELETE FROM questions WHERE id = ?", question.id);
+    sql("UPDATE human_tasks SET status = 'open', closed_at = NULL WHERE id = ?", task.id);
+    const res = await api("POST", `/api/human-tasks/${task.id}/close`, { outcome: "done", optionId: "2", note: "and a thin border" });
+    expect(res.status).toBe(200);
+    expect(res.json.continued).toBe(true);
+    expect(getHumanTask(task.id)).toMatchObject({ status: "done", response: { optionId: "2", text: "and a thin border" } });
+    await until(() => listRuns({ conversationId: conversation.id }).some((r) => r.id !== run.id && r.status === "succeeded"), 10_000, "the chat to continue");
+    expect(getConversation(conversation.id).messages.some((m) => m.content === `Answer to H-${task.number} Which color should the header be?\n\nBlue\n\nand a thin border`)).toBe(true);
   }, 30_000);
 
   test("stopping the run takes the ticket back", async () => {

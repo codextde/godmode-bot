@@ -42,7 +42,7 @@ import { conversationExists, promptWithFiles, saveAttachments, sendMessage } fro
 import { hasQueued, submitMessage } from "./messageQueue";
 import { markRead, notify } from "./notifications";
 import { pauseOf } from "./pauses";
-import { answerQuestion, getQuestion, listQuestions, type Answerer } from "./questions";
+import { answerQuestion, getQuestion, listQuestions, questionHere, type Answerer } from "./questions";
 import { getSettings } from "./settings";
 import { noteHumanTask } from "../tasks/service";
 
@@ -690,7 +690,8 @@ export function deleteHumanTask(id: string): void {
 export async function closeHumanTask(id: string, input: HumanTaskCloseInput, by: Answerer = { actor: "user", via: "app" }): Promise<HumanTaskCloseResult> {
   const r = requireRow(id);
   if (!isActive(r.status)) throw conflict(r.status === "withdrawn" ? "The agent took this task back already." : "This task is closed already.");
-  if (r.question_id) return answerFromTicket(r, input, by);
+  // A question gone everywhere this computer can reach: the ticket closes like any decision, the chat gets the answer.
+  if (r.question_id && (await questionHere(r.question_id, r.conversation_id))) return answerFromTicket(r, input, by);
   const note = (input.note ?? "").trim().slice(0, 20_000);
   const files = input.attachments ?? [];
   const decision = r.kind === "decision";

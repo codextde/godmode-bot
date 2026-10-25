@@ -376,6 +376,29 @@ export function setRemoteAnswerer(fn: typeof remoteAnswer): void {
   remoteAnswer = fn;
 }
 
+/** Fetches a question from the computer its chat works on and keeps a copy here (remote/devices.ts sets it). */
+let remoteQuestion: ((runnerId: string, questionId: string) => Promise<boolean>) | null = null;
+
+export function setRemoteQuestionFetcher(fn: typeof remoteQuestion): void {
+  remoteQuestion = fn;
+}
+
+/**
+ * The question is here, or now fetched from the computer that asked it: its copy never arrived when this one was
+ * offline while it was asked, only its ticket did (the group shares tickets, not questions).
+ */
+export async function questionHere(id: string, conversationId: string | null): Promise<boolean> {
+  if (row(id)) return true;
+  const owner = conversationId ? (get<{ runner_id: string | null }>("SELECT runner_id FROM conversations WHERE id = ?", conversationId)?.runner_id ?? null) : null;
+  if (!owner || !remoteQuestion) return false;
+  try {
+    return (await remoteQuestion(owner, id)) && !!row(id);
+  } catch (err) {
+    log.info(`could not fetch question ${id} from the computer that asked it`, { error: err instanceof Error ? err.message : String(err) });
+    return false;
+  }
+}
+
 export function answerQuestion(id: string, input: AnswerQuestionInput, by: Answerer): { question: AgentQuestion; run: Run } {
   const r = row(id);
   if (!r) throw notFound("Question");

@@ -55,7 +55,7 @@ import {
   setRemoteSender,
   transcriptPath,
 } from "../services/conversations";
-import { setRemoteAnswerer } from "../services/questions";
+import { setRemoteAnswerer, setRemoteQuestionFetcher } from "../services/questions";
 import { getRun } from "../runner/runner";
 import { cancelFollowup, getFollowup, MIN_DELAY_MS as MIN_FOLLOWUP_DELAY_MS, scheduleFollowup } from "../services/followups";
 import { clearQueue, listQueue } from "../services/messageQueue";
@@ -68,7 +68,7 @@ import { readHandover, writeSession, writeTranscript } from "./handover";
 import { moveStage, trackMove } from "./chatMoves";
 import { loadIdentity } from "./identity";
 import { forgetController, linkServerPort, runnerInfo, setPhoneInfo, startLinkServer, stopLinkServer } from "./linkServer";
-import { adoptChat, catchUp, fetchConversation, importChat } from "./mirror";
+import { adoptChat, adoptQuestion, catchUp, fetchConversation, importChat } from "./mirror";
 import { createRunnerCode } from "./pairing";
 import {
   clearGroup,
@@ -245,6 +245,9 @@ export function startDevices(h: LinkHandler, deliver: (event: ServerEvent) => vo
       }
     })();
   });
+  setRemoteQuestionFetcher(async (owner, questionId) =>
+    adoptQuestion(owner, await link(owner).json("GET", `/api/questions/${encodeURIComponent(questionId)}`, undefined, { timeoutMs: 15_000 })),
+  );
   if (groupRole()) {
     listen();
     // Started while the primary is away (or before its link is up): the stand-in clock starts now.
@@ -264,6 +267,7 @@ export function stopDevices(): void {
   setForwarding(null);
   setRemoteSender(null);
   setRemoteAnswerer(null);
+  setRemoteQuestionFetcher(null);
   offGroup?.();
   offGroup = null;
   if (groupTimer) clearTimeout(groupTimer);
