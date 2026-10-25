@@ -237,11 +237,20 @@ export async function reachableBase(
   return refused;
 }
 
-/** This computer of the group's best address that answers now, asked afresh (without the key); null when none does. */
+/**
+ * This computer of the group's best address that answers now and takes this phone's key, asked afresh; null when none
+ * does. The key goes only to an address that first answered as that computer.
+ */
 export async function answeringBase(connection: Connection, instanceId: string): Promise<string | null> {
   const bases = [...new Set(computerOf(connection, instanceId).urls.map(baseUrl))].filter(isPhoneUrlAllowed);
   const base = bases[(await Promise.all(bases.map(probeInstance))).indexOf(instanceId)];
   if (!base) return null;
+  try {
+    const res = await send(`${base}/api/mobile/me`, { method: "GET", headers: { authorization: `Bearer ${connection.token}`, accept: "application/json" } }, PROBE_TIMEOUT_MS);
+    if (!res.ok) return null;
+  } catch {
+    return null;
+  }
   verified.set(base, instanceId);
   unreachable.delete(base);
   return base;

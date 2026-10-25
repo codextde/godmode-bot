@@ -23,6 +23,13 @@ let socketComputer: string | null = null;
  * handshake with 401) or closed for a removed phone there: the next attempts try them after the others.
  */
 const refusedSockets = new Set<string>();
+/** Computers the link was moved to whose socket failed: not moved to again on its own before this time. */
+const moveRefused = new Map<string, number>();
+const MOVE_REFUSED_MS = 3 * 60_000;
+/** Counts moves, so a connect that started before one doesn't open the link where it was. */
+let moves = 0;
+/** The computer the last move went to, until its socket opened or failed. */
+let movingTo: string | null = null;
 const counts = new Map<string, number>();
 
 const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> = {
@@ -143,8 +150,10 @@ async function checkPreferred(instanceId: string) {
     if (socketComputer === instanceId) useLive.getState().setPreferredAway(false);
     return;
   }
+  if ((moveRefused.get(preferred.instance.id) ?? 0) > Date.now()) return;
   const base = await answeringBase(connection, preferred.instance.id);
-  if (socketComputer !== instanceId || useSession.getState().connection?.token !== connection.token) return;
+  const current = useSession.getState().connection;
+  if (socketComputer !== instanceId || !current || current.token !== connection.token || preferredOf(current)?.instance.id !== preferred.instance.id) return;
   if (base) moveTo(base, preferred.instance.id);
   else useLive.getState().setPreferredAway(true);
 }
@@ -152,6 +161,8 @@ async function checkPreferred(instanceId: string) {
 /** Opens the link at this computer's address instead of the current one. */
 function moveTo(base: string, instanceId: string) {
   useSession.getState().setActive(base, instanceId);
+  moves++;
+  movingTo = instanceId;
   if (!running) return;
   const ws = socket;
   socket = null;
@@ -169,6 +180,7 @@ function moveTo(base: string, instanceId: string) {
  */
 export async function preferComputer(instanceId: string | null): Promise<boolean> {
   useSession.getState().setPreferred(instanceId);
+  if (instanceId) moveRefused.delete(instanceId);
   const connection = useSession.getState().connection;
   const preferred = connection ? preferredOf(connection) : undefined;
   if (!connection || !preferred) return true;
@@ -402,12 +414,13 @@ async function connect() {
   const connection = useSession.getState().connection;
   if (!running || !connection || socket || connecting) return;
   connecting = true;
+  const move = moves;
   useLive.getState().setStatus("connecting");
   const found = await reachableBase(connection, (id) => useLive.getState().setComputer(id), refusedSockets);
   connecting = false;
   if (!running || socket) return;
-  // Paired again while this attempt looked for the computer: the new pairing's attempt was skipped, so make it now.
-  if (useSession.getState().connection?.token !== connection.token) return void connect();
+  // Paired again or moved while this attempt looked for the computer: the newer attempt was skipped, so make it now.
+  if (useSession.getState().connection?.token !== connection.token || move !== moves) return void connect();
   if (!found || found instanceof ApiError) {
     useLive.getState().setComputer(null);
     useLive.getState().setStatus("offline", found?.message);
@@ -430,6 +443,8 @@ async function connect() {
     const moved = useSession.getState().connection?.activeInstanceId !== instanceId;
     useSession.getState().setActive(base, instanceId);
     socketComputer = instanceId;
+    if (movingTo === instanceId) moveRefused.delete(instanceId);
+    movingTo = null;
     useLive.getState().setComputer(instanceId);
     useLive.getState().setStatus("online");
     // Streaming replies as what changed, not the whole block list five times a second (megabytes in a long run).
@@ -465,7 +480,11 @@ async function connect() {
       // Another computer of the group: the paired one says whether the phone was removed.
       forget(base, true);
     }
-    if (e.code === 4003 || !opened) refusedSockets.add(base);
+    if (e.code === 4003 || !opened) {
+      refusedSockets.add(base);
+      if (movingTo === instanceId) moveRefused.set(instanceId, Date.now() + MOVE_REFUSED_MS);
+    }
+    if (movingTo === instanceId) movingTo = null;
     scheduleReconnect();
   };
   ws.onerror = () => ws.close();

@@ -170,7 +170,7 @@ export function ChoiceRow({
   return (
     <Pressable
       accessibilityRole="radio"
-      accessibilityState={{ selected }}
+      accessibilityState={{ checked: selected, selected }}
       onPress={() => {
         tap();
         if (!selected) onPress();

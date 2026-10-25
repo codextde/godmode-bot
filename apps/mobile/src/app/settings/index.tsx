@@ -121,15 +121,13 @@ export default function Settings() {
 
       {computers.length > 1 ? (
         <Group title="This phone uses" footer="When the one you pick is out of reach, this phone uses another computer of the group and switches back once it answers again.">
-          {primary ? (
-            <ChoiceRow
-              icon="bolt"
-              title="Automatic"
-              detail={`The primary, ${primary.instance.name}`}
-              selected={!connection.preferredInstanceId}
-              onPress={() => void pick(null)}
-            />
-          ) : null}
+          <ChoiceRow
+            icon="bolt"
+            title="Automatic"
+            detail={primary ? `The primary, ${primary.instance.name}` : "The computer that answers"}
+            selected={!connection.preferredInstanceId}
+            onPress={() => void pick(null)}
+          />
           {computers.map((p) => (
             <ChoiceRow
               key={p.instance.id}
