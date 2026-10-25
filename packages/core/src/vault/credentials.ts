@@ -104,6 +104,17 @@ export function linkCredentialTotp(credentialId: string, totpId: string): void {
   });
 }
 
+/** Link a pair unless either side got a 2FA link meanwhile (an auto-link must never replace one). Returns true if linked. */
+export function linkCredentialTotpIfFree(credentialId: string, totpId: string): boolean {
+  const cred = get<{ linked: string | null }>(`SELECT (SELECT t.id FROM totp t WHERE t.id = credentials.totp_id) AS linked FROM credentials WHERE id = ?`, credentialId);
+  const totp = get<{ linked: string | null }>(`SELECT (SELECT c.id FROM credentials c WHERE c.id = totp.credential_id) AS linked FROM totp WHERE id = ?`, totpId);
+  if (!cred || !totp || cred.linked || totp.linked) return false;
+  linkCredentialTotp(credentialId, totpId);
+  bus.changed("totp");
+  bus.changed("credentials");
+  return true;
+}
+
 /** Remove every link involving this credential. Returns true if a TOTP entry was changed. */
 export function unlinkCredential(credentialId: string): boolean {
   const ts = now();

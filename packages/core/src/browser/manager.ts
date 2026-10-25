@@ -19,7 +19,7 @@ import { resolveUvx, toolPath } from "../services/doctor";
 import { hasBrowserSubscribers, hasBrowserWatchers } from "../server/ws";
 import { CdpClient, attachToPage, getCookies, pickActivePage, probeCdp, isUserPage, type CdpCookie, type CdpCookieParam, type PageSession, type PageTarget } from "./cdp";
 import { clearLaunchMarker, findChrome, isProcessAlive, launchChrome, readLaunchMarker, writeLaunchMarker, type ChromeProcess } from "./chrome";
-import { fillIntoActivePage, fillPrecheck, type FillKind } from "./fill";
+import { fillIntoActivePage, fillPrecheck, probeOtpInActivePage, type OtpProbe, type FillKind } from "./fill";
 import { solveInBrowser, type SolveOptions, type SolveResult } from "./captcha";
 import { browserUseCommand, browserUseEnv, writeBrowserUseConfig } from "./browserUse";
 import { stealthArgs, stopProbes, windowedUserAgent } from "./stealth";
@@ -820,6 +820,13 @@ export async function fillIntoPage(
   } finally {
     rb.lastUsedAt = Date.now();
   }
+}
+
+/** Whether the chat's page still shows a 2FA code field (see probeOtpInActivePage); null when the browser or tab is gone. */
+export async function probeOtpPage(profileId: string, conversationId?: string): Promise<OtpProbe | null> {
+  const rb = getRunning(profileId);
+  if (!rb) return null;
+  return probeOtpInActivePage({ client: rb.client, port: rb.port, ...(conversationId ? { chatPage: () => chatPage(rb, conversationId) } : {}) });
 }
 
 /** Solve the CAPTCHA on the chat's page (without a chat: the active page) through the selected solving service. */

@@ -949,6 +949,20 @@ export interface TotpEntry {
   updatedAt: ISODate;
 }
 
+/** A login without 2FA and the free 2FA entry that most likely belongs to it. */
+export interface TotpAutoLinkSuggestion {
+  credentialId: ID;
+  totpId: ID;
+  /** 0..1 */
+  score: number;
+  /** Clear winner on both sides: safe to link in one click. */
+  sure: boolean;
+}
+
+export interface TotpAutoLinkResult {
+  linked: { credentialId: ID; totpId: ID }[];
+}
+
 export interface TotpCode {
   id: ID;
   code: string;
