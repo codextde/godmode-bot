@@ -1445,7 +1445,7 @@ dependencies = [
 
 [[package]]
 name = "godmode-bot"
-version = "0.2.27"
+version = "0.2.28"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
