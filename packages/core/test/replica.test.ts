@@ -248,6 +248,30 @@ describe("between two computers", () => {
     expect(pendingFor("rnr_b")).toBe(0);
   });
 
+  test("a project both computers made while apart lands with its own slug instead of failing", () => {
+    use(b);
+    run("DELETE FROM projects WHERE workspace_id = 'wsp_apps'");
+    run("DELETE FROM workspaces WHERE id = 'wsp_apps'");
+    run("INSERT INTO workspaces (id, name, slug, created_at, updated_at) VALUES ('wsp_apps', 'Apps', 'apps', ?, ?)", T(0), T(0));
+    run("INSERT INTO projects (id, workspace_id, name, slug, created_at, updated_at) VALUES ('prj_here', 'wsp_apps', 'Earshot', 'earshot', ?, ?)", T(1), T(1));
+    const theirs: ReplicaChange = {
+      t: "projects",
+      k: "prj_there",
+      at: T(30),
+      row: { id: "prj_there", workspace_id: "wsp_apps", name: "Earshot", slug: "earshot", created_at: T(30), updated_at: T(30) },
+    };
+    // Within the pull the slug may still be freed by a rename that comes later: it waits for the end of the pull.
+    expect(applyChanges("rnr_a", [theirs], { peerWinsTies: false }).failed).toBe(1);
+    const res = retryDeferred("rnr_a", { peerWinsTies: false });
+    expect(res.applied).toBe(1);
+    expect(res.failed).toBe(0);
+    expect(all("SELECT id, slug FROM projects WHERE workspace_id = 'wsp_apps' ORDER BY id")).toEqual([
+      { id: "prj_here", slug: "earshot" },
+      { id: "prj_there", slug: "earshot-2" },
+    ]);
+    expect(all("SELECT * FROM replica_deferred")).toHaveLength(0);
+  });
+
   test("an agent whose folder name isn't safe never lands", () => {
     use(b);
     const evil: ReplicaChange = { t: "agents", k: "agt_evil", at: T(20), row: { id: "agt_evil", name: "Evil", slug: "../../outside", created_at: T(0), updated_at: T(0) } };

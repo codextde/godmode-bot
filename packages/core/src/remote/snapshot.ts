@@ -28,7 +28,7 @@ import { DEFAULT_SETTINGS, getSettings, resetSettingsCache } from "../services/s
 import { badRequest, parseJson } from "../util";
 import { decrypt, sha256 } from "../vault/crypto";
 import { isSecondary, primaryRunnerId } from "./group";
-import { asPeer, madeHere, pendingKeys } from "./replica";
+import { asOwn, asPeer, madeHere, pendingKeys } from "./replica";
 import * as vault from "../vault/vault";
 
 const log = logger("snapshot");
@@ -222,6 +222,34 @@ export function appliedDigest(): string | null {
 /* Apply (runner)                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Tables with a unique slug besides the id, and the columns the slug is unique within. Two computers of a group can
+ * each make "earshot" in the same workspace while apart: the copy that comes second gets "earshot-2" instead of failing.
+ */
+export const SLUG_SCOPES: Record<string, string[]> = { workspaces: [], projects: ["workspace_id"] };
+
+const SLUG_SEP = "\u001f";
+
+export function slugKey(table: string, row: Record<string, unknown>, slug: unknown = row.slug): string {
+  return [...SLUG_SCOPES[table]!.map((c) => String(row[c] ?? "")), String(slug)].join(SLUG_SEP);
+}
+
+/** The id of another row of `table` that holds `row`'s slug. */
+export function slugHolder(table: string, row: Record<string, unknown>, id: string, slug: unknown = row.slug): string | null {
+  const scope = SLUG_SCOPES[table]!;
+  const where = [...scope, "slug"].map((c) => `${q(c)} IS ?`).join(" AND ");
+  const params = [...scope.map((c) => (row[c] ?? null) as Value), slug as Value];
+  return get<{ id: string }>(`SELECT id FROM ${q(table)} WHERE ${where} AND id != ?`, ...params, id)?.id ?? null;
+}
+
+/** `row`'s slug, or the first "slug-2", "slug-3"… no other row holds and `claimed` doesn't name. */
+export function freeSlug(table: string, row: Record<string, unknown>, id: string, claimed: Set<string> = new Set()): string {
+  const base = String(row.slug);
+  let candidate = base;
+  for (let i = 2; claimed.has(slugKey(table, row, candidate)) || slugHolder(table, row, id, candidate); i++) candidate = `${base}-${i}`;
+  return candidate;
+}
+
 /** Why a row can't be copied: its slug or id becomes a folder name on the runner (an agent's id does too, for its browser files). */
 export function unsafe(table: string, row: Record<string, unknown>): string | null {
   const label = typeof row.name === "string" && row.name ? row.name : String(row.id);
@@ -355,6 +383,25 @@ async function apply(s: ConfigSnapshot): Promise<{ digest: string; warnings: str
           changed.add("runs");
           const slug = String(local.slug);
           if (SAFE_ID.test(slug)) removedAgents.push({ slug, repoPath: join(cfg.agentsDir, slug) });
+        }
+      }
+
+      if (SLUG_SCOPES[spec.table] && pk === "id") {
+        const written = new Set(rows.map((r) => String(r.id)).filter((k) => !ownChanges.has(k)));
+        const claimed = new Map(rows.filter((r) => written.has(String(r.id))).map((r) => [slugKey(spec.table, r), String(r.id)]));
+        for (const local of all<Record<string, unknown>>(`SELECT * FROM ${q(spec.table)}`)) {
+          const key = String(local.id);
+          const holder = claimed.get(slugKey(spec.table, local));
+          if (!holder || holder === key) continue;
+          if (written.has(key)) {
+            // It gets its new slug from this copy too, maybe later in the loop: out of the way until then.
+            run(`UPDATE ${q(spec.table)} SET slug = ? WHERE id = ?`, `${String(local.slug)}~${key}`, key);
+            continue;
+          }
+          // Made here and not with the primary yet: it yields, and the new slug goes to the primary as this computer's change.
+          const slug = freeSlug(spec.table, local, key, new Set(claimed.keys()));
+          asOwn(() => run(`UPDATE ${q(spec.table)} SET slug = ? WHERE id = ?`, slug, key));
+          touch(spec, key);
         }
       }
 

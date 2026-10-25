@@ -19,7 +19,7 @@ import { logger } from "../log";
 import { now } from "../util";
 import { listActiveRuns } from "../runner/runner";
 import { isSecondary, primaryRunnerId } from "./group";
-import { LOCAL_SETTINGS, SETUP_TABLES, unsafe, withOwnFields } from "./snapshot";
+import { freeSlug, LOCAL_SETTINGS, SETUP_TABLES, SLUG_SCOPES, slugHolder, unsafe, withOwnFields } from "./snapshot";
 
 const log = logger("replica");
 
@@ -238,6 +238,18 @@ export function asPeer<T>(origin: string, at: string | null, fn: () => T): T {
     return fn();
   } finally {
     sql("UPDATE replica_ctx SET origin = NULL, at = NULL WHERE id = 1");
+  }
+}
+
+/** Run `fn` as this computer's own change, also inside `asPeer`: what it writes goes to the other computers. */
+export function asOwn<T>(fn: () => T): T {
+  const ctx = get<{ origin: string | null; at: string | null }>("SELECT origin, at FROM replica_ctx WHERE id = 1");
+  if (!ctx) return fn();
+  sql("UPDATE replica_ctx SET origin = NULL, at = NULL WHERE id = 1");
+  try {
+    return fn();
+  } finally {
+    sql("UPDATE replica_ctx SET origin = ?, at = ? WHERE id = 1", ctx.origin, ctx.at);
   }
 }
 
@@ -573,6 +585,11 @@ function applyOne(peer: string, c: ReplicaChange, opts: ApplyOptions, incoming: 
     result.deferred++;
     opts.onMissing?.(missing.table, missing.id);
     return;
+  }
+  // Both computers made "earshot" while apart: the one that comes second here becomes "earshot-2" (the setup copy
+  // takes the new slug back to the peer). Only once the whole pull is in: a slug may be free by its end (a rename).
+  if (opts.retry && SLUG_SCOPES[t.table] && t.key.length === 1 && t.key[0] === "id" && row.slug != null && slugHolder(t.table, row, c.k)) {
+    row.slug = freeSlug(t.table, row, c.k);
   }
   const isNew = !get(`SELECT 1 FROM ${q(t.table)} WHERE ${keyWhere(t)}`, ...parts);
   const extra = isNew ? (t.onInsert?.(row) ?? {}) : {};
