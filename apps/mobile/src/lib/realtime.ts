@@ -1,12 +1,12 @@
 import { AppState, type AppStateStatus } from "react-native";
 import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
-import { answersNow, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
+import { answeringBase, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
 import { noteQueue, upsertMessage } from "./chat-cache";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
-import { primaryOf, removedBy } from "./peers";
+import { preferredOf, removedBy } from "./peers";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
 
@@ -23,6 +23,13 @@ let socketComputer: string | null = null;
  * handshake with 401) or closed for a removed phone there: the next attempts try them after the others.
  */
 const refusedSockets = new Set<string>();
+/** Computers the link was moved to whose socket failed: not moved to again on its own before this time. */
+const moveRefused = new Map<string, number>();
+const MOVE_REFUSED_MS = 3 * 60_000;
+/** Counts moves, so a connect that started before one doesn't open the link where it was. */
+let moves = 0;
+/** The computer the last move went to, until its socket opened or failed. */
+let movingTo: string | null = null;
 const counts = new Map<string, number>();
 
 const ENTITY_KEYS: Partial<Record<EntityName, readonly (readonly unknown[])[]>> = {
@@ -129,15 +136,66 @@ async function catchUp(instanceId: string) {
   } catch {
     /* the next reconnect tries again */
   }
-  await checkPrimary(instanceId);
+  await checkPreferred(instanceId);
 }
 
-/** Whether the socket goes to another computer of the group because the primary doesn't answer. */
-async function checkPrimary(instanceId: string) {
+/**
+ * The link belongs on the computer picked in Settings, else on the primary. While it is on another one, that one is
+ * asked again; once it answers, the link moves back to it.
+ */
+async function checkPreferred(instanceId: string) {
   const connection = useSession.getState().connection;
-  const primary = connection ? primaryOf(connection) : undefined;
-  const away = !!connection && !!primary && primary.instance.id !== instanceId && !(await answersNow(connection, primary.instance.id));
-  if (socketComputer === instanceId) useLive.getState().setPrimaryAway(away);
+  const preferred = connection ? preferredOf(connection) : undefined;
+  if (!connection || !preferred || preferred.instance.id === instanceId) {
+    if (socketComputer === instanceId) useLive.getState().setPreferredAway(false);
+    return;
+  }
+  if ((moveRefused.get(preferred.instance.id) ?? 0) > Date.now()) return;
+  const base = await answeringBase(connection, preferred.instance.id);
+  const current = useSession.getState().connection;
+  if (socketComputer !== instanceId || !current || current.token !== connection.token || preferredOf(current)?.instance.id !== preferred.instance.id) return;
+  if (base) moveTo(base, preferred.instance.id);
+  else useLive.getState().setPreferredAway(true);
+}
+
+/** Opens the link at this computer's address instead of the current one. */
+function moveTo(base: string, instanceId: string) {
+  useSession.getState().setActive(base, instanceId);
+  moves++;
+  movingTo = instanceId;
+  if (!running) return;
+  const ws = socket;
+  socket = null;
+  socketComputer = null;
+  clearTimers();
+  ws?.close();
+  useLive.getState().setPreferredAway(false);
+  attempt = 0;
+  void connect();
+}
+
+/**
+ * Picks the computer this phone talks to (null: automatic, the primary while it answers). False when it doesn't answer
+ * right now; the link moves there once it does.
+ */
+export async function preferComputer(instanceId: string | null): Promise<boolean> {
+  useSession.getState().setPreferred(instanceId);
+  if (instanceId) moveRefused.delete(instanceId);
+  const connection = useSession.getState().connection;
+  const preferred = connection ? preferredOf(connection) : undefined;
+  if (!connection || !preferred) return true;
+  if (preferred.instance.id === (socketComputer ?? connection.activeInstanceId)) {
+    useLive.getState().setPreferredAway(false);
+    return true;
+  }
+  const base = await answeringBase(connection, preferred.instance.id);
+  if (useSession.getState().connection?.preferredInstanceId !== instanceId) return true;
+  if (!base) {
+    if (socket) useLive.getState().setPreferredAway(true);
+    return false;
+  }
+  moveTo(base, preferred.instance.id);
+  return true;
 }
 
 /**
@@ -356,12 +414,13 @@ async function connect() {
   const connection = useSession.getState().connection;
   if (!running || !connection || socket || connecting) return;
   connecting = true;
+  const move = moves;
   useLive.getState().setStatus("connecting");
   const found = await reachableBase(connection, (id) => useLive.getState().setComputer(id), refusedSockets);
   connecting = false;
   if (!running || socket) return;
-  // Paired again while this attempt looked for the computer: the new pairing's attempt was skipped, so make it now.
-  if (useSession.getState().connection?.token !== connection.token) return void connect();
+  // Paired again or moved while this attempt looked for the computer: the newer attempt was skipped, so make it now.
+  if (useSession.getState().connection?.token !== connection.token || move !== moves) return void connect();
   if (!found || found instanceof ApiError) {
     useLive.getState().setComputer(null);
     useLive.getState().setStatus("offline", found?.message);
@@ -384,20 +443,21 @@ async function connect() {
     const moved = useSession.getState().connection?.activeInstanceId !== instanceId;
     useSession.getState().setActive(base, instanceId);
     socketComputer = instanceId;
+    if (movingTo === instanceId) moveRefused.delete(instanceId);
+    movingTo = null;
     useLive.getState().setComputer(instanceId);
     useLive.getState().setStatus("online");
     // Streaming replies as what changed, not the whole block list five times a second (megabytes in a long run).
     sendEvent({ type: "deltas.patch" });
     replaySubscriptions();
     if (viewing) sendView();
-    void checkPrimary(instanceId);
     void catchUp(instanceId);
     // Events were missed while the link was down, so everything is asked again (lists are small and chats come as a
     // window). Not on the first connect to the same computer: every screen has just fetched its own.
     if (wasOpen || moved) void queryClient.invalidateQueries();
     wasOpen = true;
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
-    awayTimer = setInterval(() => void checkPrimary(instanceId), 60_000);
+    awayTimer = setInterval(() => void checkPreferred(instanceId), 30_000);
   };
   ws.onmessage = (msg) => {
     try {
@@ -420,7 +480,11 @@ async function connect() {
       // Another computer of the group: the paired one says whether the phone was removed.
       forget(base, true);
     }
-    if (e.code === 4003 || !opened) refusedSockets.add(base);
+    if (e.code === 4003 || !opened) {
+      refusedSockets.add(base);
+      if (movingTo === instanceId) moveRefused.set(instanceId, Date.now() + MOVE_REFUSED_MS);
+    }
+    if (movingTo === instanceId) movingTo = null;
     scheduleReconnect();
   };
   ws.onerror = () => ws.close();

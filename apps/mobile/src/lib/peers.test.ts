@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { isPhoneUrlAllowed, type MobileInstance, type MobilePeer } from "@godmode/shared";
-import { accepts, candidateOrder, computerOf, removedBy, withDefaults, withGroup, type Computers } from "./peers";
+import { accepts, candidateOrder, computerOf, preferredOf, removedBy, withDefaults, withGroup, type Computers } from "./peers";
 
 const instance = (id: string): MobileInstance => ({ id, name: `Mac ${id}`, version: "0.2.20", platform: "darwin" });
 const peer = (id: string, role: MobilePeer["role"], urls: string[]): MobilePeer => ({ instance: instance(id), urls, role });
@@ -16,6 +16,7 @@ function grouped(active: string, activeUrl: string): Computers {
     urls: HOME,
     activeUrl,
     activeInstanceId: active,
+    preferredInstanceId: null,
     peers: [peer("a", "primary", A), peer("home", "secondary", HOME), peer("c", "secondary", C)],
   };
 }
@@ -24,7 +25,7 @@ const order = (c: Computers) => candidateOrder(c).map(({ base, instanceId }) => 
 
 describe("candidateOrder", () => {
   test("alone: the address that answered last, then the others", () => {
-    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: `${HOME[1]}/`, activeInstanceId: "home", peers: [] };
+    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: `${HOME[1]}/`, activeInstanceId: "home", preferredInstanceId: null, peers: [] };
     expect(order(c)).toEqual([`home ${HOME[1]}`, `home ${HOME[0]}`]);
   });
 
@@ -76,7 +77,7 @@ describe("accepts", () => {
   });
 
   test("alone: only the paired computer", () => {
-    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: HOME[0]!, activeInstanceId: "home", peers: [] };
+    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: HOME[0]!, activeInstanceId: "home", preferredInstanceId: null, peers: [] };
     expect(accepts(c, "home")).toBe(true);
     expect(accepts(c, "a")).toBe(false);
   });
@@ -103,7 +104,7 @@ describe("removedBy", () => {
   });
 
   test("alone: the paired computer", () => {
-    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: HOME[0]!, activeInstanceId: "home", peers: [] };
+    const c: Computers = { instance: instance("home"), urls: HOME, activeUrl: HOME[0]!, activeInstanceId: "home", preferredInstanceId: null, peers: [] };
     expect(removedBy(c, "home")).toBe(true);
     expect(removedBy(c, "a")).toBe(false);
   });
@@ -180,4 +181,33 @@ test("computerOf falls back to the paired computer", () => {
   expect(computerOf(c, "home").role).toBe("secondary");
   expect(computerOf(c, "gone").instance.id).toBe("home");
   expect(computerOf(c, null).instance.id).toBe("home");
+});
+
+describe("preferredOf", () => {
+  test("automatic: the primary, wherever the link is", () => {
+    expect(preferredOf(grouped("c", C[0]!))?.instance.id).toBe("a");
+  });
+
+  test("the computer picked, a secondary too", () => {
+    expect(preferredOf({ ...grouped("a", A[0]!), preferredInstanceId: "c" })?.instance.id).toBe("c");
+  });
+
+  test("a picked computer that left the group falls back to the primary", () => {
+    expect(preferredOf({ ...grouped("a", A[0]!), preferredInstanceId: "gone" })?.instance.id).toBe("a");
+  });
+
+  test("withGroup forgets the pick once that computer is no longer listed", () => {
+    const next = withGroup({ ...grouped("a", A[0]!), preferredInstanceId: "c" }, [peer("a", "primary", A), peer("home", "secondary", HOME)], isPhoneUrlAllowed);
+    expect(next.preferredInstanceId).toBeNull();
+  });
+
+  test("withGroup keeps the pick while it is listed", () => {
+    const next = withGroup({ ...grouped("a", A[0]!), preferredInstanceId: "home" }, [peer("a", "primary", A), peer("home", "secondary", HOME)], isPhoneUrlAllowed);
+    expect(next.preferredInstanceId).toBe("home");
+  });
+
+  test("a pairing stored before picking starts automatic", () => {
+    const { preferredInstanceId: _gone, ...old } = grouped("a", A[0]!);
+    expect(withDefaults(old).preferredInstanceId).toBeNull();
+  });
 });
