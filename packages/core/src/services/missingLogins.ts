@@ -16,6 +16,7 @@ import { all, get, insert, run, tx, update } from "../db";
 import { bus } from "../events/bus";
 import { addCredentialDomain, getCredential, linkCredentialTotp, listCredentials } from "../vault/credentials";
 import { getTotp, issuerMatchesCredential, listTotp } from "../vault/totp";
+import { brandScore } from "../vault/totpGuess";
 import { audit } from "./audit";
 import { notify } from "./notifications";
 import { badRequest, domainMatches, hostnameOf, newId, notFound, now, truncate } from "../util";
@@ -195,11 +196,12 @@ export function totpChoicesForMissingLogin(id: string): MissingLoginTotpChoices 
   const logins = siteLogins(row, host);
   const credentials = new Map(listCredentials({ workspaceId: "all" }).map((c) => [c.id, c]));
   const site = { name: row.service, url: row.url || `https://${host}`, domains: JSON.stringify([host]) };
+  const siteBrand = { name: row.service, url: site.url, domains: [host] };
   const scored = listTotp({ workspaceId: "all" })
     .map((t) => {
       const linked = t.credentialId ? credentials.get(t.credentialId) : undefined;
       let score = 0;
-      if (t.issuer && issuerMatchesCredential(t.issuer, site)) score += 3;
+      if ((t.issuer && issuerMatchesCredential(t.issuer, site)) || brandScore(siteBrand, t) >= 0.75) score += 3;
       if (logins.some((l) => sameUser(l.username, t.accountName))) score += 3;
       if (linked && logins.some((l) => sameUser(l.username, linked.username))) score += 2;
       if (linked && covers(linked, host)) score += 2;

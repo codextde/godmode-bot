@@ -203,6 +203,8 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   TotpImportInput,
   TotpImportResult,
   TotpInput,
+  TotpAutoLinkResult,
+  TotpAutoLinkSuggestion,
   UpdateReport,
   UsageSummary,
   VaultStatus,
@@ -498,6 +500,8 @@ export const api = {
     update: (id: string, input: Partial<TotpInput>) => patch<TotpEntry>(`/api/totp/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/totp/${id}`),
     import: (input: TotpImportInput) => post<TotpImportResult>("/api/totp/import", input),
+    autolinkSuggestions: () => get<TotpAutoLinkSuggestion[]>("/api/totp/autolink"),
+    autolink: (pairs?: { credentialId: string; totpId: string }[]) => post<TotpAutoLinkResult>("/api/totp/autolink", { pairs }),
   },
 
   workspaces: {

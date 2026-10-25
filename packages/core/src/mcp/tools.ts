@@ -100,6 +100,7 @@ import {
   findCredentialsForAgent,
   generatePassword,
   getCredential,
+  linkCredentialTotpIfFree,
   listCredentials,
   markCredentialUsed,
   revealForAgent,
@@ -108,6 +109,8 @@ import {
 import { passkeysForHost } from "../vault/passkeys";
 import { passkeysEnabled } from "../browser/passkeys";
 import { codeForAgent, listTotp, totpForAgent } from "../vault/totp";
+import { rankTotpGuesses } from "../vault/totpGuess";
+import { triedTotp, watchTotpGuess } from "../vault/totpTrial";
 import {
   CARD_FIELDS,
   attachQuestion,
@@ -125,9 +128,9 @@ import {
   type CardField,
 } from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
-import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
+import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, probeOtpPage, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
 import { SOLVERS, activeSolver, captchaSolverReady } from "../browser/captcha";
-import { currentVmPage, fillIntoVm, solveCaptchaInVm } from "../vm/guest";
+import { currentVmPage, fillIntoVm, probeOtpInVm, solveCaptchaInVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
@@ -610,6 +613,10 @@ function requireBrowser(agent: Agent, ctx: RunContext): FillTarget {
 
 function pageOf(target: FillTarget) {
   return "vmId" in target ? currentVmPage(target.vmId) : currentPage(target.profileId, target.conversationId);
+}
+
+function probeOtp(target: FillTarget) {
+  return "vmId" in target ? probeOtpInVm(target.vmId) : probeOtpPage(target.profileId, target.conversationId);
 }
 
 function fillInto(target: FillTarget, opts: Parameters<typeof fillIntoPage>[1]) {
@@ -1156,7 +1163,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "vault_fill_totp",
     description:
-      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. Only works on the site of the login the 2FA entry is linked to (an unlinked entry also needs the credentialId of the site's login). The code input is found automatically (incl. one-digit-per-box inputs); pass a selector only if needed.",
+      "Type the current 2FA (TOTP / authenticator) code into the browser page — Godmode fills it, you never see it. Pass the login's credentialId (its linked 2FA is used) or a totpId. Only works on the site of the login the 2FA entry is linked to (an unlinked entry also needs the credentialId of the site's login). When the login has no 2FA linked yet, Godmode tries the 2FA entry that most likely belongs to it and links the two by itself once the site accepts the code; if the site rejects it, call this again to try the next likely one. The code input is found automatically (incl. one-digit-per-box inputs); pass a selector only if needed.",
     schema: z.object({
       credentialId: z.string().optional().describe("Login id whose linked 2FA should be used"),
       totpId: z.string().optional().describe("2FA entry id (alternative to credentialId)"),
@@ -1167,14 +1174,23 @@ const TOOLS: ToolDef[] = [
       const browser = requireBrowser(agent, ctx);
       let id = totpId ?? null;
       let site: Credential | null = null;
+      let guess: { score: number; left: number } | null = null;
       if (credentialId) {
         const cred = credentialsForAgent(agent).find((c) => c.id === credentialId);
         if (!cred) return fail(`Login ${credentialId} is not available to you.`);
         site = cred;
         id ??= cred.totpId ?? totpForAgent(agent).find((t) => t.credentialId === credentialId)?.id ?? sameAccountTotp(agent, cred) ?? null;
         if (!id) {
+          const ranked = rankTotpGuesses(cred, totpForAgent(agent), triedTotp(ctx.conversationId, cred.id));
+          if (ranked[0]) {
+            id = ranked[0].entry.id;
+            guess = { score: ranked[0].score, left: ranked.length - 1 };
+          }
+        }
+        if (!id) {
+          const tried = triedTotp(ctx.conversationId, cred.id).size;
           return fail(
-            `No 2FA code is linked to "${cred.name}". Call report_missing_login with kind "missing_totp" and the site's URL: the human can pick the code if it is already in the vault or add it. Don't give the human a task to type the code; continue with other work.`,
+            `${tried ? `None of the ${tried} 2FA ${tried === 1 ? "entry" : "entries"} that looked like they belong to "${cred.name}" worked, and no other one fits. ` : `No 2FA code is linked to "${cred.name}". `}Call report_missing_login with kind "missing_totp" and the site's URL: the human can pick the code if it is already in the vault or add it. Don't give the human a task to type the code; continue with other work.`,
           );
         }
       }
@@ -1196,11 +1212,39 @@ const TOOLS: ToolDef[] = [
       }
       const { scope, guessHost } = await fillScopeFor(browser, site);
       const result = await fillInto(browser, { text: code.code, kind: "totp", selector, submit, ...scope });
-      audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}) });
+      audit(`agent:${agent.id}`, "totp.fill", id, { field: "totp", runId: ctx.runId, credentialId: credentialId ?? null, ok: result.ok, ...(guessHost ? { guessedSite: guessHost } : {}), ...(guess ? { guessed: true } : {}) });
       if (!result.ok) return fail(`Could not fill the 2FA code: ${scrub(result.detail, code.code)}`);
       const remembered = guessHost && addCredentialDomain(site.id, guessHost);
       if (remembered) audit(`agent:${agent.id}`, "credential.autofix_domain", site.id, { domain: guessHost, runId: ctx.runId });
-      return `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.${remembered ? ` Added ${guessHost} to "${site.name}" (its name matched the site).` : ""}`;
+      const filled = `Filled the current 2FA code into ${result.url}${submit ? " and submitted" : ""}.${remembered ? ` Added ${guessHost} to "${site.name}" (its name matched the site).` : ""}`;
+      if (!guess) return filled;
+
+      const login = site;
+      const label = entry.accountName && entry.issuer ? `${entry.issuer} (${entry.accountName})` : entry.issuer || entry.accountName;
+      let linked = false;
+      const outcome = watchTotpGuess(ctx.conversationId, login.id, entry.id, {
+        probe: () => probeOtp(browser),
+        onSite: (url) => {
+          const host = hostnameOf(url);
+          return !!host && scope.allowedHosts.some((d) => domainMatches(host, d));
+        },
+        onAccepted: () => {
+          linked = linkCredentialTotpIfFree(login.id, entry.id);
+          if (linked) audit(`agent:${agent.id}`, "totp.autolink", entry.id, { credentialId: login.id, runId: ctx.runId, score: guess.score });
+        },
+      });
+      const retry = guess.left
+        ? `If the page says the code is wrong, call vault_fill_totp again with the same credentialId: Godmode tries the next likely 2FA entry (${guess.left} left).`
+        : `If the page says the code is wrong, no other saved 2FA entry fits: call report_missing_login with kind "missing_totp".`;
+      if (!submit) {
+        return `${filled} "${login.name}" had no 2FA linked, so Godmode used its best guess, the 2FA entry "${label}". Submit the code now; once the site accepts it, Godmode links the two by itself. ${retry}`;
+      }
+      const verdict = await Promise.race([outcome, sleep(12_000).then(() => "pending" as const)]);
+      if (verdict === "accepted") {
+        return `${filled} "${login.name}" had no 2FA linked, so Godmode tried its best guess, the 2FA entry "${label}". The site accepted it${linked ? `, so the two are linked now and future sign-ins use it right away` : ""}.`;
+      }
+      if (verdict === "rejected") return `${filled} Godmode's best guess for "${login.name}", the 2FA entry "${label}", looks rejected. ${retry}`;
+      return `${filled} "${login.name}" had no 2FA linked, so Godmode used its best guess, the 2FA entry "${label}". The 2FA field is still on the page, so it is not clear yet whether the site took it; Godmode keeps watching and links the two once it does. ${retry}`;
     },
   }),
 
