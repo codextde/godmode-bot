@@ -1701,4 +1701,17 @@ CREATE TABLE artifact_versions (
 ALTER TABLE routines ADD COLUMN run_on TEXT;
 `,
   },
+  {
+    id: 104,
+    name: "self_repair_tickets",
+    sql: /* sql */ `
+-- The log a fix ticket came from: emptied once its pull request is merged, so the same problems are never fixed twice.
+CREATE TABLE IF NOT EXISTS self_repair_tickets (
+  task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  source TEXT NOT NULL,
+  filed_at TEXT NOT NULL,
+  cleared_at TEXT
+);
+`,
+  },
 ];
