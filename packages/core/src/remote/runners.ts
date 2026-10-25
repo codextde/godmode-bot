@@ -642,7 +642,7 @@ export function startRunners(): void {
   for (const r of all<RunnerRow>("SELECT * FROM runners")) startLink(r);
   setMirrorHooks({
     runFinished: (runnerId, run) => {
-      void syncRunner(runnerId, { agentId: run.agentId }).catch((err) => log.warn(`could not merge memory after run ${run.id}`, err instanceof Error ? err.message : err));
+      void syncRunner(runnerId, { agentId: run.agentId, work: true }).catch((err) => logFailure(`could not merge memory after run ${run.id}`, err));
     },
     resync: (runnerId, runId) => links.get(runnerId)?.sendClientEvent({ type: "run.resync", runId }),
     released: (runnerId, conversationId) => pendingReleases(runnerId).includes(conversationId),
@@ -741,7 +741,7 @@ export function linkGone(err: unknown): boolean {
 
 function logFailure(text: string, err: unknown): void {
   const detail = err instanceof Error ? err.message : err;
-  if (linkGone(err)) log.info(text, detail);
+  if (linkGone(err) || (err as { repeated?: boolean } | null)?.repeated) log.info(text, detail);
   else log.warn(text, detail);
 }
 
@@ -784,12 +784,14 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
           /* the next connect tells */
         }
       } catch (err) {
-        update("runners", id, { sync_error: `Couldn't copy your setup: ${message(err)}`, updated_at: now() });
-        const failure = Object.assign(new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed"), { cause: err });
+        const syncError = `Couldn't copy your setup: ${message(err)}`;
+        update("runners", id, { sync_error: syncError, updated_at: now() });
+        // The same failure as last time: it was warned about then, every edit and run tries again.
+        const failure = Object.assign(new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed"), { cause: err, repeated: r.sync_error === syncError });
         // Work goes ahead on the setup the runner has (the runner card shows why) — not when it never got one or lacks the key.
         if (!opts.work || needsKey || !r.synced_at || linkGone(err)) throw failure;
         warnings.push(failure.message);
-        logFailure(failure.message, err);
+        logFailure(`could not copy the setup to runner ${id}`, failure);
       } finally {
         syncing.delete(id);
         emit(id);

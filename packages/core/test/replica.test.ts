@@ -5,12 +5,12 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import type { Database } from "bun:sqlite";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
 import { all, closeDb, get, openDb, run, setDb } from "../src/db";
-import { setLogLevel } from "../src/log";
+import { setFileLogLevel, setLogDir, setLogLevel } from "../src/log";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { applyChanges, changesFor, ensureReplica, pendingFor, pendingKeys, replicaSeq, replicaTables, resetReplicaCache, retryDeferred, type ReplicaChange } from "../src/remote/replica";
 
@@ -270,6 +270,21 @@ describe("between two computers", () => {
       { id: "prj_there", slug: "earshot-2" },
     ]);
     expect(all("SELECT * FROM replica_deferred")).toHaveLength(0);
+  });
+
+  test("a change that keeps failing is warned about once, its retries only at info", () => {
+    use(b);
+    const logs = join(dir, "logs");
+    mkdirSync(logs, { recursive: true });
+    setLogDir(logs);
+    setFileLogLevel("info");
+    const broken: ReplicaChange = { t: "goals", k: "gol_broken", at: T(40), row: { id: "gol_broken", title: null, created_at: T(40), updated_at: T(40) } };
+    expect(applyChanges("rnr_a", [broken], { peerWinsTies: false }).failed).toBe(1);
+    expect(retryDeferred("rnr_a", { peerWinsTies: false }).failed).toBe(1);
+    expect(retryDeferred("rnr_a", { peerWinsTies: false }).failed).toBe(1);
+    const file = join(logs, "godmode.jsonl");
+    const lines = existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map((l) => JSON.parse(l) as { level: string; msg: string }) : [];
+    expect(lines.filter((l) => l.msg === "could not take a change of goals yet").map((l) => l.level)).toEqual(["warn", "info", "info"]);
   });
 
   test("an agent whose folder name isn't safe never lands", () => {
