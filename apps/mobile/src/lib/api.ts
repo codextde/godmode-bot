@@ -237,10 +237,14 @@ export async function reachableBase(
   return refused;
 }
 
-/** Whether this computer of the group answers at one of its addresses now, asked afresh (without the key). */
-export async function answersNow(connection: Connection, instanceId: string): Promise<boolean> {
+/** This computer of the group's best address that answers now, asked afresh (without the key); null when none does. */
+export async function answeringBase(connection: Connection, instanceId: string): Promise<string | null> {
   const bases = [...new Set(computerOf(connection, instanceId).urls.map(baseUrl))].filter(isPhoneUrlAllowed);
-  return (await Promise.all(bases.map(probeInstance))).includes(instanceId);
+  const base = bases[(await Promise.all(bases.map(probeInstance))).indexOf(instanceId)];
+  if (!base) return null;
+  verified.set(base, instanceId);
+  unreachable.delete(base);
+  return base;
 }
 
 /**
@@ -388,6 +392,7 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
       activeUrl: base,
       peers: [],
       activeInstanceId: result.instance.id,
+      preferredInstanceId: null,
       pairedAt: result.device.createdAt,
     };
   }

@@ -5,7 +5,7 @@ import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { EFFORT_LABELS, findModel, type InterfaceMode, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
@@ -15,8 +15,9 @@ import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
-import { computersOf } from "@/lib/peers";
+import { computersOf, preferredOf, primaryOf } from "@/lib/peers";
 import { qk } from "@/lib/query";
+import { preferComputer } from "@/lib/realtime";
 import { isGatewayUrl, useSession } from "@/lib/session";
 import { firstLine, patchSettings, useSettings } from "@/lib/setup";
 import { space, useColors } from "@/lib/theme";
@@ -47,7 +48,7 @@ export default function Settings() {
   const theme = useAppearance((s) => s.theme);
   const status = useLive((s) => s.status);
   const linked = useLive((s) => s.computer);
-  const primaryAway = useLive((s) => s.primaryAway);
+  const preferredAway = useLive((s) => s.preferredAway);
   const me = useQuery({ queryKey: qk.me, queryFn: api.me });
   const settings = useSettings();
   const catalog = useModelCatalog();
@@ -65,9 +66,16 @@ export default function Settings() {
   const projects = workspaces.reduce((n, w) => n + w.projects.length, 0);
   const computers = computersOf(connection);
   const activeId = linked ?? connection.activeInstanceId;
-  const computerState = (id: string, primary: boolean) => {
-    if (id === activeId) return status === "online" ? "Connected" : status === "connecting" ? "Connecting…" : null;
-    return primary && primaryAway && status === "online" ? "Away" : null;
+  const preferredId = preferredOf(connection)?.instance.id;
+  const primary = primaryOf(connection);
+  const computerState = (id: string) => {
+    if (id === activeId) return status === "online" ? "Connected" : status === "connecting" ? "Connecting…" : "Out of reach";
+    return id === preferredId && preferredAway && status === "online" ? "Away" : null;
+  };
+  const pick = async (id: string | null) => {
+    if (await preferComputer(id)) return;
+    const name = computers.find((p) => p.instance.id === (id ?? primary?.instance.id))?.instance.name ?? "That computer";
+    Alert.alert(`${name} doesn't answer right now`, "This phone switches to it as soon as it's back.");
   };
 
   const toggleLock = async (on: boolean) => {
@@ -112,13 +120,24 @@ export default function Settings() {
       </Card>
 
       {computers.length > 1 ? (
-        <Group title="Computers" footer="When one is out of reach, this phone uses another computer of the group.">
+        <Group title="This phone uses" footer="When the one you pick is out of reach, this phone uses another computer of the group and switches back once it answers again.">
+          {primary ? (
+            <ChoiceRow
+              icon="bolt"
+              title="Automatic"
+              detail={`The primary, ${primary.instance.name}`}
+              selected={!connection.preferredInstanceId}
+              onPress={() => void pick(null)}
+            />
+          ) : null}
           {computers.map((p) => (
-            <Info
+            <ChoiceRow
               key={p.instance.id}
               icon="display"
-              label={p.instance.name}
-              value={[p.role === "primary" ? "Primary" : null, computerState(p.instance.id, p.role === "primary")].filter(Boolean).join(" · ")}
+              title={p.instance.name}
+              detail={[p.role === "primary" ? "Primary" : "Secondary", computerState(p.instance.id)].filter(Boolean).join(" · ")}
+              selected={connection.preferredInstanceId === p.instance.id}
+              onPress={() => void pick(p.instance.id)}
             />
           ))}
         </Group>

@@ -152,6 +152,38 @@ export function SwitchRow({
   );
 }
 
+/** One option of a group, picked with a tap; the picked one carries a check. */
+export function ChoiceRow({
+  icon,
+  title,
+  detail,
+  selected,
+  onPress,
+}: {
+  icon?: IconName;
+  title: string;
+  detail?: ReactNode;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const c = useColors();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      onPress={() => {
+        tap();
+        if (!selected) onPress();
+      }}
+      style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
+    >
+      {icon ? <Tile icon={icon} tint={selected ? c.brandStrong : undefined} /> : null}
+      <Label title={title} detail={detail} />
+      {selected ? <Icon name="check" size={15} color={c.brandStrong} weight="bold" /> : null}
+    </Pressable>
+  );
+}
+
 export function StepperRow({
   icon,
   title,

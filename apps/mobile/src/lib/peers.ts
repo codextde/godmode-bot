@@ -14,6 +14,8 @@ export interface Computers {
   peers: MobilePeer[];
   /** The computer that answered last. */
   activeInstanceId: string;
+  /** The computer picked in Settings; null: automatic, the primary while it answers. */
+  preferredInstanceId: string | null;
 }
 
 export interface Computer {
@@ -43,6 +45,11 @@ export function computersOf(c: Computers): Computer[] {
 /** The group's primary right now, as last listed. */
 export function primaryOf(c: Computers): Computer | undefined {
   return computersOf(c).find((p) => p.role === "primary");
+}
+
+/** The computer the link belongs on: the one picked while it is still in the group, else the primary. */
+export function preferredOf(c: Computers): Computer | undefined {
+  return computersOf(c).find((p) => p.instance.id === c.preferredInstanceId) ?? primaryOf(c);
 }
 
 /** A computer of the group by id; the paired one when that one isn't listed (any more). */
@@ -102,15 +109,19 @@ export function withGroup<T extends Computers>(c: T, group: unknown, allowed: (u
     peers.push({ instance: { ...p.instance!, name }, urls: [...new Set(urls)], role: p.role === "primary" ? "primary" : "secondary" });
   }
   const next = { ...c, peers };
+  if (next.preferredInstanceId && !accepts(next, next.preferredInstanceId)) next.preferredInstanceId = null;
   if (accepts(next, c.activeInstanceId)) return next;
   return { ...next, activeInstanceId: c.instance.id, activeUrl: c.urls[0] ?? c.activeUrl };
 }
 
-/** A pairing stored before device groups: no group yet, and the paired computer answered last. */
-export function withDefaults<T extends { instance: MobileInstance; peers?: unknown; activeInstanceId?: unknown }>(stored: T): T & Pick<Computers, "peers" | "activeInstanceId"> {
+/** A pairing stored before device groups: no group yet, the paired computer answered last, no computer picked. */
+export function withDefaults<T extends { instance: MobileInstance; peers?: unknown; activeInstanceId?: unknown; preferredInstanceId?: unknown }>(
+  stored: T,
+): T & Pick<Computers, "peers" | "activeInstanceId" | "preferredInstanceId"> {
   return {
     ...stored,
     peers: Array.isArray(stored.peers) ? (stored.peers as MobilePeer[]) : [],
     activeInstanceId: typeof stored.activeInstanceId === "string" ? stored.activeInstanceId : stored.instance.id,
+    preferredInstanceId: typeof stored.preferredInstanceId === "string" ? stored.preferredInstanceId : null,
   };
 }

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { create } from "zustand";
 import { applyRunDelta, type MessageBlock, type Run, type RunDelta } from "@godmode/shared";
-import { computerOf, primaryOf } from "./peers";
+import { computerOf, preferredOf } from "./peers";
 import { useSession } from "./session";
 
 export type LinkStatus = "connecting" | "online" | "offline";
@@ -37,8 +37,8 @@ interface LiveState {
   offlineReason: string | null;
   /** The computer of the group the link is on, or asks while it connects; null: the one that answered last. */
   computer: string | null;
-  /** The link goes through another computer of the group because the primary doesn't answer. */
-  primaryAway: boolean;
+  /** The link goes through another computer of the group because the one it belongs on (picked, else the primary) doesn't answer. */
+  preferredAway: boolean;
   runs: Record<string, LiveRun>;
   /** Runs seen ending lately: an answer that arrives after their end doesn't bring them back as live. */
   ended: string[];
@@ -48,7 +48,7 @@ interface LiveState {
   frames: Record<string, Frame>;
   setStatus: (status: LinkStatus, offlineReason?: string | null) => void;
   setComputer: (computer: string | null) => void;
-  setPrimaryAway: (away: boolean) => void;
+  setPreferredAway: (away: boolean) => void;
   seedRuns: (runs: Run[]) => void;
   runStarted: (run: Run) => void;
   runActivity: (runId: string, label: string) => void;
@@ -63,7 +63,7 @@ export const useLive = create<LiveState>((set, get) => ({
   status: "connecting",
   offlineReason: null,
   computer: null,
-  primaryAway: false,
+  preferredAway: false,
   runs: {},
   ended: [],
   labels: {},
@@ -71,7 +71,7 @@ export const useLive = create<LiveState>((set, get) => ({
   frames: {},
   setStatus: (status, offlineReason = null) => set({ status, offlineReason }),
   setComputer: (computer) => set({ computer }),
-  setPrimaryAway: (primaryAway) => set({ primaryAway }),
+  setPreferredAway: (preferredAway) => set({ preferredAway }),
   seedRuns: (runs) =>
     set((s) => {
       const ids = new Set(runs.map((r) => r.id));
@@ -176,17 +176,17 @@ export function useRunActivity(runId: string | undefined): string | null {
 }
 
 /**
- * The name of the computer the link is on, or asks while it connects; with `away` the primary's while the link goes
- * through another computer of the group because the primary doesn't answer.
+ * The name of the computer the link is on, or asks while it connects; with `away` the name of the one it belongs on
+ * (picked, else the primary) while the link goes through another computer of the group because that one doesn't answer.
  */
 export function useLinkComputer(): { name: string | null; away: string | null } {
   const connection = useSession((s) => s.connection);
   const computer = useLive((s) => s.computer);
-  const primaryAway = useLive((s) => s.primaryAway);
+  const preferredAway = useLive((s) => s.preferredAway);
   return useMemo(() => {
     if (!connection) return { name: null, away: null };
     const on = computerOf(connection, computer ?? connection.activeInstanceId);
-    const primary = primaryOf(connection);
-    return { name: on.instance.name, away: primaryAway && primary && primary.instance.id !== on.instance.id ? primary.instance.name : null };
-  }, [connection, computer, primaryAway]);
+    const preferred = preferredOf(connection);
+    return { name: on.instance.name, away: preferredAway && preferred && preferred.instance.id !== on.instance.id ? preferred.instance.name : null };
+  }, [connection, computer, preferredAway]);
 }

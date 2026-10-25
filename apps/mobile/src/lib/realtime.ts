@@ -1,12 +1,12 @@
 import { AppState, type AppStateStatus } from "react-native";
 import type { InvalidateQueryFilters } from "@tanstack/react-query";
 import { browserView, type Agent, type AgentQuestion, type ClientEvent, type EntityName, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
-import { answersNow, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
+import { answeringBase, api, ApiError, forget, reachableBase, retryAddresses } from "./api";
 import { noteQueue, upsertMessage } from "./chat-cache";
 import { setQueue } from "./composer";
 import { withPending } from "./pending-queue";
 import { useLive } from "./live";
-import { primaryOf, removedBy } from "./peers";
+import { preferredOf, removedBy } from "./peers";
 import { qk, queryClient } from "./query";
 import { useSession } from "./session";
 
@@ -129,15 +129,61 @@ async function catchUp(instanceId: string) {
   } catch {
     /* the next reconnect tries again */
   }
-  await checkPrimary(instanceId);
+  await checkPreferred(instanceId);
 }
 
-/** Whether the socket goes to another computer of the group because the primary doesn't answer. */
-async function checkPrimary(instanceId: string) {
+/**
+ * The link belongs on the computer picked in Settings, else on the primary. While it is on another one, that one is
+ * asked again; once it answers, the link moves back to it.
+ */
+async function checkPreferred(instanceId: string) {
   const connection = useSession.getState().connection;
-  const primary = connection ? primaryOf(connection) : undefined;
-  const away = !!connection && !!primary && primary.instance.id !== instanceId && !(await answersNow(connection, primary.instance.id));
-  if (socketComputer === instanceId) useLive.getState().setPrimaryAway(away);
+  const preferred = connection ? preferredOf(connection) : undefined;
+  if (!connection || !preferred || preferred.instance.id === instanceId) {
+    if (socketComputer === instanceId) useLive.getState().setPreferredAway(false);
+    return;
+  }
+  const base = await answeringBase(connection, preferred.instance.id);
+  if (socketComputer !== instanceId || useSession.getState().connection?.token !== connection.token) return;
+  if (base) moveTo(base, preferred.instance.id);
+  else useLive.getState().setPreferredAway(true);
+}
+
+/** Opens the link at this computer's address instead of the current one. */
+function moveTo(base: string, instanceId: string) {
+  useSession.getState().setActive(base, instanceId);
+  if (!running) return;
+  const ws = socket;
+  socket = null;
+  socketComputer = null;
+  clearTimers();
+  ws?.close();
+  useLive.getState().setPreferredAway(false);
+  attempt = 0;
+  void connect();
+}
+
+/**
+ * Picks the computer this phone talks to (null: automatic, the primary while it answers). False when it doesn't answer
+ * right now; the link moves there once it does.
+ */
+export async function preferComputer(instanceId: string | null): Promise<boolean> {
+  useSession.getState().setPreferred(instanceId);
+  const connection = useSession.getState().connection;
+  const preferred = connection ? preferredOf(connection) : undefined;
+  if (!connection || !preferred) return true;
+  if (preferred.instance.id === (socketComputer ?? connection.activeInstanceId)) {
+    useLive.getState().setPreferredAway(false);
+    return true;
+  }
+  const base = await answeringBase(connection, preferred.instance.id);
+  if (useSession.getState().connection?.preferredInstanceId !== instanceId) return true;
+  if (!base) {
+    if (socket) useLive.getState().setPreferredAway(true);
+    return false;
+  }
+  moveTo(base, preferred.instance.id);
+  return true;
 }
 
 /**
@@ -390,14 +436,13 @@ async function connect() {
     sendEvent({ type: "deltas.patch" });
     replaySubscriptions();
     if (viewing) sendView();
-    void checkPrimary(instanceId);
     void catchUp(instanceId);
     // Events were missed while the link was down, so everything is asked again (lists are small and chats come as a
     // window). Not on the first connect to the same computer: every screen has just fetched its own.
     if (wasOpen || moved) void queryClient.invalidateQueries();
     wasOpen = true;
     pingTimer = setInterval(() => sendEvent({ type: "ping" }), 25_000);
-    awayTimer = setInterval(() => void checkPrimary(instanceId), 60_000);
+    awayTimer = setInterval(() => void checkPreferred(instanceId), 30_000);
   };
   ws.onmessage = (msg) => {
     try {

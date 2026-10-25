@@ -28,6 +28,8 @@ interface SessionState {
   connect: (connection: Connection) => Promise<void>;
   /** The address and computer that answered. */
   setActive: (url: string, instanceId: string) => void;
+  /** The computer picked in Settings; null: automatic. */
+  setPreferred: (instanceId: string | null) => void;
   /** Keep the addresses current: the computer lists them again, e.g. with its Godmode Cloud gateway once linked. */
   setUrls: (urls: string[]) => void;
   /** Keep the computer's name and version current (they can change after pairing). */
@@ -67,6 +69,14 @@ export const useSession = create<SessionState>((set, get) => ({
     const current = get().connection;
     if (!current || (current.activeUrl === url && current.activeInstanceId === instanceId)) return;
     const connection = { ...current, activeUrl: url, activeInstanceId: instanceId };
+    set({ connection });
+    void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
+  },
+
+  setPreferred: (instanceId) => {
+    const current = get().connection;
+    if (!current || current.preferredInstanceId === instanceId) return;
+    const connection = { ...current, preferredInstanceId: instanceId };
     set({ connection });
     void SecureStore.setItemAsync(CONNECTION_KEY, JSON.stringify(connection), STORE_OPTIONS);
   },
