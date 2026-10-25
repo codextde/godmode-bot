@@ -459,6 +459,8 @@ function emptyResult(): ApplyResult {
   return { applied: 0, kept: 0, deferred: 0, failed: 0, entities: new Set(), agents: new Set(), removedAgents: [], keys: {} };
 }
 
+const stuckWarned = new Set<string>();
+
 /**
  * Write what `peer` changed. `peerWinsTies`: the peer is the primary. Each row is checked against its last change here
  * first; a row that points at one that isn't here yet waits (replica_deferred) and is tried with the next pull.
@@ -491,7 +493,13 @@ export function applyChanges(peer: string, changes: ReplicaChange[], opts: Apply
         } catch {
           /* the database is in trouble: the next pull brings it again */
         }
-        log.warn(`could not take a change of ${c.t} yet`, { peer, key: c.k, error: one instanceof Error ? one.message : String(one) });
+        const error = one instanceof Error ? one.message : String(one);
+        // Tried again with every pull: the same failure is worth one warning.
+        const seen = `${peer}${KEY_SEP}${c.t}${KEY_SEP}${c.k}${KEY_SEP}${error}`;
+        if (stuckWarned.size >= 1000) stuckWarned.clear();
+        const level = stuckWarned.has(seen) ? "info" : "warn";
+        stuckWarned.add(seen);
+        log[level](`could not take a change of ${c.t} yet`, { peer, key: c.k, error });
       }
     }
     Object.assign(result, partial);
