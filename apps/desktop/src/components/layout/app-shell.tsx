@@ -16,7 +16,6 @@ import {
   MonitorUp,
   Inbox,
   KeyRound,
-  ListTodo,
   Lock,
   MessageCircle,
   MessageSquarePlus,
@@ -37,7 +36,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
-import { isHumanTaskWaiting, modState, modUpdateAvailable } from "@godmode/shared";
+import { modState, modUpdateAvailable } from "@godmode/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -74,7 +73,7 @@ import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { LicenseBanner } from "@/components/license/license-banner";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useBootstrap, useHumanTasks, useMods } from "@/lib/hooks";
+import { useBootstrap, useMods } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -131,9 +130,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const attention = boot?.counts.attention;
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
-  // Counted from the list the board shows, so the two can't disagree (and the board is loaded before it is opened).
-  const humanTasks = useHumanTasks();
-  const myTasks = humanTasks.data && !humanTasks.isError ? humanTasks.data.filter(isHumanTaskWaiting).length : attention?.todo;
   const { data: mods = [] } = useMods();
   // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;
@@ -191,7 +187,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const workNav: NavItem[] = [
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
-    { to: "/my-tasks", label: "My tasks", icon: <ListTodo />, badge: myTasks || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/artifacts", label: "Artifacts", icon: <AppWindow /> },
@@ -222,7 +217,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const easyItem = (to: string, label: string): NavItem => ({ ...byPath.get(to)!, label });
   const easyNav: NavItem[] = [
     easyItem("/inbox", "Inbox"),
-    easyItem("/my-tasks", "My to-dos"),
     easyItem("/agents", "Agents"),
     easyItem("/automations", "Automations"),
     easyItem("/artifacts", "Dashboards & apps"),

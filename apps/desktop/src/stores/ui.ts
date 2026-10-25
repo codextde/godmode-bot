@@ -10,6 +10,7 @@ export type RecentTab = "all" | "running" | "scheduled" | "done";
 export type RecentSource = "mine" | "automations" | "agents" | "all";
 
 export type WorkspacesView = "grid" | "list";
+export type InboxView = "list" | "board";
 
 export type WorkspacesSort = "name" | "active" | "attention";
 
@@ -37,6 +38,8 @@ interface UiState {
   collapsedColumns: string[];
   /** The Agents page shows cards, rows or the org chart. */
   agentsView: AgentsView;
+  /** The Inbox shows what waits as a list or the to-dos as a board. */
+  inboxView: InboxView;
   /** Workspace groups folded on the Agents page ("global" or a workspace id). */
   collapsedAgentGroups: string[];
   /** Which chats the sidebar's Recent list shows. */
@@ -64,6 +67,7 @@ interface UiState {
   skipClaudeVersion: (version: string | null) => void;
   toggleColumn: (status: string) => void;
   setAgentsView: (v: AgentsView) => void;
+  setInboxView: (v: InboxView) => void;
   toggleAgentGroup: (key: string) => void;
   setRecentTab: (tab: RecentTab) => void;
   setRecentSource: (source: RecentSource) => void;
@@ -89,6 +93,7 @@ export const useUi = create<UiState>()(
       skippedClaudeVersion: null,
       collapsedColumns: ["cancelled"],
       agentsView: "grid",
+      inboxView: "list",
       collapsedAgentGroups: [],
       recentTab: "all",
       recentSource: "mine",
@@ -117,6 +122,7 @@ export const useUi = create<UiState>()(
           collapsedColumns: s.collapsedColumns.includes(status) ? s.collapsedColumns.filter((c) => c !== status) : [...s.collapsedColumns, status],
         })),
       setAgentsView: (agentsView) => set({ agentsView }),
+      setInboxView: (inboxView) => set({ inboxView }),
       toggleAgentGroup: (key) =>
         set((s) => ({
           collapsedAgentGroups: s.collapsedAgentGroups.includes(key) ? s.collapsedAgentGroups.filter((k) => k !== key) : [...s.collapsedAgentGroups, key],
@@ -144,6 +150,7 @@ export const useUi = create<UiState>()(
         skippedClaudeVersion: s.skippedClaudeVersion,
         collapsedColumns: s.collapsedColumns,
         agentsView: s.agentsView,
+        inboxView: s.inboxView,
         collapsedAgentGroups: s.collapsedAgentGroups,
         recentTab: s.recentTab,
         recentSource: s.recentSource,

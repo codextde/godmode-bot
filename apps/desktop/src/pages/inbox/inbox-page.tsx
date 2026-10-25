@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { Archive, CircleCheck, Inbox, PartyPopper, RefreshCw } from "lucide-react";
-import type { Agent, AgentQuestion, MissingLogin, MissingLoginStatus } from "@godmode/shared";
-import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
+import { Archive, CircleCheck, Inbox, List, PartyPopper, Plus, RefreshCw, SquareKanban } from "lucide-react";
+import type { Agent, AgentQuestion, HumanTask, MissingLogin, MissingLoginStatus } from "@godmode/shared";
+import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskWaiting } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,9 +14,13 @@ import { NotificationList } from "@/components/inbox/notification-list";
 import { InboxQuestion } from "@/components/inbox/question-item";
 import { domainFromUrl, isVaultLocked } from "@/components/vault/vault-utils";
 import { errorMessage } from "@/lib/api";
-import { useAllAgents, useAttention, useMissingLogins, useQuestions, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useAttention, useHumanTasks, useMissingLogins, useQuestions, useWorkspaces } from "@/lib/hooks";
+import { cn } from "@/lib/utils";
+import { useUi, type InboxView } from "@/stores/ui";
 import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AttentionList } from "@/components/attention/attention-list";
+import { HumanTaskBoard } from "@/components/human-tasks/human-task-board";
+import { HumanTaskSheet } from "@/components/human-tasks/human-task-sheet";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
 
@@ -38,7 +42,128 @@ const EMPTY: Record<MissingLoginStatus, { icon: React.ReactNode; title: string; 
   },
 };
 
+const VIEWS = [
+  { id: "list", label: "List", icon: List },
+  { id: "board", label: "Board", icon: SquareKanban },
+] as const;
+
+/** Everything that waits for the human in one place: the list to work through, and the same to-dos as a board to plan with. */
 export default function InboxPage() {
+  const [params, setParams] = useSearchParams();
+  const storedView = useUi((s) => s.inboxView);
+  const setStoredView = useUi((s) => s.setInboxView);
+  const asked = params.get("view");
+  const view: InboxView = asked === "board" || asked === "list" ? asked : storedView;
+  const [adding, setAdding] = useState<"backlog" | "open" | null>(null);
+  const [focusNote, setFocusNote] = useState(false);
+  const humanTasks = useHumanTasks();
+  const { data: agents = [] } = useAllAgents();
+  const agentById = useMemo(() => new Map<string, Agent>(agents.map((a) => [a.id, a])), [agents]);
+
+  const setView = (v: InboxView) => {
+    setStoredView(v);
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        next.delete("view");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const openTask = (t: HumanTask, note = false) => {
+    setFocusNote(note);
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        next.set("task", t.id);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const closeTask = () => {
+    setFocusNote(false);
+    setParams(
+      (p) => {
+        const next = new URLSearchParams(p);
+        next.delete("task");
+        return next;
+      },
+      { replace: true },
+    );
+  };
+  const openId = params.get("task");
+  const selected = openId ? (humanTasks.data?.find((t) => t.id === openId) ?? null) : null;
+
+  const tasks = humanTasks.data ?? [];
+  const waiting = tasks.filter((t) => t.status === "open").length;
+  const agentsWaiting = new Set(tasks.filter((t) => isHumanTaskWaiting(t) && t.agentId).map((t) => t.agentId)).size;
+  const parked = tasks.filter((t) => t.status === "backlog").length;
+  const boardDescription = waiting
+    ? `${waiting} to do${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Drag to plan, drop on Done and its agent picks up where it left off.`
+    : parked
+      ? `Nothing to do right now · ${parked} in the backlog for later.`
+      : "Your to-dos as a board: what agents hand you and what you add yourself. Drop one on Done and its agent picks up where it left off.";
+
+  return (
+    <div className={view === "board" ? "flex h-full min-h-0 flex-col" : "relative"}>
+      <InboxHeader
+        view={view}
+        onView={setView}
+        description={view === "board" ? boardDescription : undefined}
+        onNewTask={() => {
+          setView("board");
+          setAdding("open");
+        }}
+      />
+      {view === "board" ? <HumanTaskBoard adding={adding} onAdding={setAdding} onOpen={openTask} /> : <InboxList agentById={agentById} />}
+      <HumanTaskSheet task={selected} agent={selected?.agentId ? agentById.get(selected.agentId) : undefined} focusNote={focusNote} onClose={closeTask} />
+    </div>
+  );
+}
+
+function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView; onView: (v: InboxView) => void; description?: string; onNewTask: () => void }) {
+  const attention = useAttention();
+  const openCount = attention.data?.length ?? 0;
+  return (
+    <PageHeader
+      icon={<Inbox />}
+      title="Inbox"
+      description={
+        description ??
+        (openCount > 0
+          ? `${openCount} thing${openCount === 1 ? "" : "s"} need${openCount === 1 ? "s" : ""} you — answer what your agents ask, do what they hand you, add the access they miss.`
+          : "What your agents need from you — questions, to-dos, approvals, missing logins, 2FA codes — plus updates from their work.")
+      }
+      actions={
+        <>
+          <div role="group" aria-label="View" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                aria-pressed={view === v.id}
+                onClick={() => onView(v.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5",
+                  view === v.id ? "border bg-card text-foreground shadow-card" : "border border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <v.icon aria-hidden /> {v.label}
+              </button>
+            ))}
+          </div>
+          <Button onClick={onNewTask}>
+            <Plus /> New task
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
   const [tab, setTab] = useState<MissingLoginStatus>("open");
   const open = useMissingLogins("open");
   const resolved = useMissingLogins("resolved");
@@ -52,8 +177,6 @@ export default function InboxPage() {
   const questionsBy = { open: qOpen, resolved: qResolved, dismissed: qWithdrawn };
   const currentQuestions = questionsBy[tab];
 
-  const { data: agents = [] } = useAllAgents();
-  const agentById = useMemo(() => new Map<string, Agent>(agents.map((a) => [a.id, a])), [agents]);
   const update = useMissingLoginStatus(tab);
   const [params] = useSearchParams();
   const link2fa = params.get("link2fa")?.toLowerCase() ?? "";
@@ -71,8 +194,6 @@ export default function InboxPage() {
   const { workspaceOf } = useScopedAttention();
   const { data: workspaces = [] } = useWorkspaces();
   const others = (attention.data ?? []).filter((i) => i.kind !== "question" && i.kind !== "login");
-  const openCount = (open.data?.length ?? 0) + (qOpen.data?.length ?? 0) + others.length;
-
   const count = (s: MissingLoginStatus) => {
     const logins = byStatus[s].data?.length;
     const questions = questionsBy[s].data?.length;
@@ -81,17 +202,7 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="relative">
-      <PageHeader
-        icon={<Inbox />}
-        title="Inbox"
-        description={
-          openCount > 0
-            ? `${openCount} thing${openCount === 1 ? "" : "s"} need${openCount === 1 ? "s" : ""} your attention — answer what your agents ask or add the missing access.`
-            : "What your agents need from you — questions, approvals, missing logins, 2FA codes — plus updates from their work."
-        }
-      />
-      <PageBody>
+    <PageBody>
         <div className="grid grid-cols-1 items-start gap-6 @5xl:grid-cols-[minmax(0,1fr)_380px]">
           <section aria-labelledby="attention-title" className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -182,7 +293,6 @@ export default function InboxPage() {
 
           <NotificationList className="@5xl:sticky @5xl:top-6" />
         </div>
-      </PageBody>
-    </div>
+    </PageBody>
   );
 }

@@ -1527,7 +1527,7 @@ async function finished(id: string, run: Run): Promise<void> {
   const forHuman = waitingHumanTasks(run.conversationId);
   if (forHuman.length) {
     const what = forHuman.map((h) => `H-${h.number} “${h.title}”`).join(", ");
-    block(id, `Waiting for you: ${what}. It continues once you mark ${forHuman.length === 1 ? "it" : "them"} done under My tasks.`, {
+    block(id, `Waiting for you: ${what}. It continues once you mark ${forHuman.length === 1 ? "it" : "them"} done in your Inbox.`, {
       kind: "needs_input",
       runId: run.id,
       actor: agent,

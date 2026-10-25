@@ -20,7 +20,6 @@ export function useInterfaceMode(): InterfaceMode {
 
 /** Easy mode titles and descriptions for the top-level pages, by path (the sidebar uses the same names). */
 export const EASY_PAGES: Record<string, { title?: string; description?: string }> = {
-  "/my-tasks": { title: "My to-dos" },
   "/artifacts": { title: "Dashboards & apps" },
   "/tasks": { title: "Task board" },
   "/automations": { description: "Let your agents start work by themselves: on a schedule, or when something happens in your apps." },
