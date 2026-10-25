@@ -4,10 +4,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, Credential, TotpEntry } from "@godmode/shared";
-import { argValue, fillFailure, fills, invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { argValue, fillFailure, fills, invocations, otpPages, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
 import { createCredential, deleteCredential, getCredential, listCredentials } from "../src/vault/credentials";
-import { createTotp } from "../src/vault/totp";
+import { createTotp, deleteTotp, getTotp } from "../src/vault/totp";
 import { listAudit } from "../src/services/audit";
 import { listMissingLogins } from "../src/services/missingLogins";
 import { listNotifications } from "../src/services/notifications";
@@ -279,6 +279,55 @@ describe("vault tools", () => {
     expect(bound.isError).toBeUndefined();
     expect([fills[2]!.allowedHosts, fills[2]!.httpHosts]).toEqual([["127.0.0.1"], ["127.0.0.1"]]);
   });
+
+  test("vault_fill_totp tries the most likely 2FA for a login without one and links it once the site takes it", async () => {
+    fills.length = 0;
+    otpPages.length = 0;
+    const login = createCredential({ name: "Acme Portal", url: "https://example.com/acme", username: "zoe@acme.test", password: "acme-pass-1234" });
+    const right = createTotp({ issuer: "Acme", accountName: "zoe@acme.test", secret: "MFRGGZDFMZTWQ2LK" });
+    const wrong = createTotp({ issuer: "Acme Inc", accountName: "", secret: "GEZDGNBVGY3TQOJQ" });
+    try {
+      const r = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: login.id, submit: true });
+      expect(r.isError).toBeUndefined();
+      expect(fills).toHaveLength(1);
+      expect(fills[0]!.allowedHosts).toEqual(["example.com"]);
+      expect(r.content[0]!.text).toContain("The site accepted it");
+      expect(getCredential(login.id).totpId).toBe(right.id);
+      expect(getTotp(wrong.id).credentialId).toBeNull();
+      expect(listAudit(50, "totp.autolink").some((a) => a.target === right.id)).toBe(true);
+    } finally {
+      deleteCredential(login.id);
+      deleteTotp(right.id);
+      deleteTotp(wrong.id);
+    }
+  }, 30_000);
+
+  test("vault_fill_totp moves on to the next guess when the site rejects one, and never links a rejected one", async () => {
+    fills.length = 0;
+    otpPages.length = 0;
+    otpPages.push({ url: "https://example.com/2fa", otpField: true, error: true });
+    const login = createCredential({ name: "Globex", url: "https://example.com/globex", username: "hank", password: "globex-pass-1234" });
+    const first = createTotp({ issuer: "Globex", accountName: "hank", secret: "MFRGGZDFMZTWQ2LK" });
+    const second = createTotp({ issuer: "Globex Corp", accountName: "", secret: "GEZDGNBVGY3TQOJQ" });
+    try {
+      const a = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: login.id, submit: true });
+      expect(a.content[0]!.text).toContain("looks rejected");
+      expect(a.content[0]!.text).toContain("1 left");
+      const b = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: login.id, submit: true });
+      expect(b.content[0]!.text).toContain("looks rejected");
+      expect(fills.map((f) => f.text)).toHaveLength(2);
+      const c = await call(tokens[worker.id]!, "vault_fill_totp", { credentialId: login.id, submit: true });
+      expect(c.isError).toBe(true);
+      expect(c.content[0]!.text).toContain("report_missing_login");
+      expect(fills).toHaveLength(2);
+      expect(getCredential(login.id).totpId).toBeNull();
+    } finally {
+      otpPages.length = 0;
+      deleteCredential(login.id);
+      deleteTotp(first.id);
+      deleteTotp(second.id);
+    }
+  }, 30_000);
 
   test("vault_fill_totp uses the 2FA of the same account's other login for the site", async () => {
     fills.length = 0;

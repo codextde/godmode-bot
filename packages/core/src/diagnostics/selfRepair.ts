@@ -4,21 +4,22 @@
  *
  * Asked for by the human (Settings → Logs, a runner's "Fix in code"), it always files one. Checks that run by
  * themselves (the self_repair tool) only file one for problems that are new: seen lately, not already in an open
- * ticket, and not filed for the build that still runs.
+ * ticket, and not filed for the build that still runs. Once a fix is merged, the log it came from is emptied.
  */
 import type { LogEntry, LogIssue, SelfRepairInput, SelfRepairResult, Task, TaskActor } from "@godmode/shared";
 import { MAX_TASK_DESCRIPTION_LENGTH, taskAttachmentMarkdown } from "@godmode/shared";
 import { BUILD, VERSION, config } from "../config";
+import { bus } from "../events/bus";
 import { getAgent, getDefaultAgentId } from "../agents/service";
 import { all, get, run as sql } from "../db";
 import { logger, scrub } from "../log";
-import { listRunners, runnerDiagnostics } from "../remote/runners";
+import { clearRunnerLog, listRunners, runnerDiagnostics } from "../remote/runners";
 import { audit } from "../services/audit";
 import { getSettings } from "../services/settings";
 import { saveTaskAttachment } from "../tasks/attachments";
 import { createTask } from "../tasks/service";
 import { badRequest, now } from "../util";
-import { buildLogReport, fingerprint, issuesOf, listLogEntries } from "./logs";
+import { buildLogReport, clearLogs, fingerprint, issuesOf, listLogEntries } from "./logs";
 
 const log = logger("self-repair");
 
@@ -131,6 +132,28 @@ function agentTicketsToday(): number {
   return get<{ n: number }>("SELECT COUNT(*) AS n FROM tasks WHERE created_by LIKE 'agent:%' AND labels LIKE '%\"autofix\"%' AND created_at > ?", since)?.n ?? 0;
 }
 
+/** Empty the logs whose fix tickets were merged (all of them, or one source's): what they show is fixed. */
+export async function clearFixedLogs(onlySource?: string): Promise<void> {
+  const merged = all<{ task_id: string; source: string }>(
+    `SELECT s.task_id, s.source FROM self_repair_tickets s JOIN tasks t ON t.id = s.task_id
+     WHERE s.cleared_at IS NULL AND t.pr_state = 'merged'${onlySource ? " AND s.source = ?" : ""}`,
+    ...(onlySource ? [onlySource] : []),
+  );
+  for (const source of new Set(merged.map((m) => m.source))) {
+    try {
+      if (source === "local") clearLogs();
+      else await clearRunnerLog(source);
+    } catch (err) {
+      // An offline runner's log is emptied before its next check.
+      log.warn(`could not clear the log of ${source === "local" ? "this computer" : `runner ${source}`} after its fix was merged`, err);
+      continue;
+    }
+    const ts = now();
+    for (const m of merged.filter((x) => x.source === source)) sql("UPDATE self_repair_tickets SET cleared_at = ? WHERE task_id = ?", ts, m.task_id);
+    log.info(`cleared the log of ${source === "local" ? "this computer" : `runner ${source}`}: its fix was merged`);
+  }
+}
+
 /** File a fix ticket for what a log (this computer's or a runner's) shows. */
 export async function fixFromLog(source: RepairSource, opts: RepairOptions = {}): Promise<SelfRepairResult> {
   if (config().role === "runner") throw badRequest("A runner's problems are fixed from the computer it works for.");
@@ -142,6 +165,7 @@ export async function fixFromLog(source: RepairSource, opts: RepairOptions = {})
   }
   const id = sourceId(source);
   const onlyNew = !!opts.onlyNew;
+  await clearFixedLogs(id);
 
   let where: string;
   let label: string;
@@ -194,6 +218,7 @@ export async function fixFromLog(source: RepairSource, opts: RepairOptions = {})
     opts.actor ?? "user",
   );
   const ts = now();
+  sql("INSERT OR REPLACE INTO self_repair_tickets (task_id, source, filed_at) VALUES (?, ?, ?)", task.id, id, ts);
   for (const i of issues) {
     sql(
       "INSERT INTO self_repair_issues (source, key, task_id, filed_at, build) VALUES (?, ?, ?, ?, ?) ON CONFLICT(source, key) DO UPDATE SET task_id = excluded.task_id, filed_at = excluded.filed_at, build = excluded.build",
@@ -234,4 +259,20 @@ export async function selfRepairCheck(
     }
   }
   return out;
+}
+
+let unsubscribe: (() => void) | null = null;
+
+/** A merged fix empties its log right away (and what was merged while Godmode was off, now). */
+export function startSelfRepair(): void {
+  if (config().role === "runner") return;
+  unsubscribe ??= bus.on((e) => {
+    if (e.type === "task.event" && e.event.kind === "pr_merged") void clearFixedLogs().catch((err) => log.warn("could not clear the logs of merged fixes", err));
+  });
+  void clearFixedLogs().catch((err) => log.warn("could not clear the logs of merged fixes", err));
+}
+
+export function stopSelfRepair(): void {
+  unsubscribe?.();
+  unsubscribe = null;
 }

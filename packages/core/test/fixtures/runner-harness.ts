@@ -40,6 +40,8 @@ export const fills: {
 }[] = [];
 /** Runs that asked for browser tools, with the chat they are bound to. */
 export const browserRuns: { agentId: string; runId: string; conversationId: string; profileId: string | null }[] = [];
+/** What the fake page shows after a 2FA fill, one look per entry (the last one repeats); empty = the code was taken. */
+export const otpPages: { url: string; otpField: boolean; error: boolean }[] = [];
 /** When set, the fake fill fails with an error message that echoes the typed text (leak test). */
 export const fillFailure = { echoText: false };
 
@@ -87,6 +89,10 @@ mock.module("../../src/browser/manager", () => ({
     });
     if (fillFailure.echoText) return { ok: false, url: "https://example.com/login", detail: `Typing failed near "${opts.text}"` };
     return { ok: true, url: "https://example.com/login", detail: "filled" };
+  },
+  probeOtpPage: async (profileId: string, conversationId?: string) => {
+    if (profileId !== FAKE_PROFILE_ID) return realBrowser.probeOtpPage(profileId, conversationId);
+    return (otpPages.length > 1 ? otpPages.shift() : otpPages[0]) ?? { url: "https://example.com/home", otpField: false, error: false };
   },
   currentPage: async (profileId: string, conversationId?: string) =>
     profileId === FAKE_PROFILE_ID ? { url: "https://app.example.com/login", title: "Login" } : realBrowser.currentPage(profileId, conversationId),

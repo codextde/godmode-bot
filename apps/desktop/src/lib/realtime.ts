@@ -49,7 +49,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
   agents: [qk.agents, qk.spend, qk.bootstrap],
   routines: [qk.routines, qk.bootstrap],
-  credentials: [qk.credentials],
+  credentials: [qk.credentials, qk.totpAutolink],
   totp: [qk.totp],
   passkeys: [qk.passkeys],
   "payment-cards": [qk.cards],

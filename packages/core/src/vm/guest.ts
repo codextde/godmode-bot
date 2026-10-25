@@ -22,7 +22,7 @@ import type { Subprocess } from "bun";
 import { BROWSER_USE_PYTHON, BROWSER_USE_SPEC, BROWSER_USE_VERSION, browserUseConfig } from "../browser/browserUse";
 import { CdpClient, pickActivePage, probeCdp } from "../browser/cdp";
 import { findFreePort } from "../browser/chrome";
-import { fillIntoActivePage, fillPrecheck, type FillOptions, type FillResult } from "../browser/fill";
+import { fillIntoActivePage, fillPrecheck, probeOtpInActivePage, type OtpProbe, type FillOptions, type FillResult } from "../browser/fill";
 import { solveInBrowser, type SolveOptions, type SolveResult } from "../browser/captcha";
 import { stealthArgs } from "../browser/stealth";
 import { CUA_DRIVER_SPEC, CUA_DRIVER_VERSION } from "../computer/cua";
@@ -523,6 +523,19 @@ export async function fillIntoVm(vmId: string, opts: FillOptions & { urlContains
     return await fillIntoActivePage(browser, opts);
   } finally {
     browser.client.close();
+  }
+}
+
+/** Whether the VM's active page still shows a 2FA code field; null when its browser can't be reached. */
+export async function probeOtpInVm(vmId: string): Promise<OtpProbe | null> {
+  let browser: Awaited<ReturnType<typeof guestBrowser>> = null;
+  try {
+    browser = await guestBrowser(vmId);
+    return browser ? await probeOtpInActivePage(browser) : null;
+  } catch {
+    return null;
+  } finally {
+    browser?.client.close();
   }
 }
 

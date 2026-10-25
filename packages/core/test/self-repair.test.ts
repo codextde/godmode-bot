@@ -6,9 +6,9 @@ import type { Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { startSmartGitServer, type SmartGitServer } from "./fixtures/smart-git-server";
 import { BUILD, config } from "../src/config";
-import { run as sql } from "../src/db";
-import { clearLogs } from "../src/diagnostics/logs";
-import { fixFromLog, selfRepairCheck } from "../src/diagnostics/selfRepair";
+import { get, run as sql } from "../src/db";
+import { clearLogs, listLogEntries } from "../src/diagnostics/logs";
+import { clearFixedLogs, fixFromLog, selfRepairCheck } from "../src/diagnostics/selfRepair";
 import { logger, setFileLogLevel, setLogDir } from "../src/log";
 import { getSettings, updateSettings } from "../src/services/settings";
 import { readTaskAttachment } from "../src/tasks/attachments";
@@ -134,5 +134,22 @@ describe("fixing Godmode's code from its logs", () => {
     const { task } = await fixFromLog({ kind: "local" }, { autoMerge: false, actor: "user" });
     expect(task?.autoMerge).toBe(false);
     expect(task?.description).toContain("waits for the human's review");
+  });
+
+  test("a merged fix empties the log it came from, so its problems are not fixed twice", async () => {
+    log.error("could not write the vault index");
+    const { task } = await fixFromLog({ kind: "local" }, { autoMerge: false, actor: "user" });
+    await clearFixedLogs();
+    expect(listLogEntries({ search: "could not write the vault index" })).toHaveLength(1);
+
+    sql("UPDATE tasks SET pr_state = 'merged' WHERE id = ?", task!.id);
+    await clearFixedLogs();
+    expect(listLogEntries({ level: "warn" })).toHaveLength(0);
+    expect(get<{ cleared_at: string | null }>("SELECT cleared_at FROM self_repair_tickets WHERE task_id = ?", task!.id)?.cleared_at).toBeTruthy();
+
+    // Cleared once: problems logged after that stay for the next fix.
+    log.error("could not write the vault index");
+    await clearFixedLogs();
+    expect(listLogEntries({ search: "could not write the vault index" })).toHaveLength(1);
   });
 });

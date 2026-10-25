@@ -6,9 +6,11 @@ import {
   createCredential,
   deleteCredential,
   getCredential,
+  linkCredentialTotpIfFree,
   listCredentials,
   updateCredential,
 } from "../../vault/credentials";
+import { suggestTotpLinks } from "../../vault/totpGuess";
 import { deletePasskey, getPasskey, listPasskeys } from "../../vault/passkeys";
 import { createTotp, currentCodes, deleteTotp, importTotpUris, listTotp, updateTotp } from "../../vault/totp";
 import { importPasswords, MAX_IMPORT_BYTES, previewPasswordImport } from "../../vault/passwordImport";
@@ -326,6 +328,20 @@ export function registerVaultRoutes(app: Hono): void {
           .filter(Boolean)
       : undefined;
     return c.json(currentCodes(ids));
+  });
+
+  app.get("/api/totp/autolink", (c) => c.json(suggestTotpLinks(listCredentials({ workspaceId: "all" }), listTotp({ workspaceId: "all" }))));
+
+  /** Link suggested pairs (default: every sure one). A pair is only linked while it is still a suggestion. */
+  app.post("/api/totp/autolink", async (c) => {
+    const input = await body(c, z.object({ pairs: z.array(z.object({ credentialId: idSchema, totpId: idSchema })).max(1000).optional() }));
+    const suggestions = suggestTotpLinks(listCredentials({ workspaceId: "all" }), listTotp({ workspaceId: "all" }));
+    const wanted = input.pairs
+      ? suggestions.filter((s) => input.pairs!.some((p) => p.credentialId === s.credentialId && p.totpId === s.totpId))
+      : suggestions.filter((s) => s.sure);
+    const linked = wanted.filter((s) => linkCredentialTotpIfFree(s.credentialId, s.totpId)).map(({ credentialId, totpId }) => ({ credentialId, totpId }));
+    for (const l of linked) audit("user", "totp.autolink", l.totpId, { credentialId: l.credentialId });
+    return c.json({ linked });
   });
 
   app.post("/api/totp/import", async (c) => {

@@ -11,6 +11,7 @@ import { EmptyState, PageBody, PageHeader } from "@/components/common";
 import { TotpCard, TotpCardSkeleton } from "@/components/vault/totp-card";
 import { TotpEditDialog } from "@/components/vault/totp-edit-dialog";
 import { TotpImportDialog } from "@/components/vault/totp-import-dialog";
+import { TotpAutoLinkPanel } from "@/components/vault/totp-autolink-panel";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { useTotpCodes } from "@/components/vault/use-totp-codes";
@@ -147,6 +148,8 @@ export default function TotpPage() {
             )}
           </div>
         )}
+
+        {hasEntries && creds.data && <TotpAutoLinkPanel entries={list.data ?? []} credById={credById} />}
 
         {list.isLoading ? (
           <div className="@container">

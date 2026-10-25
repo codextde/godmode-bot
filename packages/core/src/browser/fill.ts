@@ -97,6 +97,24 @@ interface LocateResult {
   focusInFrame?: boolean;
 }
 
+/** Is a visible 2FA code input (or a row of one-digit boxes) on this document, and does it say a code was wrong? */
+const OTP_PROBE = String.raw`() => {
+  const OTP_RE = /one[-_ ]?time|otp|totp|2fa|mfa|two[-_ ]?factor|verification|verify|security[-_ ]?code|auth(entication)?[-_ ]?code|\bcode\b|token|\bpin\b/;
+  const visible = (el) => {
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden") return false;
+    const r = el.getBoundingClientRect();
+    return r.width >= 2 && r.height >= 2;
+  };
+  const attrText = (el) => ["name", "id", "autocomplete", "placeholder", "aria-label", "data-testid"].map((a) => el.getAttribute(a) || "").join(" ").toLowerCase();
+  const inputs = [...document.querySelectorAll("input")].filter((el) => !el.disabled && ["", "text", "tel", "number", "password"].includes((el.getAttribute("type") || "").toLowerCase()) && visible(el));
+  const field = inputs.some((el) => el.getAttribute("autocomplete") === "one-time-code" || (OTP_RE.test(attrText(el)) && !/user|e-?mail|search/.test(attrText(el))));
+  const boxes = inputs.filter((el) => el.maxLength === 1).length >= 4;
+  const text = (document.body && document.body.innerText || "").slice(0, 20000);
+  const error = /incorrect|invalid|wrong code|didn.t work|not valid|expired|too many|try again|falsch|ung(\u00fc|ue)ltig|abgelaufen|zu viele|erneut versuchen|nicht korrekt/i.test(text);
+  return { otp: field || boxes, error };
+}`;
+
 /* ------------------------------------------------------------------ */
 /* In-page scripts (run in an isolated world; state kept on its global) */
 /* ------------------------------------------------------------------ */
@@ -686,5 +704,46 @@ export async function fillIntoActivePage(
     }
   } catch (err) {
     return { ok: false, url: "", detail: scrub(`Could not fill the field: ${err instanceof Error ? err.message : String(err)}`) };
+  }
+}
+
+export interface OtpProbe {
+  url: string;
+  otpField: boolean;
+  /** The page says a code was wrong, expired or tried too often. */
+  error: boolean;
+}
+
+/** Whether a 2FA code field is still showing on the page or one of its frames — gone means the site took the code. */
+export async function otpFieldOnPage(page: PageSession): Promise<OtpProbe> {
+  await page.waitForReady(3000).catch(() => {});
+  const url = await page.evaluate<string>("location.href", { timeoutMs: 3000 }).catch(() => "");
+  const contexts: FrameContext[] = [{ session: page, contextId: await page.isolatedWorld(), isChildFrame: false }, ...(await frameContexts(page).catch(() => []))];
+  const out: OtpProbe = { url, otpField: false, error: false };
+  for (const ctx of contexts) {
+    const res = await call<{ otp: boolean; error: boolean }>(ctx, OTP_PROBE, {}).catch(() => null);
+    out.otpField ||= !!res?.otp;
+    out.error ||= !!res?.error;
+  }
+  return out;
+}
+
+/** otpFieldOnPage for the page fillIntoActivePage would pick; null when there is no page to look at. */
+export async function probeOtpInActivePage(browser: {
+  client: CdpClient;
+  port?: number;
+  chatPage?: (urlContains?: string) => PageTarget | null;
+}): Promise<OtpProbe | null> {
+  try {
+    const target = browser.chatPage ? browser.chatPage() : await pickActivePage(browser.client, { port: browser.port });
+    if (!target) return null;
+    const page = await attachToPage(browser.client, target.targetId);
+    try {
+      return await otpFieldOnPage(page);
+    } finally {
+      await page.detach();
+    }
+  } catch {
+    return null;
   }
 }
