@@ -32,7 +32,6 @@ const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
-const HumanTasksPage = lazy(() => import("@/pages/human-tasks/human-tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const CardsPage = lazy(() => import("@/pages/vault/cards-page"));
@@ -210,7 +209,7 @@ export function App() {
           <Route path="/files" element={<Navigate to="/settings/files" replace />} />
           <Route path="/files/:agentId" element={<FilesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="/my-tasks" element={<HumanTasksPage />} />
+          <Route path="/my-tasks" element={<MyTasksRedirect />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
           <Route path="/plugins" element={<PluginsPage />} />
@@ -275,6 +274,13 @@ function NotFoundRedirect() {
 }
 
 /** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
+/** My tasks became the Inbox's board: old links (notifications, tickets) open the same task there. */
+function MyTasksRedirect() {
+  const params = new URLSearchParams(useLocation().search);
+  if (!params.has("task")) params.set("view", "board");
+  return <Navigate to={`/inbox?${params}`} replace />;
+}
+
 function LegacyModsRedirect() {
   const { search } = useLocation();
   const params = new URLSearchParams(search);

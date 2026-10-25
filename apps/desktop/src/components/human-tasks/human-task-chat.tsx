@@ -53,8 +53,8 @@ export function HumanTaskBar({ conversationId, agentName }: { conversationId: st
         <Row key={t.id} task={t} agentName={agentName} />
       ))}
       {tasks.length > 3 && (
-        <Link to="/my-tasks" className="block px-1 text-xs text-muted-foreground hover:text-foreground">
-          +{tasks.length - 3} more under My tasks
+        <Link to="/inbox?view=board" className="block px-1 text-xs text-muted-foreground hover:text-foreground">
+          +{tasks.length - 3} more in your Inbox
         </Link>
       )}
     </div>
@@ -85,7 +85,7 @@ function Row({ task, agentName }: { task: HumanTask; agentName: string }) {
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <Button size="xs" variant="ghost" asChild>
-          <Link to={`/my-tasks?task=${task.id}`}>Open</Link>
+          <Link to={`/inbox?task=${task.id}`}>Open</Link>
         </Button>
         {decision ? (
           <Tooltip>

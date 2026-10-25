@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
@@ -18,8 +17,8 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from "@dnd-kit/utilities";
 import { Circle, CircleCheck, CircleDashed, ListTodo, Plus, Search, Timer } from "lucide-react";
 import type { Agent, HumanTask, HumanTaskLane } from "@godmode/shared";
-import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive, isHumanTaskWaiting } from "@godmode/shared";
-import { EmptyState, PageHeader } from "@/components/common";
+import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive } from "@godmode/shared";
+import { EmptyState } from "@/components/common";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { HumanTaskCard } from "@/components/human-tasks/human-task-card";
-import { HumanTaskSheet, useHumanTaskActions } from "@/components/human-tasks/human-task-sheet";
+import { useHumanTaskActions } from "@/components/human-tasks/human-task-sheet";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { useAllAgents, useBootstrap, useHumanTasks } from "@/lib/hooks";
@@ -70,17 +69,23 @@ function columnOf(id: string, cols: Columns): ColumnId | null {
   return (Object.keys(cols) as ColumnId[]).find((c) => cols[c].includes(id)) ?? null;
 }
 
-export default function HumanTasksPage() {
+/** My tasks as a board (Backlog, To do, Doing, Done): the Inbox's Board view. Opening a card is up to the page (it holds the sheet). */
+export function HumanTaskBoard({
+  adding,
+  onAdding,
+  onOpen,
+}: {
+  adding: "backlog" | "open" | null;
+  onAdding: (to: "backlog" | "open" | null) => void;
+  onOpen: (t: HumanTask, focusNote?: boolean) => void;
+}) {
   const qc = useQueryClient();
-  const [params, setParams] = useSearchParams();
   const tasksQ = useHumanTasks();
   const { data = [] } = tasksQ;
   const { data: boot } = useBootstrap();
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   const [search, setSearch] = useState("");
-  const [focusNote, setFocusNote] = useState(false);
-  const [adding, setAdding] = useState<"backlog" | "open" | null>(null);
   const { update } = useHumanTaskActions();
 
   const tasks = useMemo(() => {
@@ -88,20 +93,6 @@ export default function HumanTasksPage() {
     if (!q) return data;
     return data.filter((t) => `H-${t.number} ${t.title} ${t.body} ${t.agentName ?? ""} ${t.conversationTitle ?? ""}`.toLowerCase().includes(q));
   }, [data, search]);
-  const openId = params.get("task");
-  const selected = openId ? (data.find((t) => t.id === openId) ?? null) : null;
-  const open = (t: HumanTask, note = false) => {
-    setFocusNote(note);
-    const p = new URLSearchParams(params);
-    p.set("task", t.id);
-    setParams(p, { replace: true });
-  };
-  const closeSheet = () => {
-    const p = new URLSearchParams(params);
-    p.delete("task");
-    setParams(p, { replace: true });
-    setFocusNote(false);
-  };
 
   const create = useMutation({
     mutationFn: ({ title, status }: { title: string; status: "backlog" | "open" }) => api.humanTasks.create({ title, status }),
@@ -109,29 +100,8 @@ export default function HumanTasksPage() {
     onError: (e) => toastApiError(e, "Couldn't add the task", qc),
   });
 
-  const waiting = data.filter((t) => t.status === "open").length;
-  const agentsWaiting = new Set(data.filter((t) => isHumanTaskWaiting(t) && t.agentId).map((t) => t.agentId)).size;
-  const parked = data.filter((t) => t.status === "backlog").length;
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        icon={<ListTodo />}
-        title="My tasks"
-        description={
-          waiting
-            ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Close or answer one and its agent picks up where it left off.`
-            : parked
-              ? `Nothing waits for you right now · ${parked} in the backlog for later. Close or answer one and its agent picks up where it left off.`
-              : "What your agents can't settle without you — a passkey, a CAPTCHA, a question, a decision. Close or answer it and the agent picks up where it left off."
-        }
-        actions={
-          <Button onClick={() => setAdding("open")} disabled={tasksQ.isError && !tasksQ.data}>
-            <Plus /> New task
-          </Button>
-        }
-      />
-
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 px-5 pb-4 @2xl:px-8">
         <div className="relative w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -167,7 +137,7 @@ export default function HumanTasksPage() {
             title="Nothing waits for you"
             description="When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself."
             action={
-              <Button variant="outline" onClick={() => setAdding("open")}>
+              <Button variant="outline" onClick={() => onAdding("open")}>
                 <Plus /> Add one of your own
               </Button>
             }
@@ -179,15 +149,13 @@ export default function HumanTasksPage() {
           agents={agentById}
           loading={tasksQ.isPending ? { backlog: 0, open: Math.min(boot?.counts.attention?.todo ?? 2, 4), doing: 0, closed: 2 } : undefined}
           adding={adding}
-          onAdding={setAdding}
+          onAdding={onAdding}
           onAdd={(title, status) => create.mutateAsync({ title, status })}
-          onOpen={(t) => open(t)}
+          onOpen={(t) => onOpen(t)}
           onMove={(t, status, beforeId) => update.mutate({ id: t.id, patch: { status, beforeId } })}
-          onDropDone={(t) => open(t, true)}
+          onDropDone={(t) => onOpen(t, true)}
         />
       )}
-
-      <HumanTaskSheet task={selected} agent={selected?.agentId ? agentById.get(selected.agentId) : undefined} focusNote={focusNote} onClose={closeSheet} />
     </div>
   );
 }
