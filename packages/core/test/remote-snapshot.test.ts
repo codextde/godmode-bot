@@ -12,6 +12,8 @@ import { setLogLevel } from "../src/log";
 import type { MemorySnapshot } from "../src/memory/files";
 import { mergeMemory, readMemoryState, writeMemoryState } from "../src/remote/memorySync";
 import { appliedDigest, applySnapshot, buildSnapshot, snapshotDigest, type ConfigSnapshot } from "../src/remote/snapshot";
+import { clearGroup, setGroup } from "../src/remote/group";
+import { ensureReplica, madeHere, pendingKeys, resetReplicaCache } from "../src/remote/replica";
 import * as runner from "../src/runner/runner";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
 import { HttpError } from "../src/util";
@@ -611,6 +613,52 @@ describe("applying a snapshot on a runner", () => {
     expect(result).toEqual({ digest: snapshot.digest, warnings: [] });
     expect(row("ssh_servers", "ssh_box")).toMatchObject({ host: "box.example.org", description: "" });
     expect(get("SELECT 1 FROM settings WHERE key = 'future'")).toBeNull();
+  });
+
+  test("projects that swapped slugs on the controller swap on the runner too", async () => {
+    await sync(() => {
+      insert("workspaces", { id: "ws_apps", name: "Apps", slug: "apps", created_at: TS, updated_at: TS });
+      insert("projects", { id: "prj_one", workspace_id: "ws_apps", name: "One", slug: "alpha", created_at: TS, updated_at: TS });
+      insert("projects", { id: "prj_two", workspace_id: "ws_apps", name: "Two", slug: "beta", created_at: TS, updated_at: TS });
+    });
+    const result = await sync(() => {
+      sql("UPDATE projects SET slug = 'swap' WHERE id = 'prj_one'");
+      sql("UPDATE projects SET slug = 'alpha' WHERE id = 'prj_two'");
+      sql("UPDATE projects SET slug = 'beta' WHERE id = 'prj_one'");
+    });
+    expect(result.warnings).toEqual([]);
+    expect(row("projects", "prj_one").slug).toBe("beta");
+    expect(row("projects", "prj_two").slug).toBe("alpha");
+  });
+
+  test("a project a secondary made while apart yields its slug to the primary's and still goes to the primary", async () => {
+    const secondary = mkdtempSync(join(tmpdir(), "godmode-snapshot-secondary-"));
+    try {
+      use(secondary);
+      setGroup("secondary", "rnr_primary");
+      resetReplicaCache();
+      ensureReplica();
+      use(controller);
+      const before = buildSnapshot();
+      use(secondary);
+      await applySnapshot(before);
+      insert("projects", { id: "prj_mine", workspace_id: "ws_apps", name: "Earshot", slug: "earshot", created_at: LATER, updated_at: LATER });
+      use(controller);
+      insert("projects", { id: "prj_theirs", workspace_id: "ws_apps", name: "Earshot", slug: "earshot", created_at: LATER, updated_at: LATER });
+      const snapshot = buildSnapshot();
+      use(secondary);
+      expect((await applySnapshot(snapshot)).warnings).toEqual([]);
+      expect(row("projects", "prj_theirs").slug).toBe("earshot");
+      expect(row("projects", "prj_mine").slug).toBe("earshot-2");
+      expect(pendingKeys("rnr_primary", "projects").has("prj_mine")).toBe(true);
+      expect(madeHere("projects").has("prj_mine")).toBe(true);
+    } finally {
+      clearGroup();
+      resetReplicaCache();
+      use(controller);
+      sql("DELETE FROM projects WHERE id = 'prj_theirs'");
+      rmSync(secondary, { recursive: true, force: true });
+    }
   });
 
   test("unsafe ids are skipped with a warning and nothing is written outside the data directory", async () => {

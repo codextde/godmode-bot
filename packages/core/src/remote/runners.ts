@@ -747,9 +747,10 @@ function logFailure(text: string, err: unknown): void {
 
 /**
  * Bring a runner up to date: the setup when it differs (or `force`), then — for a chat that starts — the agent's memory
- * and the browser sessions of the profile it uses. Returns what was done; a failed setup copy throws.
+ * and the browser sessions of the profile it uses. Returns what was done; a failed setup copy throws, except for `work`
+ * on a runner that has an earlier setup and the vault key.
  */
-export function syncRunner(id: string, opts: { agentId?: string; profileId?: string | null; force?: boolean } = {}): Promise<{ config: boolean; memory: boolean; cookies: boolean; warnings: string[] }> {
+export function syncRunner(id: string, opts: { agentId?: string; profileId?: string | null; force?: boolean; work?: boolean } = {}): Promise<{ config: boolean; memory: boolean; cookies: boolean; warnings: string[] }> {
   return serialized(id, async () => {
     const l = link(id);
     l.assertOnline();
@@ -784,7 +785,11 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
         }
       } catch (err) {
         update("runners", id, { sync_error: `Couldn't copy your setup: ${message(err)}`, updated_at: now() });
-        throw Object.assign(new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed"), { cause: err });
+        const failure = Object.assign(new HttpError(502, `Couldn't copy your setup to ${r.name}: ${message(err)}`, "runner_sync_failed"), { cause: err });
+        // Work goes ahead on the setup the runner has (the runner card shows why) — not when it never got one or lacks the key.
+        if (!opts.work || needsKey || !r.synced_at || linkGone(err)) throw failure;
+        warnings.push(failure.message);
+        logFailure(failure.message, err);
       } finally {
         syncing.delete(id);
         emit(id);
@@ -926,7 +931,7 @@ export async function startRemoteChat(runnerId: string, input: StartChatInput): 
       profileId = null;
     }
   }
-  await syncRunner(runnerId, { agentId, profileId });
+  await syncRunner(runnerId, { agentId, profileId, work: true });
   const { runnerId: _runner, workingDirectory, computerTarget, vmId, androidDeviceIds, ...rest } = input;
   // Another computer of the group is where the app that asked runs: its folders, screen, VMs and phones are named there.
   const own = row(runnerId)?.kind === "device" ? { workingDirectory, computerTarget, vmId, androidDeviceIds } : {};
@@ -949,7 +954,7 @@ export async function prepareRemoteMessage(conversationId: string): Promise<void
       profileId = null;
     }
   }
-  await syncRunner(runnerId, { agentId: conv.agentId, profileId });
+  await syncRunner(runnerId, { agentId: conv.agentId, profileId, work: true });
 }
 
 /* ------------------------------------------------------------------ */
