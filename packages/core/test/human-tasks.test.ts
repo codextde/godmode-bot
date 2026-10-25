@@ -3,7 +3,7 @@ import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { callTool } from "../src/mcp/tools";
-import { ensureDefaultAgent, updateAgent } from "../src/agents/service";
+import { deleteAgent, ensureDefaultAgent, updateAgent } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
 import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { listAttention } from "../src/services/attention";
@@ -191,6 +191,22 @@ describe("an agent gives the human a task", () => {
     await until(() => listHumanTasks({ status: "active", agentId: agent.id }).every((t) => t.conversationId !== null), 5_000, "orphans to be withdrawn");
     const gone = listHumanTasks({ status: "closed", agentId: agent.id }).filter((t) => t.closedReason === "The chat it was for was deleted.");
     expect(gone).toHaveLength(5);
+  }, 30_000);
+
+  test("a task withdrawn with its deleted agent reads as withdrawn, not as the human's own", async () => {
+    const godmode = await ensureDefaultAgent();
+    const temp = await makeAgent({ name: "Temp shop bot" });
+    const { conversation, run } = await startChat({ agentId: temp.id, content: "HUMAN_TASK verify the channel" });
+    await waitForRun(run.id, 10_000);
+    const task = listHumanTasks({ conversationId: conversation.id })[0]!;
+    await deleteAgent(temp.id);
+    await until(() => getHumanTask(task.id).status === "withdrawn", 5_000, "the task to be withdrawn");
+    const live = await chatWithTask();
+    const ctx = { runId: live.run.id, agentId: godmode.id, conversationId: live.conversationId, workspaceId: null, depth: 0 };
+    const again = await callTool(ctx, "human_task_cancel", { id: `H-${task.number}`, reason: "Line closed" });
+    expect(again.isError).toBe(true);
+    expect(again.content[0]!.text).toContain("withdrawn already");
+    await callTool({ ...ctx, agentId: agent.id }, "human_task_cancel", { id: live.task.id });
   }, 30_000);
 });
 

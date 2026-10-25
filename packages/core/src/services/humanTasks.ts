@@ -803,8 +803,8 @@ ${
 export function withdrawHumanTask(id: string, reason: string, by: { agentId: string }): HumanTask {
   const r = requireRow(id);
   const ref = humanTaskRef(r);
-  const lead = r.agent_id === by.agentId ? null : teamLeadOf(r, by.agentId);
   if (!isActive(r.status)) throw conflict(`${ref} is ${r.status} already`);
+  const lead = r.agent_id === by.agentId ? null : teamLeadOf(r, by.agentId);
   if (r.question_id) throw badRequest(`${ref} is ${lead ? "a" : "your"} question to the human: it waits for their answer`);
   // Only the agent picks its ticket up again.
   const ticket = lead && r.task_id ? get<{ number: number }>("SELECT number FROM tasks WHERE id = ? AND status = 'blocked' AND blocked_kind = 'needs_input'", r.task_id) : null;
