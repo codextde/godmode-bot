@@ -10,7 +10,9 @@ import { all, closeDb, get, getMeta, insert, openDb, run as sql } from "../src/d
 import { bus } from "../src/events/bus";
 import { setLogLevel } from "../src/log";
 import type { MemorySnapshot } from "../src/memory/files";
+import { clearGroup, setGroup } from "../src/remote/group";
 import { mergeMemory, readMemoryState, writeMemoryState } from "../src/remote/memorySync";
+import { ensureReplica, resetReplicaCache } from "../src/remote/replica";
 import { appliedDigest, applySnapshot, buildSnapshot, snapshotDigest, type ConfigSnapshot } from "../src/remote/snapshot";
 import * as runner from "../src/runner/runner";
 import { getSettings, resetSettingsCache, updateSettings } from "../src/services/settings";
@@ -674,6 +676,72 @@ describe("applying a snapshot on a runner", () => {
 
     expect(state()).toEqual(before);
     expect(vault.isUnlocked()).toBe(true);
+  });
+
+  test("a secondary keeps a project it made with the same name as one of the primary's, and the rest of the copy lands", async () => {
+    const secondary = mkdtempSync(join(tmpdir(), "godmode-snapshot-secondary-"));
+    try {
+      use(controller);
+      insert("workspaces", { id: "ws_ears", name: "Ears", slug: "ears", created_at: TS, updated_at: TS });
+      const firstCopy = buildSnapshot();
+      use(secondary);
+      resetReplicaCache();
+      ensureReplica();
+      setGroup("secondary", "rnr_primary");
+      await applySnapshot(firstCopy);
+      // Made here while the primary was away.
+      insert("projects", { id: "prj_here", workspace_id: "ws_ears", name: "Earshot", slug: "earshot", created_at: TS, updated_at: TS });
+
+      use(controller);
+      insert("projects", { id: "prj_there", workspace_id: "ws_ears", name: "Earshot", slug: "earshot", created_at: LATER, updated_at: LATER });
+      sql("UPDATE agents SET project_id = 'prj_there', instructions = 'Work on Earshot.' WHERE id = 'agt_helper'");
+      const copy = buildSnapshot();
+      sql("UPDATE agents SET project_id = NULL, instructions = 'Answer briefly.' WHERE id = 'agt_helper'");
+      sql("DELETE FROM workspaces WHERE id = 'ws_ears'");
+
+      use(secondary);
+      const result = await applySnapshot(copy);
+      expect(result.warnings).toEqual(['"Earshot" (projects) wasn\'t copied: this computer has its own one with the same name.']);
+      expect(exists("projects", "prj_here")).toBe(true);
+      expect(exists("projects", "prj_there")).toBe(false);
+      expect(row("agents", "agt_helper")).toMatchObject({ project_id: "prj_here", instructions: "Work on Earshot." });
+      expect(appliedDigest()).toBe(copy.digest);
+    } finally {
+      clearGroup();
+      use(runnerDir);
+      rmSync(secondary, { recursive: true, force: true });
+    }
+  });
+
+  test("a workspace and a project both made on each side with the same names don't stop the copy", async () => {
+    const secondary = mkdtempSync(join(tmpdir(), "godmode-snapshot-secondary-"));
+    try {
+      use(secondary);
+      resetReplicaCache();
+      ensureReplica();
+      setGroup("secondary", "rnr_primary");
+      insert("workspaces", { id: "ws_here", name: "Studio", slug: "studio", created_at: TS, updated_at: TS });
+      insert("projects", { id: "prj_here", workspace_id: "ws_here", name: "Earshot", slug: "earshot", created_at: TS, updated_at: TS });
+
+      use(controller);
+      insert("workspaces", { id: "ws_there", name: "Studio", slug: "studio", created_at: LATER, updated_at: LATER });
+      insert("projects", { id: "prj_there", workspace_id: "ws_there", name: "Earshot", slug: "earshot", created_at: LATER, updated_at: LATER });
+      const copy = buildSnapshot();
+      sql("DELETE FROM workspaces WHERE id = 'ws_there'");
+
+      use(secondary);
+      const result = await applySnapshot(copy);
+      expect(result.warnings.join("\n")).toContain('"Studio" (workspaces) wasn\'t copied');
+      expect(row("projects", "prj_here")).toMatchObject({ workspace_id: "ws_here", slug: "earshot" });
+      expect(exists("workspaces", "ws_there")).toBe(false);
+      expect(exists("projects", "prj_there")).toBe(false);
+      expect(exists("agents", "agt_helper")).toBe(true);
+      expect(appliedDigest()).toBe(copy.digest);
+    } finally {
+      clearGroup();
+      use(runnerDir);
+      rmSync(secondary, { recursive: true, force: true });
+    }
   });
 
   test("the vault refuses a key that doesn't open its canary", async () => {
