@@ -90,6 +90,24 @@ export function chromeCandidates(opts: DetectOptions = {}): ChromeCandidate[] {
   return out;
 }
 
+export function profileOwnerCandidates(opts: DetectOptions = {}): ChromeCandidate[] {
+  const platform = opts.platform ?? process.platform;
+  const env = opts.env ?? process.env;
+  const home = opts.home ?? homedir();
+  const resolve = opts.which ?? which;
+  const helium: ChromeCandidate[] = [];
+  if (platform === "darwin") {
+    for (const base of ["/Applications", join(home, "Applications")]) helium.push({ browser: "Helium", path: join(base, "Helium.app", "Contents", "MacOS", "Helium") });
+  } else if (platform === "win32") {
+    const local = env.LOCALAPPDATA || env.LocalAppData || join(home, "AppData", "Local");
+    helium.push({ browser: "Helium", path: [local, "imput", "Helium", "Application", "chrome.exe"].join("\\") });
+  } else {
+    const found = resolve("helium");
+    if (found) helium.push({ browser: "Helium", path: found });
+  }
+  return [...chromeCandidates(opts), ...helium];
+}
+
 /** Playwright's cache (ms-playwright/chromium-<rev>/…), newest revision first. */
 export function playwrightChromiumCandidates(opts: DetectOptions = {}): ChromeCandidate[] {
   const platform = opts.platform ?? process.platform;
