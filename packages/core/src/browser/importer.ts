@@ -15,7 +15,7 @@ import type { ChromeImportInput, ChromeImportResult, LocalChromeProfile } from "
 import { logger } from "../log";
 import { badRequest, domainMatches, sleep } from "../util";
 import { CdpClient, getCookies, setCookies, type CdpCookie, type CdpCookieParam } from "./cdp";
-import { chromeCandidates, findChrome, launchChrome, type DetectOptions } from "./chrome";
+import { findChrome, launchChrome, profileOwnerCandidates, type DetectOptions } from "./chrome";
 
 const log = logger("browser-import");
 
@@ -44,6 +44,7 @@ export function browserSources(opts: DetectOptions = {}): BrowserSource[] {
       { browser: "Chromium", root: join(base, "Chromium") },
       { browser: "Microsoft Edge", root: join(base, "Microsoft Edge") },
       { browser: "Brave", root: join(base, "BraveSoftware", "Brave-Browser") },
+      { browser: "Helium", root: join(base, "net.imput.helium") },
     ];
   }
   if (platform === "win32") {
@@ -57,6 +58,7 @@ export function browserSources(opts: DetectOptions = {}): BrowserSource[] {
       { browser: "Chromium", root: w("Chromium") },
       { browser: "Microsoft Edge", root: w("Microsoft", "Edge") },
       { browser: "Brave", root: w("BraveSoftware", "Brave-Browser") },
+      { browser: "Helium", root: w("imput", "Helium") },
     ];
   }
   const base = env.XDG_CONFIG_HOME || join(home, ".config");
@@ -68,6 +70,7 @@ export function browserSources(opts: DetectOptions = {}): BrowserSource[] {
     { browser: "Chromium", root: join(home, "snap", "chromium", "common", "chromium") },
     { browser: "Microsoft Edge", root: join(base, "microsoft-edge") },
     { browser: "Brave", root: join(base, "BraveSoftware", "Brave-Browser") },
+    { browser: "Helium", root: join(base, "net.imput.helium") },
   ];
 }
 
@@ -105,7 +108,9 @@ export function blockedProfileRoots(): string[] {
 
 export async function listLocalChromeProfiles(opts: DetectOptions = {}): Promise<LocalChromeProfile[]> {
   const out: LocalChromeProfile[] = [];
+  const owners = profileOwnerCandidates(opts);
   for (const src of browserSources(opts)) {
+    if (!owners.some((c) => c.browser === src.browser && existsSync(c.path))) continue;
     let json: string;
     try {
       json = readFileSync(join(src.root, "Local State"), "utf8");
@@ -371,7 +376,7 @@ function removeDir(path: string) {
 function executableFor(root: string): { browser: string; path: string } | null {
   const source = browserSources().find((s) => samePath(s.root, root));
   if (source) {
-    const exe = chromeCandidates().find((c) => c.browser === source.browser && existsSync(c.path));
+    const exe = profileOwnerCandidates().find((c) => c.browser === source.browser && existsSync(c.path));
     if (exe) return { browser: source.browser, path: exe.path };
     return null;
   }

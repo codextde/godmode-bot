@@ -12,6 +12,7 @@ import {
   isProcessAlive,
   LAUNCH_MARKER,
   playwrightChromiumCandidates,
+  profileOwnerCandidates,
   readLaunchMarker,
   writeLaunchMarker,
 } from "../src/browser/chrome";
@@ -55,6 +56,19 @@ describe("Chromium executable detection", () => {
     expect(paths).toContain("C:\\Users\\me\\AppData\\Local\\Google\\Chrome SxS\\Application\\chrome.exe");
     expect(paths).toContain("C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe");
     expect(paths).toContain("C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe");
+  });
+
+  test("profile owners add Helium after the browsers Godmode runs itself", () => {
+    const mac = profileOwnerCandidates({ platform: "darwin", home: "/Users/me", env: {} });
+    expect(chromeCandidates({ platform: "darwin", home: "/Users/me", env: {} }).some((c) => c.browser === "Helium")).toBe(false);
+    expect(mac.filter((c) => c.browser === "Helium").map((c) => c.path)).toEqual([
+      "/Applications/Helium.app/Contents/MacOS/Helium",
+      "/Users/me/Applications/Helium.app/Contents/MacOS/Helium",
+    ]);
+    const win = profileOwnerCandidates({ platform: "win32", home: "C:\\Users\\me", env: { LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local" } });
+    expect(win.find((c) => c.browser === "Helium")?.path).toBe("C:\\Users\\me\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe");
+    const linux = profileOwnerCandidates({ platform: "linux", home: "/home/me", env: {}, which: (b) => (b === "helium" ? "/usr/local/bin/helium" : null) });
+    expect(linux.find((c) => c.browser === "Helium")?.path).toBe("/usr/local/bin/helium");
   });
 
   test("Linux: PATH lookups, well-known paths, snap last before Playwright", () => {
