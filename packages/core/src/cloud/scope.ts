@@ -70,6 +70,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/doctor/claude-login", A],
   ["POST|DELETE", "/api/doctor/claude-login", "owner"],
   ["POST", "/api/doctor/claude-login/code", "owner"],
+  // Copies the link to the computer's clipboard, which is out of reach from afar.
+  ["POST", "/api/doctor/claude-login/copy", refused(COMPUTER_ONLY)],
   // Settings → System: reading the state is fine from anywhere; changing macOS permissions or the machine's tools
   // happens on the computer itself.
   ["GET", "/api/doctor/permissions", A],
