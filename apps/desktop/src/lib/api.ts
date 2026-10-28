@@ -414,6 +414,7 @@ export const api = {
     startClaudeLogin: () => post<ClaudeLoginStatus>("/api/doctor/claude-login"),
     submitClaudeLoginCode: (code: string) => post<ClaudeLoginStatus>("/api/doctor/claude-login/code", { code }),
     cancelClaudeLogin: () => del<ClaudeLoginStatus>("/api/doctor/claude-login"),
+    copyClaudeLoginLink: () => post<{ ok: boolean }>("/api/doctor/claude-login/copy"),
     claudeUpdate: (refresh = false) => get<ClaudeUpdateStatus>("/api/doctor/claude-update", { refresh: refresh ? 1 : undefined }),
     updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
     permissions: () => get<PermissionReport>("/api/doctor/permissions"),
