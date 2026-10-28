@@ -1,11 +1,11 @@
-import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AppWindow, ArrowRight, CircleCheck, CircleDashed, EyeOff, KeyRound, RectangleEllipsis, ScrollText, Smartphone, Terminal, Wrench } from "lucide-react";
+import { AppWindow, CircleCheck, CircleDashed, Eye, EyeOff, KeyRound, RectangleEllipsis, ScrollText, Smartphone, Terminal, Usb, UserCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type { AndroidSettings, Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
+import { AndroidOverview } from "@/components/android/android-overview";
 import { useShortPath } from "@/components/chat/folder-picker";
 import { useVaultGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
@@ -13,7 +13,8 @@ import { api } from "@/lib/api";
 import { useAndroidStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { Callout, CommitInput, InfoRow, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+import { FeatureSection } from "./feature-section";
+import { Callout, CommitInput, InfoRow, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 function Fact({ icon, children, caution }: { icon: React.ReactNode; children: React.ReactNode; caution?: boolean }) {
   return (
@@ -68,108 +69,97 @@ export function AndroidSection({ settings }: { settings: Settings }) {
       .catch(() => undefined);
 
   return (
-    <div className="space-y-5">
-      <SectionHeading
-        title="Android phones"
-        description="Let agents use real Android phones and emulators connected to this computer by USB or Wi-Fi: they see the screen, tap, type, open apps and run shell commands. A run uses its chat's phones and its agent's."
-      />
-
-      {s?.error && (
-        <Callout tone="warning" title="Godmode can't list the phones">
-          {s.error}
-        </Callout>
-      )}
-
-      <SettingsGroup
-        title="Android phones"
-        icon={<Smartphone />}
-        actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/android">
-              Manage phones <ArrowRight />
-            </Link>
-          </Button>
-        }
-      >
-        <SettingRow
-          label="Let agents use Android phones"
-          htmlFor="android-enabled"
-          description="Godmode looks for phones connected over adb, and agents can control the ones you give them. Turned off, phone controls are hidden in chats and agent settings."
-        >
-          <Switch id="android-enabled" checked={a.enabled} onCheckedChange={(enabled) => set({ enabled })} />
-        </SettingRow>
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Logins and 2FA codes"
-        icon={<KeyRound />}
-        description="Let agents sign in to apps and websites on a phone with the logins and 2FA codes from your vault."
-      >
-        <SettingRow
-          label="Type logins and 2FA codes into phones"
-          htmlFor="android-vault-fill"
-          disabled={!a.enabled}
-          description="Godmode types saved logins into password fields on the phone. Whatever is typed on a phone can be read through its shell, so only agents you allow to see passwords get this; the others ask you to sign in on the phone. Turning this on asks for your vault passphrase."
-        >
-          <Switch id="android-vault-fill" checked={a.vaultFill} disabled={!a.enabled} onCheckedChange={(on) => void setVaultFill(on)} />
-        </SettingRow>
-        <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
-          <Fact icon={<EyeOff />}>Only agents that may see passwords</Fact>
-          <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
-          <Fact icon={<ScrollText />}>Every fill audited</Fact>
-          <Fact icon={<AppWindow />} caution>
-            Not bound to an app
-          </Fact>
-          <Fact icon={<Terminal />} caution>
-            Readable through the shell
-          </Fact>
-        </ul>
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="adb"
-        icon={<Wrench />}
-        description="Android Debug Bridge, from Google's platform-tools. Godmode reaches the phones through it."
-        actions={
-          s && !s.adb.installed && s.canInstall ? (
-            <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
-              {install.isPending && <Spinner />} {install.isPending ? "Installing…" : "Install"}
-            </Button>
-          ) : undefined
-        }
-      >
-        <InfoRow label="Status">
-          {s ? (
-            <State ok={s.adb.installed}>
-              {s.adb.installed
-                ? [s.adb.version ? `adb ${s.adb.version}` : "Installed", s.adb.managed ? "Godmode's own copy" : "found on this computer"].join(" · ")
-                : s.canInstall
-                  ? "Not installed — Godmode can download it from Google"
-                  : "Not installed — install Android's platform-tools"}
-            </State>
-          ) : (
-            <State ok={null}>Checking…</State>
+    <FeatureSection
+      feature="android"
+      settings={settings}
+      title="Android phones"
+      summary="Agents use real Android phones and emulators connected to this computer by USB or Wi-Fi: they see the screen, tap, type, open apps and run shell commands."
+      icon={<Smartphone />}
+      points={[
+        { icon: <Usb />, text: "Phones and emulators over USB or Wi-Fi" },
+        { icon: <Eye />, text: "Watch live and take over any time" },
+        { icon: <UserCheck />, text: "Only the agents and chats you give a phone" },
+      ]}
+    >
+      <div className="space-y-8">
+        <AndroidOverview />
+        <div className="space-y-5">
+          {s?.error && (
+            <Callout tone="warning" title="Godmode can't list the phones">
+              {s.error}
+            </Callout>
           )}
-        </InfoRow>
-        {s?.adb.path && (
-          <InfoRow label="Binary" mono>
-            <span className="break-all">{short(s.adb.path)}</span>
-          </InfoRow>
-        )}
-        <SettingRow
-          label="Custom adb binary"
-          htmlFor="android-adb-path"
-          description="Leave empty to use the one from the Android SDK, your PATH or Homebrew, else Godmode's own copy."
-        >
-          <CommitInput
-            id="android-adb-path"
-            className="w-72 font-mono text-[13px]"
-            placeholder="Found automatically"
-            value={a.adbPath}
-            onCommit={saveAdbPath}
-          />
-        </SettingRow>
-      </SettingsGroup>
-    </div>
+          <SettingsGroup
+            title="Logins and 2FA codes"
+            icon={<KeyRound />}
+            description="Let agents sign in to apps and websites on a phone with the logins and 2FA codes from your vault."
+          >
+            <SettingRow
+              label="Type logins and 2FA codes into phones"
+              htmlFor="android-vault-fill"
+              description="Godmode types saved logins into password fields on the phone. Whatever is typed on a phone can be read through its shell, so only agents you allow to see passwords get this; the others ask you to sign in on the phone. Turning this on asks for your vault passphrase."
+            >
+              <Switch id="android-vault-fill" checked={a.vaultFill} onCheckedChange={(on) => void setVaultFill(on)} />
+            </SettingRow>
+            <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
+              <Fact icon={<EyeOff />}>Only agents that may see passwords</Fact>
+              <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
+              <Fact icon={<ScrollText />}>Every fill audited</Fact>
+              <Fact icon={<AppWindow />} caution>
+                Not bound to an app
+              </Fact>
+              <Fact icon={<Terminal />} caution>
+                Readable through the shell
+              </Fact>
+            </ul>
+          </SettingsGroup>
+
+          <SettingsGroup
+            title="adb"
+            icon={<Wrench />}
+            description="Android Debug Bridge, from Google's platform-tools. Godmode reaches the phones through it."
+            actions={
+              s && !s.adb.installed && s.canInstall ? (
+                <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
+                  {install.isPending && <Spinner />} {install.isPending ? "Installing…" : "Install"}
+                </Button>
+              ) : undefined
+            }
+          >
+            <InfoRow label="Status">
+              {s ? (
+                <State ok={s.adb.installed}>
+                  {s.adb.installed
+                    ? [s.adb.version ? `adb ${s.adb.version}` : "Installed", s.adb.managed ? "Godmode's own copy" : "found on this computer"].join(" · ")
+                    : s.canInstall
+                      ? "Not installed — Godmode can download it from Google"
+                      : "Not installed — install Android's platform-tools"}
+                </State>
+              ) : (
+                <State ok={null}>Checking…</State>
+              )}
+            </InfoRow>
+            {s?.adb.path && (
+              <InfoRow label="Binary" mono>
+                <span className="break-all">{short(s.adb.path)}</span>
+              </InfoRow>
+            )}
+            <SettingRow
+              label="Custom adb binary"
+              htmlFor="android-adb-path"
+              description="Leave empty to use the one from the Android SDK, your PATH or Homebrew, else Godmode's own copy."
+            >
+              <CommitInput
+                id="android-adb-path"
+                className="w-72 font-mono text-[13px]"
+                placeholder="Found automatically"
+                value={a.adbPath}
+                onCommit={saveAdbPath}
+              />
+            </SettingRow>
+          </SettingsGroup>
+        </div>
+      </div>
+    </FeatureSection>
   );
 }

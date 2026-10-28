@@ -118,7 +118,7 @@ export function ProfileUseCard() {
                 s.hasApiKey ? (
                   "browser_use_api_key set"
                 ) : (
-                  <Link to="/integrations?tab=api-keys" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                  <Link to="/settings/api-keys" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
                     <KeyRound className="size-3" /> Add browser-use API key
                   </Link>
                 )

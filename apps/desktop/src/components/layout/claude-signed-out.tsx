@@ -65,7 +65,7 @@ export function ClaudeSignedOutBanner() {
                 </p>
                 {out.apiKey ? (
                   <Button size="sm" variant="outline" className="h-7 shrink-0 bg-card" asChild>
-                    <Link to="/integrations?tab=api-keys">Check the key</Link>
+                    <Link to="/settings/api-keys">Check the key</Link>
                   </Button>
                 ) : !maySignIn ? null : state !== "waiting" ? (
                   <Button size="sm" className="h-7 shrink-0" onClick={() => start.mutate()} disabled={start.isPending}>

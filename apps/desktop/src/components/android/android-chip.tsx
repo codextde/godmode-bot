@@ -114,7 +114,7 @@ export function AndroidChip({
         {!isLoading && devices.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">
             <p className="text-xs text-muted-foreground">No phones yet.</p>
-            <Button size="sm" onClick={() => go("/android")}>
+            <Button size="sm" onClick={() => go("/settings/android")}>
               <Plus /> Connect a phone
             </Button>
           </div>
@@ -160,7 +160,7 @@ export function AndroidChip({
               </CommandList>
             </Command>
             <div className="border-t p-1">
-              <Button type="button" variant="ghost" size="sm" className="w-full justify-start font-normal text-muted-foreground" onClick={() => go("/android")}>
+              <Button type="button" variant="ghost" size="sm" className="w-full justify-start font-normal text-muted-foreground" onClick={() => go("/settings/android")}>
                 <Settings2 /> Manage phones
               </Button>
             </div>
@@ -180,7 +180,7 @@ export function AndroidField({ value, onChange }: { value: string[]; onChange: (
         <Smartphone className="size-5 shrink-0 text-muted-foreground" />
         <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No phones yet — connect one and this agent can use it.</p>
         <Button type="button" variant="outline" size="sm" asChild>
-          <Link to="/android">
+          <Link to="/settings/android">
             <Plus /> Connect a phone
           </Link>
         </Button>
@@ -194,7 +194,7 @@ export function AndroidField({ value, onChange }: { value: string[]; onChange: (
         <span id="agent-android-label" className="text-sm font-medium">
           Can control
         </span>
-        <Link to="/android" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
+        <Link to="/settings/android" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
           Manage phones <ArrowRight className="size-3" />
         </Link>
       </div>
