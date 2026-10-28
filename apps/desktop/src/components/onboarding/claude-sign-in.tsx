@@ -133,7 +133,7 @@ export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; cl
       <div className="flex items-center gap-2 text-[13px] font-medium">
         <Spinner className="size-3.5" />
         <span className="min-w-0 flex-1">{signsInFromAfar ? "Sign in on this device" : "Finish signing in in your browser"}</span>
-        <Button size="xs" variant="ghost" className="-my-1 -mr-1.5 text-muted-foreground" onClick={() => login.cancel.mutate()} disabled={login.cancel.isPending}>
+        <Button type="button" size="xs" variant="ghost" className="-my-1 -mr-1.5 text-muted-foreground" onClick={() => login.cancel.mutate()} disabled={login.cancel.isPending}>
           Cancel
         </Button>
       </div>
@@ -165,10 +165,10 @@ export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; cl
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <Button size="xs" variant={signsInFromAfar ? "default" : "outline"} className="h-7 px-2.5" onClick={openPage}>
+              <Button type="button" size="xs" variant={signsInFromAfar ? "default" : "outline"} className="h-7 px-2.5" onClick={openPage}>
                 <ExternalLink /> Open sign-in page
               </Button>
-              <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => void copy()}>
+              <Button type="button" size="xs" variant="outline" className="h-7 px-2.5" onClick={() => void copy()}>
                 <Copy /> {copied ? "Copy again" : "Copy link"}
               </Button>
             </div>

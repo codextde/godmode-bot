@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, CircleAlert, Globe, LogIn, RotateCw, Sparkles, UserRound } from "lucide-react";
@@ -23,6 +23,7 @@ import { StepCard, StepFooter } from "./step-kit";
 /** Installed in this order: uv first, the browser tools run on it. */
 const INSTALL_ORDER: DependencyId[] = ["claude", "uv", "browser-use", "chrome"];
 const BROWSER_IDS: DependencyId[] = ["uv", "browser-use", "chrome"];
+const ROW_IDS: DependencyId[] = ["claude", "claude-auth", ...BROWSER_IDS];
 const DETAIL_IDS: DependencyId[] = ["claude", "claude-auth", "uv", "browser-use", "chrome", "git"];
 
 type Job = { state: "installing" | "failed" | "done"; output?: string };
@@ -97,9 +98,15 @@ export function SetupStep({
         }
         setJobs((j) => ({ ...j, [id]: { state: "installing" } }));
         const res = await api.doctor.install(id).catch((e) => ({ ok: false, output: errorMessage(e) }));
-        r = await refresh();
-        const ok = find(r, id)?.ok ?? res.ok;
-        setJobs((j) => ({ ...j, [id]: { state: ok ? "done" : "failed", output: res.output } }));
+        let ok = res.ok;
+        try {
+          r = await refresh();
+          // A check that started before the install finished may still say it is missing.
+          if (res.ok && !find(r, id)?.ok) r = await refresh();
+          ok = find(r, id)?.ok ?? res.ok;
+        } finally {
+          setJobs((j) => ({ ...j, [id]: { state: ok ? "done" : "failed", output: res.output } }));
+        }
       }
       signIn(r);
     } catch (e) {
@@ -110,8 +117,7 @@ export function SetupStep({
     }
   };
 
-  const required = report?.dependencies.filter((d) => d.required) ?? [];
-  const allOk = !!report && required.every((d) => d.ok);
+  const allOk = !!report && ROW_IDS.every((id) => !missing(find(report, id)));
   const showBrowser = BROWSER_IDS.some((id) => find(report, id)?.required);
 
   const installRow = (ids: DependencyId[]): { state: RowState; job?: Job & { id: DependencyId } } => {
@@ -137,7 +143,7 @@ export function SetupStep({
           ? "failed"
           : !started
             ? "idle"
-            : running && (!claudeOk || !signInTried.current || login.start.isPending)
+            : login.start.isPending || (running && maySignIn && (!claudeOk || !signInTried.current))
               ? "waiting"
               : claudeOk && maySignIn
                 ? "action"
@@ -145,18 +151,18 @@ export function SetupStep({
 
   const rows = [claudeRow.state, accountState, ...(showBrowser ? [browserRow.state] : [])];
   const doneCount = rows.filter((s) => s === "done").length;
-  const finished = !!report && (allOk || (started && !running && login.state !== "waiting"));
+  const finished = !!report && (allOk || (started && !running && login.state !== "waiting" && !login.start.isPending));
   const first = userName.trim().split(/\s+/)[0];
   const mood = allOk ? "happy" : started && !running && !finished ? "attention" : running || login.state === "waiting" ? "working" : "idle";
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
+    if (!report) return;
     if (allOk) onNext(true);
     else void run();
   };
 
   return (
-    <form onSubmit={submit}>
+    <div>
       <div className="mb-8 flex flex-col items-start">
         <motion.div
           initial={{ opacity: 0, y: 6 }}
@@ -197,6 +203,9 @@ export function SetupStep({
               autoComplete="given-name"
               value={userName}
               onChange={(e) => onUserName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !started) submit();
+              }}
               placeholder="Your first name"
               className="h-10 pl-9 text-[15px]"
               maxLength={60}
@@ -324,7 +333,7 @@ export function SetupStep({
 
         {!started && !allOk ? (
           <div className="mt-7 border-t pt-6">
-            <SubmitButton busy={false} disabled={!report} className="h-12 text-[15px]">
+            <SubmitButton busy={false} disabled={!report} type="button" onClick={submit} className="h-12 text-[15px]">
               Set up Godmode
             </SubmitButton>
             <p className="mt-2.5 text-center text-xs text-muted-foreground">Installs everything by itself, then opens the Claude sign-in.</p>
@@ -348,7 +357,7 @@ export function SetupStep({
           <p className="mt-3 text-right text-xs text-muted-foreground">Agents start working once everything above is green. You can finish this later in Settings, System.</p>
         )}
       </StepCard>
-    </form>
+    </div>
   );
 }
 
