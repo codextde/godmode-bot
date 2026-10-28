@@ -6,6 +6,7 @@ import { deleteConversation, getConversation, startChat } from "../src/services/
 import { applyEdits, getArtifact, listArtifacts, listArtifactVersions } from "../src/services/artifacts";
 import { listActiveRuns, listRuns, waitForRun } from "../src/runner/runner";
 import { getAccessToken } from "../src/server/auth";
+import { updateSettings } from "../src/services/settings";
 
 let env: TestEnv;
 let agent: Agent;
@@ -13,6 +14,7 @@ let other: Agent;
 
 beforeAll(async () => {
   env = await setupEnv("godmode-artifacts-");
+  updateSettings({ artifacts: { enabled: true } });
   agent = await makeAgent({ name: "Builder" });
   other = await makeAgent({ name: "Other" });
 });

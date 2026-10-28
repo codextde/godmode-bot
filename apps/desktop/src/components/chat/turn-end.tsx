@@ -218,7 +218,7 @@ function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string
         <span className="min-w-0">Claude refused the Anthropic API key. Check it, then try again.</span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" asChild>
-            <Link to="/integrations?tab=api-keys">
+            <Link to="/settings/api-keys">
               API keys <ArrowUpRight />
             </Link>
           </Button>

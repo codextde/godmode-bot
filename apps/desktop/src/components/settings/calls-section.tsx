@@ -192,7 +192,7 @@ function SetupStatus({ setup }: { setup: ReturnType<typeof useCallSetup> }) {
         ) : (
           <>
             No ElevenLabs key yet. Add one under{" "}
-            <Link to="/integrations?tab=api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
+            <Link to="/settings/api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
               Integrations → API keys
             </Link>
             .

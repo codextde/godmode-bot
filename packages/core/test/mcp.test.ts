@@ -1554,6 +1554,7 @@ describe("settings tools", () => {
         "computer.screenshotMaxSize",
         "vm.onQuit",
         "vm.idleStopMinutes",
+        "artifacts.enabled",
         "voice.enabled",
         "voice.autoSpeak",
         "voice.language",

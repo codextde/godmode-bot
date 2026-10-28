@@ -159,7 +159,7 @@ export function AppTriggerFields({
           <Label htmlFor="automation-connection" className="text-xs text-muted-foreground">
             Account
           </Label>
-          <Link to="/integrations" className="flex items-center gap-0.5 text-xs text-muted-foreground transition hover:text-foreground">
+          <Link to="/settings/integrations" className="flex items-center gap-0.5 text-xs text-muted-foreground transition hover:text-foreground">
             Connect another app <ArrowUpRight className="size-3" />
           </Link>
         </div>
@@ -262,7 +262,7 @@ function ConnectHint({ title, description, action }: { title: string; descriptio
         <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
       </div>
       <Button asChild size="sm" variant="outline" className="shrink-0">
-        <Link to="/integrations">
+        <Link to="/settings/integrations">
           {action} <ArrowUpRight />
         </Link>
       </Button>

@@ -15,13 +15,13 @@ export default function ArtifactPage() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex h-10 shrink-0 items-center border-b bg-paper-2 px-2">
         <Button asChild variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
-          <Link to="/artifacts">
+          <Link to="/settings/artifacts">
             <ArrowLeft /> Artifacts
           </Link>
         </Button>
       </div>
       <div className="min-h-0 flex-1">
-        <ArtifactView id={artifactId} variant="page" onClose={() => navigate("/artifacts")} footer={<ChangeBar id={artifactId} />} />
+        <ArtifactView id={artifactId} variant="page" onClose={() => navigate("/settings/artifacts")} footer={<ChangeBar id={artifactId} />} />
       </div>
     </div>
   );

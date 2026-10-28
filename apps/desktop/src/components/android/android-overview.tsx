@@ -7,13 +7,13 @@ import type { AndroidDevice } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { EmptyState, PageBody, PageHeader } from "@/components/common";
+import { EmptyState } from "@/components/common";
 import { ConnectWifiDialog, EditPhoneDialog, ForgetPhoneDialog } from "@/components/android/android-dialogs";
 import { CONNECTION_LABEL } from "@/components/android/android-parts";
 import { DeviceCard } from "@/components/android/device-card";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
-import { useAndroidDevices, useAndroidStatus, useSettings } from "@/lib/hooks";
+import { useAndroidDevices, useAndroidStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 
 const STEPS = [
@@ -38,7 +38,7 @@ function SetupSteps() {
 
 function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; onEdit: (d: AndroidDevice) => void; onForget: (d: AndroidDevice) => void }) {
   return (
-    <div className="grid grid-cols-1 items-start gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
+    <div className="grid grid-cols-1 items-start gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
       <AnimatePresence initial={false}>
         {devices.map((device, i) => (
           <motion.div
@@ -59,11 +59,10 @@ function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; o
 }
 
 /** Android phones connected over adb: watch them, take control, give them to agents. */
-export default function AndroidPage() {
+export function AndroidOverview() {
   const qc = useQueryClient();
   const status = useAndroidStatus();
   const list = useAndroidDevices();
-  const { data: settings } = useSettings();
   const devices = list.data ?? [];
   const [wifiOpen, setWifiOpen] = useState(false);
   const [editing, setEditing] = useState<AndroidDevice | null>(null);
@@ -86,35 +85,24 @@ export default function AndroidPage() {
 
   const adb = status.data?.adb;
   const pending = status.data?.pending ?? [];
-  const off = settings?.android.enabled === false;
   const connected = devices.filter((d) => d.state === "connected").length;
 
   return (
-    <div className="relative">
-      <PageHeader
-        icon={<Smartphone />}
-        title="Android phones"
-        description="Phones connected to this computer over USB or Wi-Fi. Agents see the screen, tap, type, open apps and run commands — you watch live and can take over any time."
-        actions={
-          <>
-            <Button variant="outline" size="icon" aria-label="Look for phones again" onClick={() => refresh.mutate()} disabled={refresh.isPending || !adb?.installed}>
-              {refresh.isPending ? <Spinner className="size-4" /> : <RefreshCw />}
-            </Button>
-            <Button variant="outline" onClick={() => setWifiOpen(true)} disabled={!adb?.installed || off}>
-              <Wifi /> Connect over Wi-Fi
-            </Button>
-          </>
-        }
-      />
-      <PageBody>
-        {off ? (
-          <EmptyState
-            icon={<Smartphone />}
-            title="Android phones are turned off"
-            description="Turn them on in Settings → Android phones to let Godmode look for phones and agents control them."
-          />
-        ) : status.isLoading || list.isLoading ? (
-          <div className="grid grid-cols-1 gap-4 @3xl:grid-cols-2 @6xl:grid-cols-3">
+    <div className="@container relative space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="eyebrow">{devices.length ? `${connected} of ${devices.length} connected` : "Phones"}</h3>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon-sm" aria-label="Look for phones again" onClick={() => refresh.mutate()} disabled={refresh.isPending || !adb?.installed}>
+            {refresh.isPending ? <Spinner className="size-4" /> : <RefreshCw />}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setWifiOpen(true)} disabled={!adb?.installed}>
+            <Wifi /> Connect over Wi-Fi
+          </Button>
+        </div>
+      </div>
+      <div>
+        {status.isLoading || list.isLoading ? (
+          <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {[0, 1].map((i) => (
               <Skeleton key={i} className="h-96 rounded-xl" />
             ))}
@@ -126,7 +114,7 @@ export default function AndroidPage() {
             description={
               status.data?.canInstall
                 ? "adb is Android's free debugging bridge from Google. Godmode installs its own copy (about 16 MB) — nothing else on your computer changes."
-                : "Install Android's platform-tools (adb) and make sure it's on your PATH, or set its path in Settings → Android phones."
+                : "Install Android's platform-tools (adb) and make sure it's on your PATH, or set its path below."
             }
             action={
               status.data?.canInstall && (
@@ -196,10 +184,6 @@ export default function AndroidPage() {
               />
             ) : (
               <>
-                <p className="text-xs text-muted-foreground">
-                  {connected} of {devices.length} connected · adb {adb?.version ?? ""}
-                  {adb?.managed ? " (Godmode's copy)" : ""}
-                </p>
                 <DeviceGrid devices={devices.filter((d) => d.state !== "disconnected")} onEdit={setEditing} onForget={setForgetting} />
                 {devices.some((d) => d.state === "disconnected") && (
                   <section aria-label="Not connected" className="mt-4 grid gap-3">
@@ -211,7 +195,7 @@ export default function AndroidPage() {
             )}
           </div>
         )}
-      </PageBody>
+      </div>
 
       <ConnectWifiDialog open={wifiOpen} onOpenChange={setWifiOpen} />
       <EditPhoneDialog device={editing} onClose={() => setEditing(null)} />

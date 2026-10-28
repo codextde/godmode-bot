@@ -26,6 +26,7 @@ import { all, bool, get, insert, run as exec, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { getSettings } from "../services/settings";
 import { notify } from "../services/notifications";
 import * as vault from "../vault/vault";
 import { sha256 } from "../vault/crypto";
@@ -111,6 +112,8 @@ const notified = new Map<string, string>();
 let unsubscribe: (() => void) | null = null;
 let syncing: Promise<void> | null = null;
 let syncAgain = false;
+/** The messaging switch (Settings → Messaging) as the last sync saw it: off, no bot runs. */
+let switchedOn: boolean | null = null;
 
 const secretsContext = (id: string) => `messaging_connections.secrets:${id}`;
 
@@ -598,17 +601,18 @@ async function stopRuntime(id: string) {
 }
 
 async function syncOnce() {
+  const on = (switchedOn = getSettings().messaging.enabled);
   const rows = all<ConnectionRow>("SELECT * FROM messaging_connections");
   const unlocked = vault.isUnlocked();
-  const wanted = new Map(rows.filter((r) => bool(r.enabled) && unlocked).map((r) => [r.id, r]));
+  const wanted = new Map(rows.filter((r) => on && bool(r.enabled) && unlocked).map((r) => [r.id, r]));
   // Keep running adapters when the vault locks: their tokens are already in memory, and people keep talking.
   for (const id of [...runtimes.keys()]) {
     const row = rows.find((r) => r.id === id);
-    if (!row || !bool(row.enabled) || (unlocked && runtimes.get(id)!.fingerprint !== fingerprintOf(row))) await stopRuntime(id);
+    if (!on || !row || !bool(row.enabled) || (unlocked && runtimes.get(id)!.fingerprint !== fingerprintOf(row))) await stopRuntime(id);
   }
   for (const id of wanted.keys()) {
     const row = connectionRow(id);
-    if (runtimes.has(id) || !row || !bool(row.enabled)) continue;
+    if (!getSettings().messaging.enabled || runtimes.has(id) || !row || !bool(row.enabled)) continue;
     try {
       await startRuntime(row);
       startErrors.delete(id);
@@ -644,6 +648,7 @@ function requestSync() {
 
 function onBusEvent(event: ServerEvent) {
   if (event.type === "vault.status") requestSync();
+  if (event.type === "entity.changed" && event.entity === "settings" && getSettings().messaging.enabled !== switchedOn) requestSync();
   if (event.type === "question.updated" && event.question.answer) {
     void followAnsweredRun(event.question).catch((err) => log.warn("could not follow an answered run", err));
   }

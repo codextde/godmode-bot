@@ -3,6 +3,7 @@ import { Navigate, NavLink, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
+  AppWindow,
   AudioLines,
   BrainCircuit,
   Box,
@@ -15,10 +16,13 @@ import {
   Globe,
   HeartPulse,
   Info,
+  KeyRound,
   KeySquare,
   Laptop,
+  MessageCircle,
   MonitorUp,
   Phone,
+  Plug,
   RefreshCw,
   ScrollText,
   Settings2,
@@ -32,6 +36,8 @@ import { EmptyState, PageBody, PageHeader } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
 import { AiSection } from "@/components/settings/ai-section";
 import { AndroidSection } from "@/components/settings/android-section";
+import { ApiKeysSection } from "@/components/settings/api-keys-section";
+import { ArtifactsSection } from "@/components/settings/artifacts-section";
 import { BackupSection } from "@/components/settings/backup-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
@@ -41,12 +47,15 @@ import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { ConnectSection } from "@/components/settings/connect-section";
 import { DevicesSection } from "@/components/settings/devices-section";
+import { FEATURES, featureOn } from "@/components/settings/feature-section";
 import { FilesSection } from "@/components/settings/files-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
+import { IntegrationsSection } from "@/components/settings/integrations-section";
 import { LicenseSection } from "@/components/settings/license-section";
 import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
+import { MessagingSection } from "@/components/settings/messaging-section";
 import { PhoneSection } from "@/components/settings/phone-section";
 import { SecuritySection } from "@/components/settings/security-section";
 import { SystemSection } from "@/components/settings/system-section";
@@ -66,11 +75,15 @@ const SECTIONS = [
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
   { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
   { id: "vms", label: "Virtual machines", icon: <Box />, group: "Preferences" },
-  { id: "android", label: "Android phones", icon: <Smartphone />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
   { id: "calls", label: "Phone calls", icon: <Phone />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
+  { id: "artifacts", label: "Artifacts", icon: <AppWindow />, group: "Features" },
+  { id: "integrations", label: "Integrations", icon: <Plug />, group: "Features" },
+  { id: "messaging", label: "Messaging", icon: <MessageCircle />, group: "Features" },
+  { id: "android", label: "Android phones", icon: <Smartphone />, group: "Features" },
   { id: "files", label: "Files", icon: <FolderOpen />, group: "Data & privacy" },
+  { id: "api-keys", label: "API keys", icon: <KeyRound />, group: "Data & privacy" },
   { id: "security", label: "Security", icon: <ShieldCheck />, group: "Data & privacy" },
   { id: "backup", label: "Backup", icon: <DatabaseBackup />, group: "Data & privacy" },
   { id: "phone", label: "Phone", icon: <Smartphone />, group: "App" },
@@ -96,6 +109,10 @@ const EASY: Partial<Record<SectionId, { label: string; group: string }>> = {
   voice: { label: "Voice", group: "Everyday" },
   calls: { label: "Phone calls", group: "Everyday" },
   phone: { label: "Phone app", group: "Everyday" },
+  artifacts: { label: "Dashboards & apps", group: "Extras" },
+  integrations: { label: "Connected apps", group: "Extras" },
+  messaging: { label: "Chat apps", group: "Extras" },
+  android: { label: "Android phones", group: "Extras" },
   security: { label: "Security", group: "Account" },
   backup: { label: "Backup", group: "Account" },
   license: { label: "License", group: "Account" },
@@ -110,7 +127,7 @@ const EASY_ADVANCED_LABEL: Partial<Record<SectionId, string>> = {
 };
 
 /** Sections that render without the settings document (they use their own endpoints). */
-const STANDALONE: SectionId[] = ["files", "backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
+const STANDALONE: SectionId[] = ["files", "api-keys", "backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
 
 export default function SettingsPage() {
   const { section } = useParams();
@@ -145,11 +162,15 @@ export default function SettingsPage() {
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
       vms: () => <VmSection settings={s} />,
+      artifacts: () => <ArtifactsSection settings={s} />,
+      integrations: () => <IntegrationsSection settings={s} />,
+      messaging: () => <MessagingSection settings={s} />,
       android: () => <AndroidSection settings={s} />,
       voice: () => <VoiceSection settings={s} />,
       calls: () => <CallsSection settings={s} />,
       memory: () => <MemorySection settings={s} />,
       files: () => <FilesSection />,
+      "api-keys": () => <ApiKeysSection />,
       security: () => <SecuritySection settings={s} />,
       backup: () => <BackupSection />,
       phone: () => <PhoneSection settings={s} />,
@@ -191,11 +212,29 @@ export default function SettingsPage() {
 }
 
 type NavEntry = { id: SectionId; label: string; icon: ReactNode; group: string };
+type Marks = Partial<Record<SectionId, ReactNode>>;
+
+/** Next to the optional features: "Off", or what waits for the human there (people who asked to talk to a bot). */
+function useMarks(): Marks {
+  const { data: boot } = useBootstrap();
+  if (!boot) return {};
+  const marks: Marks = {};
+  for (const feature of FEATURES) if (!featureOn(boot.settings, feature)) marks[feature] = <span className="text-[11px] text-muted-foreground/70">Off</span>;
+  const requests = featureOn(boot.settings, "messaging") ? boot.counts.messagingRequests : 0;
+  if (requests)
+    marks.messaging = (
+      <span className="rounded-[5px] bg-brand-soft px-1.5 font-mono text-[10.5px] leading-4 font-medium text-brand-strong tabular-nums" aria-label={`${requests} waiting`}>
+        {requests}
+      </span>
+    );
+  return marks;
+}
 
 function SectionNav({ active }: { active: SectionId }) {
   const easy = useEasyMode();
   const [showAdvanced, setShowAdvanced] = useState(false);
-  if (!easy) return <SectionList active={active} entries={SECTIONS} />;
+  const marks = useMarks();
+  if (!easy) return <SectionList active={active} entries={SECTIONS} marks={marks} />;
   const everyday: NavEntry[] = (Object.keys(EASY) as SectionId[]).map((id) => ({ ...SECTIONS.find((s) => s.id === id)!, ...EASY[id]! }));
   const advanced: NavEntry[] = SECTIONS.flatMap((s) =>
     EASY[s.id] ? [] : [{ ...s, label: EASY_ADVANCED_LABEL[s.id] ?? s.label, group: "Advanced" }],
@@ -205,6 +244,7 @@ function SectionNav({ active }: { active: SectionId }) {
     <SectionList
       active={active}
       entries={open ? [...everyday, ...advanced] : everyday}
+      marks={marks}
       footer={
         !open && (
           <button
@@ -221,7 +261,7 @@ function SectionNav({ active }: { active: SectionId }) {
   );
 }
 
-function SectionList({ active, entries, footer }: { active: SectionId; entries: readonly NavEntry[]; footer?: ReactNode }) {
+function SectionList({ active, entries, marks, footer }: { active: SectionId; entries: readonly NavEntry[]; marks: Marks; footer?: ReactNode }) {
   return (
     <nav
       aria-label="Settings sections"
@@ -256,6 +296,7 @@ function SectionList({ active, entries, footer }: { active: SectionId; entries: 
               )}
               <span className={cn("relative", isActive ? "text-foreground" : "text-muted-foreground")}>{s.icon}</span>
               <span className="relative">{s.label}</span>
+              {marks[s.id] && <span className="relative ml-auto pl-2">{marks[s.id]}</span>}
             </NavLink>
           </div>
         );

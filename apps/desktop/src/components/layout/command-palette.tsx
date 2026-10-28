@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
+  AppWindow,
   Archive,
   AudioLines,
   ArrowLeft,
@@ -14,6 +15,7 @@ import {
   CreditCard,
   FolderOpen,
   DatabaseBackup,
+  Fingerprint,
   Gauge,
   Globe,
   HeartPulse,
@@ -57,7 +59,7 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command";
-import { useAllAgents, useConversations, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useConversations, useWorkspaces } from "@/lib/hooks";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { useStartAgentChat } from "@/components/agents/agent-actions";
 import { ATTENTION_ICON } from "@/components/attention/attention-list";
@@ -79,10 +81,14 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
   { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux" },
-  { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device" },
   { id: "voice", label: "Voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
   { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound" },
   { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
+  { id: "artifacts", label: "Artifacts", icon: AppWindow, words: "dashboards apps trackers tools build feature turn on off" },
+  { id: "integrations", label: "Integrations", icon: Plug, words: "connected apps composio api tools mcp servers gmail slack notion feature turn on off" },
+  { id: "messaging", label: "Messaging", icon: MessageCircle, words: "chat apps slack telegram microsoft teams bots feature turn on off" },
+  { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device feature turn on off" },
+  { id: "api-keys", label: "API keys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
   { id: "files", label: "Files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
   { id: "backup", label: "Backup", icon: DatabaseBackup, words: "restore export import" },
@@ -120,6 +126,7 @@ export function CommandPalette() {
   const named = (path: string, pro: string) => (mode === "easy" ? (EASY_PAGES[path]?.title ?? pro) : pro);
   const alias = (path: string, pro: string) => (mode === "easy" && EASY_PAGES[path]?.title ? [pro, EASY_PAGES[path]!.title!] : undefined);
   const { data: agents = [] } = useAllAgents();
+  const on = useBootstrap().data?.settings;
   const { data: conversations = [] } = useConversations();
   const { data: workspaces = [] } = useWorkspaces();
   const scope = useUi((s) => s.workspace);
@@ -364,21 +371,33 @@ export function CommandPalette() {
           <CommandItem value="archived tasks board tickets" onSelect={() => go("/tasks?view=archived")}>
             <Archive /> Archived tasks
           </CommandItem>
-          <CommandItem keywords={alias("/vault/logins", "Logins")} onSelect={() => go("/vault/logins")}>
-            <KeyRound /> {named("/vault/logins", "Logins")}
+          <CommandItem value="passwords logins vault" onSelect={() => go("/vault/logins")}>
+            <KeyRound /> Passwords
           </CommandItem>
-          <CommandItem keywords={alias("/vault/2fa", "2FA codes")} onSelect={() => go("/vault/2fa")}>
-            <ShieldCheck /> {named("/vault/2fa", "2FA codes")}
+          <CommandItem value="2fa codes two-factor authenticator totp otp" onSelect={() => go("/vault/2fa")}>
+            <ShieldCheck /> 2FA codes
+          </CommandItem>
+          <CommandItem value="passkeys webauthn" onSelect={() => go("/vault/passkeys")}>
+            <Fingerprint /> Passkeys
           </CommandItem>
           <CommandItem value="cards payment credit cards purchases subscriptions" keywords={alias("/vault/cards", "Cards")} onSelect={() => go("/vault/cards")}>
             <CreditCard /> {named("/vault/cards", "Cards")}
           </CommandItem>
-          <CommandItem keywords={alias("/integrations", "Integrations")} onSelect={() => go("/integrations")}>
-            <Plug /> {named("/integrations", "Integrations")}
-          </CommandItem>
-          <CommandItem value="messaging slack telegram microsoft teams bots" keywords={alias("/messaging", "Messaging")} onSelect={() => go("/messaging")}>
-            <MessageCircle /> {named("/messaging", "Messaging")}
-          </CommandItem>
+          {on?.artifacts.enabled && (
+            <CommandItem value="artifacts dashboards apps trackers" keywords={mode === "easy" ? ["Dashboards & apps"] : undefined} onSelect={() => go("/settings/artifacts")}>
+              <AppWindow /> {mode === "easy" ? "Dashboards & apps" : "Artifacts"}
+            </CommandItem>
+          )}
+          {on?.integrations.enabled && (
+            <CommandItem value="integrations connected apps composio api tools mcp servers" onSelect={() => go("/settings/integrations")}>
+              <Plug /> {mode === "easy" ? "Connected apps" : "Integrations"}
+            </CommandItem>
+          )}
+          {on?.messaging.enabled && (
+            <CommandItem value="messaging chat apps slack telegram microsoft teams bots" onSelect={() => go("/settings/messaging")}>
+              <MessageCircle /> {mode === "easy" ? "Chat apps" : "Messaging"}
+            </CommandItem>
+          )}
           <CommandItem value="calls phone calls elevenlabs voice transcripts" keywords={alias("/calls", "Calls")} onSelect={() => go("/calls")}>
             <Phone /> {named("/calls", "Calls")}
           </CommandItem>
@@ -394,6 +413,11 @@ export function CommandPalette() {
           <CommandItem value="ssh servers remote linux" keywords={alias("/ssh", "SSH servers")} onSelect={() => go("/ssh")}>
             <Server /> {named("/ssh", "SSH servers")}
           </CommandItem>
+          {on?.android.enabled && (
+            <CommandItem value="android phones adb emulator devices" onSelect={() => go("/settings/android")}>
+              <Smartphone /> Android phones
+            </CommandItem>
+          )}
           <CommandItem value="runners remote computer mac mini" keywords={alias("/runners", "Runners")} onSelect={() => go("/runners")}>
             <MonitorSmartphone /> {named("/runners", "Runners")}
           </CommandItem>
