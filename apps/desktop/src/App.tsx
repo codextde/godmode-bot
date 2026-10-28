@@ -41,7 +41,6 @@ const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
 const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
 const AndroidDevicePage = lazy(() => import("@/pages/android/android-device-page"));
 const CallsPage = lazy(() => import("@/pages/calls/calls-page"));
-const RunnersPage = lazy(() => import("@/pages/runners/runners-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
 const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
 
@@ -226,7 +225,6 @@ export function App() {
           <Route path="/android" element={<ToSettings section="android" />} />
           <Route path="/android/:id" element={b.settings.android.enabled ? <AndroidDevicePage /> : <ToSettings section="android" />} />
           <Route path="/calls" element={<CallsPage />} />
-          <Route path="/runners" element={<RunnersPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:section" element={<SettingsPage />} />

@@ -16,7 +16,6 @@ import {
   Lock,
   MessageSquarePlus,
   MessagesSquare,
-  MonitorSmartphone,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -198,7 +197,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
     { to: "/ssh", label: "SSH servers", icon: <Server /> },
-    { to: "/runners", label: "Runners", icon: <MonitorSmartphone /> },
   ];
   // Easy mode: the everyday pages in plain words up front, every other page under More.
   const byPath = new Map([...workNav, ...machineNav].map((item) => [item.to, item]));
@@ -219,7 +217,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/computer", "Computer control"),
     easyItem("/vms", "Virtual machines"),
     easyItem("/ssh", "Servers"),
-    easyItem("/runners", "Other computers"),
   ];
 
   return (

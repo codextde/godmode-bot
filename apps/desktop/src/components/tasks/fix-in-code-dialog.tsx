@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { GitMerge, GitPullRequestArrow, Wrench } from "lucide-react";
 import { toast } from "sonner";
-import { hostedRepo, type LogIssue, type RemoteRunner } from "@godmode/shared";
+import { hostedRepo, type LogIssue } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 const MAX_NOTE = 4000;
 const PREVIEW = 3;
 
-export type FixSource = { kind: "local"; issues?: LogIssue[] } | { kind: "runner"; runner: RemoteRunner };
+export type FixSource = { kind: "local"; issues?: LogIssue[] };
 
 function repoName(url: string): string {
   return hostedRepo(url)?.path ?? url.replace(/^https?:\/\//, "").replace(/\.git$/, "");
@@ -47,10 +47,7 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
   }, [open]);
 
   const file = useMutation({
-    mutationFn: (s: FixSource) => {
-      const input = { note: note.trim() || undefined, autoMerge: merge };
-      return s.kind === "local" ? api.logs.fix(input) : api.runners.fixInCode(s.runner.id, input);
-    },
+    mutationFn: () => api.logs.fix({ note: note.trim() || undefined, autoMerge: merge }),
     onSuccess: ({ task }) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
       onClose();
@@ -68,11 +65,11 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
   const who = agent?.name ?? "An agent";
   const base = settings?.baseBranch || "main";
   const noRepo = !!settings && !settings.repoUrl;
-  const issues = source.kind === "local" ? (source.issues ?? []) : [];
-  const where = source.kind === "local" ? "this computer's log" : `${source.runner.name}'s log and health checks`;
+  const issues = source.issues ?? [];
+  const where = "this computer's log";
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!file.isPending) file.mutate(source);
+    if (!file.isPending) file.mutate();
   };
 
   return (
@@ -129,7 +126,7 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
               maxLength={MAX_NOTE}
               rows={3}
               autoFocus
-              placeholder="Optional, e.g. “Chats on the runner stop after a few minutes”"
+              placeholder="Optional, e.g. “Chats stop after a few minutes”"
               className="resize-none"
             />
           </div>
@@ -155,7 +152,7 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
               </Button>
               <Button type="submit" disabled={file.isPending || !settings || noRepo}>
                 {file.isPending ? <Spinner /> : <Wrench />}
-                {file.isPending ? (source.kind === "runner" ? "Reading the log…" : "Filing…") : "File the fix"}
+                {file.isPending ? "Filing…" : "File the fix"}
               </Button>
             </div>
           </DialogFooter>
