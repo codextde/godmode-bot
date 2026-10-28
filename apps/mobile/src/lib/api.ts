@@ -65,6 +65,7 @@ import type {
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
+import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
 import { useSession, type Connection } from "./session";
@@ -629,7 +630,13 @@ export const api = {
     get: (id: string) => get<Run>(`/api/runs/${id}`),
     /** The run's raw stream-json log. */
     log: (id: string) => get<string>(`/api/runs/${id}/log`),
-    cancel: (id: string) => post<{ ok: true }>(`/api/runs/${id}/cancel`),
+    /** A run that had ended without the phone hearing of it (its chat changed computers) stops showing at once. */
+    cancel: async (id: string) => {
+      const res = await post<{ ok: true }>(`/api/runs/${id}/cancel`);
+      const run = await get<Run>(`/api/runs/${id}`).catch(() => null);
+      if (run && (run.status === "succeeded" || run.status === "failed" || run.status === "cancelled")) useLive.getState().runFinished(run);
+      return res;
+    },
   },
 
   routines: {

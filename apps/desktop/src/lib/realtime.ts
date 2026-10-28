@@ -1,5 +1,6 @@
 import type { InvalidateQueryFilters, QueryClient } from "@tanstack/react-query";
-import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type DeviceGroup, type EntityName, type Message, type RemoteRunner, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
+import { browserView, type AgentQuestion, type AutomationEvent, type BrowserProfile, type ClientEvent, type ConversationWithMessages, type DeviceGroup, type EntityName, type Message, type RemoteRunner, type Run, type ServerEvent, type Task, type TaskEvent, type Vm } from "@godmode/shared";
+import { api } from "./api";
 import { wsUrl } from "./core";
 import { useLive } from "@/stores/live";
 import { setChatMove, useChatMoves } from "@/stores/chatMoves";
@@ -13,6 +14,8 @@ let socket: WebSocket | null = null;
 let retry = 0;
 let stopped = false;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
+let staleTimer: ReturnType<typeof setInterval> | null = null;
+let client: QueryClient | null = null;
 const pendingSends: ClientEvent[] = [];
 
 /** Subscribe to raw server events (returns unsubscribe). */
@@ -102,13 +105,51 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
 
 export function startRealtime(queryClient: QueryClient) {
   stopped = false;
+  client = queryClient;
   void connect(queryClient);
+  staleTimer ??= setInterval(() => void dropEndedRuns(), STALE_CHECK_MS);
   return () => {
     stopped = true;
     socket?.close();
     socket = null;
     if (pingTimer) clearInterval(pingTimer);
+    if (staleTimer) clearInterval(staleTimer);
+    staleTimer = null;
   };
+}
+
+const ENDED: ReadonlySet<Run["status"]> = new Set(["succeeded", "failed", "cancelled"]);
+const STALE_CHECK_MS = 60_000;
+const STALE_AFTER_MS = 2 * 60_000;
+
+/**
+ * Asks for a run this window shows as working: one that ended without this window hearing of it (its end was told
+ * while its chat changed computers) goes. True when it was over.
+ */
+export async function settleRun(runId: string): Promise<boolean> {
+  const run = await api.runs.get(runId).catch(() => null);
+  if (!run || !ENDED.has(run.status) || !useLive.getState().runs[runId]) return false;
+  if (client) handle(client, { type: "run.finished", run });
+  else useLive.getState().runFinished(run);
+  return true;
+}
+
+let sweeping = false;
+
+/** Runs that look busy for a while but aren't among the working ones are asked for one by one. */
+async function dropEndedRuns() {
+  if (sweeping || !useLive.getState().connected) return;
+  const old = Object.values(useLive.getState().runs).filter((r) => Date.now() - r.startedAt > STALE_AFTER_MS);
+  if (!old.length) return;
+  sweeping = true;
+  try {
+    const working = new Set((await api.runs.list({ status: "queued,running,paused", limit: 500 })).map((r) => r.id));
+    for (const r of old) if (!working.has(r.runId)) await settleRun(r.runId);
+  } catch {
+    /* next round */
+  } finally {
+    sweeping = false;
+  }
 }
 
 async function connect(queryClient: QueryClient) {
