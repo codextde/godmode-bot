@@ -278,20 +278,14 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
-  // Runners: seeing them is fine from anywhere. Pairing, copying the setup (logins, 2FA, sessions) to them, fixing,
-  // updating and removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the
+  // Runners: seeing them is fine from anywhere. Copying the setup (logins, 2FA, sessions) to them, updating and
+  // removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the
   // computer. The proxy to a runner (/api/runners/:id/proxy/…) matches no entry, so it is refused as well.
   ["GET", "/api/runners", A],
   ["GET", "/api/runners/:id", A],
-  ["GET", "/api/runners/:id/health", A],
   ["POST", "/api/runners/:id/connect", A],
-  ["POST|DELETE", "/api/runners/pairing", refused(COMPUTER_ONLY)],
-  ["POST", "/api/runners", refused(COMPUTER_ONLY)],
   ["PATCH|DELETE", "/api/runners/:id", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/sync", refused(COMPUTER_ONLY)],
-  ["POST", "/api/runners/:id/health/fix", refused(COMPUTER_ONLY)],
-  ["POST", "/api/runners/:id/autofix", refused(COMPUTER_ONLY)],
-  ["POST", "/api/runners/:id/fix-in-code", refused(COMPUTER_ONLY)],
   ["POST", "/api/runners/:id/update", refused(COMPUTER_ONLY)],
   // Device groups: looking and handing work over is fine from anywhere; who belongs to the group is decided on the computers.
   ["GET", "/api/devices", A],

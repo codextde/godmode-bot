@@ -1,12 +1,13 @@
 /**
- * `godmode runner <command>`: set this computer up as a runner, run it, look at it, take the service away again.
+ * `godmode runner <command>`: the runners paired before device groups. Run one, look at it, set its service up again
+ * (the update script does) or take it away. New runners can't be paired any more.
  *
  * The subcommands live in one table (`commands`), so further ones slot in next to them.
  */
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { RUNNER_DEFAULT_PORT, parseRunnerOffer, type RunnerCheck, type RunnerHealth, type RunnerPairingOfferPayload } from "@godmode/shared";
+import { RUNNER_DEFAULT_PORT, type RunnerCheck, type RunnerHealth } from "@godmode/shared";
 import { loadConfig, runnerDataDir, VERSION, type CoreConfig } from "../config";
 import { all, getMeta, openDb, setMeta } from "../db";
 import { getAccessToken } from "../server/auth";
@@ -15,7 +16,6 @@ import { safeEqual } from "../vault/crypto";
 import * as vault from "../vault/vault";
 import { runnerHealth } from "./health";
 import { installService, serviceStatus, serviceSupported, uninstallService } from "./launchd";
-import { createRunnerCode, deliverCode } from "./pairing";
 
 /** How long `runner install` waits for the service it just started. */
 const START_TIMEOUT_MS = 30_000;
@@ -121,9 +121,8 @@ interface CommandContext {
 }
 
 export const USAGE = `Usage:
-  godmode runner install [--pair <gmo1…>] [--link-port <n>] [--no-service]
-                                      Set this computer up as a runner that starts when you log in, and pair it
-  godmode runner pair [<gmo1…>]       Show a new pairing code (or send it to the Godmode that made the offer)
+  godmode runner install [--link-port <n>] [--no-service]
+                                      Set the runner up to start when you log in (again)
   godmode runner serve [--link-port <n>] [--port <n>] [--data-dir <dir>]
                                       Run the runner in the foreground (--port: its loopback API, random by default)
   godmode runner status               Show the service, the link port, paired computers and the health checks
@@ -164,43 +163,6 @@ function linkPortOption(value: string | boolean | undefined): number | undefined
   return Number.isInteger(port) && port >= 0 && port < 65536 ? port : Number.NaN;
 }
 
-/** The pairing offer of an install command, when one was given. */
-function offerOption(ctx: CommandContext, value: string | boolean | undefined): RunnerPairingOfferPayload | null | false {
-  if (value === undefined) return null;
-  const offer = typeof value === "string" ? parseRunnerOffer(value) : null;
-  if (!offer) {
-    ctx.print("That pairing offer is damaged — copy the install command from Godmode again.");
-    return false;
-  }
-  return offer;
-}
-
-/**
- * The last step of setting a runner up: a pairing code, sent to the Godmode that made the offer when there is one,
- * else shown to be pasted there. The code only works while the runner serves (it is checked by the serving process).
- */
-async function pairStep(ctx: CommandContext, offer: RunnerPairingOfferPayload | null, serving: boolean): Promise<number> {
-  const { code } = await createRunnerCode();
-  if (offer && serving) {
-    ctx.print(`Pairing with ${offer.name}…`);
-    const result = await deliverCode(offer, code);
-    if (result.ok) {
-      ctx.print(`Paired with ${result.name ?? offer.name}. It can give this computer work now.`);
-      return 0;
-    }
-    ctx.print(`Couldn't pair automatically: ${result.error ?? "Godmode didn't answer"}`);
-  }
-  ctx.print("");
-  ctx.print("Pairing code (valid for 10 minutes, once):");
-  ctx.print("");
-  ctx.print(code);
-  ctx.print("");
-  ctx.print("In Godmode: Runners → Add runner → Enter a pairing code, and paste it there.");
-  if (!serving) ctx.print("The code works once the runner is running: godmode runner serve");
-  // The runner is set up either way, and the code on screen pairs it: not a failure of the command.
-  return 0;
-}
-
 async function install(ctx: CommandContext): Promise<number> {
   // `--port` is still understood here, as it was before `--link-port` existed.
   const asked = ctx.values["link-port"] ?? ctx.values.port;
@@ -210,17 +172,13 @@ async function install(ctx: CommandContext): Promise<number> {
     return 2;
   }
   const port = parsed ?? null;
-  const offer = offerOption(ctx, ctx.values.pair);
-  if (offer === false) return 2;
   const cfg = open(ctx);
   // The port Godmode reaches this runner on. One chosen earlier stays unless another is asked for: paired computers dial it.
   if (port !== null || getMeta("link.port") === null) setMeta("link.port", String(port ?? RUNNER_DEFAULT_PORT));
 
-  let serving = false;
   if (ctx.values["no-service"] || !serviceSupported()) {
     ctx.print(`The runner is set up in ${cfg.dataDir}.`);
     ctx.print(serviceSupported() ? "Start it with: godmode runner serve" : "Starting at login is only available on macOS. Start it with: godmode runner serve");
-    serving = !!runningRunner(cfg.dataDir);
   } else {
     const since = Date.now();
     await installService({ ...self(), dataDir: cfg.dataDir });
@@ -230,18 +188,8 @@ async function install(ctx: CommandContext): Promise<number> {
       return 1;
     }
     ctx.print(`The runner is running (pid ${runner.pid}) and starts whenever you log in on this Mac.`);
-    serving = true;
   }
-  return pairStep(ctx, offer, serving);
-}
-
-async function pair(ctx: CommandContext, positionals: string[] = []): Promise<number> {
-  const offer = offerOption(ctx, positionals[0] ?? (ctx.values.pair as string | undefined));
-  if (offer === false) return 2;
-  const cfg = open(ctx);
-  const serving = !!runningRunner(cfg.dataDir);
-  if (!serving) ctx.print("The runner isn't running on this computer right now.");
-  return pairStep(ctx, offer, serving);
+  return 0;
 }
 
 async function serve(ctx: CommandContext): Promise<number> {
@@ -288,7 +236,7 @@ async function status(ctx: CommandContext): Promise<number> {
     `Paired     ${
       controllers.length
         ? controllers.map((c) => `${c.name}${c.last_seen_at ? ` (last connected ${c.last_seen_at})` : ""}`).join(", ")
-        : "nothing yet — run `godmode runner pair`"
+        : "nothing"
     }`,
   );
   ctx.print("");
@@ -309,7 +257,7 @@ async function uninstall(ctx: CommandContext): Promise<number> {
   return 0;
 }
 
-const commands: Record<string, (ctx: CommandContext, positionals: string[]) => Promise<number>> = { install, pair, serve, status, uninstall };
+const commands: Record<string, (ctx: CommandContext, positionals: string[]) => Promise<number>> = { install, serve, status, uninstall };
 
 /** Runs `godmode runner <argv…>` and resolves with the exit code. `serve` resolves once the runner listens. */
 export async function runRunnerCli(argv: string[], host: RunnerCliHost): Promise<number> {
@@ -318,7 +266,6 @@ export async function runRunnerCli(argv: string[], host: RunnerCliHost): Promise
     options: {
       port: { type: "string" },
       "link-port": { type: "string" },
-      pair: { type: "string" },
       "data-dir": { type: "string" },
       "no-service": { type: "boolean" },
     },
