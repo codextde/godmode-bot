@@ -13,6 +13,10 @@ name: Release
 # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID and for notarization either an App Store Connect
 # API key (APPLE_API_ISSUER, APPLE_API_KEY = key id, APPLE_API_KEY_P8 = contents of the .p8) or APPLE_ID + APPLE_PASSWORD.
 #
+# Official releases fail instead of shipping anything unsigned: the DMGs, the apps inside them, the update bundles and
+# the standalone macOS binaries are all checked with scripts/macos-verify.sh, and verify-downloads.yml re-checks what
+# usegodmode.com serves every morning (it opens an issue when Gatekeeper would refuse a download).
+#
 # Required secrets for auto-update: TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD (the key matching
 # `plugins.updater.pubkey` in tauri.conf.json). They sign the update bundles and add latest.json to the release;
 # installed apps pick the update up once the release is published.
@@ -90,6 +94,41 @@ jobs:
             echo "::error::Set the TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets (see the top of release.yml)."
             exit 1
           fi
+
+      - name: Check the Apple signing setup
+        if: github.repository == 'codextde/godmode-bot'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          # An official release is never shipped unsigned: macOS would only offer to move it to the Trash.
+          missing=0
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_TEAM_ID APPLE_API_ISSUER APPLE_API_KEY APPLE_API_KEY_P8; do
+            if [ -z "${!name}" ]; then echo "::error::the $name secret is missing (see the top of release.yml)"; missing=1; fi
+          done
+          [ "$missing" = 0 ] || exit 1
+          [[ "$APPLE_SIGNING_IDENTITY" == "Developer ID Application: "*"($APPLE_TEAM_ID)" || "$APPLE_SIGNING_IDENTITY" =~ ^[0-9A-Fa-f]{40}$ ]] ||
+            { echo "::error::APPLE_SIGNING_IDENTITY must be a Developer ID Application identity of team $APPLE_TEAM_ID"; exit 1; }
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          export PW="$APPLE_CERTIFICATE_PASSWORD"
+          openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -passin env:PW -nokeys -clcerts -out "$RUNNER_TEMP/cert.pem" 2>/dev/null ||
+            openssl pkcs12 -legacy -in "$RUNNER_TEMP/cert.p12" -passin env:PW -nokeys -clcerts -out "$RUNNER_TEMP/cert.pem" ||
+            { echo "::error::APPLE_CERTIFICATE can't be opened with APPLE_CERTIFICATE_PASSWORD"; exit 1; }
+          subject=$(openssl x509 -in "$RUNNER_TEMP/cert.pem" -noout -subject)
+          until=$(openssl x509 -in "$RUNNER_TEMP/cert.pem" -noout -enddate | cut -d= -f2)
+          rm -f "$RUNNER_TEMP/cert.p12"
+          [[ "$subject" == *"$APPLE_TEAM_ID"* ]] || { echo "::error::APPLE_CERTIFICATE belongs to another team: $subject"; exit 1; }
+          openssl x509 -in "$RUNNER_TEMP/cert.pem" -noout -checkend 0 >/dev/null ||
+            { echo "::error::the Developer ID certificate expired on $until: create a new one on developer.apple.com and update APPLE_CERTIFICATE"; exit 1; }
+          openssl x509 -in "$RUNNER_TEMP/cert.pem" -noout -checkend $((45 * 86400)) >/dev/null ||
+            echo "::warning::the Developer ID certificate expires on $until: renew it before then"
+          rm -f "$RUNNER_TEMP/cert.pem"
+          echo "Signing as $APPLE_SIGNING_IDENTITY, certificate valid until $until"
 
       - name: Create (or reuse) the draft release
         id: release
@@ -201,7 +240,11 @@ jobs:
             printf '%s\n' "$APPLE_API_KEY_P8" > "$key_path"
             echo "APPLE_API_KEY_PATH=$key_path" >> "$GITHUB_ENV"
           fi
-          if [ -z "$APPLE_CERTIFICATE" ]; then
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            if [ "$GITHUB_REPOSITORY" = "codextde/godmode-bot" ]; then
+              echo "::error::the Apple signing secrets are missing: an unsigned app can only be moved to the Trash on a Mac"
+              exit 1
+            fi
             echo "::warning::macOS build is not signed with a Developer ID (APPLE_CERTIFICATE missing): Gatekeeper will block it"
           fi
 
@@ -236,11 +279,9 @@ jobs:
       - name: Check the macOS signature and notarization
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
         run: |
-          app=$(ls -d apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/macos/*.app | head -n1)
-          codesign --verify --deep --strict --verbose=2 "$app"
-          codesign -dvv "$app" 2>&1 | grep -E "Authority=Developer ID Application|TeamIdentifier"
-          xcrun stapler validate "$app"
-          spctl --assess --type execute --verbose=2 "$app"
+          bundle=apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle
+          apps=("$bundle"/macos/*.app) updates=("$bundle"/macos/*.app.tar.gz)
+          scripts/macos-verify.sh "${apps[0]}" "${updates[0]}"
 
       # The bundler notarizes the .app only; a downloaded DMG that is signed but not notarized can still warn on open.
       - name: Notarize the DMG and replace it in the release
@@ -252,7 +293,8 @@ jobs:
           dmg=$(ls apps/desktop/src-tauri/target/${{ matrix.rust_target }}/release/bundle/dmg/*.dmg | head -n1)
           xcrun notarytool submit "$dmg" --key "$APPLE_API_KEY_PATH" --key-id "$APPLE_API_KEY" --issuer "$APPLE_API_ISSUER" --wait --timeout 30m
           xcrun stapler staple "$dmg"
-          spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+          # What a user downloads: the DMG and the app inside it, as Gatekeeper sees them.
+          scripts/macos-verify.sh "$dmg"
           # GitHub stores spaces in asset names as dots.
           name=$(basename "$dmg" | tr ' ' '.')
           old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq ".[] | select(.name == \"$name\") | .id")
@@ -314,7 +356,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Built on Linux: Linux + Windows. macOS binaries are built (and signed ad hoc) on macOS.
+          # Built on Linux: Linux + Windows. macOS binaries are built, signed and notarized on macOS.
           - os: ubuntu-latest
             targets: bun-linux-x64 bun-linux-x64-baseline bun-linux-arm64 bun-windows-x64
           - os: macos-latest
@@ -339,6 +381,29 @@ jobs:
           for target in ${{ matrix.targets }}; do
             bun run scripts/build.ts --target="$target" --smoke
           done
+
+      - name: Sign and notarize the macOS binaries
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          # Ad-hoc signed binaries downloaded in a browser can only be moved to the Trash.
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_API_KEY_P8" ]; then
+            if [ "$GITHUB_REPOSITORY" = "codextde/godmode-bot" ]; then echo "::error::the Apple signing secrets are missing"; exit 1; fi
+            echo "::warning::macOS binaries stay ad-hoc signed (no Apple signing secrets)"
+            exit 0
+          fi
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY.p8"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY_PATH"
+          scripts/macos-sign-binaries.sh packages/core/bin/godmode-darwin-*
+          packages/core/bin/godmode-darwin-arm64 version
+          scripts/macos-verify.sh packages/core/bin/godmode-darwin-*
 
       - name: Upload to the draft release
         working-directory: packages/core/bin
