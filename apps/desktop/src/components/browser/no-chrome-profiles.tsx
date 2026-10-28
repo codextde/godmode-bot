@@ -64,7 +64,7 @@ export function NoChromeProfiles({
       <AppWindow className="mx-auto size-6 text-muted-foreground" />
       <p className="mt-2 font-medium">No Chrome profiles found on this machine</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Google Chrome, Chromium, Edge and Brave are supported.{footer ? ` ${footer}` : ""}
+        Google Chrome, Chromium, Edge, Brave and Helium are supported.{footer ? ` ${footer}` : ""}
       </p>
       <Button size="sm" variant="outline" className="mt-3" onClick={onRetry} disabled={retrying}>
         {retrying ? <Spinner /> : <RefreshCw />} Retry

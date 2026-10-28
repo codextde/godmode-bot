@@ -180,11 +180,14 @@ describe("local browser profiles", () => {
     const mac = browserSources({ platform: "darwin", home: "/Users/me", env: {} });
     expect(mac.find((s) => s.browser === "Google Chrome")?.root).toBe("/Users/me/Library/Application Support/Google/Chrome");
     expect(mac.find((s) => s.browser === "Brave")?.root).toBe("/Users/me/Library/Application Support/BraveSoftware/Brave-Browser");
+    expect(mac.find((s) => s.browser === "Helium")?.root).toBe("/Users/me/Library/Application Support/net.imput.helium");
     const win = browserSources({ platform: "win32", home: "C:\\Users\\me", env: { LOCALAPPDATA: "C:\\Users\\me\\AppData\\Local" } });
     expect(win.find((s) => s.browser === "Google Chrome Canary")?.root).toBe("C:\\Users\\me\\AppData\\Local\\Google\\Chrome SxS\\User Data");
     expect(win.find((s) => s.browser === "Microsoft Edge")?.root).toBe("C:\\Users\\me\\AppData\\Local\\Microsoft\\Edge\\User Data");
+    expect(win.find((s) => s.browser === "Helium")?.root).toBe("C:\\Users\\me\\AppData\\Local\\imput\\Helium\\User Data");
     const linux = browserSources({ platform: "linux", home: "/home/me", env: {} });
     expect(linux.find((s) => s.browser === "Google Chrome")?.root).toBe("/home/me/.config/google-chrome");
     expect(linux.some((s) => s.root === "/home/me/snap/chromium/common/chromium")).toBe(true);
+    expect(linux.find((s) => s.browser === "Helium")?.root).toBe("/home/me/.config/net.imput.helium");
   });
 });
