@@ -21,7 +21,7 @@ import { isGrantCancelled, useVaultGrant, withGrant } from "./grant";
 import { isVaultLocked, toastApiError } from "./vault-utils";
 import { WorkspaceSelect } from "./workspace-select";
 
-type Source = "chrome" | "1password" | "other";
+type Source = "chrome" | "1password" | "dashlane" | "other";
 type Filter = "all" | "new" | "update" | "unchanged" | "conflict";
 
 const SOURCE_NAMES: Record<PasswordImportSource, string> = {
@@ -38,7 +38,7 @@ const SOURCE_NAMES: Record<PasswordImportSource, string> = {
 };
 
 const GRANT_REASON = "Enter your vault passphrase to compare the export with your saved logins.";
-const isExportFile = (f: File) => /\.(csv|1pux|txt)$/i.test(f.name) || f.type === "text/csv";
+const isExportFile = (f: File) => /\.(csv|1pux|txt|zip|json)$/i.test(f.name) || f.type === "text/csv";
 /** An export can be older than the vault, so replacing a saved password is always an explicit choice. */
 const preselected = (r: PasswordImportRow) => r.action !== "unchanged" && !r.conflictKey && !r.replacesPassword;
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
@@ -122,8 +122,12 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
 
   const readFile = (file: File) => {
     if (preview.isPending) return;
+    if (/\.dash$/i.test(file.name)) {
+      setError("That's Dashlane's encrypted backup. In Dashlane, choose Export to CSV instead and drop the .zip here.");
+      return;
+    }
     if (!isExportFile(file)) {
-      setError("Choose the .csv or .1pux file your password manager exported.");
+      setError("Choose the .csv, .zip or .1pux file your password manager exported.");
       return;
     }
     preview.mutate({ file, scope: workspaceId });
@@ -169,7 +173,7 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
               ? "Pick what to bring over. Logins you already saved are updated, not duplicated."
               : step.kind === "done"
                 ? `Finished importing ${step.file.name}.`
-                : "Bring your logins over from Chrome, 1Password or another password manager. Nothing is saved until you confirm."}
+                : "Bring your logins over from Chrome, 1Password, Dashlane or another password manager. Nothing is saved until you confirm."}
           </DialogDescription>
         </div>
       </div>
@@ -248,10 +252,11 @@ function SourcePicker({ value, onChange }: { value: Source; onChange: (s: Source
   const options: { id: Source; label: string; hint: string; mark: ReactNode }[] = [
     { id: "chrome", label: "Chrome", hint: "Edge, Brave & Arc too", mark: <ChromeMark /> },
     { id: "1password", label: "1Password", hint: ".1pux or .csv", mark: <OnePasswordMark /> },
+    { id: "dashlane", label: "Dashlane", hint: ".zip or .csv", mark: <DashlaneMark /> },
     {
       id: "other",
       label: "Other",
-      hint: "Bitwarden, Safari, Firefox…",
+      hint: "Bitwarden, Safari…",
       mark: (
         <span className="grid size-7 place-items-center rounded-full bg-secondary text-muted-foreground ring-1 ring-border ring-inset">
           <FileSpreadsheet className="size-3.5" />
@@ -260,7 +265,7 @@ function SourcePicker({ value, onChange }: { value: Source; onChange: (s: Source
     },
   ];
   return (
-    <div role="radiogroup" aria-label="Import from" className="grid grid-cols-3 gap-2">
+    <div role="radiogroup" aria-label="Import from" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {options.map((o) => {
         const active = value === o.id;
         return (
@@ -347,6 +352,31 @@ function SourceGuide({ source }: { source: Source }) {
             <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">Archived items, credit cards and notes are left out. 2FA codes are saved and linked to their login.</p>
           </>
         )}
+        {source === "dashlane" && (
+          <>
+            <ol className="space-y-2.5 p-3.5">
+              <GuideStep n={1}>
+                <span className="inline-flex flex-wrap items-center gap-1">
+                  Open
+                  <span className="inline-flex items-center rounded-md border bg-paper-2 py-px pr-0.5 pl-2 font-mono text-xs">
+                    app.dashlane.com
+                    <CopyButton value="https://app.dashlane.com" size="icon-xs" label="Copy address" toastLabel="Address copied — paste it into your browser" />
+                  </span>
+                  and sign in.
+                </span>
+              </GuideStep>
+              <GuideStep n={2}>
+                Open the <B>Vault</B> menu at the top left, choose <B>Settings → Export data</B> and click <B>Export to CSV</B>.
+              </GuideStep>
+              <GuideStep n={3}>
+                Drop the downloaded <B>.zip</B> below as it is — no need to unpack it.
+              </GuideStep>
+            </ol>
+            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">
+              2FA codes come along and are linked to their login. Notes, IDs and payment cards in the export are left out; Dashlane can't export passkeys.
+            </p>
+          </>
+        )}
         {source === "other" && (
           <>
             <dl className="grid gap-x-6 gap-y-2 p-3.5 text-sm sm:grid-cols-2">
@@ -354,7 +384,7 @@ function SourceGuide({ source }: { source: Source }) {
                 ["Bitwarden", "Tools → Export vault → .csv"],
                 ["Apple Passwords", "File → Export All Passwords"],
                 ["Firefox", "about:logins → ⋯ → Export Logins"],
-                ["LastPass · Dashlane", "Advanced → Export → CSV"],
+                ["LastPass", "Advanced → Export → CSV"],
                 ["Proton Pass", "Settings → Export → CSV"],
                 ["KeePassXC", "Database → Export → CSV"],
               ].map(([name, where]) => (
@@ -419,13 +449,13 @@ function ExportDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) 
       <div>
         <p className="text-sm font-medium">{busy ? "Reading your export…" : dragging ? "Drop to read the file" : "Drop your export here"}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          .csv or .1pux · or <span className="font-medium text-foreground underline-offset-2 group-hover:underline">browse files</span> · you'll review everything first
+          .csv, .zip or .1pux · or <span className="font-medium text-foreground underline-offset-2 group-hover:underline">browse files</span> · you'll review everything first
         </p>
       </div>
       <input
         ref={input}
         type="file"
-        accept=".csv,.1pux,text/csv"
+        accept=".csv,.zip,.json,.1pux,.dash,text/csv,application/zip"
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {
@@ -798,6 +828,15 @@ function ChromeMark() {
       <path d="M12 12 12 23A11 11 0 0 1 2.47 6.5Z" fill="#34A853" />
       <circle cx="12" cy="12" r="5.25" fill="#fff" />
       <circle cx="12" cy="12" r="4.1" fill="#1A73E8" />
+    </svg>
+  );
+}
+
+function DashlaneMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-7 shrink-0" aria-hidden>
+      <circle cx="12" cy="12" r="11" fill="#0E353D" />
+      <path d="M8 6.5h4.1c3.3 0 5.4 2.2 5.4 5.5s-2.1 5.5-5.4 5.5H8Zm2.6 2.3v6.4h1.4c1.8 0 2.8-1.2 2.8-3.2s-1-3.2-2.8-3.2Z" fill="#fff" fillRule="evenodd" />
     </svg>
   );
 }
