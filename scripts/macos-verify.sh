@@ -39,8 +39,8 @@ signer() {
 certificate() {
   local dir="$WORK/certs-$RANDOM"
   mkdir -p "$dir"
-  (cd "$dir" && codesign -d --extract-certificates "$1" 2>/dev/null)
-  local leaf="$dir/codesign0"
+  codesign -d --extract-certificates="$dir/cert" "$1" 2>/dev/null || true
+  local leaf="$dir/cert0"
   [ -f "$leaf" ] || fail "could not read the signing certificate of $1"
   local until
   until="$(openssl x509 -inform DER -in "$leaf" -noout -enddate | cut -d= -f2)"
