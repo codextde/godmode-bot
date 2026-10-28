@@ -7,7 +7,8 @@ import type { TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EmptyState, PageBody, PageHeader } from "@/components/common";
+import { EmptyState, PageBody } from "@/components/common";
+import { PasswordsHeader } from "@/components/vault/passwords-header";
 import { TotpCard, TotpCardSkeleton } from "@/components/vault/totp-card";
 import { TotpEditDialog } from "@/components/vault/totp-edit-dialog";
 import { TotpImportDialog } from "@/components/vault/totp-import-dialog";
@@ -104,10 +105,7 @@ export default function TotpPage() {
 
   return (
     <div className="relative">
-      <PageHeader
-        icon={<ShieldCheck />}
-        title="2FA Codes"
-        description="Authenticator codes your agents type in during sign-in — so two-factor never needs you."
+      <PasswordsHeader
         actions={
           <>
             <Tooltip>

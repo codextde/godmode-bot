@@ -14,7 +14,7 @@ export const GO_TO: readonly { key: string; to: string; label: string }[] = [
   { key: "u", to: "/automations", label: "Automations" },
   { key: "i", to: "/inbox", label: "Inbox" },
   { key: "y", to: "/activity", label: "Activity" },
-  { key: "l", to: "/vault/logins", label: "Logins" },
+  { key: "l", to: "/vault/logins", label: "Passwords" },
   { key: "s", to: "/settings/general", label: "Settings" },
 ];
 

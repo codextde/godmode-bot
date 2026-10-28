@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import type { ArtifactSummary } from "@godmode/shared";
 import { ARTIFACT_STARTERS, MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
 import { AppWindow, ArrowUp, MoreHorizontal, Pin, PinOff, Search, Trash2 } from "lucide-react";
-import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
+import { AgentAvatar, EmptyState } from "@/components/common";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,8 @@ import { useAgents, useArtifact, useArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
 
-export default function ArtifactsPage() {
+/** Dashboards and small apps the agents built: a line to ask for a new one, then the gallery. */
+export function ArtifactsOverview() {
   const { data: artifacts, isLoading } = useArtifacts();
   const [query, setQuery] = useState("");
   const list = useMemo(() => {
@@ -33,52 +34,45 @@ export default function ArtifactsPage() {
   const empty = !isLoading && (artifacts?.length ?? 0) === 0;
 
   return (
-    <div className="@container h-full overflow-y-auto">
-      <PageHeader
-        icon={<AppWindow />}
-        title="Artifacts"
-        description="Dashboards and small apps your agents build for you. Open one, use it, and ask for changes in plain words."
-      />
-      <PageBody className="space-y-8">
-        <Composer prominent={empty} />
+    <div className="@container space-y-8">
+      <Composer prominent={empty} />
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
-            {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton key={i} className="aspect-[16/11] rounded-xl" />
-            ))}
-          </div>
-        ) : empty ? (
-          <EmptyState
-            art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={64} follow />}
-            title="Nothing built yet"
-            description="Describe a dashboard or a tool above, or pick a starting point. Agents also build artifacts when you ask for one in any chat."
-          />
-        ) : (
-          <section className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-medium">
-                Your artifacts <span className="ml-1 text-muted-foreground tabular-nums">{artifacts!.length}</span>
-              </h2>
-              {(artifacts?.length ?? 0) > 6 && (
-                <div className="relative ml-auto w-56">
-                  <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-8 pl-8 text-sm" />
-                </div>
-              )}
-            </div>
-            {list.length ? (
-              <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
-                {list.map((a, i) => (
-                  <ArtifactTile key={a.id} artifact={a} index={i} />
-                ))}
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
+          {Array.from({ length: 2 }, (_, i) => (
+            <Skeleton key={i} className="aspect-[16/11] rounded-xl" />
+          ))}
+        </div>
+      ) : empty ? (
+        <EmptyState
+          art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={64} follow />}
+          title="Nothing built yet"
+          description="Describe a dashboard or a tool above, or pick a starting point. Agents also build artifacts when you ask for one in any chat."
+        />
+      ) : (
+        <section className="space-y-3">
+          <div className="flex items-center gap-3">
+            <h3 className="text-sm font-medium">
+              Your artifacts <span className="ml-1 text-muted-foreground tabular-nums">{artifacts!.length}</span>
+            </h3>
+            {(artifacts?.length ?? 0) > 6 && (
+              <div className="relative ml-auto w-56">
+                <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-8 pl-8 text-sm" />
               </div>
-            ) : (
-              <p className="py-10 text-center text-sm text-muted-foreground">Nothing matches “{query}”.</p>
             )}
-          </section>
-        )}
-      </PageBody>
+          </div>
+          {list.length ? (
+            <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
+              {list.map((a, i) => (
+                <ArtifactTile key={a.id} artifact={a} index={i} />
+              ))}
+            </div>
+          ) : (
+            <p className="py-10 text-center text-sm text-muted-foreground">Nothing matches “{query}”.</p>
+          )}
+        </section>
+      )}
     </div>
   );
 }

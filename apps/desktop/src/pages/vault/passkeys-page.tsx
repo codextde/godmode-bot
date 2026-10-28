@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EmptyState, PageBody, PageHeader, ScopeBadge, StatusDot } from "@/components/common";
+import { EmptyState, PageBody, ScopeBadge, StatusDot } from "@/components/common";
+import { PasswordsHeader } from "@/components/vault/passwords-header";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
 import { Favicon } from "@/components/vault/favicon";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
@@ -59,10 +60,7 @@ export default function PasskeysPage() {
 
   return (
     <div className="relative">
-      <PageHeader
-        icon={<Fingerprint />}
-        title="Passkeys"
-        description="Passkeys sites created in Godmode's browser. Each belongs to the browser profile it was made in, like its cookies, and agents sign in with it on their own — no phone, fingerprint or security key."
+      <PasswordsHeader
         actions={
           settings && (
             <Tooltip>

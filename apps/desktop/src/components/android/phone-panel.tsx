@@ -131,7 +131,7 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
         </div>
 
         <Link
-          to="/android"
+          to="/settings/android"
           className="group flex shrink-0 items-center gap-3 border-t px-4 py-3 transition hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none"
         >
           <span className="grid size-8 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground shadow-card">

@@ -208,7 +208,7 @@ export default function AndroidDevicePage() {
           description={list.isError ? errorMessage(list.error) : "It may have been forgotten. Plug it in again and it shows up as a new phone."}
           action={
             <Button asChild variant="outline">
-              <Link to="/android">
+              <Link to="/settings/android">
                 <ArrowLeft /> All phones
               </Link>
             </Button>
@@ -223,7 +223,7 @@ export default function AndroidDevicePage() {
     <div className="flex h-full min-h-0 flex-col">
       <header className={cn("flex h-14 shrink-0 items-center gap-3 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
         <Button asChild variant="ghost" size="icon-sm" className="text-muted-foreground">
-          <Link to="/android" aria-label="All phones">
+          <Link to="/settings/android" aria-label="All phones">
             <ArrowLeft />
           </Link>
         </Button>

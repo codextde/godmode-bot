@@ -367,7 +367,10 @@ export function AgentForm({
   const inherited = useInheritedInstructions(values.workspaceId, undefined, values.projectId);
   const vmChoices = useVmChoices();
   const androidOn = !!boot?.settings.android.enabled;
-  const sections = SECTIONS.filter((s) => (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn));
+  const integrationsOn = !!boot?.settings.integrations.enabled;
+  const sections = SECTIONS.filter(
+    (s) => (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn) && (s.id !== "tools" || integrationsOn),
+  );
 
   const { hash } = useLocation();
   // Again once the VM or Android section shows up: they wait for the VM status and the settings (links from the VMs page go to #vm).
@@ -761,20 +764,22 @@ export function AgentForm({
         </FormSection>
       )}
 
-      <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
-        <div className="space-y-5">
-          <ToggleRow
-            id="agent-inherit-mcp"
-            icon={<Plug className="size-4" />}
-            title="Inherit shared integrations"
-            description="Also use the global and workspace tools, MCP servers and Composio apps."
-            checked={values.inheritMcp}
-            onChange={(v) => set("inheritMcp", v)}
-          />
-          <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
-          <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
-        </div>
-      </FormSection>
+      {integrationsOn && (
+        <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
+          <div className="space-y-5">
+            <ToggleRow
+              id="agent-inherit-mcp"
+              icon={<Plug className="size-4" />}
+              title="Inherit shared integrations"
+              description="Also use the global and workspace tools, MCP servers and Composio apps."
+              checked={values.inheritMcp}
+              onChange={(v) => set("inheritMcp", v)}
+            />
+            <ApiToolsField agentId={agentId} workspaceId={values.workspaceId} savedWorkspaceId={initial?.workspaceId ?? null} inherit={values.inheritMcp} />
+            <McpField agentId={agentId} value={values.mcpServerIds} onChange={(v) => set("mcpServerIds", v)} />
+          </div>
+        </FormSection>
+      )}
 
       <FormSection
         id="subagents"
@@ -1535,7 +1540,7 @@ function ApiToolsField({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <Label>API tools</Label>
-        <Link to="/integrations?tab=tools" className="text-xs font-medium text-muted-foreground underline-offset-[3px] hover:text-foreground hover:underline">
+        <Link to="/settings/integrations?tab=tools" className="text-xs font-medium text-muted-foreground underline-offset-[3px] hover:text-foreground hover:underline">
           Manage tools
         </Link>
       </div>

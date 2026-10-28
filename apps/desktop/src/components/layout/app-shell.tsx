@@ -9,14 +9,11 @@ import {
   Box,
   ChevronRight,
   CreditCard,
-  Fingerprint,
-  AppWindow,
   Globe,
   MonitorUp,
   Inbox,
   KeyRound,
   Lock,
-  MessageCircle,
   MessageSquarePlus,
   MessagesSquare,
   MonitorSmartphone,
@@ -24,13 +21,10 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
-  Plug,
   Puzzle,
   Search,
   Server,
-  Smartphone,
   Settings,
-  ShieldCheck,
   SquareKanban,
   Workflow,
   X,
@@ -109,7 +103,11 @@ interface NavItem {
   icon: ReactNode;
   badge?: number;
   end?: boolean;
+  /** Other paths the item stands for (the tabs of one screen). */
+  also?: readonly string[];
 }
+
+const isActive = (item: NavItem, pathname: string) => [item.to, ...(item.also ?? [])].some((to) => pathname.startsWith(to));
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: boot } = useBootstrap();
@@ -188,51 +186,37 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
-    { to: "/artifacts", label: "Artifacts", icon: <AppWindow /> },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
     { to: "/calls", label: "Calls", icon: <Phone /> },
     { to: "/plugins", label: "Plugins", icon: <Puzzle />, badge: modsWaiting || undefined },
-  ];
-  const accessNav: NavItem[] = [
-    { to: "/vault/logins", label: "Logins", icon: <KeyRound /> },
-    { to: "/vault/2fa", label: "2FA Codes", icon: <ShieldCheck /> },
-    { to: "/vault/passkeys", label: "Passkeys", icon: <Fingerprint /> },
+    { to: "/vault/logins", label: "Passwords", icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
     { to: "/vault/cards", label: "Cards", icon: <CreditCard /> },
-    { to: "/integrations", label: "Integrations", icon: <Plug /> },
-    { to: "/messaging", label: "Messaging", icon: <MessageCircle />, badge: boot?.counts.messagingRequests || undefined },
   ];
   const machineNav: NavItem[] = [
     { to: "/browser", label: "Browser", icon: <Globe /> },
     { to: "/computer", label: "Computer", icon: <MonitorUp /> },
     { to: "/vms", label: "Virtual machines", icon: <Box /> },
     { to: "/ssh", label: "SSH servers", icon: <Server /> },
-    { to: "/android", label: "Android phones", icon: <Smartphone /> },
     { to: "/runners", label: "Runners", icon: <MonitorSmartphone /> },
   ];
   // Easy mode: the everyday pages in plain words up front, every other page under More.
-  const byPath = new Map([...workNav, ...accessNav, ...machineNav].map((item) => [item.to, item]));
+  const byPath = new Map([...workNav, ...machineNav].map((item) => [item.to, item]));
   const easyItem = (to: string, label: string): NavItem => ({ ...byPath.get(to)!, label });
   const easyNav: NavItem[] = [
     easyItem("/inbox", "Inbox"),
     easyItem("/agents", "Agents"),
     easyItem("/automations", "Automations"),
-    easyItem("/artifacts", "Dashboards & apps"),
     easyItem("/tasks", "Task board"),
     easyItem("/vault/logins", "Passwords"),
-    easyItem("/integrations", "Connected apps"),
   ];
   const easyMore: NavItem[] = [
     easyItem("/activity", "History"),
     easyItem("/calls", "Phone calls"),
-    easyItem("/messaging", "Chat apps"),
-    easyItem("/vault/2fa", "2FA codes"),
-    easyItem("/vault/passkeys", "Passkeys"),
     easyItem("/vault/cards", "Payment cards"),
     easyItem("/plugins", "Add-ons"),
     easyItem("/browser", "Browser"),
     easyItem("/computer", "Computer control"),
-    easyItem("/android", "Android phones"),
     easyItem("/vms", "Virtual machines"),
     easyItem("/ssh", "Servers"),
     easyItem("/runners", "Other computers"),
@@ -294,7 +278,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavSection id="more" label="More" items={easyMore} folded="list" />
           ) : (
             <>
-              <NavSection id="access" label="Access" items={accessNav} />
               <NavSection id="machines" label="Machines" items={machineNav} />
             </>
           )}
@@ -454,7 +437,7 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
       </SidebarGroup>
     );
   if (folded === "list") {
-    const current = items.find((item) => pathname.startsWith(item.to));
+    const current = items.find((item) => isActive(item, pathname));
     const waiting = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
     return (
       <SidebarGroup className="py-1">
@@ -477,7 +460,7 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
       {header}
       <div id={listId} className="flex items-center">
         {items.map((item) => {
-          const active = pathname.startsWith(item.to);
+          const active = isActive(item, pathname);
           return (
             <Tooltip key={item.to}>
               <TooltipTrigger asChild>
@@ -507,7 +490,7 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
 
 function NavMenuItem({ item }: { item: NavItem }) {
   const location = useLocation();
-  const active = item.end ? location.pathname === item.to || location.pathname.startsWith("/chat/") : location.pathname.startsWith(item.to);
+  const active = item.end ? location.pathname === item.to || location.pathname.startsWith("/chat/") : isActive(item, location.pathname);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -583,7 +566,13 @@ function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiV
   );
 }
 
+/** Settings pages, and the pages they open (an agent's files, a phone, an artifact). */
+const SETTINGS_PATHS = ["/settings", "/files", "/android/", "/artifacts/"];
+
 function FooterBar() {
+  const { data: boot } = useBootstrap();
+  // People waiting to talk to a bot: Settings → Messaging shows who.
+  const requests = boot?.settings.messaging.enabled ? boot.counts.messagingRequests : 0;
   const connected = useLive((s) => s.connected);
   const qc = useQueryClient();
   const lock = useMutation({
@@ -622,13 +611,20 @@ function FooterBar() {
       <ThemeToggle />
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant={location.pathname.startsWith("/settings") || location.pathname.startsWith("/files") ? "secondary" : "ghost"} size="icon" className="size-8" asChild>
-            <Link to="/settings/general">
+          <Button
+            variant={SETTINGS_PATHS.some((p) => location.pathname.startsWith(p)) ? "secondary" : "ghost"}
+            size="icon"
+            className="relative size-8"
+            aria-label={requests ? `Settings (${requests} waiting in Messaging)` : "Settings"}
+            asChild
+          >
+            <Link to={requests ? "/settings/messaging" : "/settings/general"}>
               <Settings className="size-4" />
+              {requests > 0 && <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand ring-2 ring-card" aria-hidden />}
             </Link>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Settings ({modKey},)</TooltipContent>
+        <TooltipContent>{requests ? `Settings · ${requests} waiting in Messaging` : `Settings (${modKey},)`}</TooltipContent>
       </Tooltip>
     </div>
   );

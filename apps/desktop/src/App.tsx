@@ -25,7 +25,6 @@ const AgentsPage = lazy(() => import("@/pages/agents/agents-page"));
 const AgentNewPage = lazy(() => import("@/pages/agents/agent-new"));
 const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const FilesPage = lazy(() => import("@/pages/files/files-page"));
-const ArtifactsPage = lazy(() => import("@/pages/artifacts/artifacts-page"));
 const ArtifactPage = lazy(() => import("@/pages/artifacts/artifact-page"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
 const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
@@ -36,13 +35,10 @@ const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
 const CardsPage = lazy(() => import("@/pages/vault/cards-page"));
 const PasskeysPage = lazy(() => import("@/pages/vault/passkeys-page"));
-const IntegrationsPage = lazy(() => import("@/pages/integrations/integrations-page"));
-const MessagingPage = lazy(() => import("@/pages/messaging/messaging-page"));
 const BrowserPage = lazy(() => import("@/pages/browser/browser-page"));
 const ComputerPage = lazy(() => import("@/pages/computer/computer-page"));
 const VmsPage = lazy(() => import("@/pages/vms/vms-page"));
 const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
-const AndroidPage = lazy(() => import("@/pages/android/android-page"));
 const AndroidDevicePage = lazy(() => import("@/pages/android/android-device-page"));
 const CallsPage = lazy(() => import("@/pages/calls/calls-page"));
 const RunnersPage = lazy(() => import("@/pages/runners/runners-page"));
@@ -204,8 +200,8 @@ export function App() {
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/agents/new" element={<AgentNewPage />} />
           <Route path="/agents/:agentId/*" element={<AgentDetailPage />} />
-          <Route path="/artifacts" element={<ArtifactsPage />} />
-          <Route path="/artifacts/:artifactId" element={<ArtifactPage />} />
+          <Route path="/artifacts" element={<ToSettings section="artifacts" />} />
+          <Route path="/artifacts/:artifactId" element={b.settings.artifacts.enabled ? <ArtifactPage /> : <ToSettings section="artifacts" />} />
           <Route path="/files" element={<Navigate to="/settings/files" replace />} />
           <Route path="/files/:agentId" element={<FilesPage />} />
           <Route path="/tasks" element={<TasksPage />} />
@@ -221,14 +217,14 @@ export function App() {
           <Route path="/vault/2fa" element={<TotpPage />} />
           <Route path="/vault/cards" element={<CardsPage />} />
           <Route path="/vault/passkeys" element={<PasskeysPage />} />
-          <Route path="/integrations" element={<IntegrationsPage />} />
-          <Route path="/messaging" element={<MessagingPage />} />
+          <Route path="/integrations" element={<ToSettings section="integrations" />} />
+          <Route path="/messaging" element={<ToSettings section="messaging" />} />
           <Route path="/browser" element={<BrowserPage />} />
           <Route path="/computer" element={<ComputerPage />} />
           <Route path="/vms" element={<VmsPage />} />
           <Route path="/ssh" element={<SshPage />} />
-          <Route path="/android" element={<AndroidPage />} />
-          <Route path="/android/:id" element={<AndroidDevicePage />} />
+          <Route path="/android" element={<ToSettings section="android" />} />
+          <Route path="/android/:id" element={b.settings.android.enabled ? <AndroidDevicePage /> : <ToSettings section="android" />} />
           <Route path="/calls" element={<CallsPage />} />
           <Route path="/runners" element={<RunnersPage />} />
           <Route path="/inbox" element={<InboxPage />} />
@@ -275,6 +271,13 @@ function NotFoundRedirect() {
 
 /** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
 /** My tasks became the Inbox's board: old links (notifications, tickets) open the same task there. */
+/** A page that moved into Settings: its old address, with its query (?tab=, ?connection=), opens the section. */
+function ToSettings({ section }: { section: string }) {
+  const { search } = useLocation();
+  if (section === "integrations" && new URLSearchParams(search).get("tab") === "api-keys") return <Navigate to="/settings/api-keys" replace />;
+  return <Navigate to={`/settings/${section}${search}`} replace />;
+}
+
 function MyTasksRedirect() {
   const params = new URLSearchParams(useLocation().search);
   if (!params.has("task")) params.set("view", "board");

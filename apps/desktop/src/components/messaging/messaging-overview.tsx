@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ChevronRight, Globe, MessageCircle, Plus, ShieldCheck } from "lucide-react";
+import { ChevronRight, Globe, Plus, ShieldCheck } from "lucide-react";
 import type { Agent, MessagingConnection, MessagingProvider } from "@godmode/shared";
 import { MESSAGING_PROVIDERS } from "@godmode/shared";
-import { AgentAvatar, PageBody, PageHeader } from "@/components/common";
+import { AgentAvatar } from "@/components/common";
 import { QueryError } from "@/components/integrations/query-error";
 import { ConnectDialog } from "@/components/messaging/connect-dialog";
 import { ConnectionSheet, useUpdateConnection } from "@/components/messaging/connection-sheet";
@@ -22,7 +22,8 @@ export function useMessagingConnections() {
   return useQuery({ queryKey: qk.messagingList, queryFn: api.messaging.list });
 }
 
-export default function MessagingPage() {
+/** The bots people use to talk to agents, and the platforms to add one on. */
+export function MessagingOverview() {
   const [params, setParams] = useSearchParams();
   const connections = useMessagingConnections();
   const agents = useAllAgents();
@@ -44,13 +45,8 @@ export default function MessagingPage() {
     );
 
   return (
-    <div className="relative">
-      <PageHeader
-        icon={<MessageCircle />}
-        title="Messaging"
-        description="Talk to your agents from Slack, Telegram and Microsoft Teams — they answer right where you already chat."
-      />
-      <PageBody className="space-y-9">
+    <div className="@container relative">
+      <div className="space-y-9">
         {connections.isError ? (
           <QueryError error={connections.error} onRetry={() => connections.refetch()} title="Couldn't load your bots" />
         ) : connections.isLoading ? (
@@ -60,7 +56,7 @@ export default function MessagingPage() {
         ) : (
           list.length > 0 && (
             <section className="space-y-3">
-              <h2 className="eyebrow">Your bots</h2>
+              <h3 className="eyebrow">Your bots</h3>
               <ul className="space-y-2">
                 {list.map((c, i) => (
                   <motion.li key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
@@ -73,7 +69,7 @@ export default function MessagingPage() {
         )}
 
         <section className="space-y-3">
-          <h2 className="eyebrow">{list.length ? "Add a platform" : "Platforms"}</h2>
+          <h3 className="eyebrow">{list.length ? "Add a platform" : "Platforms"}</h3>
           <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
             {MESSAGING_PROVIDERS.map((p) => (
               <ProviderRow key={p} provider={p} connections={list.filter((c) => c.provider === p)} onConnect={() => setParam("connect", p)} />
@@ -90,7 +86,7 @@ export default function MessagingPage() {
             </p>
           </div>
         </section>
-      </PageBody>
+      </div>
 
       <ConnectDialog
         provider={connectProvider && MESSAGING_PROVIDERS.includes(connectProvider) ? connectProvider : null}
