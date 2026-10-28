@@ -12,7 +12,7 @@ import { listNotifications, markRead, clearNotifications, unreadCount } from "..
 import { audit, listAudit } from "../../services/audit";
 import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
-import { cancelClaudeLogin, claudeLoginStatus, recheckClaudeSignedOut, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
+import { cancelClaudeLogin, claudeLoginStatus, copyClaudeLoginLink, recheckClaudeSignedOut, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
 import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPrivacySettings, resetPrivacy } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
@@ -113,6 +113,7 @@ export function registerSystemRoutes(app: Hono) {
     const { code } = await body(c, z.object({ code: z.string().min(1).max(2000) }));
     return c.json(submitClaudeLoginCode(code));
   });
+  app.post("/api/doctor/claude-login/copy", async (c) => c.json(await copyClaudeLoginLink()));
   app.delete("/api/doctor/claude-login", (c) => c.json(cancelClaudeLogin()));
   app.get("/api/doctor/claude-update", async (c) => c.json(await claudeUpdateStatus(c.req.query("refresh") === "1")));
   app.post("/api/doctor/claude-update", async (c) => {

@@ -1,25 +1,34 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { motion } from "motion/react";
-import { ArrowRight, Bot, CircleCheck, CircleDashed, KeyRound, ShieldCheck } from "lucide-react";
-import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState } from "@godmode/shared";
+import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Bot, ChevronDown, CircleCheck, CircleDashed, Cookie, KeyRound, ShieldCheck } from "lucide-react";
+import { MASCOT_CHARACTER, MASCOT_COLOR, type ChromeImportResult, type LicenseState, type LocalChromeProfile } from "@godmode/shared";
 import { Character } from "@/components/character";
+import { ActivatePanel } from "@/components/license/activate";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { api, errorMessage } from "@/lib/api";
+import { isMac } from "@/lib/desktop";
+import { useLicense } from "@/lib/hooks";
+import { qk } from "@/lib/queryKeys";
+import { cn } from "@/lib/utils";
 import { FormError, SubmitButton } from "./auth-layout";
-import { Confetti, StepCard } from "./step-kit";
+import { Confetti, StepCard, StepFooter } from "./step-kit";
 
 export interface OnboardingSummary {
   doctorOk: boolean | null;
   vault: "created" | "unlocked" | "existing" | null;
-  importedCookies: number | null;
   dashboardPassword: boolean | null;
-  license: LicenseState | null;
 }
 
 const NEXT = [
   { to: "/agents/new", icon: <Bot />, title: "Hire your first agent", body: "Pick a template or describe the job." },
-  { to: "/vault/logins", icon: <KeyRound />, title: "Save your logins", body: "Agents sign in like you, 2FA included. No connectors needed." },
+  { to: "/vault/logins", icon: <KeyRound />, title: "Save your logins", body: "Agents sign in like you, 2FA included." },
   { to: "/vault/2fa?import=1", icon: <ShieldCheck />, title: "Import 2FA codes", body: "Scan Google Authenticator exports." },
 ];
+
+const LICENSED: LicenseState["status"][] = ["active", "trial", "past_due", "unverified"];
 
 export function DoneStep({
   userName,
@@ -34,91 +43,101 @@ export function DoneStep({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { data: license } = useLicense();
+  const licensed = !!license?.keyHint && !license.blocked && LICENSED.includes(license.status);
+  const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? new Date(license.graceEndsAt) : null;
+  const needsKey = !!license && !licensed && !freeUntil;
+  const [activateOpen, setActivateOpen] = useState(false);
+  const blocked = !!license?.blocked;
   const first = userName.trim().split(/\s+/)[0];
 
   const finish = async (to: string) => {
-    if (busy) return;
+    if (busy || blocked) return;
     setBusy(to);
     setError(null);
     try {
       await onFinish(to);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errorMessage(e));
       setBusy(null);
     }
   };
 
-  const items: { label: string; ok: boolean | null; detail?: string }[] = [
-    { label: "System check", ok: summary.doctorOk, detail: summary.doctorOk === false ? "Some tools still missing — see Settings → System" : undefined },
-    {
-      label: "Encrypted vault",
-      ok: summary.vault !== null,
-      detail: summary.vault === "created" ? "Created" : summary.vault ? "Unlocked" : undefined,
-    },
-    {
-      label: "Browser sessions",
-      ok: summary.importedCookies !== null ? true : null,
-      detail: summary.importedCookies !== null ? `${summary.importedCookies.toLocaleString()} cookies imported` : "Skipped — import any time from Browser",
-    },
-  ];
-  const license = summary.license;
-  const licensed = !!license?.keyHint && !license.blocked && ["active", "trial", "past_due", "unverified"].includes(license.status);
-  const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? format(new Date(license.graceEndsAt), "MMM d") : null;
-  items.push({
-    label: "Godmode Pro",
-    ok: licensed || freeUntil ? true : license?.blocked ? false : null,
-    detail: licensed ? (license!.status === "trial" ? "Free trial active" : "Activated") : freeUntil ? `Free until ${freeUntil}` : "Skipped",
-  });
-  if (serverMode)
-    items.push({
-      label: "Dashboard password",
-      ok: summary.dashboardPassword,
-      detail: summary.dashboardPassword ? "Set" : "Not set — sign in with access tokens",
-    });
+  const licenseDetail = licensed
+    ? license!.status === "trial" && license!.trialEndsAt
+      ? `Free trial until ${format(new Date(license!.trialEndsAt), "MMM d")}`
+      : "Activated"
+    : freeUntil
+      ? `Free until ${format(freeUntil, "MMM d")}`
+      : license && !license.enforced
+        ? "Free in this build"
+        : blocked
+          ? "Needs a licence key"
+          : "Not activated yet";
 
   return (
     <div>
-      <Confetti />
+      {!blocked && <Confetti />}
       <div className="mb-8 flex flex-col items-center text-center">
         <motion.div
           initial={{ scale: 0.6, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 260, damping: 20, delay: 0.1 }}
         >
-          <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={88} mood="happy" follow title="Godmode" />
+          <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={88} mood={blocked ? "attention" : "happy"} follow title="Godmode" />
         </motion.div>
-        <p className="eyebrow mt-7">Setup complete</p>
-        <h2 className="heading-display mt-3 text-[40px] sm:text-[48px]">
+        <h2 className="heading-display mt-7 text-[40px] sm:text-[48px]">
           You're all set{first ? `, ${first}` : ""}.
           <span className="block text-foreground/35">Your coworker is ready.</span>
         </h2>
         <p className="mt-4 max-w-md text-[15px] leading-relaxed text-muted-foreground">
-          Tell it what you need in plain words — it will sign in, browse and report back.
+          Tell it what you need in plain words. It signs in, browses and reports back.
         </p>
       </div>
 
       <StepCard>
         <ul className="divide-y overflow-hidden rounded-xl border bg-paper-2">
-          {items.map((it, i) => (
-            <motion.li
-              key={it.label}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 + i * 0.07 }}
-              className="flex items-center gap-3 px-3.5 py-2.5 text-sm"
-            >
-              {it.ok ? (
-                <CircleCheck className="size-4 shrink-0 text-success" />
-              ) : it.ok === false ? (
-                <CircleDashed className="size-4 shrink-0 text-warning" />
-              ) : (
-                <CircleDashed className="size-4 shrink-0 text-muted-foreground" />
-              )}
-              <span className="font-medium">{it.label}</span>
-              {it.detail && <span className="ml-auto truncate text-xs text-muted-foreground">{it.detail}</span>}
-            </motion.li>
-          ))}
+          <SummaryRow
+            i={0}
+            ok={summary.doctorOk}
+            label="Set up on this computer"
+            detail={summary.doctorOk === false ? "Something is still missing. See Settings, System." : summary.doctorOk ? "Installed and signed in" : undefined}
+          />
+          <SummaryRow i={1} ok={summary.vault !== null} label="Encrypted vault" detail={summary.vault === "created" ? "Created" : summary.vault ? "Unlocked" : undefined} />
+          <ChromeImportRow i={2} />
+          <SummaryRow
+            i={3}
+            ok={licensed || !!freeUntil || (!!license && !license.enforced) ? true : blocked ? false : null}
+            label="Godmode Pro"
+            detail={licenseDetail}
+            action={
+              needsKey && license?.enforced ? (
+                <Button size="xs" variant={blocked ? "default" : "outline"} className="h-7 px-2.5" onClick={() => setActivateOpen((o) => !o)} aria-expanded={activateOpen || blocked}>
+                  Activate <ChevronDown className={cn("transition-transform", (activateOpen || blocked) && "rotate-180")} />
+                </Button>
+              ) : undefined
+            }
+          />
+          {serverMode && (
+            <SummaryRow
+              i={4}
+              ok={summary.dashboardPassword}
+              label="Dashboard password"
+              detail={summary.dashboardPassword ? "Set" : "Not set. Sign in with access tokens."}
+            />
+          )}
         </ul>
+
+        <AnimatePresence initial={false}>
+          {needsKey && (activateOpen || blocked) && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <div className="mt-4 rounded-xl border p-5">
+                {blocked && license?.message && <p className="mb-4 text-sm text-muted-foreground">{license.message}</p>}
+                <ActivatePanel source="onboarding" onActivated={() => setActivateOpen(false)} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         <p className="eyebrow mt-7 mb-3">Next up</p>
         <div className="grid gap-2 sm:grid-cols-3">
@@ -126,7 +145,7 @@ export function DoneStep({
             <motion.button
               key={n.to}
               type="button"
-              disabled={!!busy}
+              disabled={!!busy || blocked}
               onClick={() => finish(n.to)}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -149,12 +168,90 @@ export function DoneStep({
           </div>
         )}
 
-        <div className="mt-7 flex justify-center border-t pt-5">
-          <SubmitButton busy={busy === "/"} disabled={!!busy} type="button" onClick={() => finish("/")} className="w-auto px-8">
+        <StepFooter>
+          {blocked && <span className="text-xs text-muted-foreground">Activate Godmode to start working.</span>}
+          <SubmitButton busy={busy === "/"} disabled={!!busy || blocked} type="button" onClick={() => finish("/")} className="w-auto px-8">
             Start working
           </SubmitButton>
-        </div>
+        </StepFooter>
       </StepCard>
     </div>
+  );
+}
+
+function SummaryRow({ i, ok, label, detail, action }: { i: number; ok: boolean | null; label: string; detail?: string; action?: ReactNode }) {
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.25 + i * 0.07 }}
+      className="flex min-h-12 items-center gap-3 px-3.5 py-2 text-sm"
+    >
+      {ok ? (
+        <CircleCheck className="size-4 shrink-0 text-success" />
+      ) : (
+        <CircleDashed className={cn("size-4 shrink-0", ok === false ? "text-warning" : "text-muted-foreground")} />
+      )}
+      <span className="font-medium">{label}</span>
+      {detail && <span className="ml-auto truncate text-xs text-muted-foreground">{detail}</span>}
+      {action && <span className={cn("shrink-0", !detail && "ml-auto")}>{action}</span>}
+    </motion.li>
+  );
+}
+
+/** One click brings Chrome's sign-ins into Godmode's browser; hidden when this computer has no Chrome profile. */
+function ChromeImportRow({ i }: { i: number }) {
+  const chrome = useQuery({ queryKey: qk.chromeProfiles, queryFn: api.browser.chromeProfiles, retry: false });
+  const profiles = chrome.data ?? [];
+  const [selected, setSelected] = useState<string | null>(null);
+  const chosen = profiles.find((p) => p.path === selected) ?? profiles[0] ?? null;
+  const [result, setResult] = useState<ChromeImportResult | null>(null);
+  const importMut = useMutation({
+    mutationFn: async (profile: LocalChromeProfile) => {
+      const targets = await api.browser.profiles();
+      const target = targets.find((p) => p.isDefault) ?? targets.find((p) => !p.workspaceId) ?? targets[0];
+      if (!target) throw new Error("No Godmode browser profile exists yet. Import from the Browser page later.");
+      return api.browser.import(target.id, { sourcePath: profile.path });
+    },
+    onSuccess: setResult,
+  });
+
+  if (result)
+    return <SummaryRow i={i} ok label="Chrome sign-ins" detail={`Imported from ${result.domains.length.toLocaleString()} sites`} />;
+  if (chrome.isLoading || chrome.isError || !chosen)
+    return <SummaryRow i={i} ok={null} label="Chrome sign-ins" detail={chrome.isLoading ? "Looking for Chrome…" : "No Chrome profile found. Import later from Browser."} />;
+
+  return (
+    <motion.li initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 + i * 0.07 }} className="px-3.5 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <CircleDashed className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="font-medium">Chrome sign-ins</span>
+          <span className="block text-xs text-muted-foreground">Optional. Agents start already logged in to the sites you use.</span>
+        </span>
+        {profiles.length > 1 && (
+          <Select value={chosen.path} onValueChange={setSelected}>
+            <SelectTrigger size="sm" className="h-7 w-56 bg-card text-xs" aria-label="Chrome profile">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((p) => (
+                <SelectItem key={p.path} value={p.path} className="text-xs">
+                  {p.name}
+                  {p.email ? ` · ${p.email}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => importMut.mutate(chosen)} disabled={importMut.isPending}>
+          <Cookie /> {importMut.isPending ? "Importing…" : profiles.length > 1 ? "Import" : `Import from ${chosen.name}`}
+        </Button>
+      </div>
+      {importMut.isError && <p className="mt-2 pl-7 text-xs text-destructive">{errorMessage(importMut.error)}</p>}
+      {!importMut.isError && isMac && importMut.isPending && (
+        <p className="mt-2 pl-7 text-xs text-muted-foreground">macOS may ask for Keychain access. Allow it so Chrome's cookies can be read.</p>
+      )}
+    </motion.li>
   );
 }

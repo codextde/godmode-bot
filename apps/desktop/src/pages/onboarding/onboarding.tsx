@@ -1,33 +1,27 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { Globe2, HandHeart, KeySquare, LockKeyhole, PartyPopper, Stethoscope, AppWindow } from "lucide-react";
+import { Globe2, LockKeyhole, PartyPopper, Sparkles } from "lucide-react";
 import type { Bootstrap, InterfaceMode } from "@godmode/shared";
 import { Backdrop, Wordmark } from "@/components/brand";
-import { ActivateStep } from "@/components/onboarding/activate-step";
-import { BrowserStep } from "@/components/onboarding/browser-step";
 import { DoneStep, type OnboardingSummary } from "@/components/onboarding/done-step";
 import { RemoteStep } from "@/components/onboarding/remote-step";
+import { SetupStep } from "@/components/onboarding/setup-step";
 import { StepProgress, StepRail, type StepMeta } from "@/components/onboarding/step-kit";
-import { SystemStep } from "@/components/onboarding/system-step";
 import { VaultStep } from "@/components/onboarding/vault-step";
-import { WelcomeStep } from "@/components/onboarding/welcome-step";
 import { api } from "@/lib/api";
 import { isTauri, storageKey } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
-type StepId = "welcome" | "system" | "vault" | "browser" | "remote" | "activate" | "done";
+type StepId = "setup" | "vault" | "remote" | "done";
 
 const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
-  welcome: { title: "Welcome", hint: "Say hello", icon: <HandHeart /> },
-  system: { title: "System check", hint: "Claude Code, browser & tools", icon: <Stethoscope /> },
-  vault: { title: "Vault", hint: "Encrypted logins & 2FA", icon: <LockKeyhole /> },
-  browser: { title: "Browser sessions", hint: "Import Chrome sign-ins", icon: <AppWindow />, optional: true },
+  setup: { title: "Set up", hint: "Installs and signs in by itself", icon: <Sparkles /> },
+  vault: { title: "Vault", hint: "Keeps your logins safe", icon: <LockKeyhole /> },
   remote: { title: "Remote dashboard", hint: "Password for web access", icon: <Globe2 /> },
-  activate: { title: "Activate", hint: "Free trial or licence key", icon: <KeySquare /> },
   done: { title: "Done", hint: "Start working", icon: <PartyPopper /> },
 };
 
@@ -62,11 +56,10 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
 
   // The step list is fixed on mount — bootstrap changes mid-flow (e.g. vault created) must not shift indices.
   const [steps] = useState<StepId[]>(() => {
-    const list: StepId[] = ["welcome", "system"];
+    const list: StepId[] = ["setup"];
     if (!(bootstrap.vault.initialized && bootstrap.vault.unlocked)) list.push("vault");
-    list.push("browser");
     if (serverMode) list.push("remote");
-    list.push("activate", "done");
+    list.push("done");
     return list;
   });
   const [index, setIndex] = useState(() => {
@@ -83,13 +76,13 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
   const [summary, setSummary] = useState<OnboardingSummary>({
     doctorOk: null,
     vault: bootstrap.vault.initialized && bootstrap.vault.unlocked ? "existing" : null,
-    importedCookies: null,
     dashboardPassword: bootstrap.settings.server.hasDashboardPassword,
-    license: null,
   });
 
+  const scroller = useRef<HTMLElement>(null);
   const go = (to: number) => {
     const next = Math.max(0, Math.min(steps.length - 1, to));
+    scroller.current?.scrollTo({ top: 0 });
     setDirection(next >= index ? 1 : -1);
     setIndex(next);
     saveSession({ step: steps[next], userName, mode });
@@ -113,16 +106,15 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
 
   let content: ReactNode;
   switch (stepId) {
-    case "welcome":
-      content = <WelcomeStep userName={userName} onUserName={setUserName} mode={mode} onMode={setMode} onNext={next} />;
-      break;
-    case "system":
+    case "setup":
       content = (
-        <SystemStep
-          onBack={back}
-          onNext={() => {
-            const report = qc.getQueryData<{ dependencies: { required: boolean; ok: boolean }[] }>(qk.doctor);
-            setSummary((s) => ({ ...s, doctorOk: report ? report.dependencies.every((d) => !d.required || d.ok) : null }));
+        <SetupStep
+          userName={userName}
+          onUserName={setUserName}
+          mode={mode}
+          onMode={setMode}
+          onNext={(doctorOk) => {
+            setSummary((s) => ({ ...s, doctorOk }));
             next();
           }}
         />
@@ -141,17 +133,6 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
         />
       );
       break;
-    case "browser":
-      content = (
-        <BrowserStep
-          onBack={back}
-          onDone={(importedCookies) => {
-            setSummary((s) => ({ ...s, importedCookies }));
-            next();
-          }}
-        />
-      );
-      break;
     case "remote":
       content = (
         <RemoteStep
@@ -160,17 +141,6 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
           onBack={back}
           onDone={(dashboardPassword) => {
             setSummary((s) => ({ ...s, dashboardPassword }));
-            next();
-          }}
-        />
-      );
-      break;
-    case "activate":
-      content = (
-        <ActivateStep
-          onBack={back}
-          onDone={(state) => {
-            setSummary((s) => ({ ...s, license: state }));
             next();
           }}
         />
@@ -202,7 +172,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
             Everything stays on this machine. You can change any of this later in Settings.
           </p>
         </aside>
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-2xl pt-8 pb-14 lg:pt-14">
             <StepProgress steps={meta} current={index} />
             <AnimatePresence mode="wait" custom={direction} initial={false}>
