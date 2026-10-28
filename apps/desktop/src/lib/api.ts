@@ -160,12 +160,6 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   RoutineInput,
   Run,
   RunPause,
-  RunnerAutofixInput,
-  RunnerFixResult,
-  RunnerHealth,
-  RunnerPairingOffer,
-  RunnerPatch,
-  RunnerUpdateInput,
   SendMessageInput,
   SendMessageOutcome,
   SendMessageResult,
@@ -821,30 +815,11 @@ export const api = {
 
   runners: {
     list: () => get<RemoteRunner[]>("/api/runners"),
-    get: (id: string) => get<RemoteRunner>(`/api/runners/${id}`),
-    /** A one-time offer (10 minutes): the install commands that set up a runner and pair it with this computer. */
-    pairing: () => post<RunnerPairingOffer>("/api/runners/pairing"),
-    cancelPairing: () => del<{ ok: true }>("/api/runners/pairing"),
-    /** Pair with the `gmr1.` code a runner printed. */
-    pair: (code: string) => post<RemoteRunner>("/api/runners", { code }),
-    update: (id: string, input: RunnerPatch) => patch<RemoteRunner>(`/api/runners/${id}`, input),
     remove: (id: string) => del<{ ok: true }>(`/api/runners/${id}`),
     /** Dial the runner again now instead of waiting for the next retry. */
     connect: (id: string) => post<RemoteRunner>(`/api/runners/${id}/connect`),
-    /** Copy the setup (agents, logins, integrations, settings) to the runner now. */
-    sync: (id: string) => post<RemoteRunner>(`/api/runners/${id}/sync`),
-    /** `refresh` runs the checks on the runner again instead of answering from its last result. */
-    health: (id: string, refresh = false) => get<RunnerHealth>(`/api/runners/${id}/health`, { refresh: refresh ? 1 : undefined }),
-    fix: (id: string, checkId: string) => post<RunnerFixResult>(`/api/runners/${id}/health/fix`, { id: checkId }),
-    /** Its Godmode to this computer's and its tools to their newest; the progress follows as `runner.updated`. */
-    upgrade: (id: string, input: RunnerUpdateInput = {}) => post<RemoteRunner>(`/api/runners/${id}/update`, input),
-    /** Starts a chat here whose agent diagnoses and repairs the runner. */
-    autofix: (id: string, input: RunnerAutofixInput = {}) => post<StartChatResult>(`/api/runners/${id}/autofix`, input),
-    /** A ticket that fixes what the runner's log shows in Godmode's code. */
-    fixInCode: (id: string, input: SelfRepairInput = {}) => post<SelfRepairResult>(`/api/runners/${id}/fix-in-code`, input),
-    /** Any API call answered by the runner instead of this computer: `path` is the route without `/api`, e.g. "/computer/sources". */
-    proxy: <T>(id: string, method: string, path: string, body?: unknown) => request<T>(method, `/api/runners/${id}/proxy${path}`, body),
   },
+
 
   /** This computer's device group: several full Godmode apps that work as one (remote/devices.ts in the core). */
   devices: {

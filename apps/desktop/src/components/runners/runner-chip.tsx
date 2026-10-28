@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronDown, Laptop, MonitorSmartphone, Plus, RefreshCw, Settings2, TriangleAlert, WifiOff } from "lucide-react";
+import { Check, ChevronDown, Laptop, MonitorSmartphone, RefreshCw, Settings2, TriangleAlert, WifiOff } from "lucide-react";
 import type { RemoteRunner } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Command, CommandGroup, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { timeAgo } from "@/components/ssh/ssh-parts";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
-import { isRunnerPlace, placeName, usePlaces, type Place } from "@/lib/places";
+import { isOlderRunner, isRunnerPlace, placeName, usePlaces, type Place } from "@/lib/places";
 import { upsertRunner } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
 import { RUNNER_STATE_LABEL, RunnerStateDot, RunnerTag, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "./runner-parts";
@@ -44,19 +44,17 @@ function PlaceIcon({ place }: { place: Place }) {
 }
 
 /**
- * Composer control of a new chat for where it works: this computer, another computer of the device group, or a runner.
- * Hidden while there is nowhere else. A place that isn't online is listed but can't be picked.
+ * Composer control of a new chat for where it works: this computer or another computer of the device group. Hidden
+ * while there is nowhere else. A place that isn't online is listed but can't be picked.
  */
 export function RunnerChip({ value, onChange }: { value: string | null; onChange: (runnerId: string | null) => void }) {
-  const { places, hereId, inGroup } = usePlaces();
+  const { places, hereId } = usePlaces();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  if (places.length <= 1) return null;
+  const others = places.filter((p) => !p.here && !isOlderRunner(p));
+  if (!others.length) return null;
 
-  const selected = places.find((p) => p.runnerId === value) ?? places.find((p) => p.here)!;
-  const current = selected.here ? null : selected;
-  const others = places.filter((p) => !p.here && p.kind !== "runner");
-  const runners = places.filter((p) => !p.here && p.kind === "runner");
+  const current = others.find((p) => p.runnerId === value) ?? null;
   const pick = (runnerId: string | null) => {
     setOpen(false);
     if (runnerId !== value) onChange(runnerId);
@@ -75,14 +73,10 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
               <button
                 type="button"
                 aria-label={`Runs on ${placeName(current)} (${RUNNER_STATE_LABEL[current.state].toLowerCase()})`}
-                className={cn(
-                  "flex h-8 min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                  isRunnerPlace(current, inGroup) ? "max-w-[16rem]" : "max-w-[12rem]",
-                )}
+                className="flex h-8 max-w-[12rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />
                 <span className="truncate font-medium">{current.name}</span>
-                {isRunnerPlace(current, inGroup) && <RunnerTag />}
                 <RunnerStateDot state={current.state} />
                 <ChevronDown className="size-3.5 shrink-0 opacity-60" />
               </button>
@@ -90,7 +84,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
               <Button
                 type="button"
                 variant="ghost"
-                aria-label={`Runs on ${THIS_COMPUTER_INLINE} — pick a runner`}
+                aria-label={`Runs on ${THIS_COMPUTER_INLINE} — pick another computer`}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
@@ -108,9 +102,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
         <div className="border-b px-3 pt-2.5 pb-2">
           <p className="text-[13px] font-medium">Run on</p>
           <p className="text-xs text-muted-foreground">
-            {inGroup
-              ? "The computer that does the work of this chat. You see it on every computer of your group, and it can move later — also while it works."
-              : "The computer that does the work of this chat. A runner keeps going while this one sleeps — and the chat stays where it started."}
+            The computer that does the work of this chat. You see it on every computer of your group, and it can move later — also while it works.
           </p>
         </div>
         <Command>
@@ -127,42 +119,17 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
                 {!current && <Check className="size-4" aria-label="Selected" />}
               </CommandItem>
             </CommandGroup>
-            {others.length > 0 && (
-              <>
-                <CommandSeparator />
-                <CommandGroup heading="Your devices">
-                  {others.map((place) => (
-                    <PlaceItem key={place.runnerId ?? "primary"} place={place} selected={current === place} onSelect={() => pick(place.runnerId)} />
-                  ))}
-                </CommandGroup>
-              </>
-            )}
-            {runners.length > 0 && (
-              <>
-                <CommandSeparator />
-                <CommandGroup heading="Runners">
-                  {runners.map((place) => (
-                    <PlaceItem key={place.runnerId} place={place} selected={current === place} onSelect={() => pick(place.runnerId)} />
-                  ))}
-                </CommandGroup>
-              </>
-            )}
+            <CommandSeparator />
+            <CommandGroup heading="Your devices">
+              {others.map((place) => (
+                <PlaceItem key={place.runnerId ?? "primary"} place={place} selected={current === place} onSelect={() => pick(place.runnerId)} />
+              ))}
+            </CommandGroup>
             <CommandSeparator />
             <CommandGroup>
-              {inGroup ? (
-                <CommandItem value="__devices" onSelect={() => go("/settings/devices")} className="text-muted-foreground">
-                  <Settings2 /> Manage devices
-                </CommandItem>
-              ) : (
-                <>
-                  <CommandItem value="__add" onSelect={() => go("/runners?new=1")} className="text-muted-foreground">
-                    <Plus /> Add runner
-                  </CommandItem>
-                  <CommandItem value="__manage" onSelect={() => go("/runners")} className="text-muted-foreground">
-                    <Settings2 /> Manage runners
-                  </CommandItem>
-                </>
-              )}
+              <CommandItem value="__devices" onSelect={() => go("/settings/devices")} className="text-muted-foreground">
+                <Settings2 /> Manage devices
+              </CommandItem>
             </CommandGroup>
           </CommandList>
         </Command>
@@ -197,7 +164,7 @@ function PlaceItem({ place, selected, onSelect }: { place: Place; selected: bool
 
 /** The line under a new chat's composer once another computer is picked: what happens before the work starts there. */
 export function RunnerNote({ place }: { place: Place | null }) {
-  const name = place ? placeName(place) : "a runner";
+  const name = place ? placeName(place) : "another computer";
   if (place && place.state !== "online") {
     return (
       <p className="flex items-start gap-1.5 px-1 pt-2 text-xs text-warning" role="status">
@@ -212,17 +179,11 @@ export function RunnerNote({ place }: { place: Place | null }) {
       </p>
     );
   }
-  const device = place?.kind === "device" || place?.kind === "primary";
   return (
     <p className="flex items-start gap-1.5 px-1 pt-2 text-xs text-muted-foreground">
       <MonitorSmartphone className="mt-px size-3.5 shrink-0" aria-hidden />
       <span>
-        Runs on <span className="font-medium text-foreground">{name}</span>.{" "}
-        {device
-          ? "It has your agents and logins too, and you can follow it from here."
-          : place?.runner && !place.runner.syncBrowser
-            ? "Your agents and logins are copied there first."
-            : "Your agents, logins and browser sessions are copied there first."}
+        Runs on <span className="font-medium text-foreground">{name}</span>. It has your agents and logins too, and you can follow it from here.
       </span>
     </p>
   );
@@ -317,8 +278,8 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
             )}
             <CommandSeparator />
             <CommandGroup>
-              <CommandItem value="__manage" onSelect={() => act(() => navigate(inGroup ? "/settings/devices" : "/runners"))} className="text-muted-foreground">
-                <Settings2 /> {inGroup ? "Manage devices" : "Manage runners"}
+              <CommandItem value="__manage" onSelect={() => act(() => navigate("/settings/devices"))} className="text-muted-foreground">
+                <Settings2 /> Manage devices
               </CommandItem>
             </CommandGroup>
           </CommandList>
@@ -333,7 +294,6 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
  * and a way to continue on this computer instead.
  */
 export function RunnerOfflineBar({ runner, onMove }: { runner: RemoteRunner; onMove: () => void }) {
-  const device = runner.kind === "device";
   const qc = useQueryClient();
   const connect = useMutation({
     mutationFn: () => api.runners.connect(runner.id),
@@ -363,7 +323,7 @@ export function RunnerOfflineBar({ runner, onMove }: { runner: RemoteRunner; onM
       </span>
       {update ? (
         <Button size="xs" variant="ghost" asChild>
-          <Link to={device ? "/settings/devices" : "/runners"}>{device ? "Open devices" : "Open runners"}</Link>
+          <Link to="/settings/devices">Open devices</Link>
         </Button>
       ) : (
         <Button size="xs" variant="ghost" disabled={connecting} onClick={() => connect.mutate()}>

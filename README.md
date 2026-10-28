@@ -138,7 +138,7 @@ API key (Max and Team plans now include monthly API credits) or a Team plan. God
 ## More
 
 - [docs/FEATURES.md](docs/FEATURES.md): every feature with screenshots, a quick start, and setup guides for the desktop
-  app, the headless server and Docker, the phone app, Godmode Cloud, runners, computer use, macOS VMs, SSH servers,
+  app, the headless server and Docker, the phone app, Godmode Cloud, computer use, macOS VMs, SSH servers,
   plugins and connecting Claude Code over MCP.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the core, runner, vault, browser and scheduler fit together.
 - [SECURITY.md](SECURITY.md): the full security model and its caveats.

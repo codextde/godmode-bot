@@ -456,7 +456,7 @@ Usage:
 Claude Code and other AI tools (they set up agents, automations and tasks in the running Godmode):
 ${CONNECT_USAGE}
 
-Runner (this computer works for a Godmode on another one):
+Runner (a computer paired as a runner before device groups):
 ${RUNNER_USAGE.replace(/^Usage:\n/, "")}`);
     return;
   }

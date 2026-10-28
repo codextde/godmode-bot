@@ -1,6 +1,6 @@
 /**
  * A real runner (a child process: `godmode runner serve`) and a controller (this process) end to end: pairing with
- * the code `godmode runner pair` prints, the setup copy, a chat that works on the runner and shows up here live, the
+ * a code made in the runner's data dir, the setup copy, a chat that works on the runner and shows up here live, the
  * runner going away and coming back, catching up on what finished while nobody listened, and moving a chat back here.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
@@ -18,9 +18,9 @@ import { getAccessToken } from "../src/server/auth";
 import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import { createCredential } from "../src/vault/credentials";
 import * as vault from "../src/vault/vault";
-import { connectRunner, getRunner, link, linkGone, listRunners, pairWithCode, removeRunner, startAutofix, startRunners, stopRunners } from "../src/remote/runners";
+import { connectRunner, getRunner, link, linkGone, listRunners, pairWithCode, removeRunner, startRunners, stopRunners } from "../src/remote/runners";
+import { createRunnerCode } from "../src/remote/pairing";
 import { Database } from "bun:sqlite";
-import { callTool, listToolsFor } from "../src/mcp/tools";
 import { getAgent } from "../src/agents/service";
 import { transcriptPath } from "../src/services/conversations";
 import { HttpError, childEnv, sleep } from "../src/util";
@@ -110,11 +110,13 @@ beforeAll(async () => {
   resetSettingsCache();
 
   await startChild();
-  const pair = Bun.spawnSync([process.execPath, INDEX, "runner", "pair", "--data-dir", runnerDir], { env: env(), stdout: "pipe", stderr: "pipe" });
-  const code = /gmr1\.[A-Za-z0-9_-]+/.exec(pair.stdout.toString())?.[0];
-  if (!code) throw new Error(`no pairing code:\n${pair.stdout.toString()}\n${pair.stderr.toString()}`);
+  // The serving runner checks the code it finds in its database.
+  loadConfig({ dataDir: runnerDir, role: "runner" });
+  openDb(join(runnerDir, "godmode.db"));
+  const { code } = await createRunnerCode();
+  closeDb();
 
-  // This process is the controller. Its own runs (the fix-with-Claude chat) use the fake Claude Code too: never the
+  // This process is the controller. Its own runs use the fake Claude Code too: never the
   // real one, which would work with bypassed permissions on this machine.
   process.env.FAKE_CLAUDE_STATE = join(controllerDir, "fake-claude");
   process.env.CLAUDE_CONFIG_DIR = join(controllerDir, "claude-config");
@@ -218,29 +220,6 @@ describe("a runner, end to end", () => {
     const again = (await retried.json()) as { mode: string; run: { id: string } };
     expect(again.mode).toBe("again");
     await until(() => !!get<{ status: string }>("SELECT status FROM runs WHERE id = ? AND status IN ('failed', 'succeeded')", again.run.id), 30_000, "the retry to end");
-  }, 60_000);
-
-  test("the fix-with-Claude chat runs here, gets the runner tools, and runner_exec runs on the runner", async () => {
-    const started = await startAutofix(runnerId, { note: "It seems stuck" });
-    expect(started.conversation.runnerId).toBeNull();
-    expect(started.conversation.runnerToolsId).toBe(runnerId);
-    const prompt = get<{ content: string }>("SELECT content FROM messages WHERE id = ?", started.message.id)!.content;
-    expect(prompt).toContain("Health report:");
-    expect(prompt).toContain("It seems stuck");
-    const ctx = { runId: started.run.id, agentId, conversationId: started.conversation.id, workspaceId: null, depth: 0 };
-    const names = listToolsFor(getAgent(agentId), ctx as never).map((t) => t.name);
-    expect(names).toEqual(expect.arrayContaining(["runner_exec", "runner_health", "runner_fix"]));
-    const out = await callTool(ctx as never, "runner_exec", { command: "pwd && echo on-the-runner" });
-    expect(out.isError).toBeUndefined();
-    expect(out.content[0]!.text).toContain("on-the-runner");
-    expect(out.content[0]!.text).toContain(runnerDir.split("/").pop()!);
-    // The chat's own run is the fake Claude Code's: it is done before the next test.
-    expect((await waitForRun(started.run.id, 20_000)).status).toBe("succeeded");
-    expect(get<{ content: string }>("SELECT content FROM messages WHERE run_id = ? AND role = 'assistant'", started.run.id)?.content).toContain("Hello");
-    // An ordinary chat doesn't get them.
-    const chatId = all<{ id: string }>("SELECT id FROM conversations WHERE runner_id = ?", runnerId)[0]!.id;
-    const plain = listToolsFor(getAgent(agentId), { ...ctx, conversationId: chatId } as never).map((t) => t.name);
-    expect(plain).not.toContain("runner_exec");
   }, 60_000);
 
   test("while the runner is away its chat answers runner_offline; when it is back the chat continues", async () => {

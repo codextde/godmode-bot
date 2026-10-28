@@ -29,7 +29,6 @@ export const EASY_PAGES: Record<string, { title?: string; description?: string }
   "/vault/cards": { title: "Payment cards" },
   "/computer": { title: "Computer control" },
   "/ssh": { title: "Servers" },
-  "/runners": { title: "Other computers" },
 };
 
 export function useEasyMode(): boolean {

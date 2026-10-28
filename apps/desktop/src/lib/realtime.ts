@@ -443,7 +443,6 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "runner.deleted":
       qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => (Array.isArray(old) ? old.filter((r) => r.id !== event.id) : old));
-      qc.removeQueries({ queryKey: qk.runnerHealth(event.id) });
       // Its chats stay, as ordinary chats of this computer.
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       break;

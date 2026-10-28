@@ -1,5 +1,6 @@
 /**
- * The runners this Godmode works with (owner: remote) — the controller's side of remote runners.
+ * The other computers this Godmode works with (owner: remote) — the controller's side of the link: the computers of its
+ * device group (kind "device") and runners paired before device groups (kind "runner"; no new ones are paired).
  *
  *  registry     the `runners` table: who was paired, where it listens, its pinned key
  *  connections  one RemoteLink per runner, started with the core; its events go into the mirror (mirror.ts)
@@ -7,7 +8,6 @@
  *               gets a copy of the setup (snapshot.ts), the agent's memory is merged both ways (memorySync.ts) and the
  *               chat's browser sessions are copied
  *  health       the runner's own checks, passed through, with a summary kept for the list
- *  autofix      a local chat whose agent may run commands on the runner to repair it
  *  updates      the runner's Godmode brought to this computer's, its tools to their newest (runnerUpdates.ts)
  */
 import { createHash } from "node:crypto";
@@ -18,12 +18,9 @@ import {
   type ConversationWithMessages,
   type LogEntry,
   type RemoteRunner,
-  type RunnerAutofixInput,
-  type RunnerFixResult,
   type RunnerHealth,
   type RunnerHealthSummary,
   type RunnerInfo,
-  type RunnerPairingOffer,
   type RunnerKind,
   type RunnerPatch,
   type RunnerUpdate,
@@ -45,14 +42,11 @@ import { audit } from "../services/audit";
 import {
   type RunnerChatState,
   conversationExists,
-  createConversation,
   emitConversationUpdated,
   getConversationSummary,
-  sendMessage,
   transcriptPath,
 } from "../services/conversations";
 import { MIN_DELAY_MS as MIN_FOLLOWUP_DELAY_MS, scheduleFollowup } from "../services/followups";
-import { notify } from "../services/notifications";
 import { addWelcomeEvents, setRemoteViewHandlers } from "../server/ws";
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import * as vault from "../vault/vault";
@@ -65,7 +59,6 @@ import { mergeMemory, readMemoryState, writeMemoryState } from "./memorySync";
 import { parseHandover, writeSession, writeTranscript, type ChatHandover } from "./handover";
 import { moveBytes, moveStage } from "./chatMoves";
 import { adoptChat, applyRunnerEvent, catchUp, chatMovedHere, forgetHeavyChats, reconcileConversation, runnerDisconnected, setMirrorHooks } from "./mirror";
-import { cancelOffer, createOffer } from "./pairing";
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
 import { requireLicense } from "../license/license";
@@ -386,8 +379,8 @@ export async function removeRunner(id: string): Promise<void> {
 /* ------------------------------------------------------------------ */
 
 /**
- * Pair with a runner from its pairing code (pasted, or delivered by `godmode runner install --pair`). `via`: the
- * address the code was delivered from, dialed first (it proved to reach this computer, e.g. over Tailscale).
+ * Pair with another computer from its pairing code (remote/devices.ts: joining a device group, or a computer joining
+ * this one's). `via`: the address the code came from, dialed first.
  */
 export async function pairWithCode(
   text: string,
@@ -437,7 +430,6 @@ export async function pairWithCode(
   infos.set(id, info);
   const runner = requireRow(id);
   audit("user", kind === "device" ? "device.pair" : "runner.pair", id, { name: runner.name, address });
-  if (kind === "runner") notify("success", `${runner.name} is connected`, "Give it a chat with “Run on” in the message box. Godmode copies your setup there first.", "/runners");
   opts.prepared?.(id);
   if (started) startLink(runner);
   const model = getRunner(id);
@@ -445,15 +437,6 @@ export async function pairWithCode(
   bus.emit({ type: "runner.updated", runner: model });
   bus.changed("runners");
   return model;
-}
-
-/** Show an install command that pairs the runner by itself. */
-export function createPairing(): Promise<RunnerPairingOffer> {
-  return createOffer(async (code, from) => ({ name: (await pairWithCode(code, from)).name }));
-}
-
-export function cancelPairing(): void {
-  cancelOffer();
 }
 
 /* ------------------------------------------------------------------ */
@@ -668,7 +651,6 @@ export function stopRunners(): void {
   syncTimer = null;
   for (const l of links.values()) l.stop();
   links.clear();
-  cancelOffer();
 }
 
 /** Try to connect now instead of at the next retry. */
@@ -883,27 +865,6 @@ export async function runnerHealth(id: string, refresh: boolean): Promise<Runner
   healths.set(id, health);
   emit(id);
   return health;
-}
-
-/** Fix one check. `sync` is done from here (copy the setup again); everything else on the runner. */
-export async function fixRunner(id: string, checkId: string): Promise<RunnerFixResult> {
-  const r = requireRow(id);
-  const known = healths.get(id) ?? (await runnerHealth(id, false));
-  const check = known.checks.find((c) => c.id === checkId);
-  if (check?.fix?.kind === "sync") {
-    try {
-      await syncRunner(id, { force: true });
-      const health = await runnerHealth(id, true);
-      return { ok: true, output: `Copied your setup to ${r.name}.`, health };
-    } catch (err) {
-      return { ok: false, output: message(err), health: await runnerHealth(id, true).catch(() => known) };
-    }
-  }
-  const result = await link(id).json<RunnerFixResult>("POST", "/api/link/health/fix", { id: checkId }, { timeoutMs: 20 * 60_000 });
-  healths.set(id, result.health);
-  audit("user", "runner.fix", id, { check: checkId, ok: result.ok });
-  emit(id);
-  return result;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1149,55 +1110,6 @@ function describeHealth(health: RunnerHealth): string {
 }
 
 /**
- * A chat on this computer whose agent may run commands on the runner (runner_exec, runner_health, runner_fix): it gets
- * the runner's health report and the end of its log, and is asked to find and fix what's wrong.
- */
-export async function startAutofix(runnerId: string, input: RunnerAutofixInput): Promise<StartChatResult> {
-  const r = requireRow(runnerId);
-  const l = link(runnerId);
-  l.assertOnline();
-  const health = await runnerHealth(runnerId, true);
-  let logTail = "";
-  try {
-    const res = await l.json<{ stdout: string }>("POST", "/api/link/exec", { command: "tail -n 80 logs/godmode.jsonl", timeoutMs: 15_000 });
-    logTail = res.stdout.slice(-15_000);
-  } catch {
-    logTail = "(the log couldn't be read)";
-  }
-  const agentId = getDefaultAgentId();
-  if (!agentId) throw badRequest("No default agent exists");
-  const focus = input.checkId ? health.checks.find((c) => c.id === input.checkId) : null;
-  const prompt = [
-    `Please get the runner "${r.name}" (${r.platform ?? "unknown OS"}, Godmode ${r.version ?? "?"}) into working order.`,
-    focus ? `Start with the check "${focus.name}" (${focus.id}): ${focus.detail}` : "Fix everything that fails below.",
-    input.note?.trim() ? `What I noticed: ${input.note.trim()}` : "",
-    "",
-    "You can run commands on the runner with `runner_exec` (a login shell in the runner's data folder; its log is logs/godmode.jsonl), look at its checks with `runner_health` and use the one-click fixes with `runner_fix`. Look before you change anything, change one thing at a time, and check again with `runner_health` after each fix.",
-    "Some things only I can do on the runner itself — granting a macOS permission, signing in to Claude Code or GitHub, logging in on its screen. When you get to one of those, tell me exactly what to click or type and where, then check again once I say it's done.",
-    "",
-    "Health report:",
-    describeHealth(health),
-    "",
-    "End of the runner's log:",
-    "```",
-    logTail || "(empty)",
-    "```",
-  ]
-    .filter((line, i, lines) => line !== "" || lines[i - 1] !== "")
-    .join("\n");
-  const conversation = createConversation({ agentId, title: `Fix ${r.name}`.slice(0, 200), origin: "chat" });
-  sql("UPDATE conversations SET runner_tools_id = ? WHERE id = ?", runnerId, conversation.id);
-  try {
-    const result = await sendMessage(conversation.id, { content: prompt, trigger: "chat" });
-    return { ...result, conversation: getConversationSummary(conversation.id) };
-  } catch (err) {
-    sql("DELETE FROM conversations WHERE id = ?", conversation.id);
-    bus.emit({ type: "conversation.deleted", id: conversation.id });
-    throw err;
-  }
-}
-
-/**
  * What a fix in Godmode's code needs from a runner: its diagnostic log (the overview and the report for an AI) and its
  * health checks. Asks the runner's own API over the link, so it works with every runner that has Settings → Logs.
  */
@@ -1220,7 +1132,7 @@ export async function clearRunnerLog(runnerId: string): Promise<void> {
   await l.json("DELETE", "/api/logs", undefined, { timeoutMs: 30_000 });
 }
 
-/** For the autofix chat's tools: a command on the runner. */
+/** A command on the runner (retiring an old runner, the updater's bridge). */
 export async function runnerExec(runnerId: string, command: string, timeoutSec?: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return link(runnerId).json("POST", "/api/link/exec", { command, ...(timeoutSec ? { timeoutMs: Math.min(timeoutSec, 900) * 1000 } : {}) }, { timeoutMs: 16 * 60_000 });
 }
