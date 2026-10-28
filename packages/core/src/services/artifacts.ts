@@ -19,9 +19,10 @@ import type {
 import { MAX_ARTIFACT_DATA, MAX_ARTIFACT_HTML, MAX_ARTIFACT_VERSIONS } from "@godmode/shared";
 import { all, get, insert, run as sql, tx } from "../db";
 import { bus } from "../events/bus";
-import { badRequest, newId, notFound, now, parseJson } from "../util";
+import { badRequest, conflict, newId, notFound, now, parseJson } from "../util";
 import { getDefaultAgentId } from "../agents/service";
 import { audit } from "./audit";
+import { getSettings } from "./settings";
 import { conversationExists, startChat } from "./conversations";
 import { hasQueued, submitMessage } from "./messageQueue";
 import { activeRunForConversation } from "../runner/runner";
@@ -377,6 +378,7 @@ export async function refreshArtifact(id: string): Promise<ArtifactMessageResult
 
 /** A new artifact from a description (the Artifacts page): a new chat whose agent builds it. */
 export async function startArtifact(input: ArtifactStartInput): Promise<ArtifactStartResult> {
+  if (!getSettings().artifacts.enabled) throw conflict("Artifacts are turned off. Turn them on in Settings → Artifacts.");
   const prompt = input.prompt.trim();
   if (!prompt) throw badRequest("Describe what to build");
   const started = await startChat({

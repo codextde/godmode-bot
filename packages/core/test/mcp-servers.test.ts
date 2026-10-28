@@ -7,7 +7,7 @@ import { SECRET_MASK } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, get, insert, openDb } from "../src/db";
 import { setLogLevel } from "../src/log";
-import { resetSettingsCache } from "../src/services/settings";
+import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import * as vault from "../src/vault/vault";
 import {
   createMcpServer,
@@ -104,6 +104,7 @@ beforeAll(async () => {
   resetComposioState();
   vault.lock();
   await vault.setup(PASSPHRASE, false);
+  updateSettings({ integrations: { enabled: true } });
   seedWorkspace("ws_one");
   seedWorkspace("ws_two");
   seedAgent("agt_a", "ws_one");

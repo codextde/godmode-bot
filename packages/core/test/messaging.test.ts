@@ -6,6 +6,7 @@ import { all, get } from "../src/db";
 import { getRun, waitForRun } from "../src/runner/runner";
 import { openQuestionOf, listQuestions } from "../src/services/questions";
 import * as vault from "../src/vault/vault";
+import { updateSettings } from "../src/services/settings";
 import { createApiTool, deleteApiTool } from "../src/integrations/apiTools";
 import { issueGrant } from "../src/server/grants";
 import { createApp } from "../src/server/app";
@@ -161,6 +162,7 @@ beforeAll(async () => {
   installFetchMock();
   fakeTelegram();
   fakeElevenLabs();
+  updateSettings({ messaging: { enabled: true }, integrations: { enabled: true } });
   startMessaging();
 });
 
@@ -241,6 +243,14 @@ describe("Telegram bot", () => {
     // The token is sealed, never stored in plain text.
     const row = get<{ secrets_enc: string }>("SELECT secrets_enc FROM messaging_connections WHERE id = ?", conn.id)!;
     expect(row.secrets_enc).not.toContain(TG_TOKEN);
+  });
+
+  test("turning messaging off stops the bots, turning it on starts them again", async () => {
+    const { runtimeOf } = await import("../src/messaging/service");
+    updateSettings({ messaging: { enabled: false } });
+    await until(() => runtimeOf(connectionId) === null, 5000, "bot stopped");
+    updateSettings({ messaging: { enabled: true } });
+    await until(() => runtimeOf(connectionId) !== null && listConnections()[0]?.status.state === "connected", 5000, "bot running again");
   });
 
   test("the same bot can't be connected twice", async () => {
