@@ -294,7 +294,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       {(usesOpenAi || v.ttsProvider === "elevenlabs") && (
         <Callout tone="info" icon={<KeyRound className="text-brand-strong" />} title="API keys live in the vault">
           Add your {[usesOpenAi && "OpenAI", v.ttsProvider === "elevenlabs" && "ElevenLabs"].filter(Boolean).join(" and ")} key under{" "}
-          <Link to="/integrations?tab=api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
+          <Link to="/settings/api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
             Integrations → API keys
           </Link>
           . Keys are encrypted and never shown again.

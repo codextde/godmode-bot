@@ -13,6 +13,7 @@ import { all, bool, get, insert, run, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
 import { badRequest, HttpError, newId, notFound, now, parseJson, slugify } from "../util";
 import { COMPOSIO_SERVER_NAMES, composioMcpServersForAgent } from "./composio";
@@ -377,13 +378,14 @@ export function mcpServerJson(server: McpServer, secrets: { env: Record<string, 
 
 /**
  * All external MCP servers (custom + composio) an agent gets for a run, keyed by a unique server name,
- * with secrets (env/headers) decrypted. Respects agent.inheritMcp and agent.mcpServerIds.
+ * with secrets (env/headers) decrypted. Respects agent.inheritMcp and agent.mcpServerIds; none while integrations are off.
  *
  * A server whose secrets cannot be decrypted (vault locked) is skipped with a warning instead of
  * failing the whole run; Composio problems (offline, invalid key) likewise only drop the Composio servers.
  */
 export async function mcpServersForAgent(agent: Agent): Promise<Record<string, McpServerJson>> {
   const out: Record<string, McpServerJson> = {};
+  if (!getSettings().integrations.enabled) return out;
   const taken = new Set(RESERVED_NAMES);
   for (const server of mcpServerRowsForAgent(agent)) {
     let secrets: { env: Record<string, string>; headers: Record<string, string> };

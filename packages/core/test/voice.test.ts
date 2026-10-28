@@ -262,6 +262,7 @@ describe("transcribeRecording (voice messages)", () => {
   test("an API tool the agent may use lends its key, only to the provider's own address", async () => {
     const elsewhere = createApiTool({ name: "Proxy", baseUrl: "https://api.openai.com.example.net", apiKey: "sk-proxy-123456" });
     const insecure = createApiTool({ name: "Plain", baseUrl: "http://api.openai.com", apiKey: "sk-plain-123456" });
+    updateSettings({ integrations: { enabled: true } });
     try {
       await expectHttpError(() => transcribeRecording(audio, { agent }), 400);
       expect(captured).toHaveLength(0);
@@ -272,9 +273,12 @@ describe("transcribeRecording (voice messages)", () => {
       expect(captured[0]!.url).toBe("https://api.elevenlabs.io/v1/speech-to-text");
       expect(captured[0]!.headers.get("xi-api-key")).toBe("xi-tool-key-123");
 
-      // Nobody to borrow from: no agent, or an agent that doesn't get shared tools.
+      // Nobody to borrow from: no agent, an agent that doesn't get shared tools, or integrations turned off.
       await expectHttpError(() => transcribeRecording(audio), 400);
       await expectHttpError(() => transcribeRecording(audio, { agent: { ...agent, inheritMcp: false } }), 400);
+      updateSettings({ integrations: { enabled: false } });
+      await expectHttpError(() => transcribeRecording(audio, { agent }), 400);
+      updateSettings({ integrations: { enabled: true } });
       expect(captured).toHaveLength(1);
       deleteApiTool(tool.id);
 
@@ -289,6 +293,7 @@ describe("transcribeRecording (voice messages)", () => {
     } finally {
       deleteApiTool(elsewhere.id);
       deleteApiTool(insecure.id);
+      updateSettings({ integrations: { enabled: false } });
     }
   });
 

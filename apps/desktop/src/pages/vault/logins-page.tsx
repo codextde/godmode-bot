@@ -7,12 +7,13 @@ import type { Credential, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
-import { EmptyState, Kbd, PageBody, PageHeader } from "@/components/common";
+import { EmptyState, Kbd, PageBody } from "@/components/common";
 import { usePageScroll } from "@/components/layout/page-scroll";
 import { CredentialDialog, type CredentialPrefill } from "@/components/vault/credential-dialog";
 import { CREDENTIAL_GRID, CredentialRow } from "@/components/vault/credential-row";
 import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
 import { PasswordImportDialog } from "@/components/vault/password-import-dialog";
+import { PasswordsHeader } from "@/components/vault/passwords-header";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
@@ -118,10 +119,7 @@ export default function LoginsPage() {
 
   return (
     <div className="relative">
-      <PageHeader
-        icon={<KeyRound />}
-        title="Logins"
-        description="Website logins your agents can use — encrypted in your local vault."
+      <PasswordsHeader
         actions={
           <>
             <Button variant="outline" onClick={() => setImportOpen(true)}>

@@ -73,7 +73,7 @@ beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "godmode-fake-adb-"));
   process.env.FAKE_ADB_DIR = dir;
   writeState("", {});
-  updateSettings({ android: { adbPath: FAKE_ADB } });
+  updateSettings({ android: { adbPath: FAKE_ADB, enabled: true } });
   agent = await makeAgent({ name: "Phone Operator" });
 });
 

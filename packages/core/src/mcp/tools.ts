@@ -920,8 +920,14 @@ function isDreamRun(ctx: RunContext): boolean {
   }
 }
 
-/** Artifacts belong to a chat: not in condition checks, dreams or connected apps, and not on a runner (its chats show on the controller). */
-const canArtifact = (_agent: Agent, ctx: RunContext) => config().role !== "runner" && !!ctx.conversationId && !isCheckRun(ctx) && !isDreamRun(ctx);
+/**
+ * Artifacts belong to a chat: not in condition checks, dreams or connected apps, and not on a runner (its chats show on
+ * the controller). Only while the human has artifacts on.
+ */
+const canArtifact = (_agent: Agent, ctx: RunContext) =>
+  getSettings().artifacts.enabled && config().role !== "runner" && !!ctx.conversationId && !isCheckRun(ctx) && !isDreamRun(ctx);
+
+const androidOn = () => getSettings().android.enabled;
 
 /** Agents change their own artifacts; managers anyone's. */
 function artifactRefusal(agent: Agent, id: string): string | null {
@@ -3489,7 +3495,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     description:
       "Android phones connected to this computer over adb (and ones seen before): id, name, model, Android version, connected or not, battery, and which agents and chats control them. Also phones waiting for the human to allow USB debugging.",
     schema: z.object({}),
-    when: isManager,
+    when: (agent) => isManager(agent) && androidOn(),
     run: async () => {
       const [status, devices] = await Promise.all([androidStatus(), freshDevices()]);
       if (!status.adb.installed) return "adb isn't installed on this computer; the human can install it on the Android phones page.";
@@ -3517,7 +3523,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       deviceId: z.string(),
       agentId: z.string().describe("The agent that gets the phone"),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && androidOn(),
     run: async ({ deviceId, agentId }, { agent, ctx }) => {
       if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, where the phones are plugged in.");
       if (agentId === agent.id) return fail("You can't give yourself a phone. Ask the human: they pick phones for a chat in its message box, or for an agent in its settings.");

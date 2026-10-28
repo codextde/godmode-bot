@@ -68,10 +68,13 @@ export const DEFAULT_SETTINGS: Settings = {
     tartPath: "",
   },
   android: {
-    enabled: true,
+    enabled: false,
     vaultFill: false,
     adbPath: "",
   },
+  artifacts: { enabled: false },
+  integrations: { enabled: false },
+  messaging: { enabled: false },
   voice: {
     enabled: true,
     sttProvider: "browser",

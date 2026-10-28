@@ -1537,6 +1537,21 @@ export interface VmSettings {
   tartPath: string;
 }
 
+/** Small web apps agents build in a chat (artifacts.ts): the Artifacts page and the artifact_* tools. */
+export interface ArtifactSettings {
+  enabled: boolean;
+}
+
+/** Composio apps, API tools and MCP servers: agents get them only while this is on. */
+export interface IntegrationSettings {
+  enabled: boolean;
+}
+
+/** Bots on Slack, Telegram and Teams that people use to talk to agents: they only run while this is on. */
+export interface MessagingSettings {
+  enabled: boolean;
+}
+
 export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
@@ -1606,6 +1621,13 @@ export interface Settings {
   computer: ComputerSettings;
   vm: VmSettings;
   android: AndroidSettings;
+  /**
+   * Optional features, off for new installs (Settings → Features). An install that already used one before the switch
+   * existed starts with it on (migration 105).
+   */
+  artifacts: ArtifactSettings;
+  integrations: IntegrationSettings;
+  messaging: MessagingSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;
