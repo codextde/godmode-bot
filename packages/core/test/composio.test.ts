@@ -7,7 +7,7 @@ import { Hono } from "hono";
 import { loadConfig } from "../src/config";
 import { closeDb, get, getMeta, insert, openDb, run } from "../src/db";
 import { setLogLevel } from "../src/log";
-import { resetSettingsCache } from "../src/services/settings";
+import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import * as vault from "../src/vault/vault";
 import * as composio from "../src/integrations/composio";
 import { createMcpServer, mcpServersForAgent } from "../src/integrations/mcpServers";
@@ -122,6 +122,7 @@ beforeAll(async () => {
   composio.resetComposioState();
   vault.lock();
   await vault.setup(PASSPHRASE, false);
+  updateSettings({ integrations: { enabled: true } });
   const ts = new Date().toISOString();
   insert("workspaces", { id: "ws_sales", name: "Sales", slug: "sales", created_at: ts, updated_at: ts });
   insert("agents", { id: "agt_x", workspace_id: "ws_sales", name: "X", slug: "x", repo_path: join(dataDir, "agents", "x"), created_at: ts, updated_at: ts });

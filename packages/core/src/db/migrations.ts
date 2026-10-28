@@ -58,6 +58,23 @@ SELECT id, agent_id, agent_name, trigger, at, MAX(0, own), duration_ms, failed F
 `;
 
 /**
+ * Artifacts, integrations, messaging and Android phones are off for new installs. An install that already uses one
+ * keeps it on: artifacts exist; API tools, MCP servers, Composio apps or a Composio key are set up; a bot is connected;
+ * a phone was seen (Android was on by default). A section saved before keeps its switch. Idempotent (only settings
+ * without the switch); also run after a restore, because a backup from before migration 105 has no switches.
+ * Migration 105 embeds it.
+ */
+export const FEATURE_SWITCHES_SQL = /* sql */ `
+INSERT OR IGNORE INTO settings (key, value) SELECT 'artifacts', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM artifacts);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'integrations', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM api_tools)
+  OR EXISTS (SELECT 1 FROM mcp_servers) OR EXISTS (SELECT 1 FROM composio_connections) OR EXISTS (SELECT 1 FROM secrets WHERE key = 'composio_api_key');
+INSERT OR IGNORE INTO settings (key, value) SELECT 'messaging', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM messaging_connections);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'android', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM android_devices);
+UPDATE settings SET value = json_set(value, '$.enabled', json(CASE WHEN EXISTS (SELECT 1 FROM android_devices) THEN 'true' ELSE 'false' END))
+WHERE key = 'android' AND json_valid(value) AND json_type(value, '$.enabled') IS NULL;
+`;
+
+/**
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */
@@ -1713,5 +1730,10 @@ CREATE TABLE IF NOT EXISTS self_repair_tickets (
   cleared_at TEXT
 );
 `,
+  },
+  {
+    id: 105,
+    name: "feature_switches",
+    sql: FEATURE_SWITCHES_SQL,
   },
 ];

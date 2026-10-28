@@ -11,6 +11,7 @@ import { all, bool, get, insert, run, update } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
 import { badRequest, HttpError, newId, notFound, now, parseJson, slugify } from "../util";
 
@@ -370,10 +371,11 @@ export function apiToolInAgentScope(tool: { workspaceId: string | null; agentId:
 const specificity = (t: ApiTool) => (t.agentId ? 2 : t.workspaceId ? 1 : 0);
 
 /**
- * Enabled tools `agent` may use, most general first. Shared (global / workspace) ones only when the agent inherits
+ * Enabled tools `agent` may use, most general first (none while integrations are off). Shared (global / workspace) ones only when the agent inherits
  * shared integrations (`inheritMcp`); tools pinned to the agent always.
  */
 export function apiToolsForAgent(agent: Pick<Agent, "id" | "workspaceId" | "inheritMcp">): ApiTool[] {
+  if (!getSettings().integrations.enabled) return [];
   return all<ApiToolRow>("SELECT * FROM api_tools WHERE enabled = 1 ORDER BY name COLLATE NOCASE, created_at")
     .map(toModel)
     .filter((t) => apiToolInAgentScope(t, agent) && (t.agentId === agent.id || agent.inheritMcp))

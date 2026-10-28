@@ -13,7 +13,7 @@ import { createWorkspace, deleteWorkspace } from "../src/services/workspaces";
 import { updateAgent } from "../src/agents/service";
 import { buildEnv } from "../src/runner/runner";
 import { buildSystemPrompt, resumeContextPrefix } from "../src/runner/prompt";
-import { getSettings } from "../src/services/settings";
+import { getSettings, updateSettings } from "../src/services/settings";
 import {
   apiToolEnv,
   apiToolKey,
@@ -78,6 +78,7 @@ async function gateway(agent: Agent, name: string, args: unknown = {}) {
 beforeAll(async () => {
   env = await setupEnv("godmode-api-tools-");
   await vault.setup(PASSPHRASE, false);
+  updateSettings({ integrations: { enabled: true } });
   api = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
