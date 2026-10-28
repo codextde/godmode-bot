@@ -39,6 +39,11 @@ export function isRunnerPlace(place: Place | null, inGroup: boolean): boolean {
   return !!place && inGroup && !place.here && place.kind === "runner";
 }
 
+/** A runner from before device groups: its chats keep working, but nothing new goes there. */
+export function isOlderRunner(place: Place | null): boolean {
+  return !!place && !place.here && place.kind === "runner";
+}
+
 export function usePlaces(): Places {
   const { data: runners = [] } = useRunners();
   const { data: group } = useDeviceGroup();

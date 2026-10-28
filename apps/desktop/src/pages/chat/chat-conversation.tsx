@@ -33,7 +33,7 @@ import { PhonePanel, PhoneToggle, useChatPhones } from "@/components/android/pho
 import { ArtifactPanel, ArtifactScopeProvider, ArtifactToggle, useArtifactPanel, useAutoOpenArtifacts } from "@/components/artifacts/artifact-panel";
 import { RunnerOfflineBar, RunnerPill } from "@/components/runners/runner-chip";
 import { MoveChatDialog } from "@/components/runners/move-chat";
-import { usePlaces, type Place } from "@/lib/places";
+import { isOlderRunner, usePlaces, type Place } from "@/lib/places";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
@@ -113,7 +113,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const runnerAway = onRunner && !!chatPlace && chatPlace.state !== "online";
   const [moving, setMoving] = useState(false);
   const [moveTo, setMoveTo] = useState<Place | null>(null);
-  const moveTargets = useMemo(() => places.filter((p) => p.runnerId !== (conv?.runnerId ?? null) && p.state === "online"), [places, conv?.runnerId]);
+  const moveTargets = useMemo(() => places.filter((p) => p.runnerId !== (conv?.runnerId ?? null) && p.state === "online" && !isOlderRunner(p)), [places, conv?.runnerId]);
   const openMove = (to: Place | null) => {
     setMoveTo(to);
     setMoving(true);
