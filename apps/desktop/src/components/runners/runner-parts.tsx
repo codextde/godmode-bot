@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
-import { Check, ChevronDown, CircleAlert, CircleCheck, CircleDashed, CircleX, Copy, SquareTerminal, TriangleAlert, WifiOff } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Check, Copy, SquareTerminal, TriangleAlert, WifiOff } from "lucide-react";
 import { toast } from "sonner";
-import type { RemoteRunner, RunnerCheck, RunnerHealth, RunnerHealthSummary, RunnerState } from "@godmode/shared";
+import type { RemoteRunner, RunnerState } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { copyText } from "@/components/chat/copy-button";
-import { timeAgo } from "@/components/ssh/ssh-parts";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -93,194 +91,10 @@ export function RunnerStateBadge({ runner, className }: { runner: Pick<RemoteRun
   );
 }
 
-const OS_NAME: Record<string, string> = { darwin: "macOS", linux: "Linux", win32: "Windows" };
-
-/** "macOS · Apple silicon"; null until the runner has connected once and said what it is. */
-export function runnerPlatform(runner: Pick<RemoteRunner, "platform" | "arch">): string | null {
-  if (!runner.platform) return null;
-  const os = OS_NAME[runner.platform] ?? runner.platform;
-  const chip = runner.platform !== "darwin" ? runner.arch : runner.arch === "arm64" ? "Apple silicon" : runner.arch === "x64" ? "Intel" : runner.arch;
-  return chip ? `${os} · ${chip}` : os;
-}
-
-/** Where the link goes: the address it is connected through, else the first one Godmode tries (IPv6 in brackets). */
-export function runnerEndpoint(runner: Pick<RemoteRunner, "address" | "addresses" | "port">): string | null {
-  const host = runner.address ?? runner.addresses[0];
-  if (!host) return null;
-  return `${host.includes(":") ? `[${host}]` : host}:${runner.port}`;
-}
-
 /** "3 chats · 1 working" */
 export function runnerWorkLine(runner: Pick<RemoteRunner, "conversations" | "activeRuns">): string {
   const chats = runner.conversations === 0 ? "No chats yet" : runner.conversations === 1 ? "1 chat" : `${runner.conversations} chats`;
   return runner.activeRuns > 0 ? `${chats} · ${runner.activeRuns} working` : chats;
-}
-
-/** Whether the setup (agents, logins, integrations, settings) on the runner matches this computer's. */
-export function runnerSyncLine(runner: Pick<RemoteRunner, "sync" | "state">): { text: string; tone: "muted" | "busy" | "error" } {
-  const { state, syncedAt } = runner.sync;
-  if (state === "syncing") return { text: "Copying your setup…", tone: "busy" };
-  if (state === "failed") return { text: "Setup not copied", tone: "error" };
-  if (state === "pending") return { text: runner.state === "online" ? "Setup changes waiting to be copied" : "Setup is copied when it's back", tone: "muted" };
-  return { text: syncedAt ? `Setup copied ${timeAgo(syncedAt)}` : "Setup copied", tone: "muted" };
-}
-
-/* ------------------------------------------------------------------ */
-/* Health                                                               */
-/* ------------------------------------------------------------------ */
-
-export type CheckTone = "ok" | "warn" | "fail" | "unknown";
-
-/** What a check means for the work: only a failing required check blocks it, everything else that isn't fine is a warning. */
-export function checkTone(check: Pick<RunnerCheck, "status" | "required">): CheckTone {
-  if (check.status === "ok" || check.status === "unknown") return check.status;
-  return check.status === "fail" && check.required ? "fail" : "warn";
-}
-
-export const CHECK_ICON: Record<CheckTone, LucideIcon> = { ok: CircleCheck, warn: CircleAlert, fail: CircleX, unknown: CircleDashed };
-export const CHECK_COLOR: Record<CheckTone, string> = { ok: "text-success", warn: "text-warning", fail: "text-destructive", unknown: "text-muted-foreground" };
-
-/** The checks that keep the runner from working. */
-export function blockingChecks(health: RunnerHealth): RunnerCheck[] {
-  return health.checks.filter((c) => checkTone(c) === "fail");
-}
-
-function summarize(health: RunnerHealth): RunnerHealthSummary {
-  const tones = health.checks.map(checkTone);
-  const failing = tones.filter((t) => t === "fail").length;
-  return { ok: failing === 0, failing, warnings: tones.filter((t) => t === "warn").length, checkedAt: health.checkedAt };
-}
-
-/** The newer of the summary the runner list carries and a full report loaded on this screen. */
-export function latestSummary(summary: RunnerHealthSummary | null, health: RunnerHealth | undefined): RunnerHealthSummary | null {
-  if (!health) return summary;
-  return summary && summary.checkedAt > health.checkedAt ? summary : summarize(health);
-}
-
-export function healthTone(summary: RunnerHealthSummary | null): CheckTone {
-  if (!summary) return "unknown";
-  return summary.failing > 0 ? "fail" : summary.warnings > 0 ? "warn" : "ok";
-}
-
-export function healthLabel(summary: RunnerHealthSummary | null): string {
-  if (!summary) return "Not checked yet";
-  if (summary.failing > 0) return `${summary.failing} to fix`;
-  if (summary.warnings > 0) return summary.warnings === 1 ? "1 warning" : `${summary.warnings} warnings`;
-  return "All good";
-}
-
-const HEALTH_PILL: Record<CheckTone, string> = {
-  ok: "border-success/25 bg-success/[0.06] text-success",
-  warn: "border-warning/30 bg-warning/[0.07] text-warning",
-  fail: "border-destructive/25 bg-destructive/[0.06] text-destructive",
-  unknown: "border-border bg-secondary text-muted-foreground",
-};
-
-/**
- * "All good" / "2 to fix" / "1 warning". With `onClick` it is the button that opens the checks. `stale`: the runner is
- * away, so what was found last time is no statement about now.
- */
-export function HealthPill({
-  summary,
-  checking,
-  stale,
-  expanded,
-  controls,
-  onClick,
-  className,
-}: {
-  summary: RunnerHealthSummary | null;
-  checking?: boolean;
-  stale?: boolean;
-  expanded?: boolean;
-  /** Id of the panel the pill opens. */
-  controls?: string;
-  onClick?: () => void;
-  className?: string;
-}) {
-  const tone = stale ? "unknown" : healthTone(summary);
-  const Icon = CHECK_ICON[tone];
-  const cls = cn("inline-flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium whitespace-nowrap [&_svg]:size-3", HEALTH_PILL[tone], className);
-  const content = (
-    <>
-      {checking ? <Spinner className="size-3" aria-hidden /> : <Icon aria-hidden />}
-      {checking ? "Checking…" : stale && summary ? "Last checks" : healthLabel(summary)}
-      {onClick && <ChevronDown aria-hidden className={cn("opacity-60 transition-transform", expanded && "rotate-180")} />}
-    </>
-  );
-  if (!onClick) return <span className={cls}>{content}</span>;
-  return (
-    <button
-      type="button"
-      aria-expanded={expanded}
-      aria-controls={controls}
-      onClick={onClick}
-      className={cn(cls, "transition outline-none hover:opacity-80 focus-visible:ring-[3px] focus-visible:ring-ring/50")}
-    >
-      {content}
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Can it work? What is wrong? What to do next?                         */
-/* ------------------------------------------------------------------ */
-
-/** One line that answers "can I give it work right now?". */
-export function runnerVerdict(runner: RemoteRunner, summary: RunnerHealthSummary | null): { tone: CheckTone | "busy"; label: string } {
-  if (runner.update.state === "restarting") return { tone: "busy", label: "Restarting with the new Godmode…" };
-  switch (runner.state) {
-    case "connecting":
-      return { tone: "busy", label: "Looking for it on the network…" };
-    case "offline":
-      return { tone: "fail", label: runner.lastSeenAt ? `Not reachable — last online ${timeAgo(runner.lastSeenAt)}` : "Not reachable" };
-    case "update_required":
-      return { tone: "warn", label: "Waiting for an update" };
-    case "online":
-      if (!summary) return { tone: "unknown", label: "Connected" };
-      return summary.failing > 0 ? { tone: "fail", label: "Can't work yet" } : { tone: "ok", label: "Ready to work" };
-  }
-}
-
-/** Ends a sentence that came without its full stop (errors from the core often do). */
-function sentence(text: string): string {
-  const t = text.trim();
-  return /[.!?…]$/.test(t) ? t : `${t}.`;
-}
-
-export interface RunnerProblem {
-  /** What fixes it: dial again, or copy the setup again. */
-  kind: "connection" | "sync";
-  tone: "fail" | "warn";
-  title: string;
-  detail: string;
-}
-
-/**
- * What stands between this computer and the runner, most urgent first; null when nothing does. (What is wrong on the
- * runner itself is the checks' business.)
- */
-export function runnerProblem(runner: RemoteRunner): RunnerProblem | null {
-  if (runner.state === "offline" && runner.update.state !== "restarting") {
-    return {
-      kind: "connection",
-      tone: "fail",
-      title: `${runner.name} is offline`,
-      detail: `${sentence(runner.error ?? "Is it awake and on the same network?")} Godmode keeps trying — its chats continue when it's back.`,
-    };
-  }
-  // The update strip says what to do (and has the command).
-  if (runner.state === "update_required") return null;
-  if (runner.state !== "online") return null;
-  if (runner.sync.state === "failed") {
-    return {
-      kind: "sync",
-      tone: "fail",
-      title: "Your setup couldn't be copied",
-      detail: `${runner.sync.error ? `${sentence(runner.sync.error)} ` : ""}Until it is, ${runner.name} works with the agents and logins it got last time.`,
-    };
-  }
-  return null;
 }
 
 /* ------------------------------------------------------------------ */
