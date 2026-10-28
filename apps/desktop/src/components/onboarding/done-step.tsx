@@ -43,7 +43,7 @@ export function DoneStep({
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { data: license } = useLicense();
+  const { data: license, isLoading: licenseLoading } = useLicense();
   const licensed = !!license?.keyHint && !license.blocked && LICENSED.includes(license.status);
   const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? new Date(license.graceEndsAt) : null;
   const needsKey = !!license && !licensed && !freeUntil;
@@ -52,7 +52,7 @@ export function DoneStep({
   const first = userName.trim().split(/\s+/)[0];
 
   const finish = async (to: string) => {
-    if (busy || blocked) return;
+    if (busy || blocked || licenseLoading) return;
     setBusy(to);
     setError(null);
     try {
@@ -145,7 +145,7 @@ export function DoneStep({
             <motion.button
               key={n.to}
               type="button"
-              disabled={!!busy || blocked}
+              disabled={!!busy || blocked || licenseLoading}
               onClick={() => finish(n.to)}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
@@ -170,7 +170,7 @@ export function DoneStep({
 
         <StepFooter>
           {blocked && <span className="text-xs text-muted-foreground">Activate Godmode to start working.</span>}
-          <SubmitButton busy={busy === "/"} disabled={!!busy || blocked} type="button" onClick={() => finish("/")} className="w-auto px-8">
+          <SubmitButton busy={busy === "/"} disabled={!!busy || blocked || licenseLoading} type="button" onClick={() => finish("/")} className="w-auto px-8">
             Start working
           </SubmitButton>
         </StepFooter>
