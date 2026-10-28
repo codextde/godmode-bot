@@ -1685,8 +1685,11 @@ that was never linked never talks to a cloud; nothing leaves the computer unless
 ## Remote runners
 
 A **runner** is a headless Godmode core on another computer (macOS for now) that works for the human's Godmode — the
-**controller** — so chats go on while the controller's lid is closed. Everything lives in `packages/core/src/remote/`
-(not `runner/`, which is the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
+**controller** — so chats go on while the controller's lid is closed. Runners were superseded by device groups (below),
+which are built on the same link: new runners can't be paired any more, and the app offers no runner for new chats.
+Runners paired earlier keep connecting, updating and serving the chats that live on them; Settings → Devices lists them
+under "Older runners" with a Remove button. Everything lives in `packages/core/src/remote/` (not `runner/`, which is
+the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
 
 * **Role and process.** `godmode runner serve` (or the LaunchAgent `dev.codext.godmode.runner` that `godmode runner
   install` writes, `RunAtLoad`, `KeepAlive` on failure, `LimitLoadToSessionType Aqua` because agents need the desktop
@@ -1710,15 +1713,11 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
   (frames and streaming text are dropped while the socket is backed up). The controller's `RemoteLink`
   (`linkClient.ts`) dials each known address in turn (LAN, Tailscale, `.local`), pings every 20 s and reconnects with
   backoff (5 minutes for a version mismatch). `/api/link/*` (`server/routes/link.ts`) exists only on that channel:
-  info, setup sync, health and fixes, agent memory, cookies, `exec` (for the autofix chat; audited) and `forget`.
-* **Pairing.** `godmode runner pair` (and the end of `runner install`) stores a one-time code in meta `link.pairing`
-  (10 minutes) and prints `gmr1.<base64url JSON>`: name, addresses, port, static key, pairing id and secret. Pasting it
-  in Godmode (`POST /api/runners`) runs the pair handshake: the runner stores the controller's key and drops the code
-  before it answers. Or Godmode makes an offer (`POST /api/runners/pairing`): a temporary listener on every interface
-  and `gmo1.<…>` with its URLs and a token, inside an install command — `curl …/godmode` from this computer with the
-  binary's SHA-256 pinned (compiled builds only) or `usegodmode.com/runner.sh` with the license key — that ends in
-  `godmode runner install --pair <offer>`. The runner then posts its code to the offer's `POST /pair`, sealed with a
-  key derived from the token (which never crosses the network), and the controller pairs with it; the listener stops.
+  info, setup sync, health and fixes, agent memory, cookies, `exec` (retiring a runner, the updater's bridge; audited)
+  and `forget`.
+* **Pairing codes** (`pairing.ts`). A one-time code in meta `link.pairing` (10 minutes), `gmr1.<base64url JSON>`: name,
+  addresses, port, static key, pairing id and secret. The pair handshake with it stores the other side's key and drops
+  the code before it answers. Device groups carry it inside their invites (`gmd1.`).
 * **Setup copy** (`snapshot.ts`). Before a chat starts on a runner, before every message to it, and 5 s after the
   setup changes while it is connected, the controller compares its digest with the one the runner reported and sends
   the snapshot when they differ: workspaces, agents, logins, 2FA, app secrets, MCP servers, Composio connections, API
@@ -1757,9 +1756,7 @@ A **runner** is a headless Godmode core on another computer (macOS for now) that
 * **Health** (`health.ts`): software (doctor), macOS permissions (Accessibility, Screen Recording, Full Disk Access),
   access (vault, setup copied), system (service, keep-awake, desktop session, disk, firewall), each with a fix kind
   (`install`, `request`, `open-settings`, `sync`, `restart`, `manual` + hint) and `installing` for what is on its way.
-  `godmode runner status` asks the serving runner (`/api/runner/health` on loopback) for its own view. **Fix with
-  Claude** starts a chat on this computer with `conversations.runner_tools_id`: its agent gets `runner_health`,
-  `runner_fix` and `runner_exec` (a login shell on the runner, in its data dir) and the health report and log tail.
+  `godmode runner status` asks the serving runner (`/api/runner/health` on loopback) for its own view.
 * **Updates** (`runnerUpdates.ts` on the controller, `selfUpdate.ts` on the runner). A runner gets the Godmode this
   computer runs: the same program when both are the same platform and architecture (compared by SHA-256, `RunnerInfo.digest`;
   sent over the link in 4 MiB pieces, `PUT /api/link/update/chunk`), else the release of the same version from
@@ -1901,7 +1898,7 @@ off, the laptop (and the phone) carry on.
 * **Desktop:** Settings → Devices (stand-in and browser sign-in settings, Full Disk Access per computer, the runner
   twin), the sidebar indicator and its popover, the away banner (countdown, then "stands in"), `lib/places.ts` (what
   "This Mac" means on each computer; a runner twin is listed after its computer and tagged "Runner"), the "Run on"
-  chip, the chat pill and the move dialog. The runners page lists runners only.
+  chip (computers of the group only), the chat pill and the move dialog.
 
 ## Memory
 
