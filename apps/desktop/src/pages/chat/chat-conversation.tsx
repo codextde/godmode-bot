@@ -51,7 +51,7 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
 import { ProjectChip } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
-import { onServerEvent, viewConversation } from "@/lib/realtime";
+import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
 import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
@@ -426,8 +426,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   });
 
   const cancel = useMutation({
-    mutationFn: (runId: string) => api.runs.cancel(runId),
-    onSuccess: () => toast("Stopping the agent…"),
+    mutationFn: async (runId: string) => {
+      await api.runs.cancel(runId);
+      return settleRun(runId);
+    },
+    onSuccess: (ended) => toast(ended ? "That run had already ended" : "Stopping the agent…"),
     onError: (err) => toast.error("Couldn't stop the run", { description: errorMessage(err) }),
   });
 
