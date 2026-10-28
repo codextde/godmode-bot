@@ -1,6 +1,6 @@
 /**
  * Password imports: CSV exports of Chrome (and every Chromium browser), 1Password, Bitwarden, Apple Passwords,
- * Firefox, LastPass, Dashlane, Proton Pass and KeePass, plus 1Password's .1pux archive.
+ * Firefox, LastPass, Dashlane, Proton Pass and KeePass, plus 1Password's .1pux archive and Dashlane's zip and JSON exports.
  *
  * Rows for the same site + username + password become one login with several domains. Every login is matched
  * against the saved logins of the target scope, so importing the same export twice changes nothing.
@@ -96,12 +96,12 @@ export function parseCsv(text: string, sep = ","): string[][] {
 /** Header aliases, most specific first. */
 const COLUMNS = {
   url: ["url", "login_uri", "login uri", "website", "web site", "web address", "login url", "uri", "origin_url", "hostname"],
-  username: ["username", "login_username", "user name", "login name", "login", "user", "email", "e-mail", "email address"],
+  username: ["username", "login_username", "user name", "login name", "login", "user", "email", "e-mail", "email address", "username2", "username3"],
   password: ["password", "login_password"],
   name: ["name", "title"],
   notes: ["note", "notes", "extra", "comment", "comments"],
-  otp: ["otpauth", "login_totp", "totp", "otpsecret", "otp", "one-time password"],
-  tags: ["tags", "folder", "group", "grouping"],
+  otp: ["otpauth", "login_totp", "totp", "otpurl", "otpsecret", "otp", "one-time password"],
+  tags: ["tags", "folder", "group", "grouping", "category"],
   archived: ["archived"],
 } as const;
 
@@ -109,7 +109,7 @@ function detectCsvSource(h: Set<string>): PasswordImportSource {
   if (h.has("login_uri")) return "bitwarden";
   if (h.has("httprealm") || h.has("formactionorigin")) return "firefox";
   if (h.has("grouping") && h.has("extra")) return "lastpass";
-  if (h.has("username2") || h.has("otpsecret")) return "dashlane";
+  if (h.has("username2") || h.has("otpsecret") || h.has("otpurl")) return "dashlane";
   if (h.has("vault") && h.has("createtime")) return "protonpass";
   if (h.has("group") && h.has("title")) return "keepass";
   if (h.has("otpauth") && (h.has("archived") || h.has("favorite"))) return "1password";
@@ -226,15 +226,50 @@ export function parse1PuxData(json: string): ParsedExport {
   return { source: "1password", entries };
 }
 
+/* ------------------------------------------------------------------ */
+/* Dashlane JSON (older desktop app)                                    */
+/* ------------------------------------------------------------------ */
+
+type DashlaneLogin = { title?: unknown; domain?: unknown; url?: unknown; login?: unknown; email?: unknown; secondaryLogin?: unknown; password?: unknown; note?: unknown };
+
+export function parseDashlaneJson(json: string): ParsedExport | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  const logins = (data as { AUTHENTIFIANT?: unknown } | null)?.AUTHENTIFIANT;
+  if (!Array.isArray(logins)) return null;
+  return {
+    source: "dashlane",
+    entries: list<DashlaneLogin>(logins).map((l) => ({
+      name: str(l.title).trim(),
+      url: (str(l.url) || str(l.domain)).trim(),
+      username: [l.login, l.email, l.secondaryLogin].map((v) => str(v).trim()).find(Boolean) ?? "",
+      password: str(l.password),
+      notes: str(l.note).trim(),
+      otp: "",
+      tags: [],
+    })),
+  };
+}
+
 const isZip = (data: Uint8Array) => data[0] === 0x50 && data[1] === 0x4b && data[2] === 0x03 && data[3] === 0x04;
 const tooLarge = (what: string) => new HttpError(413, `${what} is larger than 64 MB`, "too_large");
 
-/** Read an uploaded export: a CSV in any supported layout, a .1pux archive, or Dashlane's zip of CSVs. */
+/** Read an uploaded export: a CSV in any supported layout, a .1pux archive, or Dashlane's zip of CSVs or JSON. */
 export function readPasswordExport(data: Uint8Array): ParsedExport {
   if (data.length === 0) throw badRequest("The file is empty");
   if (!isZip(data)) {
     if (data.length > MAX_TEXT_BYTES) throw tooLarge("The CSV");
-    return parsePasswordCsv(decodeText(data));
+    const text = decodeText(data).replace(/^\uFEFF/, "");
+    if (/^\s*\{/.test(text)) {
+      const dashlane = parseDashlaneJson(text);
+      if (dashlane) return dashlane;
+      throw badRequest("This JSON file is not a Dashlane export. Export a CSV from your password manager instead");
+    }
+    return parsePasswordCsv(text);
   }
   const wanted = (name: string) => name === "export.data" || /(^|\/)credentials\.csv$/i.test(name);
   let oversized = false;
