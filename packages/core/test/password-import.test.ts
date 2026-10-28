@@ -190,6 +190,41 @@ describe("1Password .1pux", () => {
     expect(readPasswordExport(zip)).toMatchObject({ source: "dashlane", entries: [{ name: "Jira", password: "pw" }] });
   });
 
+  test("Dashlane's current CSV: otpUrl, second usernames and categories", () => {
+    const csv =
+      "username,username2,username3,title,password,note,url,category,otpUrl\n" +
+      "me@x.de,,,GitHub,pw1,,https://github.com,Work,otpauth://totp/GitHub:me?secret=JBSWY3DPEHPK3PXP&issuer=GitHub\n" +
+      ",alt@x.de,,Shop,pw2,,shop.example.com,,\n";
+    const zip = zipSync({ "dashlane-credential-export/credentials.csv": strToU8(csv), "dashlane-credential-export/securenotes.csv": strToU8("title,note\nx,y\n") });
+    const parsed = readPasswordExport(zip);
+    expect(parsed.source).toBe("dashlane");
+    expect(parsed.entries).toMatchObject([
+      { name: "GitHub", username: "me@x.de", tags: ["Work"] },
+      { name: "Shop", username: "alt@x.de" },
+    ]);
+    const { logins } = groupLogins(parsed.entries);
+    expect(logins.find((l) => l.name === "GitHub")!.totp).toMatchObject({ issuer: "GitHub", secret: "JBSWY3DPEHPK3PXP" });
+  });
+
+  test("Dashlane's JSON export", () => {
+    const json = JSON.stringify({
+      AUTHENTIFIANT: [
+        { title: "Amazon", domain: "amazon.de", login: "", email: "me@x.de", password: "pw", note: "prime" },
+        { title: "Router", domain: "192.168.0.1", login: "admin", password: "pw" },
+      ],
+      PAYMENTMEANS_CREDITCARD: [{ cardNumber: "4111" }],
+    });
+    const parsed = readPasswordExport(bytes(`\uFEFF${json}`));
+    expect(parsed).toMatchObject({ source: "dashlane", entries: [{ name: "Amazon", url: "amazon.de", username: "me@x.de", notes: "prime" }, { name: "Router" }] });
+    const { logins, skipped } = groupLogins(parsed.entries);
+    expect(logins.map((l) => l.hosts[0])).toEqual(["amazon.de"]);
+    expect(skipped[0]!.reason).toBe("Local network address");
+  });
+
+  test("other JSON files are refused", () => {
+    expect(() => readPasswordExport(bytes(`{"items":[]}`))).toThrow(/not a Dashlane export/);
+  });
+
   test("Windows-1252 CSVs keep their accents", () => {
     const latin = new Uint8Array([...bytes("name,url,username,password\nx,https://x.de,me,caf"), 0xe9, 0x0a]);
     expect(readPasswordExport(latin).entries[0]!.password).toBe("café");

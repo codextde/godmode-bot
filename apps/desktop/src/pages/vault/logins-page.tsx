@@ -201,7 +201,7 @@ export default function LoginsPage() {
                 <div className="flex flex-col items-center gap-3">
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button onClick={() => setImportOpen(true)}>
-                      <FileKey /> Import from Chrome or 1Password
+                      <FileKey /> Import from Chrome, 1Password or Dashlane
                     </Button>
                     <Button variant="outline" onClick={openCreate}>
                       <Plus /> Add a login
