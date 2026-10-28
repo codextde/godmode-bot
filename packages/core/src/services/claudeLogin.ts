@@ -258,6 +258,33 @@ export function submitClaudeLoginCode(code: string): ClaudeLoginStatus {
   return claudeLoginStatus();
 }
 
+const CLIPBOARD: string[][] =
+  process.platform === "darwin"
+    ? [["pbcopy"]]
+    : process.platform === "win32"
+      ? [["clip"]]
+      : [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]];
+
+/** Puts the waiting sign-in's link on this computer's clipboard: the desktop webview may only write it during a click. */
+export async function copyClaudeLoginLink(): Promise<{ ok: boolean }> {
+  const url = session ? status.url : null;
+  if (!url) return { ok: false };
+  for (const [name, ...args] of CLIPBOARD) {
+    const bin = Bun.which(name!, { PATH: process.env.PATH ?? process.env.Path ?? "" });
+    if (!bin) continue;
+    try {
+      const proc = Bun.spawn([bin, ...args], { stdin: new Blob([url]), stdout: "ignore", stderr: "ignore", windowsHide: true } as Parameters<typeof Bun.spawn>[1]);
+      const timer = setTimeout(() => proc.kill(), 5_000);
+      const code = await proc.exited;
+      clearTimeout(timer);
+      if (code === 0) return { ok: true };
+    } catch {
+      /* not installed */
+    }
+  }
+  return { ok: false };
+}
+
 export function cancelClaudeLogin(): ClaudeLoginStatus {
   if (session) finish(session, null, "Cancelled.");
   status = { state: "idle", url: null, message: null };

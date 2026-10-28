@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../src/config";
@@ -9,6 +9,7 @@ import { resetSettingsCache, updateSettings } from "../src/services/settings";
 import {
   cancelClaudeLogin,
   claudeLoginStatus,
+  copyClaudeLoginLink,
   noteAnthropicKeyChanged,
   noteClaudeSignedOut,
   noteClaudeWorks,
@@ -83,6 +84,28 @@ describe.skipIf(process.platform === "win32")("claude login", () => {
     await until(() => claudeLoginStatus().state !== "waiting");
     expect(claudeLoginStatus().state).toBe("failed");
     expect(claudeLoginStatus().message).toContain("Invalid code");
+  });
+
+  test("copies the waiting sign-in's link to the clipboard", async () => {
+    const bin = join(dataDir, "clipboard-bin");
+    const out = join(dataDir, "clipboard.txt");
+    mkdirSync(bin, { recursive: true });
+    for (const name of ["pbcopy", "wl-copy"]) {
+      writeFileSync(join(bin, name), `#!/bin/sh\ncat > "${out}"\n`);
+      chmodSync(join(bin, name), 0o755);
+    }
+    const savedPath = process.env.PATH;
+    process.env.PATH = `${bin}:${savedPath}`;
+    try {
+      expect(await copyClaudeLoginLink()).toEqual({ ok: false });
+      startClaudeLogin();
+      await until(() => !!claudeLoginStatus().url);
+      expect(await copyClaudeLoginLink()).toEqual({ ok: true });
+      expect(readFileSync(out, "utf8")).toBe("https://claude.com/cai/oauth/authorize?code=true&state=abc");
+    } finally {
+      process.env.PATH = savedPath;
+      cancelClaudeLogin();
+    }
   });
 
   test("cancel stops a waiting sign-in", async () => {
