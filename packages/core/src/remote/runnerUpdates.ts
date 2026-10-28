@@ -188,7 +188,7 @@ function failed(id: string, detail: string, auto: boolean) {
   if (auto && a) autoFailed.set(`${id}:${a.target}`, Date.now());
   const name = host?.row(id)?.name ?? "The runner";
   log.warn(`${name}: update failed: ${detail}`);
-  if (auto) notify("warning", `${name} couldn't be updated`, detail, "/runners");
+  if (auto) notify("warning", `${name} couldn't be updated`, detail, "/settings/devices");
 }
 
 /* ------------------------------------------------------------------ */

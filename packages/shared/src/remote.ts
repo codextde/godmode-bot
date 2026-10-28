@@ -1,9 +1,8 @@
 /**
- * Remote runners: a headless Godmode on another computer that does the work of a chat, so it goes on while this
- * computer sleeps. The Godmode the human uses (the controller) pairs with a runner once, copies what the work needs to
- * it and mirrors its chats; everything between the two travels over an end-to-end encrypted link.
+ * The link between computers: the computers of a device group (devices.ts), and runners paired before device groups (a
+ * headless Godmode on another computer that does the work of a chat; no new ones are paired). One side copies what the
+ * work needs to the other and mirrors its chats; everything between the two travels over an end-to-end encrypted link.
  */
-import type { TailscaleStatus } from "./mobile";
 import type { ID, ISODate, ToolUpdateStatus } from "./models";
 
 /** Port the runner listens on for the encrypted link (phones use 7787). */
@@ -14,8 +13,6 @@ export const LINK_PROTOCOL = 1;
 export const RUNNER_CODE_PREFIX = "gmr1.";
 /** Invite to join a device group (devices.ts): the primary's pairing code under its own prefix. */
 export const DEVICE_INVITE_PREFIX = "gmd1.";
-/** Pairing offer Godmode puts into the install command: `gmo1.<base64url(JSON RunnerPairingOfferPayload)>`. */
-export const RUNNER_OFFER_PREFIX = "gmo1.";
 /** Live views of a runner's screen are named `runner:<runner id>:<view>` on the controller. */
 export const RUNNER_VIEW_PREFIX = "runner:";
 
@@ -129,47 +126,6 @@ export interface RunnerSelfUpdate {
 /** How a runner reaches this computer: the local network, a virtual machine's bridge, or Tailscale. */
 export type RunnerNetwork = "lan" | "vm" | "tailscale";
 
-/** One address of this computer the install command can use. */
-export interface RunnerOfferRoute {
-  network: RunnerNetwork;
-  address: string;
-  /** `http://<address>:<port>` of the pairing listener. */
-  url: string;
-  /** The interface ("en0"), or Tailscale's MagicDNS name of this computer. */
-  detail: string | null;
-  /** The install command through this address; null when this build can't serve its own binary. */
-  command: string | null;
-}
-
-/** POST /api/runners/pairing */
-export interface RunnerPairingOffer {
-  offerId: ID;
-  /** One command that installs the runner from this computer and pairs it (through the first route); null when this build can't serve its own binary. */
-  command: string | null;
-  /** Every address of this computer the other Mac can download from, best first. */
-  routes: RunnerOfferRoute[];
-  /** The same through usegodmode.com (needs the license key in place of the placeholder). */
-  websiteCommand: string;
-  /** Where the runner reaches this computer while pairing. */
-  urls: string[];
-  /** Tailscale on this computer, so the human can pick it or learn why it isn't there. */
-  tailscale: TailscaleStatus;
-  expiresAt: ISODate;
-}
-
-/** Decoded `gmo1.` payload. */
-export interface RunnerPairingOfferPayload {
-  v: 1;
-  id: ID;
-  /** One-time secret; never sent over the network (it keys the sealed reply). */
-  token: string;
-  urls: string[];
-  /** Name of the computer that made the offer. */
-  name: string;
-  /** Unix seconds. */
-  exp: number;
-}
-
 /** Decoded `gmr1.` payload. */
 export interface RunnerPairingCode {
   v: 1;
@@ -239,20 +195,13 @@ export interface RunnerHealth {
   installing?: string[];
 }
 
-/** POST /api/runners/:id/health/fix */
+/** POST /api/link/health/fix */
 export interface RunnerFixResult {
   ok: boolean;
   output: string;
   health: RunnerHealth;
 }
 
-/** POST /api/runners/:id/autofix */
-export interface RunnerAutofixInput {
-  /** The check to fix; omitted = everything that fails. */
-  checkId?: string;
-  /** What the human noticed, in their words. */
-  note?: string;
-}
 
 /* base64url without Buffer, so the same code runs in the browser and in Bun (same approach as the phone pairing link in mobile.ts). */
 
@@ -353,19 +302,6 @@ export function parseDeviceInvite(text: string): RunnerPairingCode | null {
   const compact = text.replace(/\s+/g, "");
   if (!compact.startsWith(DEVICE_INVITE_PREFIX)) return null;
   return parseRunnerCode(RUNNER_CODE_PREFIX + compact.slice(DEVICE_INVITE_PREFIX.length));
-}
-
-export function encodeRunnerOffer(offer: RunnerPairingOfferPayload): string {
-  return encode(RUNNER_OFFER_PREFIX, offer);
-}
-
-/** Reads the pairing offer from an install command; null when it isn't one. Expiry is for the caller to check (`exp`). */
-export function parseRunnerOffer(text: string): RunnerPairingOfferPayload | null {
-  const p = decode(RUNNER_OFFER_PREFIX, text);
-  if (!p || p.v !== 1) return null;
-  const { id, token, urls, name, exp } = p;
-  if (!isText(id) || !isText(token) || !isTextList(urls) || !isText(name) || !isTime(exp)) return null;
-  return { v: 1, id, token, urls, name, exp };
 }
 
 /** `runner:<id>:<view>` → { runnerId, view }; null for a local view. */

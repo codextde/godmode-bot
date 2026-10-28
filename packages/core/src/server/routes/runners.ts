@@ -1,40 +1,13 @@
 import type { Hono } from "hono";
-import {
-  cancelPairing,
-  connectRunner,
-  createPairing,
-  fixRunner,
-  getRunner,
-  listRunners,
-  moveChatHere,
-  pairWithCode,
-  removeRunner,
-  runnerHealth,
-  startAutofix,
-  syncRunner,
-  updateRunner,
-  updateRunnerNow,
-} from "../../remote/runners";
-import { fixFromLog } from "../../diagnostics/selfRepair";
-import { disableIdleTimeout } from "../../mcp/http";
+import { connectRunner, getRunner, listRunners, moveChatHere, removeRunner, syncRunner, updateRunner, updateRunnerNow } from "../../remote/runners";
 import { body, z } from "../validate";
 
-/** Runners: other computers that work for this Godmode (remote/runners.ts). Requests about their chats: remote/routing.ts. */
+/**
+ * The other computers this Godmode has a link to: the computers of its device group, and runners paired before device
+ * groups existed (no new ones are paired). Requests about their chats: remote/routing.ts.
+ */
 export function registerRunnerRoutes(app: Hono): void {
   app.get("/api/runners", (c) => c.json(listRunners()));
-
-  // An install command that pairs the runner by itself (and the listener it reports back to).
-  app.post("/api/runners/pairing", async (c) => c.json(await createPairing(), 201));
-  app.delete("/api/runners/pairing", (c) => {
-    cancelPairing();
-    return c.json({ ok: true as const });
-  });
-
-  // Pair with a code the runner showed (`godmode runner pair`).
-  app.post("/api/runners", async (c) => {
-    const { code } = await body(c, z.object({ code: z.string().min(1).max(8192) }));
-    return c.json(await pairWithCode(code), 201);
-  });
 
   app.get("/api/runners/:id", (c) => c.json(getRunner(c.req.param("id"))));
 
@@ -71,27 +44,6 @@ export function registerRunnerRoutes(app: Hono): void {
     return c.json(await updateRunnerNow(c.req.param("id"), input));
   });
 
-  app.get("/api/runners/:id/health", async (c) => c.json(await runnerHealth(c.req.param("id"), c.req.query("refresh") === "1")));
-
-  app.post("/api/runners/:id/health/fix", async (c) => {
-    const { id } = await body(c, z.object({ id: z.string().min(1).max(64) }));
-    return c.json(await fixRunner(c.req.param("id"), id));
-  });
-
   // A chat on a runner moves to this computer (remote/routing.ts lets this request through to here).
   app.post("/api/conversations/:id/move-here", async (c) => c.json(await moveChatHere(c.req.param("id"))));
-
-  app.post("/api/runners/:id/autofix", async (c) => {
-    const input = await body(c, z.object({ checkId: z.string().max(64).optional(), note: z.string().max(4000).optional() }));
-    return c.json(await startAutofix(c.req.param("id"), input), 201);
-  });
-
-  /** A ticket that fixes what the runner's log shows in Godmode's code. */
-  app.post("/api/runners/:id/fix-in-code", async (c) => {
-    const input = await body(c, z.object({ note: z.string().max(4000).optional(), autoMerge: z.boolean().optional() }));
-    getRunner(c.req.param("id"));
-    // Reading the runner's log over the link can take longer than an idle request may.
-    disableIdleTimeout(c);
-    return c.json(await fixFromLog({ kind: "runner", runnerId: c.req.param("id") }, { ...input, actor: "user" }), 201);
-  });
 }

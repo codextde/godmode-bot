@@ -137,7 +137,7 @@ import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../in
 import { chatSources, createProject, getProject, projectOfChat, updateProject } from "../services/projects";
 import { all, get } from "../db";
 import { config } from "../config";
-import { fixRunner, link, runnerExec, runnerHealth } from "../remote/runners";
+import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
 import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
@@ -207,9 +207,6 @@ const isManager = (a: Agent) => a.permissions.canManageAgents;
  * replaced with the next sync — what an agent changed there would be lost, and the human never sees it.
  */
 const managesSetup = (a: Agent) => isManager(a) && config().role !== "runner";
-/** The runner a "fix with Claude" chat may run commands on. */
-const toolsRunner = (ctx: RunContext): string | null =>
-  get<{ runner_tools_id: string | null }>("SELECT runner_tools_id FROM conversations WHERE id = ?", ctx.conversationId)?.runner_tools_id ?? null;
 const canDelegate = (a: Agent) => a.permissions.allowDelegation || a.permissions.canManageAgents;
 const canReveal = (a: Agent) => a.permissions.secretAccess === "reveal";
 /** Raw secrets in this run: the agent may read them, and its chat's task didn't come from an agent that may not. */
@@ -3561,47 +3558,6 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     run: ({ status }) => {
       const items = listMissingLogins(status === "all" ? {} : { status: status ?? "open" });
       return items.length ? json(items) : "No missing logins.";
-    },
-  }),
-
-  defineTool({
-    name: "runner_health",
-    description:
-      "The runner's checks (software, macOS permissions, access, system) as it sees them right now: what passes, what fails, and how each failure can be fixed.",
-    schema: z.object({}),
-    when: (_agent, ctx) => !!toolsRunner(ctx),
-    run: async (_args, { ctx }) => json(await runnerHealth(toolsRunner(ctx)!, true)),
-  }),
-
-  defineTool({
-    name: "runner_fix",
-    description:
-      "Use the one-click fix of one of the runner's checks (installs a missing program, asks macOS for a permission on the runner's screen, copies the setup again…). Returns what happened and the checks afterwards.",
-    schema: z.object({ checkId: z.string().min(1).max(64).describe('The check\'s id from runner_health, e.g. "claude" or "accessibility"') }),
-    when: (_agent, ctx) => !!toolsRunner(ctx),
-    run: async ({ checkId }, { ctx }) => {
-      const runnerId = toolsRunner(ctx)!;
-      audit(`run:${ctx.runId}`, "runner.fix", runnerId, { check: checkId });
-      const result = await fixRunner(runnerId, checkId);
-      return { text: json(result), isError: !result.ok };
-    },
-  }),
-
-  defineTool({
-    name: "runner_exec",
-    description:
-      "Run a shell command on the runner (a login shell in the runner's data folder, as the user the runner runs as; its log is logs/godmode.jsonl). Look before you change anything. Returns the exit code, stdout and stderr.",
-    schema: z.object({
-      command: z.string().min(1).max(20_000),
-      timeoutSec: z.number().int().positive().max(900).optional().describe("Default 120"),
-    }),
-    when: (_agent, ctx) => !!toolsRunner(ctx),
-    run: async ({ command, timeoutSec }, { ctx }) => {
-      const runnerId = toolsRunner(ctx)!;
-      audit(`run:${ctx.runId}`, "runner.exec", runnerId, { command: command.slice(0, 500) });
-      const res = await runnerExec(runnerId, command, timeoutSec);
-      const out = [`exit code: ${res.timedOut ? "timed out" : res.code}`, res.stdout ? `stdout:\n${redact(res.stdout)}` : "", res.stderr ? `stderr:\n${redact(res.stderr)}` : ""].filter(Boolean).join("\n\n");
-      return { text: out, isError: res.code !== 0 };
     },
   }),
 

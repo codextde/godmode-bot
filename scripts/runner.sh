@@ -1,12 +1,11 @@
 #!/bin/sh
-# Sets this computer up as a Godmode runner: installs the standalone `godmode` binary (macOS or Linux) and starts
-# the runner, which then works for the Godmode on your own computer — also while that one sleeps.
+# Updates a Godmode runner that was paired before device groups: installs the standalone `godmode` binary (macOS or
+# Linux) and starts the runner again. New runners can't be paired any more; use a device group instead.
 #
-#   curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX GODMODE_PAIR=gmo1.… sh
+#   curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=GM-XXXXX-XXXXX-XXXXX-XXXXX sh
 #
 # Environment:
 #   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal) — required
-#   GODMODE_PAIR          pairing offer from Godmode → Runners → Add runner (pairs right after the install)
 #   GODMODE_VERSION       release tag to install, e.g. v0.2.0 (default: latest)
 #   GODMODE_INSTALL_DIR   target directory (default: ~/.local/bin)
 #
@@ -116,7 +115,7 @@ esac
 say ""
 say "Setting up the runner…"
 # stdin is this script while it is piped to sh: keep it away from the binary.
-"$INSTALL_DIR/godmode" runner install ${GODMODE_PAIR:+--pair "$GODMODE_PAIR"} < /dev/null \
+"$INSTALL_DIR/godmode" runner install < /dev/null \
   || err "the runner could not be set up — see above, then run: $INSTALL_DIR/godmode runner install"
 
 say ""
