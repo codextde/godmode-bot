@@ -23,7 +23,7 @@ import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
-import { usePlaces } from "@/lib/places";
+import { isOlderRunner, usePlaces } from "@/lib/places";
 import { useEasyMode } from "@/lib/mode";
 
 /** The new chat's place was never picked: it goes where this computer sends new chats. */
@@ -155,9 +155,9 @@ export default function ChatHome() {
   const defaultRunnerId = !group?.role ? null : group.defaultRunOn === null ? hereId : group.defaultRunOn === "primary" ? null : group.defaultRunOn;
   const runnerId = runnerPick === DEFAULT_PLACE ? defaultRunnerId : runnerPick;
   const target = placeOf(runnerId);
-  // A computer picked earlier that is gone since (or a list that can't be loaded): back to this computer, visibly —
-  // the chat must never start somewhere other than where the composer says.
-  const runnerGone = runnerId !== hereId && ((runners.isError && !runners.data) || (!!runners.data && !target));
+  // A computer picked earlier that is gone since, an older runner, or a list that can't be loaded: back to this
+  // computer, visibly — the chat must never start somewhere other than where the composer says.
+  const runnerGone = runnerId !== hereId && ((runners.isError && !runners.data) || (!!runners.data && (!target || isOlderRunner(target))));
   useEffect(() => {
     if (runnerGone) setRunnerId(hereId);
   }, [runnerGone, setRunnerId, hereId]);

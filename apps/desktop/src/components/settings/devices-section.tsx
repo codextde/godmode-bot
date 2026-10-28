@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Cable, Check, ClipboardPaste, Copy, KeyRound, LaptopMinimalCheck, LogOut, MessagesSquare, MonitorPause, MoonStar, Network, Plus, RefreshCw, Timer, TriangleAlert, Unlink, X } from "lucide-react";
+import { Cable, Check, ClipboardPaste, Copy, KeyRound, LaptopMinimalCheck, LogOut, MessagesSquare, MonitorPause, MonitorSmartphone, MoonStar, Network, Plus, RefreshCw, Timer, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
 import { toast } from "sonner";
-import { DEVICE_INVITE_PREFIX, parseDeviceInvite, RUNNER_CODE_PREFIX, type BrowserSignIns, type DeviceGroup, type DeviceGroupPatch, type GroupDevice } from "@godmode/shared";
+import { DEVICE_INVITE_PREFIX, parseDeviceInvite, RUNNER_CODE_PREFIX, type BrowserSignIns, type DeviceGroup, type DeviceGroupPatch, type GroupDevice, type RemoteRunner } from "@godmode/shared";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,7 +38,7 @@ import {
   useHandoff,
 } from "@/components/devices/device-parts";
 import { useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
-import { RunnerStateBadge, RunnerStateDot, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
+import { RUNNER_STATE_LABEL, RunnerStateBadge, RunnerStateDot, runnerWorkLine, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
 import { useNow } from "@/components/vault/use-now";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
@@ -76,6 +76,7 @@ export function DevicesSection() {
       ) : (
         <AloneView />
       )}
+      {group && <OlderRunners group={group} />}
       {group?.port && (
         <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
           <Network className="size-3" aria-hidden />
@@ -878,6 +879,110 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
             <AlertDialogDescription>
               It works on its own again, with the setup it has now. The chats that live on it stay there and no longer show up on the other
               computers.{device.activeRuns > 0 && ` ${device.activeRuns === 1 ? "1 chat is" : `${device.activeRuns} chats are`} working there right now.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </motion.div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Runners from before device groups                                    */
+/* ------------------------------------------------------------------ */
+
+/** Classic runners still paired here. A computer of the group that also runs one has its own note in the list above. */
+function OlderRunners({ group }: { group: DeviceGroup }) {
+  const { data: runners = [] } = useRunners();
+  const twins = new Set(group.devices.map((d) => d.runnerTwin).filter(Boolean));
+  const older = runners.filter((r) => r.kind === "runner" && !twins.has(r.id));
+  if (!older.length) return null;
+
+  return (
+    <SettingsGroup
+      title="Older runners"
+      icon={<MonitorSmartphone />}
+      description="Paired as runners before device groups. Their chats keep working here, but new chats don't start there."
+    >
+      <AnimatePresence initial={false}>
+        {older.map((r) => (
+          <OlderRunnerRow key={r.id} runner={r} />
+        ))}
+      </AnimatePresence>
+    </SettingsGroup>
+  );
+}
+
+function OlderRunnerRow({ runner }: { runner: RemoteRunner }) {
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
+  const remove = useMutation({
+    mutationFn: () => api.runners.remove(runner.id),
+    onSuccess: () => {
+      qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => old?.filter((r) => r.id !== runner.id));
+      void qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      toast.success(`${runner.name} removed`, { description: runner.conversations > 0 ? `Its chats stay here, as chats of ${THIS_COMPUTER_INLINE}.` : undefined });
+    },
+    onError: (e) => toastApiError(e, `Couldn't remove ${runner.name}`, qc),
+  });
+  const chats = runner.conversations;
+  const working = runner.activeRuns;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: "auto" }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
+      className="overflow-hidden"
+    >
+      <div className="flex items-center gap-3 py-3.5">
+        <div className={cn("grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-4", runner.state !== "online" && "text-muted-foreground")}>
+          <MonitorSmartphone />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{runner.name}</p>
+          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <RunnerStateDot state={runner.state} />
+            <span className="truncate tabular-nums">
+              {RUNNER_STATE_LABEL[runner.state]} · {runnerWorkLine(runner)}
+            </span>
+          </p>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-destructive"
+              aria-label={`Remove ${runner.name}`}
+              disabled={remove.isPending}
+              onClick={() => setConfirm(true)}
+            >
+              {remove.isPending ? <Spinner /> : <Trash2 />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Remove</TooltipContent>
+        </Tooltip>
+      </div>
+      <AlertDialog open={confirm} onOpenChange={setConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {runner.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Godmode forgets this runner, and the runner forgets {THIS_COMPUTER_INLINE}.
+              {chats === 1 && ` Its chat stays here with everything in it; new messages in it are answered on ${THIS_COMPUTER_INLINE}.`}
+              {chats > 1 && ` Its ${chats} chats stay here with everything in them; new messages in them are answered on ${THIS_COMPUTER_INLINE}.`}
+              {working === 1 && " An agent is still working there — what it finishes from now on won't show up here."}
+              {working > 1 && ` ${working} agents are still working there — what they finish from now on won't show up here.`} Godmode itself stays installed on{" "}
+              {runner.hostname || "the other computer"}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

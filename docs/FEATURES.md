@@ -63,7 +63,7 @@ Everything Godmode does, the screenshots, and the setup guides for each part. Ba
 | **Cleanup** | Settings → Cleanup shows what Godmode's data folder holds, checks tools, permissions, updates, the database and disk space in one go, and frees what piles up: browser caches, worktrees of finished tasks, unused clones, agents' scratch files and old run logs, unpacked agent history, leftovers of interrupted runs, old logs and the database's free pages — once a day on its own, or with one click. Anything that may still hold work stays. |
 | **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
 | **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
-| **Runners** | Keep working with the lid closed: put Godmode on another Mac — a Mac mini, an old laptop — with one install command, and pick it under **Run on** when you start a chat. Godmode copies your agents, logins, 2FA codes and browser sessions there, the work happens there, and you watch it here live like any other chat. Install, pairing and Claude Code set themselves up; a health view shows what's missing (software, macOS permissions, the vault) with one-click fixes, or hand it to **Fix with Claude**. Encrypted end to end. |
+| **Device groups** | Use Godmode on several Macs as one (Settings → Devices): every Mac has your agents, logins and chats, a chat can run on any of them — pick it under **Run on** — and move between them, also while it works. Close the lid and hand the work to another Mac. Encrypted end to end. |
 | **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), or through the gateway of a Godmode Cloud you link it to. Liquid Glass on iOS 26. |
 | **Godmode Cloud** (optional) | A self-hosted account service: open your computer's dashboard in any browser and reach it from your phone without Tailscale, with accounts, invites, roles, an admin dashboard and Stripe plans. Godmode works fully without it; nothing leaves your computer unless you link it to a cloud. See [apps/cloud](../apps/cloud/README.md). |
 
@@ -275,19 +275,6 @@ Open a computer's dashboard from any browser and reach it from your phone withou
 [`apps/cloud`](../apps/cloud/README.md) (Coolify or Docker Compose; the only setting is its address), then link Godmode in
 **Settings → Cloud**. The computer keeps one outbound connection to the cloud; there is no port to open. The cloud
 relays, and can see, everything done through it, so link only to a cloud you trust.
-
-### Runners — another Mac that works while yours sleeps
-
-1. In Godmode open **Runners → Add runner** and copy the command.
-2. Run it in Terminal on the other Mac (a Mac mini, a laptop that stays plugged in — on the same network or in your
-   Tailscale). It installs Godmode as a runner that starts whenever you log in there, installs Claude Code and a
-   browser, and pairs itself with your Godmode.
-3. Start a chat and pick the runner under **Run on** in the message box.
-
-The runner keeps its Mac awake while it serves. Sign in to Claude Code on it once (`claude`), and grant Accessibility
-and Screen Recording on its screen if agents should use apps there — the runner's health view says what's left. On the
-runner: `godmode runner status`, `godmode runner pair` (a new pairing code to paste under **Add runner → Enter a
-pairing code**), `godmode runner uninstall`.
 
 ### Claude Code & other AI tools — set Godmode up from your terminal
 
@@ -517,9 +504,9 @@ Every run is committed, so you can see exactly what an agent learned and did —
   that sets up and steers can still create agents and automations that act with your logins: connect only apps you
   trust, and give the others a look-only key.
 
-- **Runners** pair with a one-time code and pin each other's keys; the link is end-to-end encrypted (X25519, AES-256-GCM)
-  and the runner's API never listens beyond its own loopback. A paired Godmode gets your vault key on the runner so
-  logins work there — pair only computers you control.
+- **Device groups** pair with a one-time invite and pin each other's keys; the link is end-to-end encrypted (X25519,
+  AES-256-GCM). The computers of a group share your vault key so logins work on each of them — add only computers you
+  control.
 
 > Agents run Claude Code with **bypass permissions** by default. Treat them like a trusted coworker with access to
 > your machine; for sensitive work give the agent its own **macOS VM** (see above), or run Godmode in a VM or
@@ -541,8 +528,7 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - [x] Plugins: Claude Code plugins for agents — one-click installs from GitHub (Claude Video, oh-my-claudecode), updates and uninstall, a gallery of guardrails, options, an editor, drafts written by Godmode, checked before they run
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale
-- [x] Runners: another Mac does the work of a chat while this one sleeps — one install command, encrypted link, setup copied, live view
-- [ ] Runners on Windows and Linux, tasks of the board on a runner, VMs copied to a runner
+- [x] Device groups: several Macs as one Godmode, chats run on any of them and move between them — encrypted link, setup shared, live view
 - [x] Godmode Cloud (optional, self-hosted): your computer in any browser, phones without Tailscale, accounts and plans
 - [x] Claude Code & MCP: Claude Code and other AI tools create and manage agents, automations and tasks from outside, plus a `godmode` command line for scripts
 - [ ] Push notifications

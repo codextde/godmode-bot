@@ -278,7 +278,7 @@ function SelfRepairGroup({ settings }: { settings: Settings }) {
     <SettingsGroup
       title="Self-repair"
       icon={<Wrench />}
-      description="“Fix in code” here and on runners files a ticket on Godmode's source repository. Agents with the self_repair tool check the logs by themselves, too."
+      description="“Fix in code” files a ticket on Godmode's source repository. Agents with the self_repair tool check the logs by themselves, too."
     >
       <SettingRow stacked label="Repository" htmlFor="repair-repo" description="Godmode's source code, or your fork of it. Godmode pushes and merges with this computer's git and GitHub sign-in.">
         <CommitInput

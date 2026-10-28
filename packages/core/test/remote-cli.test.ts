@@ -446,12 +446,14 @@ describe("godmode runner", () => {
     const unknown = await runner(["frobnicate"]);
     expect(unknown.code).toBe(2);
     expect(unknown.output).toContain("Unknown command: runner frobnicate");
-    for (const command of ["install", "pair", "serve", "status", "uninstall"]) expect(unknown.output).toContain(`godmode runner ${command}`);
+    for (const command of ["install", "serve", "status", "uninstall"]) expect(unknown.output).toContain(`godmode runner ${command}`);
     const missing = await runner([]);
     expect(missing.code).toBe(2);
     expect(missing.output).toContain("godmode runner install");
     // Names every object has are not commands.
     expect((await runner(["constructor"])).code).toBe(2);
+    // New runners can't be paired any more.
+    expect((await runner(["pair"])).code).toBe(2);
   });
 
   test("a runner.json left behind by a crash doesn't count as a running runner", async () => {
@@ -574,7 +576,7 @@ describe("the godmode binary", () => {
     const help = godmode(["help"]);
     expect(help.code).toBe(0);
     for (const line of ["godmode serve", "godmode token", "godmode password <new>", "godmode doctor", "godmode version"]) expect(help.stdout).toContain(line);
-    for (const command of ["install", "pair", "serve", "status", "uninstall"]) expect(help.stdout).toContain(`godmode runner ${command}`);
+    for (const command of ["install", "serve", "status", "uninstall"]) expect(help.stdout).toContain(`godmode runner ${command}`);
     expect(godmode(["--help"]).stdout).toBe(help.stdout);
 
     const unknown = godmode(["runner", "frobnicate"]);

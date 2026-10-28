@@ -3,18 +3,7 @@ import type { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  encodeRunnerCode,
-  encodeRunnerOffer,
-  parseRunnerCode,
-  parseRunnerOffer,
-  parseRunnerView,
-  RUNNER_CODE_PREFIX,
-  RUNNER_OFFER_PREFIX,
-  runnerView,
-  type RunnerPairingCode,
-  type RunnerPairingOfferPayload,
-} from "@godmode/shared";
+import { encodeRunnerCode, parseRunnerCode, parseRunnerView, RUNNER_CODE_PREFIX, runnerView, type RunnerPairingCode } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, openDb } from "../src/db";
 
@@ -28,15 +17,6 @@ const CODE: RunnerPairingCode = {
   id: "pair_3fA9xQ2LmT7c",
   secret: "c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0LXNlY3I",
   exp: 1_790_000_000,
-};
-
-const OFFER: RunnerPairingOfferPayload = {
-  v: 1,
-  id: "offer_8Hq2ZpK4wN1d",
-  token: "dG9rZW4tdG9rZW4tdG9rZW4tdG9rZW4tdG9rZW4tdG8",
-  urls: ["http://192.168.1.10:51234", "http://100.64.0.7:51234"],
-  name: "Daniels MacBook Pro",
-  exp: 1_790_000_600,
 };
 
 /** A payload the encoders would never produce, in the same wire format. */
@@ -71,7 +51,7 @@ describe("pairing codes", () => {
     expect(parseRunnerCode(`${RUNNER_CODE_PREFIX}${Buffer.from("not json").toString("base64url")}`)).toBeNull();
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, [CODE]))).toBeNull();
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, null))).toBeNull();
-    expect(parseRunnerCode(encodeRunnerOffer(OFFER))).toBeNull();
+    expect(parseRunnerCode(raw("gmo1.", CODE))).toBeNull();
     expect(parseRunnerCode(raw("gmr2.", CODE))).toBeNull();
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, { ...CODE, v: 2 }))).toBeNull();
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, { ...CODE, v: "1" }))).toBeNull();
@@ -103,45 +83,6 @@ describe("pairing codes", () => {
     for (const change of bad) expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, { ...CODE, ...change }))).toBeNull();
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, { ...CODE, port: 1 }))?.port).toBe(1);
     expect(parseRunnerCode(raw(RUNNER_CODE_PREFIX, { ...CODE, port: 65535 }))?.port).toBe(65535);
-  });
-});
-
-describe("pairing offers", () => {
-  test("round-trip", () => {
-    const text = encodeRunnerOffer(OFFER);
-    expect(text.startsWith(RUNNER_OFFER_PREFIX)).toBe(true);
-    expect(text).toBe(raw(RUNNER_OFFER_PREFIX, OFFER));
-    expect(parseRunnerOffer(text)).toEqual(OFFER);
-  });
-
-  test("are read with the spaces and line breaks a paste adds", () => {
-    expect(parseRunnerOffer(wrapped(encodeRunnerOffer(OFFER)))).toEqual(OFFER);
-  });
-
-  test("reject junk, another prefix and another version", () => {
-    expect(parseRunnerOffer("")).toBeNull();
-    expect(parseRunnerOffer("gmo1")).toBeNull();
-    expect(parseRunnerOffer(`${RUNNER_OFFER_PREFIX}%%%`)).toBeNull();
-    expect(parseRunnerOffer(`${RUNNER_OFFER_PREFIX}${Buffer.from("{").toString("base64url")}`)).toBeNull();
-    expect(parseRunnerOffer(encodeRunnerCode(CODE))).toBeNull();
-    expect(parseRunnerOffer(raw(RUNNER_OFFER_PREFIX, { ...OFFER, v: 2 }))).toBeNull();
-  });
-
-  test("reject an offer with a missing or mistyped field", () => {
-    for (const field of Object.keys(OFFER) as (keyof RunnerPairingOfferPayload)[]) {
-      const { [field]: _dropped, ...rest } = OFFER;
-      expect(parseRunnerOffer(raw(RUNNER_OFFER_PREFIX, rest))).toBeNull();
-    }
-    const bad: Record<string, unknown>[] = [
-      { id: "" },
-      { token: "" },
-      { token: 1 },
-      { urls: "http://192.168.1.10:51234" },
-      { urls: [null] },
-      { name: "" },
-      { exp: "soon" },
-    ];
-    for (const change of bad) expect(parseRunnerOffer(raw(RUNNER_OFFER_PREFIX, { ...OFFER, ...change }))).toBeNull();
   });
 });
 

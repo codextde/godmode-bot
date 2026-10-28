@@ -29,7 +29,6 @@ import {
   Lock,
   MessageCircle,
   MessageSquarePlus,
-  MonitorSmartphone,
   MonitorUp,
   Moon,
   Phone,
@@ -418,9 +417,6 @@ export function CommandPalette() {
               <Smartphone /> Android phones
             </CommandItem>
           )}
-          <CommandItem value="runners remote computer mac mini" keywords={alias("/runners", "Runners")} onSelect={() => go("/runners")}>
-            <MonitorSmartphone /> {named("/runners", "Runners")}
-          </CommandItem>
           <CommandItem onSelect={() => go("/workspaces")}>
             <Layers /> Workspaces
           </CommandItem>

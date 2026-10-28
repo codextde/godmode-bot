@@ -63,7 +63,7 @@ function describe(err: unknown, name: string): string {
       case "unknown_controller":
         return `${name} doesn't know this computer anymore. Remove it here and pair it again.`;
       case "pairing_invalid":
-        return "That pairing code isn't valid anymore. Make a new one on the runner with `godmode runner pair`.";
+        return "That invite isn't valid anymore. Make a new one on the other computer.";
       case "bad_frame":
         return `The connection to ${name} couldn't be verified. If this keeps happening, pair it again.`;
       case "handshake_timeout":
@@ -492,7 +492,7 @@ export class RemoteLink {
    */
   static async pair(opts: { identity: LinkIdentity; code: RunnerPairingCode; name: string }): Promise<{ info: RunnerInfo; address: string }> {
     const { identity, code, name } = opts;
-    if (code.exp * 1000 <= Date.now()) throw new HttpError(400, "That pairing code has expired. Make a new one on the runner with `godmode runner pair`.", "pairing_expired");
+    if (code.exp * 1000 <= Date.now()) throw new HttpError(400, "That invite has expired. Make a new one on the other computer.", "pairing_expired");
     try {
       const dialed = await dial(code.addresses, code.port, (t) =>
         SecureChannel.initiator(t, { identity, remoteKey: code.key, mode: "pair", pairingId: code.id, secret: code.secret, name, handshakeTimeoutMs: HANDSHAKE_TIMEOUT_MS }),

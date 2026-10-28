@@ -55,7 +55,7 @@ export function LicenseSection() {
   const license = useLicense();
   return (
     <div className="space-y-5">
-      <SectionHeading title="License" description="Your Godmode Pro licence: every feature, on this computer and the runners that work for it." />
+      <SectionHeading title="License" description="Your Godmode Pro licence: every feature, on this computer." />
       {license.data ? (
         <LicenseCard state={license.data} />
       ) : license.isError ? (

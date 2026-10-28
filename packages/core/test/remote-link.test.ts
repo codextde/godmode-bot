@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { parseRunnerCode, parseRunnerOffer, type RunnerPairingCode, type ServerEvent } from "@godmode/shared";
+import { parseRunnerCode, type RunnerPairingCode, type ServerEvent } from "@godmode/shared";
 import { loadConfig } from "../src/config";
 import { closeDb, all, getMeta, openDb, setMeta } from "../src/db";
 import { bus } from "../src/events/bus";
@@ -11,8 +11,7 @@ import { setLogLevel } from "../src/log";
 import { generateKeyPair } from "../src/remote/crypto";
 import { RemoteLink, type LinkState } from "../src/remote/linkClient";
 import { forgetController, startLinkServer, stopLinkServer } from "../src/remote/linkServer";
-import { setTailscaleOverride } from "../src/mobile/tailscale";
-import { cancelOffer, createOffer, createRunnerCode, deliverCode, offerAddresses } from "../src/remote/pairing";
+import { createRunnerCode, offerAddresses } from "../src/remote/pairing";
 import { getAccessToken } from "../src/server/auth";
 import { websocketHandler } from "../src/server/ws";
 import { HttpError, sleep } from "../src/util";
@@ -88,7 +87,6 @@ beforeAll(async () => {
 afterAll(() => {
   for (const l of links) l.stop();
   stopLinkServer();
-  cancelOffer();
   closeDb();
   rmSync(dataDir, { recursive: true, force: true });
 });
@@ -231,33 +229,8 @@ describe("a session", () => {
   });
 });
 
-describe("pairing offers", () => {
-  test("the runner delivers its code sealed; a wrong token gets nothing; the listener stops afterwards", async () => {
-    const received: string[] = [];
-    const offer = await createOffer(async (c) => {
-      received.push(c);
-      return { name: "Controller" };
-    });
-    const payload = parseRunnerOffer(/GODMODE_PAIR=(\S+)/.exec(offer.websiteCommand)![1]!)!;
-    expect(payload.urls).toEqual(offer.urls);
-    const loopback = offer.urls.filter((u) => u.startsWith("http://127.0.0.1:"));
-    expect(loopback).toHaveLength(1);
-    const { code: runnerCode } = await createRunnerCode();
-
-    const forged = await deliverCode({ ...payload, urls: loopback, token: Buffer.alloc(32, 7).toString("base64url") }, runnerCode);
-    expect(forged.ok).toBe(false);
-    expect(received).toHaveLength(0);
-
-    const ok = await deliverCode({ ...payload, urls: loopback }, runnerCode);
-    expect(ok).toEqual({ ok: true, name: "Controller" });
-    expect(received).toEqual([runnerCode]);
-
-    const after = await deliverCode({ ...payload, urls: loopback }, runnerCode);
-    expect(after.ok).toBe(false);
-    expect(received).toHaveLength(1);
-  });
-
-  test("the offer lists this computer's networks, Tailscale with its MagicDNS name, and the code arrives through any of them", async () => {
+describe("addresses a runner can download this Godmode from", () => {
+  test("this computer's networks, Tailscale with its MagicDNS name", () => {
     const ts = { installed: true, running: true, ip: "100.101.102.103", dnsName: "studio.tail1234.ts.net", tailnet: "me@example.com", detail: null };
     const nic = (address: string, internal = false) => ({ address, family: "IPv4" as const, internal, netmask: "255.255.255.0", mac: "00:00:00:00:00:00", cidr: null });
     const routes = offerAddresses(ts, {
@@ -273,39 +246,5 @@ describe("pairing offers", () => {
     ]);
     expect(offerAddresses(ts, { en0: [nic("10.0.0.4")] }).at(-1)).toEqual({ network: "tailscale", address: "100.101.102.103", detail: "studio.tail1234.ts.net" });
     expect(offerAddresses({ ...ts, running: false, ip: null }, { en0: [nic("10.0.0.4")] })).toHaveLength(1);
-
-    setTailscaleOverride(ts);
-    try {
-      const from: (string | null)[] = [];
-      const offer = await createOffer(async (_c, via) => {
-        from.push(via);
-        return { name: "Controller" };
-      });
-      expect(offer.tailscale.dnsName).toBe("studio.tail1234.ts.net");
-      expect(offer.routes.at(-1)).toMatchObject({ network: "tailscale", address: "100.101.102.103", detail: "studio.tail1234.ts.net" });
-      expect(offer.routes.map((r) => r.url)).toEqual(offer.urls.slice(0, offer.routes.length));
-      const payload = parseRunnerOffer(/GODMODE_PAIR=(\S+)/.exec(offer.websiteCommand)![1]!)!;
-      const { code: runnerCode } = await createRunnerCode();
-      expect(await deliverCode({ ...payload, urls: offer.urls.filter((u) => u.startsWith("http://127.0.0.1:")) }, runnerCode)).toEqual({ ok: true, name: "Controller" });
-      expect(from).toEqual(["127.0.0.1"]);
-    } finally {
-      setTailscaleOverride(null);
-      cancelOffer();
-    }
-  });
-
-  test("an expired offer is not delivered", async () => {
-    const offer = await createOffer(async () => ({ name: "Controller" }));
-    const payload = parseRunnerOffer(/GODMODE_PAIR=(\S+)/.exec(offer.websiteCommand)![1]!)!;
-    const result = await deliverCode({ ...payload, exp: Math.floor(Date.now() / 1000) - 1 }, "gmr1.x");
-    expect(result.ok).toBe(false);
-    cancelOffer();
-  });
-
-  test("outside a compiled build there is no self-hosted install command, the website one is always there", async () => {
-    const offer = await createOffer(async () => ({ name: "Controller" }));
-    expect(offer.command).toBeNull();
-    expect(offer.websiteCommand).toStartWith("curl -fsSL https://usegodmode.com/runner.sh | GODMODE_LICENSE=");
-    cancelOffer();
   });
 });
