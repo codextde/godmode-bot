@@ -4,10 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent, AgentPermissions, TotpAlgorithm } from "@godmode/shared";
 import { loadConfig } from "../src/config";
-import { closeDb, get, insert, openDb } from "../src/db";
+import { closeDb, get, insert, openDb, run } from "../src/db";
 import { resetSettingsCache } from "../src/services/settings";
 import { HttpError } from "../src/util";
-import { createCredential, getCredential } from "../src/vault/credentials";
+import { createCredential, getCredential, linkCredentialTotp } from "../src/vault/credentials";
 import { base32Decode, base32Encode, decodeMigrationPayload, normalizeBase32Secret, parseOtpUri } from "../src/vault/otpauth";
 import {
   codeForAgent,
@@ -18,6 +18,7 @@ import {
   getTotp,
   importTotpUris,
   listTotp,
+  mergeDuplicateTotp,
   totpForAgent,
   updateTotp,
 } from "../src/vault/totp";
@@ -567,6 +568,73 @@ describe("TOTP service", () => {
     // Both null → everything in scope.
     const open = totpForAgent(makeAgent("ws_a")).map((e) => e.id);
     expect(open).toEqual(expect.arrayContaining([linkedAllowed.id, linkedGlobal.id, unlinked.id]));
+  });
+
+  test("duplicates: same name and code merge into the global entry, links and permissions follow", () => {
+    for (const t of listTotp({ workspaceId: "all" })) deleteTotp(t.id);
+    const secret = "MFRGGZDFMZTWQ2LK";
+    const ts0 = "2026-01-01T00:00:00.000Z";
+    const raw = (id: string, workspaceId: string | null, issuer: string, accountName: string, s = secret) => {
+      insert("totp", {
+        id,
+        workspace_id: workspaceId,
+        issuer,
+        account_name: accountName,
+        secret_enc: vault.seal(s, `totp.secret:${id}`),
+        algorithm: "SHA1",
+        digits: 6,
+        period: 30,
+        credential_id: null,
+        icon: null,
+        last_used_at: null,
+        created_at: ts0,
+        updated_at: ts0,
+      });
+    };
+    raw("totp_dup_global", null, "Coolify Zeus", "tech@solakon.de");
+    raw("totp_dup_ws", "ws_a", "coolify zeus", "TECH@solakon.de ");
+    raw("totp_dup_ws_b", "ws_b", "Coolify Zeus", "tech@solakon.de");
+    raw("totp_other_name", "ws_a", "Coolify", "tech@solakon.de");
+    raw("totp_other_code", "ws_a", "Coolify Zeus", "tech@solakon.de", "GEZDGNBVGY3TQOJQ");
+    const cred = createCredential({ name: "Coolify", url: "https://coolify.example.com", username: "tech@solakon.de", workspaceId: "ws_a" });
+    linkCredentialTotp(cred.id, "totp_dup_ws");
+    insert("agents", {
+      id: "agt_dup",
+      name: "Dup",
+      slug: "dup",
+      repo_path: "/tmp/agt_dup",
+      permissions: JSON.stringify({ totpIds: ["totp_dup_ws", "totp_dup_global"] }),
+      created_at: ts0,
+      updated_at: ts0,
+    });
+
+    const merged = mergeDuplicateTotp();
+    expect([...merged]).toEqual([
+      ["totp_dup_ws", "totp_dup_global"],
+      ["totp_dup_ws_b", "totp_dup_global"],
+    ]);
+    expect(listTotp({ workspaceId: "all" }).map((t) => t.id).sort()).toEqual(["totp_dup_global", "totp_other_code", "totp_other_name"]);
+    expect(getTotp("totp_dup_global").credentialId).toBe(cred.id);
+    expect(getCredential(cred.id).totpId).toBe("totp_dup_global");
+    expect(JSON.parse(get<{ permissions: string }>("SELECT permissions FROM agents WHERE id = 'agt_dup'")!.permissions).totpIds).toEqual(["totp_dup_global"]);
+    expect(mergeDuplicateTotp().size).toBe(0);
+
+    // Creating or importing the same code again keeps one entry.
+    expect(createTotp({ issuer: "Coolify Zeus", accountName: "tech@solakon.de", secret, workspaceId: "ws_b" }).id).toBe("totp_dup_global");
+    const imported = importTotpUris({ uris: [`otpauth://totp/Coolify%20Zeus:tech@solakon.de?secret=${secret}`], workspaceId: "ws_a" });
+    expect(imported.imported).toHaveLength(0);
+    expect(imported.skipped[0]?.reason).toBe("already exists");
+
+    // Two copies linked to different logins both stay; different workspaces without a global copy stay too.
+    const cred2 = createCredential({ name: "Coolify 2", url: "https://coolify.example.com", username: "ops@solakon.de", workspaceId: "ws_a" });
+    raw("totp_linked_twin", "ws_a", "Coolify Zeus", "tech@solakon.de");
+    updateTotp("totp_linked_twin", { credentialId: cred2.id }); // runs the merge itself
+    expect(getTotp("totp_linked_twin").credentialId).toBe(cred2.id);
+    raw("totp_solo_a", "ws_a", "Hetzner", "me", "JBSWY3DPEHPK3PXP");
+    raw("totp_solo_b", "ws_b", "Hetzner", "me", "JBSWY3DPEHPK3PXP");
+    expect(mergeDuplicateTotp().size).toBe(0);
+
+    run("DELETE FROM agents WHERE id = 'agt_dup'");
   });
 
   test("locked vault → 423 for secrets, metadata still listable", async () => {
