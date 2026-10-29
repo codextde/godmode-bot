@@ -140,7 +140,7 @@ import { all, get } from "../db";
 import { config } from "../config";
 import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
-import { chatFillOnly, createConversation, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
+import { chatFillOnly, chatGoal, createConversation, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { androidStatus, assignDevice, freshDevices } from "../android/service";
@@ -148,7 +148,7 @@ import { getSettings } from "../services/settings";
 import { agentSettingsRefusal, applyAgentSettings, humanOnlySettings, settingsSections } from "../services/agentSettings";
 import { spendReport } from "../services/spend";
 import { budgetOverview, budgetSentence, exhaustedBudget } from "../services/budgets";
-import { cancelRun, getRun, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
+import { cancelRun, endGoalAfterTurn, getRun, runClaudeConfigDir, listRuns, markMissingLoginReported, runBrowserProfile, runChatBrowserProfile, waitForRun, runExempt } from "../runner/runner";
 import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow } from "../runner/prompt";
@@ -1795,6 +1795,23 @@ const TOOLS: ToolDef[] = [
     schema: z.object({}),
     when: canFollowUp,
     run: (_args, { ctx }) => (cancelFollowup(ctx.conversationId) ? "Follow-up removed." : "This chat had no follow-up."),
+  }),
+
+  defineTool({
+    name: "goal_clear",
+    description:
+      "End this chat's `/goal` yourself, as the human would with `/goal clear`. Only when the goal is over without being met: the human told you to end, drop or replace it, or a decision of theirs leaves nothing to work towards. Never to get out of work that is merely hard, long or unfinished. The goal's check no longer holds this turn up: Godmode clears the goal when the turn is over and notes it in the chat with your reason. Never hand the human a task to type `/goal clear`.",
+    schema: z.object({
+      reason: z.string().min(1).max(300).describe('Why it ends, shown in the chat, e.g. "Daniel decided on 10-28 to end it"'),
+    }),
+    when: canFollowUp,
+    run: ({ reason }, { ctx }) => {
+      const goal = chatGoal(ctx.conversationId, runClaudeConfigDir(ctx.runId));
+      if (!goal) return "This chat has no active /goal — nothing to end.";
+      const refused = endGoalAfterTurn(ctx.runId, reason);
+      if (refused) return fail(refused);
+      return `The goal “${goal.length > 200 ? `${goal.slice(0, 199).trimEnd()}…` : goal}” ends when this turn is over. Finish your answer now and don't work on it any further.`;
+    },
   }),
 
   defineTool({
