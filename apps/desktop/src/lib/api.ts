@@ -219,6 +219,9 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   WorkspaceSource,
   SelfRepairInput,
   SelfRepairResult,
+  Offer,
+  AcceptOfferResult,
+  ImportMemoryInput,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
 import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
@@ -925,6 +928,17 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/artifacts/${id}`),
   },
 
+  offers: {
+    /** What the main agent offers to take off the human's plate (open ones). */
+    list: () => get<Offer[]>("/api/offers"),
+    /** Starts a chat with the agent with the offer's prompt. */
+    accept: (id: string) => post<AcceptOfferResult>(`/api/offers/${id}/accept`, {}),
+    dismiss: (id: string) => post<Offer>(`/api/offers/${id}/dismiss`, {}),
+  },
+  memory: {
+    /** Starts a chat in which the main agent merges what another assistant remembers into its memory. */
+    import: (input: ImportMemoryInput) => post<StartChatResult>("/api/memory/import", input),
+  },
   missingLogins: {
     list: (q: { status?: string } = {}) => get<MissingLogin[]>("/api/missing-logins", q),
     update: (id: string, input: MissingLoginPatch) => patch<MissingLogin>(`/api/missing-logins/${id}`, input),

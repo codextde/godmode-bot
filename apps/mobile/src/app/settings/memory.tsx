@@ -56,6 +56,16 @@ export default function Memory() {
               value={d.tidyWorkspace}
               onChange={(tidyWorkspace) => void patchSettings({ memory: { dreaming: { tidyWorkspace } } })}
             />
+            {/* An older Godmode on the computer doesn't offer work yet. */}
+            {d.offers === undefined ? null : (
+              <SwitchRow
+                icon="sparkles"
+                title="Offer to take work off your plate"
+                detail="Your main agent offers work it spotted on Home."
+                value={d.offers}
+                onChange={(offers) => void patchSettings({ memory: { dreaming: { offers } } })}
+              />
+            )}
             <PickerRow icon="sparkles" title="Model" value={dreamModel || "agent"} options={modelOptions} onChange={(v) => void patchSettings({ memory: { dreaming: { model: v === "agent" ? "" : v } } })} />
             {/* An older Godmode on the computer has no size limit to set. */}
             {d.maxMemoryChars === undefined ? null : (

@@ -50,11 +50,12 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     throw badRequest("Invalid dreaming settings");
   }
   const dreaming = memory?.dreaming as
-    | { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown; tidyWorkspace?: unknown; maxMemoryChars?: unknown }
+    | { cron?: unknown; minNewExchanges?: unknown; refreshDays?: unknown; model?: unknown; enabled?: unknown; tidyWorkspace?: unknown; offers?: unknown; maxMemoryChars?: unknown }
     | undefined;
   if (dreaming) {
     if (dreaming.enabled !== undefined && typeof dreaming.enabled !== "boolean") throw badRequest("dreaming.enabled must be true or false");
     if (dreaming.tidyWorkspace !== undefined && typeof dreaming.tidyWorkspace !== "boolean") throw badRequest("dreaming.tidyWorkspace must be true or false");
+    if (dreaming.offers !== undefined && typeof dreaming.offers !== "boolean") throw badRequest("dreaming.offers must be true or false");
     if (dreaming.cron !== undefined && (typeof dreaming.cron !== "string" || !isValidDreamSchedule(dreaming.cron))) {
       throw badRequest("The dreaming schedule must be a cron expression with 5 fields (minute hour day month weekday)");
     }

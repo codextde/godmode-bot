@@ -1744,4 +1744,25 @@ CREATE TABLE IF NOT EXISTS self_repair_tickets (
 ALTER TABLE conversations ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 107,
+    name: "offers",
+    sql: /* sql */ `
+-- Work the main agent offers to take off the human's plate, spotted while it dreamt. 'draft' until its dream succeeds.
+CREATE TABLE IF NOT EXISTS offers (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  dream_id TEXT,
+  title TEXT NOT NULL,
+  why TEXT NOT NULL DEFAULT '',
+  prompt TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  conversation_id TEXT,
+  created_at TEXT NOT NULL,
+  decided_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
+`,
+  },
 ];
