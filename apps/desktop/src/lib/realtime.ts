@@ -95,6 +95,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   // A finished or undone dream rewrote the memory files.
   dreams: [qk.dreams, qk.agentFilesAll, qk.agentFileAll, qk.agentCommitsAll],
   followups: [qk.followups],
+  offers: [qk.offers],
   // A beat was recorded, the watchdog stepped in, or an agent's heartbeat settings changed.
   heartbeats: [qk.heartbeats],
   // The background upkeep repaired, updated or cleaned up: system check, permissions, updates, cleanup.

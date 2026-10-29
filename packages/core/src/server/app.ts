@@ -14,6 +14,7 @@ import { registerAgentRoutes } from "./routes/agents";
 import { registerSpendRoutes } from "./routes/spend";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
+import { registerMemoryRoutes } from "./routes/memory";
 import { registerQuestionRoutes } from "./routes/questions";
 import { registerHumanTaskRoutes } from "./routes/humanTasks";
 import { registerArtifactRoutes } from "./routes/artifacts";
@@ -186,6 +187,7 @@ export function createApp() {
   registerSpendRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
+  registerMemoryRoutes(app);
   registerQuestionRoutes(app);
   registerHumanTaskRoutes(app);
   registerArtifactRoutes(app);

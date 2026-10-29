@@ -195,6 +195,8 @@ export type EntityName =
   | "settings"
   | "runs"
   | "dreams"
+  /** The main agent offered work, or an offer was taken up, declined or expired. */
+  | "offers"
   | "models"
   | "computer"
   | "vms"

@@ -38,6 +38,7 @@ const AGENT_SETTINGS: Record<string, readonly string[]> = {
     "dreaming.minNewExchanges",
     "dreaming.refreshDays",
     "dreaming.tidyWorkspace",
+    "dreaming.offers",
   ],
   diagnostics: ["verbose"],
   maintenance: ["autoFix", "autoUpdate"],

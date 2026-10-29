@@ -39,6 +39,7 @@ import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
+import { QuoteSelection } from "@/components/chat/quote-selection";
 import { TurnEnd } from "@/components/chat/turn-end";
 import { ChatFilesScope } from "@/components/chat/local-files";
 import { liveActivityLabel } from "@/components/chat/messages";
@@ -547,20 +548,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
-            <Thread
-              messages={visibleMessages}
-              agent={agent}
-              delegatedFrom={conv.delegatedFrom}
-              inflight={inflight}
-              after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
-              onStop={() => activeRunId && cancel.mutate(activeRunId)}
-              stopping={cancel.isPending}
-              onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
-              pausing={pausing}
-              empty={
-                <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
-              }
-            />
+            <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
+              <Thread
+                messages={visibleMessages}
+                agent={agent}
+                delegatedFrom={conv.delegatedFrom}
+                inflight={inflight}
+                after={lastTurn && <TurnEnd key={lastTurn.id} conversation={conv} message={lastTurn} agent={agent} />}
+                onStop={() => activeRunId && cancel.mutate(activeRunId)}
+                stopping={cancel.isPending}
+                onPause={conv.origin === "dream" || live?.trigger === "dream" || live?.trigger === "check" || paused ? undefined : () => pause.mutate()}
+                pausing={pausing}
+                empty={
+                  <ConversationWelcome agent={agent} seed={conversationId} onPick={(text) => composerRef.current?.setText(text)} />
+                }
+              />
+            </QuoteSelection>
           </QuestionScopeProvider>
           </ArtifactScopeProvider>
         </ChatFilesScope>

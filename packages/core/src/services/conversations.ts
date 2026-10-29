@@ -114,7 +114,7 @@ interface MessageRow {
   created_at: string;
 }
 
-const MESSAGE_SOURCES: readonly MessageSource[] = ["automation", "delegation", "task"];
+const MESSAGE_SOURCES: readonly MessageSource[] = ["automation", "delegation", "task", "offer"];
 
 /* ------------------------------------------------------------------ */
 /* Mapping                                                             */
@@ -1000,6 +1000,9 @@ export async function startChat(
   input: {
     agentId?: string;
     content: string;
+    /** What Claude gets instead of `content`. */
+    prompt?: string;
+    source?: MessageSource;
     origin?: ConversationOrigin;
     title?: string;
     attachments?: SendMessageInput["attachments"];
@@ -1053,7 +1056,7 @@ export async function startChat(
     audit("user", "computer.share", computerTargetLabel(input.computerTarget), { conversationId: conversation.id, kind: input.computerTarget.kind });
   }
   try {
-    const result = await sendMessage(conversation.id, { content: input.content, attachments: input.attachments, voice: input.voice });
+    const result = await sendMessage(conversation.id, { content: input.content, prompt: input.prompt, source: input.source, attachments: input.attachments, voice: input.voice });
     return { ...result, conversation: getConversationSummary(conversation.id) };
   } catch (err) {
     // Don't leave an empty conversation behind when the first message could not be sent.
@@ -1093,6 +1096,7 @@ function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
   if (m?.source === "automation") return "Automation";
   if (m?.source === "delegation") return "Delegated task";
   if (m?.source === "task") return "Task";
+  if (m?.source === "offer") return "Offer (taken up)";
   if (runTrigger === "followup") return "Follow-up";
   if (runTrigger === "heartbeat") return "Heartbeat";
   if (runTrigger === "call") return "Phone call";
