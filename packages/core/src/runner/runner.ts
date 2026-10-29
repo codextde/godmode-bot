@@ -405,6 +405,10 @@ interface Job {
   private?: boolean;
   /** Godmode ended it because a `/goal` kept it going with nothing to do: it succeeded. */
   goalPaused?: boolean;
+  /** The agent ended the chat's `/goal` (`goal_clear`) when the hook had blocked this many times: Godmode clears it once the process is done. */
+  goalClear?: { reason: string; atCheck: number };
+  /** Where its Claude Code keeps sessions (GLM runs have a config folder of their own); null = the default. */
+  claudeConfigDir?: string | null;
   /** Resolves ids in tool input for the activity label (memoized per run). */
   names?: ActivityNames;
   /** The human started or let it run: a used-up monthly budget doesn't hold it. */
@@ -1803,6 +1807,12 @@ async function spawnClaude(
     if (job.acc.push(event)) scheduleDelta(job);
     showContext(job);
     if (job.acc.goalIdle >= GOAL_IDLE_LIMIT && !job.goalPaused && !job.pause && !halted(job) && !job.timedOut && !job.stalled) pauseGoal(job, proc);
+    // The agent ended the goal: the hook's next block is only the goal it no longer pursues.
+    if (job.goalClear && job.acc.goalChecks > job.goalClear.atCheck && !job.goalPaused && !job.pause && !halted(job) && !job.timedOut && !job.stalled) {
+      job.goalPaused = true;
+      log.info(`run ${job.runId}: the agent ended the goal, ending the run`);
+      killTree(proc);
+    }
     // Claude has read the human's answer the moment it starts replying: settle it now, so a crash later in the run
     // can't hand the same answer (an approval: "Do it now") to the next turn again.
     if (job.acc.answered && !job.answersSettled) {
@@ -1839,6 +1849,72 @@ function pauseGoal(job: Job, proc: Subprocess) {
   scheduleDelta(job);
   log.info(`run ${job.runId}: the goal loop has nothing to do, ending the run`);
   killTree(proc);
+}
+
+/**
+ * `goal_clear`: the agent ends the chat's `/goal` (the human dropped it, replaced it, or it can no longer be reached).
+ * The goal's check doesn't hold this turn up anymore, and Godmode clears the goal in the session once the process is done.
+ */
+export function endGoalAfterTurn(runId: string, reason: string): string | null {
+  const job = jobs.get(runId);
+  if (!job || job.status !== "running" || job.cancelReason || job.timedOut || job.stalled) return "This run is being stopped — the goal stays. Try again in the next turn.";
+  job.goalClear = { reason, atCheck: job.acc.goalChecks };
+  return null;
+}
+
+/** The Claude Code config folder the run's sessions live in, or null for the default (or no such run). */
+export function runClaudeConfigDir(runId: string): string | null {
+  return jobs.get(runId)?.claudeConfigDir ?? null;
+}
+
+const GOAL_CLEAR_TIMEOUT_MS = 60_000;
+
+/** Clear the session's `/goal` as the human would with `/goal clear`: Claude Code runs it without the model. */
+async function clearGoal(job: Job, cmd: string[], sessionId: string, cwd: string, env: Record<string, string | undefined>): Promise<void> {
+  const reason = job.goalClear?.reason ?? "";
+  let said = "";
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const proc = Bun.spawn({
+      cmd: [...cmd, "-p", "--resume", sessionId, "--output-format", "json", "--setting-sources", "", "--strict-mcp-config"],
+      cwd,
+      env,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "ignore",
+      detached: process.platform !== "win32",
+    });
+    job.proc = proc;
+    timer = setTimeout(() => killTree(proc), GOAL_CLEAR_TIMEOUT_MS);
+    proc.stdin.write("/goal clear");
+    await proc.stdin.end();
+    const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+    for (const line of out.trim().split("\n").reverse()) {
+      try {
+        const event = JSON.parse(line) as { type?: unknown; result?: unknown };
+        if (event.type === "result" && typeof event.result === "string") {
+          said = event.result;
+          break;
+        }
+      } catch {
+        /* not a line of its own */
+      }
+    }
+  } catch (err) {
+    log.warn(`run ${job.runId}: could not clear the goal of session ${sessionId}`, err);
+  } finally {
+    clearTimeout(timer);
+    job.proc = null;
+  }
+  const cleared = /^Goal cleared: ([\s\S]+)/.exec(said.trim());
+  if (cleared) {
+    const goal = cleared[1]!.replace(/\s+/g, " ").trim();
+    job.acc.addNotice("info", `Goal ended: “${goal.length > 160 ? `${goal.slice(0, 159).trimEnd()}…` : goal}”${reason ? ` — ${reason.replace(/[.!]$/, "")}` : ""}.`);
+    log.info(`run ${job.runId}: goal of session ${sessionId} cleared`);
+  } else if (!/^No goal set/.test(said.trim())) {
+    job.acc.addNotice("warning", "Godmode couldn't end this chat's goal. Type /goal clear to end it.");
+  }
+  scheduleDelta(job);
 }
 
 /** The model a run is recorded with: what Claude reported, but for GLM the requested id (Z.ai may name it otherwise). */
@@ -2345,6 +2421,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
   if (zai) applyZaiEnv(env, model, zai);
+  job.claudeConfigDir = env.CLAUDE_CONFIG_DIR ?? null;
   // Scripts that drive the browser themselves (Playwright, puppeteer) get the run's own endpoint: its profile, its chat's tabs.
   const cdpUrl = !vm && mcp.mcpServers[BROWSER_MCP_NAME] ? chatLeaseUrl(job.runId) : null;
   if (cdpUrl) env[RUN_CDP_ENV] = cdpUrl;
@@ -2441,6 +2518,12 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         logSink,
       );
     }
+
+    // A Stop by the human leaves the goal as it is; a stop to send the queue now or to shut down doesn't.
+    if (job.goalClear && job.stoppedByHuman && !job.thenQueue) {
+      job.acc.addNotice("warning", "Stopped before the goal ended: it is still set.");
+      scheduleDelta(job);
+    } else if (job.goalClear) await clearGoal(job, cmd, job.acc.sessionId ?? sessionId, cwd, env);
 
     const final = job.acc.final;
     const answer = !!final && !final.isError;
