@@ -30,6 +30,7 @@ import {
   findRunLog,
   getRun,
   listActiveRuns,
+  listRuns,
   recoverInterruptedRuns,
   waitForRun,
 } from "../src/runner/runner";
@@ -590,5 +591,28 @@ describe("recoverInterruptedRuns", () => {
     insert("message_images", { message_id: messageId, block_id: "toolu_shot", image: "iVBORw0KGgoAAAA" });
     sql("DELETE FROM messages WHERE id = ?", messageId);
     expect(all("SELECT 1 FROM message_images WHERE message_id = ?", messageId)).toEqual([]);
+  });
+});
+
+describe("listRuns", () => {
+  test("filters by status newest first, unfinished and finished alike", () => {
+    const conv = createConversation({ agentId: agent.id });
+    const at = (m: number) => `2031-01-01T00:0${m}:00.000Z`;
+    const rows = [
+      ["run_list_test_000001", "succeeded", at(1)],
+      ["run_list_test_000002", "running", at(2)],
+      ["run_list_test_000003", "queued", at(3)],
+      ["run_list_test_000004", "succeeded", at(4)],
+      ["run_list_test_000005", "running", at(4)],
+    ] as const;
+    for (const [id, status, created] of rows) insert("runs", { id, agent_id: agent.id, conversation_id: conv.id, trigger: "chat", status, prompt: "x", created_at: created });
+    expect(listRuns({ conversationId: conv.id, status: "queued,running,paused" }).map((r) => r.id)).toEqual([
+      "run_list_test_000005",
+      "run_list_test_000003",
+      "run_list_test_000002",
+    ]);
+    expect(listRuns({ conversationId: conv.id, status: "running", limit: 1 }).map((r) => r.id)).toEqual(["run_list_test_000005"]);
+    expect(listRuns({ conversationId: conv.id, status: "succeeded" }).map((r) => r.id)).toEqual(["run_list_test_000004", "run_list_test_000001"]);
+    sql("DELETE FROM runs WHERE id LIKE 'run_list_test_%'");
   });
 });
