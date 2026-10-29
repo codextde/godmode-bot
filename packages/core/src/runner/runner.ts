@@ -401,6 +401,8 @@ interface Job {
   answersSettled?: boolean;
   /** The human stopped it (from a chat, the board or a chat platform), not Godmode. */
   stoppedByHuman?: boolean;
+  /** Its chat is private: it leaves no transcript, memory, follow-up or commit behind. */
+  private?: boolean;
   /** Godmode ended it because a `/goal` kept it going with nothing to do: it succeeded. */
   goalPaused?: boolean;
   /** Resolves ids in tool input for the activity label (memoized per run). */
@@ -1981,11 +1983,13 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     instructions_digest: string | null;
     memory_digest: string | null;
     secret_access: string | null;
+    private: number;
   }>(
-    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access FROM conversations WHERE id = ?",
+    "SELECT claude_session_id, claude_session_cost_usd, working_directory, model, effort, ultracode, instructions, instructions_digest, memory_digest, secret_access, private FROM conversations WHERE id = ?",
     job.conversationId,
   );
   if (!conv) return { status: "cancelled", error: "Conversation was deleted" };
+  job.private = conv.private === 1;
   const dreaming = job.trigger === "dream";
   // A dream always works in the agent's repository, on its memory files.
   const folder = dreaming ? null : (conv.working_directory ?? agent.workingDirectory);
@@ -2216,7 +2220,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         standingInstructions: standing,
         // Condition checks run every few minutes and only look at the world: no memory needed.
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
-        followups: job.trigger !== "check" && job.trigger !== "delegation",
+        followups: job.trigger !== "check" && job.trigger !== "delegation" && !job.private,
+        privateChat: job.private,
         artifacts: settings.artifacts.enabled && job.trigger !== "check" && config().role !== "runner",
         calls:
           job.trigger !== "check" && job.trigger !== "delegation" && config().role !== "runner" && settings.phone.enabled && elevenLabsKey() !== null
@@ -2320,7 +2325,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     }
   }
   // claude-mem's worker outlives the run: started from a GLM run it would keep Z.ai's endpoint for later Claude runs.
-  if (settings.memory.backend === "claude-mem" && !dreaming && !glm) {
+  if (settings.memory.backend === "claude-mem" && !dreaming && !glm && !job.private) {
     const pluginDir = claudeMemPluginDir();
     if (pluginDir) baseArgs.push("--plugin-dir", pluginDir);
     else {
@@ -2334,6 +2339,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
+  // Claude Code's own auto memory would keep what a private chat said.
+  if (job.private) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
@@ -2799,7 +2806,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
     });
     safely("update conversation", () => saveConversation(job, agent, outcome.status === "succeeded", ts));
     // Before run.finished goes out: whoever handles the end of the run (the task board) sees what waits for the human.
-    if (wasRunning && agent && outcome.status === "succeeded" && job.trigger !== "check" && job.trigger !== "dream") {
+    if (wasRunning && agent && outcome.status === "succeeded" && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
       safely("note an open decision", () =>
         noteOpenDecision({ agentId: job.agentId, conversationId: job.conversationId, runId: job.runId, workspaceId: chatWorkspaceId(job.conversationId) ?? agent.workspaceId, attended: attendedBy(job) }, text),
       );
@@ -2835,7 +2842,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   if (convAlive) emitConversationUpdated(job.conversationId);
 
   // Condition checks and dreams keep no transcript: checks only report a result, a dream's record is the dream itself.
-  if (wasRunning && finished && convAlive && job.trigger !== "check" && job.trigger !== "dream") {
+  if (wasRunning && finished && convAlive && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
     const done = finished;
     safely("append transcript", () => {
       const users = [job.userMessageId, ...job.alsoAnswers].flatMap((id) => (id ? [getMessage(id)] : []));
@@ -2858,7 +2865,7 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
 
   // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their
   // memory changes themselves (memory/dreaming.ts).
-  if (getSettings().memory.autoCommit && job.trigger !== "check" && job.trigger !== "dream") {
+  if (getSettings().memory.autoCommit && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
     const title = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", job.conversationId)?.title ?? job.trigger;
     const message = `Run ${job.runId.slice(-6)}: ${title}`;
     commitAgentRepo(job.agentId, message).catch((err) => log.warn(`auto-commit for agent ${job.agentId} failed`, err));

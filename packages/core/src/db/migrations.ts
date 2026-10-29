@@ -1736,4 +1736,12 @@ CREATE TABLE IF NOT EXISTS self_repair_tickets (
     name: "feature_switches",
     sql: FEATURE_SWITCHES_SQL,
   },
+  {
+    id: 106,
+    name: "private_chats",
+    sql: /* sql */ `
+-- Private chats keep nothing: no list entry, transcript, memory or commit, and they are wiped when the human leaves them.
+ALTER TABLE conversations ADD COLUMN private INTEGER NOT NULL DEFAULT 0;
+`,
+  },
 ];

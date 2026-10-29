@@ -17,6 +17,7 @@ import {
   DatabaseBackup,
   Fingerprint,
   Gauge,
+  Ghost,
   Globe,
   HeartPulse,
   Inbox,
@@ -262,6 +263,9 @@ export function CommandPalette() {
         <CommandGroup heading="Actions">
           <CommandItem onSelect={() => go("/")}>
             <MessageSquarePlus /> New chat <CommandShortcut>{modKey}N</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => go("/?private=1")}>
+            <Ghost /> New private chat <CommandShortcut>⇧{modKey}N</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => go("/agents/new")}>
             <Plus /> Create agent

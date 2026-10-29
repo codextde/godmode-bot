@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
 import { EFFORT_LABELS } from "@godmode/shared";
-import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow } from "lucide-react";
+import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,7 @@ import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
 import { THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
+import { PrivateChatBadge } from "@/components/chat/private-chat";
 import { useEffectiveModel } from "@/components/chat/model-picker";
 import { useModelLabel } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
@@ -183,6 +184,7 @@ export function ConversationHeader({
             <TooltipContent>Model, effort and Ultracode set for this chat — in the model picker or with /model and /effort</TooltipContent>
           </Tooltip>
         )}
+        {conversation.private && <PrivateChatBadge />}
         {conversation.archived && (
           <Link
             to="/archived"
@@ -195,21 +197,23 @@ export function ConversationHeader({
 
       <div className="flex shrink-0 items-center gap-0.5">
         {browserToggle}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={conversation.pinned ? "Unpin chat" : "Pin chat"}
-              aria-pressed={conversation.pinned}
-              onClick={() => update.mutate({ pinned: !conversation.pinned })}
-              className={cn("text-muted-foreground", conversation.pinned && "text-foreground")}
-            >
-              <Pin className={cn(conversation.pinned && "fill-current")} />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{conversation.pinned ? "Unpin" : "Pin to sidebar"}</TooltipContent>
-        </Tooltip>
+        {!conversation.private && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={conversation.pinned ? "Unpin chat" : "Pin chat"}
+                aria-pressed={conversation.pinned}
+                onClick={() => update.mutate({ pinned: !conversation.pinned })}
+                className={cn("text-muted-foreground", conversation.pinned && "text-foreground")}
+              >
+                <Pin className={cn(conversation.pinned && "fill-current")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{conversation.pinned ? "Unpin" : "Pin to sidebar"}</TooltipContent>
+          </Tooltip>
+        )}
         {onVoiceMode && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -220,33 +224,44 @@ export function ConversationHeader({
             <TooltipContent>Voice mode</TooltipContent>
           </Tooltip>
         )}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="More actions" className="text-muted-foreground">
-              <Ellipsis />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem onClick={() => setEditing(true)}>
-              <Pencil /> Rename
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => update.mutate({ pinned: !conversation.pinned })}>
-              {conversation.pinned ? <PinOff /> : <Pin />} {conversation.pinned ? "Unpin" : "Pin"}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
-              {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? "Unarchive" : "Archive"}
-            </DropdownMenuItem>
-            {move && (
-              <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
-                <Laptop /> {move.label ?? `Move to ${THIS_COMPUTER_INLINE}`}
+        {conversation.private ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="sm" aria-label="End private chat" className="gap-1 text-muted-foreground" onClick={() => navigate("/")}>
+                <X /> End
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>End and wipe this chat</TooltipContent>
+          </Tooltip>
+        ) : (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon-sm" aria-label="More actions" className="text-muted-foreground">
+                <Ellipsis />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => setEditing(true)}>
+                <Pencil /> Rename
               </DropdownMenuItem>
-            )}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-              <Trash2 /> Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem onClick={() => update.mutate({ pinned: !conversation.pinned })}>
+                {conversation.pinned ? <PinOff /> : <Pin />} {conversation.pinned ? "Unpin" : "Pin"}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
+                {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? "Unarchive" : "Archive"}
+              </DropdownMenuItem>
+              {move && (
+                <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
+                  <Laptop /> {move.label ?? `Move to ${THIS_COMPUTER_INLINE}`}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
+                <Trash2 /> Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       <DeleteChatDialog
