@@ -56,6 +56,7 @@ import { startHeartbeats, stopHeartbeats } from "./services/heartbeats";
 import { startCalls, stopCalls } from "./calls/calls";
 import { startWatchdog, stopWatchdog } from "./runner/watchdog";
 import { startMacPrompts, stopMacPrompts } from "./services/macPrompts";
+import { startTotpDedupe, stopTotpDedupe } from "./vault/totp";
 import { cleanUp, fixAll, installUpdates, startMaintenance, stopMaintenance } from "./services/maintenance";
 import { RECOMMENDED, scanCleanup } from "./services/cleanup";
 import { checkUpdates } from "./services/updates";
@@ -222,6 +223,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     startTasks();
     startHeartbeats();
     startCalls();
+    startTotpDedupe();
   };
   const stopShared = async () => {
     if (!sharedOn) return;
@@ -236,6 +238,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopSelfRepair();
     stopHeartbeats();
     stopCalls();
+    stopTotpDedupe();
   };
   if (!runner) {
     // Every computer of a group fires the automations pinned to it; the rest only where the shared work runs.
