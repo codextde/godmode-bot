@@ -57,7 +57,8 @@
  *               and answers "DREAM {json}". Digest keywords: DREAM_SLEEP hangs and DREAM_CRASH exits 3 (both after
  *               writing the memory), DREAM_NO_REPORT skips the report, DREAM_BLOAT writes a MEMORY.md that is too long and
  *               shortens it when the report is sent back (DREAM_BLOAT_STAYS: never). With a workspace inventory in the prompt and a
- *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations.
+ *               `tidy-ops.json` in the state dir, it first calls workspace_tidy with those operations; when offer_help is
+ *               listed and the state dir has an `offer-args.json`, it calls offer_help with those arguments.
  *   LEAVE_DECISION  finish with an answer that has a "Decision for you" section
  *   ASK_IN_PROSE    finish with an answer that closes with a question to the human
  *   ASK_HUMAN   call the gateway's ask_human (arguments from the state dir's `ask-args.json` when it exists) as a step,
@@ -480,6 +481,7 @@ if (slash?.[1] === "clear") {
   const inventoryRel = /`(workspace\/tmp\/dreams\/[^`]+-workspace\.md)`/.exec(prompt)?.[1] ?? null;
   const inventory = inventoryRel && existsSync(join(cwd, inventoryRel)) ? readFileSync(join(cwd, inventoryRel), "utf8") : null;
   const tidyOps = join(stateDir, "tidy-ops.json");
+  const offerArgs = join(stateDir, "offer-args.json");
   const digest = digestRel && existsSync(join(cwd, digestRel)) ? readFileSync(join(cwd, digestRel), "utf8") : "";
   const memoryPath = join(cwd, "MEMORY.md");
   const hadMemory = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8").length : 0;
@@ -515,6 +517,9 @@ if (slash?.[1] === "clear") {
     inventory !== null && existsSync(tidyOps)
       ? await rpc({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "workspace_tidy", arguments: { operations: JSON.parse(readFileSync(tidyOps, "utf8")) } } })
       : null;
+  const offered = (list.result.tools as { name: string }[]).some((t) => t.name === "offer_help") && existsSync(offerArgs)
+    ? await rpc({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "offer_help", arguments: JSON.parse(readFileSync(offerArgs, "utf8")) } })
+    : null;
   if (digest.includes("DREAM_SLEEP_AFTER_TIDY")) {
     textTurn("Dreaming");
     await pause(60_000);
@@ -544,6 +549,7 @@ if (slash?.[1] === "clear") {
     hadMemory,
     inventory,
     tidy: tidy ? { text: tidy.result.content[0].text as string, isError: tidy.result.isError === true } : null,
+    offer: offered ? { text: offered.result.content[0].text as string, isError: offered.result.isError === true } : null,
   };
   const text = `DREAM ${JSON.stringify(summary)}`;
   textTurn(text);

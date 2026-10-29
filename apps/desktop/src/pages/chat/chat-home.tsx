@@ -42,6 +42,7 @@ import { useDraft } from "@/lib/drafts";
 import { AttentionList } from "@/components/attention/attention-list";
 import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AwaySummaryCard } from "@/components/attention/away-summary";
+import { OffersCard } from "@/components/attention/offers-card";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
@@ -397,6 +398,7 @@ export default function ChatHome() {
         <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
           <AwaySummaryCard agents={agents} />
           <NeedsYou agents={agents} />
+          <OffersCard agents={agents} />
           <RunningNow agents={agents} />
           <RecentChats agents={agents} />
         </div>

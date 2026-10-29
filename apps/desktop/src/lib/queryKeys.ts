@@ -64,6 +64,7 @@ export const qk = {
   goalList: (workspaceId: string) => ["goals", "list", workspaceId],
   /** Dreams (memory consolidation); invalidating the root refreshes every overview and detail. */
   dreams: ["dreams"] as unknown[],
+  offers: ["offers"] as unknown[],
   agentDreams: (agentId: string) => ["dreams", "agent", agentId],
   dream: (id: string) => ["dreams", "detail", id],
   routines: ["routines"] as unknown[],

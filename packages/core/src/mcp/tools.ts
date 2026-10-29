@@ -86,6 +86,7 @@ import {
 import { listEvents } from "../automations/events";
 import { reportCheckResult } from "../automations/conditions";
 import { dreamTidies, reportDream, tidyWorkspace } from "../memory/dreaming";
+import { MAX_OPEN as MAX_OFFERS, PROMPT_MAX as OFFER_PROMPT_MAX, TITLE_MAX as OFFER_TITLE_MAX, WHY_MAX as OFFER_WHY_MAX, offersOn, recordOffers } from "../memory/offers";
 import { NOTE_MAX as WORKSPACE_NOTE_MAX } from "../memory/workspace";
 import { COMPOSIO_API_KEY_SECRET, listConnections } from "../integrations/composio";
 import { listTriggerTypes } from "../integrations/composioTriggers";
@@ -934,7 +935,7 @@ function artifactRefusal(agent: Agent, id: string): string | null {
   return null;
 }
 
-const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy"]);
+const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy", "offer_help"]);
 
 /**
  * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
@@ -2972,6 +2973,26 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     }),
     when: (_agent, ctx) => isDreamRun(ctx) && dreamTidies(ctx.runId),
     run: ({ operations }, { ctx }) => tidyWorkspace(ctx.runId, operations),
+  }),
+
+  defineTool({
+    name: "offer_help",
+    description:
+      "Offer the human work you could take off their plate (main agent, while dreaming). Each offer shows on their Home with Do it / No thanks; Do it starts a chat with you with `prompt` as their message. Only concrete offers the activity gives real evidence for — no offer is better than a weak one.",
+    schema: z.object({
+      offers: z
+        .array(
+          z.object({
+            title: z.string().min(1).max(OFFER_TITLE_MAX).describe('What you would do, as a short imperative, e.g. "Chase the 3 unpaid October invoices"'),
+            why: z.string().max(OFFER_WHY_MAX).describe("Why now, from what you saw — one sentence for the human"),
+            prompt: z.string().min(1).max(OFFER_PROMPT_MAX).describe("The message that starts the work, written as the human would send it to you, complete enough to act on"),
+          }),
+        )
+        .min(1)
+        .max(MAX_OFFERS),
+    }),
+    when: (agent, ctx) => isDreamRun(ctx) && offersOn(agent),
+    run: ({ offers }, { ctx }) => recordOffers(ctx.runId, offers),
   }),
 
   defineTool({

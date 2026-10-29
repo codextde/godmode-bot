@@ -6,6 +6,7 @@ import {
   AppWindow,
   Archive,
   AudioLines,
+  ArrowDownToLine,
   ArrowLeft,
   ArrowRightFromLine,
   Bot,
@@ -275,6 +276,9 @@ export function CommandPalette() {
           </CommandItem>
           <CommandItem onSelect={() => go("/vault/2fa?import=1")}>
             <ShieldCheck /> Import 2FA QR code
+          </CommandItem>
+          <CommandItem value="import memory chatgpt claude gemini bring your memory" onSelect={() => go("/settings/memory?import=1")}>
+            <ArrowDownToLine /> Import memory from ChatGPT, Claude or Gemini
           </CommandItem>
           <CommandItem value="add card payment credit card" onSelect={() => go("/vault/cards?new=1")}>
             <CreditCard /> Add card

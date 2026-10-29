@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { ArrowRightLeft, ArrowUpRight, Coins, Cpu, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Coins, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
@@ -91,6 +91,11 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
       <>
         <Workflow className="size-3.5" aria-hidden />
         <span className="font-medium text-foreground">Automation</span>
+      </>
+    ) : message.source === "offer" ? (
+      <>
+        <HandHelping className="size-3.5" aria-hidden />
+        <span className="font-medium text-foreground">Offer you took up</span>
       </>
     ) : message.source === "task" ? (
       <>

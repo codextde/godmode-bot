@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
+import { ChatTable } from "./chat-table";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
 import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
 import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
@@ -63,11 +64,7 @@ const components: Components = {
     return <ul className={cn(className, gallery && "gm-gallery", tiles && "gm-shots")}>{children}</ul>;
   },
   table({ children }) {
-    return (
-      <div className="overflow-x-auto rounded-lg border bg-card shadow-card">
-        <table>{children}</table>
-      </div>
-    );
+    return <ChatTable>{children}</ChatTable>;
   },
   img({ node, src, alt }) {
     const local = (node as HastNode | undefined)?.data?.gmFile;
