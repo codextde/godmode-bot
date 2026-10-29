@@ -259,6 +259,8 @@ export function getRun(id: string): Run {
   return toRun(row);
 }
 
+const UNFINISHED = new Set(["queued", "running", "paused"]);
+
 export function listRuns(opts: { agentId?: string; status?: string; conversationId?: string; parentRunId?: string; limit?: number } = {}): Run[] {
   const where: string[] = [];
   const params: (string | number)[] = [];
@@ -274,17 +276,17 @@ export function listRuns(opts: { agentId?: string; status?: string; conversation
     where.push("conversation_id = ?");
     params.push(opts.conversationId);
   }
-  if (opts.status) {
-    const statuses = opts.status.split(",").map((s) => s.trim()).filter(Boolean);
-    if (statuses.length) {
-      where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
-      params.push(...statuses);
-    }
+  const statuses = (opts.status ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (statuses.length) {
+    where.push(`status IN (${statuses.map(() => "?").join(", ")})`);
+    params.push(...statuses);
   }
+  // Unfinished runs are a handful: find them by status instead of walking every run newest first.
+  const order = statuses.length && statuses.every((s) => UNFINISHED.has(s)) ? "+created_at" : "created_at";
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 50)), 500);
   params.push(limit);
   const runs = all<RunRow>(
-    `SELECT * FROM runs ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC, rowid DESC LIMIT ?`,
+    `SELECT * FROM runs ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} DESC, rowid DESC LIMIT ?`,
     ...params,
   ).map(toRun);
   // Why a paused run stands still: paused by the human, waiting for Claude's limit, or for the human's answer.

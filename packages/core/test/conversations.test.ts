@@ -68,6 +68,9 @@ describe("conversation list", () => {
     expect(list.slice(0, 3).map((x) => x.id)).toEqual([c.id, b.id, a.id]);
     expect(list.find((x) => x.id === a.id)!.preview).toBe("hello from alpha");
     expect(list.every((x) => x.running === false)).toBe(true);
+    const page = listConversations({ agentId: agent.id, limit: 2 });
+    expect(page.map((x) => x.id)).toEqual([c.id, b.id]);
+    expect(page[1]!.preview).toBe("find the needle here");
 
     expect(listConversations({ search: "needle" }).map((x) => x.id)).toEqual([b.id]);
     expect(listConversations({ search: "alph" }).map((x) => x.id)).toEqual([a.id]);
