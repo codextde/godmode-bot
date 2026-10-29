@@ -193,7 +193,7 @@ export function createTotp(input: TotpInput): TotpEntry {
   });
   bus.changed("totp");
   if (input.credentialId) bus.changed("credentials");
-  return getTotp(id);
+  return getTotp(mergeDuplicateTotp().get(id) ?? id);
 }
 
 export function updateTotp(id: string, input: Partial<TotpInput>): TotpEntry {
@@ -236,7 +236,7 @@ export function updateTotp(id: string, input: Partial<TotpInput>): TotpEntry {
   });
   bus.changed("totp");
   if (credentialsChanged) bus.changed("credentials");
-  return getTotp(id);
+  return getTotp(mergeDuplicateTotp().get(id) ?? id);
 }
 
 export function deleteTotp(id: string): void {
@@ -279,9 +279,9 @@ const dedupeKey = (issuer: string, accountName: string, secret: string) =>
 const exactScope = (workspaceId: string | null) =>
   workspaceId === null ? { sql: "workspace_id IS NULL", params: [] as string[] } : { sql: "workspace_id = ?", params: [workspaceId] };
 
-/** Dedupe keys of the entries that already exist in exactly this scope. */
+/** Dedupe keys of the entries that already exist in this scope, or globally (which covers every workspace). */
 function existingKeys(workspaceId: string | null): Set<string> {
-  const scope = exactScope(workspaceId);
+  const scope = workspaceId === null ? exactScope(null) : { sql: "(workspace_id = ? OR workspace_id IS NULL)", params: [workspaceId] };
   const keys = new Set<string>();
   for (const r of all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp WHERE ${scope.sql}`, ...scope.params)) {
     try {
@@ -409,7 +409,109 @@ export function importTotpUris(input: TotpImportInput): TotpImportResult {
 
   if (importedIds.length > 0) bus.changed("totp");
   if (linked) bus.changed("credentials");
-  return { imported: importedIds.map(getTotp), skipped };
+  const merged = importedIds.length > 0 ? mergeDuplicateTotp() : new Map<string, string>();
+  return { imported: [...new Set(importedIds.map((id) => merged.get(id) ?? id))].map(getTotp), skipped };
+}
+
+/* ------------------------------------------------------------------ */
+/* Duplicates                                                           */
+/* ------------------------------------------------------------------ */
+
+/** Same name and same code: issuer + account name (case-insensitive) and secret, algorithm, digits, period. */
+const duplicateKey = (r: TotpRow, secret: string) =>
+  `${dedupeKey(r.issuer, r.account_name, secret)}\u0000${r.algorithm}:${r.digits}:${r.period}`;
+
+/** Global first (visible everywhere), then the one a login uses, then the oldest. */
+const keeperOrder = (a: TotpRow, b: TotpRow) =>
+  Number(a.workspace_id !== null) - Number(b.workspace_id !== null) ||
+  Number(a.linked_credential_id === null) - Number(b.linked_credential_id === null) ||
+  a.created_at.localeCompare(b.created_at) ||
+  a.id.localeCompare(b.id);
+
+function replaceInAgentPermissions(from: string, to: string): void {
+  for (const row of all<{ id: string; permissions: string }>("SELECT id, permissions FROM agents")) {
+    const perms = parseJson<{ totpIds?: unknown }>(row.permissions, {});
+    if (!Array.isArray(perms.totpIds) || !perms.totpIds.includes(from)) continue;
+    perms.totpIds = [...new Set(perms.totpIds.map((x) => (x === from ? to : x)))];
+    run("UPDATE agents SET permissions = ? WHERE id = ?", JSON.stringify(perms), row.id);
+  }
+}
+
+/**
+ * Remove 2FA entries that repeat another one (same name, same code) in the same scope, or in a workspace when the
+ * entry is also global. The survivor takes over the login link and agent permissions; a copy linked to a different
+ * login than the survivor stays. Entries in two different workspaces are left alone. Returns removed id → survivor id.
+ */
+export function mergeDuplicateTotp(): Map<string, string> {
+  const merged = new Map<string, string>();
+  if (!vault.isUnlocked()) return merged;
+  const groups = new Map<string, TotpRow[]>();
+  for (const r of all<TotpRow>(`SELECT ${ROW_SELECT} FROM totp`)) {
+    let secret: string;
+    try {
+      secret = vault.open(r.secret_enc, secretContext(r.id));
+    } catch (err) {
+      if (isLockedError(err)) return merged;
+      continue;
+    }
+    const key = duplicateKey(r, secret);
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
+  let credentialsChanged = false;
+  tx(() => {
+    for (const rows of groups.values()) {
+      if (rows.length < 2) continue;
+      rows.sort(keeperOrder);
+      const keepers: TotpRow[] = [];
+      for (const r of rows) {
+        const keeper = keepers.find((k) => k.workspace_id === null || k.workspace_id === r.workspace_id);
+        if (!keeper || (r.linked_credential_id && keeper.linked_credential_id)) {
+          keepers.push(r);
+          continue;
+        }
+        if (r.linked_credential_id) {
+          linkCredentialTotp(r.linked_credential_id, keeper.id);
+          keeper.linked_credential_id = r.linked_credential_id;
+          credentialsChanged = true;
+        } else {
+          credentialsChanged = unlinkTotp(r.id) || credentialsChanged;
+        }
+        replaceInAgentPermissions(r.id, keeper.id);
+        run("DELETE FROM totp WHERE id = ?", r.id);
+        merged.set(r.id, keeper.id);
+      }
+    }
+  });
+  if (merged.size > 0) {
+    log.info(`merged ${merged.size} duplicate 2FA ${merged.size === 1 ? "entry" : "entries"}`);
+    bus.changed("totp");
+    bus.changed("agents");
+  }
+  if (credentialsChanged) bus.changed("credentials");
+  return merged;
+}
+
+let mergeWatch: (() => void) | null = null;
+
+/** Merge duplicates now and whenever the vault is unlocked. */
+export function startTotpDedupe(): void {
+  if (mergeWatch) return;
+  const sweep = () => {
+    try {
+      mergeDuplicateTotp();
+    } catch (err) {
+      log.warn(`could not merge duplicate 2FA entries: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+  mergeWatch = bus.on((e) => {
+    if (e.type === "vault.status" && e.status.unlocked) sweep();
+  });
+  sweep();
+}
+
+export function stopTotpDedupe(): void {
+  mergeWatch?.();
+  mergeWatch = null;
 }
 
 /* ------------------------------------------------------------------ */
