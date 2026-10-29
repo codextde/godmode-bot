@@ -273,7 +273,7 @@ function noteMemoryLeft(dreamId: string, repoPath: string) {
 /** Finished exchanges of the agent after the cursor — of conversations that still exist (a deleted chat is forgotten). */
 const ACTIVITY_WHERE = `r.agent_id = ? AND r.trigger NOT IN (${NOT_ACTIVITY.map(() => "?").join(", ")})
   AND r.status IN ('succeeded', 'failed') AND r.finished_at IS NOT NULL AND (? IS NULL OR r.finished_at > ?)
-  AND EXISTS (SELECT 1 FROM conversations c0 WHERE c0.id = r.conversation_id AND c0.origin != 'dream')`;
+  AND EXISTS (SELECT 1 FROM conversations c0 WHERE c0.id = r.conversation_id AND c0.origin != 'dream' AND c0.private = 0)`;
 
 export function pendingActivity(agentId: string): DreamOverview["pending"] {
   const since = dreamCursor(agentId);

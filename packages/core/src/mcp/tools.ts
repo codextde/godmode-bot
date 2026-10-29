@@ -139,7 +139,7 @@ import { all, get } from "../db";
 import { config } from "../config";
 import { link } from "../remote/runners";
 import { loginFillScope } from "../browser/fill";
-import { chatFillOnly, createConversation, maskSecretInChat, sendMessage } from "../services/conversations";
+import { chatFillOnly, createConversation, isPrivateChat, maskSecretInChat, sendMessage } from "../services/conversations";
 import { assignVm, createVm, getVm, listVms, sharedDirOf, startVm, stopVm, suspendVm, vmInUse, vmOfRun, vmStatus } from "../vm/service";
 import { resolveVmId } from "../vm/assignments";
 import { androidStatus, assignDevice, freshDevices } from "../android/service";
@@ -3031,7 +3031,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       // Runs held because a monthly budget is used up: only the human raises it or lets them run.
       for (const r of runs) if (r.pause?.reason === "budget") waiting.set(r.id, "a monthly budget (the human decides)");
       return json(
-        runs.map((r) => ({
+        runs.map((r) => isPrivateChat(r.conversationId) ? { id: r.id, agent: names.get(r.agentId) ?? r.agentId, agentId: r.agentId, status: r.status, trigger: r.trigger, createdAt: r.createdAt, private: true } : ({
           id: r.id,
           agent: names.get(r.agentId) ?? r.agentId,
           agentId: r.agentId,

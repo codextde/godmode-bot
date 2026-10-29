@@ -393,6 +393,8 @@ export interface StartChatInput {
   instructions?: string;
   /** Work on this runner instead of this computer. */
   runnerId?: ID | null;
+  /** A private chat: nothing of it is kept (see Conversation.private). */
+  private?: boolean;
 }
 
 /** Move a chat's follow-up to another time. */

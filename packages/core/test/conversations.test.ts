@@ -1,23 +1,28 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, Conversation, ConversationWithMessages, MessageBlock, MessagePage, Run, StartChatResult } from "@godmode/shared";
-import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
+import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { run as sql } from "../src/db";
 import {
   DEFAULT_CONVERSATION_TITLE,
   addMessage,
+  conversationExists,
   createConversation,
+  discardPrivateChat,
+  discardPrivateChats,
   getConversation,
   listConversations,
   listMessagePage,
   safeFileName,
   sendMessage,
   setConversationState,
+  startChat,
   titleFromContent,
   updateConversation,
 } from "../src/services/conversations";
 import { cancelFollowup, scheduleFollowup } from "../src/services/followups";
-import { cancelRun, getRun, waitForRun } from "../src/runner/runner";
+import { cancelRun, findRunLog, getRun, waitForRun } from "../src/runner/runner";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { createWorkspace } from "../src/services/workspaces";
 import { getAccessToken } from "../src/server/auth";
@@ -362,5 +367,65 @@ describe("plainPreview", () => {
     expect(out).toContain("I created the 📰 HN AI Digest agent.");
     expect(out).toContain("Docs and code here");
     expect(out).not.toMatch(/\*\*|`|\]\(|const x/);
+  });
+});
+
+describe("private chats", () => {
+  test("stay out of every list, keep no transcript and are wiped with their session, uploads and run logs", async () => {
+    const claudeDir = join(env.dataDir, "claude-config");
+    const before = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = claudeDir;
+    try {
+      const chat = await startChat({
+        agentId: agent.id,
+        content: "Something just between us",
+        attachments: [{ name: "secret.txt", mime: "text/plain", data: Buffer.from("hush").toString("base64") }],
+        private: true,
+      });
+      expect(chat.conversation.private).toBe(true);
+      await waitForRun(chat.run.id, 20_000);
+      const conv = getConversation(chat.conversation.id);
+      expect(conv.private).toBe(true);
+      expect(conv.messages.length).toBe(2);
+      expect(listConversations({ agentId: agent.id }).some((c) => c.id === conv.id)).toBe(false);
+      expect(listConversations({ search: "between us" })).toEqual([]);
+      expect(existsSync(join(agent.repoPath, "conversations", `${conv.id}.md`))).toBe(false);
+
+      const prompt = invocations(env).findLast((i) => i.prompt.includes("Something just between us"))!;
+      expect(prompt.args.join("\n")).toContain("## Private chat");
+      expect(prompt.args.join("\n")).not.toContain("update `MEMORY.md` with learnings");
+
+      const run = getRun(chat.run.id);
+      const log = findRunLog(run)!;
+      expect(existsSync(log)).toBe(true);
+      const upload = join(agent.repoPath, conv.messages[0]!.attachments[0]!.path);
+      expect(existsSync(upload)).toBe(true);
+      const sessionId = getConversation(conv.id).claudeSessionId!;
+      const session = join(claudeDir, "projects", "-some-project", `${sessionId}.jsonl`);
+      mkdirSync(join(session, ".."), { recursive: true });
+      writeFileSync(session, "{}\n");
+
+      expect(await discardPrivateChat(conv.id)).toBe(true);
+      expect(conversationExists(conv.id)).toBe(false);
+      expect(existsSync(log)).toBe(false);
+      expect(existsSync(upload)).toBe(false);
+      expect(existsSync(session)).toBe(false);
+      const wiped = getRun(run.id);
+      expect(wiped.prompt).toBe("Private chat");
+      expect(wiped.result).toBeNull();
+    } finally {
+      if (before === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = before;
+    }
+  });
+
+  test("a normal chat is not discarded, and leftovers go at startup", async () => {
+    const normal = createConversation({ agentId: agent.id, title: "Keep me" });
+    expect(await discardPrivateChat(normal.id)).toBe(false);
+    expect(conversationExists(normal.id)).toBe(true);
+    const left = createConversation({ agentId: agent.id, private: true });
+    expect(await discardPrivateChats()).toBeGreaterThanOrEqual(1);
+    expect(conversationExists(left.id)).toBe(false);
+    expect(conversationExists(normal.id)).toBe(true);
   });
 });
