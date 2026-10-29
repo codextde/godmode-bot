@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { BrainCircuit, CheckCircle2, Download, ExternalLink, FileText, GitCommitHorizontal, Loader2, MoonStar, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
+import { ArrowDownToLine, BrainCircuit, CheckCircle2, Download, ExternalLink, FileText, GitCommitHorizontal, Loader2, MoonStar, Sparkles } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { DreamingSettings, Settings } from "@godmode/shared";
@@ -14,6 +15,7 @@ import { qk } from "@/lib/queryKeys";
 import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { ModelSelect } from "./ai-section";
+import { ImportMemoryDialog } from "./import-memory-dialog";
 import { ChoiceCards, CommitInput, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 type Backend = Settings["memory"]["backend"];
@@ -29,6 +31,19 @@ const CUSTOM = "__custom__";
 export function MemorySection({ settings }: { settings: Settings }) {
   const { patch } = useSettingsPatch();
   const m = settings.memory;
+  const [params, setParams] = useSearchParams();
+  const [importOpen, setImportOpen] = useState(false);
+  useEffect(() => {
+    if (params.get("import") === "1") setImportOpen(true);
+  }, [params]);
+  const onImportOpen = (open: boolean) => {
+    setImportOpen(open);
+    if (!open && params.has("import")) {
+      const next = new URLSearchParams(params);
+      next.delete("import");
+      setParams(next, { replace: true });
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -85,6 +100,18 @@ export function MemorySection({ settings }: { settings: Settings }) {
         />
         {m.backend === "claude-mem" && <ClaudeMemStatus />}
       </SettingsGroup>
+
+      <SettingsGroup title="Bring your memory" icon={<ArrowDownToLine />}>
+        <SettingRow
+          label="Import from another AI"
+          description="What ChatGPT, Claude or Gemini remember about you — your work, people, preferences and plans — goes into your main agent's memory, so it knows you from day one."
+        >
+          <Button variant="outline" size="sm" onClick={() => onImportOpen(true)}>
+            Import…
+          </Button>
+        </SettingRow>
+      </SettingsGroup>
+      <ImportMemoryDialog open={importOpen} onOpenChange={onImportOpen} />
 
       <SettingsGroup title="Housekeeping" icon={<GitCommitHorizontal />}>
         <SettingRow
@@ -188,6 +215,14 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         }
       >
         <Switch id="dream-tidy" disabled={off} checked={d.tidyWorkspace} onCheckedChange={(tidyWorkspace) => onChange({ tidyWorkspace })} />
+      </SettingRow>
+      <SettingRow
+        label="Offer to take work off your plate"
+        htmlFor="dream-offers"
+        disabled={off}
+        description="Your main agent's dreams also spot work it could do for you — a chore you repeat, a deadline nobody is on, a task left half-done — and offer it on Home. Nothing starts until you click Do it."
+      >
+        <Switch id="dream-offers" disabled={off} checked={d.offers} onCheckedChange={(offers) => onChange({ offers })} />
       </SettingRow>
       <SettingRow
         label="Minimum new exchanges"

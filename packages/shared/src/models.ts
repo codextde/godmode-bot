@@ -721,7 +721,7 @@ export interface QueuedMessage {
 }
 
 /** Who wrote a user message when it wasn't the human: an automation, another agent handing work over, the task board. */
-export type MessageSource = "automation" | "delegation" | "task";
+export type MessageSource = "automation" | "delegation" | "task" | "offer";
 
 export interface Message {
   id: ID;
@@ -821,6 +821,30 @@ export interface DreamWorkspaceChange {
   /** Rewrite only: the note's text before and after (left out of dream lists, see DreamDetail.fileChanges). */
   before?: string;
   after?: string;
+}
+
+export type OfferStatus = "open" | "accepted" | "dismissed" | "expired";
+
+/**
+ * Work the main agent offers to take off the human's plate, spotted while it dreamt. Home shows the open ones; "Do it"
+ * starts a chat with the agent with `prompt` as the human's message.
+ */
+export interface Offer {
+  id: ID;
+  agentId: ID;
+  title: string;
+  why: string;
+  prompt: string;
+  status: OfferStatus;
+  /** The chat "Do it" started. */
+  conversationId: ID | null;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface AcceptOfferResult {
+  offer: Offer;
+  conversation: Conversation;
 }
 
 export interface Dream {
@@ -1511,6 +1535,8 @@ export interface DreamingSettings {
   refreshDays: number;
   /** Dreams also sort the agent's workspace: loose files into topic folders, disposable leftovers out. */
   tidyWorkspace: boolean;
+  /** The main agent's dreams also spot work it can take off the human's plate and offer it on Home. */
+  offers: boolean;
 }
 
 export interface VmSettings {

@@ -44,6 +44,7 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
       { keys: ["⇧", "↵"], what: "New line" },
       { keys: ["/"], what: "Claude Code commands (/compact, /model, …)" },
       { keys: ["↑"], what: "Edit your last message while it waits in the queue" },
+      { keys: [`${modKey}L`], what: "Quote the selected text in your next message" },
       { keys: ["Esc"], what: "Stop dictation" },
     ],
   },

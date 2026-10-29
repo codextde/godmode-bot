@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, Bot, ChevronDown, CircleCheck, CircleDashed, Cookie, KeyRound, ShieldCheck } from "lucide-react";
+import { ArrowDownToLine, ArrowRight, Bot, ChevronDown, CircleCheck, CircleDashed, Cookie, KeyRound, ShieldCheck } from "lucide-react";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type ChromeImportResult, type LicenseState, type LocalChromeProfile } from "@godmode/shared";
 import { Character } from "@/components/character";
 import { ActivatePanel } from "@/components/license/activate";
@@ -26,6 +26,7 @@ const NEXT = [
   { to: "/agents/new", icon: <Bot />, title: "Hire your first agent", body: "Pick a template or describe the job." },
   { to: "/vault/logins", icon: <KeyRound />, title: "Save your logins", body: "Agents sign in like you, 2FA included." },
   { to: "/vault/2fa?import=1", icon: <ShieldCheck />, title: "Import 2FA codes", body: "Scan Google Authenticator exports." },
+  { to: "/settings/memory?import=1", icon: <ArrowDownToLine />, title: "Bring your memory", body: "From ChatGPT, Claude or Gemini." },
 ];
 
 const LICENSED: LicenseState["status"][] = ["active", "trial", "past_due", "unverified"];
@@ -140,7 +141,7 @@ export function DoneStep({
         </AnimatePresence>
 
         <p className="eyebrow mt-7 mb-3">Next up</p>
-        <div className="grid gap-2 sm:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2">
           {NEXT.map((n, i) => (
             <motion.button
               key={n.to}

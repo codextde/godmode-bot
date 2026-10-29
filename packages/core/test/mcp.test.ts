@@ -1580,6 +1580,7 @@ describe("settings tools", () => {
         "memory.dreaming.minNewExchanges",
         "memory.dreaming.refreshDays",
         "memory.dreaming.tidyWorkspace",
+        "memory.dreaming.offers",
         "diagnostics.verbose",
         "maintenance.autoFix",
         "maintenance.autoUpdate",

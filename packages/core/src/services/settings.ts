@@ -132,6 +132,7 @@ export const DEFAULT_SETTINGS: Settings = {
       minNewExchanges: 3,
       refreshDays: 7,
       tidyWorkspace: true,
+      offers: true,
     },
   },
   diagnostics: {

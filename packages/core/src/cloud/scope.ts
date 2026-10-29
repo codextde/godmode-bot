@@ -167,6 +167,10 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/agents/:id/dreams", agentPermissions],
   ["GET", "/api/dreams/:id", A],
   ["POST", "/api/dreams/:id/revert", A],
+  ["GET", "/api/offers", A],
+  ["POST", "/api/offers/:id/accept", A],
+  ["POST", "/api/offers/:id/dismiss", A],
+  ["POST", "/api/memory/import", A],
 
   ["GET|POST", "/api/routines", A],
   ["PATCH|DELETE", "/api/routines/:id", A],

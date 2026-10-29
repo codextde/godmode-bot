@@ -1859,7 +1859,7 @@ const GLM_HIDDEN_TOOLS = [
 ];
 
 /** Who wrote a user message, as a recap names them. */
-const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task" };
+const SOURCE_SPEAKER: Record<NonNullable<Message["source"]> | "human", string> = { human: "User", automation: "Automation", delegation: "Delegated task", task: "Task", offer: "Your offer, taken up by the user" };
 
 function recapPrefix(job: Job): string {
   // A run that continues after a pause sends a note instead of its prompt: its own task and answer so far belong to the recap.
