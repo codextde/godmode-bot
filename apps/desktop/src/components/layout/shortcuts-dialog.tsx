@@ -24,6 +24,7 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
     rows: [
       { keys: [`${modKey}K`], what: "Search chats, tickets, automations, settings — and what waits for you" },
       { keys: [`${modKey}N`], what: "New chat" },
+      { keys: ["⇧", `${modKey}N`], what: "New private chat (nothing is saved)" },
       { keys: [`${modKey}B`], what: "Show or hide the sidebar" },
       { keys: [`${modKey}1–9`], what: "Switch to a workspace (in A–Z order)" },
       { keys: [`${modKey}0`], what: "All workspaces" },

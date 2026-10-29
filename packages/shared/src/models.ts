@@ -417,6 +417,8 @@ export interface Conversation {
   runnerToolsId: ID | null;
   pinned: boolean;
   archived: boolean;
+  /** A private chat keeps nothing: it is in no list, writes no transcript or memory, and is wiped once the human leaves it. */
+  private?: boolean;
   lastMessageAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;

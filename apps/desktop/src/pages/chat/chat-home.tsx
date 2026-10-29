@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Pin, Receipt, Scale, Telescope, Mail } from "lucide-react";
+import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Backdrop } from "@/components/brand";
@@ -21,6 +21,7 @@ import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
+import { PRIVATE_CHAT_HINT, PrivateChatToggle } from "@/components/chat/private-chat";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { isOlderRunner, usePlaces } from "@/lib/places";
@@ -101,6 +102,9 @@ export default function ChatHome() {
   const qc = useQueryClient();
   const easy = useEasyMode();
   const [params, setParams] = useSearchParams();
+  // Private lives in the address (?private=1): ⇧⌘N opens it, ⌘N leaves it.
+  const privateChat = params.get("private") === "1";
+  const setPrivateChat = (on: boolean) => setParams(on ? { private: "1" } : {}, { replace: true });
   const { data: boot } = useBootstrap();
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
@@ -161,7 +165,8 @@ export default function ChatHome() {
   useEffect(() => {
     if (runnerGone) setRunnerId(hereId);
   }, [runnerGone, setRunnerId, hereId]);
-  const onRunner = runnerId !== hereId && !runnerGone;
+  // A private chat stays on this computer.
+  const onRunner = !privateChat && runnerId !== hereId && !runnerGone;
   // A folder, a shared screen, a VM and the phones belong to this computer: a chat elsewhere starts without them.
   const place = (): Pick<StartChatInput, "runnerId" | "workingDirectory" | "computerTarget" | "vmId" | "androidDeviceIds"> =>
     onRunner
@@ -183,7 +188,7 @@ export default function ChatHome() {
     resetSetup();
     if (agent) setAgentId(agent);
     if (prompt) requestAnimationFrame(() => composerRef.current?.setText(prompt));
-    setParams({}, { replace: true });
+    setParams(params.get("private") === "1" ? { private: "1" } : {}, { replace: true });
   }, [params, setParams]);
 
   const start = useMutation({
@@ -212,6 +217,10 @@ export default function ChatHome() {
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
       <Backdrop />
 
+      <motion.div {...fade(0)} className="absolute top-3 right-3 z-10 @xl:top-4 @xl:right-4">
+        <PrivateChatToggle value={privateChat} onChange={setPrivateChat} />
+      </motion.div>
+
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
         <motion.div {...fade(0)}>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
@@ -225,26 +234,43 @@ export default function ChatHome() {
             )}
           </span>
         </motion.div>
-        {selected && (
-          <motion.div {...fade(0.03)} className="mt-7">
-            <AgentAvatar key={selected.id} agent={selected} size="xl" follow className="size-20" />
+        {privateChat ? (
+          <motion.div key="private" {...fade(0.03)} className="mt-7 flex flex-col items-center">
+            <span className="grid size-20 place-items-center rounded-full border-2 border-dashed border-foreground/25 bg-card text-foreground/80 shadow-card">
+              <Ghost className="size-9" strokeWidth={1.5} />
+            </span>
+            <h1 className="heading-display mt-4 text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]">
+              Private chat
+              <span className="block text-foreground/35">Just between us.</span>
+            </h1>
+            <p className="mt-3 max-w-md text-sm text-muted-foreground">{PRIVATE_CHAT_HINT}</p>
           </motion.div>
+        ) : (
+          <>
+            {selected && (
+              <motion.div {...fade(0.03)} className="mt-7">
+                <AgentAvatar key={selected.id} agent={selected} size="xl" follow className="size-20" />
+              </motion.div>
+            )}
+            <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
+              {greeting(now)}
+              {userName ? `, ${userName}` : ""}.
+              <span className="block text-foreground/35">What should we get done?</span>
+            </motion.h1>
+          </>
         )}
-        <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
-          {greeting(now)}
-          {userName ? `, ${userName}` : ""}.
-          <span className="block text-foreground/35">What should we get done?</span>
-        </motion.h1>
 
         <motion.div {...fade(0.12)} className="mt-9 w-full text-left">
           <Composer
+            key={privateChat ? "private" : "home"}
             ref={composerRef}
             size="lg"
             autoFocus
-            draftKey="home"
+            draftKey={privateChat ? undefined : "home"}
             agentId={selected?.id}
             busy={start.isPending}
-            placeholder={selected ? `Ask ${selected.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
+            className={privateChat ? "border-dashed border-foreground/30" : undefined}
+            placeholder={privateChat ? "Ask anything. Nothing is saved." : selected ? `Ask ${selected.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
             leading={
               agentsLoading ? (
                 <Skeleton className="h-8 w-32 rounded-lg" />
@@ -255,7 +281,7 @@ export default function ChatHome() {
             options={
               !agentsLoading && (
                 <>
-                  <RunnerChip value={onRunner ? runnerId : hereId} onChange={setRunnerId} />
+                  {!privateChat && <RunnerChip value={onRunner ? runnerId : hereId} onChange={setRunnerId} />}
                   {!onRunner && (
                     <FolderChip
                       chatFolder={folder}
@@ -297,6 +323,7 @@ export default function ChatHome() {
                 projectId: projectId ?? undefined,
                 sshServerIds: sshServerIds.length ? sshServerIds : undefined,
                 instructions: instructions || undefined,
+                private: privateChat || undefined,
               })
             }
           />
@@ -316,7 +343,7 @@ export default function ChatHome() {
           </AnimatePresence>
         </motion.div>
 
-        {easy ? (
+        {privateChat ? null : easy ? (
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
             <h2 className="eyebrow mb-2.5 px-0.5">Try something like</h2>
             <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
@@ -366,12 +393,14 @@ export default function ChatHome() {
         </motion.p>
       </div>
 
-      <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
-        <AwaySummaryCard agents={agents} />
-        <NeedsYou agents={agents} />
-        <RunningNow agents={agents} />
-        <RecentChats agents={agents} />
-      </div>
+      {!privateChat && (
+        <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
+          <AwaySummaryCard agents={agents} />
+          <NeedsYou agents={agents} />
+          <RunningNow agents={agents} />
+          <RecentChats agents={agents} />
+        </div>
+      )}
 
       <VoiceMode
         agent={selected}
@@ -388,6 +417,7 @@ export default function ChatHome() {
             sshServerIds: sshServerIds.length ? sshServerIds : undefined,
             instructions: instructions || undefined,
             ...choice,
+            private: privateChat || undefined,
           });
         }}
       />

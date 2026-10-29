@@ -28,11 +28,12 @@ const shorten = (s: string, max = 160) => (s.length > max ? `${s.slice(0, max - 
 
 function afterRun(r: Run): void {
   if (r.status !== "succeeded" && r.status !== "failed") return;
-  const conv = get<{ id: string; title: string; origin: string; archived: number; agent: string | null }>(
-    "SELECT c.id, c.title, c.origin, c.archived, a.name AS agent FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = ?",
+  const conv = get<{ id: string; title: string; origin: string; archived: number; private: number; agent: string | null }>(
+    "SELECT c.id, c.title, c.origin, c.archived, c.private, a.name AS agent FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = ?",
     r.conversationId,
   );
-  if (!conv) return;
+  // A private chat leaves no unread mark or notification behind: its text would outlive it there.
+  if (!conv || conv.private) return;
   const viewed = isConversationViewed(conv.id);
   const agent = conv.agent ?? "The agent";
 

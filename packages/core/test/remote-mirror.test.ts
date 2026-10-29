@@ -558,6 +558,7 @@ describe("the chat the API returns", () => {
       runnerToolsId: null,
       pinned: false,
       archived: false,
+      private: false,
       lastMessageAt: null,
       createdAt: local.createdAt,
       updatedAt: local.updatedAt,

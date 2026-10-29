@@ -28,6 +28,7 @@ import { applyRuntimeSettings, onSettingsApplied } from "./services/runtime";
 import * as vault from "./vault/vault";
 import { ensureDefaultAgent } from "./agents/service";
 import { recoverInterruptedRuns, shutdownRunner } from "./runner/runner";
+import { discardPrivateChats } from "./services/conversations";
 import { interruptedWork, resumeInterruptedWork, startOutageRecovery, stopOutageRecovery } from "./services/resume";
 import { clearRunMods, startModUpdates, stopModUpdates } from "./mods/service";
 import { reloadSchedules, startScheduler } from "./scheduler/scheduler";
@@ -192,6 +193,8 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (!runner) adoptStoredSolverKey();
   await ensureDefaultAgent();
   recoverInterruptedRuns();
+  // Nobody is in a private chat across a restart: it goes before anything could continue it.
+  await discardPrivateChats().catch((err) => log.warn("could not discard private chats", err));
   // What the stop cut off, before the scheduler, follow-ups or automations start anything in those chats.
   const interrupted = runner ? null : interruptedWork();
   clearRunMods();
