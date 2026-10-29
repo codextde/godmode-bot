@@ -512,9 +512,11 @@ export function listConversations(
   }
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
+  const order = `${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC`;
+  // Pick the page first: the preview and the derived columns are then looked up for those chats only, not for every one.
   const rows = all<ConversationRow>(
-    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL}, ${DELEGATED_SQL} FROM ${FROM_SQL} WHERE ${where.join(" AND ")}
-     ORDER BY ${opts.archived ? "" : "c.pinned DESC, "}COALESCE(c.last_message_at, c.created_at) DESC LIMIT ?`,
+    `SELECT c.*, ${PREVIEW_SQL}, ${FOLLOWUP_SQL}, ${PAUSE_SQL}, ${DELEGATED_SQL} FROM ${FROM_SQL}
+     WHERE c.id IN (SELECT c.id FROM ${FROM_SQL} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT ?) ORDER BY ${order}`,
     ...params,
   );
   return rows.map(toConversation);
