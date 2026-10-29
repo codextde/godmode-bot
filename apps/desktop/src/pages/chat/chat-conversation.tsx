@@ -19,6 +19,7 @@ import { Composer, type ComposerHandle } from "@/components/chat/composer";
 import { QueueTray, type QueueTrayHandle } from "@/components/chat/queue-tray";
 import { useArchiveChat } from "@/components/chat/chat-actions";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { PrivateChatNote, usePrivateChatLifetime } from "@/components/chat/private-chat";
 import { useConversationMood } from "@/components/chat/conversation-mood";
 import { FollowupBar } from "@/components/chat/followup";
 import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
@@ -81,6 +82,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const composerRef = useRef<ComposerHandle>(null);
   useViewing(conversationId);
+  usePrivateChatLifetime(conversationId, !!conv?.private);
   const queueRef = useRef<QueueTrayHandle>(null);
   const mountedAt = useRef(Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
@@ -529,6 +531,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             </>
           }
         />
+        {conv.private && <PrivateChatNote />}
 
         <MoveChatDialog
           conversation={conv}
@@ -673,7 +676,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               />
               <Composer
                 ref={composerRef}
-                draftKey={conversationId}
+                draftKey={conv.private ? undefined : conversationId}
                 agentId={conv.agentId}
                 autoFocus
                 running={!!activeRunId && !paused}

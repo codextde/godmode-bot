@@ -4,6 +4,7 @@ import { EFFORT_OPTIONS, MAX_INSTRUCTIONS_LENGTH, RUN_STOPPED_BY_USER, isModelId
 import {
   createConversation,
   deleteConversation,
+  discardPrivateChat,
   getConversation,
   getConversationSummary,
   listConversations,
@@ -23,7 +24,7 @@ import { replySettles } from "../../services/humanTasks";
 import { continueConversation, pauseConversation, setAutoContinue } from "../../services/pauses";
 import { cancelRun, findRunLog, getRun, listRuns, untilAsked } from "../../runner/runner";
 import { cancelFollowup, listFollowups, rescheduleFollowup, runFollowupNow } from "../../services/followups";
-import { conflict, notFound } from "../../util";
+import { badRequest, conflict, notFound } from "../../util";
 import { getAgent } from "../../agents/service";
 import { listAttention } from "../../services/attention";
 import { awaySummary } from "../../services/away";
@@ -179,7 +180,8 @@ export function registerChatRoutes(app: Hono): void {
   });
 
   app.delete("/api/conversations/:id", async (c) => {
-    await deleteConversation(c.req.param("id"));
+    const id = c.req.param("id");
+    if (!(await discardPrivateChat(id))) await deleteConversation(id);
     return c.json({ ok: true as const });
   });
 
@@ -262,9 +264,11 @@ export function registerChatRoutes(app: Hono): void {
         instructions,
         /** Work on this runner (another computer) instead of this one. */
         runnerId: z.string().trim().min(1).max(100).nullable().optional(),
+        private: z.boolean().optional(),
         ...modelChoice,
       }),
     );
+    if (input.private && input.runnerId && input.runnerId !== selfDeviceId()) throw badRequest("A private chat stays on this computer");
     // A secondary names itself by its id in the primary's list: a chat for it starts here.
     if (input.runnerId && input.runnerId === selfDeviceId()) input.runnerId = null;
     if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);

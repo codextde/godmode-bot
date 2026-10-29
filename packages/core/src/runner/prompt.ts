@@ -52,6 +52,8 @@ export interface PromptContext {
   memory?: PromptMemory | null;
   /** The run may schedule follow-ups (followup_schedule). */
   followups?: boolean;
+  /** The human opened a private chat: nothing of it may be kept. */
+  privateChat?: boolean;
   /** The run can build artifacts (artifact_create): small web apps shown in Godmode. */
   artifacts?: boolean;
   /** Phone calls are set up: the run may place them (`owner`: and call the human). */
@@ -418,7 +420,11 @@ ${human} can write to you while you are working. Such a message reaches you betw
   const reflect = settings.memory.reflectAfterRun;
   const memoryFile = folder ? join(repo, "MEMORY.md") : "MEMORY.md";
   const budget = memoryBudget(settings.memory.dreaming.maxMemoryChars);
-  out.push(`## Memory
+  const privateNote = ctx.privateChat
+    ? `## Private chat
+${human} opened this as a private chat: nothing of it is kept, and Godmode wipes it once ${human} leaves. Don't write anything from it into \`${memoryFile}\`, \`memory/\` or other notes, don't commit, and don't schedule follow-ups or hand it to other agents, unless ${human} explicitly asks for exactly that in this chat. This overrides what is said below about keeping your memory up to date: read it, never update it here.${ctx.memory ? `\n\n${memoryBlock(ctx.memory, memoryFile, budget.target)}` : ""}`
+    : null;
+  out.push(privateNote ?? `## Memory
 ${reflect ? "At the end of every task" : "When you learn something durable"}, update \`${memoryFile}\` with learnings worth keeping: facts and preferences about ${human}, how specific websites and accounts work, recurring procedures, and open follow-ups. Keep it concise and organized (edit or remove stale entries instead of appending duplicates). ${settings.memory.injectMemory ? "It is loaded into the start of every chat, so keep" : "Keep"} it under ${budget.target.toLocaleString("en-US")} characters: one short line per fact, long details (playbooks, lists, the state of a project) in \`memory/<topic>.md\` with a link from it, and no log of finished work (your conversations and git keep that). Never store passwords, 2FA codes, tokens or other secrets in any file. Godmode commits your repository after each run.${settings.memory.dreaming.enabled ? " While you are idle, Godmode also lets you \"dream\": you review your recent conversations and consolidate this memory." : ""}${ctx.memory ? `\n\n${memoryBlock(ctx.memory, memoryFile, budget.target)}` : ""}`);
 
   out.push(`## Safety

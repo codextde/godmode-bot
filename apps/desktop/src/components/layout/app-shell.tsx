@@ -169,6 +169,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       } else if (mod && e.key.toLowerCase() === "n" && !e.shiftKey) {
         e.preventDefault();
         navigate("/");
+      } else if (mod && e.shiftKey && !e.altKey && letterOf(e) === "n") {
+        e.preventDefault();
+        navigate("/?private=1");
       } else if (mod && e.key === ",") {
         e.preventDefault();
         navigate("/settings/general");

@@ -3,7 +3,7 @@
  * A conversation belongs to one agent; every user turn starts a run (runner/runner.ts) that streams
  * into one assistant message. A human-readable transcript is kept in the agent repo.
  */
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import type {
   Agent,
@@ -44,6 +44,7 @@ import { audit } from "./audit";
 import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
 import { requireLicense } from "../license/license";
+import { claudeConfigDir } from "./claudeUpdate";
 import { continueConversation, pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "./pauses";
 
 const log = logger("chat");
@@ -78,6 +79,7 @@ interface ConversationRow extends PauseQuestionCols {
   context_window: number | null;
   pinned: number;
   archived: number;
+  private: number;
   last_message_at: string | null;
   created_at: string;
   updated_at: string;
@@ -168,6 +170,7 @@ function toConversation(r: ConversationRow): Conversation {
     runnerToolsId: r.runner_tools_id ?? null,
     pinned: bool(r.pinned),
     archived: bool(r.archived),
+    private: bool(r.private),
     lastMessageAt: r.last_message_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -329,6 +332,7 @@ export function createConversation(
     instructions?: string;
     /** No raw secrets in this chat, whatever its agent may read (see `chatFillOnly`). */
     fillOnly?: boolean;
+    private?: boolean;
   } & ModelChoice,
 ): Conversation {
   const agent = getAgent(input.agentId); // 404 if the agent doesn't exist
@@ -361,6 +365,7 @@ export function createConversation(
     instructions: input.instructions?.trim() ?? "",
     pinned: 0,
     archived: 0,
+    private: int(!!input.private)!,
     last_message_at: null,
     created_at: ts,
     updated_at: ts,
@@ -484,7 +489,7 @@ function imageMime(data: Uint8Array): string {
 export function listConversations(
   opts: { agentId?: string; workspaceId?: string; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {},
 ): Conversation[] {
-  const where: string[] = ["c.archived = ?"];
+  const where: string[] = ["c.private = 0", "c.archived = ?"];
   const params: (string | number)[] = [opts.archived ? 1 : 0];
   if (opts.ongoing) where.push(`(${ONGOING_SQL})`);
   if (opts.agentId) {
@@ -658,6 +663,76 @@ export async function deleteConversation(id: string): Promise<void> {
   if (forgot) bus.changed("agents");
   if (parseServerIds(row.ssh_server_ids).length) bus.changed("ssh-servers");
   if (parseDeviceIds(row.android_device_ids).length) bus.changed("android");
+}
+
+function readUpTo(path: string): string | null {
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+export function isPrivateChat(id: string): boolean {
+  return bool(get<{ private: number }>("SELECT private FROM conversations WHERE id = ?", id)?.private);
+}
+
+/** Claude Code's own record of a session: its JSONL and the folder of its subagents and tool output, in any project. */
+function claudeSessionPaths(sessionId: string): string[] {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) return [];
+  const root = join(claudeConfigDir(), "projects");
+  let dirs: string[];
+  try {
+    dirs = readdirSync(root);
+  } catch {
+    return [];
+  }
+  return dirs.flatMap((dir) => [join(root, dir, `${sessionId}.jsonl`), join(root, dir, sessionId)].filter((p) => existsSync(p)));
+}
+
+/**
+ * Wipe a private chat: its messages, uploads, run logs and Claude Code session go, and its runs keep only what they
+ * cost (budgets count it). Other chats are left alone.
+ */
+export async function discardPrivateChat(id: string): Promise<boolean> {
+  const row = conversationRow(id);
+  if (!row?.private) return false;
+  let agent: Agent | null = null;
+  try {
+    agent = getAgent(row.agent_id);
+  } catch {
+    // Its agent is gone already.
+  }
+  const uploads = all<{ attachments: string }>("SELECT attachments FROM messages WHERE conversation_id = ?", id).flatMap((m) =>
+    parseJson<Attachment[]>(m.attachments, []).map((a) => a.path),
+  );
+  await deleteConversation(id);
+  const logs = listRuns({ conversationId: id, limit: 500 }).flatMap((r) => findRunLog(r) ?? []);
+  // A chat may have gone through more than one session (a fresh one after compaction): each run log names its own.
+  const sessions = new Set(row.claude_session_id ? [row.claude_session_id] : []);
+  for (const path of logs) for (const m of (readUpTo(path) ?? "").matchAll(/"session_id":"([A-Za-z0-9_-]+)"/g)) sessions.add(m[1]!);
+  const files = [
+    ...logs,
+    ...(agent ? uploads.filter((p) => p.startsWith("workspace/uploads/")).map((p) => join(agent.repoPath, p)) : []),
+    ...[...sessions].flatMap(claudeSessionPaths),
+  ];
+  for (const file of new Set(files)) {
+    try {
+      rmSync(file, { recursive: true, force: true });
+    } catch (err) {
+      log.warn(`could not remove ${basename(file)} of private chat ${id}`, err);
+    }
+  }
+  sql("UPDATE runs SET prompt = 'Private chat', result = NULL, error = NULL, note = NULL WHERE conversation_id = ?", id);
+  bus.changed("runs");
+  return true;
+}
+
+/** Private chats left over from before a restart or crash: nobody is in them anymore. */
+export async function discardPrivateChats(): Promise<number> {
+  const ids = all<{ id: string }>("SELECT id FROM conversations WHERE private = 1").map((r) => r.id);
+  for (const id of ids) await discardPrivateChat(id).catch((err) => log.warn(`could not discard private chat ${id}`, err));
+  return ids.length;
 }
 
 /* ------------------------------------------------------------------ */
@@ -945,6 +1020,7 @@ export async function startChat(
     /** Android phones for this chat, in addition to the agent's. */
     androidDeviceIds?: string[];
     instructions?: string;
+    private?: boolean;
   } & ModelChoice,
 ): Promise<StartChatResult> {
   requireLicense();
@@ -970,6 +1046,7 @@ export async function startChat(
     model: input.model,
     effort: input.effort,
     ultracode: input.ultracode,
+    private: input.private,
   });
   if (input.computerTarget) {
     update("conversations", conversation.id, { computer_target: JSON.stringify(parseComputerTarget(input.computerTarget)) });
@@ -1025,7 +1102,7 @@ function speaker(m?: Pick<Message, "source">, runTrigger?: RunTrigger): string {
 /** Append one finished exchange (user turn + assistant turn) to the human-readable transcript. */
 export function appendTranscript(conversationId: string, finishedRun: Run, userMessages: Message[], assistant: Message | null) {
   const row = conversationRow(conversationId);
-  if (!row) return;
+  if (!row || row.private) return;
   const agent = getAgent(row.agent_id);
   const path = transcriptPath(agent, conversationId);
   mkdirSync(join(agent.repoPath, "conversations"), { recursive: true });
