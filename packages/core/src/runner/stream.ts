@@ -223,6 +223,8 @@ export class StreamAccumulator {
   goalIdle = 0;
   /** The hook's latest verdict, without the goal it restates. */
   goalFeedback: string | null = null;
+  /** How often the hook blocked the end of a turn in this stretch. */
+  goalChecks = 0;
   private compacting = false;
   /** The model of the latest top-level message (subagents may run smaller ones). */
   private mainModel: string | null = null;
@@ -718,6 +720,7 @@ export class StreamAccumulator {
    */
   private onGoalCheck(text: string): void {
     const busy = [...this.tasks.values()].some((t) => t.status === "running");
+    this.goalChecks++;
     if (this.goalFeedback !== null) this.goalIdle = this.toolCalls > this.toolCallsAtGoalCheck || busy ? 0 : this.goalIdle + 1;
     this.toolCallsAtGoalCheck = this.toolCalls;
     // "[<the goal>]: Not satisfied. …": the verdict is what tells.

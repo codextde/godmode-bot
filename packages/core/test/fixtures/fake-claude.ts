@@ -84,6 +84,11 @@
  *   SHOTS:<n>   run <n> tool steps that each answer with a screenshot and a line of text, then answer "shots done".
  *              With THEN_WAIT:<key> it first waits for the state dir's `<key>-next` file, writes "almost there", and
  *              waits for `<key>-done`
+ *   GOAL_CLEAR  a turn of a chat whose `/goal` (written to the session file under CLAUDE_CONFIG_DIR) is over: the agent
+ *              calls the gateway's goal_clear (reason from the state dir's `goal-clear-args.json`, result to
+ *              `goal-clear-result.json`), answers, and the goal's Stop hook blocks the end of the turn; the process
+ *              then idles for 5 s, writes `goal-clear-idled` and answers "No response requested." GOAL_CLEAR_LATE
+ *              lets the hook block once before the call. `/goal clear` clears that goal.
  *   /<command>  a slash command Claude Code runs locally (`/clear` resets the session, `/model bogus` is rejected,
  *               `/effort ultracode [on|off]` switches Ultracode, and a new effort level ends an Ultracode that the
  *               --settings file turned on)
@@ -360,6 +365,22 @@ function textTurn(text: string) {
 
 const slash = /^\/(\S+)\s*([\s\S]*)$/.exec(prompt.trim());
 
+/** Claude Code's own record of the session, where `/goal` keeps its state. */
+const sessionFile = () => join(process.env.CLAUDE_CONFIG_DIR ?? join(stateDir, "claude"), "projects", "fake", `${sessionId}.jsonl`);
+const goalStatus = (status: Record<string, unknown>) => {
+  mkdirSync(join(sessionFile(), ".."), { recursive: true });
+  appendFileSync(sessionFile(), JSON.stringify({ type: "attachment", uuid: crypto.randomUUID(), sessionId, attachment: { type: "goal_status", ...status } }) + "\n");
+};
+const activeGoal = (): string | null => {
+  if (!existsSync(sessionFile())) return null;
+  const statuses = readFileSync(sessionFile(), "utf8")
+    .split("\n")
+    .filter((l) => l.includes('"goal_status"'))
+    .map((l) => (JSON.parse(l) as { attachment: { met: boolean; condition: string } }).attachment);
+  const last = statuses.at(-1);
+  return last && !last.met ? last.condition : null;
+};
+
 /** Ask the human through the gateway like an agent does, as one step, then stand still at the hook. */
 async function ask(mode: "question" | "approval" | "twice" | "nohook") {
   out(init);
@@ -419,6 +440,12 @@ if (slash?.[1] === "clear") {
   out({ type: "conversation_reset", new_conversation_id: fresh, trigger: "clear" });
   out({ ...init, session_id: fresh });
   result("", { session_id: fresh, num_turns: 0, local_command: "clear" });
+} else if (slash?.[1] === "goal" && slash[2].trim() === "clear") {
+  const goal = activeGoal();
+  if (goal) goalStatus({ met: true, sentinel: true, condition: goal });
+  appendFileSync(join(stateDir, "goal-clears"), `${sessionId}\n`);
+  const text = goal ? `Goal cleared: ${goal}` : "No goal set";
+  out({ type: "result", subtype: "success", is_error: false, num_turns: 0, duration_ms: 1, total_cost_usd: 0, result: text, session_id: sessionId });
 } else if (slash) {
   const [, name, args] = slash;
   out(init);
@@ -1098,6 +1125,39 @@ if (slash?.[1] === "clear") {
   const text = `GUEST ${JSON.stringify(summary)}`;
   textTurn(text);
   result(text);
+} else if (prompt.includes("GOAL_CLEAR")) {
+  out(init);
+  const goal = "sell the course and make the first sale";
+  goalStatus({ met: false, sentinel: true, condition: goal });
+  const cfg = JSON.parse(readFileSync(argValue("--mcp-config")!, "utf8")) as { mcpServers: Record<string, { url: string; headers: Record<string, string> }> };
+  const gw = cfg.mcpServers.godmode!;
+  const rpc = async (body: unknown) => {
+    const res = await fetch(gw.url, { method: "POST", headers: { ...gw.headers, "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify(body) });
+    const raw = await res.text();
+    return raw ? JSON.parse(raw) : null;
+  };
+  await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "fake", version: "1" } } });
+  const verdict = () => {
+    goalStatus({ met: false, condition: goal, reason: "No paying customer yet." });
+    out({ type: "user", message: { role: "user", content: [{ type: "text", text: `Stop hook feedback:\n[${goal}]: Not satisfied. No paying customer yet.` }] }, parent_tool_use_id: null, session_id: sessionId });
+  };
+  if (prompt.includes("GOAL_CLEAR_LATE")) {
+    textTurn("Still no sale.");
+    verdict();
+    await pause(150);
+  }
+  const argsFile = join(stateDir, "goal-clear-args.json");
+  const input = existsSync(argsFile) ? (JSON.parse(readFileSync(argsFile, "utf8")) as Record<string, unknown>) : { reason: "Daniel decided to end it." };
+  out({ type: "assistant", message: { id: "msg_goal_clear", role: "assistant", content: [{ type: "tool_use", id: "toolu_goal_clear", name: "mcp__godmode__goal_clear", input }] }, parent_tool_use_id: null, session_id: sessionId });
+  const called = await rpc({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "goal_clear", arguments: input } });
+  writeFileSync(join(stateDir, "goal-clear-result.json"), JSON.stringify(called.result));
+  out({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_goal_clear", content: called.result.content[0].text, is_error: called.result.isError === true }] }, parent_tool_use_id: null, session_id: sessionId });
+  textTurn("The line is closed, the site stays live.");
+  verdict();
+  await pause(5000);
+  writeFileSync(join(stateDir, "goal-clear-idled"), "");
+  textTurn("No response requested.");
+  result("No response requested.");
 } else if (prompt.includes("GOAL_LOOP")) {
   await replay(prompt.includes("GOAL_LOOP_WORKING") ? "stream-goal-working.jsonl" : "stream-goal-loop.jsonl", async (event) => {
     if (event.type !== "user" || !JSON.stringify(event).includes("Stop hook feedback:")) return;

@@ -20,6 +20,7 @@ import {
   FileSearch,
   FileText,
   FileUp,
+  FlagOff,
   FolderKanban,
   FolderSearch,
   Globe,
@@ -416,6 +417,7 @@ const GODMODE_TOOLS = new Set([
   "notify_user",
   "followup_schedule",
   "followup_cancel",
+  "goal_clear",
   "ask_human",
   "request_approval",
   "tasks_list",
@@ -571,6 +573,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       return { kind: "notify", icon: AlarmClock, title: `Will continue ${followupTime(input)}`, detail: truncate(str(input.note), 120) || undefined };
     case "followup_cancel":
       return { kind: "notify", icon: AlarmClockOff, title: "Cancelled its follow-up" };
+    case "goal_clear":
+      return { kind: "notify", icon: FlagOff, title: "Ended the goal", detail: truncate(str(input.reason), 120) || undefined };
     case "ask_human":
       return { kind: "agents", icon: MessageCircleQuestion, title: "Asked you", detail: truncate(str(input.question), 120) || undefined };
     case "request_approval":

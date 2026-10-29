@@ -3,7 +3,7 @@
  * A conversation belongs to one agent; every user turn starts a run (runner/runner.ts) that streams
  * into one assistant message. A human-readable transcript is kept in the agent repo.
  */
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import type {
   Agent,
@@ -678,9 +678,9 @@ export function isPrivateChat(id: string): boolean {
 }
 
 /** Claude Code's own record of a session: its JSONL and the folder of its subagents and tool output, in any project. */
-function claudeSessionPaths(sessionId: string): string[] {
+function claudeSessionPaths(sessionId: string, configDir = claudeConfigDir()): string[] {
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(sessionId)) return [];
-  const root = join(claudeConfigDir(), "projects");
+  const root = join(configDir, "projects");
   let dirs: string[];
   try {
     dirs = readdirSync(root);
@@ -688,6 +688,53 @@ function claudeSessionPaths(sessionId: string): string[] {
     return [];
   }
   return dirs.flatMap((dir) => [join(root, dir, `${sessionId}.jsonl`), join(root, dir, sessionId)].filter((p) => existsSync(p)));
+}
+
+/** How far back a goal status is looked for at most: while a goal is set, its latest status is near the end. */
+const GOAL_LOOKBACK_BYTES = 64 * 1024 * 1024;
+
+/**
+ * The condition of the chat's `/goal` while one is set, or null. Claude Code keeps it in the session: the latest goal
+ * status there tells, as it does when the session resumes (met, failed or cleared = none). `configDir`: where the
+ * run's Claude Code keeps its sessions (GLM runs have their own).
+ */
+export function chatGoal(conversationId: string, configDir?: string | null): string | null {
+  const sessionId = get<{ claude_session_id: string | null }>("SELECT claude_session_id FROM conversations WHERE id = ?", conversationId)?.claude_session_id;
+  const files = sessionId ? claudeSessionPaths(sessionId, configDir || undefined).filter((p) => p.endsWith(".jsonl")) : [];
+  const newest = files.map((p) => ({ p, at: statSync(p, { throwIfNoEntry: false })?.mtimeMs ?? 0 })).sort((x, y) => y.at - x.at)[0]?.p;
+  if (!newest) return null;
+  let fd: number;
+  try {
+    fd = openSync(newest, "r");
+  } catch {
+    return null;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    for (let span = Math.min(size, 1 << 20); ; span = Math.min(size, GOAL_LOOKBACK_BYTES, span * 4)) {
+      const buf = Buffer.alloc(span);
+      readSync(fd, buf, 0, span, size - span);
+      let text = buf.toString("utf8");
+      // A line cut off at the start of the window is read with the next, larger one.
+      if (span < size) text = text.slice(text.indexOf("\n") + 1);
+      for (let at = text.lastIndexOf('"goal_status"'); at >= 0; at = text.lastIndexOf('"goal_status"', at - 1)) {
+        const end = text.indexOf("\n", at);
+        let status: { type?: unknown; met?: unknown; failed?: unknown; condition?: unknown } | undefined;
+        try {
+          status = (JSON.parse(text.slice(text.lastIndexOf("\n", at) + 1, end < 0 ? undefined : end)) as { attachment?: typeof status }).attachment;
+        } catch {
+          continue;
+        }
+        if (status?.type !== "goal_status") continue;
+        return !status.met && !status.failed && typeof status.condition === "string" && status.condition ? status.condition : null;
+      }
+      if (span >= size || span >= GOAL_LOOKBACK_BYTES) return null;
+    }
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**
@@ -714,7 +761,7 @@ export async function discardPrivateChat(id: string): Promise<boolean> {
   const files = [
     ...logs,
     ...(agent ? uploads.filter((p) => p.startsWith("workspace/uploads/")).map((p) => join(agent.repoPath, p)) : []),
-    ...[...sessions].flatMap(claudeSessionPaths),
+    ...[...sessions].flatMap((s) => claudeSessionPaths(s)),
   ];
   for (const file of new Set(files)) {
     try {
