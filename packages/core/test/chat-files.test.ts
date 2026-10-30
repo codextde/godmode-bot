@@ -60,6 +60,8 @@ beforeAll(async () => {
   writeFileSync(join(shots, "fake.png"), "not a picture");
   writeFileSync(join(agent.repoPath, "workspace", "report.pdf"), "%PDF-1.4");
   writeFileSync(join(outside, "desktop.png"), PNG);
+  writeFileSync(join(agent.repoPath, "workspace", "plan.md"), "# Plan\n\n- one\n- two\n");
+  writeFileSync(join(agent.repoPath, "workspace", "blob.md"), Buffer.from([0x23, 0x00, 0x01]));
   __setFileManagerForTests((command) => void launched.push(command));
 });
 
@@ -140,7 +142,7 @@ describe("files of a chat", () => {
   test("a relative path starts where the agent works; pictures are told from other files by their bytes", async () => {
     const files = byRef(await resolveRefs("workspace/shots/", "workspace/shots/01-positions.png", "report.pdf", "CLAUDE.md", "workspace/shots/fake.png", "missing.png", "https://example.com/a.png"));
     expect(Object.keys(files)).toEqual(["workspace/shots/", "workspace/shots/01-positions.png", "report.pdf", "CLAUDE.md", "workspace/shots/fake.png"]);
-    expect(files["workspace/shots/"]).toEqual({ ref: "workspace/shots/", path: shots, name: "shots", kind: "folder", image: null });
+    expect(files["workspace/shots/"]).toEqual({ ref: "workspace/shots/", path: shots, name: "shots", kind: "folder", image: null, markdown: null });
     expect(files["workspace/shots/01-positions.png"]).toMatchObject({ path: join(shots, "01-positions.png"), name: "01-positions.png", kind: "file" });
     expect(files["workspace/shots/01-positions.png"]!.image).toStartWith(`/api/files/image?path=${encodeURIComponent(join(shots, "01-positions.png"))}&v=`);
     // Found in the agent's `workspace/`, where it puts what it produces.
@@ -220,6 +222,31 @@ describe("files of a chat", () => {
   });
 });
 
+describe("Markdown for the reader", () => {
+  test("only readable Markdown is served", async () => {
+    const files = byRef(await resolveRefs("workspace/plan.md", "workspace/report.pdf", "workspace/shots/"));
+    const url = files["workspace/plan.md"]!.markdown!;
+    expect(url).toStartWith(`/api/files/markdown?path=${encodeURIComponent(join(agent.repoPath, "workspace", "plan.md"))}&v=`);
+    expect(files["workspace/report.pdf"]!.markdown).toBeNull();
+    expect(files["workspace/shots/"]!.markdown).toBeNull();
+
+    const { status, res } = await call("GET", url);
+    expect(status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(await res.text()).toBe("# Plan\n\n- one\n- two\n");
+
+    const link = join(outside, "link.md");
+    symlinkSync(join(shots, "notes.txt"), link);
+    for (const path of [join(shots, "notes.txt"), join(agent.repoPath, "workspace", "blob.md"), link, join(dataDir, "access-token"), shots, join(shots, "gone.md")]) {
+      expect([path, (await call("GET", `/api/files/markdown?path=${encodeURIComponent(path)}`)).status]).toEqual([path, 404]);
+    }
+    expect((await call("GET", "/api/files/markdown?path=workspace/plan.md")).status).toBe(400);
+    expect((await call("GET", "/api/files/markdown")).status).toBe(400);
+    expect((await app.request(`http://127.0.0.1${url}`)).status).toBe(401);
+  });
+});
+
 describe("showing a file in the file manager", () => {
   test("only for the app on this computer", async () => {
     const path = join(shots, "01-positions.png");
@@ -283,6 +310,7 @@ describe("showing a file in the file manager", () => {
     const { deviceMayCall } = await import("../src/mobile/scope");
     expect(deviceMayCall("POST", `/api/conversations/${chat.id}/files`)).toBe(false);
     expect(deviceMayCall("GET", "/api/files/image")).toBe(false);
+    expect(deviceMayCall("GET", "/api/files/markdown")).toBe(false);
     expect(deviceMayCall("POST", "/api/files/reveal")).toBe(false);
   });
 });

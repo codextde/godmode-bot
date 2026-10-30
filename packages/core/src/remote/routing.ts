@@ -266,11 +266,11 @@ export const remoteRouting: MiddlewareHandler = async (c, next) => {
       }
     }
 
-    if (path === "/api/files/image" && c.req.query("runner")) {
+    if ((path === "/api/files/image" || path === "/api/files/markdown") && c.req.query("runner")) {
       const url = new URL(c.req.url);
       const runnerId = url.searchParams.get("runner")!;
       url.searchParams.delete("runner");
-      return await forward(c, runnerId, `/api/files/image${url.search}`);
+      return await forward(c, runnerId, `${path}${url.search}`);
     }
 
     if (BROWSER.test(path) && c.req.method === "POST") {

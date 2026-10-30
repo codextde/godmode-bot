@@ -570,6 +570,47 @@
 .prose-chat li > p {
   @apply m-0;
 }
+
+/* A Markdown file opened in the chat's reader: a document, not a reply */
+.prose-chat.prose-reader {
+  @apply text-[0.975rem] leading-[1.75];
+}
+.prose-reader > * + * {
+  @apply mt-4;
+}
+.prose-reader h1 {
+  @apply text-[1.75rem] leading-tight font-semibold tracking-tight;
+}
+.prose-reader > h1:first-child {
+  @apply mb-6;
+}
+.prose-reader h2 {
+  @apply mt-10 border-b pb-2 text-[1.3rem] leading-snug font-semibold tracking-tight;
+}
+.prose-reader h3 {
+  @apply mt-7 text-[1.05rem] font-semibold;
+}
+.prose-reader h4,
+.prose-reader h5,
+.prose-reader h6 {
+  @apply mt-6 text-[0.95rem] font-semibold text-foreground/85;
+}
+.prose-reader :is(h1, h2, h3, h4) {
+  scroll-margin-top: 1.5rem;
+}
+.prose-reader blockquote {
+  @apply rounded-r-md border-l-[3px] border-primary/40 bg-paper-2/60 py-2 pr-3 pl-4;
+}
+.prose-reader ul,
+.prose-reader ol {
+  @apply space-y-1.5;
+}
+.prose-reader hr {
+  @apply my-8;
+}
+.prose-reader img {
+  @apply rounded-lg;
+}
 .prose-chat ul.gm-gallery {
   @apply flex list-none flex-wrap items-start gap-3 pl-0;
 }
