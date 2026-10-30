@@ -795,7 +795,7 @@ whole list, at most once a second per run.
   a run keeps the browser it started with.
 * On macOS a visible browser never takes focus: it is started in the background through LaunchServices
   (`open -g`, no startup window) and its first window opens behind the active app.
-* Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.10 browser-use --mcp`)
+* Agents get browser tools from the **browser-use MCP server** (`uvx --from browser-use==0.13.14 browser-use --mcp`)
   configured per run via `BROWSER_USE_CONFIG_PATH` → `<data>/browser-use/<profile>/<agent>/runs/<run-id>/config.json`
   (removed with the run, together with browser-use's scratch files next to it) with `browser_profile.cdp_url`
   pointing at the run's chat endpoint (below); downloads land in the agent's `workspace/downloads`.

@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, isAbsolute, join } from "node:path";
 import { which } from "../util";
 
-export const BROWSER_USE_VERSION = "0.13.10";
+export const BROWSER_USE_VERSION = "0.13.14";
 export const BROWSER_USE_SPEC = `browser-use==${BROWSER_USE_VERSION}`;
 // uv takes the newest Python it can get; browser-use's dependencies ship no wheels for 3.15 yet and would need a compiler.
 export const BROWSER_USE_PYTHON = ">=3.11,<3.15";
