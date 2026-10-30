@@ -1,4 +1,5 @@
-import { useColorScheme, type TextStyle } from "react-native";
+import { useColorScheme, type TextStyle, type ViewStyle } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkTheme, DefaultTheme, type Theme } from "expo-router";
 import { useAppearance } from "./appearance";
 
@@ -176,4 +177,11 @@ export function useNavigationTheme(): Theme {
       heavy: { fontFamily: fonts.bold, fontWeight: "700" },
     },
   };
+}
+
+/** A screen's background, kept clear of side safe areas: the iPhone Duo cover screen puts the status bar, tab bar and header buttons in a column on the right. */
+export function usePageStyle(): ViewStyle {
+  const c = useColors();
+  const { left, right } = useSafeAreaInsets();
+  return { backgroundColor: c.background, paddingLeft: left, paddingRight: right };
 }

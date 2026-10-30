@@ -16,7 +16,7 @@ import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { qk, queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
 import { useSession } from "@/lib/session";
-import { fonts, useColors, useNavigationTheme } from "@/lib/theme";
+import { fonts, useColors, useNavigationTheme, usePageStyle } from "@/lib/theme";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -36,6 +36,7 @@ export default function RootLayout() {
   const deviceId = useSession((s) => s.connection?.deviceId);
   const theme = useNavigationTheme();
   const c = useColors();
+  const page = usePageStyle();
   const [fontsLoaded, fontError] = useFonts(FONT_FILES);
   const fontsReady = fontsLoaded || !!fontError;
 
@@ -83,9 +84,9 @@ export default function RootLayout() {
           <ThemeProvider value={theme}>
             <ThemeSync paired={paired} />
             <StatusBar style="auto" />
-            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: { backgroundColor: c.background } }}>
+            <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }}>
               <Stack.Protected guard={paired}>
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="chat/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="agent/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="memory/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Memory" }} />
@@ -109,7 +110,7 @@ export default function RootLayout() {
                 <Stack.Screen name="run/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "" }} />
                 <Stack.Screen name="dream/[id]" options={{ headerTransparent: process.env.EXPO_OS === "ios", title: "Dream" }} />
                 <Stack.Screen name="goal" options={{ presentation: "formSheet", sheetAllowedDetents: [0.62, 1], sheetGrabberVisible: true, headerShown: false }} />
-                <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false }} />
+                <Stack.Screen name="settings" options={{ presentation: "modal", headerShown: false, contentStyle: { backgroundColor: c.background } }} />
                 <Stack.Screen name="live" options={{ presentation: "fullScreenModal", headerShown: false, contentStyle: { backgroundColor: "#000" } }} />
               </Stack.Protected>
               <Stack.Protected guard={!paired}>
