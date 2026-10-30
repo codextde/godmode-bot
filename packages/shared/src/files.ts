@@ -13,6 +13,8 @@ export interface ChatFile {
   kind: "file" | "folder";
   /** Where the core serves the file, when it is a picture the chat can show. */
   image: string | null;
+  /** Where the core serves the file, when it is Markdown the chat can open in its reader. */
+  markdown: string | null;
   /** It is on the chat's runner, not on the core's machine. */
   remote?: boolean;
 }
@@ -25,6 +27,10 @@ export interface ChatFiles {
 }
 
 export const CHAT_IMAGE_PATH = "/api/files/image";
+export const CHAT_MARKDOWN_PATH = "/api/files/markdown";
+/** Larger Markdown is data, not something to read. */
+export const MAX_CHAT_MARKDOWN_BYTES = 2 * 1024 * 1024;
+export const MARKDOWN_NAME = /\.(?:md|markdown|mdx|mdown|mkd)$/i;
 
 /** File names as one short line: "a.png, b.png, c.png and 12 more". */
 export function fileNameSummary(names: string[], max = 3): string {
@@ -38,6 +44,10 @@ const MAX_TEXT = 200_000;
 /** `version` changes with the file, so a picture that was written again is fetched again. */
 export function chatImageUrl(path: string, version: number): string {
   return `${CHAT_IMAGE_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
+}
+
+export function chatMarkdownUrl(path: string, version: number): string {
+  return `${CHAT_MARKDOWN_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
 }
 
 // No lookbehind here: the phone app's JavaScript engine compiles this file too. Every repetition that could run to the

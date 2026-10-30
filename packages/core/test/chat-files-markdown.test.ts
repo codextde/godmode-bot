@@ -21,6 +21,7 @@ const file = (ref: string, path: string, kind: ChatFile["kind"] = "file"): ChatF
   kind,
   name: path.split("/").pop()!,
   image: /\.png$/.test(path) ? `/api/files/image?path=${encodeURIComponent(path)}&v=1` : null,
+  markdown: null,
 });
 
 function render(tree: HastNode, ...files: ChatFile[]): string {
