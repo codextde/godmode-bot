@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Agent, ChatFile } from "@godmode/shared";
-import { MAX_CHAT_FILE_REFS, MAX_TASK_ATTACHMENT_BYTES, chatImageUrl } from "@godmode/shared";
+import { MARKDOWN_NAME, MAX_CHAT_FILE_REFS, MAX_CHAT_MARKDOWN_BYTES, MAX_TASK_ATTACHMENT_BYTES, chatImageUrl, chatMarkdownUrl } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { sniffType } from "../integrations/apiToolRequest";
@@ -96,9 +96,36 @@ function openImage(path: string, withData: boolean): { mime: string; version: nu
   }
 }
 
+/** A Markdown file the chat can open in its reader — by its name and the one a link leads to — not too long to read. */
+function openMarkdown(path: string, withText: boolean): { version: number; text: string | null } | null {
+  if (!MARKDOWN_NAME.test(path) || kindOf(path) !== "file") return null;
+  let fd: number | null = null;
+  try {
+    if (!MARKDOWN_NAME.test(realpathSync(path))) return null;
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size > MAX_CHAT_MARKDOWN_BYTES) return null;
+    if (!withText) return { version: stat.mtimeMs, text: null };
+    const data = readFileSync(fd);
+    if (data.includes(0)) return null;
+    return { version: stat.mtimeMs, text: data.toString("utf8") };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
 function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
   const image = found.kind === "file" && IMAGE_NAME.test(found.path) ? openImage(found.path, false) : null;
-  return { ref, ...found, name: basename(found.path) || found.path, image: image && chatImageUrl(found.path, image.version) };
+  const markdown = found.kind === "file" ? openMarkdown(found.path, false) : null;
+  return {
+    ref,
+    ...found,
+    name: basename(found.path) || found.path,
+    image: image && chatImageUrl(found.path, image.version),
+    markdown: markdown && chatMarkdownUrl(found.path, markdown.version),
+  };
 }
 
 /** The references of one message that exist, in their order. */
@@ -146,6 +173,13 @@ export function readChatImage(input: string): { mime: string; data: Buffer } {
   const image = openImage(absolute(input), true);
   if (!image?.data) throw notFound("Picture");
   return { mime: image.mime, data: image.data };
+}
+
+/** A Markdown file on this computer, for the chat's reader. Anything else stays unread. */
+export function readChatMarkdown(input: string): string {
+  const file = openMarkdown(absolute(input), true);
+  if (file?.text == null) throw notFound("Markdown file");
+  return file.text;
 }
 
 type Launch = (command: string[]) => void;

@@ -208,6 +208,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/missing-logins/:id/totp-choices", A],
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
+  ["GET", "/api/files/markdown", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/mcp-servers", A],

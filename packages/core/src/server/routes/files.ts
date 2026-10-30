@@ -1,7 +1,7 @@
 import type { Hono } from "hono";
 import type { ChatFiles } from "@godmode/shared";
 import { MAX_CHAT_FILE_REFS } from "@godmode/shared";
-import { readChatImage, resolveChatFiles, revealInFileManager } from "../../services/chatFiles";
+import { readChatImage, readChatMarkdown, resolveChatFiles, revealInFileManager } from "../../services/chatFiles";
 import { HttpError, badRequest } from "../../util";
 import { isLocalRequest } from "../auth";
 import { body, z } from "../validate";
@@ -21,6 +21,17 @@ export function registerFileRoutes(app: Hono): void {
     const { mime, data } = readChatImage(path);
     return c.body(new Uint8Array(data), 200, {
       "Content-Type": mime,
+      "Content-Security-Policy": "sandbox; default-src 'none'",
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, no-store",
+    });
+  });
+
+  app.get("/api/files/markdown", (c) => {
+    const path = c.req.query("path");
+    if (!path) throw badRequest("path is required");
+    return c.body(readChatMarkdown(path), 200, {
+      "Content-Type": "text/markdown; charset=utf-8",
       "Content-Security-Policy": "sandbox; default-src 'none'",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, no-store",

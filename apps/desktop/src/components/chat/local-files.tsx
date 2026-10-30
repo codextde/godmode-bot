@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Copy, Download, Folder, FolderOpen, ImageOff, Maximize2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Copy, Download, Folder, FolderOpen, ImageOff, Maximize2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import type { ChatFile } from "@godmode/shared";
 import { fileRefs } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { copyText } from "@/components/vault/clipboard";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { fileIcon } from "./attachments";
 import { downloadCoreFile, useCoreFileUrl } from "./core-file";
 import { Lightbox } from "./lightbox";
+import { MarkdownReader } from "./markdown-reader";
 
 /* ------------------------------------------------------------------ */
 /* Which of the paths a message names exist                             */
@@ -99,7 +101,11 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
   });
   return useMemo(() => {
     if (!data?.files.length) return null;
-    const files = runnerId ? data.files.map((f) => (f.remote && f.image ? { ...f, image: onRunner(f.image, runnerId) } : f)) : data.files;
+    const files = runnerId
+      ? data.files.map((f) =>
+          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null } : f,
+        )
+      : data.files;
     const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
     return { byRef: new Map(files.map((f) => [f.ref, f])), pictures: [...pictures.values()], local: data.local };
   }, [data, runnerId]);
@@ -111,7 +117,11 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
 
 const SHOW_IN_FOLDER = isMac ? "Show in Finder" : "Show in folder";
 
-const MessageScope = createContext<{ local: boolean; preview: (path: string) => void }>({ local: false, preview: () => {} });
+const MessageScope = createContext<{ local: boolean; preview: (path: string) => void; read: (path: string) => void }>({
+  local: false,
+  preview: () => {},
+  read: () => {},
+});
 
 /**
  * What a click on a file does: it opens the file manager there, or — from another computer, or for a file on the chat's
@@ -133,16 +143,60 @@ function useShowInFolder(): (file: ChatFile) => { label: string; icon: LucideIco
   );
 }
 
-/** Everything the files of one message share: where they are, and the preview its pictures open in. */
+/** Everything the files of one message share: where they are, the preview its pictures open in and the reader for its Markdown. */
 export function MessageFilesScope({ files, children }: { files: MessageFiles | null; children: ReactNode }) {
   const [previewed, setPreviewed] = useState<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
   const local = files?.local ?? false;
-  const scope = useMemo(() => ({ local, preview: setPreviewed }), [local]);
+  const scope = useMemo(() => ({ local, preview: setPreviewed, read: setReading }), [local]);
   return (
     <MessageScope.Provider value={scope}>
       {children}
       {!!files?.pictures.length && <PicturePreview pictures={files.pictures} path={previewed} onChange={setPreviewed} />}
+      {files && <Reader files={files} path={reading} onChange={setReading} />}
     </MessageScope.Provider>
+  );
+}
+
+function Reader({ files, path, onChange }: { files: MessageFiles; path: string | null; onChange: (path: string | null) => void }) {
+  const showFor = useShowInFolder();
+  const current = useMemo(() => (path ? [...files.byRef.values()].find((f) => f.path === path && f.markdown) : undefined), [files, path]);
+  // While the dialog closes, the file stays.
+  const [file, setFile] = useState(current);
+  if (current && current !== file) setFile(current);
+  if (!file) return null;
+  return <MarkdownReader file={file} open={!!current} onOpenChange={(open) => !open && onChange(null)} folderAction={showFor(file)} />;
+}
+
+/** A Markdown file: a click asks whether to read it here or show it in its folder. */
+function MarkdownLink({ file, className, children }: { file: ChatFile; className: string; children: ReactNode }) {
+  const { read, local } = useContext(MessageScope);
+  const { label, icon: ShowIcon, show } = useShowInFolder()(file);
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <span role="button" tabIndex={0} title={file.path} className={className} onClick={(e) => e.stopPropagation()}>
+          {children}
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-56" onClick={(e) => e.stopPropagation()}>
+        <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">{file.name}</DropdownMenuLabel>
+        <DropdownMenuItem onSelect={() => read(file.path)}>
+          <BookOpen /> Open preview
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={show}>
+          <ShowIcon /> {label}
+        </DropdownMenuItem>
+        {local && !file.remote && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => void copyText(file.path, "Path copied")}>
+              <Copy /> Copy path
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -157,29 +211,38 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
     e.stopPropagation();
     show();
   };
+  const className = cn("gm-file", chip && "gm-file-chip");
+  const content = start ? (
+    <>
+      <span className="whitespace-nowrap">
+        <Icon aria-hidden />
+        {start}
+      </span>
+      {(children as string).slice(start.length)}
+    </>
+  ) : (
+    <>
+      <Icon aria-hidden />
+      {children}
+    </>
+  );
+  if (file.markdown) {
+    return (
+      <MarkdownLink file={file} className={className}>
+        {content}
+      </MarkdownLink>
+    );
+  }
   return (
     <span
       role="button"
       tabIndex={0}
       title={`${label} · ${file.path}`}
-      className={cn("gm-file", chip && "gm-file-chip")}
+      className={className}
       onClick={activate}
       onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && activate(e)}
     >
-      {start ? (
-        <>
-          <span className="whitespace-nowrap">
-            <Icon aria-hidden />
-            {start}
-          </span>
-          {(children as string).slice(start.length)}
-        </>
-      ) : (
-        <>
-          <Icon aria-hidden />
-          {children}
-        </>
-      )}
+      {content}
     </span>
   );
 }
