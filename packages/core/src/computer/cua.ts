@@ -26,7 +26,7 @@ import { LineProcess } from "./lineProcess";
 
 const log = logger("computer");
 
-export const CUA_DRIVER_VERSION = "0.33.1";
+export const CUA_DRIVER_VERSION = "0.38.0";
 export const CUA_DRIVER_SPEC = `cua-driver==${CUA_DRIVER_VERSION}`;
 const PROTOCOL_VERSION = "2025-06-18";
 /** Stop the driver after this long without calls (it is restarted on demand). */
@@ -192,7 +192,7 @@ function glibcVersion(): string | null {
 }
 
 /**
- * Why PyPI has no cua-driver build for `host` (null = it has one, or that can't be told). 0.33.1 ships macOS 13+
+ * Why PyPI has no cua-driver build for `host` (null = it has one, or that can't be told). 0.38.0 ships macOS 13+
  * (universal), manylinux_2_31 x86_64/aarch64 and Windows x64/arm64. `osRelease` is os.release() (Darwin 22 is macOS
  * 13); `glibc` null = another C library, or unknown.
  */

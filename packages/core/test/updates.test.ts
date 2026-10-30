@@ -544,7 +544,7 @@ suite("tool updates", () => {
     test("used before Godmode noted it: the pinned version is an update — a newer one in the cache is not", async () => {
       // No trace of it: never installed, nothing to update. A newer cua-driver in uv's cache is no earlier pin.
       const cached = (v: string) => mkdirSync(join(tools.dir, "uv-cache", "wheels-v6", "pypi", "cua-driver", `${v}-py3-none-macosx_13_0_universal2`), { recursive: true });
-      cached("0.34.0");
+      cached("0.99.0");
       expect(await tool("cua-driver")).toMatchObject({ installed: false, updateAvailable: false });
 
       // The driver's state folder: it ran, version unknown.

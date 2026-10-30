@@ -144,7 +144,7 @@ describe("Chromium executable detection", () => {
 
 describe("browser-use MCP wiring", () => {
   test("splitCommand handles quotes and escapes", () => {
-    expect(splitCommand(`uvx --from "browser-use==0.13.10" browser-use --mcp`)).toEqual(["uvx", "--from", "browser-use==0.13.10", "browser-use", "--mcp"]);
+    expect(splitCommand(`uvx --from "browser-use==0.13.14" browser-use --mcp`)).toEqual(["uvx", "--from", "browser-use==0.13.14", "browser-use", "--mcp"]);
     expect(splitCommand(`'/path with spaces/bu' --flag "a \\"b\\""`)).toEqual(["/path with spaces/bu", "--flag", 'a "b"']);
     expect(splitCommand(`  a   ""  b `)).toEqual(["a", "", "b"]);
   });
