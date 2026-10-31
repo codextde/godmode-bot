@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { ArrowRight, BedDouble, Bell, CalendarClock, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -352,6 +353,7 @@ export default function ChatHome() {
         </motion.div>
 
         {privateChat || hideSuggestions ? null : easy ? (
+          <SuggestionsMenu label={t("home.hideSuggestions")} onHide={hideAllSuggestions}>
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="eyebrow">{t("home.trySomething")}</h2>
@@ -373,7 +375,9 @@ export default function ChatHome() {
               ))}
             </div>
           </motion.div>
+          </SuggestionsMenu>
         ) : (
+          <SuggestionsMenu label={t("home.hideSuggestions")} onHide={hideAllSuggestions}>
           <motion.div {...fade(0.18)} className="group/suggestions relative mt-4 flex flex-wrap items-center justify-center gap-2">
             {SUGGESTIONS.map(({ icon: Icon, text }) => (
               <button
@@ -388,6 +392,7 @@ export default function ChatHome() {
             ))}
             <SuggestionsDismiss label={t("home.hideSuggestions")} onClick={hideAllSuggestions} />
           </motion.div>
+          </SuggestionsMenu>
         )}
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
@@ -436,6 +441,21 @@ export default function ChatHome() {
         }}
       />
     </ChatDropZone>
+  );
+}
+
+/** Right-click on the suggestions: the same as their X. */
+function SuggestionsMenu({ label, onHide, children }: { label: string; onHide: () => void; children: React.ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onHide}>
+          <EyeOff />
+          {label}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
