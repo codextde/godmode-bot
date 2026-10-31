@@ -54,6 +54,8 @@ interface UiState {
   expandedNav: string[];
   /** The "Try something like" suggestions on Home were closed. */
   hideSuggestions: boolean;
+  /** Sidebar sections open by default that the human folded. */
+  collapsedNav: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
   away: { since: string; until: string } | null;
   /** Pick a scope; a project only goes with its workspace (omitted = the whole workspace). */
@@ -74,6 +76,7 @@ interface UiState {
   setRecentTab: (tab: RecentTab) => void;
   setRecentSource: (source: RecentSource) => void;
   toggleNavSection: (key: string) => void;
+  toggleNavCollapsed: (key: string) => void;
   setWorkspacesView: (v: WorkspacesView) => void;
   setWorkspacesSort: (v: WorkspacesSort) => void;
   setAway: (away: { since: string; until: string } | null) => void;
@@ -102,6 +105,7 @@ export const useUi = create<UiState>()(
       recentSource: "mine",
       recentWorkspaces: [],
       expandedNav: [],
+      collapsedNav: [],
       workspacesView: "grid",
       workspacesSort: "name",
       away: null,
@@ -137,6 +141,8 @@ export const useUi = create<UiState>()(
       setWorkspacesSort: (workspacesSort) => set({ workspacesSort }),
       toggleNavSection: (key) =>
         set((s) => ({ expandedNav: s.expandedNav.includes(key) ? s.expandedNav.filter((k) => k !== key) : [...s.expandedNav, key] })),
+      toggleNavCollapsed: (key) =>
+        set((s) => ({ collapsedNav: s.collapsedNav.includes(key) ? s.collapsedNav.filter((k) => k !== key) : [...s.collapsedNav, key] })),
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
     }),
@@ -161,6 +167,7 @@ export const useUi = create<UiState>()(
         recentSource: s.recentSource,
         recentWorkspaces: s.recentWorkspaces,
         expandedNav: s.expandedNav,
+        collapsedNav: s.collapsedNav,
         workspacesView: s.workspacesView,
         workspacesSort: s.workspacesSort,
         hideSuggestions: s.hideSuggestions,
