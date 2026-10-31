@@ -1,5 +1,6 @@
 import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
+  HexStatus,
   AndroidConnectInput,
   AndroidConnectResult,
   AndroidDevice,
@@ -1047,6 +1048,8 @@ export const api = {
       return request<{ text: string }>("POST", "/api/voice/transcribe", form);
     },
     speak: (text: string) => request<Blob>("POST", "/api/voice/speak", { text }),
+    hex: () => get<HexStatus>("/api/voice/hex"),
+    prepareHex: (language?: string) => post<HexStatus>("/api/voice/hex/prepare", { language }),
   },
 
   calls: {

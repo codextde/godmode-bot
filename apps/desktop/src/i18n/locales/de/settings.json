@@ -1864,7 +1864,8 @@
       "title": "Sprache zu Text",
       "browserDescription": "Kostenlos, nutzt die Spracherkennung deines Systems.",
       "openaiDescription": "Transkription auf Whisper-Niveau von OpenAI – genauer, braucht einen OpenAI-API-Schlüssel.",
-      "providerLabel": "Anbieter für Sprache zu Text"
+      "providerLabel": "Anbieter für Sprache zu Text",
+      "hexDescription": "Hex transkribiert auf diesem Mac — kostenlos, privat und offline. Englisch und Deutsch."
     },
     "tts": {
       "title": "Text zu Sprache",
@@ -1894,6 +1895,34 @@
       "title": "API-Schlüssel liegen im Tresor",
       "both": "OpenAI- und ElevenLabs",
       "body": "Füge deinen {{providers}}-Schlüssel unter <link>Integrationen → API-Schlüssel</link> hinzu. Schlüssel werden verschlüsselt und nie wieder angezeigt."
+    },
+    "hex": {
+      "description": "Lokale Spracherkennung mit der Hex-App. Nichts verlässt diesen Computer.",
+      "refresh": "Erneut prüfen",
+      "app": "Hex-App",
+      "found": "Gefunden",
+      "version": "Version {{version}}",
+      "missingTitle": "Hex ist nicht installiert",
+      "missingBody": "Installiere Hex 3 oder neuer und prüfe dann erneut. Godmode startet Hex selbst im Hintergrund – du musst es nicht öffnen.",
+      "errorTitle": "Hex hat nicht funktioniert",
+      "model": "Sprachmodell",
+      "modelDescription": "Alle verstehen Englisch und Deutsch. Parakeet v3 ist schnell und genau.",
+      "size": "{{size}}",
+      "download": "Modell auf diesem Mac",
+      "ready": "Heruntergeladen und bereit.",
+      "notDownloaded": "Noch nicht heruntergeladen ({{size}}). Einmal herunterladen, um mit Hex zu diktieren.",
+      "downloadAction": "Herunterladen",
+      "downloadFailed": "Das Hex-Modell konnte nicht heruntergeladen werden",
+      "phase": {
+        "starting": "Hex wird gestartet…",
+        "downloading": "Wird heruntergeladen… {{percent}} %",
+        "verifying": "Download wird geprüft…",
+        "loading": "Modell wird geladen…"
+      },
+      "languageTitle": "Hex diktiert auf Englisch und Deutsch",
+      "languageBody": "Deine Sprache ist {{language}}. Hex hört dann auf Englisch – stell die Sprache oben auf en-US oder de-DE.",
+      "path": "Speicherort",
+      "pathDescription": "Leer lassen, um Hex unter Programme zu finden. Sonst die Hex-App oder ihr hex-Programm."
     }
   }
 }

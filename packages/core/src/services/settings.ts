@@ -87,6 +87,8 @@ export const DEFAULT_SETTINGS: Settings = {
     language: "en-US",
     openaiBaseUrl: "https://api.openai.com/v1",
     sttModel: "gpt-4o-mini-transcribe",
+    hexPath: "",
+    hexModel: "parakeet_v3",
     ttsModel: "gpt-4o-mini-tts",
     ttsVoice: "alloy",
     elevenlabsVoiceId: "21m00Tcm4TlvDq8ikWAM",

@@ -457,7 +457,10 @@ async function startRecorder(opts: DictationOptions): Promise<DictationHandle> {
     opts.onPhase?.("transcribing");
     try {
       const blob = new Blob(chunks, { type: mime || chunks[0]?.type || "audio/webm" });
-      const text = await transcribe(blob, ext, opts.settings?.language);
+      const text =
+        opts.settings?.sttProvider === "hex"
+          ? await transcribe(await toWav(blob), "wav", opts.settings.language)
+          : await transcribe(blob, ext, opts.settings?.language);
       opts.onFinal(text.trim());
     } catch (e) {
       opts.onError(e instanceof Error ? e : new Error(String(e)));
@@ -477,6 +480,41 @@ async function startRecorder(opts: DictationOptions): Promise<DictationHandle> {
       else release();
     },
   };
+}
+
+const WAV_RATE = 16_000;
+const MIN_WAV_SECONDS = 1.6;
+
+export async function toWav(blob: Blob): Promise<Blob> {
+  const ctx = new OfflineAudioContext(1, 1, WAV_RATE);
+  const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  const frames = Math.max(Math.ceil(decoded.duration * WAV_RATE), Math.ceil(MIN_WAV_SECONDS * WAV_RATE));
+  const render = new OfflineAudioContext(1, frames, WAV_RATE);
+  const source = render.createBufferSource();
+  source.buffer = decoded;
+  source.connect(render.destination);
+  source.start();
+  const samples = (await render.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const ascii = (at: number, text: string) => [...text].forEach((c, i) => out.setUint8(at + i, c.charCodeAt(0)));
+  ascii(0, "RIFF");
+  out.setUint32(4, 36 + samples.length * 2, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, WAV_RATE, true);
+  out.setUint32(28, WAV_RATE * 2, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  ascii(36, "data");
+  out.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]!));
+    out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Blob([out.buffer], { type: "audio/wav" });
 }
 
 /** Send recorded audio to the core for transcription (keeps the real container extension). */
