@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import type { LucideIcon } from "lucide-react";
 import { BookOpenText, Drama, FolderOpen, Globe, Radio, SquareTerminal, Code, Download } from "lucide-react";
 import type { McpTransport } from "@godmode/shared";
@@ -37,10 +38,10 @@ export function formatArgs(args: string[]): string {
   return args.map((a) => (a === "" || /[\s"'\\]/.test(a) ? `"${a.replace(/(["\\])/g, "\\$1")}"` : a)).join(" ");
 }
 
-export const TRANSPORTS: { id: McpTransport; label: string; hint: string; icon: LucideIcon }[] = [
-  { id: "stdio", label: "Local command", hint: "Runs a program on this machine (npx, uvx, docker…)", icon: SquareTerminal },
-  { id: "http", label: "HTTP", hint: "Streamable HTTP endpoint", icon: Globe },
-  { id: "sse", label: "SSE", hint: "Legacy server-sent events endpoint", icon: Radio },
+export const TRANSPORTS: { id: McpTransport; label: ParseKeys<"integrations">; hint: ParseKeys<"integrations">; icon: LucideIcon }[] = [
+  { id: "stdio", label: "transports.stdio.label", hint: "transports.stdio.hint", icon: SquareTerminal },
+  { id: "http", label: "transports.http.label", hint: "transports.http.hint", icon: Globe },
+  { id: "sse", label: "transports.sse.label", hint: "transports.sse.hint", icon: Radio },
 ];
 
 export function transportMeta(t: McpTransport) {
@@ -54,7 +55,7 @@ export const HEADER_KEY_PATTERN = /^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/;
 export interface McpPreset {
   id: string;
   name: string;
-  description: string;
+  description: ParseKeys<"integrations">;
   icon: LucideIcon;
   transport: McpTransport;
   command?: string;
@@ -63,34 +64,34 @@ export interface McpPreset {
   envKeys?: string[];
   headerKeys?: string[];
   /** Shown in the dialog after applying the preset. */
-  note?: string;
+  note?: ParseKeys<"integrations">;
 }
 
 export const MCP_PRESETS: McpPreset[] = [
   {
     id: "filesystem",
     name: "filesystem",
-    description: "Read and write files in folders you allow",
+    description: "presets.filesystem.description",
     icon: FolderOpen,
     transport: "stdio",
     command: "npx",
     args: ["-y", "@modelcontextprotocol/server-filesystem", "/absolute/path/to/folder"],
-    note: "Replace the last argument with the absolute folder path(s) agents may access.",
+    note: "presets.filesystem.note",
   },
   {
     id: "github",
     name: "github",
-    description: "GitHub's official remote MCP server",
+    description: "presets.github.description",
     icon: Code,
     transport: "http",
     url: "https://api.githubcopilot.com/mcp/",
     headerKeys: ["Authorization"],
-    note: "Set the Authorization header to “Bearer <personal access token>”.",
+    note: "presets.github.note",
   },
   {
     id: "playwright",
     name: "playwright",
-    description: "Microsoft Playwright browser automation",
+    description: "presets.playwright.description",
     icon: Drama,
     transport: "stdio",
     command: "npx",
@@ -99,7 +100,7 @@ export const MCP_PRESETS: McpPreset[] = [
   {
     id: "fetch",
     name: "fetch",
-    description: "Fetch web pages and convert them to markdown",
+    description: "presets.fetch.description",
     icon: Download,
     transport: "stdio",
     command: "uvx",
@@ -108,7 +109,7 @@ export const MCP_PRESETS: McpPreset[] = [
   {
     id: "context7",
     name: "context7",
-    description: "Up-to-date library docs for coding agents",
+    description: "presets.context7.description",
     icon: BookOpenText,
     transport: "http",
     url: "https://mcp.context7.com/mcp",

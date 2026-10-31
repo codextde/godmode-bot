@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, KeyRound } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { TotpAlgorithm, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { toastApiError } from "./vault-utils";
 
 /** Enter a 2FA secret by hand (the "Can't scan it?" key most sites show next to the QR code). */
 export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string | null; onCreated: (entry: TotpEntry) => void }) {
+  const { t } = useTranslation("vault");
   const qc = useQueryClient();
   const uid = useId();
   const [issuer, setIssuer] = useState("");
@@ -31,11 +33,11 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
 
   const normalized = normalizeBase32(secret);
   const secretError = !secret.trim()
-    ? "Paste the setup key shown next to the QR code."
+    ? t("totpManual.secretMissing")
     : !isValidBase32(secret)
-      ? "That doesn't look like a setup key (letters A–Z and digits 2–7, at least 16 characters)."
+      ? t("totpManual.secretInvalid")
       : null;
-  const issuerError = !issuer.trim() ? "Which service is this for?" : null;
+  const issuerError = !issuer.trim() ? t("totpManual.issuerMissing") : null;
 
   const create = useMutation({
     mutationFn: () =>
@@ -43,10 +45,10 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
     onSuccess: (entry) => {
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success(`${entry.issuer} added`, { description: "Your agents can now complete 2FA for this account." });
+      toast.success(t("totpManual.added", { name: entry.issuer }), { description: t("totpManual.addedDescription") });
       onCreated(entry);
     },
-    onError: (e) => toastApiError(e, "Could not add 2FA code", qc),
+    onError: (e) => toastApiError(e, t("totpManual.addFailed"), qc),
   });
 
   /** Pasting a full otpauth:// link fills every field at once. */
@@ -62,7 +64,7 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
         setPeriod(p.preview.period || 30);
         setSecret(s.replace(/%20/g, ""));
         if (p.preview.algorithm !== "SHA1" || p.preview.digits !== 6 || p.preview.period !== 30) setAdvancedOpen(true);
-        toast.success("Filled from the otpauth link");
+        toast.success(t("totpManual.filledFromLink"));
         return;
       }
     }
@@ -82,17 +84,17 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor={id("issuer")}>Service</Label>
+          <Label htmlFor={id("issuer")}>{t("totpForm.service")}</Label>
           <Input id={id("issuer")} value={issuer} onChange={(e) => setIssuer(e.target.value)} placeholder="GitHub" autoFocus aria-invalid={submitted && !!issuerError} />
           {submitted && issuerError && <p className="text-xs text-destructive">{issuerError}</p>}
         </div>
         <div className="space-y-2">
-          <Label htmlFor={id("account")}>Account</Label>
-          <Input id={id("account")} value={account} onChange={(e) => setAccount(e.target.value)} placeholder="you@example.com" autoComplete="off" />
+          <Label htmlFor={id("account")}>{t("totpForm.account")}</Label>
+          <Input id={id("account")} value={account} onChange={(e) => setAccount(e.target.value)} placeholder={t("totpManual.accountPlaceholder")} autoComplete="off" />
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor={id("secret")}>Setup key</Label>
+        <Label htmlFor={id("secret")}>{t("totpManual.setupKey")}</Label>
         <PasswordInput
           id={id("secret")}
           value={secret}
@@ -105,7 +107,7 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
           <p className="text-xs text-destructive">{secretError}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            On the site's 2FA setup page, choose “Can't scan the code?” to see the key. Spaces don't matter — you can also paste an <code className="font-mono">otpauth://</code> link.
+            <Trans t={t} i18nKey="totpManual.setupKeyHint" components={{ code: <code className="font-mono" /> }} />
           </p>
         )}
       </div>
@@ -113,58 +115,58 @@ export function TotpManualForm({ workspaceId, onCreated }: { workspaceId: string
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleTrigger asChild>
           <button type="button" className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-            Advanced
+            {t("totpManual.advanced")}
             <ChevronDown className={cn("size-3.5 transition-transform", advancedOpen && "rotate-180")} />
           </button>
         </CollapsibleTrigger>
         <CollapsibleContent className="pt-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
-              <Label htmlFor={id("alg")}>Algorithm</Label>
+              <Label htmlFor={id("alg")}>{t("totpForm.algorithm")}</Label>
               <Select value={algorithm} onValueChange={(v) => setAlgorithm(v as TotpAlgorithm)}>
                 <SelectTrigger id={id("alg")} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SHA1">SHA-1 (default)</SelectItem>
+                  <SelectItem value="SHA1">{t("totpManual.withDefault", { value: "SHA-1" })}</SelectItem>
                   <SelectItem value="SHA256">SHA-256</SelectItem>
                   <SelectItem value="SHA512">SHA-512</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={id("digits")}>Digits</Label>
+              <Label htmlFor={id("digits")}>{t("totpForm.digits")}</Label>
               <Select value={String(digits)} onValueChange={(v) => setDigits(Number(v))}>
                 <SelectTrigger id={id("digits")} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="6">6 (default)</SelectItem>
+                  <SelectItem value="6">{t("totpManual.withDefault", { value: "6" })}</SelectItem>
                   <SelectItem value="8">8</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor={id("period")}>Period</Label>
+              <Label htmlFor={id("period")}>{t("totpForm.period")}</Label>
               <Select value={String(period)} onValueChange={(v) => setPeriod(Number(v))}>
                 <SelectTrigger id={id("period")} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="30">30 s (default)</SelectItem>
+                  <SelectItem value="30">{t("totpManual.withDefault", { value: "30 s" })}</SelectItem>
                   <SelectItem value="60">60 s</SelectItem>
                   {period !== 30 && period !== 60 && <SelectItem value={String(period)}>{period} s</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">Only change these if the service says so — almost every site uses the defaults.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("totpManual.advancedHint")}</p>
         </CollapsibleContent>
       </Collapsible>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={create.isPending}>
-          {create.isPending && <Spinner />} Add 2FA code
+          {create.isPending && <Spinner />} {t("totpManual.submit")}
         </Button>
       </div>
     </form>

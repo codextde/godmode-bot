@@ -24,6 +24,7 @@ import { Archive, Check, ChevronsLeftRight, GitMerge, MessageSquareReply, Messag
 import type { Agent, Task, TaskStatus, Workspace } from "@godmode/shared";
 import { mergesOnApprove, reopenStatus } from "@godmode/shared";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Textarea } from "@/components/ui/textarea";
@@ -229,6 +230,7 @@ function Column({
   /** Offer to archive the whole column (finished work). */
   archiveAll?: boolean;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_ID}${status}` });
   const [adding, setAdding] = useState(false);
   const meta = STATUS_META[status];
@@ -236,7 +238,7 @@ function Column({
   // Tickets a restart cut off: continued together, one after the other.
   const interrupted = status === "blocked" ? tasks.filter((t) => t.blockedKind === "interrupted" && t.agentId) : [];
   const continueAll = () => {
-    toast(`Continuing ${interrupted.length} tasks`);
+    toast(t("board.continuing", { count: interrupted.length }));
     for (const t of interrupted) onMove(t, "todo", null);
   };
 
@@ -265,30 +267,30 @@ function Column({
           {interrupted.length >= 2 && !dragging && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Continue all ${interrupted.length} interrupted tasks`} onClick={continueAll}>
+                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={t("board.continueAll", { count: interrupted.length })} onClick={continueAll}>
                   <RotateCw className="size-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Continue all {interrupted.length} interrupted tasks</TooltipContent>
+              <TooltipContent side="bottom">{t("board.continueAll", { count: interrupted.length })}</TooltipContent>
             </Tooltip>
           )}
           {archiveAll && tasks.length > 0 && !dragging && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Archive all ${meta.label} tasks`} onClick={() => onArchive(tasks)}>
+                <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={t("board.archiveAllLabel", { label: meta.label })} onClick={() => onArchive(tasks)}>
                   <Archive className="size-3.5" />
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                Archive all {tasks.length} — off the board, never deleted
+                {t("board.archiveAll", { count: tasks.length })}
               </TooltipContent>
             </Tooltip>
           )}
-          <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Fold ${meta.label}`} onClick={onCollapse}>
+          <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={t("board.fold", { label: meta.label })} onClick={onCollapse}>
             <ChevronsLeftRight className="size-3.5" />
           </Button>
           {onQuickAdd && (
-            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={`Add a task to ${meta.label}`} onClick={() => setAdding(true)}>
+            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label={t("board.addTo", { label: meta.label })} onClick={() => setAdding(true)}>
               <Plus className="size-4" />
             </Button>
           )}
@@ -314,7 +316,7 @@ function Column({
         </SortableContext>
         {!tasks.length && !adding && (
           <p className={cn("m-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs text-muted-foreground/80", dragging && "border-foreground/20")}>
-            {dragging ? "Drop here" : meta.hint}
+            {dragging ? t("board.dropHere") : meta.hint}
           </p>
         )}
       </div>
@@ -325,7 +327,7 @@ function Column({
           onClick={() => setAdding(true)}
           className="mx-2 mb-2 flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] text-muted-foreground transition hover:bg-foreground/[0.05] hover:text-foreground"
         >
-          <Plus className="size-3.5" /> Add task
+          <Plus className="size-3.5" /> {t("board.addTask")}
         </button>
       )}
     </section>
@@ -356,7 +358,8 @@ function SortableCard({
     onOpen(task);
     setTimeout(() => focusReply(task.id), 350);
   };
-  const restart = task.blockedKind === "interrupted" ? "Continue" : task.blockedKind === "stopped" || task.blockedKind === "manual" ? "Start again" : "Try again";
+  const { t } = useTranslation(["tasks", "common"]);
+  const restart = task.blockedKind === "interrupted" ? t("actions.continue") : task.blockedKind === "stopped" || task.blockedKind === "manual" ? t("actions.startAgain") : t("common:actions.tryAgain");
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === "Enter") {
@@ -384,13 +387,13 @@ function SortableCard({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => onOpen(task)}>
-          <PanelRightOpen /> Open
+          <PanelRightOpen /> {t("common:actions.open")}
           <ContextMenuShortcut>↵</ContextMenuShortcut>
         </ContextMenuItem>
         {task.conversationId && (
           <ContextMenuItem asChild>
             <Link to={`/chat/${task.conversationId}`}>
-              <MessagesSquare /> Open chat
+              <MessagesSquare /> {t("actions.openChat")}
             </Link>
           </ContextMenuItem>
         )}
@@ -400,17 +403,17 @@ function SortableCard({
             <ContextMenuItem onSelect={() => onMove(task, "done", null, true)}>
               {mergesOnApprove(task) ? (
                 <>
-                  <GitMerge /> Approve &amp; merge
+                  <GitMerge /> {t("actions.approveMerge")}
                 </>
               ) : (
                 <>
-                  <Check /> Approve
+                  <Check /> {t("actions.approve")}
                 </>
               )}
             </ContextMenuItem>
             {task.agentId && task.conversationId && (
               <ContextMenuItem onSelect={reply}>
-                <MessageSquareReply /> Request changes…
+                <MessageSquareReply /> {t("actions.requestChangesMenu")}
               </ContextMenuItem>
             )}
           </>
@@ -420,7 +423,7 @@ function SortableCard({
             <ContextMenuSeparator />
             {task.blockedKind === "needs_input" ? (
               <ContextMenuItem onSelect={reply}>
-                <MessageSquareReply /> Answer…
+                <MessageSquareReply /> {t("actions.answerMenu")}
               </ContextMenuItem>
             ) : (
               <ContextMenuItem onSelect={() => onMove(task, "todo", null)}>
@@ -433,7 +436,7 @@ function SortableCard({
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => onMove(task, reopenStatus(task), null)}>
-              <RotateCcw /> Reopen
+              <RotateCcw /> {t("actions.reopen")}
             </ContextMenuItem>
           </>
         )}
@@ -441,16 +444,16 @@ function SortableCard({
           <>
             <ContextMenuSeparator />
             <ContextMenuItem onSelect={() => onMove(task, "todo", null)}>
-              <Play /> Start
+              <Play /> {t("actions.start")}
             </ContextMenuItem>
           </>
         )}
         <ContextMenuSeparator />
         <ContextMenuItem onSelect={() => onArchive([task])}>
-          <Archive /> Archive
+          <Archive /> {t("actions.archive")}
         </ContextMenuItem>
         <ContextMenuItem variant="destructive" onSelect={() => onDelete(task)}>
-          <Trash2 /> Delete…
+          <Trash2 /> {t("actions.deleteMenu")}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
@@ -458,6 +461,7 @@ function SortableCard({
 }
 
 function CollapsedColumn({ status, count, onExpand }: { status: TaskStatus; count: number; onExpand: () => void }) {
+  const { t } = useTranslation("tasks");
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_ID}${status}` });
   const meta = STATUS_META[status];
   return (
@@ -465,7 +469,7 @@ function CollapsedColumn({ status, count, onExpand }: { status: TaskStatus; coun
       ref={setNodeRef}
       type="button"
       onClick={onExpand}
-      aria-label={`Show ${meta.label} (${count})`}
+      aria-label={t("board.showColumn", { label: meta.label, count })}
       className={cn(
         "flex w-11 shrink-0 flex-col items-center gap-3 rounded-xl bg-foreground/[0.028] py-3.5 ring-1 ring-border/70 transition hover:bg-foreground/[0.05] dark:bg-foreground/[0.035]",
         isOver && "bg-foreground/[0.06] ring-foreground/20",
@@ -479,6 +483,7 @@ function CollapsedColumn({ status, count, onExpand }: { status: TaskStatus; coun
 }
 
 function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<unknown>; onClose: () => void }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -502,7 +507,7 @@ function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<
         rows={2}
         value={title}
         disabled={busy}
-        placeholder="What needs to be done?"
+        placeholder={t("board.quickAddPlaceholder")}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => !title.trim() && onClose()}
         onKeyDown={(e) => {
@@ -514,9 +519,9 @@ function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<
         className="min-h-0 resize-none border-0 p-1 text-[13.5px] shadow-none focus-visible:ring-0"
       />
       <div className="mt-1.5 flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">Enter to add · Esc to close</span>
+        <span className="text-[11px] text-muted-foreground">{t("board.quickAddHint")}</span>
         <Button size="sm" className="h-7" disabled={!title.trim() || busy} onMouseDown={(e) => e.preventDefault()} onClick={() => void submit()}>
-          Add
+          {t("common:actions.add")}
         </Button>
       </div>
     </div>

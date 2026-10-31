@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { AlarmClock, CircleStop, Hourglass, KanbanSquare, MessageCircleQuestion, Pause, Plus, Power, RefreshCw, Workflow } from "lucide-react";
 import type { Agent, Run, Task } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
@@ -21,6 +22,7 @@ import type { LiveRun } from "@/stores/live";
 import { useAgentLiveRuns, useToggleAgent } from "../agent-actions";
 import { cronToHuman, scheduleToHuman } from "../cron";
 import { lowerFirst, TRIGGER_TYPES } from "@/components/automations/trigger-meta";
+import { useLocale } from "@/i18n/language";
 
 const TICKET_ORDER: Task["status"][] = ["in_progress", "blocked", "in_review", "todo"];
 const SHOWN_TICKETS = 6;
@@ -30,6 +32,8 @@ const SHOWN_TICKETS = 6;
  * tickets on the board, the follow-ups it promised and its next automations. Built from data the app already keeps live.
  */
 export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => void }) {
+  const { t } = useTranslation("agents");
+  const { dateLocale } = useLocale();
   const live = useAgentLiveRuns(agent.id);
   // Standing-still runs come from the runs themselves: board and automation chats are archived and not in the chat list.
   const paused = useQuery({
@@ -44,7 +48,7 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
   const toggle = useToggleAgent();
 
   const tickets = (tasks.data ?? [])
-    .filter((t) => t.agentId === agent.id && TICKET_ORDER.includes(t.status))
+    .filter((task) => task.agentId === agent.id && TICKET_ORDER.includes(task.status))
     .sort((a, b) => TICKET_ORDER.indexOf(a.status) - TICKET_ORDER.indexOf(b.status) || a.position - b.position);
   const promised = (followups.data ?? []).filter((f) => f.agentId === agent.id).sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const next = (routines.data ?? []).filter((r) => r.enabled && r.nextRunAt).sort((a, b) => a.nextRunAt!.localeCompare(b.nextRunAt!));
@@ -52,9 +56,9 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
   const standing = (paused.data ?? []).filter((r) => !liveIds.has(r.id));
 
   const titleOf = (conversationId: string, prompt?: string) =>
-    (tasks.data ?? []).find((t) => t.conversationId === conversationId)?.title ??
+    (tasks.data ?? []).find((task) => task.conversationId === conversationId)?.title ??
     (chats.data ?? []).find((c) => c.id === conversationId)?.title ??
-    (prompt ? prompt.replace(/^\[[^\]]*\]\s*/, "").slice(0, 80) : "A chat");
+    (prompt ? prompt.replace(/^\[[^\]]*\]\s*/, "").slice(0, 80) : t("plate.aChat"));
 
   const loading = paused.isLoading || tasks.isLoading || followups.isLoading || routines.isLoading;
   const empty = !live.length && !standing.length && !tickets.length && !promised.length && !next.length;
@@ -62,7 +66,7 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
   return (
     <section aria-labelledby="plate-heading" className={cn("rounded-xl border bg-card p-4 shadow-card", live.some((r) => r.status === "running") && "glow-border")}>
       <h2 id="plate-heading" className="mb-3 text-sm font-medium tracking-[-0.01em]">
-        On its plate
+        {t("plate.title")}
       </h2>
       {loading && empty ? (
         <div className="space-y-2">
@@ -73,20 +77,20 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
       ) : empty ? (
         !agent.enabled ? (
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-            {agent.name} is switched off.
+            {t("plate.switchedOff", { name: agent.name })}
             <Button size="sm" variant="outline" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: agent.id, enabled: true })}>
-              {toggle.isPending ? <Spinner /> : <Power />} Switch on
+              {toggle.isPending ? <Spinner /> : <Power />} {t("plate.switchOn")}
             </Button>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <span className="mr-1">Nothing on {agent.name}'s plate right now.</span>
+            <span className="mr-1">{t("plate.nothing", { name: agent.name })}</span>
             <Button size="sm" variant="outline" onClick={onRunTask}>
-              Run task
+              {t("plate.runTask")}
             </Button>
             <Button size="sm" variant="ghost" asChild>
               <Link to={`/agents/${agent.id}/routines`}>
-                <Plus /> Add automation
+                <Plus /> {t("plate.addAutomation")}
               </Link>
             </Button>
           </div>
@@ -94,7 +98,7 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
       ) : (
         <div className="space-y-4">
           {(live.length > 0 || standing.length > 0) && (
-            <Group label="Now">
+            <Group label={t("plate.now")}>
               {live.map((r) => (
                 <LiveRow key={r.runId} run={r} title={titleOf(r.conversationId)} />
               ))}
@@ -104,26 +108,26 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
             </Group>
           )}
           {tickets.length > 0 && (
-            <Group label="Board tickets">
-              {tickets.slice(0, SHOWN_TICKETS).map((t) => (
-                <Row key={t.id} to={`/tasks?task=${t.id}`} icon={<KanbanSquare className="size-3.5" />}>
+            <Group label={t("plate.boardTickets")}>
+              {tickets.slice(0, SHOWN_TICKETS).map((task) => (
+                <Row key={task.id} to={`/tasks?task=${task.id}`} icon={<KanbanSquare className="size-3.5" />}>
                   <span className="min-w-0 flex-1 truncate">
-                    <span className="font-mono text-xs text-muted-foreground tabular-nums">#{t.number}</span> {t.title}
-                    {t.status === "blocked" && t.blockedReason && <span className="text-rose-600 dark:text-rose-400"> — {t.blockedReason}</span>}
+                    <span className="font-mono text-xs text-muted-foreground tabular-nums">#{task.number}</span> {task.title}
+                    {task.status === "blocked" && task.blockedReason && <span className="text-rose-600 dark:text-rose-400"> — {task.blockedReason}</span>}
                   </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{STATUS_META[t.status].label}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{STATUS_META[task.status].label}</span>
                 </Row>
               ))}
               {tickets.length > SHOWN_TICKETS && (
                 <Link to={`/tasks?agent=${agent.id}`} className="block px-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-                  {tickets.length - SHOWN_TICKETS} more on the board
+                  {t("plate.moreOnBoard", { count: tickets.length - SHOWN_TICKETS })}
                 </Link>
               )}
             </Group>
           )}
-          {tasks.isError && <RetryRow text="Couldn't load its board tickets." onRetry={() => tasks.refetch()} error={tasks.error} />}
+          {tasks.isError && <RetryRow text={t("plate.ticketsError")} onRetry={() => tasks.refetch()} error={tasks.error} />}
           {promised.length > 0 && (
-            <Group label="Follow-ups">
+            <Group label={t("plate.followups")}>
               {promised.map((f) => (
                 <Row key={f.conversationId} to={`/chat/${f.conversationId}`} icon={<AlarmClock className="size-3.5 text-brand-strong" />}>
                   <span className="min-w-0 flex-1 truncate" title={f.note}>
@@ -135,7 +139,7 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
             </Group>
           )}
           {next.length > 0 && (
-            <Group label={next.length > 1 ? "Next automations" : "Next automation"}>
+            <Group label={t("plate.nextAutomation", { count: next.length })}>
               {next.slice(0, 3).map((r) => {
                 const Icon = TRIGGER_TYPES[r.trigger.type]?.icon ?? Workflow;
                 return (
@@ -145,19 +149,19 @@ export function Plate({ agent, onRunTask }: { agent: Agent; onRunTask: () => voi
                       <span className="text-xs text-muted-foreground">
                         ·{" "}
                         {r.trigger.type === "condition"
-                          ? `checks ${lowerFirst(cronToHuman(r.cron))}`
+                          ? t("plate.checks", { schedule: lowerFirst(cronToHuman(r.cron)) })
                           : lowerFirst(
                               r.trigger.type === "schedule" ? scheduleToHuman(r.cron, r.trigger.startWindowMinutes, r.trigger.runsPerWindow) : scheduleToHuman(r.cron),
                             )}
                       </span>
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true, locale: dateLocale })}</span>
                   </Row>
                 );
               })}
               {next.length > 3 && (
                 <Link to={`/agents/${agent.id}/routines`} className="block px-2 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-                  and {next.length - 3} more
+                  {t("plate.andMore", { count: next.length - 3 })}
                 </Link>
               )}
             </Group>
@@ -189,6 +193,7 @@ function Row({ to, icon, children }: { to: string; icon: ReactNode; children: Re
 }
 
 function LiveRow({ run, title }: { run: LiveRun; title: string }) {
+  const { t } = useTranslation("agents");
   const working = run.status === "running";
   const now = useNow(working);
   const cancel = useCancelRun();
@@ -197,15 +202,15 @@ function LiveRow({ run, title }: { run: LiveRun; title: string }) {
       <span className="grid size-4 shrink-0 place-items-center">{working ? <LiveDot /> : <span className="size-1.5 rounded-full bg-muted-foreground/50" />}</span>
       <span className="min-w-0 flex-1">
         <span className={cn("block truncate", working ? "text-shimmer font-medium" : "text-muted-foreground")}>
-          {working ? (run.activity && run.activity !== "Starting…" ? run.activity : "Working…") : "Queued — waiting for a free slot"}
+          {working ? (run.activity && run.activity !== "Starting…" ? run.activity : t("plate.working")) : t("plate.queued")}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{title}</span>
       </span>
       {working && <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>}
       <Button size="xs" variant="ghost" asChild>
-        <Link to={`/chat/${run.conversationId}`}>Watch</Link>
+        <Link to={`/chat/${run.conversationId}`}>{t("plate.watch")}</Link>
       </Button>
-      <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={cancel.isPending} onClick={() => cancel.mutate(run.runId)} aria-label={`Stop: ${title}`}>
+      <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={cancel.isPending} onClick={() => cancel.mutate(run.runId)} aria-label={t("plate.stopLabel", { title })}>
         {cancel.isPending ? <Spinner /> : <CircleStop />}
       </Button>
     </li>
@@ -213,6 +218,7 @@ function LiveRow({ run, title }: { run: LiveRun; title: string }) {
 }
 
 function StandingRow({ run, title, waiting }: { run: Run; title: string; waiting: boolean }) {
+  const { t } = useTranslation("agents");
   const limit = run.pause?.reason === "limit";
   return (
     <Row
@@ -222,24 +228,27 @@ function StandingRow({ run, title, waiting }: { run: Run; title: string; waiting
       <span className="min-w-0 flex-1">
         <span className={cn("block truncate", waiting && "font-medium")}>
           {waiting
-            ? "Waiting for your answer"
+            ? t("plate.waitingForAnswer")
             : limit
-              ? `Waiting for Claude's ${run.pause?.limit ?? "usage limit"}${run.pause?.auto && run.pause.resumeAt ? ` · continues ${followupWhen(run.pause.resumeAt)}` : ""}`
-              : "Paused"}
+              ? run.pause?.auto && run.pause.resumeAt
+                ? t("plate.waitingForLimitResume", { limit: run.pause?.limit ?? t("plate.usageLimit"), when: followupWhen(run.pause.resumeAt) })
+                : t("plate.waitingForLimit", { limit: run.pause?.limit ?? t("plate.usageLimit") })
+              : t("plate.paused")}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{title}</span>
       </span>
-      <span className="shrink-0 text-xs text-muted-foreground">Open chat</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{t("plate.openChat")}</span>
     </Row>
   );
 }
 
 function RetryRow({ text, onRetry, error }: { text: string; onRetry: () => void; error: unknown }) {
+  const { t } = useTranslation("common");
   return (
     <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground" title={errorMessage(error)}>
       {text}
       <Button size="xs" variant="ghost" onClick={onRetry}>
-        <RefreshCw /> Try again
+        <RefreshCw /> {t("actions.tryAgain")}
       </Button>
     </div>
   );

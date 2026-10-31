@@ -1,0 +1,145 @@
+{
+  "list": {
+    "title": "Automationen",
+    "new": "Neue Automation",
+    "loadFailed": "Automationen konnten nicht geladen werden",
+    "noMatch": "Keine passenden Automationen",
+    "clearFilters": "Filter zurücksetzen",
+    "emptyTitle": "Noch keine Automationen",
+    "emptyBody": "Richte selbst eine ein — eine Posteingangs-Zusammenfassung am Morgen, ein Antwortentwurf für jede Kundenmail, ein Blick auf die Preise der Konkurrenz."
+  },
+  "status": {
+    "active": "Aktiv",
+    "paused": "Pausiert",
+    "failing": "Fehlerhaft"
+  },
+  "notify": {
+    "failures": "Wenn ein Lauf fehlschlägt",
+    "always": "Nach jedem Lauf",
+    "never": "Nie"
+  },
+  "automation": {
+    "title": "Automation",
+    "loading": "Automation wird geladen…",
+    "loadFailed": "Automation konnte nicht geladen werden",
+    "notFound": "Automation nicht gefunden",
+    "maybeDeleted": "Sie wurde vielleicht gelöscht.",
+    "deleteTitle": "„{{name}}“ löschen?",
+    "deleteMessageApp": "Godmode hört nicht mehr auf „{{trigger}}“ in {{app}}. Frühere Läufe und Unterhaltungen bleiben in deinem Verlauf.",
+    "deleteMessageWebhook": "Die Webhook-URL funktioniert dann nicht mehr. Frühere Läufe und Unterhaltungen bleiben in deinem Verlauf.",
+    "deleteMessage": "Sie läuft dann nicht mehr. Frühere Läufe und Unterhaltungen bleiben in deinem Verlauf.",
+    "delete": "Automation löschen",
+    "deleteFailed": "Automation konnte nicht gelöscht werden",
+    "openChat": "Chat öffnen",
+    "openChatFailed": "Chat konnte nicht geöffnet werden",
+    "openAgent": "{{name}} öffnen",
+    "openRunChat": "Öffnet den Chat dieses Laufs",
+    "runningNow": "Läuft gerade",
+    "fillOnly": "Secrets nur ausfüllen",
+    "triggerBroken": "Der Auslöser funktioniert nicht.",
+    "triggerSettingUp": "Auslöser wird eingerichtet…",
+    "trigger": "Auslöser",
+    "changeTriggerOnComputer": "Ändere den Auslöser in Godmode auf deinem Computer.",
+    "nextCheck": "Nächste Prüfung",
+    "nextRun": "Nächster Lauf",
+    "lastRun": "Letzter Lauf",
+    "onlyWhen": "Nur wenn…",
+    "condition": "Bedingung",
+    "when": "Wenn {{condition}}",
+    "lastCheck": "Letzte Prüfung",
+    "lastCheckAgo": "Letzte Prüfung · {{ago}}",
+    "nothingNoted": "Noch nichts festgehalten.",
+    "whatItDoes": "Was sie tut",
+    "enabled": "Aktiviert",
+    "enabledHint": "Pausierte Automationen behalten ihre Einstellungen, laufen aber nicht.",
+    "enabledHintEvents": "Pausierte Automationen behalten ihre Einstellungen und ignorieren neue Ereignisse.",
+    "tellMe": "Sag mir Bescheid",
+    "keepOneChat": "Ein Chat für alles",
+    "logins": "Logins",
+    "loginsFillOnly": "Werden ausgefüllt, Passwörter bleiben verborgen",
+    "loginsLikeAgent": "Wie beim Agenten",
+    "recentEvents": "Letzte Ereignisse",
+    "recentEventsCount": "Letzte Ereignisse · {{n}}",
+    "eventsFailed": "Ereignisse konnten nicht geladen werden",
+    "latestEvents_one": "Zeigt das letzte Ereignis.",
+    "latestEvents_other": "Zeigt die letzten {{count}} Ereignisse.",
+    "source": {
+      "schedule": "Zeitplan",
+      "app": "App-Ereignis",
+      "webhook": "Webhook",
+      "condition": "Bedingung erfüllt",
+      "manual": "Manuell"
+    },
+    "eventStatus": {
+      "pending": "Wartet",
+      "running": "Läuft",
+      "done": "Erledigt",
+      "failed": "Fehlgeschlagen",
+      "skipped": "Übersprungen"
+    },
+    "empty": {
+      "scheduleTitle": "Noch keine Läufe",
+      "scheduleNext": "Der erste Lauf ist {{when}}.",
+      "scheduleBody": "Läufe erscheinen hier, sobald der Zeitplan greift.",
+      "appTitle": "Warte auf das erste Ereignis",
+      "appBody": "Godmode hört auf „{{trigger}}“ in {{app}}.",
+      "conditionTitle": "Noch nicht erfüllt",
+      "conditionNext": "Die nächste Prüfung ist {{when}}.",
+      "conditionBody": "Sobald eine Prüfung die Bedingung erfüllt findet, erscheint sie hier.",
+      "webhookTitle": "Noch keine Aufrufe",
+      "webhookBody": "Ruf die Webhook-URL auf — oder sende ein Test-Ereignis — und es erscheint hier."
+    }
+  },
+  "edit": {
+    "titleNew": "Neue Automation",
+    "titleEdit": "Automation bearbeiten",
+    "loadFailed": "Automation konnte nicht geladen werden",
+    "createFailed": "Automation konnte nicht erstellt werden",
+    "updateFailed": "Automation konnte nicht aktualisiert werden",
+    "intro": "Wenn es passiert, legt der Agent los — auch wenn du nicht da bist.",
+    "whenRun": "Wann soll sie laufen?",
+    "when": "Wenn…",
+    "conditionPlaceholder": "ein Konkurrent den Preis seines Pro-Plans ändert (acme.com/pricing)",
+    "conditionHint": "In normaler Sprache. Der Agent prüft das nach dem Zeitplan unten und legt los, sobald es zutrifft.",
+    "checkedInZone": "Geprüft in der Zeitzone {{zone}}.",
+    "howOften": "Wie oft prüfen",
+    "onlyWhenOptional": "Nur wenn… (optional)",
+    "onlyWhen": "Nur wenn",
+    "filterHint": "In normaler Sprache. Unpassende Ereignisse werden übersprungen; leer lassen, um auf jedes Ereignis zu reagieren.",
+    "whatToDo": "Was soll sie tun?",
+    "keepOneChat": "Jeder Lauf setzt denselben Chat fort und erinnert sich so an frühere Läufe.",
+    "keepOneChatEvent": "Jedes Ereignis setzt denselben Chat fort. Aus: Jedes Ereignis bekommt einen eigenen Chat, nach ihm benannt.",
+    "problem": {
+      "agent": "Wähl einen Agenten",
+      "name": "Gib deiner Automation einen Namen",
+      "condition": "Beschreib, worauf geachtet werden soll",
+      "prompt": "Sag dem Agenten, was er jedes Mal tun soll",
+      "promptEvent": "Sag dem Agenten, was er mit jedem Ereignis tun soll"
+    },
+    "namePlaceholder": {
+      "schedule": "Wöchentlicher Zahlenbericht",
+      "app": "Rechnungsmails nach Drive",
+      "condition": "Preise der Konkurrenz im Blick",
+      "webhook": "Abgebrochene Bestellungen retten"
+    },
+    "promptPlaceholder": {
+      "schedule": "Sammle die Zahlen der letzten Woche aus Stripe und Google Analytics, schreib einen kurzen Bericht und schick ihn mir.",
+      "app": "Speichere das Rechnungs-PDF in Drive und trag Absender, Betrag und Fälligkeit in meine Rechnungstabelle ein. Die Details des Ereignisses werden mitgegeben.",
+      "condition": "Vergleiche ihre neuen Pläne mit unseren und aktualisiere die Preis-Battlecard in Notion. Was die Prüfung gefunden hat, wird mitgegeben.",
+      "webhook": "Prüfe, ob die Bestellung für ein Rückgewinnungsangebot infrage kommt, und entwirf eine freundliche Mail. Der Request-Body wird mitgegeben."
+    },
+    "filterPlaceholder": {
+      "app": "der Absender ist ein Kunde oder der Betreff erwähnt eine Rechnung",
+      "webhook": "die Bestellsumme liegt über 100 €"
+    },
+    "triggerHint": {
+      "schedule": "Jeden Morgen, jeden Montag, am 1.…",
+      "condition": "Regelmäßig geprüft, in normaler Sprache"
+    },
+    "notifyFooter": {
+      "never": "Keine Mitteilungen. Eine fehlerhafte Automation erscheint trotzdem unter „Braucht dich“. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
+      "always": "Eine Mitteilung nach jedem Lauf, mit dem, was sie getan hat. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext.",
+      "failures": "Ein Fehler wird einmal gemeldet, bis wieder ein Lauf klappt. Am Handy eingerichtet oder geändert, füllen ihre Läufe Logins aus, lesen aber nie Passwörter im Klartext."
+    }
+  }
+}

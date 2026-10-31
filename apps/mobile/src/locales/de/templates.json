@@ -1,0 +1,836 @@
+{
+  "roles": {
+    "ceo": {
+      "name": "CEO",
+      "role": "Geschäftsführung",
+      "description": "Setzt die Ziele, richtet jede Abteilung darauf aus und sagt dir jede Woche, was vorangeht und was dich braucht.",
+      "routine": "Wöchentlicher Firmenrückblick"
+    },
+    "coo": {
+      "name": "COO",
+      "role": "Leitung Betrieb",
+      "description": "Leitet Tagesgeschäft und Einkauf: Lieferanten, Bestand, Lieferungen, Prozesse, und nichts bleibt liegen."
+    },
+    "cfo": {
+      "name": "CFO",
+      "role": "Finanzleitung",
+      "description": "Hält die Finanzen in Ordnung: Rechnungen eingetrieben, Bücher abgestimmt, Liquidität und Ausgaben jeden Monat im Bericht.",
+      "routine": "Monatlicher Finanzbericht"
+    },
+    "cto": {
+      "name": "CTO",
+      "role": "Technische Leitung",
+      "description": "Verantwortet die Technik: macht aus Anfragen Entwicklungstickets, prüft den Code vor dem Release und hält Systeme und IT gesund."
+    },
+    "cmo": {
+      "name": "CMO",
+      "role": "Marketing-Leitung",
+      "description": "Entscheidet, was wo und für wen gesagt wird, verteilt die Arbeit im Team und berichtet, was wirklich Kunden gebracht hat.",
+      "routine": "Wöchentlicher Marketingplan"
+    },
+    "chief-of-staff": {
+      "name": "Chief of Staff",
+      "role": "Chief of Staff der Geschäftsführung",
+      "description": "Führt das Büro der Geschäftsführung: Ziele verfolgt, Entscheidungen festgehalten, Zusagen in allen Abteilungen nachgehalten.",
+      "routine": "Wochenrückblick"
+    },
+    "strategy-bizdev": {
+      "name": "Strategie & BizDev",
+      "role": "Business Development",
+      "description": "Findet heraus, wo das Unternehmen als Nächstes wachsen sollte: Märkte, Partnerschaften, neue Angebote und die Zahlen dazu."
+    },
+    "executive-assistant": {
+      "name": "Executive Assistant",
+      "role": "Assistenz der Geschäftsführung",
+      "description": "Führt deinen Kalender, bereitet deine Termine vor, bucht Reisen und erledigt die kleinen Aufgaben, die deinen Tag auffressen.",
+      "routine": "Vorbereitung für morgen"
+    },
+    "finance-department": {
+      "name": "Finanzen & Buchhaltung",
+      "role": "Finanzabteilung",
+      "description": "Die ganze Finanzabteilung in einem Agenten: Buchhaltung, Ein- und Ausgangsrechnungen, Lohn, Liquidität, Budgets und Steuern.",
+      "covers": [
+        "Buchhaltung",
+        "Kreditorenbuchhaltung",
+        "Debitorenbuchhaltung und Mahnwesen",
+        "Lohnabrechnung",
+        "Controlling",
+        "Planung und Budgets (FP&A)",
+        "Treasury und Liquidität",
+        "Steuervorbereitung",
+        "Investor Relations"
+      ],
+      "routine": "Monatsabschluss"
+    },
+    "bookkeeping-helper": {
+      "name": "Buchhaltungshilfe",
+      "role": "Buchhaltung",
+      "description": "Sortiert Belege und Rechnungen, gleicht Buchungen ab und bereitet die Daten für deine Steuerberatung vor."
+    },
+    "invoice-collector": {
+      "name": "Rechnungssammler",
+      "role": "Rechnungsbeschaffung",
+      "description": "Meldet sich jeden Monat in deinen Lieferantenportalen an (auch mit 2FA) und lädt alle neuen Rechnungen herunter.",
+      "routine": "Monatliche Rechnungsabholung"
+    },
+    "accounts-payable": {
+      "name": "Kreditorenbuchhaltung",
+      "role": "Sachbearbeitung Kreditoren",
+      "description": "Prüft jede Eingangsrechnung gegen Bestellung und Vereinbarung und bereitet die Zahlungsläufe zur Freigabe vor.",
+      "routine": "Zahlungslauf vorbereiten"
+    },
+    "accounts-receivable": {
+      "name": "Debitorenbuchhaltung",
+      "role": "Sachbearbeitung Debitoren",
+      "description": "Sorgt dafür, dass jeder Auftrag abgerechnet und jede Rechnung bezahlt wird: Zahlungen zuordnen, freundlich und bestimmt erinnern.",
+      "routine": "Forderungen prüfen"
+    },
+    "payroll-accountant": {
+      "name": "Lohnbuchhaltung",
+      "role": "Sachbearbeitung Lohn & Gehalt",
+      "description": "Bereitet die monatliche Lohnabrechnung vor: Änderungen gesammelt, Stunden und Abwesenheiten geprüft, Abrechnungen kontrolliert, Fristen eingehalten.",
+      "routine": "Lohnabrechnung vorbereiten"
+    },
+    "controller": {
+      "name": "Controller",
+      "role": "Controlling",
+      "description": "Vergleicht jeden Monat die Ist-Zahlen mit dem Plan, erklärt die Abweichungen und findet Kosten, die sich einsparen lassen.",
+      "routine": "Monatlicher Management-Report"
+    },
+    "fpa-analyst": {
+      "name": "FP&A-Analyst",
+      "role": "Finanzplanung & Analyse",
+      "description": "Erstellt das Budget, hält die Prognose aktuell und rechnet durch, was eine Einstellung, eine Preisänderung oder ein neuer Markt bewirken würde."
+    },
+    "treasury-manager": {
+      "name": "Treasury & Liquidität",
+      "role": "Treasury-Management",
+      "description": "Behält Kontostände und Geldflüsse im Blick und warnt Wochen, bevor das Geld knapp wird.",
+      "routine": "Wöchentliche Liquiditätsprognose"
+    },
+    "tax-specialist": {
+      "name": "Steuerspezialist",
+      "role": "Steuern",
+      "description": "Hält jede Steuerfrist ein, bereitet Umsatzsteuer- und andere Erklärungen für deine Steuerberatung vor und meldet Steuerrisiken früh.",
+      "routine": "Steuerfristen"
+    },
+    "investor-relations": {
+      "name": "Investor Relations",
+      "role": "Investor-Relations-Management",
+      "description": "Schreibt die Investoren-Updates, hält Datenraum und Cap Table aktuell und bereitet Unterlagen für Finanzierungsrunden vor."
+    },
+    "legal-department": {
+      "name": "Recht & Compliance",
+      "role": "Rechtsabteilung",
+      "description": "Die ganze Rechtsabteilung in einem Agenten: Verträge, Datenschutz, Compliance und Marken geregelt, bevor sie zum Problem werden.",
+      "covers": [
+        "Rechtsberatung",
+        "Vertragsmanagement",
+        "Datenschutz",
+        "Compliance",
+        "Marken und geistiges Eigentum"
+      ]
+    },
+    "general-counsel": {
+      "name": "General Counsel",
+      "role": "Leitung Recht",
+      "description": "Leitet den Rechtsbereich: wägt die rechtlichen Risiken des Geschäfts ab und sorgt dafür, dass Verträge, Datenschutz und Compliance abgedeckt sind."
+    },
+    "contract-manager": {
+      "name": "Vertragsmanager",
+      "role": "Vertragsmanagement",
+      "description": "Hält jeden Vertrag auffindbar, prüft neue gegen deine Standards und warnt, bevor Kündigungsfristen ablaufen.",
+      "routine": "Vertragsfristen"
+    },
+    "data-protection-officer": {
+      "name": "Datenschutzbeauftragter",
+      "role": "Datenschutz",
+      "description": "Hält den Umgang mit personenbezogenen Daten DSGVO-konform: Verarbeitungsverzeichnis, AV-Verträge, Datenschutzerklärung und Auskunftsanfragen."
+    },
+    "compliance-officer": {
+      "name": "Compliance Officer",
+      "role": "Compliance",
+      "description": "Weiß, welche Regeln für das Unternehmen gelten, hält die Pflichtenliste aktuell und bereitet Audits vor."
+    },
+    "ip-manager": {
+      "name": "Marken- & IP-Manager",
+      "role": "Marken- & IP-Management",
+      "description": "Schützt Marke und Ideen: Markenrecherchen, Portfolio und Verlängerungen, dazu ein wachsames Auge auf Nachahmer."
+    },
+    "people-department": {
+      "name": "Personal & HR",
+      "role": "Personalabteilung",
+      "description": "Die ganze Personalabteilung in einem Agenten: Recruiting, Verträge, Onboarding, Mitarbeitergespräche, Weiterbildung und Arbeitgebermarke.",
+      "covers": [
+        "Personalmanagement",
+        "Recruiting",
+        "HR Business Partnering",
+        "Personalverwaltung und Verträge",
+        "Weiterbildung und Entwicklung",
+        "Employer Branding"
+      ]
+    },
+    "head-of-people": {
+      "name": "Head of People",
+      "role": "Personalleitung",
+      "description": "Leitet HR: Einstellungsplan, Teamgesundheit, Mitarbeitergespräche und Richtlinien, damit das Unternehmen mit den richtigen Leuten wächst."
+    },
+    "recruiter": {
+      "name": "Recruiter",
+      "role": "Recruiting",
+      "description": "Schreibt Stellenanzeigen, prüft Bewerbungen nach deinen Kriterien und plant die Gespräche, die sich lohnen."
+    },
+    "hr-business-partner": {
+      "name": "HR Business Partner",
+      "role": "HR Business Partner",
+      "description": "Arbeitet mit den Teamleitungen an Struktur, Leistungsbeurteilungen, Feedback, Gehaltsbändern und schwierigen Gesprächen."
+    },
+    "hr-administrator": {
+      "name": "Personalverwaltung",
+      "role": "Personalsachbearbeitung",
+      "description": "Erledigt den HR-Papierkram: Verträge, Ein- und Austritte, Personalakten, Abwesenheiten und Zeugnisse."
+    },
+    "learning-development": {
+      "name": "Weiterbildung & Entwicklung",
+      "role": "Personalentwicklung",
+      "description": "Entwickelt Onboarding-Programme, Schulungspläne und einen Kompetenzüberblick, damit alle in ihrem Job besser werden."
+    },
+    "employer-branding": {
+      "name": "Employer Branding",
+      "role": "Employer-Branding-Management",
+      "description": "Macht das Unternehmen zu einem Ort, an dem Leute arbeiten wollen: Karriereseite, Team-Geschichten, Stellenanzeigen und Bewertungsportale."
+    },
+    "marketing-department": {
+      "name": "Marketing",
+      "role": "Marketingabteilung",
+      "description": "Die ganze Marketingabteilung in einem Agenten: Content, Social Media, SEO, E-Mail, Anzeigen, PR und die Zahlen dahinter.",
+      "covers": [
+        "Marketingstrategie",
+        "Content und Copywriting",
+        "Social Media und Community",
+        "SEO",
+        "E-Mail- und CRM-Marketing",
+        "bezahlte Anzeigen (Meta, Google, TikTok)",
+        "Influencer- und Affiliate-Marketing",
+        "PR",
+        "Marke",
+        "Kreation und Design",
+        "Marketing-Analyse",
+        "Conversion-Optimierung"
+      ],
+      "routine": "Wöchentlicher Marketing-Rückblick"
+    },
+    "head-of-growth": {
+      "name": "Head of Growth",
+      "role": "Growth-Leitung",
+      "description": "Findet den schnellsten Weg zu Wachstum: testet entlang des ganzen Funnels und setzt voll auf das, was die Zahlen bewegt.",
+      "routine": "Wöchentlicher Growth-Rückblick"
+    },
+    "performance-marketing-lead": {
+      "name": "Performance-Marketing-Lead",
+      "role": "Leitung Performance Marketing",
+      "description": "Steuert bezahlte Kundengewinnung auf Meta, Google und TikTok nach Zielkosten pro Kunde, mit strengen Regeln zum Stoppen und Skalieren.",
+      "routine": "Werbekonten prüfen"
+    },
+    "paid-social-manager": {
+      "name": "Paid-Social-Manager",
+      "role": "Paid-Social-Management",
+      "description": "Betreut Anzeigen auf Meta (Facebook, Instagram) und TikTok: Zielgruppen, Creative-Tests und Budgets, die sich auszahlen."
+    },
+    "google-ads-manager": {
+      "name": "Google-Ads-Manager",
+      "role": "Google-Ads-Management",
+      "description": "Betreut Google-Suche, Shopping, Performance Max und YouTube-Anzeigen: Keywords, Feeds und Gebote, die sich auszahlen."
+    },
+    "seo-specialist": {
+      "name": "SEO-Spezialist",
+      "role": "SEO",
+      "description": "Prüft deine Website jede Woche, findet Keywords, die sich lohnen, und macht daraus konkrete Fixes und Content-Briefings.",
+      "routine": "Wöchentlicher SEO-Rückblick"
+    },
+    "content-marketing-manager": {
+      "name": "Content-Marketing-Manager",
+      "role": "Content-Marketing",
+      "description": "Entscheidet, welcher Content für wen entsteht, führt den Redaktionsplan und bringt jedes Stück vor sein Publikum."
+    },
+    "content-writer": {
+      "name": "Content-Autor",
+      "role": "Redaktion",
+      "description": "Schreibt Blogartikel, Newsletter und Landingpage-Texte in deiner Tonalität, gut recherchiert und bereit zur Prüfung."
+    },
+    "copywriter": {
+      "name": "Copywriter",
+      "role": "Werbetext",
+      "description": "Schreibt die Worte, die verkaufen: Anzeigen, Hooks, Landingpages, Produktseiten und E-Mails, mit Varianten zum Testen."
+    },
+    "social-media-manager": {
+      "name": "Social-Media-Manager",
+      "role": "Social Media",
+      "description": "Plant, entwirft und terminiert Posts im Markenstil und behält das Engagement im Blick."
+    },
+    "community-manager": {
+      "name": "Community-Manager",
+      "role": "Community-Management",
+      "description": "Kümmert sich um die Menschen rund um die Marke: Kommentare, DMs, Gruppen und Foren beantwortet, Fans zu Botschaftern gemacht.",
+      "routine": "Community-Runde"
+    },
+    "email-marketing-manager": {
+      "name": "E-Mail- & CRM-Marketing",
+      "role": "E-Mail-Marketing",
+      "description": "Macht aus der E-Mail-Liste Umsatz: Newsletter, automatisierte Strecken, Segmente und Zustellbarkeit."
+    },
+    "marketing-automation": {
+      "name": "Marketing-Automation",
+      "role": "Marketing-Automation",
+      "description": "Verbindet die Marketing-Tools: Tracking, Formulare, Lead-Scoring, CRM-Workflows und die Integrationen dazwischen."
+    },
+    "influencer-affiliate-manager": {
+      "name": "Influencer- & Affiliate-Manager",
+      "role": "Influencer- & Affiliate-Marketing",
+      "description": "Findet Creator und Affiliates, die zur Marke passen, bereitet die Ansprache vor und sorgt dafür, dass sich das Partnerprogramm lohnt."
+    },
+    "pr-manager": {
+      "name": "PR & Kommunikation",
+      "role": "PR-Management",
+      "description": "Bringt das Unternehmen in Presse und Podcasts, schreibt seine Ankündigungen und hält seinen öffentlichen Auftritt einheitlich."
+    },
+    "brand-manager": {
+      "name": "Brand Manager",
+      "role": "Markenführung",
+      "description": "Hält die Marke klar und einheitlich: Positionierung, Tonalität, visuelle Regeln und wie alles aussieht, was das Unternehmen zeigt."
+    },
+    "creative-strategist": {
+      "name": "Creative Strategist",
+      "role": "Creative-Strategie",
+      "description": "Findet aus Kundenrecherche und Konkurrenzanzeigen die Angles und Hooks, mit denen Anzeigen funktionieren, und brieft die Kreation."
+    },
+    "graphic-designer": {
+      "name": "Grafikdesigner",
+      "role": "Grafikdesign",
+      "description": "Gestaltet Social-Grafiken, Anzeigenmotive, Banner und Präsentationen im Look der Marke, sofort einsatzbereit."
+    },
+    "video-editor": {
+      "name": "Video-Editor",
+      "role": "Videoschnitt & Motion Design",
+      "description": "Schneidet Kurzvideos, ergänzt Untertitel und Motion Graphics und macht aus langen Aufnahmen Clips."
+    },
+    "marketing-analyst": {
+      "name": "Marketing-Analyst",
+      "role": "Marketing-Analyse",
+      "description": "Sagt dir, welches Marketing wirkt: Kanalzahlen, Attribution, Kohorten und ein Wochenbericht ohne Vanity-Metriken.",
+      "routine": "Wöchentliche Marketingzahlen"
+    },
+    "cro-specialist": {
+      "name": "CRO-Spezialist",
+      "role": "Conversion-Optimierung",
+      "description": "Findet heraus, warum Besucher nicht kaufen oder sich nicht registrieren, und macht daraus getestete Änderungen an Seiten, Checkout und Angeboten."
+    },
+    "price-monitor": {
+      "name": "Preis- & Wettbewerbsmonitor",
+      "role": "Marktbeobachtung",
+      "description": "Verfolgt täglich Preise, Angebote und Produktänderungen der Konkurrenz und meldet, was sich bewegt hat.",
+      "routine": "Täglicher Preischeck"
+    },
+    "sales-department": {
+      "name": "Vertrieb",
+      "role": "Vertriebsabteilung",
+      "description": "Das ganze Vertriebsteam in einem Agenten: findet Leads, nimmt Kontakt auf, antwortet Interessenten, führt Deals und hält das CRM sauber.",
+      "covers": [
+        "Lead-Recherche",
+        "Erstansprache",
+        "Interessenten per E-Mail antworten",
+        "Deals zum Abschluss bringen",
+        "Key Accounts",
+        "Partnerschaften und Wiederverkäufer",
+        "technischer Pre-Sales",
+        "Sales Operations und CRM",
+        "Angebote und Auftragsabwicklung"
+      ],
+      "routine": "Vertriebsrunde"
+    },
+    "head-of-sales": {
+      "name": "Head of Sales",
+      "role": "Vertriebsleitung",
+      "description": "Hält die Pipeline voll: entscheidet, wer gesucht wird, prüft die Leads und bereitet deine Verkaufsgespräche vor.",
+      "routine": "Wöchentlicher Pipeline-Rückblick"
+    },
+    "lead-researcher": {
+      "name": "Lead-Rechercheur",
+      "role": "Lead-Recherche",
+      "description": "Findet und qualifiziert Interessenten, die zu deinem idealen Kundenprofil passen, mit geprüftem Kontext."
+    },
+    "sales-development-rep": {
+      "name": "Outreach-Agent",
+      "role": "Sales Development",
+      "description": "Entwirft persönliche Erstnachrichten und Follow-ups für deine qualifizierten Leads, die du freigibst und versendest."
+    },
+    "email-sales-agent": {
+      "name": "E-Mail-Vertriebsagent",
+      "role": "Vertriebsinnendienst",
+      "description": "Bearbeitet das Vertriebspostfach: antwortet Interessenten schnell, qualifiziert sie, fasst nach und bucht die Gespräche, die sich lohnen.",
+      "routine": "Vertriebspostfach"
+    },
+    "account-executive": {
+      "name": "Account Executive",
+      "role": "Account Executive",
+      "description": "Führt Deals vom Erstgespräch bis zur Unterschrift: Vorbereitung, Angebote, Einwände, Follow-ups und eine saubere Prognose."
+    },
+    "key-account-manager": {
+      "name": "Key Account Manager",
+      "role": "Key Account Management",
+      "description": "Betreut die größten Kunden: Account-Pläne, regelmäßige Abstimmungen, Verlängerungen und den nächsten Deal mit jedem.",
+      "routine": "Key Accounts prüfen"
+    },
+    "partnership-manager": {
+      "name": "Partner-Manager",
+      "role": "Partnermanagement",
+      "description": "Baut Partnerschaften auf, die für dich verkaufen: Wiederverkäufer, Empfehlungspartner, Integrationen und Co-Marketing."
+    },
+    "sales-engineer": {
+      "name": "Sales Engineer",
+      "role": "Sales Engineering",
+      "description": "Klärt die technische Seite von Deals: Bedarfsanalyse, Demos, Lösungskonzepte, Aufwandsschätzungen und Security-Fragebögen."
+    },
+    "revops": {
+      "name": "RevOps",
+      "role": "Revenue Operations",
+      "description": "Hält das CRM sauber und den Vertrieb messbar: Pipeline-Berichte, Prognose, Tools und Übergaben.",
+      "routine": "Wöchentlicher Pipeline-Bericht"
+    },
+    "sales-support": {
+      "name": "Vertriebsunterstützung",
+      "role": "Vertriebsinnendienst",
+      "description": "Erstellt Angebote und Auftragsbestätigungen, hält Preislisten aktuell und fasst bei offenen Angeboten nach."
+    },
+    "customer-department": {
+      "name": "Kundenservice",
+      "role": "Kundenservice-Abteilung",
+      "description": "Das ganze Kundenservice-Team in einem Agenten: Antworten, Onboarding, Hilfeartikel, Retouren und das, was Kunden immer wieder fragen.",
+      "covers": [
+        "Kundensupport",
+        "Customer Success",
+        "Hilfecenter und Textbausteine",
+        "Retouren und Reklamationen",
+        "Support-Qualität und Reporting"
+      ],
+      "routine": "Support-Warteschlange"
+    },
+    "head-of-customer": {
+      "name": "Support-Leitung",
+      "role": "Leitung Kundenservice",
+      "description": "Leitet den Kundenservice: Antwortzeiten, Antwortqualität und die Muster, die dem Unternehmen zeigen, was es beheben muss.",
+      "routine": "Wöchentlicher Support-Bericht"
+    },
+    "customer-support": {
+      "name": "Support-Agent",
+      "role": "Kundensupport",
+      "description": "Beantwortet Kundenfragen aus deinem Support-Postfach oder Helpdesk mit Entwürfen, die auf deinen Dokumenten und Richtlinien beruhen.",
+      "routine": "Support-Warteschlange"
+    },
+    "customer-success-manager": {
+      "name": "Customer Success Manager",
+      "role": "Customer Success",
+      "description": "Macht Kunden mit dem Produkt erfolgreich: Onboarding, Check-ins, Health Scores und gefährdete Accounts retten.",
+      "routine": "Kunden-Health-Check"
+    },
+    "knowledge-base-manager": {
+      "name": "Wissensdatenbank-Manager",
+      "role": "Hilfecenter-Management",
+      "description": "Macht aus den Fragen, die Kunden immer wieder stellen, klare Hilfeartikel und Textbausteine und hält sie aktuell."
+    },
+    "returns-manager": {
+      "name": "Retouren- & Reklamationsmanager",
+      "role": "Retouren- & Reklamationsmanagement",
+      "description": "Wickelt Retouren, beschädigte Ware und Reklamationen komplett ab, holt Kosten von Lieferanten zurück und findet die Ursachen."
+    },
+    "ecommerce-department": {
+      "name": "E-Commerce",
+      "role": "E-Commerce-Abteilung",
+      "description": "Das ganze Onlinegeschäft in einem Agenten: Shop, Marktplätze, Produkte, Preise, Beschaffung und Bestellungen.",
+      "covers": [
+        "E-Commerce-Management",
+        "Shop-Management (Shopify und andere)",
+        "Marktplätze (Amazon, eBay und andere)",
+        "Produktdaten und Feeds",
+        "Preisgestaltung",
+        "Produktbeschaffung",
+        "Bestellungen und Fulfillment"
+      ],
+      "routine": "Täglicher Shop-Check"
+    },
+    "head-of-ecommerce": {
+      "name": "E-Commerce-Manager",
+      "role": "E-Commerce-Leitung",
+      "description": "Verantwortet den Onlineumsatz: Shop, Marktplätze, Sortiment und Preise, jeden Tag nach Zahlen gesteuert.",
+      "routine": "Wöchentlicher E-Commerce-Rückblick"
+    },
+    "shop-manager": {
+      "name": "Shop-Manager",
+      "role": "Shop-Management",
+      "description": "Betreibt den Onlineshop (Shopify o. Ä.): Produkte, Kollektionen, Theme, Apps, Bestellungen und alles, was nicht funktioniert.",
+      "routine": "Shop-Check"
+    },
+    "marketplace-manager": {
+      "name": "Marktplatz-Manager",
+      "role": "Marktplatz-Management",
+      "description": "Verkauft auf Amazon, eBay, Kaufland, Etsy und anderen: Listings, Buy Box, Bewertungen und Kontogesundheit."
+    },
+    "product-data-manager": {
+      "name": "Produktdaten-Manager",
+      "role": "Produktdatenmanagement",
+      "description": "Hält Produktinformationen überall vollständig und einheitlich: Titel, Beschreibungen, Attribute, Bilder und Feeds."
+    },
+    "pricing-manager": {
+      "name": "Pricing-Manager",
+      "role": "Preismanagement",
+      "description": "Setzt Preise, die verkaufen und trotzdem Gewinn bringen: Margen, Konkurrenzpreise, Aktionen und Preistests."
+    },
+    "sourcing-agent": {
+      "name": "Sourcing-Agent",
+      "role": "Beschaffung",
+      "description": "Findet Gewinnerprodukte und verlässliche Lieferanten, vergleicht Einstandskosten und Margen und bereitet Muster und Bestellungen vor."
+    },
+    "product-department": {
+      "name": "Produkt & Design",
+      "role": "Produktabteilung",
+      "description": "Das ganze Produktteam in einem Agenten: was gebaut wird und warum, Designs, Nutzerforschung, Tickets und Doku.",
+      "covers": [
+        "Produktmanagement",
+        "Product Ownership und Backlog",
+        "UX- und UI-Design",
+        "Nutzerforschung",
+        "technische Redaktion und Doku"
+      ]
+    },
+    "head-of-product": {
+      "name": "Head of Product",
+      "role": "Produktleitung",
+      "description": "Entscheidet, was als Nächstes gebaut, gestaltet, getestet und erforscht wird, und macht aus Erkenntnissen klare, priorisierte nächste Schritte."
+    },
+    "product-manager": {
+      "name": "Produktmanager",
+      "role": "Produktmanagement",
+      "description": "Findet die Probleme, die sich zu lösen lohnen, schreibt die Specs, hält die Roadmap ehrlich und misst, was ausgeliefert wurde."
+    },
+    "product-owner": {
+      "name": "Product Owner",
+      "role": "Product Owner",
+      "description": "Hält das Backlog bereit: User Stories mit Akzeptanzkriterien, klare Prioritäten und jeder Sprint geplant."
+    },
+    "ux-ui-designer": {
+      "name": "UX/UI-Designer",
+      "role": "UX/UI-Design",
+      "description": "Gestaltet Abläufe und Oberflächen, die sich selbstverständlich anfühlen: Wireframes, klickbare Prototypen, UI und Designsystem."
+    },
+    "ux-researcher": {
+      "name": "UX-Researcher",
+      "role": "UX-Research",
+      "description": "Findet heraus, was Nutzer wirklich brauchen: Interviews, Usability-Tests, Auswertung von Bewertungen und klare Erkenntnisse."
+    },
+    "technical-writer": {
+      "name": "Technischer Redakteur",
+      "role": "Technische Redaktion",
+      "description": "Schreibt die Doku, die Leute wirklich lesen: Anleitungen, API-Referenzen, READMEs, Changelogs und Release Notes."
+    },
+    "research-analyst": {
+      "name": "Research-Analyst",
+      "role": "Recherche & Analyse",
+      "description": "Taucht im Web tief in jedes Thema ein und liefert einen belegten Bericht, mit dem du entscheiden kannst."
+    },
+    "engineering-department": {
+      "name": "Technik & IT",
+      "role": "Technikabteilung",
+      "description": "Die ganze Technikabteilung in einem Agenten: baut und repariert die Software, betreibt die Infrastruktur und hält die IT am Laufen.",
+      "covers": [
+        "Softwareentwicklung (Frontend, Backend, Fullstack)",
+        "Mobile Apps",
+        "DevOps und Cloud",
+        "QA und Testing",
+        "Sicherheit",
+        "IT-Administration",
+        "IT-Support",
+        "Automatisierung (n8n, Make, KI-Agenten)",
+        "ERP- und CRM-Administration"
+      ]
+    },
+    "software-engineer": {
+      "name": "Softwareentwickler",
+      "role": "Softwareentwicklung",
+      "description": "Setzt Features und Fixes aus Tickets in deinen Repositorys um, mit Tests, und übergibt einen Pull Request."
+    },
+    "mobile-developer": {
+      "name": "App-Entwickler",
+      "role": "Mobile-App-Entwicklung",
+      "description": "Baut und repariert die iOS- und Android-Apps, testet sie in Simulatoren und bereitet die Store-Releases vor."
+    },
+    "embedded-engineer": {
+      "name": "Embedded-/Firmware-Entwickler",
+      "role": "Firmware-Entwicklung",
+      "description": "Schreibt und debuggt Firmware für die Hardware: Treiber, Protokolle, Energieverwaltung und Over-the-Air-Updates."
+    },
+    "devops-engineer": {
+      "name": "DevOps-Engineer",
+      "role": "DevOps",
+      "description": "Hält Builds, Deployments und Server am Laufen: CI/CD, Infrastructure as Code, Monitoring, Backups und Cloud-Kosten."
+    },
+    "web-qa-tester": {
+      "name": "Web-App-Tester",
+      "role": "QA-Testing",
+      "description": "Testet deine Web-App täglich in einem echten Browser und meldet Regressionen mit Screenshots.",
+      "routine": "Täglicher Smoke-Test"
+    },
+    "code-reviewer": {
+      "name": "Code-Reviewer",
+      "role": "Code-Review",
+      "description": "Prüft offene Pull Requests auf Bugs, Sicherheitslücken und fehlende Tests, bevor sie gemergt werden.",
+      "routine": "Offene Pull Requests prüfen"
+    },
+    "security-engineer": {
+      "name": "Security-Engineer",
+      "role": "IT-Sicherheit",
+      "description": "Findet Sicherheitslücken vor den Angreifern: Abhängigkeits- und Code-Audits, Zugriffsprüfungen, Härtung und Notfallpläne.",
+      "routine": "Wöchentlicher Sicherheitscheck"
+    },
+    "uptime-watcher": {
+      "name": "Uptime-Wächter",
+      "role": "Site Reliability Engineering",
+      "description": "Prüft jeden Morgen deine Websites, APIs, Zertifikate und Domains und schlägt Alarm, bevor Kunden etwas merken.",
+      "routine": "Morgendlicher Health-Check"
+    },
+    "it-administrator": {
+      "name": "IT-Administrator",
+      "role": "IT-Administration",
+      "description": "Betreibt die IT des Unternehmens: Konten und Zugänge, Google Workspace oder Microsoft 365, Geräte, Lizenzen und Backups."
+    },
+    "it-helpdesk": {
+      "name": "IT-Helpdesk",
+      "role": "IT-Support",
+      "description": "Hilft dem Team bei IT-Problemen: Fehlersuche, Anleitungen, Zugriffsanfragen und ein wachsender Selbsthilfe-Leitfaden."
+    },
+    "data-engineer": {
+      "name": "Data Engineer",
+      "role": "Data Engineering",
+      "description": "Baut die Datenpipelines: holt Daten aus den Tools des Unternehmens an einen sauberen Ort, dem alle vertrauen können."
+    },
+    "ml-engineer": {
+      "name": "ML-/KI-Engineer",
+      "role": "ML-/KI-Entwicklung",
+      "description": "Baut die KI-Features: LLM-Integrationen, Prompts, Retrieval, Evaluierungen und Modelle, wo sie sich lohnen."
+    },
+    "automation-engineer": {
+      "name": "Automatisierungs-Engineer",
+      "role": "Automatisierung",
+      "description": "Automatisiert wiederkehrende Arbeit: Workflows in n8n oder Make, Skripte, Integrationen und neue KI-Agenten."
+    },
+    "erp-crm-admin": {
+      "name": "ERP- & CRM-Administrator",
+      "role": "ERP- & CRM-Administration",
+      "description": "Betreut ERP und CRM: Datenqualität, Felder, Workflows, Berechtigungen, Integrationen und Anfragen der Nutzer."
+    },
+    "data-department": {
+      "name": "Daten & Analyse",
+      "role": "Datenabteilung",
+      "description": "Das ganze Datenteam in einem Agenten: beantwortet Fragen mit Daten, baut Dashboards, erstellt Prognosen und analysiert Prozesse.",
+      "covers": [
+        "Datenanalyse",
+        "BI und Dashboards",
+        "Data Science und Prognosen",
+        "Business-Analyse"
+      ]
+    },
+    "head-of-data": {
+      "name": "Head of Data",
+      "role": "Leitung Daten",
+      "description": "Leitet Daten und Analyse: eine verlässliche Datenquelle, die Kennzahlen, die zählen, und Analysen, die Entscheidungen verändern."
+    },
+    "data-analyst": {
+      "name": "Datenanalyst",
+      "role": "Datenanalyse",
+      "description": "Beantwortet Geschäftsfragen mit Daten: Abfragen, Tabellen, Diagramme und eine klare Antwort ganz oben."
+    },
+    "bi-developer": {
+      "name": "BI-Entwickler",
+      "role": "BI-Entwicklung",
+      "description": "Baut die Dashboards und Berichte, mit denen das Unternehmen arbeitet, auf sauberen Datenmodellen mit klaren Definitionen."
+    },
+    "data-scientist": {
+      "name": "Data Scientist",
+      "role": "Data Science",
+      "description": "Prognostiziert, segmentiert und sagt voraus: Nachfrageprognosen, Kundensegmente, Experimentauswertungen und Modelle."
+    },
+    "business-analyst": {
+      "name": "Business-Analyst",
+      "role": "Business-Analyse",
+      "description": "Macht aus geschäftlichen Anforderungen klare Vorgaben: Prozessanalyse, Ist- und Soll-Zustand, Spezifikationen und Business Cases."
+    },
+    "operations-department": {
+      "name": "Betrieb & Einkauf",
+      "role": "Betriebsabteilung",
+      "description": "Die ganze Betriebsabteilung in einem Agenten: Einkauf, Bestand, Logistik, Qualität, Projekte, Prozesse und das Büro.",
+      "covers": [
+        "Betriebsführung",
+        "Beschaffung und Einkauf",
+        "Supply Chain und Bedarfsplanung",
+        "Lager und Logistik",
+        "Qualitätsmanagement und Zertifizierungen",
+        "Projektmanagement",
+        "Prozessmanagement und Organisation",
+        "Büromanagement"
+      ],
+      "routine": "Betriebs-Check"
+    },
+    "office-manager": {
+      "name": "Office-Manager",
+      "role": "Büromanagement",
+      "description": "Führt das Backoffice: Posteingang, Rechnungen, Büromaterial und Dienstleister, und sagt dir nur, was dich braucht."
+    },
+    "operations-manager": {
+      "name": "Operations-Manager",
+      "role": "Betriebsleitung",
+      "description": "Hält das Tagesgeschäft auf Kurs: KPIs im Blick, Engpässe beseitigt, Dienstleister koordiniert."
+    },
+    "procurement-manager": {
+      "name": "Einkaufsmanager",
+      "role": "Einkauf",
+      "description": "Kauft, was das Unternehmen braucht, zu den besten Gesamtkosten: Lieferanten verglichen, Angebote eingeholt, Konditionen verhandelt."
+    },
+    "supply-chain-planner": {
+      "name": "Supply-Chain-Planer",
+      "role": "Supply-Chain-Planung",
+      "description": "Prognostiziert die Nachfrage und plant den Bestand: Meldebestände, Bestellpläne und frühe Warnungen, bevor etwas ausgeht.",
+      "routine": "Bestands- und Nachbestellcheck"
+    },
+    "logistics-coordinator": {
+      "name": "Logistikkoordinator",
+      "role": "Logistik",
+      "description": "Bringt Ware dorthin, wo sie hinmuss: Sendungen, Spediteure, Tracking-Probleme, Lager- und Zollpapiere.",
+      "routine": "Sendungsprobleme"
+    },
+    "quality-manager": {
+      "name": "Qualitätsmanager",
+      "role": "Qualitätsmanagement",
+      "description": "Hält Qualität dokumentiert und nachweisbar: Verfahren, Zertifizierungen, Audits, Mängel und Korrekturmaßnahmen."
+    },
+    "project-manager": {
+      "name": "Projektmanager",
+      "role": "Projektmanagement",
+      "description": "Plant Projekte und hält sie auf Kurs: Meilensteine, Verantwortliche, Risiken und ein wöchentlicher Status, den alle verstehen.",
+      "routine": "Projektstatus"
+    },
+    "process-manager": {
+      "name": "Prozessmanager",
+      "role": "Prozessmanagement",
+      "description": "Bildet ab, wie die Arbeit wirklich läuft, beseitigt Verschwendung und gestaltet Prozesse und Rollen neu, damit das Unternehmen skaliert."
+    },
+    "inbox-triage": {
+      "name": "Posteingangs-Triage",
+      "role": "Posteingangsmanagement",
+      "description": "Sortiert dein E-Mail-Postfach, entwirft Antworten und zeigt dir, was dich wirklich braucht.",
+      "routine": "Posteingang sortieren"
+    },
+    "daily-briefing": {
+      "name": "Tagesbriefing",
+      "role": "Briefing-Autor",
+      "description": "Ein knackiges Morgenbriefing: Kalender, Prioritäten, News und alles, was Aufmerksamkeit braucht.",
+      "routine": "Morgenbriefing"
+    }
+  },
+  "teams": {
+    "all-in-one-company": {
+      "name": "All-in-one-Unternehmen",
+      "description": "Ein ganzes Unternehmen mit einem Agenten pro Abteilung, der jeden Job darin abdeckt: Zwölf Agenten erledigen alles."
+    },
+    "full-company": {
+      "name": "Komplettes Unternehmen",
+      "description": "Jede Abteilung mit ihrer Leitung und allen Spezialisten. Lass einfach die Plätze weg, die du nicht brauchst."
+    },
+    "startup": {
+      "name": "Software-Startup",
+      "description": "Ein CEO mit CTO, CMO und Vertriebsleitung, jeweils mit kleinem Team: bauen, bekannt machen, verkaufen."
+    },
+    "saas": {
+      "name": "SaaS-Unternehmen",
+      "description": "Produkt, Entwicklung, Growth, Vertrieb, Customer Success und Finanzen, jeweils mit eigenem Team."
+    },
+    "online-shop": {
+      "name": "Onlineshop",
+      "description": "Eine D2C-Marke oder ein Dropshipping-Store: Produkte beschafft und gelistet, Anzeigen und Creatives, die verkaufen, Kunden gut betreut."
+    },
+    "agency": {
+      "name": "Agentur",
+      "description": "Neugeschäft, Kundenprojekte und Backoffice: Interessenten gewonnen, Projekte pünktlich umgesetzt, Rechnungen bezahlt."
+    },
+    "hardware-company": {
+      "name": "Hardware-Unternehmen",
+      "description": "Geräte mit Firmware und App: Entwicklung, Produkt, Einkauf und Supply Chain, Qualität, Support und Finanzen."
+    },
+    "solo-founder": {
+      "name": "Gründerbüro",
+      "description": "Für alle, die allein ein Unternehmen führen: eine Assistenz, die deinen Tag, Posteingang, Rechnungen und Posts im Griff hat."
+    },
+    "executive-office": {
+      "name": "CEO-Büro",
+      "description": "Ein Chief of Staff, der Ziele und Zusagen auf Kurs hält, mit Assistenz, Strategie und Recherche."
+    },
+    "finance": {
+      "name": "Finanzen & Buchhaltung",
+      "description": "Buchhaltung, Ein- und Ausgangsrechnungen, Lohn, Controlling, Liquidität und Steuern, geführt von einem CFO."
+    },
+    "back-office": {
+      "name": "Backoffice",
+      "description": "Posteingang, Rechnungen und Buchhaltung jede Woche erledigt, mit einem Office-Manager, der alles zusammenhält."
+    },
+    "legal": {
+      "name": "Recht & Compliance",
+      "description": "Verträge, Datenschutz, Compliance und Marken abgedeckt, geführt von einem General Counsel."
+    },
+    "people": {
+      "name": "Personal & HR",
+      "description": "Recruiting, Personalverwaltung, Mitarbeitergespräche, Weiterbildung und Arbeitgebermarke, geführt von einer Personalleitung."
+    },
+    "marketing": {
+      "name": "Marketing",
+      "description": "Content, Social Media, SEO, E-Mail, PR und Marke, geführt von einem CMO."
+    },
+    "growth": {
+      "name": "Growth & Performance",
+      "description": "Bezahlte Anzeigen auf Meta, Google und TikTok, Creatives, Conversion und E-Mail, gemessen an dem, was sie einbringen."
+    },
+    "creative": {
+      "name": "Kreativstudio",
+      "description": "Angles und Briefings, Texte, Grafiken und Videos für Anzeigen und Social Media, immer im Markenstil."
+    },
+    "sales": {
+      "name": "Vertrieb",
+      "description": "Interessenten gefunden und angesprochen, Anfragen beantwortet, Deals zum Abschluss gebracht und das CRM sauber gehalten."
+    },
+    "customer": {
+      "name": "Kundenservice",
+      "description": "Support schnell beantwortet, neue Kunden begleitet und gehalten, Hilfeartikel und Retouren erledigt."
+    },
+    "ecommerce": {
+      "name": "E-Commerce",
+      "description": "Shop, Marktplätze, Produktdaten, Preise und Beschaffung, geführt von einem E-Commerce-Manager."
+    },
+    "product": {
+      "name": "Produkt & Design",
+      "description": "Was gebaut wird und warum, Designs, Research, Backlog, Doku und QA, geführt von einer Produktleitung."
+    },
+    "engineering": {
+      "name": "Entwicklung",
+      "description": "Tickets umgesetzt, jeder Pull Request geprüft und getestet, Deployments und Websites überwacht, geführt von einem CTO."
+    },
+    "it-security": {
+      "name": "IT & Sicherheit",
+      "description": "Konten, Geräte und Tools betreut, dem Team geholfen, Systeme abgesichert und wiederkehrende Arbeit automatisiert."
+    },
+    "data": {
+      "name": "Daten & Analyse",
+      "description": "Pipelines, Dashboards, Analysen und Prognosen, denen das Unternehmen vertrauen kann, geführt von einem Head of Data."
+    },
+    "operations": {
+      "name": "Betrieb & Einkauf",
+      "description": "Einkauf, Bestand, Logistik, Qualität, Projekte und Prozesse, geführt von einem COO."
+    }
+  }
+}

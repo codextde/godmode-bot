@@ -6,6 +6,7 @@ import { api, errorMessage } from "@/lib/api";
 import { cloudContext, isTauri } from "@/lib/core";
 import { DEFAULT_PALETTE, PALETTE_DEFS, isPalette, paletteCss } from "@/lib/palettes";
 import { qk } from "@/lib/queryKeys";
+import { t } from "@/i18n";
 
 export type Theme = Settings["general"]["theme"];
 type Resolved = "dark" | "light";
@@ -117,7 +118,7 @@ function applyTheme(mode: Resolved, palette: Palette, animate: boolean) {
 /** People the owner let into the cloud dashboard keep a theme of their own in their browser. */
 const personal = !!cloudContext && cloudContext.role !== "owner";
 
-function useSharedChoice<K extends "theme" | "palette">(
+export function useSharedChoice<K extends "theme" | "palette" | "language">(
   key: K,
   initial: () => General[K],
   valid: (v: unknown) => v is General[K],
@@ -156,7 +157,7 @@ function useSharedChoice<K extends "theme" | "palette">(
     onError: (err) => {
       saving.current--;
       const status = (err as { status?: number }).status;
-      if (status !== 403 && status !== 409) toast.error(`Could not save the ${key}`, { description: errorMessage(err) });
+      if (status !== 403 && status !== 409) toast.error(t(`system:sharedChoice.saveError.${key}`), { description: errorMessage(err) });
     },
   });
 

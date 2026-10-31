@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { Agent, ConversationWithMessages, Message, RetryMode, Run } from "@godmode/shared";
 import { needsFix, retryHelps, retryModeOf, runEndOf, type RunEnd } from "@godmode/shared";
@@ -13,6 +14,7 @@ import { ClaudeSignInSteps, maySignIn, useClaudeLogin } from "@/components/onboa
 import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { useRoutines, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { intlLocale, t } from "@/i18n";
 
 const PLATFORM_ORIGINS = new Set(["slack", "telegram", "teams"]);
 
@@ -20,15 +22,15 @@ const PLATFORM_ORIGINS = new Set(["slack", "telegram", "teams"]);
 function fixFor(end: RunEnd, agentName: string): { text: string; to?: string; label?: string } {
   switch (end.kind) {
     case "cli":
-      return { text: "Install Claude Code, then try again.", to: "/settings/system", label: "Open System" };
+      return { text: t("chat:turnEnd.fix.cli"), to: "/settings/system", label: t("chat:turnEnd.fix.openSystem") };
     case "vm":
       return end.off
-        ? { text: "Turn virtual machines on, or pick no VM below, then try again.", to: "/settings/vms", label: "VM settings" }
-        : { text: "The VM couldn't be started — check it, or pick no VM below, then try again.", to: "/vms", label: "Open VMs" };
+        ? { text: t("chat:turnEnd.fix.vmOff"), to: "/settings/vms", label: t("chat:turnEnd.fix.vmSettings") }
+        : { text: t("chat:turnEnd.fix.vmFailed"), to: "/vms", label: t("chat:turnEnd.fix.openVms") };
     case "folder":
-      return { text: `Pick another folder for ${agentName} below, then try again.` };
+      return { text: t("chat:turnEnd.fix.folder", { name: agentName }) };
     default:
-      return { text: "Pick another model below, then try again." };
+      return { text: t("chat:turnEnd.fix.model") };
   }
 }
 
@@ -38,6 +40,7 @@ function fixFor(end: RunEnd, agentName: string): { text: string; to?: string; la
  * the ticket, a chat on Slack or Telegram to where the person asked.
  */
 export function TurnEnd({ conversation, message, agent }: { conversation: ConversationWithMessages; message: Message; agent?: Agent }) {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const { data: run } = useQuery({
     queryKey: qk.run(message.runId!),
@@ -51,11 +54,11 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   const { data: routines = [] } = useRoutines();
   const chat = useStartAgentChat();
   const runRoutine = useRunRoutine();
-  const name = agent?.name ?? "The agent";
+  const name = agent?.name ?? t("turnEnd.theAgent");
   const compress = useMutation({
     mutationFn: () => api.conversations.send(conversation.id, { content: "/compress" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.conversation(conversation.id) }),
-    onError: (err) => toast.error("Couldn't compress the chat", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("turnEnd.compressError"), { description: errorMessage(err) }),
   });
   const retry = useMutation({
     mutationFn: () => api.conversations.retry(conversation.id, message.runId!),
@@ -75,25 +78,25 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
       // Something else moved the chat on meanwhile: show it.
       if (err instanceof ApiRequestError && err.code === "stale") void qc.invalidateQueries({ queryKey: qk.conversation(conversation.id) });
       if (isLicenseRequired(err)) return;
-      toast.error(err instanceof ApiRequestError && err.status === 409 ? "Can't pick this up" : "Couldn't pick this up", { description: errorMessage(err) });
+      toast.error(err instanceof ApiRequestError && err.status === 409 ? t("turnEnd.cantPickUp") : t("turnEnd.couldntPickUp"), { description: errorMessage(err) });
     },
   });
 
   if (!run || (run.status !== "failed" && run.status !== "cancelled")) return null;
   if (run.trigger === "dream" || run.trigger === "check" || PLATFORM_ORIGINS.has(conversation.origin)) return null;
   // The connection to Claude dropped, or Claude Code stopped with an error: Godmode continues by itself, a little later.
-  const retryAt = run.retryAt ? new Date(run.retryAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : null;
-  const why = run.retryCause === "error" ? "Claude Code stopped with an error" : "The connection to Claude dropped";
+  const retryAt = run.retryAt ? new Date(run.retryAt).toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" }) : null;
+  const why = run.retryCause === "error" ? t("turnEnd.errorStopped") : t("turnEnd.connectionDropped");
 
   // A ticket's chat (also one whose ticket is archived) goes on from the ticket.
   if (conversation.origin === "task") {
-    const task = tasks.find((t) => t.conversationId === conversation.id);
+    const task = tasks.find((x) => x.conversationId === conversation.id);
     return (
       <Row>
-        <span className="min-w-0">{task ? `This chat works on ticket #${task.number} — continue it from there.` : "This chat works on a ticket — continue it from there."}</span>
+        <span className="min-w-0">{task ? t("turnEnd.ticketN", { n: task.number }) : t("turnEnd.ticket")}</span>
         <Button size="xs" variant="outline" asChild>
           <Link to={task ? `/tasks?task=${task.id}` : "/tasks?view=archived"}>
-            Open ticket <ArrowUpRight />
+            {t("messages.openTicket")} <ArrowUpRight />
           </Link>
         </Button>
       </Row>
@@ -107,15 +110,15 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
     return (
       <Row>
         <span className="min-w-0">
-          {retryAt ? `${why} — “${routine.name}” goes on by itself around ${retryAt}.` : `This was “${routine.name}” — run the automation again.`}
+          {retryAt ? t("turnEnd.routineRetry", { why, routine: routine.name, time: retryAt }) : t("turnEnd.routineAgain", { routine: routine.name })}
         </span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" disabled={runRoutine.isPending || !routine.enabled} aria-busy={runRoutine.isPending} onClick={() => runRoutine.mutate(routine)}>
-            {runRoutine.isPending ? <Spinner /> : <Play className="fill-current" />} Run now
+            {runRoutine.isPending ? <Spinner /> : <Play className="fill-current" />} {t("turnEnd.runNow")}
           </Button>
           <Button size="xs" variant="ghost" asChild>
             <Link to={`/automations?edit=${routine.id}`}>
-              <Workflow /> Open automation
+              <Workflow /> {t("turnEnd.openAutomation")}
             </Link>
           </Button>
         </span>
@@ -127,13 +130,13 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   if (!retryHelps(end)) {
     return (
       <Row>
-        <span className="min-w-0">This chat is too long for {name} to go on. Compress it into a summary and carry on, or start fresh.</span>
+        <span className="min-w-0">{t("turnEnd.tooLong", { name })}</span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" disabled={compress.isPending} aria-busy={compress.isPending} onClick={() => compress.mutate()}>
-            {compress.isPending ? <Spinner /> : <FoldVertical />} Compress
+            {compress.isPending ? <Spinner /> : <FoldVertical />} {t("turnEnd.compress")}
           </Button>
           <Button size="xs" variant="ghost" disabled={chat.isPending} onClick={() => agent && chat.mutate(agent)}>
-            {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
+            {chat.isPending ? <Spinner /> : <MessageSquarePlus />} {t("header.newChat")}
           </Button>
         </span>
       </Row>
@@ -141,9 +144,9 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
   }
 
   const mode: RetryMode = retryModeOf(message.blocks) === "continue" && conversation.claudeSessionId ? "continue" : "again";
-  const label = mode === "continue" ? "Continue" : "Try again";
+  const label = mode === "continue" ? t("common:actions.continue") : t("common:actions.tryAgain");
   const action = (variant: "outline" | "ghost") => (
-    <Button size="xs" variant={variant} disabled={retry.isPending} aria-busy={retry.isPending} onClick={() => retry.mutate()} title={mode === "continue" ? `${name} picks up where it stopped` : `Sends the message to ${name} again`}>
+    <Button size="xs" variant={variant} disabled={retry.isPending} aria-busy={retry.isPending} onClick={() => retry.mutate()} title={mode === "continue" ? t("turnEnd.picksUp", { name }) : t("turnEnd.sendsAgain", { name })}>
       {retry.isPending ? <Spinner /> : mode === "continue" ? <Play className="fill-current" /> : <RotateCcw />} {label}
     </Button>
   );
@@ -176,12 +179,12 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
       {action(byHuman ? "ghost" : "outline")}
       <span className="min-w-0">
         {retryAt
-          ? `${why} — ${name} picks it up by itself around ${retryAt}.`
+          ? t("turnEnd.retryAuto", { why, name, time: retryAt })
           : mode === "continue"
           ? byHuman
-            ? `Changed your mind? ${name} picks up where you stopped it.`
-            : `${name} picks up where it stopped, in this chat.`
-          : `Sends your message to ${name} again.`}
+            ? t("turnEnd.changedMind", { name })
+            : t("turnEnd.picksUpHere", { name })
+          : t("turnEnd.sendsYourAgain", { name })}
       </span>
     </Row>
   );
@@ -192,6 +195,7 @@ export function TurnEnd({ conversation, message, agent }: { conversation: Conver
  * works again while the chat is open.
  */
 function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string; action: (variant: "outline" | "ghost") => ReactNode; onSignedIn: () => void }) {
+  const { t } = useTranslation(["chat", "common"]);
   const continued = useRef<string | null>(null);
   const goOn = useCallback(() => {
     if (continued.current === run.id) return;
@@ -215,11 +219,11 @@ function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string
   if (status?.signedOut?.apiKey)
     return (
       <Row>
-        <span className="min-w-0">Claude refused the Anthropic API key. Check it, then try again.</span>
+        <span className="min-w-0">{t("turnEnd.keyRefused")}</span>
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="outline" asChild>
             <Link to="/settings/api-keys">
-              API keys <ArrowUpRight />
+              {t("turnEnd.apiKeys")} <ArrowUpRight />
             </Link>
           </Button>
           {action("ghost")}
@@ -230,36 +234,36 @@ function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string
     return (
       <Row>
         <Spinner className="size-3.5" />
-        <span className="min-w-0">Signing in to Claude… {name} picks up where it stopped once you're done.</span>
+        <span className="min-w-0">{t("turnEnd.signingIn", { name })}</span>
       </Row>
     );
   if (state === "waiting")
     return (
       <div className="-mt-3 space-y-1.5 pl-11">
         <ClaudeSignInSteps login={login} className="max-w-xl" />
-        <p className="text-xs text-muted-foreground">{name} goes on by itself once you're signed in.</p>
+        <p className="text-xs text-muted-foreground">{t("turnEnd.goesOnSignedIn", { name })}</p>
       </div>
     );
   if (worksAgain)
     return (
       <Row>
         {action("outline")}
-        <span className="min-w-0">Claude works again. {name} picks up where it stopped.</span>
+        <span className="min-w-0">{t("turnEnd.worksAgain", { name })}</span>
       </Row>
     );
   if (!maySignIn)
     return (
       <Row>
-        <span className="min-w-0">Claude is signed out on this computer. Once its owner signs in again, try again.</span>
+        <span className="min-w-0">{t("turnEnd.signedOutOwner")}</span>
         {action("ghost")}
       </Row>
     );
   return (
     <Row>
-      <span className="min-w-0">{state === "failed" && status?.message ? `The sign-in didn't finish: ${status.message}` : `Claude is signed out. Sign in again and ${name} goes on by itself.`}</span>
+      <span className="min-w-0">{state === "failed" && status?.message ? t("turnEnd.signInFailed", { message: status.message }) : t("turnEnd.signedOut", { name })}</span>
       <span className="flex shrink-0 items-center gap-1">
         <Button size="xs" disabled={start.isPending} aria-busy={start.isPending} onClick={() => start.mutate()}>
-          {start.isPending ? <Spinner /> : <LogIn />} {state === "failed" ? "Try again" : "Sign in again"}
+          {start.isPending ? <Spinner /> : <LogIn />} {state === "failed" ? t("common:actions.tryAgain") : t("turnEnd.signInAgain")}
         </Button>
         {action("ghost")}
       </span>
@@ -268,8 +272,9 @@ function SignInAgain({ run, name, action, onSignedIn }: { run: Run; name: string
 }
 
 function Row({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("chat");
   return (
-    <div role="group" aria-label="This turn ended early" aria-live="polite" className="-mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pl-11 text-xs text-muted-foreground">
+    <div role="group" aria-label={t("turnEnd.endedEarly")} aria-live="polite" className="-mt-3 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 pl-11 text-xs text-muted-foreground">
       {children}
     </div>
   );

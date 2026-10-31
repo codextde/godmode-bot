@@ -1,0 +1,30 @@
+{
+  "away": {
+    "title": "While you were away · {{duration}}",
+    "close": "Close the summary",
+    "whoWorked": "Who worked",
+    "finished_one": "{{count}} run finished",
+    "finished_other": "{{count}} runs finished",
+    "problems_one": "{{count}} problem",
+    "problems_other": "{{count}} problems",
+    "delivered_one": "{{count}} ticket delivered",
+    "delivered_other": "{{count}} tickets delivered",
+    "agentRuns_one": "{{name}}: {{count}} run",
+    "agentRuns_other": "{{name}}: {{count}} runs"
+  },
+  "offers": {
+    "startError": "Couldn't start it",
+    "declineError": "Couldn't decline it",
+    "titleOwner": "{{name}} can take these off your plate",
+    "title": "Work your agent can take off your plate",
+    "startsWith": "Starts with:",
+    "offered": "Offered {{time}}",
+    "showAll": "Show all",
+    "decline": "No thanks",
+    "accept": "Do it"
+  },
+  "list": {
+    "continueError": "Couldn't continue",
+    "continue": "Continue"
+  }
+}

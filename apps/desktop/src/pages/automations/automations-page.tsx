@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { CircleAlert, Clock, Plus, Search, Workflow, Zap } from "lucide-react";
 import type { Routine, RoutineTriggerType } from "@godmode/shared";
 import { useAgents, useAllAgents, useAutomationEvents, useFollowups, useRoutines } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,8 @@ const COMPACT_FROM = 3;
 const isFailing = (r: Routine) => r.lastStatus === "failed" || r.triggerStatus.state === "error";
 
 export default function AutomationsPage() {
+  const { t } = useTranslation(["automations", "common"]);
+  const { dateLocale } = useLocale();
   const routinesQ = useRoutines();
   const eventsQ = useAutomationEvents(20);
   const followupsQ = useFollowups();
@@ -112,21 +116,21 @@ export default function AutomationsPage() {
   };
 
   const FILTERS: { id: Filter; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "active", label: "Active" },
-    { id: "paused", label: "Paused" },
-    { id: "failing", label: "Failing" },
+    { id: "all", label: t("common:words.all") },
+    { id: "active", label: t("page.filter.active") },
+    { id: "paused", label: t("page.filter.paused") },
+    { id: "failing", label: t("page.filter.failing") },
   ];
 
   return (
     <>
       <PageHeader
         icon={<Workflow />}
-        title="Automations"
-        description="Your agents get to work on a schedule, when something happens in your apps, when a condition is met, or when a webhook is called."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <Button onClick={openNew}>
-            <Plus /> New automation
+            <Plus /> {t("page.new")}
           </Button>
         }
       />
@@ -138,14 +142,14 @@ export default function AutomationsPage() {
           <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
             <SummaryTile
               icon={<Zap />}
-              label="Active"
+              label={t("page.filter.active")}
               value={`${counts.active}`}
-              hint={counts.paused ? `${counts.paused} paused` : "None paused"}
+              hint={counts.paused ? t("page.pausedCount", { count: counts.paused }) : t("page.nonePaused")}
             />
             <SummaryTile
               icon={<Clock />}
-              label="Next up"
-              value={next?.nextRunAt ? formatDistanceToNowStrict(new Date(next.nextRunAt), { addSuffix: true }) : "—"}
+              label={t("page.nextUp")}
+              value={next?.nextRunAt ? formatDistanceToNowStrict(new Date(next.nextRunAt), { addSuffix: true, locale: dateLocale }) : "—"}
               hint={
                 next ? (
                   <span className="flex min-w-0 items-center gap-1.5">
@@ -153,21 +157,21 @@ export default function AutomationsPage() {
                     <span className="truncate">{next.name}</span>
                   </span>
                 ) : (
-                  "Nothing scheduled"
+                  t("page.nothingScheduled")
                 )
               }
             />
             <SummaryTile
               icon={<Workflow />}
-              label="Last event"
-              value={lastEvent ? formatDistanceToNowStrict(new Date(lastEvent.createdAt), { addSuffix: true }) : "—"}
-              hint={lastEvent ? (lastEventRoutine?.name ?? lastEvent.title) : "No events yet"}
+              label={t("page.lastEvent")}
+              value={lastEvent ? formatDistanceToNowStrict(new Date(lastEvent.createdAt), { addSuffix: true, locale: dateLocale }) : "—"}
+              hint={lastEvent ? (lastEventRoutine?.name ?? lastEvent.title) : t("page.noEvents")}
             />
             <SummaryTile
               icon={<CircleAlert />}
-              label="Failing"
+              label={t("page.filter.failing")}
               value={`${counts.failing}`}
-              hint={counts.failing ? "A run or trigger failed — have a look" : "No failures"}
+              hint={counts.failing ? t("page.failingHint") : t("page.noFailures")}
               tone={counts.failing ? "error" : undefined}
               onClick={counts.failing ? () => setFilter("failing") : undefined}
             />
@@ -181,9 +185,9 @@ export default function AutomationsPage() {
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative w-full max-w-xs">
                 <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search automations…" aria-label="Search automations" className="pl-9" />
+                <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("page.searchPlaceholder")} aria-label={t("page.searchLabel")} className="pl-9" />
               </div>
-              <div role="tablist" aria-label="Filter by status" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+              <div role="tablist" aria-label={t("page.filterByStatus")} className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
                 {FILTERS.map((f) => (
                   <button
                     key={f.id}
@@ -205,11 +209,11 @@ export default function AutomationsPage() {
               </div>
               {agentsWithAutomations.length > 1 && (
                 <Select value={agentFilter} onValueChange={setAgentFilter}>
-                  <SelectTrigger className="w-48" aria-label="Filter by agent">
+                  <SelectTrigger className="w-48" aria-label={t("page.filterByAgent")}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent position="popper">
-                    <SelectItem value="all">All agents</SelectItem>
+                    <SelectItem value="all">{t("page.allAgents")}</SelectItem>
                     <SelectSeparator />
                     {agentsWithAutomations.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
@@ -221,8 +225,8 @@ export default function AutomationsPage() {
               )}
             </div>
 
-            <div role="tablist" aria-label="Filter by trigger" className="flex flex-wrap gap-1.5">
-              <TriggerChip active={triggerFilter === "all"} onClick={() => setTriggerFilter("all")} label="All triggers" />
+            <div role="tablist" aria-label={t("page.filterByTrigger")} className="flex flex-wrap gap-1.5">
+              <TriggerChip active={triggerFilter === "all"} onClick={() => setTriggerFilter("all")} label={t("page.allTriggers")} />
               {TRIGGER_ORDER.map((type) => {
                 const meta = TRIGGER_TYPES[type];
                 return (
@@ -249,32 +253,32 @@ export default function AutomationsPage() {
         ) : routinesQ.isError ? (
           <EmptyState
             icon={<Workflow />}
-            title="Couldn't load automations"
+            title={t("page.loadFailed")}
             description={errorMessage(routinesQ.error)}
             action={
               <Button variant="outline" onClick={() => routinesQ.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : scoped.length === 0 ? (
           <EmptyState
             icon={<Workflow />}
-            title="No automations yet"
-            description="Describe one above, or set it up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
+            title={t("page.emptyTitle")}
+            description={t("page.emptyDescription")}
             action={
               <Button variant="outline" onClick={openNew}>
-                <Plus /> New automation
+                <Plus /> {t("page.new")}
               </Button>
             }
           />
         ) : visible.length === 0 ? (
           <EmptyState
             icon={<Search />}
-            title="No automations match"
+            title={t("page.noMatch")}
             action={
               <Button variant="outline" onClick={clearFilters}>
-                Clear filters
+                {t("page.clearFilters")}
               </Button>
             }
           />

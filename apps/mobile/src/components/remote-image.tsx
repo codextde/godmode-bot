@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { StyleSheet, Text, View, type ImageStyle, type StyleProp } from "react-native";
 import { Icon } from "./icon";
 import { pictureBases } from "@/lib/api";
@@ -12,6 +13,7 @@ import { radius, space, type, useColors } from "@/lib/theme";
  */
 export function RemoteImage({ path, alt, style }: { path: string; alt: string; style?: StyleProp<ImageStyle> }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const connection = useSession((s) => s.connection);
   const [ratio, setRatio] = useState(4 / 3);
   const [attempt, setAttempt] = useState(0);
@@ -22,7 +24,7 @@ export function RemoteImage({ path, alt, style }: { path: string; alt: string; s
       <View style={[styles.missing, { backgroundColor: c.sunken }]}>
         <Icon name="photo" size={15} color={c.textFaint} />
         <Text style={[type.footnote, { color: c.textMuted, flexShrink: 1 }]} numberOfLines={1}>
-          {alt || "Picture"} couldn't load
+          {t("remoteImage.couldNotLoad", { name: alt || t("remoteImage.picture") })}
         </Text>
       </View>
     );

@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { useTranslation } from "react-i18next";
 import { Circle, CircleCheck, CircleDashed, ListTodo, Plus, Search, Timer } from "lucide-react";
 import type { Agent, HumanTask, HumanTaskLane } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskActive } from "@godmode/shared";
@@ -37,16 +38,11 @@ type ColumnId = HumanTaskLane | "closed";
 type Columns = Record<ColumnId, string[]>;
 
 const COLUMN_ID = "col:";
-const COLUMNS: { id: ColumnId; label: string; hint: string; icon: ReactNode }[] = [
-  {
-    id: "backlog",
-    label: "Backlog",
-    hint: "Park what can wait. It stays open for its agent but doesn't count as waiting for you.",
-    icon: <CircleDashed className="size-3.5 text-muted-foreground/70" />,
-  },
-  { id: "open", label: "To do", hint: "What your agents need from you shows up here: things to do, questions, decisions.", icon: <Circle className="size-3.5 text-muted-foreground" /> },
-  { id: "doing", label: "Doing", hint: "Drag a task here while you work on it.", icon: <Timer className="size-3.5 text-brand-strong" /> },
-  { id: "closed", label: "Done", hint: "Drop a task here to close or answer it — its agent picks up from there.", icon: <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> },
+const COLUMNS: { id: ColumnId; icon: ReactNode }[] = [
+  { id: "backlog", icon: <CircleDashed className="size-3.5 text-muted-foreground/70" /> },
+  { id: "open", icon: <Circle className="size-3.5 text-muted-foreground" /> },
+  { id: "doing", icon: <Timer className="size-3.5 text-brand-strong" /> },
+  { id: "closed", icon: <CircleCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> },
 ];
 
 function columnOfTask(t: HumanTask): ColumnId {
@@ -79,6 +75,7 @@ export function HumanTaskBoard({
   onAdding: (to: "backlog" | "open" | null) => void;
   onOpen: (t: HumanTask, focusNote?: boolean) => void;
 }) {
+  const { t } = useTranslation(["humanTasks", "common"]);
   const qc = useQueryClient();
   const tasksQ = useHumanTasks();
   const { data = [] } = tasksQ;
@@ -97,7 +94,7 @@ export function HumanTaskBoard({
   const create = useMutation({
     mutationFn: ({ title, status }: { title: string; status: "backlog" | "open" }) => api.humanTasks.create({ title, status }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.humanTasks }),
-    onError: (e) => toastApiError(e, "Couldn't add the task", qc),
+    onError: (e) => toastApiError(e, t("board.addError"), qc),
   });
 
   return (
@@ -105,13 +102,13 @@ export function HumanTaskBoard({
       <div className="flex flex-wrap items-center gap-2 px-5 pb-4 @2xl:px-8">
         <div className="relative w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tasks" className="h-8 pl-8 text-[13px]" aria-label="Search tasks" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("board.search")} className="h-8 pl-8 text-[13px]" aria-label={t("board.search")} />
         </div>
         {tasksQ.isError && tasksQ.data && (
           <p className="text-xs text-muted-foreground" role="status">
-            Couldn't refresh the list ·{" "}
+            {t("board.refreshError")} ·{" "}
             <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => tasksQ.refetch()}>
-              Try again
+              {t("common:actions.tryAgain")}
             </button>
           </p>
         )}
@@ -121,11 +118,11 @@ export function HumanTaskBoard({
         <div className="px-5 @2xl:px-8">
           <EmptyState
             icon={<ListTodo />}
-            title="Couldn't load your tasks"
+            title={t("board.loadError")}
             description={errorMessage(tasksQ.error)}
             action={
               <Button variant="outline" onClick={() => tasksQ.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -134,11 +131,11 @@ export function HumanTaskBoard({
         <div className="px-5 @2xl:px-8">
           <EmptyState
             art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} follow />}
-            title="Nothing waits for you"
-            description="When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself."
+            title={t("board.emptyTitle")}
+            description={t("board.emptyDescription")}
             action={
               <Button variant="outline" onClick={() => onAdding("open")}>
-                <Plus /> Add one of your own
+                <Plus /> {t("board.addOwn")}
               </Button>
             }
           />
@@ -287,13 +284,14 @@ function Column({
   onAdding?: (on: boolean) => void;
   onAdd: (title: string) => Promise<unknown>;
 }) {
+  const { t } = useTranslation("humanTasks");
   const { setNodeRef, isOver } = useDroppable({ id: `${COLUMN_ID}${column.id}` });
   const tasks = ids.map((id) => byId.get(id)).filter((t): t is HumanTask => !!t);
   const closed = column.id === "closed";
   const loading = placeholders !== undefined;
   return (
     <section
-      aria-label={column.label}
+      aria-label={t(`columns.${column.id}.label`)}
       className={cn(
         "flex max-h-full w-[304px] shrink-0 flex-col rounded-xl bg-foreground/[0.028] ring-1 ring-border/70 transition-colors dark:bg-foreground/[0.035]",
         isOver && "bg-foreground/[0.05] ring-foreground/20",
@@ -305,16 +303,16 @@ function Column({
           <TooltipTrigger asChild>
             <h2 className="flex min-w-0 cursor-default items-center gap-2 text-[13px] font-medium">
               {column.icon}
-              <span className="truncate">{column.label}</span>
+              <span className="truncate">{t(`columns.${column.id}.label`)}</span>
               {!loading && <span className="font-mono text-[11.5px] font-normal text-muted-foreground tabular-nums">{tasks.length}</span>}
             </h2>
           </TooltipTrigger>
           <TooltipContent side="bottom" className="max-w-60">
-            {column.hint}
+            {t(`columns.${column.id}.hint`)}
           </TooltipContent>
         </Tooltip>
         {onAdding && (
-          <Button variant="ghost" size="icon" className="ml-auto size-7 text-muted-foreground opacity-70 group-hover/col:opacity-100" aria-label="Add a task" onClick={() => onAdding(true)}>
+          <Button variant="ghost" size="icon" className="ml-auto size-7 text-muted-foreground opacity-70 group-hover/col:opacity-100" aria-label={t("board.addTask")} onClick={() => onAdding(true)}>
             <Plus className="size-4" />
           </Button>
         )}
@@ -334,7 +332,7 @@ function Column({
         {loading && Array.from({ length: placeholders }, (_, i) => <CardSkeleton key={i} />)}
         {!loading && !tasks.length && !adding && (
           <p className={cn("m-1 rounded-lg border border-dashed px-3 py-5 text-center text-xs text-muted-foreground/80", dragging && "border-foreground/20")}>
-            {dragging ? (closed ? "Drop to mark it done" : "Drop here") : column.hint}
+            {dragging ? (closed ? t("board.dropDone") : t("board.dropHere")) : t(`columns.${column.id}.hint`)}
           </p>
         )}
       </div>
@@ -395,6 +393,7 @@ function StaticCard({ task, agent, onOpen }: { task: HumanTask; agent?: Agent; o
 }
 
 function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<unknown>; onClose: () => void }) {
+  const { t } = useTranslation(["humanTasks", "common"]);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
@@ -418,7 +417,7 @@ function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<
         rows={2}
         value={title}
         disabled={busy}
-        placeholder="What do you need to do?"
+        placeholder={t("board.quickAddPlaceholder")}
         onChange={(e) => setTitle(e.target.value)}
         onBlur={() => !title.trim() && onClose()}
         onKeyDown={(e) => {
@@ -430,9 +429,9 @@ function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<
         className="min-h-0 resize-none border-0 p-1 text-[13.5px] shadow-none focus-visible:ring-0"
       />
       <div className="mt-1.5 flex items-center justify-between">
-        <span className="text-[11px] text-muted-foreground">Enter to add · Esc to close</span>
+        <span className="text-[11px] text-muted-foreground">{t("board.quickAddHint")}</span>
         <Button size="sm" className="h-7" disabled={!title.trim() || busy} onMouseDown={(e) => e.preventDefault()} onClick={() => void submit()}>
-          Add
+          {t("common:actions.add")}
         </Button>
       </div>
     </div>

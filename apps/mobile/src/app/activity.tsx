@@ -4,6 +4,7 @@ import { isToday } from "date-fns";
 import { Stack } from "expo-router";
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { RefreshControl, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useShallow } from "zustand/react/shallow";
 import type { Run, RunStatus } from "@godmode/shared";
 import { FilterChips } from "@/components/filter-chips";
@@ -25,15 +26,7 @@ const LIMIT = 100;
 type Filter = "all" | RunStatus;
 type Item = { kind: "header"; key: string; title: string } | { kind: "run"; key: string; run: Run; divided: boolean };
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "running", label: "Running" },
-  { id: "paused", label: "Paused" },
-  { id: "succeeded", label: "Succeeded" },
-  { id: "failed", label: "Failed" },
-  { id: "cancelled", label: "Cancelled" },
-  { id: "queued", label: "Queued" },
-];
+const FILTERS: Filter[] = ["all", "running", "paused", "succeeded", "failed", "cancelled", "queued"];
 
 interface Stats {
   working: number;
@@ -47,6 +40,7 @@ const startOf = (run: Run) => run.startedAt ?? run.createdAt;
 
 /** The latest runs of the picked workspace's agents (or project's), with the ones working right now, by day. */
 export default function Activity() {
+  const { t } = useTranslation("chat");
   const [filter, setFilter] = useState<Filter>("all");
   const { id: workspaceId, projectId } = useWorkspace();
   const all = useQuery({ queryKey: [...qk.recentRuns, "all"], queryFn: () => api.runs.list({ limit: LIMIT }) });
@@ -118,7 +112,7 @@ export default function Activity() {
 
   return (
     <>
-      <Stack.Title>Activity</Stack.Title>
+      <Stack.Title>{t("activity.title")}</Stack.Title>
       <FlashList
         data={loading ? [] : items}
         keyExtractor={(item) => item.key}
@@ -134,11 +128,11 @@ export default function Activity() {
               <SkeletonRows count={8} avatar={40} />
             </View>
           ) : list.isError ? (
-            <ErrorState title="Couldn't load activity" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("activity.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : filter !== "all" ? (
-            <EmptyState icon="pulse" title="No runs match these filters" action={<Button title="Clear filters" variant="secondary" onPress={() => setFilter("all")} />} />
+            <EmptyState icon="pulse" title={t("activity.noMatch")} action={<Button title={t("activity.clearFilters")} variant="secondary" onPress={() => setFilter("all")} />} />
           ) : (
-            <EmptyState icon="pulse" title="No activity yet" body="When your agents chat, run automations or delegate work, every run shows up here — live." />
+            <EmptyState icon="pulse" title={t("activity.emptyTitle")} body={t("activity.emptyBody")} />
           )
         }
       />
@@ -157,15 +151,17 @@ function DayTitle({ title }: { title: string }) {
 /** Three numbers of the fetched runs, then what to show of them. */
 const ActivityHeader = memo(function ActivityHeader({ stats, filter, onFilter }: { stats: Stats; filter: Filter; onFilter: (filter: Filter) => void }) {
   const c = useColors();
+  const { t } = useTranslation("chat");
+  const filters = FILTERS.map((id) => ({ id, label: t(`activity.filters.${id}`) }));
   return (
     <View style={styles.header}>
       <WorkspaceChip />
       <Row style={{ gap: space.sm }}>
-        <Stat label="Working now" value={stats.working} mark={<LiveDot size={7} live={stats.working > 0} />} />
-        <Stat label="Done today" value={stats.done} mark={<Icon name="check" size={11} color={c.textMuted} weight="semibold" />} />
-        <Stat label="Failed today" value={stats.failed} mark={<Icon name="warning" size={11} color={stats.failed > 0 ? c.danger : c.textFaint} />} />
+        <Stat label={t("activity.workingNow")} value={stats.working} mark={<LiveDot size={7} live={stats.working > 0} />} />
+        <Stat label={t("activity.doneToday")} value={stats.done} mark={<Icon name="check" size={11} color={c.textMuted} weight="semibold" />} />
+        <Stat label={t("activity.failedToday")} value={stats.failed} mark={<Icon name="warning" size={11} color={stats.failed > 0 ? c.danger : c.textFaint} />} />
       </Row>
-      <FilterChips filters={FILTERS} value={filter} onChange={onFilter} bleed={space.lg} />
+      <FilterChips filters={filters} value={filter} onChange={onFilter} bleed={space.lg} />
     </View>
   );
 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router";
 import { AudioLines, KeyRound, Languages, Mic, Play, Square, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { Settings, SttProvider, TtsProvider } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +17,6 @@ import { Callout, CommitInput, Segmented, SectionHeading, SettingRow, SettingsGr
 
 const DEFAULT_VOICE = "__default__";
 const LANG_SUGGESTIONS = ["en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pt-BR", "ja-JP"];
-const SAMPLE = "Hi, I'm Godmode — your AI coworker. I'll take care of the busywork so you can focus on what matters.";
 
 function useBrowserVoices(): SpeechSynthesisVoice[] {
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -31,6 +31,7 @@ function useBrowserVoices(): SpeechSynthesisVoice[] {
 }
 
 export function VoiceSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { patch } = useSettingsPatch();
   const qc = useQueryClient();
   const v = settings.voice;
@@ -64,10 +65,10 @@ export function VoiceSection({ settings }: { settings: Settings }) {
     if (playing) return stop();
     if (v.ttsProvider === "browser") {
       if (typeof speechSynthesis === "undefined") {
-        toast.error("Speech synthesis is not available in this browser");
+        toast.error(t("voice.noSynthesis"));
         return;
       }
-      const u = new SpeechSynthesisUtterance(SAMPLE);
+      const u = new SpeechSynthesisUtterance(t("voice.sample"));
       const voice = voices.find((x) => x.name === v.browserVoice);
       if (voice) u.voice = voice;
       u.lang = v.language || voice?.lang || "en-US";
@@ -81,7 +82,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
     }
     setPlaying("loading");
     try {
-      const blob = await api.voice.speak(SAMPLE);
+      const blob = await api.voice.speak(t("voice.sample"));
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
       audioRef.current = audio;
@@ -93,31 +94,31 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       await audio.play();
     } catch (e) {
       setPlaying(null);
-      toastApiError(e, "Voice test failed", qc);
+      toastApiError(e, t("voice.testFailed"), qc);
     }
   };
 
   return (
     <div className="space-y-5">
-      <SectionHeading title="Voice" description="Talk to your agents and hear their answers — hands-free, like a call with a coworker." />
+      <SectionHeading title={t("voice.title")} description={t("voice.description")} />
 
       <SettingsGroup
-        title="Voice mode"
+        title={t("voice.mode.title")}
         icon={<AudioLines />}
         actions={
           <Button size="sm" variant={playing ? "secondary" : "outline"} onClick={testVoice} disabled={playing === "loading"}>
             {playing === "loading" ? <Spinner /> : playing ? <Square /> : <Play />}
-            {playing ? "Stop" : "Test voice"}
+            {playing ? t("common:actions.stop") : t("voice.mode.test")}
           </Button>
         }
       >
-        <SettingRow label="Enable voice" htmlFor="voice-enabled" description="Shows the microphone in chat and enables spoken replies.">
+        <SettingRow label={t("voice.mode.enable")} htmlFor="voice-enabled" description={t("voice.mode.enableDescription")}>
           <Switch id="voice-enabled" checked={v.enabled} onCheckedChange={(enabled) => patch({ voice: { enabled } })} />
         </SettingRow>
-        <SettingRow label="Speak replies to voice messages" htmlFor="auto-speak" description="When you dictate a message, the answer is read aloud automatically.">
+        <SettingRow label={t("voice.mode.autoSpeak")} htmlFor="auto-speak" description={t("voice.mode.autoSpeakDescription")}>
           <Switch id="auto-speak" checked={v.autoSpeak} onCheckedChange={(autoSpeak) => patch({ voice: { autoSpeak } })} />
         </SettingRow>
-        <SettingRow label="Language" htmlFor="voice-lang" description="BCP-47 code used for speech recognition and synthesis." stacked>
+        <SettingRow label={t("voice.mode.language")} htmlFor="voice-lang" description={t("voice.mode.languageDescription")} stacked>
           <div className="flex flex-wrap items-center gap-2">
             <CommitInput
               id="voice-lang"
@@ -145,31 +146,31 @@ export function VoiceSection({ settings }: { settings: Settings }) {
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Speech to text" icon={<Mic />}>
+      <SettingsGroup title={t("voice.stt.title")} icon={<Mic />}>
         <SettingRow
-          label="Provider"
-          description={v.sttProvider === "browser" ? "Free, uses your system's speech recognition." : "OpenAI Whisper-class transcription — more accurate, needs an OpenAI API key."}
+          label={t("voice.provider")}
+          description={v.sttProvider === "browser" ? t("voice.stt.browserDescription") : t("voice.stt.openaiDescription")}
         >
           <Segmented<SttProvider>
-            aria-label="Speech to text provider"
+            aria-label={t("voice.stt.providerLabel")}
             value={v.sttProvider}
             onChange={(sttProvider) => patch({ voice: { sttProvider } })}
             options={[
-              { value: "browser", label: "Browser" },
+              { value: "browser", label: t("voice.browser") },
               { value: "openai", label: "OpenAI" },
             ]}
           />
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Text to speech" icon={<Volume2 />}>
-        <SettingRow label="Provider" description="Browser voices are free; OpenAI and ElevenLabs sound more natural.">
+      <SettingsGroup title={t("voice.tts.title")} icon={<Volume2 />}>
+        <SettingRow label={t("voice.provider")} description={t("voice.tts.description")}>
           <Segmented<TtsProvider>
-            aria-label="Text to speech provider"
+            aria-label={t("voice.tts.providerLabel")}
             value={v.ttsProvider}
             onChange={(ttsProvider) => patch({ voice: { ttsProvider } })}
             options={[
-              { value: "browser", label: "Browser" },
+              { value: "browser", label: t("voice.browser") },
               { value: "openai", label: "OpenAI" },
               { value: "elevenlabs", label: "ElevenLabs" },
             ]}
@@ -178,18 +179,18 @@ export function VoiceSection({ settings }: { settings: Settings }) {
 
         {v.ttsProvider === "browser" && (
           <>
-            <SettingRow label="Voice" htmlFor="browser-voice" description={voices.length ? `${voices.length} voices available on this device.` : "No system voices found yet."}>
+            <SettingRow label={t("voice.tts.voice")} htmlFor="browser-voice" description={voices.length ? t("voice.tts.voicesAvailable", { count: voices.length }) : t("voice.tts.noVoices")}>
               <Select value={v.browserVoice || DEFAULT_VOICE} onValueChange={(x) => patch({ voice: { browserVoice: x === DEFAULT_VOICE ? "" : x } })}>
                 <SelectTrigger id="browser-voice" className="w-64">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  <SelectItem value={DEFAULT_VOICE}>System default</SelectItem>
+                  <SelectItem value={DEFAULT_VOICE}>{t("voice.tts.systemDefault")}</SelectItem>
                   {matching.length > 0 && (
                     <>
                       <SelectSeparator />
                       <SelectGroup>
-                        <SelectLabel>Matching {v.language || "language"}</SelectLabel>
+                        <SelectLabel>{v.language ? t("voice.tts.matching", { language: v.language }) : t("voice.tts.matchingLanguage")}</SelectLabel>
                         {matching.map((x) => (
                           <SelectItem key={x.voiceURI} value={x.name}>
                             {x.name} <span className="text-xs text-muted-foreground">{x.lang}</span>
@@ -202,7 +203,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
                     <>
                       <SelectSeparator />
                       <SelectGroup>
-                        <SelectLabel>Other languages</SelectLabel>
+                        <SelectLabel>{t("voice.tts.otherLanguages")}</SelectLabel>
                         {others.map((x) => (
                           <SelectItem key={x.voiceURI} value={x.name}>
                             {x.name} <span className="text-xs text-muted-foreground">{x.lang}</span>
@@ -214,10 +215,10 @@ export function VoiceSection({ settings }: { settings: Settings }) {
                 </SelectContent>
               </Select>
             </SettingRow>
-            <SettingRow label="Speaking rate" description="1× is normal speed.">
+            <SettingRow label={t("voice.tts.rate")} description={t("voice.tts.rateDescription")}>
               <div className="flex w-64 items-center gap-3">
                 <Slider
-                  aria-label="Speaking rate"
+                  aria-label={t("voice.tts.rate")}
                   min={0.5}
                   max={2}
                   step={0.05}
@@ -232,11 +233,11 @@ export function VoiceSection({ settings }: { settings: Settings }) {
         )}
 
         {v.ttsProvider === "elevenlabs" && (
-          <SettingRow label="ElevenLabs voice ID" htmlFor="el-voice" description="Copy it from the voice library at elevenlabs.io.">
+          <SettingRow label={t("voice.tts.elevenlabsVoice")} htmlFor="el-voice" description={t("voice.tts.elevenlabsVoiceDescription")}>
             <CommitInput
               id="el-voice"
               className="w-64 font-mono text-[13px]"
-              placeholder="e.g. 21m00Tcm4TlvDq8ikWAM"
+              placeholder={t("voice.tts.elevenlabsPlaceholder")}
               value={v.elevenlabsVoiceId}
               onCommit={(elevenlabsVoiceId) => patch({ voice: { elevenlabsVoiceId: elevenlabsVoiceId.trim() } })}
             />
@@ -245,8 +246,8 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       {usesOpenAi && (
-        <SettingsGroup title="OpenAI" icon={<Languages />} description="Any OpenAI-compatible endpoint works (e.g. a local server).">
-          <SettingRow label="Base URL" htmlFor="oai-base">
+        <SettingsGroup title="OpenAI" icon={<Languages />} description={t("voice.openai.description")}>
+          <SettingRow label={t("voice.openai.baseUrl")} htmlFor="oai-base">
             <CommitInput
               id="oai-base"
               className="w-72 font-mono text-[13px]"
@@ -256,7 +257,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
             />
           </SettingRow>
           {v.sttProvider === "openai" && (
-            <SettingRow label="Transcription model" htmlFor="oai-stt">
+            <SettingRow label={t("voice.openai.sttModel")} htmlFor="oai-stt">
               <CommitInput
                 id="oai-stt"
                 className="w-56 font-mono text-[13px]"
@@ -268,7 +269,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
           )}
           {v.ttsProvider === "openai" && (
             <>
-              <SettingRow label="Speech model" htmlFor="oai-tts">
+              <SettingRow label={t("voice.openai.ttsModel")} htmlFor="oai-tts">
                 <CommitInput
                   id="oai-tts"
                   className="w-56 font-mono text-[13px]"
@@ -277,7 +278,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
                   onCommit={(ttsModel) => patch({ voice: { ttsModel: ttsModel.trim() } })}
                 />
               </SettingRow>
-              <SettingRow label="Voice" htmlFor="oai-voice">
+              <SettingRow label={t("voice.tts.voice")} htmlFor="oai-voice">
                 <CommitInput
                   id="oai-voice"
                   className="w-56 font-mono text-[13px]"
@@ -292,12 +293,13 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       )}
 
       {(usesOpenAi || v.ttsProvider === "elevenlabs") && (
-        <Callout tone="info" icon={<KeyRound className="text-brand-strong" />} title="API keys live in the vault">
-          Add your {[usesOpenAi && "OpenAI", v.ttsProvider === "elevenlabs" && "ElevenLabs"].filter(Boolean).join(" and ")} key under{" "}
-          <Link to="/settings/api-keys" className="font-medium text-primary underline-offset-2 hover:underline">
-            Integrations → API keys
-          </Link>
-          . Keys are encrypted and never shown again.
+        <Callout tone="info" icon={<KeyRound className="text-brand-strong" />} title={t("voice.keys.title")}>
+          <Trans
+            t={t}
+            i18nKey="voice.keys.body"
+            values={{ providers: usesOpenAi && v.ttsProvider === "elevenlabs" ? t("voice.keys.both") : usesOpenAi ? "OpenAI" : "ElevenLabs" }}
+            components={{ link: <Link to="/settings/api-keys" className="font-medium text-primary underline-offset-2 hover:underline" /> }}
+          />
         </Callout>
       )}
     </div>

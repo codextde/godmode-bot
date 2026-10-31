@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore, type FormEvent } from "react";
 import { ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -100,6 +101,7 @@ export async function withGrant<T>(fn: (grant: string | undefined) => Promise<T>
 
 /** The passphrase prompt behind `ensureGrant()`. Mount once. */
 export function VaultGrantDialog() {
+  const { t } = useTranslation(["vault", "common"]);
   const open = useSyncExternalStore(subscribe, () => pending !== null);
   const reason = useSyncExternalStore(subscribe, () => pending?.reason);
   const [passphrase, setPassphrase] = useState("");
@@ -135,14 +137,14 @@ export function VaultGrantDialog() {
         <form onSubmit={submit} className="space-y-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-brand-strong" /> Confirm it's you
+              <ShieldCheck className="size-5 text-brand-strong" /> {t("grant.title")}
             </DialogTitle>
             <DialogDescription>
-              {reason ?? "Enter your vault passphrase to show secrets in plain text."} You won't be asked again for 10 minutes.
+              {reason ?? t("grant.defaultReason")} {t("grant.notAgain")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="vault-grant-passphrase">Vault passphrase</Label>
+            <Label htmlFor="vault-grant-passphrase">{t("grant.passphrase")}</Label>
             <PasswordInput
               id="vault-grant-passphrase"
               autoComplete="current-password"
@@ -158,10 +160,10 @@ export function VaultGrantDialog() {
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" disabled={busy} onClick={() => close(null)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!passphrase || busy}>
-              {busy && <Spinner />} Confirm
+              {busy && <Spinner />} {t("common:actions.confirm")}
             </Button>
           </DialogFooter>
         </form>

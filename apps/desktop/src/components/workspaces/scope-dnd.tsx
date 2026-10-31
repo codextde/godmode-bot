@@ -15,6 +15,7 @@ import {
 import { useCombinedRefs } from "@dnd-kit/utilities";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ArrowRight, Ban, Bot, Check, CornerDownRight, Ellipsis, FolderInput, KeyRound, Layers, LayersPlus, MonitorCog } from "lucide-react";
 import type { Project, ScopeMoveCounts, ScopeMoveResult, Workspace } from "@godmode/shared";
@@ -43,6 +44,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { ApiRequestError, api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -77,20 +79,20 @@ const nameOf = (item: ScopeDragItem) => (item.kind === "project" ? item.project.
 
 /** What dropping `item` on `target` would do; null when it changes nothing. */
 function planScopeMove(item: ScopeDragItem, target: ScopeDropTarget): ScopePlan | null {
-  if (target.kind === "global") return { ok: false, reason: "Global can't have projects" };
+  if (target.kind === "global") return { ok: false, reason: t("workspaces:scope.globalNoProjects") };
   if (item.kind === "project") {
     const { project } = item;
-    if (target.kind === "new") return { ok: true, move: { kind: "project", project, to: null }, label: "Make it a workspace" };
+    if (target.kind === "new") return { ok: true, move: { kind: "project", project, to: null }, label: t("workspaces:scope.makeWorkspace") };
     if (target.workspace.id === project.workspaceId) return null;
-    return { ok: true, move: { kind: "project", project, to: target.workspace }, label: `Move to ${target.workspace.name}` };
+    return { ok: true, move: { kind: "project", project, to: target.workspace }, label: t("workspaces:scope.moveToNamed", { name: target.workspace.name }) };
   }
   if (target.kind === "new" || target.workspace.id === item.workspace.id) return null;
   const n = item.workspace.projects.length;
   return {
     ok: true,
     move: { kind: "workspace", workspace: item.workspace, to: target.workspace },
-    label: `Becomes a project of ${target.workspace.name}`,
-    detail: n ? `with ${n} project${n === 1 ? "" : "s"}` : undefined,
+    label: t("workspaces:scope.becomesProjectOf", { name: target.workspace.name }),
+    detail: n ? t("workspaces:scope.withProjects", { count: n }) : undefined,
   };
 }
 
@@ -107,42 +109,43 @@ const send = (call: MoveCall, reason: string) =>
   );
 
 function grantReason(m: ScopeMove): string {
-  if (m.kind === "workspace") return `Confirm to hand ${m.workspace.name}'s logins, 2FA codes and cards to ${m.to.name}'s agents.`;
-  return `Confirm to let runs in ${m.project.name}, whose context an agent wrote, read secrets again.`;
+  if (m.kind === "workspace") return t("workspaces:scope.grantNest", { from: m.workspace.name, to: m.to.name });
+  return t("workspaces:scope.grantProject", { name: m.project.name });
 }
 
 const byName = (a: Project, b: Project) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 
 function doneText(m: ScopeMove) {
-  if (m.kind === "workspace") return `${m.workspace.name} is now a project of ${m.to.name}`;
-  return m.to ? `Moved ${m.project.name} to ${m.to.name}` : `${m.project.name} is now a workspace`;
+  if (m.kind === "workspace") return t("workspaces:scope.doneNest", { name: m.workspace.name, to: m.to.name });
+  return m.to ? t("workspaces:scope.doneMoved", { name: m.project.name, to: m.to.name }) : t("workspaces:scope.doneWorkspace", { name: m.project.name });
 }
 
-const NOUNS: [keys: (keyof ScopeMoveCounts)[], one: string, many: string][] = [
-  [["agents"], "agent", "agents"],
-  [["chats"], "chat", "chats"],
-  [["tasks"], "task", "tasks"],
-  [["projects"], "project", "projects"],
-  [["sources"], "folder or repository", "folders and repositories"],
-  [["credentials"], "login", "logins"],
-  [["totp"], "2FA code", "2FA codes"],
-  [["passkeys"], "passkey", "passkeys"],
-  [["mcpServers", "apiTools", "composioConnections"], "integration", "integrations"],
-  [["browserProfiles"], "browser profile", "browser profiles"],
-  [["paymentCards"], "card", "cards"],
-  [["goals"], "goal", "goals"],
-];
+const NOUNS = [
+  [["agents"], "workspaces:scope.nouns.agents"],
+  [["chats"], "workspaces:scope.nouns.chats"],
+  [["tasks"], "workspaces:scope.nouns.tasks"],
+  [["projects"], "workspaces:scope.nouns.projects"],
+  [["sources"], "workspaces:scope.nouns.sources"],
+  [["credentials"], "workspaces:scope.nouns.logins"],
+  [["totp"], "workspaces:scope.nouns.totp"],
+  [["passkeys"], "workspaces:scope.nouns.passkeys"],
+  [["mcpServers", "apiTools", "composioConnections"], "workspaces:scope.nouns.integrations"],
+  [["browserProfiles"], "workspaces:scope.nouns.browserProfiles"],
+  [["paymentCards"], "workspaces:scope.nouns.cards"],
+  [["goals"], "workspaces:scope.nouns.goals"],
+] as const satisfies readonly (readonly [keys: readonly (keyof ScopeMoveCounts)[], noun: string])[];
 
 /** "3 agents, 12 chats and 2 logins came along." */
 function cameAlong(moved: ScopeMoveCounts): string | undefined {
-  const parts = NOUNS.flatMap(([keys, one, many]) => {
-    const n = keys.reduce((sum, k) => sum + (moved[k] ?? 0), 0);
-    return n ? [`${n} ${n === 1 ? one : many}`] : [];
+  const parts = NOUNS.flatMap(([keys, noun]) => {
+    const n = keys.reduce((sum: number, k) => sum + (moved[k] ?? 0), 0);
+    return n ? [t(noun, { count: n })] : [];
   });
   if (!parts.length) return undefined;
-  const shown = parts.length > 4 ? [...parts.slice(0, 3), "more"] : parts;
+  const shown = parts.length > 4 ? [...parts.slice(0, 3), t("workspaces:scope.more")] : parts;
   const last = shown[shown.length - 1];
-  return `${shown.length > 1 ? `${shown.slice(0, -1).join(", ")} and ` : ""}${last} came along.`;
+  const list = shown.length > 1 ? `${shown.slice(0, -1).join(", ")} ${t("common:words.and")} ${last}` : last;
+  return t("workspaces:scope.cameAlong", { list });
 }
 
 const REFRESH = [
@@ -191,12 +194,12 @@ function useScopeMutations(onSettled: () => void, onReview: (m: ProjectMove) => 
   };
 
   const undo = useMutation({
-    mutationFn: (call: MoveCall) => send(call, "Confirm to give the logins, 2FA codes and cards back."),
+    mutationFn: (call: MoveCall) => send(call, t("workspaces:scope.grantUndo")),
     onSuccess: (res, call) => {
       settle(call, res);
-      toast.success("Moved back");
+      toast.success(t("workspaces:scope.movedBack"));
     },
-    onError: (err) => !isGrantCancelled(err) && toastApiError(err, "Couldn't move it back", qc),
+    onError: (err) => !isGrantCancelled(err) && toastApiError(err, t("workspaces:scope.moveBackFailed"), qc),
     onSettled: refresh,
   });
 
@@ -222,13 +225,13 @@ function useScopeMutations(onSettled: () => void, onReview: (m: ProjectMove) => 
     onSuccess: (res, m) => {
       settle(callOf(m), res);
       const description = [cameAlong(res.moved), ...res.notes].filter(Boolean).join(" ") || undefined;
-      toast.success(doneText(m), { description, duration: res.notes.length ? 12_000 : undefined, action: { label: "Undo", onClick: () => undo.mutate(res.undo) } });
+      toast.success(doneText(m), { description, duration: res.notes.length ? 12_000 : undefined, action: { label: t("common:actions.undo"), onClick: () => undo.mutate(res.undo) } });
     },
     onError: (err, m, before) => {
       if (before) qc.setQueryData(qk.workspaces, before);
       if (isGrantCancelled(err)) return;
       if (m.kind === "project" && err instanceof ApiRequestError && err.code === "context_review") return onReview(m);
-      toastApiError(err, `Couldn't move ${m.kind === "project" ? m.project.name : m.workspace.name}`, qc);
+      toastApiError(err, t("workspaces:scope.moveFailed", { name: m.kind === "project" ? m.project.name : m.workspace.name }), qc);
     },
     onSettled: () => {
       refresh();
@@ -316,7 +319,7 @@ export function ScopeDnd({ workspaces, children }: { workspaces: Workspace[]; ch
     if (!item || !target) return;
     const p = planScopeMove(item, target);
     if (p?.ok) move(p.move);
-    else if (p) toast.error(`Can't move ${nameOf(item)} there`, { description: `${p.reason}.` });
+    else if (p) toast.error(t("workspaces:scope.cantMove", { name: nameOf(item) }), { description: `${p.reason}.` });
   };
 
   const current = dragged && over ? planScopeMove(dragged, over) : null;
@@ -359,6 +362,7 @@ export function ScopeDnd({ workspaces, children }: { workspaces: Workspace[]; ch
 
 /** What is dragged, under the pointer, saying what letting go would do. A workspace shows as a stack: everything in it comes along. */
 function Ghost({ item, plan }: { item: ScopeDragItem; plan: ScopePlan | null }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const { name, icon, color } = item.kind === "project" ? item.project : item.workspace;
   return (
     <div className="relative w-max max-w-80 -rotate-2 cursor-grabbing">
@@ -388,9 +392,9 @@ function Ghost({ item, plan }: { item: ScopeDragItem; plan: ScopePlan | null }) 
                 <span className="truncate">{plan.reason}</span>
               </>
             ) : item.kind === "project" ? (
-              "Drop on a workspace, or make it one"
+              t("workspaces:scope.dropProject")
             ) : (
-              "Drop on another workspace"
+              t("workspaces:scope.dropWorkspace")
             )}
           </p>
         </div>
@@ -412,6 +416,7 @@ function Dock({
   at: { left: number; width: number } | null;
   onInside: (inside: boolean) => void;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const panel = useDroppable({ id: "dock", data: { target: null }, disabled: !dragged });
   const project = dragged?.kind === "project" ? dragged.project : null;
   const from = project ? project.workspaceId : dragged?.kind === "workspace" ? dragged.workspace.id : null;
@@ -435,14 +440,14 @@ function Dock({
             onPointerEnter={() => onInside(true)}
             onPointerLeave={() => onInside(false)}
             role="group"
-            aria-label={project ? `Move ${project.name}` : "Move into workspace"}
+            aria-label={project ? t("workspaces:scope.moveNamed", { name: project.name }) : t("workspaces:scope.moveIntoWorkspace")}
             className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border bg-card/90 p-1.5 shadow-float backdrop-blur-xl"
           >
             {project && <NewWorkspaceTarget />}
             {project && chips.length > 0 && <span aria-hidden className="mx-1 h-6 w-px bg-border" />}
             {chips.length > 0 && (
               <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-muted-foreground">
-                <FolderInput className="size-3.5" aria-hidden /> {project ? "Move to" : "Move into"}
+                <FolderInput className="size-3.5" aria-hidden /> {project ? t("workspaces:scope.moveTo") : t("workspaces:scope.moveInto")}
               </span>
             )}
             {chips.map((w) => (
@@ -456,6 +461,7 @@ function Dock({
 }
 
 function NewWorkspaceTarget() {
+  const { t } = useTranslation(["workspaces", "common"]);
   const drop = useScopeDrop({ kind: "new" }, "dock:new");
   return (
     <div
@@ -468,12 +474,13 @@ function NewWorkspaceTarget() {
       <span aria-hidden className="grid size-6 place-items-center rounded-lg bg-brand/15">
         <LayersPlus className="size-3.5" />
       </span>
-      Make it a workspace
+      {t("workspaces:scope.makeWorkspace")}
     </div>
   );
 }
 
 function DockTarget({ workspace, here }: { workspace: Workspace; here: boolean }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const drop = useScopeDrop({ kind: "workspace", workspace }, `dock:${workspace.id}`);
   return (
     <div
@@ -486,7 +493,7 @@ function DockTarget({ workspace, here }: { workspace: Workspace; here: boolean }
     >
       <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
       <span className="max-w-36 truncate">{workspace.name}</span>
-      {here && <span className="text-[11px]">here</span>}
+      {here && <span className="text-[11px]">{t("workspaces:scope.here")}</span>}
     </div>
   );
 }
@@ -505,6 +512,7 @@ function NestDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   if (!move) return null;
   const { workspace: w, to } = move;
   const projects = w.projects.length;
@@ -517,41 +525,33 @@ function NestDialog({
             <ArrowRight className="size-4 text-muted-foreground" />
             <WorkspaceTile icon={to.icon} color={to.color} size="md" />
           </div>
-          <AlertDialogTitle>
-            Move {w.name} into {to.name}?
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {w.name} becomes a project of {to.name}. You can undo it right after.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t("workspaces:scope.nest.title", { name: w.name, to: to.name })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("workspaces:scope.nest.description", { name: w.name, to: to.name })}</AlertDialogDescription>
         </AlertDialogHeader>
         <ul className="space-y-2.5 rounded-xl border bg-paper-2 p-4 text-sm [&_svg]:mt-0.5 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
           <li className="flex gap-2.5">
             <Bot aria-hidden />
-            <span>Its agents, chats, tasks and repositories move along.</span>
+            <span>{t("workspaces:scope.nest.movesAlong")}</span>
           </li>
           {projects > 0 && (
             <li className="flex gap-2.5">
               <Layers aria-hidden />
-              <span>
-                Its {projects === 1 ? "project becomes a project" : `${projects} projects become projects`} of {to.name} too.
-              </span>
+              <span>{t("workspaces:scope.nest.projects", { count: projects, to: to.name })}</span>
             </li>
           )}
           <li className="flex gap-2.5">
             <KeyRound aria-hidden />
-            <span>
-              Its logins, 2FA codes, integrations and browser profiles become {to.name}'s, shared with every agent there.
-            </span>
+            <span>{t("workspaces:scope.nest.secrets", { to: to.name })}</span>
           </li>
           {(w.vmId !== to.vmId || w.autoMerge !== to.autoMerge) && (
             <li className="flex gap-2.5">
               <MonitorCog aria-hidden />
-              <span>{to.name}'s VM and auto-merge settings apply to it from then on.</span>
+              <span>{t("workspaces:scope.nest.settings", { to: to.name })}</span>
             </li>
           )}
         </ul>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={pending}
             onClick={(e) => {
@@ -560,7 +560,7 @@ function NestDialog({
             }}
           >
             {pending && <Spinner />}
-            Move into {to.name}
+            {t("workspaces:scope.nest.confirm", { to: to.name })}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -582,6 +582,7 @@ function ReviewDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   if (!move) return null;
   const { project: p } = move;
   return (
@@ -595,17 +596,15 @@ function ReviewDialog({
               <LayersPlus className="size-4" />
             </span>
           </div>
-          <AlertDialogTitle>Make {p.name} a workspace?</AlertDialogTitle>
-          <AlertDialogDescription>
-            An agent wrote this project's context. As the workspace's, every agent there follows it, so read it first.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t("workspaces:scope.review.title", { name: p.name })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("workspaces:scope.review.description")}</AlertDialogDescription>
         </AlertDialogHeader>
         <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl border bg-paper-2 p-4 text-sm">
           {p.description.trim() && <p className="text-muted-foreground">{p.description}</p>}
           {p.instructions.trim() && <p className="whitespace-pre-wrap">{p.instructions}</p>}
         </div>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={pending}
             onClick={(e) => {
@@ -614,7 +613,7 @@ function ReviewDialog({
             }}
           >
             {pending && <Spinner />}
-            Make it a workspace
+            {t("workspaces:scope.makeWorkspace")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -678,16 +677,17 @@ export function useProjectDnd(project: Project, workspace?: Workspace) {
 
 /** The workspace menu's way to put it into another (the same as dragging it there, confirmation included). */
 export function WorkspaceMoveMenu({ workspace }: { workspace: Workspace }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const { workspaces, move } = useContext(Ctx);
   const others = workspaces.filter((w) => w.id !== workspace.id);
   if (!others.length) return null;
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
-        <FolderInput /> Move into…
+        <FolderInput /> {t("workspaces:scope.moveIntoMenu")}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="max-h-80 w-52 overflow-y-auto">
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Becomes a project of</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t("workspaces:scope.becomesProjectOfLabel")}</DropdownMenuLabel>
         {others.map((w) => (
           <DropdownMenuItem key={w.id} onClick={() => move({ kind: "workspace", workspace, to: w })}>
             <WorkspaceTile icon={w.icon} color={w.color} size="sm" className="size-4.5 rounded-[4px] text-[10px]" />
@@ -701,22 +701,23 @@ export function WorkspaceMoveMenu({ workspace }: { workspace: Workspace }) {
 
 /** A project's menu: make it a workspace of its own, or move it to another (the same as dragging it). */
 export function ProjectMoveMenu({ project, className }: { project: Project; className?: string }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const { workspaces, move } = useContext(Ctx);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`Move ${project.name}`} className={cn("text-muted-foreground", className)}>
+        <Button variant="ghost" size="icon-sm" aria-label={t("workspaces:scope.moveNamed", { name: project.name })} className={cn("text-muted-foreground", className)}>
           <Ellipsis />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem onClick={() => move({ kind: "project", project, to: null })}>
-          <LayersPlus /> Make it a workspace
+          <LayersPlus /> {t("workspaces:scope.makeWorkspace")}
         </DropdownMenuItem>
         {workspaces.length > 1 && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
-              <FolderInput /> Move to
+              <FolderInput /> {t("workspaces:scope.moveTo")}
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-h-80 w-52 overflow-y-auto">
               {workspaces.map((w) => {

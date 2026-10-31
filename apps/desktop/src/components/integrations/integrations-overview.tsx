@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Boxes, Server, Wrench } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiToolsTab, useApiTools } from "@/components/integrations/api-tools-tab";
 import { ComposioTab, useComposioConnections, useComposioStatus } from "@/components/integrations/composio-tab";
@@ -13,6 +14,7 @@ type Tab = (typeof TABS)[number];
 
 /** Composio apps, API tools and MCP servers, a tab each (`?tab=`). */
 export function IntegrationsOverview() {
+  const { t } = useTranslation("integrations");
   const [params, setParams] = useSearchParams();
   const raw = params.get("tab");
   const tab: Tab = (TABS as readonly string[]).includes(raw ?? "") ? (raw as Tab) : "composio";
@@ -46,8 +48,8 @@ export function IntegrationsOverview() {
       <Tabs value={tab} onValueChange={setTab} className="gap-6">
         <TabsList className="h-10 p-1">
           <TabTrigger value="composio" icon={<Boxes />} label="Composio" count={counts.composio} />
-          <TabTrigger value="tools" icon={<Wrench />} label="Tools" count={counts.tools} />
-          <TabTrigger value="mcp" icon={<Server />} label="MCP servers" count={counts.mcp} />
+          <TabTrigger value="tools" icon={<Wrench />} label={t("tabs.tools")} count={counts.tools} />
+          <TabTrigger value="mcp" icon={<Server />} label={t("tabs.mcp")} count={counts.mcp} />
         </TabsList>
         <TabsContent value="composio">
           <FadeIn>

@@ -1,8 +1,10 @@
 import { Children, isValidElement, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, Switch, TextInput, View, type KeyboardTypeOptions } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import { Icon, type IconName } from "./icon";
 import { Card, Hairline, SectionTitle, T, tap } from "./ui";
+import { intlLocale } from "@/lib/i18n";
 import { useAutosave, useEditable, type SaveState } from "@/lib/setup";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
@@ -207,6 +209,7 @@ export function StepperRow({
   format?: (n: number) => string;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const move = (dir: 1 | -1) => {
     tap();
     if (steps) {
@@ -223,13 +226,13 @@ export function StepperRow({
       {icon ? <Tile icon={icon} /> : null}
       <Label title={title} detail={detail} />
       <View style={[styles.stepper, { backgroundColor: c.sunken }]}>
-        <Pressable accessibilityLabel={`Less ${title}`} disabled={!canDown} hitSlop={6} onPress={() => move(-1)} style={[styles.stepBtn, { opacity: canDown ? 1 : 0.3 }]}>
+        <Pressable accessibilityLabel={t("form.less", { title })} disabled={!canDown} hitSlop={6} onPress={() => move(-1)} style={[styles.stepBtn, { opacity: canDown ? 1 : 0.3 }]}>
           <Icon name="minus" size={13} color={c.text} weight="bold" />
         </Pressable>
         <T variant="subhead" style={styles.stepValue}>
           {format(value)}
         </T>
-        <Pressable accessibilityLabel={`More ${title}`} disabled={!canUp} hitSlop={6} onPress={() => move(1)} style={[styles.stepBtn, { opacity: canUp ? 1 : 0.3 }]}>
+        <Pressable accessibilityLabel={t("form.more", { title })} disabled={!canUp} hitSlop={6} onPress={() => move(1)} style={[styles.stepBtn, { opacity: canUp ? 1 : 0.3 }]}>
           <Icon name="plus" size={13} color={c.text} weight="bold" />
         </Pressable>
       </View>
@@ -425,8 +428,9 @@ export function FieldRow({
 
 export function SaveBadge({ state }: { state: SaveState }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   if (state === "idle") return null;
-  const label = state === "saving" ? "Saving" : state === "saved" ? "Saved" : "Not saved";
+  const label = state === "saving" ? t("form.saving") : state === "saved" ? t("common:status.saved") : t("form.notSaved");
   const color = state === "failed" ? c.danger : state === "saved" ? c.brandStrong : c.textMuted;
   return (
     <Animated.View key={state} entering={FadeIn.duration(180)} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -460,6 +464,7 @@ export function TextEditor({
   hint?: string;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const { draft, setDraft, flush, state } = useAutosave(value, onSave);
   const [focused, setFocused] = useState(false);
   const near = maxLength ? draft.length > maxLength * 0.9 : false;
@@ -488,12 +493,12 @@ export function TextEditor({
       />
       <View style={[styles.editorFoot, { borderTopColor: c.border }]}>
         <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>
-          {hint ?? "Saves as you type"}
+          {hint ?? t("form.savesAsYouType")}
         </T>
         <SaveBadge state={state} />
         {maxLength && (near || focused) ? (
           <T variant="caption" color={near ? c.warning : c.textFaint} style={{ fontVariant: ["tabular-nums"] }}>
-            {draft.length.toLocaleString()}/{maxLength.toLocaleString()}
+            {draft.length.toLocaleString(intlLocale())}/{maxLength.toLocaleString(intlLocale())}
           </T>
         ) : null}
       </View>
@@ -511,12 +516,13 @@ export const EMOJIS = [
 
 export function EmojiGrid({ value, onPick }: { value: string; onPick: (emoji: string) => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <Animated.View entering={FadeIn.duration(160)} style={[styles.emojiGrid, { backgroundColor: c.surface, borderColor: c.border }]}>
       {EMOJIS.map((e) => (
         <Pressable
           key={e}
-          accessibilityLabel={`Use ${e}`}
+          accessibilityLabel={t("form.useEmoji", { emoji: e })}
           accessibilityState={{ selected: e === value }}
           onPress={() => {
             tap();

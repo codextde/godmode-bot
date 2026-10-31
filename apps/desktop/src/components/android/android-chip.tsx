@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Check, ChevronDown, Loader2, Lock, Plus, Settings2, Smartphone } from "lucide-react";
 import type { Agent, AndroidDevice } from "@godmode/shared";
 import { androidSummary } from "@godmode/shared";
@@ -9,13 +10,15 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAndroidDevices, useBootstrap } from "@/lib/hooks";
+import { t as translate } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { AndroidDot, stateLabel } from "./android-parts";
 
 function listNames(devices: AndroidDevice[]): string {
   const names = devices.map((d) => d.name);
-  if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return translate("android:list.two", { first: names[0], second: names[1] });
+  return translate("android:list.more", { names: names.slice(0, 2).join(", "), count: names.length - 2 });
 }
 
 /** Phone controls show while Android phones are on in Settings (runs get no phones otherwise). */
@@ -41,6 +44,7 @@ export function AndroidChip({
   onChange: (androidDeviceIds: string[]) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("android");
   const enabled = useAndroidEnabled();
   const { data: devices = [], isLoading } = useAndroidDevices();
   const navigate = useNavigate();
@@ -61,10 +65,10 @@ export function AndroidChip({
   };
 
   const tooltip = !first
-    ? "Let this chat use your Android phones"
+    ? t("chip.tooltipNone")
     : own.length === 0
-      ? `Can use ${listNames(inherited)} — assigned to ${agent.name}`
-      : `This chat can use ${listNames(active)}`;
+      ? t("chip.tooltipInherited", { names: listNames(inherited), agent: agent.name })
+      : t("chip.tooltipActive", { names: listNames(active) });
   const icon = busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Smartphone className="size-3.5 shrink-0 text-muted-foreground" />;
 
   return (
@@ -75,7 +79,7 @@ export function AndroidChip({
             {first ? (
               <button
                 type="button"
-                aria-label={`Android phones: ${active.map((d) => d.name).join(", ")}`}
+                aria-label={t("chip.ariaLabelList", { names: active.map((d) => d.name).join(", ") })}
                 className={cn(
                   "flex h-8 max-w-[12rem] min-w-14 shrink items-center gap-1.5 rounded-lg border pr-1.5 pl-2 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                   own.length > 0 ? "bg-card hover:bg-accent" : "border-dashed text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -92,14 +96,14 @@ export function AndroidChip({
               <Button
                 type="button"
                 variant="ghost"
-                aria-label="Android phones"
+                aria-label={t("chip.title")}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
                 )}
               >
                 {busy ? <Loader2 className="animate-spin" /> : <Smartphone />}
-                <span className="@max-sm/composer:sr-only">Phone</span>
+                <span className="@max-sm/composer:sr-only">{t("chip.button")}</span>
               </Button>
             )}
           </PopoverTrigger>
@@ -108,22 +112,22 @@ export function AndroidChip({
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">Android phones</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat see the screen, tap, type, open apps and run shell commands.</p>
+          <p className="text-[13px] font-medium">{t("chip.title")}</p>
+          <p className="text-xs text-muted-foreground">{t("chip.description")}</p>
         </div>
         {!isLoading && devices.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">
-            <p className="text-xs text-muted-foreground">No phones yet.</p>
+            <p className="text-xs text-muted-foreground">{t("chip.empty")}</p>
             <Button size="sm" onClick={() => go("/settings/android")}>
-              <Plus /> Connect a phone
+              <Plus /> {t("chip.connect")}
             </Button>
           </div>
         ) : (
           <>
             <Command>
-              {devices.length > 6 && <CommandInput placeholder="Find a phone…" />}
+              {devices.length > 6 && <CommandInput placeholder={t("chip.findPlaceholder")} />}
               <CommandList className="max-h-72">
-                <CommandEmpty>No phone with that name.</CommandEmpty>
+                <CommandEmpty>{t("chip.noMatch")}</CommandEmpty>
                 <CommandGroup>
                   {devices.map((d) => {
                     const locked = fromAgent.has(d.id);
@@ -146,13 +150,13 @@ export function AndroidChip({
                           </span>
                           {locked ? (
                             <span className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-                              <Lock className="size-3" aria-hidden /> Assigned to {agent.name}
+                              <Lock className="size-3" aria-hidden /> {t("chip.assignedTo", { agent: agent.name })}
                             </span>
                           ) : (
                             <span className="block truncate text-[11px] text-muted-foreground">{androidSummary(d)}</span>
                           )}
                         </span>
-                        {on && <Check className={cn("size-4", locked && "opacity-50")} aria-label={locked ? "Always on" : "Selected"} />}
+                        {on && <Check className={cn("size-4", locked && "opacity-50")} aria-label={locked ? t("chip.alwaysOn") : t("chip.selected")} />}
                       </CommandItem>
                     );
                   })}
@@ -161,7 +165,7 @@ export function AndroidChip({
             </Command>
             <div className="border-t p-1">
               <Button type="button" variant="ghost" size="sm" className="w-full justify-start font-normal text-muted-foreground" onClick={() => go("/settings/android")}>
-                <Settings2 /> Manage phones
+                <Settings2 /> {t("chip.manage")}
               </Button>
             </div>
           </>
@@ -173,15 +177,16 @@ export function AndroidChip({
 
 /** The agent form's list of phones: every run of the agent can control the checked ones. */
 export function AndroidField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { t } = useTranslation("android");
   const { data: devices = [], isLoading } = useAndroidDevices();
   if (!isLoading && devices.length === 0) {
     return (
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3.5">
         <Smartphone className="size-5 shrink-0 text-muted-foreground" />
-        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No phones yet — connect one and this agent can use it.</p>
+        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{t("field.empty")}</p>
         <Button type="button" variant="outline" size="sm" asChild>
           <Link to="/settings/android">
-            <Plus /> Connect a phone
+            <Plus /> {t("chip.connect")}
           </Link>
         </Button>
       </div>
@@ -192,10 +197,10 @@ export function AndroidField({ value, onChange }: { value: string[]; onChange: (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <span id="agent-android-label" className="text-sm font-medium">
-          Can control
+          {t("field.canControl")}
         </span>
         <Link to="/settings/android" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          Manage phones <ArrowRight className="size-3" />
+          {t("chip.manage")} <ArrowRight className="size-3" />
         </Link>
       </div>
       <div role="group" aria-labelledby="agent-android-label" className="divide-y overflow-hidden rounded-lg border">
@@ -218,7 +223,7 @@ export function AndroidField({ value, onChange }: { value: string[]; onChange: (
               );
             })}
       </div>
-      <p className="text-xs text-muted-foreground">Every run of this agent can control these. A single chat can add more with the phone button in its message box.</p>
+      <p className="text-xs text-muted-foreground">{t("field.hint")}</p>
     </div>
   );
 }

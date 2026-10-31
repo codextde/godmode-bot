@@ -1,5 +1,5 @@
 import { forwardRef, type HTMLAttributes } from "react";
-import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { AlarmClock, CalendarDays, CornerDownRight, Link2, GitMerge, GitPullRequest, GitPullRequestArrow, GitPullRequestClosed, Hourglass, ListTree, MessageCircleQuestion, OctagonAlert, Paperclip, Pause } from "lucide-react";
 import type { Agent, Task, Workspace } from "@godmode/shared";
 import { isOverdue, taskAttachmentIds, waitsForTickets } from "@godmode/shared";
@@ -10,27 +10,30 @@ import { useUi } from "@/stores/ui";
 import { useProjectIndex } from "@/components/projects/project-utils";
 import { cn } from "@/lib/utils";
 import { useNow } from "@/components/vault/use-now";
+import { shortAge } from "@/components/human-tasks/human-task-card";
 import { LabelChip } from "./task-fields";
 import { BLOCKED_META, PRIORITY_META, PriorityIcon, STATUS_META, TYPE_META, TypeIcon, daysUntil, dueLabel, isWorking, pauseLabel, waitingLabel } from "./task-meta";
 
 export function useTaskActivity(task: Task): string | null {
+  const { t } = useTranslation("tasks");
   const live = useLive((s) => (task.runId ? s.runs[task.runId] : undefined));
   if (task.activity) return task.activity;
   if (!isWorking(task)) return null;
-  if (live?.status === "queued" || task.runStatus === "queued") return "Queued — waiting for a free slot";
-  return live?.activity && live.activity !== "Starting…" ? live.activity : "Working…";
+  if (live?.status === "queued" || task.runStatus === "queued") return t("card.queued");
+  return live?.activity && live.activity !== "Starting…" ? live.activity : t("card.working");
 }
 
 export function PullRequestChip({ task, className }: { task: Task; className?: string }) {
+  const { t } = useTranslation("tasks");
   const pr = task.pullRequest;
   if (!pr) return null;
   const meta = !pr.number
-    ? { icon: GitPullRequestArrow, label: "Open pull request", tone: "text-foreground/80" }
+    ? { icon: GitPullRequestArrow, label: t("pr.openNew"), tone: "text-foreground/80" }
     : pr.state === "merged"
-      ? { icon: GitMerge, label: `#${pr.number} merged`, tone: "text-violet-600 dark:text-violet-400" }
+      ? { icon: GitMerge, label: t("pr.merged", { number: pr.number }), tone: "text-violet-600 dark:text-violet-400" }
       : pr.state === "closed"
-        ? { icon: GitPullRequestClosed, label: `#${pr.number} closed`, tone: "text-muted-foreground" }
-        : { icon: GitPullRequest, label: `#${pr.number} open`, tone: "text-emerald-600 dark:text-emerald-400" };
+        ? { icon: GitPullRequestClosed, label: t("pr.closed", { number: pr.number }), tone: "text-muted-foreground" }
+        : { icon: GitPullRequest, label: t("pr.open", { number: pr.number }), tone: "text-emerald-600 dark:text-emerald-400" };
   const Icon = meta.icon;
   return (
     <a
@@ -65,6 +68,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   { task, agent, workspace, overlay, ghost, className, ...rest },
   ref,
 ) {
+  const { t } = useTranslation("tasks");
   const activity = useTaskActivity(task);
   const scopedProject = useUi((s) => s.project);
   const project = useProjectIndex().get(task.projectId ?? "")?.project;
@@ -75,16 +79,16 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
   const files = taskAttachmentIds(task.description).length;
   const overdue = isOverdue(task);
   const closed = task.status === "done" || task.status === "cancelled";
-  const due = task.dueDate ? (overdue ? `Overdue · ${-daysUntil(task.dueDate)}d` : dueLabel(task.dueDate)) : null;
+  const due = task.dueDate ? (overdue ? t("card.overdueDays", { n: -daysUntil(task.dueDate) }) : dueLabel(task.dueDate)) : null;
   const label = [
     `#${task.number} ${task.title}`,
     STATUS_META[task.status].label,
     task.priority !== "none" ? PRIORITY_META[task.priority].label.toLowerCase() : null,
-    task.dueDate ? `due ${dueLabel(task.dueDate)}` : null,
-    overdue ? "overdue" : null,
-    task.parentNumber ? `part of #${task.parentNumber}` : null,
-    waitsForTickets(task) ? `waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
-    task.subtasks ? `${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished` : null,
+    task.dueDate ? t("card.aria.due", { date: dueLabel(task.dueDate) }) : null,
+    overdue ? t("card.aria.overdue") : null,
+    task.parentNumber ? t("card.aria.partOf", { number: task.parentNumber }) : null,
+    waitsForTickets(task) ? t("card.aria.waitsFor", { list: task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ") }) : null,
+    task.subtasks ? t("card.partsFinished", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total }) : null,
     waiting,
   ]
     .filter(Boolean)
@@ -111,7 +115,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         </span>
         <span className="font-mono tabular-nums">#{task.number}</span>
         {task.parentNumber && (
-          <span className="flex items-center gap-0.5 font-mono tabular-nums" title={`Part of #${task.parentNumber}`} aria-label={`part of #${task.parentNumber}`}>
+          <span className="flex items-center gap-0.5 font-mono tabular-nums" title={t("card.partOf", { number: task.parentNumber })} aria-label={t("card.aria.partOf", { number: task.parentNumber })}>
             <CornerDownRight className="size-3" aria-hidden />#{task.parentNumber}
           </span>
         )}
@@ -125,7 +129,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
             {workspace !== undefined && (
               <>
                 <span className="text-[11px]">{workspace?.icon ?? "🌐"}</span>
-                <span className={cn("truncate", showProject && "max-w-[45%] shrink-[2]")}>{workspace?.name ?? "Global"}</span>
+                <span className={cn("truncate", showProject && "max-w-[45%] shrink-[2]")}>{workspace?.name ?? t("card.global")}</span>
               </>
             )}
             {showProject && (
@@ -151,7 +155,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
       {waitsForTickets(task) && (
         <p className="mt-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number} ${w.title}`).join("\n")}>
           <Link2 className="size-3 shrink-0" />
-          <span className="truncate">Waits for {task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}</span>
+          <span className="truncate">{t("card.waitsFor", { list: task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ") })}</span>
         </p>
       )}
       {waiting && !activity && !paused && (
@@ -177,7 +181,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           <OctagonAlert className="mt-px size-3.5 shrink-0" />
           <span className="line-clamp-2">
             {task.blockedKind && BLOCKED_META[task.blockedKind].cardPrefix && <span className="font-medium">{BLOCKED_META[task.blockedKind].cardPrefix} </span>}
-            {task.blockedReason ?? (task.blockedKind === "interrupted" ? "Godmode restarted mid-run." : "")}
+            {task.blockedReason ?? (task.blockedKind === "interrupted" ? t("card.restartedMidRun") : "")}
           </span>
         </p>
       )}
@@ -199,7 +203,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
         ) : (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="size-5 rounded-[5px] border border-dashed border-muted-foreground/40" />
-            Unassigned
+            {t("card.unassigned")}
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -209,7 +213,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
                 "flex items-center gap-0.5 rounded-[4px] px-1 text-[11px] tabular-nums",
                 closed ? "text-muted-foreground" : overdue ? "bg-rose-500/10 font-medium text-rose-600 dark:text-rose-400" : daysUntil(task.dueDate!) === 0 ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground",
               )}
-              title={`Due ${task.dueDate}`}
+              title={t("card.due", { date: task.dueDate })}
             >
               <CalendarDays className="size-3" />
               {closed ? dueLabel(task.dueDate!) : due}
@@ -218,14 +222,14 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           {task.subtasks && (
             <span
               className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums"
-              title={`${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} parts finished`}
+              title={t("card.partsFinished", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total })}
             >
               <ListTree className="size-3" />
               {task.subtasks.total - task.subtasks.open}/{task.subtasks.total}
             </span>
           )}
           {files > 0 && (
-            <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums" title={`${files} attached file${files === 1 ? "" : "s"}`}>
+            <span className="flex items-center gap-0.5 text-[11px] text-muted-foreground tabular-nums" title={t("card.files", { count: files })}>
               <Paperclip className="size-3" />
               {files}
             </span>
@@ -233,7 +237,7 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
           <PullRequestChip task={task} />
           {!task.pullRequest && !working && (
             <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-              {formatDistanceToNowStrict(new Date(task.updatedAt), { roundingMethod: "floor" }).replace(/ (\w)\w*$/, "$1")}
+              {shortAge(task.updatedAt)}
             </span>
           )}
         </span>
@@ -244,11 +248,12 @@ export const TaskCard = forwardRef<HTMLDivElement, TaskCardProps>(function TaskC
 
 /** "4m 12s" on a working card, ticking every second. */
 function CardElapsed({ since }: { since: string }) {
+  const { t } = useTranslation("tasks");
   const now = useNow(1000);
   const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
   return (
     <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums opacity-80">
-      {s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`}
+      {s < 3600 ? t("card.elapsedMinutes", { m: Math.floor(s / 60), s: String(s % 60).padStart(2, "0") }) : t("card.elapsedHours", { h: Math.floor(s / 3600), m: String(Math.floor((s % 3600) / 60)).padStart(2, "0") })}
     </span>
   );
 }

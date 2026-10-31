@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Ban, CornerDownRight, FolderInput } from "lucide-react";
 import type { Agent, AgentMoveInput, AgentPlacement, Workspace } from "@godmode/shared";
@@ -23,6 +24,7 @@ import { AgentAvatar } from "@/components/common";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { t as translate } from "@/i18n";
 import { GroupIcon, WorkspaceSection } from "./agent-groups";
 
 /** Where an agent can be dropped: on an agent (it becomes the lead), a workspace, or the built-in agent (no lead of its own). */
@@ -47,7 +49,7 @@ export function teamOf(agent: Agent, all: Agent[]): Agent[] {
   return out;
 }
 
-const wsName = (id: string | null, workspaces: Workspace[]) => (id ? (workspaces.find((w) => w.id === id)?.name ?? "the workspace") : "Global");
+const wsName = (id: string | null, workspaces: Workspace[]) => (id ? (workspaces.find((w) => w.id === id)?.name ?? translate("agents:agentDnd.theWorkspace")) : translate("agents:agentDnd.global"));
 
 /** What dropping `agent` on `target` would do; null when it changes nothing. */
 export function planMove(agent: Agent, target: AgentDropTarget, all: Agent[], workspaces: Workspace[]): MovePlan | null {
@@ -56,16 +58,16 @@ export function planMove(agent: Agent, target: AgentDropTarget, all: Agent[], wo
   const along = (ws: string | null) => (ws !== agent.workspaceId ? team : []);
   if (target.kind === "hub" || (target.kind === "agent" && target.agent.isDefault)) {
     if (!agent.reportsTo) return null;
-    return { ok: true, input: { reportsTo: null }, workspaceId: agent.workspaceId, reportsTo: null, label: `Report to ${target.agent.name}`, done: `${agent.name} now reports to ${target.agent.name}`, team: [] };
+    return { ok: true, input: { reportsTo: null }, workspaceId: agent.workspaceId, reportsTo: null, label: translate("agents:agentDnd.reportTo", { lead: target.agent.name }), done: translate("agents:agentDnd.nowReportsTo", { agent: agent.name, lead: target.agent.name }), team: [] };
   }
   if (target.kind === "workspace") {
     if (target.workspaceId === agent.workspaceId) return null;
     const ws = target.workspaceId;
-    return { ok: true, input: { workspaceId: ws }, workspaceId: ws, reportsTo: undefined, label: `Move to ${wsName(ws, workspaces)}`, done: `Moved ${agent.name} to ${wsName(ws, workspaces)}`, team: along(ws) };
+    return { ok: true, input: { workspaceId: ws }, workspaceId: ws, reportsTo: undefined, label: translate("agents:agentDnd.moveTo", { workspace: wsName(ws, workspaces) }), done: translate("agents:agentDnd.moved", { agent: agent.name, workspace: wsName(ws, workspaces) }), team: along(ws) };
   }
   const lead = target.agent;
   if (lead.id === agent.id) return null;
-  if (team.some((a) => a.id === lead.id)) return { ok: false, reason: `${lead.name} reports to ${agent.name}` };
+  if (team.some((a) => a.id === lead.id)) return { ok: false, reason: translate("agents:agentDnd.loop", { lead: lead.name, agent: agent.name }) };
   const ws = lead.workspaceId ?? agent.workspaceId;
   if (agent.reportsTo === lead.id && ws === agent.workspaceId) return null;
   return {
@@ -73,8 +75,11 @@ export function planMove(agent: Agent, target: AgentDropTarget, all: Agent[], wo
     input: ws !== agent.workspaceId ? { workspaceId: ws, reportsTo: lead.id } : { reportsTo: lead.id },
     workspaceId: ws,
     reportsTo: lead.id,
-    label: `Report to ${lead.name}${ws !== agent.workspaceId ? ` in ${wsName(ws, workspaces)}` : ""}`,
-    done: `${agent.name} now reports to ${lead.name}${ws !== agent.workspaceId ? ` in ${wsName(ws, workspaces)}` : ""}`,
+    label: ws !== agent.workspaceId ? translate("agents:agentDnd.reportToIn", { lead: lead.name, workspace: wsName(ws, workspaces) }) : translate("agents:agentDnd.reportTo", { lead: lead.name }),
+    done:
+      ws !== agent.workspaceId
+        ? translate("agents:agentDnd.nowReportsToIn", { agent: agent.name, lead: lead.name, workspace: wsName(ws, workspaces) })
+        : translate("agents:agentDnd.nowReportsTo", { agent: agent.name, lead: lead.name }),
     team: along(ws),
   };
 }
@@ -124,6 +129,7 @@ function inScope(scope: unknown, workspaceId: string | null) {
 
 /** Move an agent (and its team) with an optimistic update and an "Undo" in the toast. */
 export function useMoveAgent() {
+  const { t } = useTranslation(["agents", "common"]);
   const qc = useQueryClient();
   const patchLists = (fn: (list: Agent[], scope: unknown) => Agent[]) => {
     const snapshot = qc.getQueriesData<Agent[]>({ queryKey: ["agents", "list"] });
@@ -139,8 +145,8 @@ export function useMoveAgent() {
     mutationFn: async (previous: AgentPlacement[]) => {
       for (const p of previous) await api.agents.update(p.id, { workspaceId: p.workspaceId, reportsTo: p.reportsTo });
     },
-    onSuccess: () => toast.success("Moved back"),
-    onError: (err) => toast.error("Couldn't move it back", { description: errorMessage(err) }),
+    onSuccess: () => toast.success(t("agentDnd.movedBack")),
+    onError: (err) => toast.error(t("agentDnd.moveBackError"), { description: errorMessage(err) }),
     onSettled: () => qc.invalidateQueries({ queryKey: qk.agents }),
   });
 
@@ -163,13 +169,13 @@ export function useMoveAgent() {
     onSuccess: (res, { plan }) => {
       const team = res.moved.length - 1;
       toast.success(plan.done, {
-        description: team > 0 ? `Its team of ${team} moved along.` : undefined,
-        action: { label: "Undo", onClick: () => undo.mutate(res.previous) },
+        description: team > 0 ? t("agentDnd.teamMoved", { n: team }) : undefined,
+        action: { label: t("common:actions.undo"), onClick: () => undo.mutate(res.previous) },
       });
     },
     onError: (err, _vars, snapshot) => {
       if (snapshot) restore(snapshot);
-      toast.error("Couldn't move the agent", { description: errorMessage(err) });
+      toast.error(t("agentDnd.moveError"), { description: errorMessage(err) });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: qk.agents }),
   });
@@ -177,6 +183,7 @@ export function useMoveAgent() {
 
 /** Drag agents onto each other, onto workspaces or onto the dock that opens while dragging; every move can be undone. */
 export function AgentDnd({ all, workspaces, children }: { all: Agent[]; workspaces: Workspace[]; children: ReactNode }) {
+  const { t } = useTranslation("agents");
   const [dragged, setDragged] = useState<Agent | null>(null);
   const [over, setOver] = useState<AgentDropTarget | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
@@ -210,7 +217,7 @@ export function AgentDnd({ all, workspaces, children }: { all: Agent[]; workspac
     if (!agent || !target) return;
     const p = planMove(agent, target, all, workspaces);
     if (p?.ok) move.mutate({ agent, plan: p });
-    else if (p) toast.error(`Can't move ${agent.name} there`, { description: `${p.reason}.` });
+    else if (p) toast.error(t("agentDnd.cantMove", { name: agent.name }), { description: `${p.reason}.` });
   };
 
   const current = dragged && over ? planMove(dragged, over, all, workspaces) : null;
@@ -236,6 +243,7 @@ export function AgentDnd({ all, workspaces, children }: { all: Agent[]; workspac
 
 /** The agent under the pointer while it is dragged, saying what letting go would do. */
 function Ghost({ agent, plan }: { agent: Agent; plan: MovePlan | null }) {
+  const { t } = useTranslation("agents");
   return (
     <div
       className={cn(
@@ -253,7 +261,7 @@ function Ghost({ agent, plan }: { agent: Agent; plan: MovePlan | null }) {
               <CornerDownRight className="size-3 shrink-0" aria-hidden />
               <span className="truncate">
                 {plan.label}
-                {plan.team.length > 0 && <span className="text-muted-foreground"> · with {plan.team.length} report{plan.team.length === 1 ? "" : "s"}</span>}
+                {plan.team.length > 0 && <span className="text-muted-foreground"> · {t("agentDnd.withReports", { count: plan.team.length })}</span>}
               </span>
             </>
           ) : plan ? (
@@ -262,7 +270,7 @@ function Ghost({ agent, plan }: { agent: Agent; plan: MovePlan | null }) {
               <span className="truncate">{plan.reason}</span>
             </>
           ) : (
-            "Drop on an agent or a workspace"
+            t("agentDnd.dropHint")
           )}
         </p>
       </div>
@@ -283,6 +291,7 @@ function Dock({
   at: { left: number; width: number } | null;
   onInside: (inside: boolean) => void;
 }) {
+  const { t } = useTranslation("agents");
   return (
     <AnimatePresence>
       {dragged && !dragged.isDefault && (
@@ -298,9 +307,9 @@ function Dock({
           <div
             onPointerEnter={() => onInside(true)}
             onPointerLeave={() => onInside(false)}
-            className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border bg-card/90 p-1.5 shadow-float backdrop-blur-xl" role="group" aria-label="Move to workspace">
+            className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-2xl border bg-card/90 p-1.5 shadow-float backdrop-blur-xl" role="group" aria-label={t("agentDnd.moveToWorkspace")}>
             <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-muted-foreground">
-              <FolderInput className="size-3.5" aria-hidden /> Move to
+              <FolderInput className="size-3.5" aria-hidden /> {t("agentDnd.moveToShort")}
             </span>
             <DockTarget workspace={null} here={dragged.workspaceId === null} />
             {workspaces.map((w) => (
@@ -314,6 +323,7 @@ function Dock({
 }
 
 function DockTarget({ workspace, here }: { workspace: Workspace | null; here: boolean }) {
+  const { t } = useTranslation("agents");
   const drop = useAgentDrop({ kind: "workspace", workspaceId: workspace?.id ?? null }, `dock:${workspace?.id ?? "global"}`);
   return (
     <div
@@ -325,8 +335,8 @@ function DockTarget({ workspace, here }: { workspace: Workspace | null; here: bo
       )}
     >
       <GroupIcon workspace={workspace} isGlobal={!workspace} className="size-5" />
-      <span className="max-w-36 truncate">{workspace?.name ?? "Global"}</span>
-      {here && <span className="text-[11px]">here</span>}
+      <span className="max-w-36 truncate">{workspace?.name ?? t("agentDnd.global")}</span>
+      {here && <span className="text-[11px]">{t("agentDnd.here")}</span>}
     </div>
   );
 }

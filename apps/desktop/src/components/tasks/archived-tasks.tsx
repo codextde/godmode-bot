@@ -1,20 +1,23 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
+import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, isYesterday, type Locale } from "date-fns";
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Agent, Task, Workspace } from "@godmode/shared";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLocale } from "@/i18n/language";
 import { STATUS_META, StatusIcon, TypeIcon } from "./task-meta";
 
-function bucket(d: Date, now: Date): string {
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
+function bucket(d: Date, now: Date, t: TFunction<["tasks", "common"]>, locale: Locale): string {
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
   const days = differenceInCalendarDays(now, d);
-  if (days < 7) return "Previous 7 days";
-  if (days < 30) return "Previous 30 days";
-  return format(d, d.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy");
+  if (days < 7) return t("archived.previous7");
+  if (days < 30) return t("archived.previous30");
+  return format(d, d.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy", { locale });
 }
 
 export function ArchivedTasks({
@@ -38,33 +41,33 @@ export function ArchivedTasks({
   onRestore: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
+  const { dateLocale } = useLocale();
   const groups = useMemo(() => {
     const now = new Date();
     const out: { label: string; items: Task[] }[] = [];
-    for (const t of tasks) {
-      const label = bucket(new Date(t.archivedAt ?? t.updatedAt), now);
+    for (const task of tasks) {
+      const label = bucket(new Date(task.archivedAt ?? task.updatedAt), now, t, dateLocale);
       const last = out.at(-1);
-      if (last?.label === label) last.items.push(t);
-      else out.push({ label, items: [t] });
+      if (last?.label === label) last.items.push(task);
+      else out.push({ label, items: [task] });
     }
     return out;
-  }, [tasks]);
+  }, [tasks, t, dateLocale]);
 
   if (!tasks.length) {
     return (
       <div className="px-5 @2xl:px-8">
         <EmptyState
           icon={<Archive />}
-          title={filtered ? "No archived tasks match" : "Nothing archived yet"}
+          title={filtered ? t("archived.noMatch") : t("archived.emptyTitle")}
           description={
-            filtered
-              ? "Try another filter."
-              : "Archive finished work to keep the board focused: right-click a card, or clear a whole Done column from its header. Archived tasks keep everything and come back in one click."
+            filtered ? t("archived.tryAnotherFilter") : t("archived.emptyDescription")
           }
           action={
             filtered ? (
               <Button variant="outline" onClick={onClearFilters}>
-                Clear filters
+                {t("archived.clearFilters")}
               </Button>
             ) : undefined
           }
@@ -117,6 +120,8 @@ function ArchivedRow({
   onRestore: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation("tasks");
+  const { dateLocale, intlLocale } = useLocale();
   const when = new Date(task.archivedAt ?? task.updatedAt);
   return (
     <motion.div
@@ -142,7 +147,7 @@ function ArchivedRow({
             <span className="shrink-0">{STATUS_META[task.status].label}</span>
             {workspace !== undefined && (
               <span className="truncate">
-                · {workspace?.icon ?? "🌐"} {workspace?.name ?? "Global"}
+                · {workspace?.icon ?? "🌐"} {workspace?.name ?? t("card.global")}
               </span>
             )}
           </span>
@@ -155,22 +160,22 @@ function ArchivedRow({
         ) : null}
         <span
           className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
-          title={`Archived ${when.toLocaleString()}`}
+          title={t("archived.archivedAt", { date: when.toLocaleString(intlLocale) })}
         >
-          {formatDistanceToNowStrict(when, { addSuffix: true })}
+          {formatDistanceToNowStrict(when, { addSuffix: true, locale: dateLocale })}
         </span>
       </button>
       <div className="absolute inset-y-0 right-2 flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
         <Button size="xs" variant="outline" className="bg-card" onClick={onRestore}>
-          <ArchiveRestore /> Restore
+          <ArchiveRestore /> {t("archived.restore")}
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon-xs" variant="ghost" aria-label={`Delete #${task.number}`} onClick={onDelete} className="text-muted-foreground hover:text-destructive">
+            <Button size="icon-xs" variant="ghost" aria-label={t("archived.deleteNumber", { number: task.number })} onClick={onDelete} className="text-muted-foreground hover:text-destructive">
               <Trash2 />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Delete forever</TooltipContent>
+          <TooltipContent>{t("archived.deleteForever")}</TooltipContent>
         </Tooltip>
       </div>
     </motion.div>

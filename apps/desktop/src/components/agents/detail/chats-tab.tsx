@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { Archive, ArchiveRestore, HeartPulse, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, SquareKanban, Trash2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
 import { errorMessage } from "@/lib/api";
@@ -20,18 +21,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
 import { PLATFORMS } from "@/components/messaging/platform";
+import { useLocale } from "@/i18n/language";
 
-const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }>; label: string }> = {
-  chat: { icon: MessageSquare, label: "Chat" },
-  routine: { icon: Workflow, label: "Automation" },
-  delegation: { icon: Share2, label: "Handed over" },
-  api: { icon: Plug, label: "Chat" },
-  dream: { icon: Moon, label: "Dreams" },
-  slack: { icon: PLATFORMS.slack.glyph, label: "Slack" },
-  telegram: { icon: PLATFORMS.telegram.glyph, label: "Telegram" },
-  teams: { icon: PLATFORMS.teams.glyph, label: "Microsoft Teams" },
-  task: { icon: SquareKanban, label: "Task" },
-  heartbeat: { icon: HeartPulse, label: "Heartbeat" },
+const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }> }> = {
+  chat: { icon: MessageSquare },
+  routine: { icon: Workflow },
+  delegation: { icon: Share2 },
+  api: { icon: Plug },
+  dream: { icon: Moon },
+  slack: { icon: PLATFORMS.slack.glyph },
+  telegram: { icon: PLATFORMS.telegram.glyph },
+  teams: { icon: PLATFORMS.teams.glyph },
+  task: { icon: SquareKanban },
+  heartbeat: { icon: HeartPulse },
 };
 
 function useDebounced<T>(value: T, ms = 250): T {
@@ -44,6 +46,7 @@ function useDebounced<T>(value: T, ms = 250): T {
 }
 
 export function ChatsTab({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("agents");
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const q = useDebounced(search.trim());
@@ -70,19 +73,19 @@ export function ChatsTab({ agent }: { agent: Agent }) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search ${agent.name}'s chats…`}
-            aria-label="Search conversations"
+            placeholder={t("chatsTab.searchPlaceholder", { name: agent.name })}
+            aria-label={t("chatsTab.searchLabel")}
             className="pl-9"
           />
         </div>
         <div className="flex items-center gap-2">
           <Switch id="show-archived" checked={showArchived} onCheckedChange={setShowArchived} />
           <Label htmlFor="show-archived" className="text-sm font-normal text-muted-foreground">
-            Archived
+            {t("chatsTab.archived")}
           </Label>
         </div>
         <Button className="ml-auto" onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
-          {chat.isPending ? <Spinner /> : <Plus />} New chat
+          {chat.isPending ? <Spinner /> : <Plus />} {t("chatsTab.newChat")}
         </Button>
       </div>
 
@@ -93,16 +96,16 @@ export function ChatsTab({ agent }: { agent: Agent }) {
           ))}
         </div>
       ) : query.isError ? (
-        <EmptyState icon={<MessagesSquare />} title="Couldn't load conversations" description={errorMessage(query.error)} />
+        <EmptyState icon={<MessagesSquare />} title={t("chatsTab.loadError")} description={errorMessage(query.error)} />
       ) : list.length === 0 ? (
         <EmptyState
           icon={showArchived ? <Archive /> : <MessagesSquare />}
-          title={q ? "No conversations match" : showArchived ? "No archived conversations" : `No chats with ${agent.name} yet`}
-          description={q ? `Nothing found for “${q}”.` : showArchived ? undefined : "Start one — it keeps the context across messages."}
+          title={q ? t("chatsTab.noMatch") : showArchived ? t("chatsTab.noArchived") : t("chatsTab.emptyTitle", { name: agent.name })}
+          description={q ? t("chatsTab.nothingFound", { query: q }) : showArchived ? undefined : t("chatsTab.emptyDescription")}
           action={
             !q && !showArchived ? (
               <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
-                <Plus /> New chat
+                <Plus /> {t("chatsTab.newChat")}
               </Button>
             ) : undefined
           }
@@ -139,8 +142,11 @@ function ConversationRow({
   onToggleArchive: () => void;
   onDelete: () => void;
 }) {
-  const origin = ORIGIN[c.origin] ?? ORIGIN.chat;
-  const Icon = origin.icon;
+  const { t } = useTranslation(["agents", "common"]);
+  const { intlLocale, dateLocale } = useLocale();
+  const originKey: ConversationOrigin = c.origin in ORIGIN ? c.origin : "chat";
+  const Icon = ORIGIN[originKey].icon;
+  const originLabel = t(`chatsTab.origin.${originKey}`);
   const when = c.lastMessageAt ?? c.createdAt;
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }} className="group relative">
@@ -151,24 +157,24 @@ function ConversationRow({
           running && "bg-brand-soft/40",
         )}
       >
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-secondary text-foreground" title={origin.label}>
-          {running ? <Orb variant="S3" size={14} label="Working…" /> : <Icon className="size-4" />}
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg border bg-secondary text-foreground" title={originLabel}>
+          {running ? <Orb variant="S3" size={14} label={t("chatsTab.working")} /> : <Icon className="size-4" />}
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className="truncate text-sm font-medium tracking-[-0.01em]">{c.title || "New chat"}</span>
-            {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />}
-            {c.archived && <Archive className="size-3 shrink-0 text-muted-foreground" aria-label="Archived" />}
+            <span className="truncate text-sm font-medium tracking-[-0.01em]">{c.title || t("chatsTab.newChat")}</span>
+            {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label={t("chatsTab.pinned")} />}
+            {c.archived && <Archive className="size-3 shrink-0 text-muted-foreground" aria-label={t("chatsTab.archived")} />}
           </span>
           <span className="block truncate text-xs text-muted-foreground">
-            {running ? <span className="text-shimmer font-medium">Working…</span> : c.preview || origin.label}
+            {running ? <span className="text-shimmer font-medium">{t("chatsTab.working")}</span> : c.preview || originLabel}
           </span>
         </span>
         <span
           className="shrink-0 text-xs text-muted-foreground tabular-nums transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
-          title={new Date(when).toLocaleString()}
+          title={new Date(when).toLocaleString(intlLocale)}
         >
-          {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
+          {formatDistanceToNowStrict(new Date(when), { addSuffix: true, locale: dateLocale })}
         </span>
       </Link>
       <div className="absolute inset-y-0 right-3 flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
@@ -177,28 +183,28 @@ function ConversationRow({
             <Button
               size="icon-xs"
               variant="outline"
-              aria-label={c.archived ? "Unarchive chat" : "Archive chat"}
+              aria-label={c.archived ? t("chatsTab.unarchiveChat") : t("chatsTab.archiveChat")}
               onClick={onToggleArchive}
               className="bg-card text-muted-foreground hover:text-foreground"
             >
               {c.archived ? <ArchiveRestore /> : <Archive />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{c.archived ? "Unarchive" : "Archive"}</TooltipContent>
+          <TooltipContent>{c.archived ? t("chatsTab.unarchive") : t("chatsTab.archive")}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               size="icon-xs"
               variant="outline"
-              aria-label={`Delete “${c.title || "New chat"}”`}
+              aria-label={t("chatsTab.deleteLabel", { title: c.title || t("chatsTab.newChat") })}
               onClick={onDelete}
               className="bg-card text-muted-foreground hover:text-destructive"
             >
               <Trash2 />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Delete</TooltipContent>
+          <TooltipContent>{t("common:actions.delete")}</TooltipContent>
         </Tooltip>
       </div>
     </motion.div>

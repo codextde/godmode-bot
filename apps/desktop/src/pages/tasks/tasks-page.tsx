@@ -3,6 +3,8 @@ import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Task, TaskPriority, TaskStatus, Workspace } from "@godmode/shared";
 import { TASK_PRIORITIES, isOverdue, localDay, mergesOnApprove } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageHeader } from "@/components/common";
@@ -72,6 +74,7 @@ function optimisticPosition(list: Task[], task: Task, status: TaskStatus, before
 }
 
 export default function TasksPage() {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   const scope = useUi((s) => s.workspace);
   const [params, setParams] = useSearchParams();
@@ -209,18 +212,18 @@ export default function TasksPage() {
         list?.map((t) => (t.id === task.id ? { ...t, status, position: optimisticPosition(list, task, status, beforeId) } : t)),
       );
     },
-    onSuccess: (t, { status, task }) => {
-      upsertTask(qc, t);
-      if ((status === "todo" || status === "in_progress") && !t.agentId) {
-        toast("Assign an agent to start it", { action: { label: "Assign", onClick: () => openTask(t) } });
+    onSuccess: (updated, { status, task }) => {
+      upsertTask(qc, updated);
+      if ((status === "todo" || status === "in_progress") && !updated.agentId) {
+        toast(t("page.assignToStart"), { action: { label: t("page.assign"), onClick: () => openTask(updated) } });
       }
       if (status === "blocked" && task.status !== "blocked") {
-        toast(`#${t.number} moved to Blocked`, { action: { label: "Add a reason", onClick: () => openTask(t) } });
+        toast(t("page.movedToBlocked", { number: updated.number }), { action: { label: t("page.addReason"), onClick: () => openTask(updated) } });
       }
     },
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
-      toastApiError(e, "Could not move the task", qc);
+      toastApiError(e, t("page.moveError"), qc);
     },
   });
 
@@ -228,20 +231,22 @@ export default function TasksPage() {
   const approve = useMutation({
     mutationKey: APPROVE_KEY,
     mutationFn: (task: Task) => api.tasks.approve(task.id),
-    onSuccess: (t, task) => {
-      upsertTask(qc, t);
+    onSuccess: (updated, task) => {
+      upsertTask(qc, updated);
       const pr = task.pullRequest?.number;
-      if (t.pullRequest?.state === "merged") {
-        toast.success(`#${t.number} merged into ${t.baseBranch}`, { description: t.status === "done" ? `Pull request #${pr} is merged and the ticket is done.` : `Pull request #${pr} is merged.` });
-      } else toast.info(`#${pr} is queued to merge`, { description: "The ticket moves to Done once GitHub merges it." });
+      if (updated.pullRequest?.state === "merged") {
+        toast.success(t("page.mergedInto", { number: updated.number, branch: updated.baseBranch }), {
+          description: updated.status === "done" ? t("page.prMergedDone", { number: pr }) : t("page.prMerged", { number: pr }),
+        });
+      } else toast.info(t("page.queuedToMerge", { number: pr }), { description: t("page.queuedToMergeDescription") });
     },
     onError: (e, task) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
-      if (!(e instanceof ApiRequestError && e.code === "merge_failed")) return toastApiError(e, "Could not approve the task", qc);
-      toast.error(`Couldn't merge #${task.pullRequest?.number}`, {
+      if (!(e instanceof ApiRequestError && e.code === "merge_failed")) return toastApiError(e, t("page.approveError"), qc);
+      toast.error(t("page.mergeError", { number: task.pullRequest?.number }), {
         description: e.message,
         duration: 12_000,
-        action: { label: "Mark done anyway", onClick: () => move.mutate({ task, status: "done", beforeId: null }) },
+        action: { label: t("page.markDoneAnyway"), onClick: () => move.mutate({ task, status: "done", beforeId: null }) },
       });
     },
   });
@@ -265,7 +270,7 @@ export default function TasksPage() {
     onSuccess: (t) => upsertTask(qc, t),
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
-      toastApiError(e, "Could not change the agent", qc);
+      toastApiError(e, t("page.reassignError"), qc);
     },
   });
   const requestReassign = (task: Task, agentId: string | null) => {
@@ -278,7 +283,7 @@ export default function TasksPage() {
     mutationFn: ({ status, title }: { status: TaskStatus; title: string }) =>
       api.tasks.create({ workspaceId: workspace?.id ?? null, projectId: scopeProject?.id ?? null, title, status }),
     onSuccess: (t) => qc.setQueryData<Task[]>(listKey, (list) => (list && !list.some((x) => x.id === t.id) ? [...list, t] : list)),
-    onError: (e) => toastApiError(e, "Could not add the task", qc),
+    onError: (e) => toastApiError(e, t("page.addError"), qc),
   });
 
   const remove = useMutation({
@@ -286,12 +291,12 @@ export default function TasksPage() {
     onSuccess: (_r, task) => {
       qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.filter((t) => t.id !== task.id));
       if (selectedId === task.id) openTask(null);
-      toast.success(`#${task.number} deleted`);
+      toast.success(t("page.deleted", { number: task.number }));
     },
-    onError: (e) => toastApiError(e, "Could not delete the task", qc),
+    onError: (e) => toastApiError(e, t("page.deleteError"), qc),
   });
 
-  const stopCopyOf = stopping ? stopCopy(stopping, (id) => (id ? (agentById.get(id)?.name ?? "The agent") : "The agent")) : null;
+  const stopCopyOf = stopping ? stopCopy(stopping, (id) => (id ? (agentById.get(id)?.name ?? t("sheet.theAgent")) : t("sheet.theAgent")), t) : null;
   const running = tasks.filter(isWorking).length;
   const review = tasks.filter((t) => t.status === "in_review").length;
   const blocked = tasks.filter((t) => t.status === "blocked").length;
@@ -301,13 +306,13 @@ export default function TasksPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         icon={<SquareKanban />}
-        title="Agent tasks"
+        title={t("page.title")}
         description={
           workspace
-            ? `${workspace.icon} ${workspace.name}${scopeProject ? ` / ${scopeProject.icon} ${scopeProject.name}` : ""} — tickets you hand to your agents.`
+            ? t("page.descriptionScoped", { scope: `${workspace.icon} ${workspace.name}${scopeProject ? ` / ${scopeProject.icon} ${scopeProject.name}` : ""}` })
             : scope === "global"
-              ? "Global tasks — tickets you hand to your agents."
-              : "Every workspace's board of tickets you hand to your agents."
+              ? t("page.descriptionGlobal")
+              : t("page.descriptionAll")
         }
         actions={
           <>
@@ -325,12 +330,12 @@ export default function TasksPage() {
                     {repos.length > 1 && <span className="text-muted-foreground"> +{repos.length - 1}</span>}
                   </span>
                 ) : (
-                  "Connect a repository"
+                  t("page.connectRepo")
                 )}
               </Button>
             )}
             <Button onClick={() => setCreating(true)}>
-              <Plus /> New task
+              <Plus /> {t("dialog.newTask")}
               <kbd className="ml-1 font-mono text-[10px] opacity-60">C</kbd>
             </Button>
           </>
@@ -342,10 +347,10 @@ export default function TasksPage() {
         <Tabs value={view} onValueChange={setView}>
           <TabsList className="group-data-[orientation=horizontal]/tabs:h-8">
             <TabsTrigger value="board" className="gap-1.5 px-2.5 text-[13px]">
-              <SquareKanban className="size-3.5" /> Board
+              <SquareKanban className="size-3.5" /> {t("page.board")}
             </TabsTrigger>
             <TabsTrigger value={ARCHIVED} className="gap-1.5 px-2.5 text-[13px]">
-              <Archive className="size-3.5" /> Archived
+              <Archive className="size-3.5" /> {t("page.archived")}
               {archived.length > 0 && (
                 <span className="rounded-[4px] bg-foreground/[0.06] px-1.5 font-mono text-[10px] text-muted-foreground tabular-nums">{archived.length}</span>
               )}
@@ -354,15 +359,15 @@ export default function TasksPage() {
         </Tabs>
         <div className="relative w-full max-w-64">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Filter tasks…" aria-label="Filter tasks" className="h-8 pl-8" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("page.filterPlaceholder")} aria-label={t("page.filterLabel")} className="h-8 pl-8" />
         </div>
         <Select value={agentFilter} onValueChange={setAgentFilter}>
-          <SelectTrigger className="h-8 w-44" aria-label="Agent">
+          <SelectTrigger className="h-8 w-44" aria-label={t("common:words.agent")}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper">
-            <SelectItem value={ALL}>All agents</SelectItem>
-            <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+            <SelectItem value={ALL}>{t("page.allAgents")}</SelectItem>
+            <SelectItem value={UNASSIGNED}>{t("card.unassigned")}</SelectItem>
             {scoped.length > 0 && <SelectSeparator />}
             {scoped.map((a) => (
               <SelectItem key={a.id} value={a.id}>
@@ -374,34 +379,28 @@ export default function TasksPage() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="h-8 font-normal">
-              <ListFilter className="text-muted-foreground" /> Filter
+              <ListFilter className="text-muted-foreground" /> {t("page.filter")}
               {filtersOn > 0 && <span className="rounded-[4px] bg-primary px-1.5 font-mono text-[10px] text-primary-foreground tabular-nums">{filtersOn}</span>}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Priority</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("fields.priority")}</DropdownMenuLabel>
             {TASK_PRIORITIES.map((p) => (
               <DropdownMenuCheckboxItem key={p} checked={priorities.has(p)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => toggleIn("priority", priorities as Set<string>, p)}>
                 <PriorityIcon priority={p} /> {PRIORITY_META[p].label}
               </DropdownMenuCheckboxItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Due</DropdownMenuLabel>
-            {(
-              [
-                ["overdue", "Overdue"],
-                ["week", "Due in 7 days"],
-                ["none", "No due date"],
-              ] as const
-            ).map(([v, label]) => (
+            <DropdownMenuLabel>{t("page.due.label")}</DropdownMenuLabel>
+            {(["overdue", "week", "none"] as const).map((v) => (
               <DropdownMenuCheckboxItem key={v} checked={dueFilter === v} onSelect={(e) => e.preventDefault()} onCheckedChange={(on) => setFilter("due", on ? v : null)}>
-                {label}
+                {t(`page.due.${v}`)}
               </DropdownMenuCheckboxItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuLabel>Labels</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("sheet.labels")}</DropdownMenuLabel>
             {labelsInUse.length === 0 ? (
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">No labels yet</p>
+              <p className="px-2 py-1.5 text-xs text-muted-foreground">{t("page.noLabels")}</p>
             ) : (
               labelsInUse.map((l) => (
                 <DropdownMenuCheckboxItem key={l} checked={labelFilter.has(l)} onSelect={(e) => e.preventDefault()} onCheckedChange={() => toggleIn("label", labelFilter, l)}>
@@ -412,30 +411,30 @@ export default function TasksPage() {
             {filtersOn > 0 && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={clearFilters}>Clear filters</DropdownMenuItem>
+                <DropdownMenuItem onSelect={clearFilters}>{t("archived.clearFilters")}</DropdownMenuItem>
               </>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
         {view === ARCHIVED ? (
           <p className="ml-auto text-xs text-muted-foreground">
-            <span className="font-mono tabular-nums">{archived.length}</span> archived · restoring puts a task back on top of its column
+            <Trans t={t} i18nKey="page.archivedInfo" values={{ count: archived.length }} components={{ n: <span className="font-mono tabular-nums" /> }} />
           </p>
         ) : (
           <p className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
             {(filtersOn > 0 || !!search.trim() || agentFilter !== ALL) && (
               <span>
-                Showing <span className="font-mono tabular-nums">{visible.length}</span> of <span className="font-mono tabular-nums">{tasks.length}</span> ·{" "}
+                <Trans t={t} i18nKey="page.showing" values={{ visible: visible.length, total: tasks.length }} components={{ n: <span className="font-mono tabular-nums" /> }} /> ·{" "}
                 <button type="button" className="underline-offset-2 hover:underline" onClick={clearFilters}>
-                  Clear filters
+                  {t("archived.clearFilters")}
                 </button>
               </span>
             )}
-            {overdueCount > 0 && <span className="font-medium text-rose-600 dark:text-rose-400">{overdueCount} overdue</span>}
-            {running > 0 && <span className="text-amber-700 dark:text-amber-300">{running} running</span>}
-            {review > 0 && <span>{review} {STATUS_META.in_review.label.toLowerCase()}</span>}
-            {blocked > 0 && <span className="text-rose-600 dark:text-rose-400">{blocked} blocked</span>}
-            <span className="font-mono tabular-nums">{tasks.length} total</span>
+            {overdueCount > 0 && <span className="font-medium text-rose-600 dark:text-rose-400">{t("page.stats.overdue", { count: overdueCount })}</span>}
+            {running > 0 && <span className="text-amber-700 dark:text-amber-300">{t("page.stats.running", { count: running })}</span>}
+            {review > 0 && <span>{t("page.stats.inReview", { count: review })}</span>}
+            {blocked > 0 && <span className="text-rose-600 dark:text-rose-400">{t("page.stats.blocked", { count: blocked })}</span>}
+            <span className="font-mono tabular-nums">{t("page.stats.total", { count: tasks.length })}</span>
           </p>
         )}
       </div>
@@ -472,11 +471,11 @@ export default function TasksPage() {
           <div className="px-5 @2xl:px-8">
             <EmptyState
               icon={<SquareKanban />}
-              title="Couldn't load the board"
+              title={t("page.loadError")}
               description={errorMessage(tasksQ.error)}
               action={
                 <Button variant="outline" onClick={() => tasksQ.refetch()}>
-                  Try again
+                  {t("common:actions.tryAgain")}
                 </Button>
               }
             />
@@ -485,11 +484,11 @@ export default function TasksPage() {
           <div className="px-5 @2xl:px-8">
             <EmptyState
               icon={<ListFilter />}
-              title="No tasks match"
-              description="Nothing on this board fits the filters."
+              title={t("page.noMatch")}
+              description={t("page.noMatchDescription")}
               action={
                 <Button variant="outline" onClick={clearFilters}>
-                  Clear filters
+                  {t("archived.clearFilters")}
                 </Button>
               }
             />
@@ -564,14 +563,14 @@ export default function TasksPage() {
       <AlertDialog open={!!deleting} onOpenChange={(open) => !open && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete #{deleting?.number}?</AlertDialogTitle>
+            <AlertDialogTitle>{t("page.deleteTitle", { number: deleting?.number })}</AlertDialogTitle>
             <AlertDialogDescription>
-              The task is gone for good{deleting?.branch ? " and its worktree is removed (a pushed branch and pull request stay)" : ""}. The agent's conversation is kept.
-              {deleting && !deleting.archivedAt && " To just get it off the board, archive it — you can restore it anytime."}
+              {deleting?.branch ? t("page.deleteTextBranch") : t("page.deleteText")}
+              {deleting && !deleting.archivedAt && ` ${t("page.deleteArchiveHint")}`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             {deleting && !deleting.archivedAt && (
               <AlertDialogCancel
                 onClick={() => {
@@ -579,7 +578,7 @@ export default function TasksPage() {
                   setDeleting(null);
                 }}
               >
-                <Archive /> Archive instead
+                <Archive /> {t("page.archiveInstead")}
               </AlertDialogCancel>
             )}
             <AlertDialogAction
@@ -589,7 +588,7 @@ export default function TasksPage() {
                 setDeleting(null);
               }}
             >
-              Delete
+              {t("common:actions.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -601,48 +600,51 @@ export default function TasksPage() {
 type Stopping = { task: Task; status: TaskStatus; beforeId: string | null; archive?: boolean; reassignTo?: string | null };
 
 /** What the confirm dialog says: what would end (a run working, standing still, waiting for an answer, a follow-up). */
-function stopCopy(s: Stopping, agentName: (id: string | null) => string): { title: string; text: string; keep: string; confirm: string } {
-  const t = s.task;
-  const who = agentName(t.agentId);
-  const what = s.archive ? "Archiving it" : `Moving it to ${STATUS_META[s.status].label}`;
-  const state = isWorking(t) ? "working" : t.pause?.reason === "question" ? "question" : t.pause?.reason === "limit" ? "limit" : t.pause ? "paused" : "waiting";
+function stopCopy(s: Stopping, agentName: (id: string | null) => string, t: TFunction<["tasks", "common"]>): { title: string; text: string; keep: string; confirm: string } {
+  const task = s.task;
+  const who = agentName(task.agentId);
+  const number = task.number;
+  const status = STATUS_META[s.status].label;
+  const how = s.archive ? "archive" : "move";
+  const state = isWorking(task) ? "working" : task.pause?.reason === "question" ? "question" : task.pause?.reason === "limit" ? "limit" : task.pause ? "paused" : "waiting";
   if (s.reassignTo !== undefined) {
-    if (s.reassignTo === null) return { title: `Take ${who} off #${t.number}?`, text: "The run stops and the task is parked in the Backlog.", keep: `Keep ${who}`, confirm: "Take off" };
+    if (s.reassignTo === null) return { title: t("stop.takeOff.title", { who, number }), text: t("stop.takeOff.text"), keep: t("stop.keepAgent", { who }), confirm: t("stop.takeOff.confirm") };
     const next = agentName(s.reassignTo);
-    const ends = state === "working" ? `${who}'s run stops` : state === "waiting" ? `${who}'s follow-up is cancelled` : `${who}'s run ends`;
-    return { title: `Hand #${t.number} to ${next}?`, text: `${who} is still on it. ${ends} and ${next} starts over.`, keep: `Keep ${who}`, confirm: "Hand over" };
+    const ends = state === "working" ? t("stop.handOver.runStops", { who }) : state === "waiting" ? t("stop.handOver.followupCancelled", { who }) : t("stop.handOver.runEnds", { who });
+    return { title: t("stop.handOver.title", { number, next }), text: t("stop.handOver.text", { who, ends, next }), keep: t("stop.keepAgent", { who }), confirm: t("stop.handOver.confirm") };
   }
-  const parked = s.archive ? " and parks the task in the Backlog" : "";
   switch (state) {
     case "working":
-      return { title: "Stop the agent?", text: `${who} is still working on #${t.number}. ${what} stops the run${parked}.`, keep: "Keep working", confirm: s.archive ? "Stop and archive" : "Stop and move" };
+      return { title: t("stop.working.title"), text: t(`stop.working.text.${how}`, { who, number, status }), keep: t("stop.working.keep"), confirm: t(`stop.working.confirm.${how}`) };
     case "question":
       return {
-        title: "Drop the question?",
-        text: `${who} is waiting for your answer on #${t.number}. ${what} ends the run${parked} — it can't be continued afterwards.`,
-        keep: "Keep waiting",
-        confirm: s.archive ? "End and archive" : "End and move",
+        title: t("stop.question.title"),
+        text: t(`stop.question.text.${how}`, { who, number, status }),
+        keep: t("stop.keepWaiting"),
+        confirm: t(`stop.endConfirm.${how}`),
       };
     case "limit":
       return {
-        title: "End the waiting run?",
-        text: `#${t.number} waits for Claude's ${t.pause?.limit ?? "usage limit"} to reset. ${what} ends the run${parked} — it can't be continued afterwards.`,
-        keep: "Keep waiting",
-        confirm: s.archive ? "End and archive" : "End and move",
+        title: t("stop.limit.title"),
+        text: t(`stop.limit.text.${how}`, { number, limit: task.pause?.limit ?? t("pause.usageLimit"), status }),
+        keep: t("stop.keepWaiting"),
+        confirm: t(`stop.endConfirm.${how}`),
       };
     case "paused":
       return {
-        title: "End the paused run?",
-        text: `#${t.number} is paused. ${what} ends the run${parked} — it can't be continued afterwards.`,
-        keep: "Keep it paused",
-        confirm: s.archive ? "End and archive" : "End and move",
+        title: t("stop.paused.title"),
+        text: t(`stop.paused.text.${how}`, { number, status }),
+        keep: t("stop.paused.keep"),
+        confirm: t(`stop.endConfirm.${how}`),
       };
     default:
       return {
-        title: "Cancel the follow-up?",
-        text: `${who} plans to continue #${t.number}${t.followup ? ` ${followupWhen(t.followup.dueAt)}` : ""}. ${what} cancels that${parked}.`,
-        keep: "Keep waiting",
-        confirm: s.archive ? "Cancel and archive" : "Cancel and move",
+        title: t("stop.followup.title"),
+        text: task.followup
+          ? t(`stop.followup.textWhen.${how}`, { who, number, when: followupWhen(task.followup.dueAt), status })
+          : t(`stop.followup.text.${how}`, { who, number, status }),
+        keep: t("stop.keepWaiting"),
+        confirm: t(`stop.followup.confirm.${how}`),
       };
   }
 }

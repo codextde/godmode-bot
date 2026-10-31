@@ -1,0 +1,836 @@
+{
+  "roles": {
+    "ceo": {
+      "name": "CEO",
+      "role": "Chief executive officer",
+      "description": "Sets the goals, keeps every department pointed at them and tells you weekly what moved and what needs you.",
+      "routine": "Weekly company review"
+    },
+    "coo": {
+      "name": "COO",
+      "role": "Chief operating officer",
+      "description": "Runs day-to-day operations and procurement: suppliers, stock, deliveries, processes and nothing falling through the cracks."
+    },
+    "cfo": {
+      "name": "CFO",
+      "role": "Chief financial officer",
+      "description": "Keeps the money side in order: invoices collected, books reconciled, cash and spend reported every month.",
+      "routine": "Monthly finance report"
+    },
+    "cto": {
+      "name": "CTO",
+      "role": "Chief technology officer",
+      "description": "Owns the tech: turns requests into engineering tickets, reviews the code that ships and keeps systems and IT healthy."
+    },
+    "cmo": {
+      "name": "CMO",
+      "role": "Chief marketing officer",
+      "description": "Decides what to say, where and to whom, hands the work to the team and reports what actually brought customers.",
+      "routine": "Weekly marketing plan"
+    },
+    "chief-of-staff": {
+      "name": "Chief of Staff",
+      "role": "Chief of staff to the CEO",
+      "description": "Runs the CEO's office: goals tracked, decisions written down, promises followed up across every department.",
+      "routine": "Week in review"
+    },
+    "strategy-bizdev": {
+      "name": "Strategy & BizDev",
+      "role": "Business development manager",
+      "description": "Finds where the business should grow next: markets, partnerships, new offers and the numbers behind each."
+    },
+    "executive-assistant": {
+      "name": "Executive Assistant",
+      "role": "Executive assistant",
+      "description": "Keeps your calendar, prepares your meetings, books travel and runs the small errands that eat your day.",
+      "routine": "Tomorrow's prep"
+    },
+    "finance-department": {
+      "name": "Finance & Accounting",
+      "role": "Finance department",
+      "description": "The whole finance department in one agent: books, invoices in and out, payroll, cash, budgets and taxes.",
+      "covers": [
+        "bookkeeping",
+        "accounts payable",
+        "accounts receivable and dunning",
+        "payroll",
+        "controlling",
+        "planning and budgets (FP&A)",
+        "treasury and cash",
+        "tax preparation",
+        "investor relations"
+      ],
+      "routine": "Month-end close"
+    },
+    "bookkeeping-helper": {
+      "name": "Bookkeeping Helper",
+      "role": "Bookkeeper",
+      "description": "Organizes receipts and invoices, reconciles transactions and prepares data for your accountant."
+    },
+    "invoice-collector": {
+      "name": "Invoice Collector",
+      "role": "Invoice collector",
+      "description": "Logs into your vendor portals every month (including 2FA) and downloads all new invoices.",
+      "routine": "Monthly invoice collection"
+    },
+    "accounts-payable": {
+      "name": "Accounts Payable",
+      "role": "Accounts payable clerk",
+      "description": "Checks every incoming invoice against what was ordered and agreed, and prepares the payment runs for your OK.",
+      "routine": "Payment run preparation"
+    },
+    "accounts-receivable": {
+      "name": "Accounts Receivable",
+      "role": "Accounts receivable clerk",
+      "description": "Makes sure every job gets invoiced and every invoice gets paid: matching payments and friendly, firm reminders.",
+      "routine": "Receivables check"
+    },
+    "payroll-accountant": {
+      "name": "Payroll Accountant",
+      "role": "Payroll accountant",
+      "description": "Prepares the monthly payroll: changes collected, hours and absences checked, payslips verified, deadlines kept.",
+      "routine": "Payroll preparation"
+    },
+    "controller": {
+      "name": "Controller",
+      "role": "Controller",
+      "description": "Compares the actual numbers with the plan every month, explains the gaps and finds costs worth cutting.",
+      "routine": "Monthly management report"
+    },
+    "fpa-analyst": {
+      "name": "FP&A Analyst",
+      "role": "FP&A analyst",
+      "description": "Builds the budget, keeps the forecast current and models what a hire, a price change or a new market would do."
+    },
+    "treasury-manager": {
+      "name": "Treasury & Cash",
+      "role": "Treasury manager",
+      "description": "Watches the bank balances and the cash coming and going, and warns weeks before money gets tight.",
+      "routine": "Weekly cash forecast"
+    },
+    "tax-specialist": {
+      "name": "Tax Specialist",
+      "role": "Tax specialist",
+      "description": "Keeps every tax deadline, prepares VAT and other returns for your tax advisor and flags tax risks early.",
+      "routine": "Tax deadlines"
+    },
+    "investor-relations": {
+      "name": "Investor Relations",
+      "role": "Investor relations manager",
+      "description": "Writes the investor updates, keeps the data room and cap table current and prepares fundraising material."
+    },
+    "legal-department": {
+      "name": "Legal & Compliance",
+      "role": "Legal department",
+      "description": "The whole legal department in one agent: contracts, privacy, compliance and trademarks handled before they become problems.",
+      "covers": [
+        "legal counsel",
+        "contract management",
+        "data protection",
+        "compliance",
+        "trademarks and IP"
+      ]
+    },
+    "general-counsel": {
+      "name": "General Counsel",
+      "role": "General counsel",
+      "description": "Leads legal: weighs the legal risk of what the business does and makes sure contracts, privacy and compliance are covered."
+    },
+    "contract-manager": {
+      "name": "Contract Manager",
+      "role": "Contract manager",
+      "description": "Keeps every contract findable, reviews new ones against your standards and warns before notice periods run out.",
+      "routine": "Contract deadlines"
+    },
+    "data-protection-officer": {
+      "name": "Data Protection Officer",
+      "role": "Data protection officer",
+      "description": "Keeps personal data handling in line with GDPR: records, processor agreements, privacy policy and data requests."
+    },
+    "compliance-officer": {
+      "name": "Compliance Officer",
+      "role": "Compliance officer",
+      "description": "Knows which rules apply to the business, keeps the obligations list current and prepares for audits."
+    },
+    "ip-manager": {
+      "name": "Trademark & IP Manager",
+      "role": "Trademark & IP manager",
+      "description": "Protects the brand and ideas: trademark searches, the portfolio and renewals, and a watch for copycats."
+    },
+    "people-department": {
+      "name": "People & HR",
+      "role": "HR department",
+      "description": "The whole HR department in one agent: hiring, contracts, onboarding, reviews, training and employer brand.",
+      "covers": [
+        "HR management",
+        "recruiting",
+        "HR business partnering",
+        "HR administration and contracts",
+        "learning and development",
+        "employer branding"
+      ]
+    },
+    "head-of-people": {
+      "name": "Head of People",
+      "role": "Head of people",
+      "description": "Leads HR: hiring plan, team health, reviews and policies, so the company grows with the right people."
+    },
+    "recruiter": {
+      "name": "Recruiter",
+      "role": "Recruiter",
+      "description": "Writes job posts, screens applicants against your criteria and schedules the interviews worth having."
+    },
+    "hr-business-partner": {
+      "name": "HR Business Partner",
+      "role": "HR business partner",
+      "description": "Works with the team leads on structure, performance reviews, feedback, pay bands and difficult conversations."
+    },
+    "hr-administrator": {
+      "name": "HR Administrator",
+      "role": "HR administrator",
+      "description": "Handles the HR paperwork: contracts, onboarding and offboarding, employee records, absences and references."
+    },
+    "learning-development": {
+      "name": "Learning & Development",
+      "role": "Learning & development manager",
+      "description": "Builds onboarding programs, training plans and a skills overview so people get better at their jobs."
+    },
+    "employer-branding": {
+      "name": "Employer Branding",
+      "role": "Employer branding manager",
+      "description": "Makes the company a place people want to work: careers page, team stories, job ads and review sites."
+    },
+    "marketing-department": {
+      "name": "Marketing",
+      "role": "Marketing department",
+      "description": "The whole marketing department in one agent: content, social, SEO, email, ads, PR and the numbers behind them.",
+      "covers": [
+        "marketing strategy",
+        "content and copywriting",
+        "social media and community",
+        "SEO",
+        "email and CRM marketing",
+        "paid ads (Meta, Google, TikTok)",
+        "influencer and affiliate marketing",
+        "PR",
+        "brand",
+        "creative and design",
+        "marketing analytics",
+        "conversion optimization"
+      ],
+      "routine": "Weekly marketing review"
+    },
+    "head-of-growth": {
+      "name": "Head of Growth",
+      "role": "Head of growth",
+      "description": "Finds the fastest way to grow: runs experiments across the whole funnel and doubles down on what moves the numbers.",
+      "routine": "Weekly growth review"
+    },
+    "performance-marketing-lead": {
+      "name": "Performance Marketing Lead",
+      "role": "Performance marketing lead",
+      "description": "Runs paid acquisition on Meta, Google and TikTok against a target cost per customer, with strict kill and scale rules.",
+      "routine": "Ad accounts check"
+    },
+    "paid-social-manager": {
+      "name": "Paid Social Manager",
+      "role": "Paid social manager",
+      "description": "Runs Meta (Facebook, Instagram) and TikTok ads: audiences, creative tests and budgets that pay back."
+    },
+    "google-ads-manager": {
+      "name": "Google Ads Manager",
+      "role": "Google Ads manager",
+      "description": "Runs Google Search, Shopping, Performance Max and YouTube ads: keywords, feeds and bids that pay back."
+    },
+    "seo-specialist": {
+      "name": "SEO Specialist",
+      "role": "SEO specialist",
+      "description": "Audits your site every week, finds keywords worth winning and turns them into concrete fixes and content briefs.",
+      "routine": "Weekly SEO review"
+    },
+    "content-marketing-manager": {
+      "name": "Content Marketing Manager",
+      "role": "Content marketing manager",
+      "description": "Decides which content to make for whom, keeps the editorial calendar and gets every piece in front of its audience."
+    },
+    "content-writer": {
+      "name": "Content Writer",
+      "role": "Content writer",
+      "description": "Writes blog articles, newsletters and landing page copy in your voice, researched and ready to review."
+    },
+    "copywriter": {
+      "name": "Copywriter",
+      "role": "Copywriter",
+      "description": "Writes the words that sell: ads, hooks, landing pages, product pages and emails, with variants to test."
+    },
+    "social-media-manager": {
+      "name": "Social Media Manager",
+      "role": "Social media manager",
+      "description": "Plans, drafts and schedules on-brand posts and keeps an eye on engagement."
+    },
+    "community-manager": {
+      "name": "Community Manager",
+      "role": "Community manager",
+      "description": "Looks after the people around the brand: comments, DMs, groups and forums answered, fans turned into ambassadors.",
+      "routine": "Community round"
+    },
+    "email-marketing-manager": {
+      "name": "Email & CRM Marketing",
+      "role": "Email marketing manager",
+      "description": "Turns the email list into revenue: newsletters, automated flows, segments and deliverability."
+    },
+    "marketing-automation": {
+      "name": "Marketing Automation",
+      "role": "Marketing automation specialist",
+      "description": "Wires up the marketing tools: tracking, forms, lead scoring, CRM workflows and the integrations between them."
+    },
+    "influencer-affiliate-manager": {
+      "name": "Influencer & Affiliate Manager",
+      "role": "Influencer & affiliate manager",
+      "description": "Finds creators and affiliates who fit the brand, prepares the outreach and keeps the partner program paying off."
+    },
+    "pr-manager": {
+      "name": "PR & Communications",
+      "role": "PR manager",
+      "description": "Gets the business into the press and podcasts, writes its announcements and keeps its public voice consistent."
+    },
+    "brand-manager": {
+      "name": "Brand Manager",
+      "role": "Brand manager",
+      "description": "Keeps the brand clear and consistent: positioning, voice, visual rules and how everything the business shows looks."
+    },
+    "creative-strategist": {
+      "name": "Creative Strategist",
+      "role": "Creative strategist",
+      "description": "Finds the angles and hooks that make ads work, from customer research and competitor ads, and briefs the creatives."
+    },
+    "graphic-designer": {
+      "name": "Graphic Designer",
+      "role": "Graphic designer",
+      "description": "Designs social graphics, ad creatives, banners and presentations in the brand's look, ready to use."
+    },
+    "video-editor": {
+      "name": "Video Editor",
+      "role": "Video editor & motion designer",
+      "description": "Cuts short-form videos, adds captions and motion graphics, and turns long recordings into clips."
+    },
+    "marketing-analyst": {
+      "name": "Marketing Analyst",
+      "role": "Marketing analyst",
+      "description": "Tells you which marketing works: channel numbers, attribution, cohorts and a weekly report without vanity metrics.",
+      "routine": "Weekly marketing numbers"
+    },
+    "cro-specialist": {
+      "name": "CRO Specialist",
+      "role": "CRO specialist",
+      "description": "Finds why visitors don't buy or sign up, and turns it into tested changes to pages, checkout and offers."
+    },
+    "price-monitor": {
+      "name": "Price & Competitor Monitor",
+      "role": "Market monitor",
+      "description": "Tracks competitor prices, offers and product changes every day and reports what moved.",
+      "routine": "Daily price check"
+    },
+    "sales-department": {
+      "name": "Sales",
+      "role": "Sales department",
+      "description": "The whole sales team in one agent: finds leads, reaches out, answers prospects, runs deals and keeps the CRM clean.",
+      "covers": [
+        "lead research",
+        "outreach",
+        "answering prospects by email",
+        "running deals to close",
+        "key accounts",
+        "partnerships and resellers",
+        "technical pre-sales",
+        "sales operations and CRM",
+        "quotes and order processing"
+      ],
+      "routine": "Sales round"
+    },
+    "head-of-sales": {
+      "name": "Head of Sales",
+      "role": "Head of sales",
+      "description": "Keeps the pipeline full: decides whom to look for, reviews the leads and prepares the human's sales calls.",
+      "routine": "Weekly pipeline review"
+    },
+    "lead-researcher": {
+      "name": "Lead Researcher",
+      "role": "Lead researcher",
+      "description": "Finds and qualifies prospects that match your ideal customer profile, with verified context."
+    },
+    "sales-development-rep": {
+      "name": "Outreach Agent",
+      "role": "Sales development rep",
+      "description": "Drafts personal first messages and follow-ups for your qualified leads, for you to approve and send."
+    },
+    "email-sales-agent": {
+      "name": "Email Sales Agent",
+      "role": "Inside sales rep",
+      "description": "Works the sales inbox: answers prospects fast, qualifies them, follows up and books the calls worth having.",
+      "routine": "Sales inbox"
+    },
+    "account-executive": {
+      "name": "Account Executive",
+      "role": "Account executive",
+      "description": "Runs deals from first call to signature: call prep, proposals, objections, follow-ups and a clean forecast."
+    },
+    "key-account-manager": {
+      "name": "Key Account Manager",
+      "role": "Key account manager",
+      "description": "Looks after the biggest customers: account plans, regular check-ins, renewals and the next deal with each.",
+      "routine": "Key accounts check"
+    },
+    "partnership-manager": {
+      "name": "Partnership Manager",
+      "role": "Partnership manager",
+      "description": "Builds partnerships that sell for you: resellers, referral partners, integrations and co-marketing deals."
+    },
+    "sales-engineer": {
+      "name": "Sales Engineer",
+      "role": "Sales engineer",
+      "description": "Answers the technical side of deals: discovery, demos, solution designs, estimates and security questionnaires."
+    },
+    "revops": {
+      "name": "RevOps",
+      "role": "Revenue operations",
+      "description": "Keeps the CRM clean and the sales machine measurable: pipeline reports, forecast, tooling and handoffs.",
+      "routine": "Weekly pipeline report"
+    },
+    "sales-support": {
+      "name": "Sales Support",
+      "role": "Sales support",
+      "description": "Prepares quotes and order confirmations, keeps price lists current and follows up on open offers."
+    },
+    "customer-department": {
+      "name": "Customer Service",
+      "role": "Customer service department",
+      "description": "The whole customer service team in one agent: answers, onboarding, help articles, returns and what customers keep asking.",
+      "covers": [
+        "customer support",
+        "customer success",
+        "help center and saved replies",
+        "returns and complaints",
+        "support quality and reporting"
+      ],
+      "routine": "Support queue"
+    },
+    "head-of-customer": {
+      "name": "Support Lead",
+      "role": "Head of customer service",
+      "description": "Leads customer service: response times, answer quality and the patterns that tell the business what to fix.",
+      "routine": "Weekly support report"
+    },
+    "customer-support": {
+      "name": "Support Agent",
+      "role": "Customer support",
+      "description": "Answers customer questions from your support inbox or helpdesk with drafts grounded in your docs and policies.",
+      "routine": "Support queue"
+    },
+    "customer-success-manager": {
+      "name": "Customer Success Manager",
+      "role": "Customer success manager",
+      "description": "Makes customers successful with the product: onboarding, check-ins, health scores and saving accounts at risk.",
+      "routine": "Customer health check"
+    },
+    "knowledge-base-manager": {
+      "name": "Knowledge Base Manager",
+      "role": "Help center manager",
+      "description": "Turns the questions customers keep asking into clear help articles and saved replies, and keeps them current."
+    },
+    "returns-manager": {
+      "name": "Returns & Complaints Manager",
+      "role": "Returns & complaints manager",
+      "description": "Handles returns, damaged goods and complaints end to end, claims costs back from suppliers and finds the root causes."
+    },
+    "ecommerce-department": {
+      "name": "E-Commerce",
+      "role": "E-commerce department",
+      "description": "The whole online business in one agent: shop, marketplaces, products, prices, sourcing and orders.",
+      "covers": [
+        "e-commerce management",
+        "shop management (Shopify and others)",
+        "marketplaces (Amazon, eBay and others)",
+        "product data and feeds",
+        "pricing",
+        "product sourcing",
+        "orders and fulfilment"
+      ],
+      "routine": "Daily shop check"
+    },
+    "head-of-ecommerce": {
+      "name": "E-Commerce Manager",
+      "role": "E-commerce manager",
+      "description": "Owns online revenue: shop, marketplaces, assortment and prices steered by the numbers, every day.",
+      "routine": "Weekly e-commerce review"
+    },
+    "shop-manager": {
+      "name": "Shop Manager",
+      "role": "Shop manager",
+      "description": "Runs the online shop (Shopify or similar): products, collections, theme, apps, orders and anything broken.",
+      "routine": "Shop check"
+    },
+    "marketplace-manager": {
+      "name": "Marketplace Manager",
+      "role": "Marketplace manager",
+      "description": "Sells on Amazon, eBay, Kaufland, Etsy and others: listings, Buy Box, reviews and account health."
+    },
+    "product-data-manager": {
+      "name": "Product Data Manager",
+      "role": "Product data manager",
+      "description": "Keeps product information complete and consistent everywhere: titles, descriptions, attributes, images and feeds."
+    },
+    "pricing-manager": {
+      "name": "Pricing Manager",
+      "role": "Pricing manager",
+      "description": "Sets prices that sell and still earn: margins, competitor prices, promotions and price tests."
+    },
+    "sourcing-agent": {
+      "name": "Sourcing Agent",
+      "role": "Sourcing agent",
+      "description": "Finds winning products and reliable suppliers, compares landed costs and margins, and prepares samples and orders."
+    },
+    "product-department": {
+      "name": "Product & Design",
+      "role": "Product department",
+      "description": "The whole product team in one agent: what to build and why, designs, user research, tickets and docs.",
+      "covers": [
+        "product management",
+        "product ownership and backlog",
+        "UX and UI design",
+        "user research",
+        "technical writing and docs"
+      ]
+    },
+    "head-of-product": {
+      "name": "Head of Product",
+      "role": "Head of product",
+      "description": "Decides what gets built, designed, tested and researched next and turns findings into clear, prioritised next steps."
+    },
+    "product-manager": {
+      "name": "Product Manager",
+      "role": "Product manager",
+      "description": "Finds the problems worth solving, writes the specs, keeps the roadmap honest and measures what shipped."
+    },
+    "product-owner": {
+      "name": "Product Owner",
+      "role": "Product owner",
+      "description": "Keeps the backlog ready: user stories with acceptance criteria, priorities clear and every sprint planned."
+    },
+    "ux-ui-designer": {
+      "name": "UX/UI Designer",
+      "role": "UX/UI designer",
+      "description": "Designs flows and interfaces that feel obvious: wireframes, clickable prototypes, UI and the design system."
+    },
+    "ux-researcher": {
+      "name": "UX Researcher",
+      "role": "UX researcher",
+      "description": "Finds out what users really need: interviews, usability tests, review mining and clear insights."
+    },
+    "technical-writer": {
+      "name": "Technical Writer",
+      "role": "Technical writer",
+      "description": "Writes the docs people actually read: guides, API references, READMEs, changelogs and release notes."
+    },
+    "research-analyst": {
+      "name": "Research Analyst",
+      "role": "Research analyst",
+      "description": "Deep-dives any topic on the web and delivers a sourced, decision-ready report."
+    },
+    "engineering-department": {
+      "name": "Tech & IT",
+      "role": "Tech department",
+      "description": "The whole tech department in one agent: builds and fixes the software, runs the infrastructure and keeps IT working.",
+      "covers": [
+        "software engineering (frontend, backend, fullstack)",
+        "mobile apps",
+        "DevOps and cloud",
+        "QA and testing",
+        "security",
+        "IT administration",
+        "IT support",
+        "automation (n8n, Make, AI agents)",
+        "ERP and CRM administration"
+      ]
+    },
+    "software-engineer": {
+      "name": "Software Engineer",
+      "role": "Software engineer",
+      "description": "Implements features and fixes from tickets in your repositories, with tests, and hands over a pull request."
+    },
+    "mobile-developer": {
+      "name": "Mobile App Developer",
+      "role": "Mobile app developer",
+      "description": "Builds and fixes the iOS and Android apps, tests them on simulators and prepares the store releases."
+    },
+    "embedded-engineer": {
+      "name": "Embedded / Firmware Engineer",
+      "role": "Firmware engineer",
+      "description": "Writes and debugs firmware for the hardware: drivers, protocols, power and over-the-air updates."
+    },
+    "devops-engineer": {
+      "name": "DevOps Engineer",
+      "role": "DevOps engineer",
+      "description": "Keeps builds, deployments and servers running: CI/CD, infrastructure as code, monitoring, backups and cloud costs."
+    },
+    "web-qa-tester": {
+      "name": "Web App QA Tester",
+      "role": "QA tester",
+      "description": "Runs a daily smoke test of your web app in a real browser and reports regressions with screenshots.",
+      "routine": "Daily smoke test"
+    },
+    "code-reviewer": {
+      "name": "Code Reviewer",
+      "role": "Code reviewer",
+      "description": "Reviews open pull requests for bugs, security issues and missing tests before they are merged.",
+      "routine": "Review open pull requests"
+    },
+    "security-engineer": {
+      "name": "Security Engineer",
+      "role": "Security engineer",
+      "description": "Finds security holes before attackers do: dependency and code audits, access reviews, hardening and incident plans.",
+      "routine": "Weekly security check"
+    },
+    "uptime-watcher": {
+      "name": "Uptime Watcher",
+      "role": "Site reliability engineer",
+      "description": "Checks your websites, APIs, certificates and domains every morning and raises the alarm before customers notice.",
+      "routine": "Morning health check"
+    },
+    "it-administrator": {
+      "name": "IT Administrator",
+      "role": "IT administrator",
+      "description": "Runs the company's IT: accounts and access, Google Workspace or Microsoft 365, devices, licences and backups."
+    },
+    "it-helpdesk": {
+      "name": "IT Helpdesk",
+      "role": "IT support",
+      "description": "Helps the team with IT problems: troubleshooting, how-tos, access requests and a growing self-help guide."
+    },
+    "data-engineer": {
+      "name": "Data Engineer",
+      "role": "Data engineer",
+      "description": "Builds the data pipelines: gets data out of the business's tools into one clean place everyone can trust."
+    },
+    "ml-engineer": {
+      "name": "ML / AI Engineer",
+      "role": "ML / AI engineer",
+      "description": "Builds the AI features: LLM integrations, prompts, retrieval, evaluations and models where they pay off."
+    },
+    "automation-engineer": {
+      "name": "Automation Engineer",
+      "role": "Automation engineer",
+      "description": "Automates the repetitive work: workflows in n8n or Make, scripts, integrations and new AI agents."
+    },
+    "erp-crm-admin": {
+      "name": "ERP & CRM Administrator",
+      "role": "ERP & CRM administrator",
+      "description": "Looks after the ERP and CRM: data quality, fields, workflows, permissions, integrations and user requests."
+    },
+    "data-department": {
+      "name": "Data & Analytics",
+      "role": "Data department",
+      "description": "The whole data team in one agent: answers questions with data, builds dashboards, forecasts and analyses processes.",
+      "covers": [
+        "data analysis",
+        "BI and dashboards",
+        "data science and forecasting",
+        "business analysis"
+      ]
+    },
+    "head-of-data": {
+      "name": "Head of Data",
+      "role": "Head of data",
+      "description": "Leads data and analytics: one source of truth, the metrics that matter and analyses that change decisions."
+    },
+    "data-analyst": {
+      "name": "Data Analyst",
+      "role": "Data analyst",
+      "description": "Answers business questions with data: queries, spreadsheets, charts and a clear answer at the top."
+    },
+    "bi-developer": {
+      "name": "BI Developer",
+      "role": "BI developer",
+      "description": "Builds the dashboards and reports the business runs on, on clean data models with clear definitions."
+    },
+    "data-scientist": {
+      "name": "Data Scientist",
+      "role": "Data scientist",
+      "description": "Forecasts, segments and predicts: demand forecasts, customer segments, experiment analysis and models."
+    },
+    "business-analyst": {
+      "name": "Business Analyst",
+      "role": "Business analyst",
+      "description": "Turns business needs into clear requirements: process analysis, current and target state, specs and business cases."
+    },
+    "operations-department": {
+      "name": "Operations & Procurement",
+      "role": "Operations department",
+      "description": "The whole operations department in one agent: purchasing, stock, logistics, quality, projects, processes and the office.",
+      "covers": [
+        "operations management",
+        "procurement and purchasing",
+        "supply chain and demand planning",
+        "warehouse and logistics",
+        "quality management and certifications",
+        "project management",
+        "process management and organisation",
+        "office management"
+      ],
+      "routine": "Operations check"
+    },
+    "office-manager": {
+      "name": "Office Manager",
+      "role": "Office manager",
+      "description": "Runs the back office: inbox, invoices, office supplies and services, and tells you only what needs you."
+    },
+    "operations-manager": {
+      "name": "Operations Manager",
+      "role": "Operations manager",
+      "description": "Keeps the daily operations on track: KPIs watched, bottlenecks removed, service providers coordinated."
+    },
+    "procurement-manager": {
+      "name": "Procurement Manager",
+      "role": "Procurement manager",
+      "description": "Buys what the business needs at the best total cost: suppliers compared, quotes requested, terms negotiated."
+    },
+    "supply-chain-planner": {
+      "name": "Supply Chain Planner",
+      "role": "Supply chain planner",
+      "description": "Forecasts demand and plans stock: reorder points, purchase plans and early warnings before anything runs out.",
+      "routine": "Stock and reorder check"
+    },
+    "logistics-coordinator": {
+      "name": "Logistics Coordinator",
+      "role": "Logistics coordinator",
+      "description": "Gets goods where they need to be: shipments, carriers, tracking problems, warehouse and customs paperwork.",
+      "routine": "Shipment exceptions"
+    },
+    "quality-manager": {
+      "name": "Quality Manager",
+      "role": "Quality manager",
+      "description": "Keeps quality documented and provable: procedures, certifications, audits, defects and corrective actions."
+    },
+    "project-manager": {
+      "name": "Project Manager",
+      "role": "Project manager",
+      "description": "Plans projects and keeps them on track: milestones, owners, risks and a weekly status everyone understands.",
+      "routine": "Project status"
+    },
+    "process-manager": {
+      "name": "Process Manager",
+      "role": "Process manager",
+      "description": "Maps how work really flows, removes waste and redesigns processes and roles so the business scales."
+    },
+    "inbox-triage": {
+      "name": "Inbox Triage",
+      "role": "Inbox manager",
+      "description": "Sorts your email inbox, drafts replies and surfaces what actually needs you.",
+      "routine": "Inbox triage"
+    },
+    "daily-briefing": {
+      "name": "Daily Briefing",
+      "role": "Briefing writer",
+      "description": "A crisp morning briefing: calendar, priorities, news and anything that needs attention.",
+      "routine": "Morning briefing"
+    }
+  },
+  "teams": {
+    "all-in-one-company": {
+      "name": "All-in-one company",
+      "description": "A whole company with one agent per department: each covers every job in it, so twelve agents run everything."
+    },
+    "full-company": {
+      "name": "Full company",
+      "description": "Every department led by its executive with all its specialists. Leave out the seats you don't need."
+    },
+    "startup": {
+      "name": "Software startup",
+      "description": "A CEO with a CTO, a CMO and a head of sales, each with a small team: build it, tell people about it, sell it."
+    },
+    "saas": {
+      "name": "SaaS company",
+      "description": "Product, engineering, growth, sales, customer success and finance, each with its own team."
+    },
+    "online-shop": {
+      "name": "Online shop",
+      "description": "A D2C brand or dropshipping store: products sourced and listed, ads and creatives that sell, customers looked after."
+    },
+    "agency": {
+      "name": "Agency",
+      "description": "New business, client delivery and the back office: prospects won, projects built and shipped on time, invoices paid."
+    },
+    "hardware-company": {
+      "name": "Hardware company",
+      "description": "Devices with firmware and an app: engineering, product, purchasing and supply chain, quality, support and finance."
+    },
+    "solo-founder": {
+      "name": "Founder's office",
+      "description": "For one person running a business: an assistant who keeps your day, inbox, invoices and posts handled."
+    },
+    "executive-office": {
+      "name": "CEO office",
+      "description": "A chief of staff who keeps goals and promises on track, with an assistant, strategy and research."
+    },
+    "finance": {
+      "name": "Finance & accounting",
+      "description": "Books, invoices in and out, payroll, controlling, cash and taxes, led by a CFO."
+    },
+    "back-office": {
+      "name": "Back office",
+      "description": "Inbox, invoices and bookkeeping handled every week, with an office manager who keeps it together."
+    },
+    "legal": {
+      "name": "Legal & compliance",
+      "description": "Contracts, data protection, compliance and trademarks covered, led by a general counsel."
+    },
+    "people": {
+      "name": "People & HR",
+      "description": "Hiring, HR paperwork, reviews, training and employer brand, led by a head of people."
+    },
+    "marketing": {
+      "name": "Marketing",
+      "description": "Content, social, SEO, email, PR and brand, led by a CMO."
+    },
+    "growth": {
+      "name": "Growth & performance",
+      "description": "Paid ads on Meta, Google and TikTok, creatives, conversion and email, judged by what they earn."
+    },
+    "creative": {
+      "name": "Creative studio",
+      "description": "Angles and briefs, copy, graphics and videos for ads and social, kept on brand."
+    },
+    "sales": {
+      "name": "Sales",
+      "description": "Prospects found and approached, inquiries answered, deals run to close and the CRM kept clean."
+    },
+    "customer": {
+      "name": "Customer service",
+      "description": "Support answered fast, customers onboarded and kept, help articles and returns handled."
+    },
+    "ecommerce": {
+      "name": "E-commerce",
+      "description": "Shop, marketplaces, product data, prices and sourcing, led by an e-commerce manager."
+    },
+    "product": {
+      "name": "Product & design",
+      "description": "What to build and why, designs, research, the backlog, docs and QA, led by a head of product."
+    },
+    "engineering": {
+      "name": "Engineering",
+      "description": "Tickets implemented, every pull request reviewed and tested, deployments and the sites watched, led by a CTO."
+    },
+    "it-security": {
+      "name": "IT & security",
+      "description": "Accounts, devices and tools run, the team helped, systems secured and repetitive work automated."
+    },
+    "data": {
+      "name": "Data & analytics",
+      "description": "Pipelines, dashboards, analyses and forecasts the business can trust, led by a head of data."
+    },
+    "operations": {
+      "name": "Operations & procurement",
+      "description": "Purchasing, stock, logistics, quality, projects and processes, led by a COO."
+    }
+  }
+}

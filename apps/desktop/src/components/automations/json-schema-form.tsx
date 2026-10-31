@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { t as translate } from "@/i18n";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -102,7 +104,7 @@ export function schemaFields(schema: Json | null | undefined): SchemaField[] {
       required: required.has(key),
       default: node.default,
       options,
-      placeholder: example !== undefined ? `e.g. ${example}` : "",
+      placeholder: example !== undefined ? translate("automations:schemaForm.example", { example }) : "",
     };
   });
 }
@@ -138,21 +140,21 @@ export function configProblems(fields: SchemaField[], state: ConfigState): Recor
     if (f.kind === "json") {
       const text = jsonText(state, f.key).trim();
       if (!text) {
-        if (f.required) out[f.key] = "Required";
+        if (f.required) out[f.key] = translate("automations:schemaForm.required");
         continue;
       }
       try {
         JSON.parse(text);
       } catch {
-        out[f.key] = "Enter valid JSON";
+        out[f.key] = translate("automations:schemaForm.invalidJson");
       }
       continue;
     }
     const v = state.values[f.key];
     if (isEmpty(v)) {
-      if (f.required) out[f.key] = "Required";
-    } else if (f.kind === "integer" && !Number.isInteger(v)) out[f.key] = "Enter a whole number";
-    else if (f.kind === "number" && !Number.isFinite(v)) out[f.key] = "Enter a number";
+      if (f.required) out[f.key] = translate("automations:schemaForm.required");
+    } else if (f.kind === "integer" && !Number.isInteger(v)) out[f.key] = translate("automations:schemaForm.wholeNumber");
+    else if (f.kind === "number" && !Number.isFinite(v)) out[f.key] = translate("automations:schemaForm.number");
   }
   return out;
 }
@@ -187,6 +189,7 @@ export function JsonSchemaForm({
   showProblems: boolean;
   idPrefix: string;
 }) {
+  const { t } = useTranslation(["automations", "common"]);
   const setValue = (key: string, v: unknown) => {
     const values = { ...state.values };
     if (isEmpty(v)) delete values[key];
@@ -227,7 +230,7 @@ export function JsonSchemaForm({
           <div key={f.key} className={cn("min-w-0 space-y-1.5", wide && "sm:col-span-2")}>
             <Label htmlFor={id} className="text-xs">
               {f.title}
-              {!f.required && <span className="font-normal text-muted-foreground">optional</span>}
+              {!f.required && <span className="font-normal text-muted-foreground">{t("common:words.optional")}</span>}
             </Label>
             {f.kind === "enum" ? (
               <Select
@@ -238,7 +241,7 @@ export function JsonSchemaForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
-                  {!f.required && <SelectItem value={NONE}>Not set</SelectItem>}
+                  {!f.required && <SelectItem value={NONE}>{t("schemaForm.notSet")}</SelectItem>}
                   {f.options.map((o) => (
                     <SelectItem key={String(o)} value={String(o)}>
                       {String(o)}

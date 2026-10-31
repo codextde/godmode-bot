@@ -1,5 +1,6 @@
 import { router, Stack } from "expo-router";
 import { ScrollView, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CloseButton } from "@/components/close-button";
 import { Group, LinkRow } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
@@ -8,35 +9,32 @@ import { useAgents } from "@/lib/hooks";
 import { space } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
 
-function plural(n: number, one: string, many: string) {
-  return `${n} ${n === 1 ? one : many}`;
-}
-
 export default function Workspaces() {
+  const { t } = useTranslation("settings");
   const { workspaces } = useWorkspace();
   const { data: agents } = useAgents();
   const create = () => router.push({ pathname: "/settings/new", params: { kind: "workspace" } });
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Workspaces" }} />
+      <Stack.Screen options={{ title: t("overview.team.workspaces") }} />
       <CloseButton />
-      <HeaderActions actions={[{ icon: "plus", label: "New workspace", onPress: create }]} />
+      <HeaderActions actions={[{ icon: "plus", label: t("workspaces.new"), onPress: create }]} />
       {workspaces.length ? (
-        <Group footer="A workspace gives a client or product its own agents, context, repositories and projects.">
+        <Group footer={t("workspaces.footer")}>
           {workspaces.map((w) => {
             const team = agents?.filter((a) => a.workspaceId === w.id).length ?? 0;
             const facts = [
-              w.projects.length ? plural(w.projects.length, "project", "projects") : null,
-              team ? plural(team, "agent", "agents") : null,
-              w.sources.length ? plural(w.sources.length, "repository", "repositories") : null,
+              w.projects.length ? t("overview.team.projects", { count: w.projects.length }) : null,
+              team ? t("workspaces.agents", { count: team }) : null,
+              w.sources.length ? t("workspaces.repositories", { count: w.sources.length }) : null,
             ].filter(Boolean);
             return (
               <LinkRow
                 key={w.id}
                 emoji={w.icon || "🗂️"}
                 title={w.name}
-                detail={facts.length ? facts.join(" · ") : w.description || "Empty"}
+                detail={facts.length ? facts.join(" · ") : w.description || t("workspaces.empty")}
                 onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: w.id } })}
               />
             );
@@ -45,9 +43,9 @@ export default function Workspaces() {
       ) : (
         <EmptyState
           icon="layers"
-          title="No workspaces yet"
-          body="Give a client or product its own agents, context and repositories."
-          action={<Button title="Create a workspace" icon="plus" onPress={create} />}
+          title={t("workspaces.none.title")}
+          body={t("workspaces.none.body")}
+          action={<Button title={t("workspaces.create")} icon="plus" onPress={create} />}
         />
       )}
     </ScrollView>

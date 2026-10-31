@@ -1,0 +1,63 @@
+{
+  "detail": {
+    "loading": "Loading the agent…",
+    "loadFailed": "Couldn't load this agent",
+    "notFound": "Agent not found",
+    "maybeDeleted": "It may have been deleted.",
+    "switchOnFailed": "Couldn't switch it on",
+    "defaultModel": "Default model",
+    "reportsToYou": "Reports to you",
+    "reportsTo": "Reports to {{name}}",
+    "leads_one": "Leads {{count}}",
+    "leads_other": "Leads {{count}}",
+    "global": "Global",
+    "effort": "{{effort}} effort",
+    "setUp": "Set up {{name}}",
+    "builtIn": "Built-in",
+    "runTask": "Run task",
+    "chat": "Chat",
+    "automations": "Automations",
+    "newAutomation": "New automation",
+    "noAutomations": "No automations yet. Let {{name}} get to work on its own — even while you're away.",
+    "recentChats": "Recent chats",
+    "noChats": "No chats with {{name}} yet."
+  },
+  "plate": {
+    "title": "On its plate",
+    "aChat": "A chat",
+    "empty": "Nothing on {{name}}'s plate right now.",
+    "switchedOff": "{{name}} is switched off.",
+    "switchOn": "Switch on",
+    "now": "Now",
+    "working": "Working…",
+    "queued": "Queued — waiting for a free slot",
+    "waitingAnswer": "Waiting for your answer",
+    "waitingLimit": "Waiting for Claude's {{limit}}",
+    "waitingLimitResumes": "Waiting for Claude's {{limit}} · continues {{when}}",
+    "usageLimit": "usage limit",
+    "paused": "Paused",
+    "tickets": "Board tickets",
+    "moreOnBoard_one": "{{count}} more on the board",
+    "moreOnBoard_other": "{{count}} more on the board",
+    "followups": "Follow-ups",
+    "followup": "Follow-up",
+    "nextAutomations_one": "Next automation",
+    "nextAutomations_other": "Next automations",
+    "andMore_one": "and {{count}} more",
+    "andMore_other": "and {{count}} more"
+  },
+  "memoryCard": {
+    "title": "Memory",
+    "empty": "Nothing remembered yet",
+    "size": "{{chars}} of {{target}} characters",
+    "sizeUpdated": "{{chars}} of {{target}} characters · updated {{ago}}",
+    "dreaming": "Dreaming — tidying up its memory",
+    "remembers": "What it remembers"
+  },
+  "routine": {
+    "changeFailed": "Couldn't change the automation",
+    "runFailed": "Couldn't run it",
+    "lastRunFailed": " · last run failed",
+    "runNow": "Run {{name}} now"
+  }
+}

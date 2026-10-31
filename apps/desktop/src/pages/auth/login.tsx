@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion, useAnimationControls } from "motion/react";
 import { KeyRound, LockKeyhole, ShieldCheck, Terminal } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,45 +12,47 @@ import { PasswordInput } from "@/components/vault/password-input";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { setSessionToken } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
+import { t } from "@/i18n";
 
 function loginError(err: unknown, kind: "password" | "token"): string {
   if (err instanceof ApiRequestError) {
     if (err.status === 429) {
       const retry = (err.details as { retryAfter?: number } | undefined)?.retryAfter;
-      return retry ? `Too many attempts — try again in ${Math.ceil(retry)} s.` : "Too many attempts — wait a minute and try again.";
+      return retry ? t("auth:login.tooManyRetry", { seconds: Math.ceil(retry) }) : t("auth:login.tooMany");
     }
-    if (err.status === 401 || err.status === 403) return kind === "password" ? "That password isn't right." : "That access token isn't valid.";
+    if (err.status === 401 || err.status === 403) return kind === "password" ? t("auth:login.wrongPassword") : t("auth:login.wrongToken");
   }
   return errorMessage(err);
 }
 
 /** Web dashboard sign-in (served by `godmode serve`). */
 export function LoginPage({ hasPassword }: { hasPassword: boolean }) {
+  const { t } = useTranslation("auth");
   const [tab, setTab] = useState<"password" | "token">(hasPassword ? "password" : "token");
   return (
     <AuthLayout
       badge={<LockKeyhole />}
       title={
         <>
-          Sign in to Godmode.
-          <span className="block text-foreground/35">Your coworker is waiting.</span>
+          {t("login.title")}
+          <span className="block text-foreground/35">{t("login.subtitle")}</span>
         </>
       }
-      description="This dashboard controls an AI coworker with access to your logins. Sign in to continue."
+      description={t("login.description")}
       footer={
         <span className="inline-flex items-center gap-1.5">
           <ShieldCheck className="size-3.5 text-brand-strong" />
-          Session is stored in an HttpOnly, same-site cookie. Failed attempts are rate limited.
+          {t("login.footer")}
         </span>
       }
     >
       <Tabs value={tab} onValueChange={(v) => setTab(v as "password" | "token")} className="gap-5">
         <TabsList className="grid h-9 w-full grid-cols-2 rounded-lg">
           <TabsTrigger value="password" className="rounded-md">
-            <KeyRound /> Password
+            <KeyRound /> {t("login.passwordTab")}
           </TabsTrigger>
           <TabsTrigger value="token" className="rounded-md">
-            <Terminal /> Access token
+            <Terminal /> {t("login.tokenTab")}
           </TabsTrigger>
         </TabsList>
         <TabsContent value="password">
@@ -57,10 +60,9 @@ export function LoginPage({ hasPassword }: { hasPassword: boolean }) {
             <PasswordForm />
           ) : (
             <div className="rounded-lg border border-dashed bg-paper-2 p-4 text-sm text-muted-foreground">
-              No dashboard password has been set yet. Sign in with an access token — you can set a password afterwards in{" "}
-              <span className="font-medium text-foreground">Settings → Security</span>.
+              <Trans t={t} i18nKey="login.noPassword" components={{ b: <span className="font-medium text-foreground" /> }} />
               <Button variant="secondary" className="mt-3 w-full" onClick={() => setTab("token")}>
-                Use an access token
+                {t("login.useToken")}
               </Button>
             </div>
           )}
@@ -74,6 +76,7 @@ export function LoginPage({ hasPassword }: { hasPassword: boolean }) {
 }
 
 function PasswordForm() {
+  const { t } = useTranslation("auth");
   const qc = useQueryClient();
   const controls = useAnimationControls();
   const [password, setPassword] = useState("");
@@ -99,7 +102,7 @@ function PasswordForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <motion.div animate={controls} className="space-y-2">
-        <Label htmlFor="login-password">Dashboard password</Label>
+        <Label htmlFor="login-password">{t("login.passwordLabel")}</Label>
         <PasswordInput
           id="login-password"
           autoFocus
@@ -116,13 +119,14 @@ function PasswordForm() {
       </motion.div>
       <FormError id="login-password-error" message={error} />
       <SubmitButton busy={busy} disabled={!password}>
-        Sign in
+        {t("login.signIn")}
       </SubmitButton>
     </form>
   );
 }
 
 function TokenForm() {
+  const { t } = useTranslation(["auth", "common"]);
   const qc = useQueryClient();
   const controls = useAnimationControls();
   const [token, setToken] = useState("");
@@ -150,7 +154,7 @@ function TokenForm() {
   return (
     <form onSubmit={submit} className="space-y-4">
       <motion.div animate={controls} className="space-y-2">
-        <Label htmlFor="login-token">Access token</Label>
+        <Label htmlFor="login-token">{t("login.tokenTab")}</Label>
         <PasswordInput
           id="login-token"
           autoFocus
@@ -162,15 +166,15 @@ function TokenForm() {
           }}
           aria-invalid={!!error}
           aria-describedby="login-token-hint"
-          placeholder="Paste the token"
+          placeholder={t("login.tokenPlaceholder")}
         />
         <p id="login-token-hint" className="text-xs text-muted-foreground">
-          <InlineCode text="Run `godmode token` on the machine running Godmode to print it." />
+          <InlineCode text={t("login.tokenHint")} />
         </p>
       </motion.div>
       <FormError message={error} />
       <SubmitButton busy={busy} disabled={!token.trim()}>
-        Continue
+        {t("common:actions.continue")}
       </SubmitButton>
     </form>
   );

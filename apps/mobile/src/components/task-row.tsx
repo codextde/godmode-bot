@@ -1,42 +1,38 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Task, TaskBlockedKind, TaskStatus, TaskType } from "@godmode/shared";
-import { isOverdue, isWaiting, TASK_STATUS_LABELS, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
+import { isOverdue, isWaiting, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { PriorityIcon, StatusIcon } from "./task-glyphs";
 import { Badge, LiveDot, Row, T, tap, UnassignedAvatar, type Tone } from "./ui";
 import { isWorking } from "@/lib/desktop-parity";
 import { shortTime } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's labels (packages/shared TASK_STATUS_LABELS) and tones (task-meta.tsx). */
 export const STATUS_META: Record<TaskStatus, { label: string; tone: Tone }> = {
-  backlog: { label: TASK_STATUS_LABELS.backlog, tone: "neutral" },
-  todo: { label: TASK_STATUS_LABELS.todo, tone: "neutral" },
-  in_progress: { label: TASK_STATUS_LABELS.in_progress, tone: "amber" },
-  in_review: { label: TASK_STATUS_LABELS.in_review, tone: "emerald" },
-  blocked: { label: TASK_STATUS_LABELS.blocked, tone: "rose" },
-  done: { label: TASK_STATUS_LABELS.done, tone: "sky" },
-  cancelled: { label: TASK_STATUS_LABELS.cancelled, tone: "neutral" },
+  backlog: { get label() { return t("components:taskRow.status.backlog"); }, tone: "neutral" },
+  todo: { get label() { return t("components:taskRow.status.todo"); }, tone: "neutral" },
+  in_progress: { get label() { return t("components:taskRow.status.in_progress"); }, tone: "amber" },
+  in_review: { get label() { return t("components:taskRow.status.in_review"); }, tone: "emerald" },
+  blocked: { get label() { return t("components:taskRow.status.blocked"); }, tone: "rose" },
+  done: { get label() { return t("components:taskRow.status.done"); }, tone: "sky" },
+  cancelled: { get label() { return t("components:taskRow.status.cancelled"); }, tone: "neutral" },
 };
 
 export const TYPE_META: Record<TaskType, { label: string; hint: string }> = {
-  general: { label: "Task", hint: "Does it and reports back" },
-  coding: { label: "Coding", hint: "Own branch, opens a pull request" },
-  research: { label: "Research", hint: "Investigates, writes a report" },
+  general: { get label() { return t("components:taskRow.type.general.label"); }, get hint() { return t("components:taskRow.type.general.hint"); } },
+  coding: { get label() { return t("components:taskRow.type.coding.label"); }, get hint() { return t("components:taskRow.type.coding.hint"); } },
+  research: { get label() { return t("components:taskRow.type.research.label"); }, get hint() { return t("components:taskRow.type.research.hint"); } },
 };
 
 /** What a blocked card leads with, like the desktop's BLOCKED_META. */
-const BLOCKED_PREFIX: Record<TaskBlockedKind, string> = {
-  needs_input: "Needs you:",
-  failed: "Failed:",
-  stopped: "Stopped:",
-  interrupted: "Interrupted:",
-  publish: "Publishing failed:",
-  setup: "Setup:",
-  manual: "",
-};
+function blockedPrefix(kind: TaskBlockedKind): string {
+  return kind === "manual" ? "" : t(`components:taskRow.blocked.${kind}`);
+}
 
 export function openTask(id: string) {
   tap();
@@ -45,9 +41,10 @@ export function openTask(id: string) {
 
 export function TaskStatusBadge({ task }: { task: Task }) {
   // In progress isn't always live work: it may wait for the human's answer, stand still, or wait for its follow-up.
-  if (waitsForAnswer(task)) return <Badge label={task.pause?.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"} tone="warning" />;
-  if (task.status === "in_progress" && task.pause) return <Badge label="Paused" icon={<StatusIcon status="in_progress" size={12} />} />;
-  if (isWaiting(task) || waitsForSubtasks(task)) return <Badge label="Waiting" icon={<StatusIcon status="in_progress" size={12} />} />;
+  const { t } = useTranslation("components");
+  if (waitsForAnswer(task)) return <Badge label={task.pause?.question?.kind === "approval" ? t("taskRow.needsOk") : t("taskRow.needsAnswer")} tone="warning" />;
+  if (task.status === "in_progress" && task.pause) return <Badge label={t("taskRow.paused")} icon={<StatusIcon status="in_progress" size={12} />} />;
+  if (isWaiting(task) || waitsForSubtasks(task)) return <Badge label={t("taskRow.waiting")} icon={<StatusIcon status="in_progress" size={12} />} />;
   const meta = STATUS_META[task.status];
   if (isWorking(task)) return <Badge label={meta.label} tone="amber" live />;
   return <Badge label={meta.label} tone={meta.tone} icon={<StatusIcon status={task.status} size={12} />} />;
@@ -55,24 +52,27 @@ export function TaskStatusBadge({ task }: { task: Task }) {
 
 export function TaskRow({ task, agent, workspaceName, projectName }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const working = isWorking(task);
   const waiting =
     task.status !== "in_progress" || task.activity
       ? null
       : isWaiting(task) && task.followup
-        ? `Waiting — continues ${shortTime(task.followup.dueAt)}`
+        ? t("taskRow.waitingContinues", { when: shortTime(task.followup.dueAt) })
         : waitsForSubtasks(task)
-          ? `Waiting for ${task.subtasks!.open === 1 ? "1 part" : `${task.subtasks!.open} parts`}${task.subtasks!.blocked ? ` · ${task.subtasks!.blocked} blocked` : ""}`
+          ? task.subtasks!.blocked
+            ? t("taskRow.waitingForPartsBlocked", { count: task.subtasks!.open, blocked: task.subtasks!.blocked })
+            : t("taskRow.waitingForParts", { count: task.subtasks!.open })
           : null;
   const blocked =
     task.status === "blocked" && (task.blockedReason || task.blockedKind)
-      ? [task.blockedKind ? BLOCKED_PREFIX[task.blockedKind] : "", task.blockedReason ?? (task.blockedKind === "interrupted" ? "Godmode restarted mid-run." : "")].filter(Boolean).join(" ")
+      ? [task.blockedKind ? blockedPrefix(task.blockedKind) : "", task.blockedReason ?? (task.blockedKind === "interrupted" ? t("taskRow.restartedMidRun") : "")].filter(Boolean).join(" ")
       : null;
   const extra = [
-    task.dueDate ? (isOverdue(task) ? "Overdue" : `Due ${task.dueDate.slice(5)}`) : null,
-    task.parentNumber ? `Part of #${task.parentNumber}` : null,
-    waitsForTickets(task) ? `Waits for ${task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")}` : null,
-    task.subtasks ? `${task.subtasks.total - task.subtasks.open}/${task.subtasks.total} parts` : null,
+    task.dueDate ? (isOverdue(task) ? t("taskRow.overdue") : t("taskRow.due", { date: task.dueDate.slice(5) })) : null,
+    task.parentNumber ? t("taskRow.partOf", { number: task.parentNumber }) : null,
+    waitsForTickets(task) ? t("taskRow.waitsFor", { tickets: task.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ") }) : null,
+    task.subtasks ? t("taskRow.partsDone", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total }) : null,
   ].filter(Boolean);
   return (
     <Pressable onPress={() => openTask(task.id)} style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}>
@@ -90,14 +90,14 @@ export function TaskRow({ task, agent, workspaceName, projectName }: { task: Tas
           <TaskStatusBadge task={task} />
           {task.priority !== "none" ? <PriorityIcon priority={task.priority} size={13} /> : null}
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
-            {[`#${task.number}`, agent?.name ?? "Unassigned", workspaceName, projectName, ...extra].filter(Boolean).join(" · ")}
+            {[`#${task.number}`, agent?.name ?? t("taskRow.unassigned"), workspaceName, projectName, ...extra].filter(Boolean).join(" · ")}
           </T>
         </Row>
         {task.activity || working ? (
           <Row style={{ gap: space.sm }}>
             <LiveDot size={6} color={c.amberMark} />
             <T variant="footnote" color={c.amber} numberOfLines={1} style={{ flex: 1 }}>
-              {task.activity ?? (task.runStatus === "queued" ? "Queued — waiting for a free slot" : "Working…")}
+              {task.activity ?? (task.runStatus === "queued" ? t("taskRow.queued") : t("taskRow.working"))}
             </T>
           </Row>
         ) : blocked ? (

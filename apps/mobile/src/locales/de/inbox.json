@@ -1,0 +1,34 @@
+{
+  "title": "Posteingang",
+  "anAgent": "Ein Agent",
+  "attention": "Braucht dich",
+  "attentionCount": "Braucht dich · {{count}}",
+  "allClear": "Alles erledigt",
+  "allClearBody": "Wenn ein Agent eine Entscheidung, deine Freigabe oder einen Login braucht, landet es hier.",
+  "login": {
+    "kind": {
+      "missingCredential": "Login fehlt",
+      "invalidCredential": "Login fehlgeschlagen",
+      "missingTotp": "2FA fehlt",
+      "missingAccount": "Kein Konto",
+      "other": "Braucht Aufmerksamkeit"
+    },
+    "updateFailed": "Anfrage konnte nicht aktualisiert werden",
+    "unknownService": "Unbekannter Dienst",
+    "reportedBy": "Gemeldet von {{name}}",
+    "reportedByAgent": "Von einem Agenten gemeldet",
+    "reportedByGodmode": "Von Godmode gemeldet",
+    "addOnComputer": "Füge den Login in Godmode auf deinem Computer hinzu, dort ist der Tresor.",
+    "dismiss": "Verwerfen",
+    "markResolved": "Als gelöst markieren"
+  },
+  "notifications": {
+    "title": "Mitteilungen",
+    "titleNew": "Mitteilungen · {{count}} neu",
+    "markAllRead": "Alle gelesen",
+    "markReadFailed": "Konnte nicht als gelesen markiert werden",
+    "loadFailed": "Mitteilungen konnten nicht geladen werden",
+    "empty": "Keine Mitteilungen. Agenten posten hier Updates, wenn sie fertig sind, etwas brauchen oder auf ein Problem stoßen.",
+    "showMore": "{{count}} weitere anzeigen"
+  }
+}

@@ -2,43 +2,34 @@
 import { Cron } from "croner";
 import {
   buildDays,
-  formatMinutes,
+  cronToHuman as sharedCronToHuman,
+  formatMinutes as sharedFormatMinutes,
   MAX_START_WINDOW_MINUTES,
   MIN_MINUTES_PER_RUN,
+  ordinal as englishOrdinal,
+  scheduleToHuman as sharedScheduleToHuman,
   startWindowLimit,
   startWindowTooLong,
-  validateCron,
+  validateCron as sharedValidateCron,
   type CronDraft,
   type CronKind,
 } from "@godmode/shared";
+import { currentLanguage, intlLocale, t } from "@/i18n";
 
 export {
   ALL_DAYS,
   buildDays,
-  cronToHuman,
   DEFAULT_CRON,
   defaultDraft,
-  formatTime,
-  ordinal,
   parseCron,
   parseDays,
-  scheduleToHuman,
-  validateCron,
   WEEKDAYS,
   type CronDraft,
   type CronKind,
   type SeveralMode,
 } from "@godmode/shared";
 
-export const CRON_KIND_LABELS: Record<CronKind, string> = {
-  hourly: "Every hour",
-  several: "Several times a day",
-  daily: "Every day",
-  weekdays: "Every weekday",
-  weekly: "Every week",
-  monthly: "Every month",
-  custom: "Custom (cron)",
-};
+export const cronKindLabel = (kind: CronKind): string => t(`agents:cron.kinds.${kind}`);
 
 export const SEVERAL_TIMES = [2, 3, 4, 5, 6, 8, 10, 12];
 export const SEVERAL_EVERY = [1, 2, 3, 4, 6, 8, 12];
@@ -100,13 +91,13 @@ export function severalStarts(d: CronDraft): number[] {
 /** What is wrong with a "several" draft, or null. */
 export function severalProblem(d: CronDraft): string | null {
   if (d.kind !== "several") return null;
-  if (!d.days.length) return "Pick at least one day";
+  if (!d.days.length) return t("agents:cron.problems.pickDay");
   const span = severalSpan(d);
-  if (span <= 0) return "The end time must be after the start time";
+  if (span <= 0) return t("agents:cron.problems.endAfterStart");
   if (d.mode === "random" && span / d.times < MIN_MINUTES_PER_RUN) {
-    return `${d.times} runs need at least ${formatMinutes(d.times * MIN_MINUTES_PER_RUN)} between start and end`;
+    return t("agents:cron.problems.tooManyRuns", { times: d.times, minutes: formatMinutes(d.times * MIN_MINUTES_PER_RUN) });
   }
-  if (d.mode === "interval" && severalStarts(d).length < 2) return `Only one run fits — make the range longer than ${d.every} h`;
+  if (d.mode === "interval" && severalStarts(d).length < 2) return t("agents:cron.problems.onlyOneRun", { hours: d.every });
   return null;
 }
 
@@ -135,7 +126,7 @@ export function maxStartWindow(cron: string, timezone: string): number {
 export function startWindowProblem(cron: string, timezone: string, minutes: number): string | null {
   if (!minutes) return null;
   const limit = maxStartWindow(cron, timezone);
-  return minutes > limit ? startWindowTooLong(limit) : null;
+  return minutes > limit ? startWindowTooLong(limit, currentLanguage()) : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -202,9 +193,40 @@ export function allTimezones(): string[] {
 /** "GMT+2" style offset label for a timezone (best effort). */
 export function timezoneOffset(tz: string): string {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date());
+    const parts = new Intl.DateTimeFormat(intlLocale(), { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date());
     return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
   } catch {
     return "";
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Human-readable, in the app language                                  */
+/* ------------------------------------------------------------------ */
+
+export const validateCron = (cron: string): string | null => sharedValidateCron(cron, currentLanguage());
+
+export const formatMinutes = (minutes: number): string => sharedFormatMinutes(minutes, currentLanguage());
+
+/** "Every day at 09:00", "Weekdays at 08:30", "Every 15 minutes", … */
+export const cronToHuman = (cron: string): string => sharedCronToHuman(cron, currentLanguage());
+
+/** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM", "5 times a day at random times between …". */
+export const scheduleToHuman = (cron: string, startWindowMinutes = 0, runsPerWindow = 1): string => sharedScheduleToHuman(cron, startWindowMinutes, runsPerWindow, currentLanguage());
+
+export function formatTime(hour: number, minute: number): string {
+  return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(intlLocale(), { hour: "numeric", minute: "2-digit" });
+}
+
+export function ordinal(n: number): string {
+  return currentLanguage() === "de" ? `${n}.` : englishOrdinal(n);
+}
+
+/** Day of week (0 = Sunday) by name in the app language. */
+export function weekdayName(day: number): string {
+  return new Date(2023, 0, 1 + day).toLocaleDateString(intlLocale(), { weekday: "long" });
+}
+
+export function weekdayShort(day: number): string {
+  return new Date(2023, 0, 1 + day).toLocaleDateString(intlLocale(), { weekday: "short" }).replace(/\.$/, "");
 }

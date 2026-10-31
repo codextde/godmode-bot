@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -69,7 +70,7 @@ import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { PALETTES } from "@godmode/shared";
-import { PALETTE_DEFS } from "@/lib/palettes";
+import { paletteLabel } from "@/lib/palettes";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
@@ -79,33 +80,33 @@ import { useHandoff } from "@/components/devices/device-parts";
 import { EASY_PAGES, MODE_LABEL, useInterfaceMode, useSetInterfaceMode } from "@/lib/mode";
 
 /** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
-const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[] = [
-  { id: "general", label: "General", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple" },
-  { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode limit" },
-  { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
-  { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
-  { id: "voice", label: "Voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
-  { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
-  { id: "artifacts", label: "Artifacts", icon: AppWindow, words: "dashboards apps trackers tools build feature turn on off" },
-  { id: "integrations", label: "Integrations", icon: Plug, words: "connected apps composio api tools mcp servers gmail slack notion feature turn on off" },
-  { id: "messaging", label: "Messaging", icon: MessageCircle, words: "chat apps slack telegram microsoft teams bots feature turn on off" },
-  { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device feature turn on off" },
-  { id: "activity", label: "Activity", icon: Activity, words: "history runs log feature turn on off" },
-  { id: "plugins", label: "Plugins", icon: Puzzle, words: "claude code mods skills hooks add-ons feature turn on off" },
-  { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound feature turn on off" },
-  { id: "cards", label: "Cards", icon: CreditCard, words: "payment credit cards purchases pay feature turn on off" },
-  { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux feature turn on off" },
-  { id: "ssh", label: "SSH servers", icon: Server, words: "remote linux servers feature turn on off" },
-  { id: "api-keys", label: "API keys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
-  { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
-  { id: "files", label: "Files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
-  { id: "backup", label: "Backup", icon: DatabaseBackup, words: "restore export import" },
-  { id: "phone", label: "Phone", icon: Smartphone, words: "mobile iphone android pair app" },
-  { id: "devices", label: "Devices", icon: Laptop, words: "device group computers macs sync primary secondary hand off handoff lid invite join" },
-  { id: "system", label: "System", icon: HeartPulse, words: "health permissions claude code install sign in login doctor updates tools" },
-  { id: "logs", label: "Logs", icon: Activity, words: "diagnostics debug" },
-  { id: "about", label: "About", icon: Info, words: "version updates" },
-];
+const SETTINGS = [
+  { id: "general", label: "general", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple" },
+  { id: "ai", label: "ai", icon: Sparkles, words: "model effort ultracode limit" },
+  { id: "browser", label: "browser", icon: Globe, words: "chromium profiles cookies" },
+  { id: "computer", label: "computer", icon: MonitorUp, words: "screen share control mac" },
+  { id: "voice", label: "voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
+  { id: "memory", label: "memory", icon: BrainCircuit, words: "dreaming remember learn" },
+  { id: "artifacts", label: "artifacts", icon: AppWindow, words: "dashboards apps trackers tools build feature turn on off" },
+  { id: "integrations", label: "integrations", icon: Plug, words: "connected apps composio api tools mcp servers gmail slack notion feature turn on off" },
+  { id: "messaging", label: "messaging", icon: MessageCircle, words: "chat apps slack telegram microsoft teams bots feature turn on off" },
+  { id: "android", label: "android", icon: Smartphone, words: "adb usb debugging emulator device feature turn on off" },
+  { id: "activity", label: "activity", icon: Activity, words: "history runs log feature turn on off" },
+  { id: "plugins", label: "plugins", icon: Puzzle, words: "claude code mods skills hooks add-ons feature turn on off" },
+  { id: "calls", label: "calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound feature turn on off" },
+  { id: "cards", label: "cards", icon: CreditCard, words: "payment credit cards purchases pay feature turn on off" },
+  { id: "vms", label: "vms", icon: Box, words: "vm tart macos linux feature turn on off" },
+  { id: "ssh", label: "ssh", icon: Server, words: "remote linux servers feature turn on off" },
+  { id: "api-keys", label: "apiKeys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
+  { id: "security", label: "security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
+  { id: "files", label: "files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
+  { id: "backup", label: "backup", icon: DatabaseBackup, words: "restore export import" },
+  { id: "phone", label: "phone", icon: Smartphone, words: "mobile iphone android pair app" },
+  { id: "devices", label: "devices", icon: Laptop, words: "device group computers macs sync primary secondary hand off handoff lid invite join" },
+  { id: "system", label: "system", icon: HeartPulse, words: "health permissions claude code install sign in login doctor updates tools" },
+  { id: "logs", label: "logs", icon: Activity, words: "diagnostics debug" },
+  { id: "about", label: "about", icon: Info, words: "version updates" },
+] as const satisfies readonly { id: string; label: string; icon: LucideIcon; words: string }[];
 
 /** Matches ignore case and accents: "cafe" finds "Café", "istanbul" finds "İstanbul". */
 const fold = (s: string) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
@@ -123,6 +124,7 @@ function wordFilter(value: string, search: string, keywords?: string[]): number 
 }
 
 export function CommandPalette() {
+  const { t } = useTranslation(["layout", "common"]);
   const open = useUi((s) => s.commandOpen);
   const setOpen = useUi((s) => s.setCommandOpen);
   const navigate = useNavigate();
@@ -183,17 +185,17 @@ export function CommandPalette() {
   const inMessages = fresh.filter((c) => !chats.some((l) => l.id === c.id));
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title="Search" description="Find what waits for you, chats, tickets, automations, agents, settings and actions">
-      <CommandInput placeholder="Search chats, tickets, automations, settings… or type a command" value={q} onValueChange={setQ} />
+    <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title={t("common:actions.search")} description={t("palette.description")}>
+      <CommandInput placeholder={t("palette.placeholder")} value={q} onValueChange={setQ} />
       <CommandList>
-        <CommandEmpty>No results.</CommandEmpty>
+        <CommandEmpty>{t("palette.empty")}</CommandEmpty>
         {waiting.length > 0 && (
           <>
-            <CommandGroup heading="Waiting for you">
+            <CommandGroup heading={t("palette.groups.waiting")}>
               {(searching ? waiting : waiting.slice(0, 5)).map((item) => {
                 const Icon = ATTENTION_ICON[item.kind];
                 return (
-                  <CommandItem key={item.id} value={unique(`waiting ${item.title} ${item.detail}`, item.id)} onSelect={() => go(item.link)}>
+                  <CommandItem key={item.id} value={unique(`waiting ${t("palette.groups.waiting")} ${item.title} ${item.detail}`, item.id)} onSelect={() => go(item.link)}>
                     <Icon className="text-warning" />
                     <span className="truncate">{item.title}</span>
                     {item.detail && <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{item.detail}</span>}
@@ -206,7 +208,7 @@ export function CommandPalette() {
           </>
         )}
         {searching && workspaces.length > 0 && (
-          <CommandGroup heading="Switch workspace">
+          <CommandGroup heading={t("palette.groups.switchWorkspace")}>
             {workspaces.map((w) => (
               <CommandItem
                 key={w.id}
@@ -218,7 +220,7 @@ export function CommandPalette() {
               >
                 <WorkspaceTile icon={w.icon} color={w.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
                 <span className="truncate">{w.name}</span>
-                {scope === w.id && !projectScope && <span className="ml-2 text-xs text-muted-foreground">current</span>}
+                {scope === w.id && !projectScope && <span className="ml-2 text-xs text-muted-foreground">{t("palette.current")}</span>}
               </CommandItem>
             ))}
             {workspaces.flatMap((w) =>
@@ -233,20 +235,20 @@ export function CommandPalette() {
                 >
                   <WorkspaceTile icon={p.icon} color={p.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />
                   <span className="truncate">{p.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">in {w.name}</span>
-                  {projectScope === p.id && <span className="ml-2 text-xs text-muted-foreground">current</span>}
+                  <span className="truncate text-xs text-muted-foreground">{t("palette.inWorkspace", { name: w.name })}</span>
+                  {projectScope === p.id && <span className="ml-2 text-xs text-muted-foreground">{t("palette.current")}</span>}
                 </CommandItem>
               )),
             )}
             {scope !== "all" && (
-              <CommandItem value="workspace switch all workspaces everything" onSelect={() => { setScope("all"); setOpen(false); }}>
-                <Layers /> All workspaces <CommandShortcut>{modKey}0</CommandShortcut>
+              <CommandItem value={`workspace switch all workspaces everything ${t("scope.all")}`} onSelect={() => { setScope("all"); setOpen(false); }}>
+                <Layers /> {t("scope.all")} <CommandShortcut>{modKey}0</CommandShortcut>
               </CommandItem>
             )}
           </CommandGroup>
         )}
         {ticketHits.length > 0 && (
-          <CommandGroup heading="Tickets">
+          <CommandGroup heading={t("palette.groups.tickets")}>
             {ticketHits.map((t) => (
               // Keyed by the search: cmdk reads `keywords` only when an item mounts, and these were matched here already.
               <CommandItem key={`${t.id}:${q}`} value={unique(`ticket #${t.number} ${t.title}`, t.id)} keywords={[q]} onSelect={() => go(`/tasks?task=${t.id}`)}>
@@ -258,38 +260,38 @@ export function CommandPalette() {
           </CommandGroup>
         )}
         {routineHits.length > 0 && (
-          <CommandGroup heading="Automations">
+          <CommandGroup heading={t("nav.automations")}>
             {routineHits.map((r) => (
               <CommandItem key={`${r.id}:${q}`} value={unique(`automation ${r.name}`, r.id)} keywords={[q]} onSelect={() => go(`/automations?edit=${r.id}`)}>
                 <Workflow className="opacity-60" />
                 <span className="truncate">{r.name}</span>
-                {!r.enabled && <span className="ml-2 text-xs text-muted-foreground">off</span>}
+                {!r.enabled && <span className="ml-2 text-xs text-muted-foreground">{t("palette.off")}</span>}
               </CommandItem>
             ))}
           </CommandGroup>
         )}
-        <CommandGroup heading="Actions">
+        <CommandGroup heading={t("palette.groups.actions")}>
           <CommandItem onSelect={() => go("/")}>
-            <MessageSquarePlus /> New chat <CommandShortcut>{modKey}N</CommandShortcut>
+            <MessageSquarePlus /> {t("shell.newChat")} <CommandShortcut>{modKey}N</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => go("/?private=1")}>
-            <Ghost /> New private chat <CommandShortcut>⇧{modKey}N</CommandShortcut>
+            <Ghost /> {t("palette.newPrivateChat")} <CommandShortcut>⇧{modKey}N</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => go("/agents/new")}>
-            <Plus /> Create agent
+            <Plus /> {t("palette.createAgent")}
           </CommandItem>
           <CommandItem onSelect={() => go("/vault/logins?new=1")}>
-            <KeyRound /> Add login
+            <KeyRound /> {t("palette.addLogin")}
           </CommandItem>
           <CommandItem onSelect={() => go("/vault/2fa?import=1")}>
-            <ShieldCheck /> Import 2FA QR code
+            <ShieldCheck /> {t("palette.import2fa")}
           </CommandItem>
-          <CommandItem value="import memory chatgpt claude gemini bring your memory" onSelect={() => go("/settings/memory?import=1")}>
-            <ArrowDownToLine /> Import memory from ChatGPT, Claude or Gemini
+          <CommandItem value={`import memory chatgpt claude gemini bring your memory ${t("palette.importMemory")}`} onSelect={() => go("/settings/memory?import=1")}>
+            <ArrowDownToLine /> {t("palette.importMemory")}
           </CommandItem>
           {on?.cards.enabled && (
-            <CommandItem value="add card payment credit card" onSelect={() => go("/vault/cards?new=1")}>
-              <CreditCard /> Add card
+            <CommandItem value={`add card payment credit card ${t("palette.addCard")}`} onSelect={() => go("/vault/cards?new=1")}>
+              <CreditCard /> {t("palette.addCard")}
             </CommandItem>
           )}
           <CommandItem
@@ -299,170 +301,170 @@ export function CommandPalette() {
               qc.invalidateQueries({ queryKey: qk.bootstrap });
             }}
           >
-            <Lock /> Lock vault
+            <Lock /> {t("footer.lockVault")}
           </CommandItem>
           <CommandItem
-            value="keyboard shortcuts keys hotkeys"
+            value={`keyboard shortcuts keys hotkeys ${t("shortcuts.title")}`}
             onSelect={() => {
               setOpen(false);
               useUi.getState().setShortcutsOpen(true);
             }}
           >
-            <Keyboard /> Keyboard shortcuts <CommandShortcut>?</CommandShortcut>
+            <Keyboard /> {t("shortcuts.title")} <CommandShortcut>?</CommandShortcut>
           </CommandItem>
           <CommandItem
-            value="switch light dark mode theme appearance night day"
+            value={`switch light dark mode theme appearance night day ${t(`themeToggle.switchTo.${resolved === "dark" ? "light" : "dark"}`)}`}
             onSelect={() => {
               toggleTheme();
               setOpen(false);
             }}
           >
-            {resolved === "dark" ? <Sun /> : <Moon />} Switch to {resolved === "dark" ? "light" : "dark"} mode <CommandShortcut>{THEME_SHORTCUT}</CommandShortcut>
+            {resolved === "dark" ? <Sun /> : <Moon />} {t(`themeToggle.switchTo.${resolved === "dark" ? "light" : "dark"}`)} <CommandShortcut>{THEME_SHORTCUT}</CommandShortcut>
           </CommandItem>
           {PALETTES.filter((p) => p !== palette).map((p) => (
             <CommandItem
               key={`palette-${p}`}
-              value={`palette theme colors appearance ${PALETTE_DEFS[p].label}`}
+              value={`palette theme colors appearance ${paletteLabel(p)}`}
               onSelect={() => {
                 setPalette(p);
                 setOpen(false);
               }}
             >
-              <Palette /> Use the {PALETTE_DEFS[p].label} palette
+              <Palette /> {t("palette.usePalette", { name: paletteLabel(p) })}
             </CommandItem>
           ))}
           <CommandItem
-            value={`switch to ${MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode interface simple advanced beginner expert`}
+            value={`switch to ${MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode interface simple advanced beginner expert ${t(`palette.switchMode.${mode === "easy" ? "pro" : "easy"}`)}`}
             onSelect={() => {
               setMode(mode === "easy" ? "pro" : "easy");
               setOpen(false);
             }}
           >
-            <Gauge /> Switch to {MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode
+            <Gauge /> {t(`palette.switchMode.${mode === "easy" ? "pro" : "easy"}`)}
           </CommandItem>
           {devices.targets.map((d) => (
             <CommandItem
               key={`handoff-${d.id ?? "primary"}`}
-              value={unique(`hand off running work to ${d.name} handoff move chats close lid device`, d.id ?? "primary")}
+              value={unique(`hand off running work to ${d.name} handoff move chats close lid device ${t("palette.handOff", { name: d.name })}`, d.id ?? "primary")}
               disabled={devices.pending}
               onSelect={() => {
                 setOpen(false);
                 devices.handoff(d);
               }}
             >
-              <ArrowRightFromLine /> Hand off running work to {d.name}
-              {devices.working > 0 && <span className="ml-2 text-xs text-muted-foreground tabular-nums">{devices.working} working</span>}
+              <ArrowRightFromLine /> {t("palette.handOff", { name: d.name })}
+              {devices.working > 0 && <span className="ml-2 text-xs text-muted-foreground tabular-nums">{t("counts.working", { count: devices.working })}</span>}
             </CommandItem>
           ))}
           {cloudContext && (
-            <CommandItem value="all computers godmode cloud devices" onSelect={() => window.location.assign(cloudContext!.home)}>
-              <ArrowLeft /> All computers
+            <CommandItem value={`all computers godmode cloud devices ${t("cloud.allComputers")}`} onSelect={() => window.location.assign(cloudContext!.home)}>
+              <ArrowLeft /> {t("cloud.allComputers")}
             </CommandItem>
           )}
           {searching &&
             agents.map((a) => (
               <CommandItem
                 key={`chat-${a.id}`}
-                value={unique(`new chat with ${a.name} talk to ${a.role ?? ""}`, a.id)}
+                value={unique(`new chat with ${a.name} talk to ${a.role ?? ""} ${t("palette.chatWith", { name: a.name })}`, a.id)}
                 onSelect={() => {
                   setOpen(false);
                   startChat.mutate(a);
                 }}
               >
-                <MessageSquarePlus /> New chat with {a.name}
+                <MessageSquarePlus /> {t("palette.chatWith", { name: a.name })}
               </CommandItem>
             ))}
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Navigate">
-          <CommandItem value="agent tasks board kanban tickets issues" keywords={alias("/tasks", "Agent tasks")} onSelect={() => go("/tasks")}>
-            <SquareKanban /> {named("/tasks", "Agent tasks")}
+        <CommandGroup heading={t("palette.groups.navigate")}>
+          <CommandItem value={`agent tasks board kanban tickets issues ${t("nav.tasks")}`} keywords={alias("/tasks", t("nav.tasks"))} onSelect={() => go("/tasks")}>
+            <SquareKanban /> {named("/tasks", t("nav.tasks"))}
           </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
-            <Bot /> Agents
+            <Bot /> {t("nav.agents")}
           </CommandItem>
-          <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
-            <Workflow /> Automations
+          <CommandItem value={`automations routines schedules triggers webhooks ${t("nav.automations")}`} onSelect={() => go("/automations")}>
+            <Workflow /> {t("nav.automations")}
           </CommandItem>
           {on?.plugins.enabled && (
-            <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
-              <Puzzle /> {named("/plugins", "Plugins")}
+            <CommandItem value={`plugins claude code mods skills hooks guardrails github install ${t("nav.plugins")}`} keywords={alias("/plugins", t("nav.plugins"))} onSelect={() => go("/plugins")}>
+              <Puzzle /> {named("/plugins", t("nav.plugins"))}
             </CommandItem>
           )}
           {on?.activity.enabled && (
-            <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
-              <Activity /> {named("/activity", "Activity")}
+            <CommandItem keywords={alias("/activity", t("nav.activity"))} onSelect={() => go("/activity")}>
+              <Activity /> {named("/activity", t("nav.activity"))}
             </CommandItem>
           )}
-          <CommandItem value="needs you inbox to-dos questions approvals my tasks" onSelect={() => go("/inbox")}>
-            <Inbox /> Needs you
+          <CommandItem value={`needs you inbox to-dos questions approvals my tasks ${t("nav.inbox")}`} onSelect={() => go("/inbox")}>
+            <Inbox /> {t("nav.inbox")}
           </CommandItem>
           <CommandItem onSelect={() => go("/archived")}>
-            <Archive /> Archived chats
+            <Archive /> {t("nav.archivedChats")}
           </CommandItem>
-          <CommandItem value="archived tasks board tickets" onSelect={() => go("/tasks?view=archived")}>
-            <Archive /> Archived tasks
+          <CommandItem value={`archived tasks board tickets ${t("nav.archivedTasks")}`} onSelect={() => go("/tasks?view=archived")}>
+            <Archive /> {t("nav.archivedTasks")}
           </CommandItem>
-          <CommandItem value="passwords logins vault" onSelect={() => go("/vault/logins")}>
-            <KeyRound /> Passwords
+          <CommandItem value={`passwords logins vault ${t("nav.passwords")}`} onSelect={() => go("/vault/logins")}>
+            <KeyRound /> {t("nav.passwords")}
           </CommandItem>
-          <CommandItem value="2fa codes two-factor authenticator totp otp" onSelect={() => go("/vault/2fa")}>
-            <ShieldCheck /> 2FA codes
+          <CommandItem value={`2fa codes two-factor authenticator totp otp ${t("palette.twoFactorCodes")}`} onSelect={() => go("/vault/2fa")}>
+            <ShieldCheck /> {t("palette.twoFactorCodes")}
           </CommandItem>
-          <CommandItem value="passkeys webauthn" onSelect={() => go("/vault/passkeys")}>
-            <Fingerprint /> Passkeys
+          <CommandItem value={`passkeys webauthn ${t("palette.passkeys")}`} onSelect={() => go("/vault/passkeys")}>
+            <Fingerprint /> {t("palette.passkeys")}
           </CommandItem>
           {on?.cards.enabled && (
-            <CommandItem value="cards payment credit cards purchases subscriptions" keywords={alias("/vault/cards", "Cards")} onSelect={() => go("/vault/cards")}>
-              <CreditCard /> {named("/vault/cards", "Cards")}
+            <CommandItem value={`cards payment credit cards purchases subscriptions ${t("nav.cards")}`} keywords={alias("/vault/cards", t("nav.cards"))} onSelect={() => go("/vault/cards")}>
+              <CreditCard /> {named("/vault/cards", t("nav.cards"))}
             </CommandItem>
           )}
           {on?.artifacts.enabled && (
-            <CommandItem value="artifacts dashboards apps trackers" keywords={mode === "easy" ? ["Dashboards & apps"] : undefined} onSelect={() => go("/settings/artifacts")}>
-              <AppWindow /> {mode === "easy" ? "Dashboards & apps" : "Artifacts"}
+            <CommandItem value={`artifacts dashboards apps trackers ${t("palette.artifacts")}`} keywords={mode === "easy" ? [t("palette.artifactsEasy")] : undefined} onSelect={() => go("/settings/artifacts")}>
+              <AppWindow /> {mode === "easy" ? t("palette.artifactsEasy") : t("palette.artifacts")}
             </CommandItem>
           )}
           {on?.integrations.enabled && (
-            <CommandItem value="integrations connected apps composio api tools mcp servers" onSelect={() => go("/settings/integrations")}>
-              <Plug /> {mode === "easy" ? "Connected apps" : "Integrations"}
+            <CommandItem value={`integrations connected apps composio api tools mcp servers ${t("palette.integrations")} ${t("palette.integrationsEasy")}`} onSelect={() => go("/settings/integrations")}>
+              <Plug /> {mode === "easy" ? t("palette.integrationsEasy") : t("palette.integrations")}
             </CommandItem>
           )}
           {on?.messaging.enabled && (
-            <CommandItem value="messaging chat apps slack telegram microsoft teams bots" onSelect={() => go("/settings/messaging")}>
-              <MessageCircle /> {mode === "easy" ? "Chat apps" : "Messaging"}
+            <CommandItem value={`messaging chat apps slack telegram microsoft teams bots ${t("palette.messaging")} ${t("palette.messagingEasy")}`} onSelect={() => go("/settings/messaging")}>
+              <MessageCircle /> {mode === "easy" ? t("palette.messagingEasy") : t("palette.messaging")}
             </CommandItem>
           )}
           {on?.phone.enabled && (
-            <CommandItem value="calls phone calls elevenlabs voice transcripts" keywords={alias("/calls", "Calls")} onSelect={() => go("/calls")}>
-              <Phone /> {named("/calls", "Calls")}
+            <CommandItem value={`calls phone calls elevenlabs voice transcripts ${t("nav.calls")}`} keywords={alias("/calls", t("nav.calls"))} onSelect={() => go("/calls")}>
+              <Phone /> {named("/calls", t("nav.calls"))}
             </CommandItem>
           )}
           <CommandItem onSelect={() => go("/browser")}>
-            <Globe /> Browser
+            <Globe /> {t("nav.browser")}
           </CommandItem>
-          <CommandItem keywords={alias("/computer", "Computer")} onSelect={() => go("/computer")}>
-            <MonitorUp /> {named("/computer", "Computer")}
+          <CommandItem keywords={alias("/computer", t("nav.computer"))} onSelect={() => go("/computer")}>
+            <MonitorUp /> {named("/computer", t("nav.computer"))}
           </CommandItem>
           {on?.vm.enabled && (
-            <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
-              <Box /> Virtual machines
+            <CommandItem value={`virtual machines vms macos tart ${t("nav.vms")}`} onSelect={() => go("/vms")}>
+              <Box /> {t("nav.vms")}
             </CommandItem>
           )}
           {on?.ssh.enabled && (
-            <CommandItem value="ssh servers remote linux" keywords={alias("/ssh", "SSH servers")} onSelect={() => go("/ssh")}>
-              <Server /> {named("/ssh", "SSH servers")}
+            <CommandItem value={`ssh servers remote linux ${t("nav.ssh")}`} keywords={alias("/ssh", t("nav.ssh"))} onSelect={() => go("/ssh")}>
+              <Server /> {named("/ssh", t("nav.ssh"))}
             </CommandItem>
           )}
           {on?.android.enabled && (
-            <CommandItem value="android phones adb emulator devices" onSelect={() => go("/settings/android")}>
-              <Smartphone /> Android phones
+            <CommandItem value={`android phones adb emulator devices ${t("palette.settingsSections.android")}`} onSelect={() => go("/settings/android")}>
+              <Smartphone /> {t("palette.settingsSections.android")}
             </CommandItem>
           )}
           <CommandItem onSelect={() => go("/workspaces")}>
-            <Layers /> Workspaces
+            <Layers /> {t("palette.workspaces")}
           </CommandItem>
-          <CommandItem value="instructions rules agent context" onSelect={() => go("/settings/instructions")}>
-            <ScrollText /> Instructions
+          <CommandItem value={`instructions rules agent context ${t("palette.instructions")}`} onSelect={() => go("/settings/instructions")}>
+            <ScrollText /> {t("palette.instructions")}
           </CommandItem>
           <CommandItem value="claude code mcp server cli connect terminal cursor api key" onSelect={() => go("/settings/connect")}>
             <SquareTerminal /> Claude Code & MCP
@@ -470,24 +472,24 @@ export function CommandPalette() {
           <CommandItem value="godmode cloud link browser remote access" onSelect={() => go("/settings/cloud")}>
             <Cloud /> Godmode Cloud
           </CommandItem>
-          <CommandItem value="license licence key activate trial subscription pro plan" onSelect={() => go("/settings/license")}>
-            <KeySquare /> License
+          <CommandItem value={`license licence key activate trial subscription pro plan ${t("palette.license")}`} onSelect={() => go("/settings/license")}>
+            <KeySquare /> {t("palette.license")}
           </CommandItem>
-          <CommandItem value="billing plan subscription invoices usage tokens" onSelect={() => go("/settings/billing")}>
-            <CreditCard /> Billing and usage
+          <CommandItem value={`billing plan subscription invoices usage tokens ${t("palette.billing")}`} onSelect={() => go("/settings/billing")}>
+            <CreditCard /> {t("palette.billing")}
           </CommandItem>
           <CommandItem onSelect={() => go("/settings/general")}>
-            <Settings /> Settings <CommandShortcut>{modKey},</CommandShortcut>
+            <Settings /> {t("common:words.settings")} <CommandShortcut>{modKey},</CommandShortcut>
           </CommandItem>
         </CommandGroup>
         {searching && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Settings">
+            <CommandGroup heading={t("common:words.settings")}>
               {SETTINGS.map(({ id, label, icon: Icon, words }) => (
-                <CommandItem key={id} value={`settings ${label} ${words}`} onSelect={() => go(`/settings/${id}`)}>
-                  <Icon /> {label}
-                  <span className="ml-2 text-xs text-muted-foreground">Settings</span>
+                <CommandItem key={id} value={`settings ${t("common:words.settings")} ${t(`palette.settingsSections.${label}`)} ${words}`} onSelect={() => go(`/settings/${id}`)}>
+                  <Icon /> {t(`palette.settingsSections.${label}`)}
+                  <span className="ml-2 text-xs text-muted-foreground">{t("common:words.settings")}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -496,7 +498,7 @@ export function CommandPalette() {
         {agents.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Agents">
+            <CommandGroup heading={t("nav.agents")}>
               {agents.map((a) => (
                 <CommandItem key={a.id} value={unique(`agent ${a.name} ${a.description}`, a.id)} onSelect={() => go(`/agents/${a.id}`)}>
                   <AgentAvatar agent={a} size="sm" still className="size-5" />
@@ -510,7 +512,7 @@ export function CommandPalette() {
         {chats.length + inMessages.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Chats">
+            <CommandGroup heading={t("palette.groups.chats")}>
               {chats.map((c) => (
                 <CommandItem key={c.id} value={unique(`chat ${c.title} ${c.preview ?? ""}`, c.id)} onSelect={() => go(`/chat/${c.id}`)}>
                   <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
@@ -521,7 +523,7 @@ export function CommandPalette() {
                 // Found by the core in its messages: kept whatever the title says (keyed by the search, see Tickets).
                 <CommandItem key={`${c.id}:${q}`} value={unique(`chat ${c.title}`, c.id)} keywords={[q]} onSelect={() => go(`/chat/${c.id}`)}>
                   <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
-                  <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">mentioned in a message</span>
+                  <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{t("palette.mentioned")}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

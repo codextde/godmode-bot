@@ -5,6 +5,7 @@ import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, i
 import { Archive, ArchiveRestore, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Agent, Conversation } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
@@ -18,19 +19,22 @@ import { errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedConversations } from "@/lib/hooks";
 import { useLive } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+import { dateLocale, t } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 
 const LIMIT = 200;
 
 function bucket(d: Date, now: Date): string {
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
   const days = differenceInCalendarDays(now, d);
-  if (days < 7) return "Previous 7 days";
-  if (days < 30) return "Previous 30 days";
-  return format(d, d.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy");
+  if (days < 7) return t("chat:archived.previous7");
+  if (days < 30) return t("chat:archived.previous30");
+  return format(d, d.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy", { locale: dateLocale() });
 }
 
 export default function ArchivedPage() {
+  const { t } = useTranslation(["chat", "common"]);
   const [search, setSearch] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const q = useDebouncedValue(search.trim());
@@ -65,7 +69,7 @@ export default function ArchivedPage() {
       else out.push({ label, items: [c] });
     }
     return out;
-  }, [list, going]);
+  }, [list, going, t]);
 
   const filtered = !!q || agentFilter !== "all";
 
@@ -73,8 +77,8 @@ export default function ArchivedPage() {
     <>
       <PageHeader
         icon={<Archive />}
-        title="Archived chats"
-        description="Out of your sidebar, never deleted, and never stopped: what a chat still has ahead goes on here. Sending a message moves it back to Recent."
+        title={t("archived.title")}
+        description={t("archived.description")}
       />
       <PageBody className="space-y-6">
         <div className="flex flex-wrap items-center gap-3">
@@ -83,18 +87,18 @@ export default function ArchivedPage() {
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search titles & messages…"
-              aria-label="Search archived chats"
+              placeholder={t("archived.searchPlaceholder")}
+              aria-label={t("archived.searchLabel")}
               className="pl-9"
             />
           </div>
           {agents.length > 1 && (
             <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-48" aria-label="Filter by agent">
+              <SelectTrigger className="w-48" aria-label={t("archived.filterByAgent")}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
-                <SelectItem value="all">All agents</SelectItem>
+                <SelectItem value="all">{t("archived.allAgents")}</SelectItem>
                 <SelectSeparator />
                 {agents.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
@@ -106,7 +110,7 @@ export default function ArchivedPage() {
           )}
           {list.length > 0 && (
             <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-              {list.length >= LIMIT ? `${LIMIT}+` : list.length} {list.length === 1 ? "chat" : "chats"}
+              {list.length >= LIMIT ? t("archived.countMax", { n: LIMIT }) : t("archived.count", { count: list.length })}
             </span>
           )}
         </div>
@@ -120,24 +124,24 @@ export default function ArchivedPage() {
         ) : archived.isError ? (
           <EmptyState
             icon={<Archive />}
-            title="Couldn't load archived chats"
+            title={t("archived.loadError")}
             description={errorMessage(archived.error)}
             action={
               <Button variant="outline" onClick={() => archived.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : list.length === 0 ? (
           <EmptyState
             icon={<Archive />}
-            title={filtered ? "No archived chats match" : "Nothing archived"}
+            title={filtered ? t("archived.noMatch") : t("archived.empty")}
             description={
               filtered
                 ? q
-                  ? `Nothing found for “${q}”.`
+                  ? t("archived.nothingFound", { query: q })
                   : undefined
-                : "Hover a chat in the sidebar and press the archive icon to tidy up. It lands here, with every message intact."
+                : t("archived.emptyHint")
             }
             action={
               filtered ? (
@@ -148,7 +152,7 @@ export default function ArchivedPage() {
                     setAgentFilter("all");
                   }}
                 >
-                  Clear filters
+                  {t("archived.clearFilters")}
                 </Button>
               ) : undefined
             }
@@ -159,9 +163,9 @@ export default function ArchivedPage() {
               <section aria-labelledby="archived-going">
                 <div className="mb-2 flex items-baseline gap-2 px-1">
                   <h2 id="archived-going" className="eyebrow">
-                    Still going
+                    {t("archived.stillGoing")}
                   </h2>
-                  <span className="text-xs text-muted-foreground">Archiving doesn't stop them — they work, wait or come back on their own.</span>
+                  <span className="text-xs text-muted-foreground">{t("archived.stillGoingHint")}</span>
                 </div>
                 <div className="space-y-0.5 rounded-xl border bg-card p-1.5 shadow-card">
                   <AnimatePresence initial={false}>
@@ -226,6 +230,8 @@ function ArchivedRow({
   onRestore: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
+  const { dateLocale: locale, intlLocale } = useLocale();
   const when = new Date(c.lastMessageAt ?? c.createdAt);
   return (
     <motion.div
@@ -241,37 +247,37 @@ function ArchivedRow({
       >
         <AgentAvatar agent={agent ?? { avatar: "💬", color: "violet" }} size="sm" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium tracking-[-0.01em]">{c.title || "New chat"}</span>
+          <span className="block truncate text-sm font-medium tracking-[-0.01em]">{c.title || t("header.newChat")}</span>
           {status ? (
             <span className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
-              <span className="shrink-0">{agent?.name ?? "Agent"} ·</span>
+              <span className="shrink-0">{agent?.name ?? t("common:words.agent")} ·</span>
               <span className="min-w-0 truncate">{status}</span>
             </span>
           ) : (
             <span className="block truncate text-[13px] text-muted-foreground">
-              {agent?.name ?? "Agent"}
+              {agent?.name ?? t("common:words.agent")}
               {c.preview && <span className="opacity-70"> · {c.preview}</span>}
             </span>
           )}
         </span>
         <span
           className="shrink-0 text-xs text-muted-foreground tabular-nums transition-opacity group-focus-within:opacity-0 group-hover:opacity-0"
-          title={when.toLocaleString()}
+          title={when.toLocaleString(intlLocale)}
         >
-          {formatDistanceToNowStrict(when, { addSuffix: true })}
+          {formatDistanceToNowStrict(when, { addSuffix: true, locale })}
         </span>
       </Link>
       <div className="absolute inset-y-0 right-2 flex items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
         <Button size="xs" variant="outline" className="bg-card" onClick={onRestore}>
-          <ArchiveRestore /> Unarchive
+          <ArchiveRestore /> {t("header.unarchive")}
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon-xs" variant="ghost" aria-label={`Delete “${c.title || "New chat"}”`} onClick={onDelete} className="text-muted-foreground hover:text-destructive">
+            <Button size="icon-xs" variant="ghost" aria-label={t("archived.deleteNamed", { title: c.title || t("header.newChat") })} onClick={onDelete} className="text-muted-foreground hover:text-destructive">
               <Trash2 />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Delete forever</TooltipContent>
+          <TooltipContent>{t("archived.deleteForever")}</TooltipContent>
         </Tooltip>
       </div>
     </motion.div>

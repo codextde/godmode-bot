@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /** The Godmode mark — a flat anthracite tile with a paper bolt (inverts in dark mode). */
@@ -16,12 +17,13 @@ export function Logo({ className }: { className?: string }) {
 }
 
 export function Wordmark({ className }: { className?: string }) {
+  const { t } = useTranslation("layout");
   return (
     <div className={cn("flex items-center gap-2.5", className)}>
       <Logo className="size-7" />
       <div className="leading-none">
         <div className="text-[15px] font-medium tracking-[-0.02em]">Godmode</div>
-        <div className="mt-1 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">AI coworker</div>
+        <div className="mt-1 text-[10px] font-medium tracking-[0.14em] text-muted-foreground uppercase">{t("brand.tagline")}</div>
       </div>
     </div>
   );

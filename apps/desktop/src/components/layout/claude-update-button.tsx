@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowDown, SquareTerminal, X } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { ClaudeUpdateStatus } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
@@ -11,12 +12,14 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
+import { t as translate } from "@/i18n";
 
 const HOUR = 60 * 60_000;
 
-const lastLines = (output: string) => output.split("\n").filter((l) => l.trim()).slice(-3).join("\n") || "claude update finished without upgrading.";
+const lastLines = (output: string) => output.split("\n").filter((l) => l.trim()).slice(-3).join("\n") || translate("layout:claudeUpdate.noUpgrade");
 
 export function ClaudeUpdateButton() {
+  const { t } = useTranslation("layout");
   const qc = useQueryClient();
   const skipped = useUi((s) => s.skippedClaudeVersion);
   const skip = useUi((s) => s.skipClaudeVersion);
@@ -28,14 +31,14 @@ export function ClaudeUpdateButton() {
     onSuccess: (res) => {
       if (res.ok) {
         qc.setQueryData<ClaudeUpdateStatus>(qk.claudeUpdate, (s) => s && { ...s, current: res.version, updateAvailable: false });
-        toast.success(`Claude Code ${res.version}`, { description: "Updated — new chats use it right away." });
+        toast.success(`Claude Code ${res.version}`, { description: t("claudeUpdate.updated") });
       } else {
         if (res.version === res.previous && latest) skip(latest);
-        toast.error("Couldn't update Claude Code", { description: <span className="whitespace-pre-line">{lastLines(res.output)}</span> });
+        toast.error(t("claudeUpdate.failed"), { description: <span className="whitespace-pre-line">{lastLines(res.output)}</span> });
       }
       void qc.invalidateQueries({ queryKey: qk.doctor });
     },
-    onError: (e) => toast.error("Couldn't update Claude Code", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("claudeUpdate.failed"), { description: errorMessage(e) }),
   });
 
   const pending = update.isPending;
@@ -66,11 +69,9 @@ export function ClaudeUpdateButton() {
               <p className="text-[12.5px] font-medium">Claude Code</p>
               <p className="truncate text-[11px] text-muted-foreground">
                 {pending ? (
-                  <span className="text-shimmer">Installing…</span>
+                  <span className="text-shimmer">{t("claudeUpdate.installing")}</span>
                 ) : (
-                  <>
-                    <span className="font-mono text-[10.5px] text-foreground tabular-nums">{latest}</span> available
-                  </>
+                  <Trans t={t} i18nKey="claudeUpdate.available" values={{ version: latest }} components={{ v: <span className="font-mono text-[10.5px] text-foreground tabular-nums" /> }} />
                 )}
               </p>
             </div>
@@ -78,11 +79,11 @@ export function ClaudeUpdateButton() {
               <TooltipTrigger asChild>
                 <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={run} disabled={pending}>
                   {pending ? <Spinner className="size-3" /> : <ArrowDown />}
-                  {pending ? "Updating" : "Update"}
+                  {pending ? t("claudeUpdate.updating") : t("claudeUpdate.update")}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                Update from {data?.current} to {latest}
+                {t("claudeUpdate.updateFromTo", { from: data?.current, to: latest })}
               </TooltipContent>
             </Tooltip>
             {!pending && (
@@ -91,13 +92,13 @@ export function ClaudeUpdateButton() {
                   <button
                     type="button"
                     onClick={() => skip(latest)}
-                    aria-label={`Skip Claude Code ${latest}`}
+                    aria-label={t("claudeUpdate.skipVersionLabel", { version: latest })}
                     className="absolute -top-1.5 -right-1.5 grid size-4 place-items-center rounded-full border bg-card text-muted-foreground opacity-0 shadow-card transition group-hover/claude:opacity-100 hover:text-foreground focus-visible:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                   >
                     <X className="size-2.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Skip this version</TooltipContent>
+                <TooltipContent>{t("claudeUpdate.skipVersion")}</TooltipContent>
               </Tooltip>
             )}
           </div>
@@ -111,13 +112,13 @@ export function ClaudeUpdateButton() {
                   className="relative size-8"
                   onClick={run}
                   disabled={pending}
-                  aria-label={`Update Claude Code to ${latest}`}
+                  aria-label={t("claudeUpdate.updateTo", { version: latest })}
                 >
                   {pending ? <Spinner /> : <SquareTerminal />}
                   {!pending && <LiveDot live={false} className="absolute top-1 right-1 bg-brand" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">{pending ? `Installing Claude Code ${latest}…` : `Update Claude Code to ${latest}`}</TooltipContent>
+              <TooltipContent side="right">{pending ? t("claudeUpdate.installingVersion", { version: latest }) : t("claudeUpdate.updateTo", { version: latest })}</TooltipContent>
             </Tooltip>
           </div>
         </motion.div>

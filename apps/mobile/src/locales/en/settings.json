@@ -1,0 +1,536 @@
+{
+  "overview": {
+    "status": {
+      "connected": "Connected",
+      "connecting": "Connecting…",
+      "outOfReach": "Out of reach",
+      "away": "Away"
+    },
+    "pick": {
+      "thatComputer": "That computer",
+      "title": "{{name}} doesn't answer right now",
+      "body": "This phone switches to it as soon as it's back."
+    },
+    "lock": {
+      "turnOn": "Turn on Face ID for Godmode",
+      "turnOff": "Turn off Face ID for Godmode"
+    },
+    "disconnect": {
+      "title": "Disconnect from {{name}}?",
+      "body": "This phone forgets its key. Scan a new code to connect again.",
+      "confirm": "Disconnect",
+      "button": "Disconnect this phone"
+    },
+    "computers": {
+      "title": "This phone uses",
+      "footer": "When the one you pick is out of reach, this phone uses another computer of the group and switches back once it answers again.",
+      "automatic": "Automatic",
+      "thePrimary": "The primary, {{name}}",
+      "whoAnswers": "The computer that answers",
+      "primary": "Primary",
+      "secondary": "Secondary"
+    },
+    "preferences": {
+      "title": "Preferences",
+      "footer": "Changes apply to your computer right away. Running chats pick them up with their next message.",
+      "yourName": "Your name",
+      "addName": "Add your name"
+    },
+    "theme": {
+      "title": "Appearance",
+      "detail": "System follows this phone's setting.",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "language": {
+      "title": "Language",
+      "detail": "System follows this phone's language. The same on your computer."
+    },
+    "mode": {
+      "title": "Interface",
+      "detail": "{{blurb}} The same on your computer.",
+      "easy": "Easy",
+      "pro": "Professional",
+      "easyBlurb": "Plain words and only what you need day to day. Everything else is one click away.",
+      "proBlurb": "Every tool, setting and detail in view: models, runs, machines, logs."
+    },
+    "links": {
+      "ai": "AI & Claude",
+      "instructions": "Instructions",
+      "instructionsDetail": "Rules for every agent, workspace and project",
+      "browser": "Browser",
+      "browserDetail": "Profiles, background, live view",
+      "computer": "Computer",
+      "computerDetail": "Computer use and virtual machines",
+      "memory": "Memory",
+      "memoryDetail": "Learning, dreaming, upkeep"
+    },
+    "team": {
+      "title": "Your team",
+      "workspaces": "Workspaces",
+      "projects_one": "{{count}} project",
+      "projects_other": "{{count}} projects",
+      "noneYet": "None yet"
+    },
+    "privacy": {
+      "title": "Data & privacy",
+      "footer": "Logins, 2FA codes, backups and the rest of Security stay on your computer.",
+      "faceId": "Require Face ID",
+      "faceIdDetail": "Hides Godmode in the app switcher and asks after 30 seconds away.",
+      "security": "Security",
+      "onComputer": "On your computer"
+    },
+    "app": {
+      "title": "App",
+      "footer": "Remove this phone on your computer anytime in Settings → Phone.",
+      "thisPhone": "This phone",
+      "version": "Godmode for {{platform}} {{version}}"
+    },
+    "palette": {
+      "title": "Palette",
+      "detail": "Just for this phone, light and dark.",
+      "names": {
+        "paper": {
+          "label": "Paper",
+          "blurb": "Warm paper by day, anthracite by night"
+        },
+        "graphite": {
+          "label": "Graphite",
+          "blurb": "Cool neutral greys with a blue accent"
+        },
+        "nord": {
+          "label": "Nord",
+          "blurb": "Arctic blue-greys and frost"
+        },
+        "solarized": {
+          "label": "Solarized",
+          "blurb": "Ethan Schoonover's classic cream and teal"
+        },
+        "rose": {
+          "label": "Rosé",
+          "blurb": "Soft blush with a raspberry accent"
+        },
+        "forest": {
+          "label": "Forest",
+          "blurb": "Moss, fern and bark"
+        },
+        "ocean": {
+          "label": "Ocean",
+          "blurb": "Sea glass and deep water"
+        },
+        "dracula": {
+          "label": "Dracula",
+          "blurb": "Purple night, and a pale day to match"
+        }
+      }
+    },
+    "suggestions": {
+      "title": "Show suggestions",
+      "detail": "Ideas like “Summarize my unread emails” on Home and in a new chat."
+    }
+  },
+  "ai": {
+    "defaultModel": {
+      "title": "Default model",
+      "footer": "Agents without a model of their own use this one. Change it per agent, or per chat from the composer.",
+      "model": "Model",
+      "effort": "Effort",
+      "effortDetail": "How long Claude thinks before it acts.",
+      "fallback": "Fallback",
+      "fallbackDetail": "Used when the default model is overloaded."
+    },
+    "work": {
+      "title": "Work",
+      "footer": "Runs over the limit wait in line. A run that takes longer than the timeout is stopped.",
+      "parallel": "Parallel runs",
+      "timeout": "Timeout per run",
+      "continueLimit": "Continue after usage limits",
+      "continueLimitDetail": "A run that hit Claude's limit picks up by itself once it resets.",
+      "resume": "Continue cut-off work",
+      "resumeDetail": "Work cut off by a restart, a lost internet connection or the end of a turn picks up by itself once Godmode and the connection are back."
+    },
+    "compact": {
+      "title": "Long chats",
+      "footer": "A chat that fills this much of the model's memory is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper, later keeps more detail. Compress any chat by hand with the ring next to the model.",
+      "auto": "Compress by itself",
+      "at": "At {{percent}}%",
+      "atDefault": "At {{percent}}% (default)",
+      "nearlyFull": "When nearly full",
+      "never": "Never by itself"
+    },
+    "watchdog": {
+      "title": "Watchdog",
+      "footer": "Stops runs that stall or go in circles, so they don't burn time and tokens.",
+      "stalled": "Stalled after",
+      "repeated": "Same step repeated"
+    }
+  },
+  "capabilities": {
+    "title": "Browser & computer",
+    "liveView": "Live view",
+    "browser": {
+      "title": "Browser",
+      "footer": "Agents browse in their own profiles, with your saved logins filled in by Godmode.",
+      "enabled": "Browser for agents",
+      "headless": "Run in the background",
+      "headlessDetail": "No browser window opens on your computer.",
+      "stealth": "Look like a person",
+      "stealthDetail": "Hides automation signals so sites don't block agents.",
+      "mute": "Mute sound",
+      "liveViewDetail": "Watch the browser while an agent works.",
+      "keepAlive": "Close idle browser after"
+    },
+    "computer": {
+      "title": "Computer use",
+      "footer": "Agents only see and control a screen, window or tab you share with them in a chat.",
+      "foreground": "Bring windows to the front",
+      "foregroundDetail": "Briefly, when a background action doesn't land.",
+      "cursor": "Show the agent's cursor",
+      "liveViewSpeed": "Live view speed"
+    },
+    "vm": {
+      "title": "Virtual machines",
+      "footer": "Agents with a VM work inside it instead of on this computer.",
+      "onQuit": "When Godmode quits",
+      "suspend": "Suspend",
+      "suspendDetail": "Resume where they left off.",
+      "stop": "Shut down",
+      "keep": "Keep running",
+      "idleStop": "Stop idle VMs after"
+    }
+  },
+  "instructions": {
+    "intro": "Rules your agents follow on every run. Set them once for everyone, then refine them per workspace, project or agent.",
+    "layers": {
+      "everyone": "Everyone",
+      "workspace": "Workspace",
+      "project": "Project",
+      "agent": "Agent",
+      "chat": "Chat"
+    },
+    "precedence": "All of them go into every run. When two disagree, the more specific one wins.",
+    "everyAgent": "Every agent",
+    "everyAgentLabel": "Instructions for every agent",
+    "example": "1. Commit as me only, never add an AI co-author.\n2. Keep code comments to a minimum.\n3. Merge main into your branch before opening a pull request.\n4. For UI changes, attach screenshots.",
+    "loadError": "Couldn't load the instructions.",
+    "lines_one": "{{count}} line",
+    "lines_other": "{{count}} lines",
+    "workspaces": {
+      "title": "Workspaces and projects",
+      "footer": "Agent context: given to every agent working in the workspace or project.",
+      "noContext": "No agent context yet",
+      "noProjectContext": "No project context yet",
+      "createDetail": "Give a client or product its own agents and context."
+    },
+    "agents": {
+      "footer": "Each agent's own role and standing orders.",
+      "none": "Works from your messages alone"
+    },
+    "tip": "Just one chat? Write it into the chat. It only applies there and wins over everything above."
+  },
+  "memory": {
+    "schedule": {
+      "night3": "Every night at 3:00",
+      "night1": "Every night at 1:00",
+      "twiceDaily": "Twice a day",
+      "sundays": "Sundays at 3:00",
+      "custom": "Custom ({{cron}})"
+    },
+    "sameAsAgent": "Same as the agent",
+    "memory": {
+      "footer": "Each agent keeps what it learns in its own repository on your computer.",
+      "inject": "Start every chat knowing it",
+      "injectDetail": "Loads the agent's memory into each new chat.",
+      "reflect": "Learn after each run",
+      "reflectDetail": "Agents note what they learned when a run ends.",
+      "autoCommit": "Save changes with git"
+    },
+    "dreaming": {
+      "title": "Dreaming",
+      "footer": "While idle, agents review recent chats and tidy up their memory and workspace: merge duplicates, fix contradictions, date what has passed, sort files — and keep the memory short enough to load into every chat.",
+      "when": "When",
+      "tidy": "Tidy the workspace",
+      "tidyDetail": "Sorts files into folders and clears out leftovers.",
+      "offers": "Offer to take work off your plate",
+      "offersDetail": "Your main agent offers work it spotted on Home.",
+      "size": "Memory size",
+      "chars_one": "{{formatted}} char",
+      "chars_other": "{{formatted}} chars",
+      "minExchanges": "New exchanges needed",
+      "refresh": "Refresh dated memory",
+      "daily": "Daily",
+      "days_one": "{{count}} day",
+      "days_other": "{{count}} days"
+    },
+    "upkeep": {
+      "title": "Upkeep",
+      "footer": "Godmode looks after itself: repairs, updates of its tools, and cleaning up old files.",
+      "autoFix": "Fix problems by itself",
+      "autoUpdate": "Update tools",
+      "autoCleanup": "Clean up old files"
+    },
+    "desktop": {
+      "title": "On your computer",
+      "notifications": "Desktop notifications"
+    }
+  },
+  "agents": {
+    "global": "Global",
+    "new": "New agent",
+    "heartbeat": "Heartbeat"
+  },
+  "agent": {
+    "notFound": {
+      "title": "Agent not found",
+      "body": "It may have been deleted on your computer."
+    },
+    "role": "Role",
+    "rolePlaceholder": "Add a role, like Bookkeeper",
+    "builtIn": "Built-in",
+    "active": "Active",
+    "activeOn": "Takes chats, tasks and automations.",
+    "activeOff": "Does nothing until you switch it on.",
+    "instructionsLabel": "Instructions for {{name}}",
+    "instructionsPlaceholder": "What it does, how, and when it asks you.\nFor example: Check my inbox every morning and draft replies to customers.",
+    "about": "About",
+    "descriptionLabel": "Description of {{name}}",
+    "descriptionPlaceholder": "One or two lines your other agents see when they hand work over.",
+    "descriptionHint": "Teammates see this",
+    "memoryFooter": "What the agent learned and keeps loading into every chat. It updates this itself; your edits guide what it remembers.",
+    "personality": {
+      "title": "Personality",
+      "tone": "Tone",
+      "none": "No particular tone",
+      "custom": "Custom"
+    },
+    "thinking": {
+      "title": "Thinking",
+      "footer": "Default follows AI & Claude in Settings.",
+      "default": "Default",
+      "special": "{{model}} (special tasks)"
+    },
+    "project": "Project",
+    "hours": {
+      "any": "Any time",
+      "work": "Working hours, 9 to 18",
+      "day": "Daytime, 8 to 22",
+      "night": "At night, 22 to 7",
+      "custom": "{{from}} to {{to}}"
+    },
+    "heartbeat": {
+      "footer": "Wakes up on its own to move its tickets forward and work through its checklist.",
+      "every": "Every",
+      "weekdays": "Weekdays only",
+      "checklist": "Checklist",
+      "checklistLabel": "Heartbeat checklist",
+      "checklistPlaceholder": "Standing duties for every beat.\nFor example: Check Stripe for unpaid orders."
+    }
+  },
+  "workspaces": {
+    "new": "New workspace",
+    "create": "Create a workspace",
+    "footer": "A workspace gives a client or product its own agents, context, repositories and projects.",
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "repositories_one": "{{count}} repository",
+    "repositories_other": "{{count}} repositories",
+    "empty": "Empty",
+    "none": {
+      "title": "No workspaces yet",
+      "body": "Give a client or product its own agents, context and repositories."
+    }
+  },
+  "workspace": {
+    "title": "Workspace",
+    "notFound": "Workspace not found",
+    "deleteDialog": {
+      "title": "Delete {{name}}?",
+      "body": "Its repositories and context go with it. This can't be undone."
+    },
+    "deleteFailed": "Couldn't delete it",
+    "notEmpty": "{{name}} still has projects, agents, tasks, logins or other things in it. Move or delete them first, or delete the workspace on your computer.",
+    "context": "Agent context",
+    "contextLabel": "Agent context for {{name}}",
+    "contextPlaceholder": "Who the client is, what the product does, links, tone, rules.\nEvery agent in this workspace gets it on every run.",
+    "projects": "Projects",
+    "projectsFooter": "Projects add their own context and repositories on top of the workspace's.",
+    "newProject": "New project",
+    "sourcesFooter": "Every agent in the workspace works with these. Tasks get their own branch of a repository. Add folders of your computer there.",
+    "behavior": "Behavior",
+    "autoMerge": "Merge pull requests right away",
+    "autoMergeDetail": "A ticket is done when its agent delivers, without your review.",
+    "browserProfile": "Browser profile",
+    "deleteFooter": "Only an empty workspace can be deleted here: no projects, agents, tasks or logins. Its chats move to every workspace.",
+    "delete": "Delete workspace"
+  },
+  "project": {
+    "notFound": "Project not found",
+    "deleteBody": "Its context and repositories go with it. Chats, tickets and agents stay in the workspace.",
+    "workspaceDetail": "Workspace: its context comes first",
+    "context": "Project context",
+    "contextLabel": "Context for {{name}}",
+    "contextPlaceholder": "Goals, scope, conventions and links for this project.\nAdded to the workspace's context on every run.",
+    "agents": "Agents on it",
+    "agentsFooter": "Agents work on this project by default. Chats and tickets can pick another.",
+    "sourcesFooter": "On top of the workspace's. Add folders of your computer there.",
+    "workspaceProfile": "The workspace's",
+    "delete": "Delete project"
+  },
+  "new": {
+    "workspace": {
+      "title": "New workspace",
+      "name": "Client, company or product",
+      "context": "Agent context",
+      "placeholder": "Who it's for, what it does, links, tone and rules. Every agent in the workspace gets it.",
+      "create": "Create workspace"
+    },
+    "project": {
+      "title": "New project",
+      "name": "Project name",
+      "context": "Project context",
+      "placeholder": "Goals, scope and conventions. Added to the workspace's context.",
+      "create": "Create project"
+    },
+    "agent": {
+      "title": "New agent",
+      "name": "Name, like Inbox Keeper",
+      "context": "Instructions",
+      "placeholder": "What it does, how, and when it asks you.",
+      "create": "Create agent"
+    },
+    "createFailed": "Couldn't create it",
+    "from": "From “{{name}}”",
+    "fromScratch": "Starting from scratch",
+    "changeRole": "Change role",
+    "inWorkspace": "In {{icon}} {{name}}",
+    "pickPicture": "Pick a picture",
+    "rolePlaceholder": "Role, like Bookkeeper (optional)",
+    "contextPlaceholder": "{{label}} (optional). {{hint}}",
+    "worksIn": "Works in",
+    "everyWorkspace": "Every workspace",
+    "getsContext": "It gets {{name}}'s context, repositories and logins.",
+    "anyWorkspace": "It can work in any workspace you start it in.",
+    "routineHint": "Its automation “{{name}}” ({{schedule}}) can be added on your computer.",
+    "setupHint": "Logins, tools and folders for new agents are set on your computer.",
+    "categories": {
+      "leadership": "Leadership",
+      "finance": "Finance",
+      "legal": "Legal",
+      "people": "People",
+      "marketing": "Marketing",
+      "sales": "Sales",
+      "customer": "Customer service",
+      "ecommerce": "E-commerce",
+      "product": "Product & design",
+      "engineering": "Engineering & IT",
+      "data": "Data",
+      "operations": "Operations"
+    },
+    "categoryTitles": {
+      "leadership": "Leadership & strategy",
+      "finance": "Finance & accounting",
+      "legal": "Legal & compliance",
+      "people": "People & HR",
+      "marketing": "Marketing",
+      "sales": "Sales",
+      "customer": "Customer service",
+      "ecommerce": "E-commerce",
+      "product": "Product & design",
+      "engineering": "Engineering & IT",
+      "data": "Data & analytics",
+      "operations": "Operations & procurement"
+    },
+    "picker": {
+      "scratch": "Start from scratch",
+      "hire": "Or hire one role",
+      "intro": "One agent per job, or one all-in-one agent that runs a whole department.",
+      "search": "Search roles",
+      "searchPlaceholder": "Search roles…",
+      "clearSearch": "Clear search",
+      "allInOne": "All-in-one",
+      "loadError": "Roles aren't available right now ({{error}}). Start from scratch instead.",
+      "noMatch": "No role matches “{{query}}”. Start from scratch and describe the job in the instructions.",
+      "none": "No roles here yet.",
+      "leads": "Leads a team",
+      "allInOneJobs_one": "All-in-one · {{count}} job",
+      "allInOneJobs_other": "All-in-one · {{count}} jobs"
+    }
+  },
+  "model": {
+    "switchFailed": "Couldn't switch the model",
+    "appliesNext": "Applies from the next message in this chat.",
+    "forNewChat": "For the chat you are about to start.",
+    "older": "Older models",
+    "special": "Special tasks",
+    "loading": "Asking Claude Code for its models…",
+    "noEffort": "Effort isn't adjustable for {{model}}.",
+    "noUltracode": "Ultracode isn't available for {{model}}.",
+    "builtIn": "Built-in list",
+    "useAgentDefault": "Use {{name}}'s default",
+    "useDefault": "Use the agent's default",
+    "faster": "Faster",
+    "deeper": "Deeper",
+    "effortHint": {
+      "low": "Quick answers with little deliberation.",
+      "medium": "Balanced speed and depth.",
+      "high": "Thinks problems through before acting.",
+      "xhigh": "Extra deliberation for hard, multi-step work.",
+      "max": "Thinks as long as it needs. Slowest, most tokens."
+    }
+  },
+  "goal": {
+    "saveFailed": "Couldn't save the goal",
+    "deleteFailed": "Couldn't delete the goal",
+    "loading": "Loading the goal…",
+    "loadFailed": "Couldn't load the goal",
+    "gone": {
+      "title": "This goal is gone",
+      "body": "It was deleted on your computer."
+    },
+    "deleteDialog": {
+      "title": "Delete “{{title}}”?",
+      "ticketsStay_one": "Its ticket stays, serving no goal. To keep it on record, mark it achieved or drop it instead.",
+      "ticketsStay_other": "Its {{count}} tickets stay, serving no goal. To keep it on record, mark it achieved or drop it instead.",
+      "noTickets": "No ticket serves it yet. To keep it on record, mark it achieved or drop it instead.",
+      "keep": "Keep it"
+    },
+    "edit": "Edit goal",
+    "new": "New goal",
+    "add": "Add goal",
+    "intro": "What the work is for. Tickets that serve it tell their agent why.",
+    "title": "Goal",
+    "titlePlaceholder": "Launch the new pricing",
+    "why": "Why it matters",
+    "whyPlaceholder": "Why it matters, or how to tell it's reached",
+    "note": "The agents get this with every ticket that serves it.",
+    "progress_one": "{{done}} of {{count}} ticket done",
+    "progress_other": "{{done}} of {{count}} tickets done",
+    "noTickets": "No ticket serves it yet.",
+    "status": {
+      "title": "Status",
+      "active": "Active",
+      "achieved": "Achieved",
+      "dropped": "Dropped"
+    },
+    "delete": "Delete goal",
+    "quick": {
+      "week": "In a week",
+      "month": "End of month",
+      "quarter": "End of quarter"
+    },
+    "datePattern": "d MMM yyyy",
+    "targetDate": "Target date",
+    "changeDate": "Target date {{date}}. Change",
+    "pickTargetDate": "Pick a target date",
+    "pickDate": "Pick a date",
+    "removeDate": "Remove the target date"
+  },
+  "pickWorkspace": {
+    "intro": "Chats and tasks you start from this phone go into the workspace or project you pick.",
+    "all": "All workspaces",
+    "allBody": "Everything, from every workspace",
+    "manage": "Manage workspaces",
+    "hideProjects": "Hide projects of {{name}}",
+    "showProjects": "Show projects of {{name}}"
+  }
+}

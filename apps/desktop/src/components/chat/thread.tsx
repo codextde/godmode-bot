@@ -3,6 +3,8 @@ import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
 import { ArrowDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { dateLocale, t } from "@/i18n";
 import type { LiveRun } from "@/stores/live";
 import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
 import { useStickToBottom } from "./use-stick-to-bottom";
@@ -10,9 +12,9 @@ import { useStickToBottom } from "./use-stick-to-bottom";
 function dayLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return format(d, d.getFullYear() === new Date().getFullYear() ? "EEEE, MMMM d" : "MMMM d, yyyy");
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
+  return format(d, d.getFullYear() === new Date().getFullYear() ? t("chat:thread.dayFormat") : t("chat:thread.dayFormatYear"), { locale: dateLocale() });
 }
 
 export interface ThreadProps {
@@ -33,6 +35,7 @@ export interface ThreadProps {
 }
 
 export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after }: ThreadProps) {
+  const { t } = useTranslation("chat");
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
@@ -43,7 +46,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label="Messages">
+      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label={t("thread.messages")}>
         <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 @xl:px-6">
           {isEmpty && empty}
           {messages.map((m) => {
@@ -105,7 +108,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
             className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md glass px-3 py-1.5 text-xs font-medium transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ArrowDown className="size-3.5" />
-            {inflight ? "Jump to live" : "Jump to latest"}
+            {inflight ? t("thread.jumpToLive") : t("thread.jumpToLatest")}
           </motion.button>
         )}
       </AnimatePresence>

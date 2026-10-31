@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import {
   Brain,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
   Reply,
   Settings2,
 } from "lucide-react";
+import { useLocale } from "@/i18n/language";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { saveBlob } from "@/lib/desktop";
@@ -168,6 +170,8 @@ async function fetchLog(id: string): Promise<string> {
 const PAGE = 300;
 
 export function RunLogViewer({ runId, live = false }: { runId: string; live?: boolean }) {
+  const { t } = useTranslation("runs");
+  const { intlLocale } = useLocale();
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
   const log = useQuery({
@@ -194,35 +198,35 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
     );
   }
   if (log.isError) {
-    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Couldn't load the log: {errorMessage(log.error)}</p>;
+    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{t("log.loadFailed", { error: errorMessage(log.error) })}</p>;
   }
   if (!entries.length) {
-    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">No log lines yet.</p>;
+    return <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{t("log.empty")}</p>;
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground tabular-nums">{entries.length.toLocaleString()} events</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{t("log.events", { count: entries.length, formatted: entries.length.toLocaleString(intlLocale) })}</span>
         {live && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-strong">
-            <LiveDot /> Live
+            <LiveDot /> {t("log.live")}
           </span>
         )}
         {streamCount > 0 && (
           <div className="flex items-center gap-2">
             <Switch id={`stream-${runId}`} size="sm" checked={showStream} onCheckedChange={setShowStream} />
             <Label htmlFor={`stream-${runId}`} className="text-xs font-normal text-muted-foreground">
-              Streaming deltas ({streamCount})
+              {t("log.streamingDeltas", { count: streamCount })}
             </Label>
           </div>
         )}
         <div className="ml-auto flex items-center gap-1">
-          <CopyButton text={log.data ?? ""} label="Copy raw log" />
+          <CopyButton text={log.data ?? ""} label={t("log.copy")} />
           <Button
             variant="ghost"
             size="icon-xs"
-            aria-label="Download log"
+            aria-label={t("log.download")}
             className="text-muted-foreground hover:text-foreground"
             onClick={() => void saveBlob(new Blob([log.data ?? ""], { type: "application/x-ndjson" }), `run-${runId}.jsonl`)}
           >
@@ -237,7 +241,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
       </ol>
       {visible.length > limit && (
         <Button variant="outline" size="sm" className="w-full" onClick={() => setLimit((l) => l + PAGE)}>
-          Show {Math.min(PAGE, visible.length - limit)} more of {visible.length - limit}
+          {t("log.showMore", { shown: Math.min(PAGE, visible.length - limit), total: visible.length - limit })}
         </Button>
       )}
     </div>
@@ -245,19 +249,20 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
 }
 
 function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, { name: string; input: unknown }> }) {
+  const { t } = useTranslation("runs");
   switch (entry.kind) {
     case "init":
       return (
-        <Row icon={<Power className="size-3.5 text-foreground" />} title="Session started" raw={entry.raw}>
+        <Row icon={<Power className="size-3.5 text-foreground" />} title={t("log.sessionStarted")} raw={entry.raw}>
           <span className="text-muted-foreground">
-            {entry.model || "model"} · {entry.tools} tools
+            {entry.model || t("log.model")} · {t("log.tools", { count: entry.tools })}
             {entry.mcp.length > 0 && ` · MCP: ${entry.mcp.map((m) => `${m.name}${m.status && m.status !== "connected" ? ` (${m.status})` : ""}`).join(", ")}`}
           </span>
         </Row>
       );
     case "text":
       return (
-        <Row icon={<MessageSquareText className="size-3.5 text-foreground" />} title={entry.sub ? "Subagent said" : "Assistant"} raw={entry.raw} defaultOpen>
+        <Row icon={<MessageSquareText className="size-3.5 text-foreground" />} title={entry.sub ? t("log.subagentSaid") : t("log.assistant")} raw={entry.raw} defaultOpen>
           <Markdown className="text-[13px]">{entry.text}</Markdown>
         </Row>
       );
@@ -265,11 +270,11 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
       return (
         <Row
           icon={<Brain className="size-3.5 text-muted-foreground" />}
-          title="Thinking"
-          summary={entry.text ? entry.text.replace(/\s+/g, " ").slice(0, 90) : "redacted"}
+          title={t("log.thinking")}
+          summary={entry.text ? entry.text.replace(/\s+/g, " ").slice(0, 90) : t("log.redacted")}
           raw={entry.raw}
         >
-          {entry.text ? <p className="whitespace-pre-wrap text-muted-foreground">{entry.text}</p> : <p className="text-muted-foreground italic">Thinking is redacted.</p>}
+          {entry.text ? <p className="whitespace-pre-wrap text-muted-foreground">{entry.text}</p> : <p className="text-muted-foreground italic">{t("log.thinkingRedacted")}</p>}
         </Row>
       );
     case "tool_use": {
@@ -281,7 +286,7 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
           title={meta.title}
           summary={meta.detail ?? entry.name}
           raw={entry.raw}
-          badge={entry.sub ? "subagent" : undefined}
+          badge={entry.sub ? t("log.subagent") : undefined}
         >
           <Pre text={formatToolInput(entry.input)} />
         </Row>
@@ -289,16 +294,16 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
     }
     case "tool_result": {
       const tool = toolNames.get(entry.toolUseId);
-      const title = tool ? describeTool(tool.name, tool.input).title : "Tool result";
+      const title = tool ? describeTool(tool.name, tool.input).title : t("log.toolResult");
       return (
         <Row
           icon={entry.isError ? <CircleX className="size-3.5 text-destructive" /> : <Reply className="size-3.5 text-muted-foreground" />}
-          title={entry.isError ? `Failed: ${title}` : `Result · ${title}`}
-          summary={entry.images ? `${entry.images} image${entry.images > 1 ? "s" : ""}` : entry.content.replace(/\s+/g, " ").slice(0, 90)}
+          title={entry.isError ? t("log.failedTool", { title }) : t("log.resultTool", { title })}
+          summary={entry.images ? t("log.images", { count: entry.images }) : entry.content.replace(/\s+/g, " ").slice(0, 90)}
           raw={entry.raw}
           tone={entry.isError ? "error" : undefined}
         >
-          <Pre text={entry.content || (entry.images ? "(image result)" : "(empty)")} />
+          <Pre text={entry.content || (entry.images ? t("log.imageResult") : t("detail.empty"))} />
         </Row>
       );
     }
@@ -306,20 +311,20 @@ function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, 
       return (
         <Row
           icon={entry.isError ? <CircleX className="size-3.5 text-destructive" /> : <CircleCheck className="size-3.5 text-success" />}
-          title={entry.isError ? `Finished with error (${entry.subtype})` : "Finished"}
+          title={entry.isError ? t("log.finishedError", { subtype: entry.subtype }) : t("log.finished")}
           raw={entry.raw}
           tone={entry.isError ? "error" : "success"}
         >
           <span className="text-muted-foreground tabular-nums">
             {formatDuration(entry.durationMs)}
-            {entry.numTurns != null && ` · ${entry.numTurns} turns`}
-            {entry.tokensIn != null && ` · ${formatTokens(entry.tokensIn)} in / ${formatTokens(entry.tokensOut)} out`}
+            {entry.numTurns != null && ` · ${t("log.turns", { count: entry.numTurns })}`}
+            {entry.tokensIn != null && ` · ${t("log.tokens", { in: formatTokens(entry.tokensIn), out: formatTokens(entry.tokensOut) })}`}
           </span>
         </Row>
       );
     case "rate_limit":
       return (
-        <Row icon={<Gauge className="size-3.5 text-muted-foreground" />} title={`Rate limit: ${entry.status}`} summary={entry.detail} raw={entry.raw} muted />
+        <Row icon={<Gauge className="size-3.5 text-muted-foreground" />} title={t("log.rateLimit", { status: entry.status })} summary={entry.detail} raw={entry.raw} muted />
       );
     case "system":
       return <Row icon={<Settings2 className="size-3.5 text-muted-foreground" />} title={`System · ${entry.subtype}`} raw={entry.raw} muted />;
@@ -351,6 +356,7 @@ function Row({
   tone?: "error" | "success";
   badge?: string;
 }) {
+  const { t } = useTranslation("runs");
   const [open, setOpen] = useState(defaultOpen);
   const [showRaw, setShowRaw] = useState(false);
   return (
@@ -383,7 +389,7 @@ function Row({
                 onClick={() => setShowRaw((r) => !r)}
                 className="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
               >
-                {showRaw ? "Hide raw JSON" : "Raw JSON"}
+                {showRaw ? t("log.hideRaw") : t("log.raw")}
               </button>
               {showRaw && <Pre text={prettyJson(raw)} />}
             </div>
@@ -403,9 +409,11 @@ function prettyJson(raw: string) {
 }
 
 function Pre({ text }: { text: string }) {
+  const { t } = useTranslation("runs");
+  const { intlLocale } = useLocale();
   return (
     <pre className="mt-1 max-h-72 overflow-auto rounded-lg border bg-paper-2 p-2.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-all">
-      {text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (${(text.length - 20_000).toLocaleString()} more characters)` : text}
+      {text.length > 20_000 ? `${text.slice(0, 20_000)}\n${t("log.truncated", { count: text.length - 20_000, formatted: (text.length - 20_000).toLocaleString(intlLocale) })}` : text}
     </pre>
   );
 }

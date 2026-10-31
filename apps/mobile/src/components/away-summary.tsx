@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatDistanceStrict } from "date-fns";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { AwayHighlight } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
@@ -12,14 +13,13 @@ import { Card, Hairline, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { useAwayStore } from "@/lib/away";
 import { useAgents } from "@/lib/hooks";
+import { dateLocale } from "@/lib/i18n";
 import { qk } from "@/lib/query";
 import { space, useColors, type Colors } from "@/lib/theme";
 
 const ICON: Record<AwayHighlight["kind"], IconName> = { delivered: "tasks", failed: "warning", replied: "chats", automation: "workflow" };
 
 const tone = (c: Colors, kind: AwayHighlight["kind"]) => (kind === "failed" || kind === "automation" ? c.danger : kind === "delivered" ? c.brandStrong : c.textMuted);
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A highlight's desktop route on the phone: a chat, a ticket, or the board. */
 function open(link: string) {
@@ -37,6 +37,7 @@ function open(link: string) {
  */
 export function AwaySummaryCard() {
   const c = useColors();
+  const { t } = useTranslation("components");
   const away = useAwayStore((s) => s.away);
   const dismiss = useAwayStore((s) => s.dismiss);
   const { byId: agents } = useAgents();
@@ -48,21 +49,22 @@ export function AwaySummaryCard() {
   });
   if (!away || !data || (data.finished === 0 && data.delivered === 0)) return null;
   const facts = [
-    plural(data.finished, "run") + " finished",
-    data.failed ? plural(data.failed, "problem") : null,
-    data.delivered ? `${plural(data.delivered, "ticket")} delivered` : null,
+    t("awaySummary.runsFinished", { count: data.finished }),
+    data.failed ? t("awaySummary.problems", { count: data.failed }) : null,
+    data.delivered ? t("awaySummary.ticketsDelivered", { count: data.delivered }) : null,
   ].filter(Boolean);
   const now = new Date();
+  const locale = dateLocale();
 
   return (
     <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(150)} style={styles.section}>
       <Row style={styles.head}>
         <T variant="eyebrow" muted numberOfLines={1} style={{ flexShrink: 1 }}>
-          While you were away · {formatDistanceStrict(new Date(away.since), new Date(away.until))}
+          {t("awaySummary.title", { duration: formatDistanceStrict(new Date(away.since), new Date(away.until), { locale }) })}
         </T>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Close the summary"
+          accessibilityLabel={t("awaySummary.close")}
           hitSlop={12}
           onPress={() => {
             tap();
@@ -76,7 +78,7 @@ export function AwaySummaryCard() {
       <Card style={{ overflow: "hidden" }}>
         <Pressable
           accessibilityRole="link"
-          accessibilityHint="Opens the activity"
+          accessibilityHint={t("awaySummary.openActivity")}
           onPress={() => {
             tap();
             router.push("/activity");
@@ -90,7 +92,7 @@ export function AwaySummaryCard() {
             <Icon name="chevron" size={11} color={c.textFaint} weight="semibold" />
           </Row>
           {data.agents.length > 0 && (
-            <View style={styles.agents} accessibilityLabel="Who worked">
+            <View style={styles.agents} accessibilityLabel={t("awaySummary.whoWorked")}>
               {data.agents.slice(0, 5).map((a) => {
                 const agent = agents.get(a.agentId);
                 return (
@@ -115,7 +117,7 @@ export function AwaySummaryCard() {
                 {h.text}
               </T>
               <T variant="caption" muted style={styles.num}>
-                {formatDistanceStrict(new Date(h.at), now, { addSuffix: true })}
+                {formatDistanceStrict(new Date(h.at), now, { addSuffix: true, locale })}
               </T>
             </Pressable>
           </View>

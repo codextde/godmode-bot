@@ -133,7 +133,7 @@ const ROUTES: [method: string, path: RegExp][] = [
  * phone listener and the cloud link stay on the computer.
  */
 const SETTINGS: Record<string, string[]> = {
-  general: ["userName", "desktopNotifications", "theme", "mode"],
+  general: ["userName", "desktopNotifications", "theme", "mode", "language"],
   runner: [
     "model",
     "fallbackModel",

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ChevronDown, FileKey, FileSpreadsheet, Lock, Search, ShieldCheck, Trash2, TriangleAlert, Upload, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { PasswordImportPreview, PasswordImportResult, PasswordImportRow, PasswordImportSource } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DrawCheck } from "@/components/aicss/Motion";
+import { t as tg } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -37,11 +40,10 @@ const SOURCE_NAMES: Record<PasswordImportSource, string> = {
   csv: "CSV",
 };
 
-const GRANT_REASON = "Enter your vault passphrase to compare the export with your saved logins.";
+const grantReason = () => tg("vault:passwordImport.grantReason");
 const isExportFile = (f: File) => /\.(csv|1pux|txt|zip|json)$/i.test(f.name) || f.type === "text/csv";
 /** An export can be older than the vault, so replacing a saved password is always an explicit choice. */
 const preselected = (r: PasswordImportRow) => r.action !== "unchanged" && !r.conflictKey && !r.replacesPassword;
-const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 
 export function PasswordImportDialog({
   open,
@@ -67,14 +69,15 @@ type Stage =
   | { kind: "done"; file: File; result: PasswordImportResult };
 
 function noLoginsMessage(file: File, p: PasswordImportPreview): string {
-  if (p.total === 0) return `${file.name} has no entries.`;
+  if (p.total === 0) return tg("vault:passwordImport.noEntries", { file: file.name });
   const reasons = new Map<string, number>();
   for (const s of p.skipped) reasons.set(s.reason, (reasons.get(s.reason) ?? 0) + 1);
   const why = [...reasons].map(([reason, n]) => `${reason.toLowerCase()} ×${n}`).join(", ");
-  return `No website logins in ${file.name}${why ? ` — ${why}` : ""}.`;
+  return why ? tg("vault:passwordImport.noLoginsWhy", { file: file.name, why }) : tg("vault:passwordImport.noLogins", { file: file.name });
 }
 
 function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: string | null; onClose: () => void }) {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const [source, setSource] = useState<Source>("chrome");
   const [workspaceId, setWorkspaceId] = useState<string | null>(defaultWorkspaceId);
@@ -86,8 +89,8 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
   // Ask for the passphrase before uploading, so a large export is not sent twice.
   const preview = useMutation({
     mutationFn: async ({ file, scope }: { file: File; scope: string | null }) => {
-      await ensureGrant(GRANT_REASON);
-      const p = await withGrant((grant) => api.credentials.importPreview(file, scope, grant), GRANT_REASON);
+      await ensureGrant(grantReason());
+      const p = await withGrant((grant) => api.credentials.importPreview(file, scope, grant), grantReason());
       return { file, scope, preview: p };
     },
     onMutate: () => setError(null),
@@ -103,31 +106,31 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
     onError: (e) => {
       if (step.kind === "review") setWorkspaceId(step.scope);
       if (isGrantCancelled(e)) return;
-      if (isVaultLocked(e)) toastApiError(e, "Vault locked", qc);
+      if (isVaultLocked(e)) toastApiError(e, t("passwordImport.vaultLocked"), qc);
       else setError(errorMessage(e));
     },
   });
 
   const run = useMutation({
     mutationFn: ({ file, scope, ids }: { file: File; scope: string | null; ids: number[] }) =>
-      withGrant((grant) => api.credentials.import(file, scope, ids, grant), GRANT_REASON).then((result) => ({ file, result })),
+      withGrant((grant) => api.credentials.import(file, scope, ids, grant), grantReason()).then((result) => ({ file, result })),
     onSuccess: ({ file, result }) => {
       setStep({ kind: "done", file, result });
       void qc.invalidateQueries({ queryKey: qk.credentials });
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Import failed", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("totpImport.failed"), qc),
   });
 
   const readFile = (file: File) => {
     if (preview.isPending) return;
     if (/\.dash$/i.test(file.name)) {
-      setError("That's Dashlane's encrypted backup. In Dashlane, choose Export to CSV instead and drop the .zip here.");
+      setError(t("passwordImport.dashBackup"));
       return;
     }
     if (!isExportFile(file)) {
-      setError("Choose the .csv, .zip or .1pux file your password manager exported.");
+      setError(t("passwordImport.wrongFile"));
       return;
     }
     preview.mutate({ file, scope: workspaceId });
@@ -167,13 +170,13 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
           <FileKey className="size-5" />
         </div>
         <div className="min-w-0 pr-8">
-          <DialogTitle className="text-lg">Import passwords</DialogTitle>
+          <DialogTitle className="text-lg">{t("passwordImport.title")}</DialogTitle>
           <DialogDescription className="mt-1">
             {step.kind === "review"
-              ? "Pick what to bring over. Logins you already saved are updated, not duplicated."
+              ? t("passwordImport.descriptionReview")
               : step.kind === "done"
-                ? `Finished importing ${step.file.name}.`
-                : "Bring your logins over from Chrome, 1Password, Dashlane or another password manager. Nothing is saved until you confirm."}
+                ? t("passwordImport.descriptionDone", { file: step.file.name })
+                : t("passwordImport.description")}
           </DialogDescription>
         </div>
       </div>
@@ -185,10 +188,10 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
           <>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-paper-2 px-3 py-2.5">
               <Label htmlFor="password-import-scope" className="shrink-0 text-xs text-muted-foreground">
-                Save to
+                {t("saveTo")}
               </Label>
               <WorkspaceSelect id="password-import-scope" value={workspaceId} onChange={changeScope} disabled={preview.isPending || run.isPending} className="h-8 w-56 bg-card" />
-              <span className="text-[11px] text-muted-foreground">{workspaceId ? "Only agents in this workspace can use them." : "Agents in every workspace can use them."}</span>
+              <span className="text-[11px] text-muted-foreground">{workspaceId ? t("totpImport.scopeWorkspace") : t("totpImport.scopeGlobal")}</span>
             </div>
 
             {step.kind === "pick" ? (
@@ -218,24 +221,24 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
 
       <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="size-3.5 shrink-0 text-brand-strong" /> Passwords go straight into your encrypted vault · the file is never stored
+          <Lock className="size-3.5 shrink-0 text-brand-strong" /> {t("passwordImport.footer")}
         </p>
         <div className="flex justify-end gap-2">
           {step.kind === "done" ? (
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>{t("common:actions.done")}</Button>
           ) : step.kind === "review" ? (
             <>
               <Button variant="ghost" onClick={() => setStep({ kind: "pick" })} disabled={run.isPending}>
-                <ArrowLeft /> Back
+                <ArrowLeft /> {t("common:actions.back")}
               </Button>
               <Button onClick={() => run.mutate({ file: step.file, scope: step.scope, ids: importIds })} disabled={importIds.length === 0 || run.isPending || preview.isPending} className="min-w-36">
                 {run.isPending && <Spinner />}
-                {importIds.length ? `Import ${plural(importIds.length, "login")}` : "Nothing selected"}
+                {importIds.length ? t("passwordImport.importCount", { count: importIds.length }) : t("passwordImport.nothingSelected")}
               </Button>
             </>
           ) : (
             <Button variant="ghost" onClick={onClose}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
           )}
         </div>
@@ -249,14 +252,15 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
 /* ------------------------------------------------------------------ */
 
 function SourcePicker({ value, onChange }: { value: Source; onChange: (s: Source) => void }) {
+  const { t } = useTranslation("vault");
   const options: { id: Source; label: string; hint: string; mark: ReactNode }[] = [
-    { id: "chrome", label: "Chrome", hint: "Edge, Brave & Arc too", mark: <ChromeMark /> },
-    { id: "1password", label: "1Password", hint: ".1pux or .csv", mark: <OnePasswordMark /> },
-    { id: "dashlane", label: "Dashlane", hint: ".zip or .csv", mark: <DashlaneMark /> },
+    { id: "chrome", label: "Chrome", hint: t("passwordImport.sources.chromeHint"), mark: <ChromeMark /> },
+    { id: "1password", label: "1Password", hint: t("passwordImport.sources.formats", { a: ".1pux", b: ".csv" }), mark: <OnePasswordMark /> },
+    { id: "dashlane", label: "Dashlane", hint: t("passwordImport.sources.formats", { a: ".zip", b: ".csv" }), mark: <DashlaneMark /> },
     {
       id: "other",
-      label: "Other",
-      hint: "Bitwarden, Safari…",
+      label: t("passwordImport.sources.other"),
+      hint: t("passwordImport.sources.otherHint"),
       mark: (
         <span className="grid size-7 place-items-center rounded-full bg-secondary text-muted-foreground ring-1 ring-border ring-inset">
           <FileSpreadsheet className="size-3.5" />
@@ -265,7 +269,7 @@ function SourcePicker({ value, onChange }: { value: Source; onChange: (s: Source
     },
   ];
   return (
-    <div role="radiogroup" aria-label="Import from" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <div role="radiogroup" aria-label={t("passwordImport.sources.label")} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {options.map((o) => {
         const active = value === o.id;
         return (
@@ -302,9 +306,21 @@ function GuideStep({ n, children }: { n: number; children: ReactNode }) {
   );
 }
 
-const B = ({ children }: { children: ReactNode }) => <span className="font-medium text-foreground">{children}</span>;
+const B = ({ children }: { children?: ReactNode }) => <span className="font-medium text-foreground">{children}</span>;
+
+function AddressChip({ address, value, toastLabel }: { address: string; value: string; toastLabel: string }) {
+  const { t } = useTranslation("vault");
+  return (
+    <span className="inline-flex items-center rounded-md border bg-paper-2 py-px pr-0.5 pl-2 font-mono text-xs">
+      {address}
+      <CopyButton value={value} size="icon-xs" label={t("cardDetails.copyAddress")} toastLabel={toastLabel} />
+    </span>
+  );
+}
 
 function SourceGuide({ source }: { source: Source }) {
+  const { t } = useTranslation("vault");
+  const b = <B />;
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
@@ -320,36 +336,39 @@ function SourceGuide({ source }: { source: Source }) {
             <ol className="space-y-2.5 p-3.5">
               <GuideStep n={1}>
                 <span className="inline-flex flex-wrap items-center gap-1">
-                  Open
-                  <span className="inline-flex items-center rounded-md border bg-paper-2 py-px pr-0.5 pl-2 font-mono text-xs">
-                    chrome://password-manager/settings
-                    <CopyButton value="chrome://password-manager/settings" size="icon-xs" label="Copy address" toastLabel="Address copied — paste it into Chrome" />
-                  </span>
-                  in Chrome.
+                  <Trans
+                    t={t}
+                    i18nKey="passwordImport.guide.chrome1"
+                    components={{
+                      addr: (
+                        <AddressChip address="chrome://password-manager/settings" value="chrome://password-manager/settings" toastLabel={t("passwordImport.guide.chromeCopied")} />
+                      ),
+                    }}
+                  />
                 </span>
               </GuideStep>
               <GuideStep n={2}>
-                Next to <B>Export passwords</B>, click <B>Download file</B> and confirm with your computer password.
+                <Trans t={t} i18nKey="passwordImport.guide.chrome2" components={{ b }} />
               </GuideStep>
               <GuideStep n={3}>
-                Drop <B>Chrome Passwords.csv</B> below.
+                <Trans t={t} i18nKey="passwordImport.guide.chrome3" components={{ b }} />
               </GuideStep>
             </ol>
-            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">Edge, Brave, Arc, Opera and Vivaldi export the same file from their password settings.</p>
+            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">{t("passwordImport.guide.chromeNote")}</p>
           </>
         )}
         {source === "1password" && (
           <>
             <ol className="space-y-2.5 p-3.5">
               <GuideStep n={1}>
-                In the 1Password desktop app, choose <B>File → Export</B> and pick your account.
+                <Trans t={t} i18nKey="passwordImport.guide.onePassword1" components={{ b }} />
               </GuideStep>
               <GuideStep n={2}>
-                Enter your account password and choose <B>1PUX</B> — it keeps 2FA codes and tags. <B>CSV</B> works too.
+                <Trans t={t} i18nKey="passwordImport.guide.onePassword2" components={{ b }} />
               </GuideStep>
-              <GuideStep n={3}>Drop the exported file below.</GuideStep>
+              <GuideStep n={3}>{t("passwordImport.guide.onePassword3")}</GuideStep>
             </ol>
-            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">Archived items, credit cards and notes are left out. 2FA codes are saved and linked to their login.</p>
+            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">{t("passwordImport.guide.onePasswordNote")}</p>
           </>
         )}
         {source === "dashlane" && (
@@ -357,23 +376,24 @@ function SourceGuide({ source }: { source: Source }) {
             <ol className="space-y-2.5 p-3.5">
               <GuideStep n={1}>
                 <span className="inline-flex flex-wrap items-center gap-1">
-                  Open
-                  <span className="inline-flex items-center rounded-md border bg-paper-2 py-px pr-0.5 pl-2 font-mono text-xs">
-                    app.dashlane.com
-                    <CopyButton value="https://app.dashlane.com" size="icon-xs" label="Copy address" toastLabel="Address copied — paste it into your browser" />
-                  </span>
-                  and sign in.
+                  <Trans
+                    t={t}
+                    i18nKey="passwordImport.guide.dashlane1"
+                    components={{
+                      addr: <AddressChip address="app.dashlane.com" value="https://app.dashlane.com" toastLabel={t("passwordImport.guide.browserCopied")} />,
+                    }}
+                  />
                 </span>
               </GuideStep>
               <GuideStep n={2}>
-                Open the <B>Vault</B> menu at the top left, choose <B>Settings → Export data</B> and click <B>Export to CSV</B>.
+                <Trans t={t} i18nKey="passwordImport.guide.dashlane2" components={{ b }} />
               </GuideStep>
               <GuideStep n={3}>
-                Drop the downloaded <B>.zip</B> below as it is — no need to unpack it.
+                <Trans t={t} i18nKey="passwordImport.guide.dashlane3" components={{ b }} />
               </GuideStep>
             </ol>
             <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">
-              2FA codes come along and are linked to their login. Notes, IDs and payment cards in the export are left out; Dashlane can't export passkeys.
+              {t("passwordImport.guide.dashlaneNote")}
             </p>
           </>
         )}
@@ -381,12 +401,12 @@ function SourceGuide({ source }: { source: Source }) {
           <>
             <dl className="grid gap-x-6 gap-y-2 p-3.5 text-sm sm:grid-cols-2">
               {[
-                ["Bitwarden", "Tools → Export vault → .csv"],
-                ["Apple Passwords", "File → Export All Passwords"],
-                ["Firefox", "about:logins → ⋯ → Export Logins"],
-                ["LastPass", "Advanced → Export → CSV"],
-                ["Proton Pass", "Settings → Export → CSV"],
-                ["KeePassXC", "Database → Export → CSV"],
+                ["Bitwarden", t("passwordImport.guide.other.bitwarden")],
+                ["Apple Passwords", t("passwordImport.guide.other.apple")],
+                ["Firefox", t("passwordImport.guide.other.firefox")],
+                ["LastPass", t("passwordImport.guide.other.lastpass")],
+                ["Proton Pass", t("passwordImport.guide.other.protonpass")],
+                ["KeePassXC", t("passwordImport.guide.other.keepassxc")],
               ].map(([name, where]) => (
                 <div key={name} className="min-w-0">
                   <dt className="font-medium">{name}</dt>
@@ -394,7 +414,7 @@ function SourceGuide({ source }: { source: Source }) {
                 </div>
               ))}
             </dl>
-            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">Any CSV with a url and a password column works — the columns are detected automatically.</p>
+            <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">{t("passwordImport.guide.otherNote")}</p>
           </>
         )}
       </motion.div>
@@ -403,6 +423,7 @@ function SourceGuide({ source }: { source: Source }) {
 }
 
 function ExportDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) => void }) {
+  const { t } = useTranslation("vault");
   const [dragging, setDragging] = useState(false);
   const depth = useRef(0);
   const input = useRef<HTMLInputElement>(null);
@@ -410,7 +431,7 @@ function ExportDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) 
     <div
       role="button"
       tabIndex={0}
-      aria-label="Choose a password export"
+      aria-label={t("passwordImport.drop.label")}
       aria-busy={busy}
       onClick={() => !busy && input.current?.click()}
       onKeyDown={(e) => {
@@ -447,9 +468,9 @@ function ExportDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) 
         {busy ? <Spinner className="size-5" /> : <Upload className="size-5" />}
       </motion.div>
       <div>
-        <p className="text-sm font-medium">{busy ? "Reading your export…" : dragging ? "Drop to read the file" : "Drop your export here"}</p>
+        <p className="text-sm font-medium">{busy ? t("passwordImport.drop.reading") : dragging ? t("passwordImport.drop.dropToRead") : t("passwordImport.drop.title")}</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          .csv, .zip or .1pux · or <span className="font-medium text-foreground underline-offset-2 group-hover:underline">browse files</span> · you'll review everything first
+          <Trans t={t} i18nKey="passwordImport.drop.hint" components={{ browse: <span className="font-medium text-foreground underline-offset-2 group-hover:underline" /> }} />
         </p>
       </div>
       <input
@@ -472,13 +493,13 @@ function ExportDropZone({ busy, onFile }: { busy: boolean; onFile: (file: File) 
 /* Review                                                               */
 /* ------------------------------------------------------------------ */
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "new", label: "New" },
-  { id: "update", label: "Updates" },
-  { id: "unchanged", label: "In vault" },
-  { id: "conflict", label: "Pick one" },
-];
+const FILTERS = [
+  { id: "all", labelKey: "passwordImport.filters.all" },
+  { id: "new", labelKey: "passwordImport.filters.new" },
+  { id: "update", labelKey: "passwordImport.filters.update" },
+  { id: "unchanged", labelKey: "passwordImport.filters.unchanged" },
+  { id: "conflict", labelKey: "passwordImport.filters.conflict" },
+] as const satisfies readonly { id: Filter; labelKey: string }[];
 
 const needsChoice = (r: PasswordImportRow) => !!r.conflictKey && r.action !== "unchanged";
 
@@ -497,6 +518,8 @@ function ReviewView({
   refreshing: boolean;
   onChangeFile: () => void;
 }) {
+  const { t } = useTranslation("vault");
+  const { intlLocale } = useLocale();
   const [chosenFilter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
 
@@ -548,20 +571,24 @@ function ReviewView({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{file.name}</p>
           <p className="text-xs text-muted-foreground">
-            {SOURCE_NAMES[preview.source]} export · {plural(preview.total, "entry", "entries")} · {plural(preview.rows.length, "login")}
+            {t("passwordImport.summary", {
+              source: SOURCE_NAMES[preview.source],
+              entries: t("passwordImport.entries", { count: preview.total }),
+              logins: t("passwordImport.logins", { count: preview.rows.length }),
+            })}
           </p>
         </div>
         {refreshing ? (
           <Spinner className="size-4 text-muted-foreground" />
         ) : (
           <Button variant="ghost" size="sm" onClick={onChangeFile}>
-            Change file
+            {t("passwordImport.changeFile")}
           </Button>
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="Filter logins" className="flex rounded-lg bg-muted p-0.5">
+        <div role="tablist" aria-label={t("passwordImport.filterLabel")} className="flex rounded-lg bg-muted p-0.5">
           {FILTERS.filter((f) => f.id !== "conflict" || counts.conflict > 0).map((f) => (
             <button
               key={f.id}
@@ -575,8 +602,8 @@ function ReviewView({
                 f.id === "conflict" && filter !== f.id && "text-warning",
               )}
             >
-              {f.label}
-              <span className="tabular-nums opacity-60">{counts[f.id].toLocaleString()}</span>
+              {t(f.labelKey)}
+              <span className="tabular-nums opacity-60">{counts[f.id].toLocaleString(intlLocale)}</span>
             </button>
           ))}
         </div>
@@ -584,10 +611,10 @@ function ReviewView({
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
-          <InputGroupInput value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search site or username…" aria-label="Search the export" />
+          <InputGroupInput value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("passwordImport.searchPlaceholder")} aria-label={t("passwordImport.searchLabel")} />
           {query && (
             <InputGroupAddon align="inline-end">
-              <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setQuery("")}>
+              <InputGroupButton size="icon-xs" aria-label={t("passwordImport.clearSearch")} onClick={() => setQuery("")}>
                 <X />
               </InputGroupButton>
             </InputGroupAddon>
@@ -596,32 +623,31 @@ function ReviewView({
       </div>
 
       {counts.conflict > 0 && filter !== "conflict" && (
-        <Callout onClick={() => setFilter("conflict")}>Your export has more than one password for some logins — old ones are often kept. Pick the current one.</Callout>
+        <Callout onClick={() => setFilter("conflict")}>{t("passwordImport.conflictCallout")}</Callout>
       )}
       {heldBack > 0 && filter !== "update" && (
         <Callout onClick={() => setFilter("update")}>
-          {plural(heldBack, "saved login")} {heldBack === 1 ? "has a different password in this export. It stays" : "have a different password in this export. They stay"}{" "}
-          unchanged unless you select {heldBack === 1 ? "it" : "them"} — an export can be older than your vault.
+          {t("passwordImport.heldBack", { count: heldBack })}
         </Callout>
       )}
 
       <div className={cn("@container overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", refreshing && "opacity-60")}>
         <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b bg-paper-2 px-3 py-2 @xl:grid-cols-[auto_minmax(0,1.3fr)_minmax(0,1fr)_7.5rem]">
           <Checkbox
-            aria-label="Select all shown logins"
+            aria-label={t("passwordImport.selectAll")}
             disabled={bulk.length === 0}
             checked={bulk.length > 0 && bulkSelected === bulk.length ? true : bulkSelected > 0 ? "indeterminate" : false}
             onCheckedChange={(v) => toggleBulk(v === true)}
           />
-          <span className="eyebrow">Login</span>
-          <span className="eyebrow hidden @xl:block">Username</span>
-          <span className="eyebrow text-right">Result</span>
+          <span className="eyebrow">{t("passwordImport.columns.login")}</span>
+          <span className="eyebrow hidden @xl:block">{t("passwordImport.columns.username")}</span>
+          <span className="eyebrow text-right">{t("passwordImport.columns.result")}</span>
         </div>
         <div className="max-h-[min(42vh,380px)] divide-y overflow-y-auto">
           {visible.map((r) => (
             <ImportRow key={r.id} row={r} checked={selected.has(r.id)} onCheckedChange={(on) => toggle(r, on)} />
           ))}
-          {visible.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">Nothing matches.</p>}
+          {visible.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">{t("passwordImport.nothingMatches")}</p>}
         </div>
       </div>
 
@@ -632,6 +658,7 @@ function ReviewView({
 }
 
 function Callout({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+  const { t } = useTranslation("vault");
   return (
     <button
       type="button"
@@ -640,12 +667,13 @@ function Callout({ children, onClick }: { children: ReactNode; onClick: () => vo
     >
       <TriangleAlert className="size-3.5 shrink-0 text-warning" />
       <span className="flex-1">{children}</span>
-      <span className="font-medium text-warning">Review</span>
+      <span className="font-medium text-warning">{t("passwordImport.review")}</span>
     </button>
   );
 }
 
 function ImportRow({ row: r, checked, onCheckedChange }: { row: PasswordImportRow; checked: boolean; onCheckedChange: (on: boolean) => void }) {
+  const { t } = useTranslation("vault");
   const inVault = r.action === "unchanged";
   return (
     <label
@@ -655,7 +683,7 @@ function ImportRow({ row: r, checked, onCheckedChange }: { row: PasswordImportRo
         inVault && "cursor-default",
       )}
     >
-      <Checkbox checked={!inVault && checked} disabled={inVault} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={`Import ${r.name}`} />
+      <Checkbox checked={!inVault && checked} disabled={inVault} onCheckedChange={(v) => onCheckedChange(v === true)} aria-label={t("passwordImport.importRow", { name: r.name })} />
       <div className="flex min-w-0 items-center gap-2.5">
         <Favicon domain={r.domains[0]} name={r.name} size="sm" className={cn(inVault && "opacity-60")} />
         <div className="min-w-0">
@@ -664,9 +692,9 @@ function ImportRow({ row: r, checked, onCheckedChange }: { row: PasswordImportRo
             {r.hasTotp && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <ShieldCheck className="size-3.5 shrink-0 text-brand-strong" aria-label="Includes a 2FA code" />
+                  <ShieldCheck className="size-3.5 shrink-0 text-brand-strong" aria-label={t("passwordImport.includesTotp")} />
                 </TooltipTrigger>
-                <TooltipContent>Includes a 2FA code — it's saved and linked</TooltipContent>
+                <TooltipContent>{t("passwordImport.includesTotpHint")}</TooltipContent>
               </Tooltip>
             )}
             {r.warning && (
@@ -681,11 +709,11 @@ function ImportRow({ row: r, checked, onCheckedChange }: { row: PasswordImportRo
           <p className="truncate text-[11px] text-muted-foreground" title={r.domains.join(", ")}>
             <span className="@xl:hidden">{r.username ? `${r.username} · ` : ""}</span>
             {r.domains.join(", ")}
-            {r.rows > 1 && ` · ${r.rows} merged`}
+            {r.rows > 1 && ` · ${t("passwordImport.merged", { n: r.rows })}`}
             {r.passwordHint && (
               <>
                 {" · "}
-                <span className="font-mono tracking-wider text-foreground/70" aria-label="Password hint">
+                <span className="font-mono tracking-wider text-foreground/70" aria-label={t("passwordImport.passwordHint")}>
                   {r.passwordHint}
                 </span>
               </>
@@ -693,11 +721,11 @@ function ImportRow({ row: r, checked, onCheckedChange }: { row: PasswordImportRo
           </p>
         </div>
       </div>
-      <span className={cn("hidden truncate text-xs @xl:block", !r.username && "text-muted-foreground italic")}>{r.username || "No username"}</span>
+      <span className={cn("hidden truncate text-xs @xl:block", !r.username && "text-muted-foreground italic")}>{r.username || t("credentialRow.noUsername")}</span>
       <div className="flex min-w-0 flex-col items-end gap-0.5">
         <ResultPill row={r} />
         {r.action === "update" && (
-          <span className="max-w-full truncate text-[10px] text-muted-foreground" title={`Updates “${r.existingName}”: ${r.changes.join(", ")}`}>
+          <span className="max-w-full truncate text-[10px] text-muted-foreground" title={t("passwordImport.updatesTitle", { name: r.existingName, changes: r.changes.join(", ") })}>
             {r.changes.join(", ")}
           </span>
         )}
@@ -718,22 +746,24 @@ function Pill({ tone, children }: { tone: keyof typeof PILL_TONES; children: Rea
 }
 
 function ResultPill({ row }: { row: PasswordImportRow }) {
-  if (row.action === "unchanged") return <Pill tone="muted">In vault</Pill>;
+  const { t } = useTranslation("vault");
+  if (row.action === "unchanged") return <Pill tone="muted">{t("passwordImport.filters.unchanged")}</Pill>;
   if (row.conflictKey)
     return (
       <Tooltip>
         <TooltipTrigger asChild>
           <span>
-            <Pill tone="warn">Pick one</Pill>
+            <Pill tone="warn">{t("passwordImport.filters.conflict")}</Pill>
           </span>
         </TooltipTrigger>
-        <TooltipContent className="max-w-60">Your export has another password for this login. Choose the one that's current.</TooltipContent>
+        <TooltipContent className="max-w-60">{t("passwordImport.conflictHint")}</TooltipContent>
       </Tooltip>
     );
-  return row.action === "new" ? <Pill tone="new">New</Pill> : <Pill tone="update">Update</Pill>;
+  return row.action === "new" ? <Pill tone="new">{t("passwordImport.filters.new")}</Pill> : <Pill tone="update">{t("passwordImport.pillUpdate")}</Pill>;
 }
 
 function SkippedList({ preview }: { preview: PasswordImportPreview }) {
+  const { t } = useTranslation("vault");
   const [open, setOpen] = useState(false);
   const reasons = useMemo(() => {
     const m = new Map<string, number>();
@@ -745,7 +775,7 @@ function SkippedList({ preview }: { preview: PasswordImportPreview }) {
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card">
       <CollapsibleTrigger asChild>
         <button type="button" className="flex w-full flex-wrap items-center gap-x-2 gap-y-1 px-3.5 py-2.5 text-left">
-          <span className="text-sm font-medium">{plural(preview.skipped.length, "entry", "entries")} left out</span>
+          <span className="text-sm font-medium">{t("passwordImport.leftOut", { count: preview.skipped.length })}</span>
           <span className="flex min-w-0 flex-1 flex-wrap gap-1">
             {reasons.map(([reason, n]) => (
               <span key={reason} className="rounded-[5px] border bg-paper-2 px-1.5 py-px text-[11px] text-muted-foreground">
@@ -760,7 +790,7 @@ function SkippedList({ preview }: { preview: PasswordImportPreview }) {
         <div className="max-h-40 divide-y overflow-y-auto border-t">
           {preview.skipped.slice(0, 300).map((s, i) => (
             <div key={i} className="flex items-center gap-3 px-3.5 py-1.5 text-xs">
-              <span className="min-w-0 flex-1 truncate">{s.name || s.url || "Untitled"}</span>
+              <span className="min-w-0 flex-1 truncate">{s.name || s.url || t("passwordImport.untitled")}</span>
               {s.username && <span className="hidden max-w-40 truncate text-muted-foreground sm:block">{s.username}</span>}
               <span className="shrink-0 text-muted-foreground">{s.reason}</span>
             </div>
@@ -772,11 +802,12 @@ function SkippedList({ preview }: { preview: PasswordImportPreview }) {
 }
 
 function PlaintextWarning({ fileName }: { fileName: string }) {
+  const { t } = useTranslation("vault");
   return (
     <p className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2 text-xs text-foreground/85">
       <Trash2 className="mt-px size-3.5 shrink-0 text-warning" />
       <span>
-        <span className="font-medium text-foreground">{fileName}</span> holds every password in plain text. Delete it after the import and empty the trash.
+        <Trans t={t} i18nKey="passwordImport.plaintext" values={{ file: fileName }} components={{ file: <span className="font-medium text-foreground" /> }} />
       </span>
     </p>
   );
@@ -787,13 +818,17 @@ function PlaintextWarning({ fileName }: { fileName: string }) {
 /* ------------------------------------------------------------------ */
 
 function ResultView({ result, fileName }: { result: PasswordImportResult; fileName: string }) {
+  const { t } = useTranslation("vault");
   const total = result.created + result.updated;
   const title = result.created
-    ? `Imported ${plural(result.created, "login")}`
+    ? t("passwordImport.result.imported", { count: result.created })
     : result.updated
-      ? `Updated ${plural(result.updated, "login")}`
-      : "Everything was already in your vault";
-  const details = [result.created && result.updated ? `${result.updated.toLocaleString()} updated` : "", result.totp ? `${plural(result.totp, "2FA code")} linked` : ""].filter(Boolean);
+      ? t("passwordImport.result.updated", { count: result.updated })
+      : t("passwordImport.result.nothing");
+  const details = [
+    result.created && result.updated ? t("passwordImport.result.updatedDetail", { count: result.updated }) : "",
+    result.totp ? t("passwordImport.result.totpLinked", { count: result.totp }) : "",
+  ].filter(Boolean);
   return (
     <div className="space-y-5 pt-2">
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center text-center">
@@ -808,7 +843,7 @@ function ResultView({ result, fileName }: { result: PasswordImportResult; fileNa
         <h3 className="mt-3 text-base font-medium tracking-[-0.01em]">{title}</h3>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           {details.length ? `${details.join(" · ")}. ` : ""}
-          {total ? "Your agents can sign in with them now — Godmode types the passwords, the AI never sees them." : "Nothing needed to change."}
+          {total ? t("passwordImport.result.success") : t("passwordImport.result.noChanges")}
         </p>
       </motion.div>
       <PlaintextWarning fileName={fileName} />

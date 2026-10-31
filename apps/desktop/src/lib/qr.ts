@@ -7,6 +7,7 @@
  * Nothing here ever leaves the device — decoding runs locally in the webview.
  */
 import jsQR from "jsqr";
+import { t } from "@/i18n";
 
 type Drawable = ImageBitmap | HTMLImageElement | HTMLCanvasElement | HTMLVideoElement;
 export type QrSource = Blob | Drawable;
@@ -32,7 +33,7 @@ async function toDrawable(src: QrSource): Promise<{ img: Drawable; width: number
       return { img, width: img.naturalWidth, height: img.naturalHeight, release: () => URL.revokeObjectURL(url) };
     } catch (e) {
       URL.revokeObjectURL(url);
-      throw new Error("This file could not be read as an image.", { cause: e });
+      throw new Error(t("system:qr.notAnImage"), { cause: e });
     }
   }
   if (src instanceof HTMLImageElement) return { img: src, width: src.naturalWidth, height: src.naturalHeight, release: () => {} };
@@ -45,7 +46,7 @@ function makeCanvas(w: number, h: number) {
   canvas.width = Math.max(1, Math.round(w));
   canvas.height = Math.max(1, Math.round(h));
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  if (!ctx) throw new Error("Canvas is not available.");
+  if (!ctx) throw new Error(t("system:qr.noCanvas"));
   return { canvas, ctx };
 }
 
@@ -239,14 +240,14 @@ export function parseOtpUri(raw: string): ParsedOtp {
   const mm = /^otpauth-migration:\/\/[^?]*\?(.*)$/i.exec(uri);
   if (mm) {
     const data = parseQuery(mm[1]).get("data");
-    if (!data) return { kind: "invalid", uri, error: "Migration code has no data" };
+    if (!data) return { kind: "invalid", uri, error: t("system:qr.migrationNoData") };
     try {
       return { kind: "migration", uri, preview: decodeMigrationPayload(data.replace(/ /g, "+")) };
     } catch {
-      return { kind: "invalid", uri, error: "Migration code could not be read" };
+      return { kind: "invalid", uri, error: t("system:qr.migrationUnreadable") };
     }
   }
-  return { kind: "invalid", uri, error: "Not a 2FA QR code" };
+  return { kind: "invalid", uri, error: t("system:qr.notTwoFactor") };
 }
 
 /* Minimal protobuf reader for Google Authenticator's MigrationPayload */

@@ -1,0 +1,56 @@
+{
+  "view": {
+    "title": "Dream",
+    "openFailed": "Couldn't open this dream",
+    "loading": "Loading the dream…",
+    "theAgent": "The agent",
+    "reverted": "This dream was undone — the files are back the way they were before it.",
+    "undoOnComputer": "Undo a dream in Godmode on your computer.",
+    "cantUndo": "The memory changed after this dream, so it can't be undone automatically.",
+    "eyebrow": "Dream · {{when}}",
+    "heading": "What {{name}} changed",
+    "attempted": "What it attempted",
+    "notes": "The agent's notes",
+    "rolledBack": "Rolled back where possible",
+    "rolledBackAll": "Rolled back — nothing was kept",
+    "noNotes": "{{name}} didn't describe its changes — the diff shows exactly what it wrote.",
+    "changes": "Changes",
+    "nothingLeft": "Nothing from this dream is left in the memory files.",
+    "noChanges": "This dream didn't change any memory files.",
+    "otherFiles": "The phone shows MEMORY.md. The other memory files this dream changed are in Godmode on your computer."
+  },
+  "file": {
+    "new": "New file",
+    "deleted": "Deleted",
+    "createdEmpty": "Created an empty file.",
+    "deletedEmpty": "Deleted an empty file.",
+    "onlyNewlineAdded": "Only the newline at the end of the file was added.",
+    "onlyNewlineRemoved": "Only the newline at the end of the file was removed.",
+    "noLineChanges": "No line changes."
+  },
+  "diff": {
+    "showUnchanged_one": "Show {{count}} unchanged line",
+    "showUnchanged_other": "Show {{count}} unchanged lines",
+    "notShown_one": "{{n}} more line not shown",
+    "notShown_other": "{{n}} more lines not shown",
+    "showEverything": "Show everything",
+    "newlineAdded": "Newline added at end of file",
+    "newlineRemoved": "No newline at end of file anymore",
+    "added": "Added: {{text}}",
+    "removed": "Removed: {{text}}"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "stuck": "Couldn't be put back",
+    "sizeNow": "{{size}} now",
+    "removedAfterWeek": "removed after a week",
+    "counts": {
+      "move_one": "{{count}} sorted",
+      "move_other": "{{count}} sorted",
+      "rewrite_one": "{{count}} rewritten",
+      "rewrite_other": "{{count}} rewritten",
+      "discard_one": "{{count}} discarded",
+      "discard_other": "{{count}} discarded"
+    }
+  }
+}

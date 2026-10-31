@@ -6,17 +6,19 @@ import { usePreventRemove } from "expo-router/react-navigation";
 import { useMemo, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTranslation } from "react-i18next";
 import type { Agent, AgentMemory } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { HeaderActions } from "@/components/header-actions";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/markdown";
 import { Button, Card, EmptyState, ErrorState, LoadingState, Row, T } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { alpha, fonts, radius, space, useColors } from "@/lib/theme";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
+import { dateLocale, intlLocale } from "@/lib/i18n";
 
 interface Section {
   title: string | null;
@@ -41,6 +43,7 @@ function splitSections(text: string): Section[] {
 }
 
 export default function MemoryScreen() {
+  const { t } = useTranslation(["memory", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const agents = useAgents();
   const agent = agents.byId.get(id);
@@ -55,13 +58,13 @@ export default function MemoryScreen() {
   if (!memory.data || !agent) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Screen options={{ title: "Memory", headerLargeTitleEnabled: false }} />
+        <Stack.Screen options={{ title: t("view.title"), headerLargeTitleEnabled: false }} />
         {memory.isError ? (
-          <ErrorState title="Couldn't open the memory" error={tooOld ? UPDATE_DESKTOP_MESSAGE : errorText(memory.error)} onRetry={tooOld ? undefined : () => void memory.refetch()} />
+          <ErrorState title={t("view.openFailed")} error={tooOld ? updateDesktopMessage() : errorText(memory.error)} onRetry={tooOld ? undefined : () => void memory.refetch()} />
         ) : !agent && !agents.isLoading ? (
-          <ErrorState title="Agent not found" error="It may have been deleted on your computer." />
+          <ErrorState title={t("view.agentNotFound")} error={t("view.agentDeleted")} />
         ) : (
-          <LoadingState label="Opening the memory…" />
+          <LoadingState label={t("view.opening")} />
         )}
       </View>
     );
@@ -71,6 +74,7 @@ export default function MemoryScreen() {
 
 function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMemory; refetch: () => Promise<unknown> }) {
   const c = useColors();
+  const { t } = useTranslation(["memory", "common"]);
   const navigation = useNavigation();
   const pull = usePullRefresh(refetch);
   const scroll = useRef<ScrollView>(null);
@@ -95,43 +99,43 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
     },
     onError: (err, vars) => {
       if (err instanceof ApiError && err.code === "memory_changed") {
-        Alert.alert("The memory changed meanwhile", `${agent.name} rewrote MEMORY.md while you were editing.`, [
-          { text: "Keep editing", style: "cancel" },
+        Alert.alert(t("view.changedTitle"), t("view.changedMessage", { name: agent.name }), [
+          { text: t("view.keepEditing"), style: "cancel" },
           {
-            text: "Load the new version",
+            text: t("view.loadNew"),
             onPress: () => {
               setDraft(null);
               void refetch();
             },
           },
-          { text: "Overwrite with mine", style: "destructive", onPress: () => save.mutate({ text: vars.text }) },
+          { text: t("view.overwrite"), style: "destructive", onPress: () => save.mutate({ text: vars.text }) },
         ]);
         void refetch();
         return;
       }
-      Alert.alert("Couldn't save the memory", errorText(err));
+      Alert.alert(t("view.saveFailed"), errorText(err));
     },
   });
 
   usePreventRemove(dirty, ({ data }) => {
-    Alert.alert("Discard your changes?", "Your edits to the memory haven't been saved.", [
-      { text: "Keep editing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: () => navigation.dispatch(data.action) },
+    Alert.alert(t("view.discardTitle"), t("view.discardMessage"), [
+      { text: t("view.keepEditing"), style: "cancel" },
+      { text: t("view.discard"), style: "destructive", onPress: () => navigation.dispatch(data.action) },
     ]);
   });
 
   const startEdit = () => {
     if (memory.dreaming) {
-      Alert.alert(`${agent.name} is dreaming`, "It is tidying up its memory right now. Edit it when the dream has ended.");
+      Alert.alert(t("view.dreamingTitle", { name: agent.name }), t("view.dreamingMessage"));
       return;
     }
     setDraft({ text: memory.content, base: memory.digest, baseText: memory.content });
   };
   const discard = () => {
     if (!dirty) return setDraft(null);
-    Alert.alert("Discard your changes?", undefined, [
-      { text: "Keep editing", style: "cancel" },
-      { text: "Discard", style: "destructive", onPress: () => setDraft(null) },
+    Alert.alert(t("view.discardTitle"), undefined, [
+      { text: t("view.keepEditing"), style: "cancel" },
+      { text: t("view.discard"), style: "destructive", onPress: () => setDraft(null) },
     ]);
   };
 
@@ -147,14 +151,14 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
       refreshControl={editing ? undefined : <RefreshControl refreshing={pull.refreshing} onRefresh={pull.onRefresh} />}
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={{ title: "Memory", headerLargeTitleEnabled: false }} />
+      <Stack.Screen options={{ title: t("view.title"), headerLargeTitleEnabled: false }} />
       {editing ? (
         <HeaderActions
-          actions={[{ icon: "check", label: "Save", prominent: true, onPress: () => draft && !save.isPending && save.mutate({ text: draft.text, base: draft.base }) }]}
-          menu={[{ icon: "close", title: dirty ? "Discard changes" : "Stop editing", onPress: discard, destructive: dirty }]}
+          actions={[{ icon: "check", label: t("common:actions.save"), prominent: true, onPress: () => draft && !save.isPending && save.mutate({ text: draft.text, base: draft.base }) }]}
+          menu={[{ icon: "close", title: dirty ? t("view.discardChanges") : t("view.stopEditing"), onPress: discard, destructive: dirty }]}
         />
       ) : (
-        <HeaderActions actions={[{ icon: "pencil", label: "Edit memory", onPress: startEdit }]} />
+        <HeaderActions actions={[{ icon: "pencil", label: t("view.edit"), onPress: startEdit }]} />
       )}
 
       <Row style={{ gap: space.md }}>
@@ -167,10 +171,10 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
             <T variant="footnote" muted style={{ fontFamily: fonts.mono }}>
               MEMORY.md
             </T>
-            {memory.updatedAt ? `  ·  updated ${formatDistanceToNowStrict(new Date(memory.updatedAt), { addSuffix: true })}` : "  ·  not written yet"}
+            {`  ·  ${memory.updatedAt ? t("view.updated", { ago: formatDistanceToNowStrict(new Date(memory.updatedAt), { addSuffix: true, locale: dateLocale() }) }) : t("view.notWritten")}`}
           </T>
         </View>
-        {save.isPending ? <T variant="caption" muted>Saving…</T> : dirty ? <T variant="caption" color={c.warning}>Unsaved</T> : null}
+        {save.isPending ? <T variant="caption" muted>{t("common:status.saving")}</T> : dirty ? <T variant="caption" color={c.warning}>{t("view.unsaved")}</T> : null}
       </Row>
 
       <Budget chars={chars} memory={memory} />
@@ -179,7 +183,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
         <Row style={[styles.banner, { backgroundColor: c.dreamSoft }]}>
           <Icon name="moon" size={14} color={c.dream} />
           <T variant="footnote" style={{ flex: 1 }}>
-            {agent.name} is dreaming — it is tidying up this memory. Editing is paused until the dream ends.
+            {t("view.dreamingBanner", { name: agent.name })}
           </T>
         </Row>
       ) : null}
@@ -187,7 +191,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
       {editing ? (
         <View style={[styles.editor, { backgroundColor: c.surface, borderColor: c.borderStrong }]}>
           <TextInput
-            accessibilityLabel={`MEMORY.md of ${agent.name}`}
+            accessibilityLabel={t("view.editorLabel", { name: agent.name })}
             value={draft.text}
             onChangeText={(text) => setDraft((d) => (d ? { ...d, text } : d))}
             multiline
@@ -197,7 +201,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
             autoCapitalize="none"
             autoCorrect={false}
             spellCheck={false}
-            placeholder={"# Memory\n\n- One short line per fact"}
+            placeholder={t("view.editorPlaceholder")}
             placeholderTextColor={c.textFaint}
             style={[styles.input, { color: c.text }]}
           />
@@ -205,9 +209,9 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
       ) : !memory.content.trim() ? (
         <EmptyState
           icon="brain"
-          title="Nothing remembered yet"
-          body={`${agent.name} writes down what it learns here: your preferences, how your accounts work, open follow-ups. You can start it yourself.`}
-          action={<Button title="Write the first note" icon="pencil" variant="secondary" onPress={startEdit} />}
+          title={t("view.emptyTitle")}
+          body={t("view.emptyBody", { name: agent.name })}
+          action={<Button title={t("view.writeFirst")} icon="pencil" variant="secondary" onPress={startEdit} />}
         />
       ) : (
         <>
@@ -219,7 +223,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
                   <Pressable
                     key={`${i}-${s.title}`}
                     accessibilityRole="button"
-                    accessibilityLabel={`Jump to ${s.title}`}
+                    accessibilityLabel={t("view.jumpTo", { title: s.title })}
                     onPress={() => scroll.current?.scrollTo({ y: Math.max(0, readerY.current + space.lg + (offsets.current[i] ?? 0) - headerInset - space.md), animated: true })}
                     style={({ pressed }) => [styles.chip, { backgroundColor: pressed ? c.sunken : c.surface, borderColor: c.border }]}
                   >
@@ -247,7 +251,7 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
           </Card>
           </View>
           <T variant="footnote" muted style={{ textAlign: "center", paddingHorizontal: space.lg }}>
-            {agent.name} keeps this file itself and tidies it while dreaming. Your edits guide what it remembers.
+            {t("view.footer", { name: agent.name })}
           </T>
         </>
       )}
@@ -258,28 +262,29 @@ function MemoryView({ agent, memory, refetch }: { agent: Agent; memory: AgentMem
 /** What the memory takes of what dreams keep it under (`target`); past `limit` chats only load its start. */
 function Budget({ chars, memory }: { chars: number; memory: Pick<AgentMemory, "target" | "limit"> }) {
   const c = useColors();
+  const { t } = useTranslation("memory");
   const { target, limit } = memory;
   const cut = chars > limit;
   const over = chars > target;
   const tone = cut ? c.danger : over ? c.warning : c.dream;
   const hint = cut
-    ? `Chats load only the first ${limit.toLocaleString()} characters — the end is missing.`
+    ? t("budget.cut", { limit: limit.toLocaleString(intlLocale()) })
     : over
-      ? `${(chars - target).toLocaleString()} over the target. The next dream shortens it.`
-      : "Loaded in full into every chat.";
+      ? t("budget.over", { over: (chars - target).toLocaleString(intlLocale()) })
+      : t("budget.full");
   return (
     <View style={{ gap: 6 }}>
       <Row style={{ justifyContent: "space-between" }}>
         <T variant="footnote" style={{ fontVariant: ["tabular-nums"] }}>
           <T variant="footnote" color={cut || over ? tone : c.text} style={{ fontWeight: "600" }}>
-            {chars.toLocaleString()}
+            {chars.toLocaleString(intlLocale())}
           </T>
-          <T variant="footnote" muted>{` of ${target.toLocaleString()} characters`}</T>
+          <T variant="footnote" muted>{` ${t("budget.ofTarget", { target: target.toLocaleString(intlLocale()) })}`}</T>
         </T>
       </Row>
       <View
         accessibilityRole="progressbar"
-        accessibilityLabel="Size of the memory"
+        accessibilityLabel={t("budget.a11y")}
         accessibilityValue={{ min: 0, max: limit, now: Math.min(chars, limit) }}
         style={[styles.track, { backgroundColor: c.sunken }]}
       >

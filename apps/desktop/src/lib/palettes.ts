@@ -1,9 +1,13 @@
 import { DEFAULT_PALETTE, PALETTE_DEFS, type Palette, type PaletteMode, type Seeds } from "@godmode/shared";
+import { t } from "@/i18n";
 
 export { DEFAULT_PALETTE, PALETTE_DEFS, isPalette } from "@godmode/shared";
 export type { PaletteDef, Seeds } from "@godmode/shared";
 
 export type Mode = PaletteMode;
+
+export const paletteLabel = (p: Palette): string => t(`system:palettes.${p}.label`);
+export const paletteBlurb = (p: Palette): string => t(`system:palettes.${p}.blurb`);
 
 const mix = (color: string, pct: number, into = "transparent") => `color-mix(in srgb, ${color} ${pct}%, ${into})`;
 

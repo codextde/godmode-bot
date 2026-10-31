@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, Hand, Maximize2, PanelRightClose, PanelRightOpen, Smartphone } from "lucide-react";
 import { androidSummary, type AndroidDevice } from "@godmode/shared";
@@ -24,6 +25,7 @@ export function useChatPhones(own: string[] | undefined, agentIds: string[] | un
 
 /** Side panel of a chat that controls phones: the phone live, what the agent is doing, and a way to take over. */
 export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice[]; activity: string | null; onHide: () => void }) {
+  const { t } = useTranslation("android");
   const [picked, setPicked] = useState<string | null>(null);
   const phone = phones.find((p) => p.id === picked) ?? phones.find((p) => p.busy) ?? phones.find((p) => p.state === "connected") ?? phones[0]!;
   const [control, setControl] = useState(false);
@@ -33,7 +35,7 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
 
   return (
     <motion.aside
-      aria-label="Android phone"
+      aria-label={t("panel.aria")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -42,7 +44,7 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
     >
       <div className="flex h-full w-80 flex-col">
         <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
-          <span className="text-sm font-medium">Phone</span>
+          <span className="text-sm font-medium">{t("panel.title")}</span>
           {connected && (
             <span
               className={cn(
@@ -51,22 +53,22 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
               )}
             >
               <LiveDot live={live} />
-              {live ? "Live" : "Waiting"}
+              {live ? t("panel.live") : t("panel.waiting")}
             </span>
           )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="-mr-1.5 ml-auto size-8 text-muted-foreground" onClick={onHide} aria-label="Hide the phone">
+              <Button variant="ghost" size="icon" className="-mr-1.5 ml-auto size-8 text-muted-foreground" onClick={onHide} aria-label={t("panel.hide")}>
                 <PanelRightClose />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Hide the phone</TooltipContent>
+            <TooltipContent>{t("panel.hide")}</TooltipContent>
           </Tooltip>
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
           {phones.length > 1 && (
-            <div role="tablist" aria-label="Phones" className="flex gap-1 rounded-lg border bg-card p-0.5">
+            <div role="tablist" aria-label={t("panel.tabs")} className="flex gap-1 rounded-lg border bg-card p-0.5">
               {phones.map((p) => (
                 <button
                   key={p.id}
@@ -114,20 +116,20 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
 
           <div className="flex gap-2">
             <Button size="sm" variant={control ? "secondary" : "default"} className="flex-1" disabled={!connected} onClick={() => setControl((c) => !c)} aria-pressed={control}>
-              <Hand /> {control ? "Stop controlling" : "Take control"}
+              <Hand /> {control ? t("panel.stopControlling") : t("panel.takeControl")}
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button asChild variant="outline" size="icon-sm" aria-label="Open full size">
+                <Button asChild variant="outline" size="icon-sm" aria-label={t("panel.openFull")}>
                   <Link to={`/android/${phone.id}`}>
                     <Maximize2 />
                   </Link>
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Open full size</TooltipContent>
+              <TooltipContent>{t("panel.openFull")}</TooltipContent>
             </Tooltip>
           </div>
-          {control && <p className="-mt-2 text-[11px] leading-4 text-muted-foreground">Click to tap, drag to swipe, type to enter text. Right click goes back.</p>}
+          {control && <p className="-mt-2 text-[11px] leading-4 text-muted-foreground">{t("panel.controlHint")}</p>}
         </div>
 
         <Link
@@ -138,8 +140,8 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
             <Smartphone className="size-4" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium">Android phones</span>
-            <span className="block truncate text-[11px] text-muted-foreground">{phones.length === 1 ? "1 phone in this chat" : `${phones.length} phones in this chat`}</span>
+            <span className="block truncate text-xs font-medium">{t("panel.footerTitle")}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">{t("panel.count", { count: phones.length })}</span>
           </span>
           <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
         </Link>
@@ -150,15 +152,16 @@ export function PhonePanel({ phones, activity, onHide }: { phones: AndroidDevice
 
 /** Header button that brings the phone panel back once it's hidden. */
 export function PhoneToggle({ working, onClick }: { working: boolean; onClick: () => void }) {
+  const { t } = useTranslation("android");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Show the phone" onClick={onClick} className="relative text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" aria-label={t("panel.show")} onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
           {working && <LiveDot className="absolute top-1.5 right-1.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Show the phone</TooltipContent>
+      <TooltipContent>{t("panel.show")}</TooltipContent>
     </Tooltip>
   );
 }

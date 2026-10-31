@@ -1,0 +1,49 @@
+{
+  "thisMac": "This Mac",
+  "thisComputer": "This computer",
+  "chats_one": "{{count}} chat",
+  "chats_other": "{{count}} chats",
+  "workingChats": "{{working}} working · {{chats}}",
+  "working_one": "{{count}} working",
+  "working_other": "{{count}} working",
+  "slowConnection": "Slow connection",
+  "clock": {
+    "today": "HH:mm",
+    "earlier": "d MMM, HH:mm"
+  },
+  "state": {
+    "standsInSince": "Stands in since {{time}}",
+    "standsIn": "Stands in",
+    "takesOverIn": "Takes over in {{time}}",
+    "takingOver": "Taking over…",
+    "online": "Online",
+    "onlineSlow": "Online · slow connection",
+    "awaySince": "Away since {{time}}",
+    "away": "Away",
+    "connecting": "Connecting…",
+    "updateRequired": "Update needed"
+  },
+  "handoff": {
+    "nothing": "Nothing to hand off",
+    "nothingDescription": "No chat is working on this computer right now.",
+    "nothingDescriptionMac": "No chat is working on this Mac right now.",
+    "moved_one": "Moved 1 chat to {{name}}",
+    "moved_other": "Moved {{count}} chats to {{name}}",
+    "movedDescription": "They continue there with everything they did so far.",
+    "moveError_one": "Couldn't move the chat to {{name}}",
+    "moveError_other": "Couldn't move the chats to {{name}}",
+    "movedPartly": "Moved {{moved}} of {{total}} chats to {{name}}",
+    "error": "Couldn't hand off to {{name}}",
+    "label": "Hand off to",
+    "primaryAway": "{{name}} is away",
+    "primaryAwayFallback": "The primary is away",
+    "noneOnline": "No other computer is online",
+    "handingOff": "Handing off…",
+    "handOffChats_one": "Hand off the running chat",
+    "handOffChats_other": "Hand off {{count}} running chats",
+    "handOffWork": "Hand off running work",
+    "toName": "to {{name}}",
+    "pick": "Pick a computer",
+    "continueOn": "Continue the running work on"
+  }
+}

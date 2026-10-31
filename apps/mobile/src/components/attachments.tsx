@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { Pressable, ScrollView, StyleSheet, View, type ColorValue } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import { Icon, type IconName } from "./icon";
 import { T, tap } from "./ui";
@@ -26,6 +27,7 @@ const THUMB = 64;
 /** The files waiting in the composer: photos as thumbnails, everything else as a small card. */
 export function AttachmentTray({ files, onRemove, busy }: { files: PendingFile[]; onRemove: (id: string) => void; busy?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <ScrollView
       horizontal
@@ -56,7 +58,7 @@ export function AttachmentTray({ files, onRemove, busy }: { files: PendingFile[]
           {!busy && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${f.name}`}
+              accessibilityLabel={t("attachments.remove", { name: f.name })}
               hitSlop={8}
               onPress={() => {
                 tap();

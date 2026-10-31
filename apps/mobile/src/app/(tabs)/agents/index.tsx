@@ -3,6 +3,7 @@ import { router, Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { memo, useCallback, useMemo, useState } from "react";
 import { RefreshControl, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { AgentRow } from "@/components/rows";
@@ -34,6 +35,7 @@ const Separator = () => <Hairline inset={78} />;
 type Filter = "all" | "running" | "needs" | "scheduled" | "disabled";
 
 export default function Agents() {
+  const { t } = useTranslation(["tabs", "common"]);
   const agents = useAgents();
   const { id: workspaceId, projectId } = useWorkspace();
   // Working means running; a run waiting for a free slot is only queued.
@@ -86,11 +88,11 @@ export default function Agents() {
 
   return (
     <>
-      <Stack.Title large>Agents</Stack.Title>
+      <Stack.Title large>{t("agents.title")}</Stack.Title>
       <HeaderActions
         actions={[
-          { icon: "clock", label: "Automations", onPress: () => router.push("/automations") },
-          ...(activityOn ? [{ icon: "pulse" as const, label: "Activity", onPress: () => router.push("/activity") }] : []),
+          { icon: "clock", label: t("agents.automations"), onPress: () => router.push("/automations") },
+          ...(activityOn ? [{ icon: "pulse" as const, label: t("agents.activity"), onPress: () => router.push("/activity") }] : []),
         ]}
       />
       <FlashList
@@ -110,11 +112,11 @@ export default function Agents() {
                 value={filter}
                 onChange={setFilter}
                 filters={[
-                  { id: "all", label: "All" },
-                  { id: "running", label: "Working", count: scoped.filter(tests.running).length },
-                  { id: "needs", label: "Needs you", count: scoped.filter(tests.needs).length },
-                  { id: "scheduled", label: "Automated", count: scoped.filter(tests.scheduled).length },
-                  { id: "disabled", label: "Off", count: scoped.filter(tests.disabled).length },
+                  { id: "all", label: t("common:words.all") },
+                  { id: "running", label: t("agents.filter.running"), count: scoped.filter(tests.running).length },
+                  { id: "needs", label: t("agents.filter.needs"), count: scoped.filter(tests.needs).length },
+                  { id: "scheduled", label: t("agents.filter.scheduled"), count: scoped.filter(tests.scheduled).length },
+                  { id: "disabled", label: t("common:status.off"), count: scoped.filter(tests.disabled).length },
                 ]}
               />
             )}
@@ -125,15 +127,15 @@ export default function Agents() {
           agents.isLoading ? (
             <SkeletonRows count={7} avatar={46} />
           ) : agents.isError ? (
-            <ErrorState title="Couldn't load agents" error={errorText(agents.error)} onRetry={() => void agents.refetch()} />
+            <ErrorState title={t("agents.loadError")} error={errorText(agents.error)} onRetry={() => void agents.refetch()} />
           ) : scoped.length ? (
-            <EmptyState icon="agents" title="No agents match" body="No agents in this view." />
+            <EmptyState icon="agents" title={t("agents.noMatch.title")} body={t("agents.noMatch.body")} />
           ) : (
             <EmptyState
               icon="agents"
-              title="Create your first agent"
-              body="Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
-              action={<Button title="New agent" icon="plus" onPress={newAgent} />}
+              title={t("agents.empty.title")}
+              body={t("agents.empty.body")}
+              action={<Button title={t("agents.newAgent")} icon="plus" onPress={newAgent} />}
             />
           )
         }

@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useRef, useState } from "react";
 import { Linking, StyleSheet, useWindowDimensions, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { parsePairingLink } from "@godmode/shared";
@@ -15,6 +16,7 @@ import { radius, space } from "@/lib/theme";
 const WHITE = "#FFFFFF";
 
 export default function Scan() {
+  const { t } = useTranslation(["onboarding", "common"]);
   const [permission, requestPermission] = useCameraPermissions();
   const [hint, setHint] = useState<string | null>(null);
   const handled = useRef(false);
@@ -25,7 +27,7 @@ export default function Scan() {
   const open = (text: string) => {
     const payload = parsePairingLink(text);
     if (!payload) {
-      setHint("That's not a Godmode code. Open Settings → Phone on your computer.");
+      setHint(t("scan.notGodmode"));
       return false;
     }
     handled.current = true;
@@ -41,7 +43,7 @@ export default function Scan() {
 
   const paste = async () => {
     const text = await Clipboard.getStringAsync();
-    if (!text || !open(text)) setHint("Copy the pairing link on your computer first.");
+    if (!text || !open(text)) setHint(t("scan.copyFirst"));
   };
 
   return (
@@ -60,22 +62,22 @@ export default function Scan() {
       </View>
 
       <View style={[styles.top, { paddingTop: insets.top + space.sm }]}>
-        <GlassIconButton icon="close" label="Close" onPress={() => router.back()} dark />
+        <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => router.back()} dark />
       </View>
 
       <View style={[styles.bottom, { paddingBottom: insets.bottom + space.xl }]}>
         {permission && !permission.granted ? (
           <Glass style={styles.panel} scheme="dark" fallback={SMOKE}>
             <T variant="headline" color={WHITE}>
-              Camera access
+              {t("scan.camera.title")}
             </T>
             <T variant="subhead" color="rgba(255,255,255,0.75)" style={{ textAlign: "center" }}>
               {permission.canAskAgain
-                ? "Godmode only uses the camera to read the pairing code on your computer."
-                : "Camera access is off. Turn it on in Settings, or paste the pairing link instead."}
+                ? t("scan.camera.why")
+                : t("scan.camera.off")}
             </T>
             <Button
-              title={permission.canAskAgain ? "Continue" : "Open Settings"}
+              title={permission.canAskAgain ? t("common:actions.continue") : t("scan.camera.openSettings")}
               icon="camera"
               variant="glass" dark
               onPress={() => (permission.canAskAgain ? void requestPermission() : void Linking.openSettings())}
@@ -85,15 +87,15 @@ export default function Scan() {
           <Animated.View entering={FadeIn.delay(200)}>
             <Glass style={styles.pill} scheme="dark" fallback={SMOKE}>
               <T variant="subhead" color={WHITE} style={{ fontWeight: "600", textAlign: "center" }}>
-                {hint ?? "Point at the code on your computer"}
+                {hint ?? t("scan.point")}
               </T>
               <T variant="footnote" color="rgba(255,255,255,0.7)" style={{ textAlign: "center" }}>
-                Settings → Phone → Connect a phone
+                {t("scan.path")}
               </T>
             </Glass>
           </Animated.View>
         )}
-        <Button title="Paste pairing link" variant="glass" dark onPress={() => void paste()} style={{ alignSelf: "center" }} />
+        <Button title={t("scan.paste")} variant="glass" dark onPress={() => void paste()} style={{ alignSelf: "center" }} />
       </View>
     </View>
   );

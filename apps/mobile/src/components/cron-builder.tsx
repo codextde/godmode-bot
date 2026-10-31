@@ -1,8 +1,10 @@
 import { DatePicker, Host } from "@expo/ui/swift-ui";
 import { datePickerStyle, labelsHidden } from "@expo/ui/swift-ui/modifiers";
 import { Cron } from "croner";
+import { format } from "date-fns";
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
   formatMinutes,
   MAX_START_WINDOW_MINUTES,
@@ -12,24 +14,17 @@ import {
   startWindowLimit,
   startWindowTooLong,
   validateCron,
-  WEEKDAYS,
   type CronDraft,
 } from "@godmode/shared";
 import { Group, PickerRow, StepperRow, SwitchRow } from "./form";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
+import { currentLanguage, dateLocale } from "@/lib/i18n";
 import { fonts, radius, space, useColors, useIsDark } from "@/lib/theme";
 
 type Kind = "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
 
-const KINDS: { value: Kind; label: string }[] = [
-  { value: "hourly", label: "Every hour" },
-  { value: "daily", label: "Every day" },
-  { value: "weekdays", label: "Every weekday" },
-  { value: "weekly", label: "Every week" },
-  { value: "monthly", label: "Every month" },
-  { value: "custom", label: "Custom (cron)" },
-];
+const KINDS: Kind[] = ["hourly", "daily", "weekdays", "weekly", "monthly", "custom"];
 
 // Monday-first order reads more naturally in a picker
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
@@ -37,11 +32,11 @@ const MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
 const DAYS_OF_MONTH = Array.from({ length: 31 }, (_, i) => i + 1);
 
 const CUSTOM_EXAMPLES = [
-  { cron: "*/15 * * * *", label: "every 15 min" },
-  { cron: "0 */2 * * *", label: "every 2 hours" },
-  { cron: "0 9,17 * * 1-5", label: "9:00 & 17:00 weekdays" },
-  { cron: "0 8 1,15 * *", label: "1st & 15th" },
-];
+  { cron: "*/15 * * * *", labelKey: "cronBuilder.examples.every15Minutes" },
+  { cron: "0 */2 * * *", labelKey: "cronBuilder.examples.every2Hours" },
+  { cron: "0 9,17 * * 1-5", labelKey: "cronBuilder.examples.twiceOnWeekdays" },
+  { cron: "0 8 1,15 * *", labelKey: "cronBuilder.examples.firstAndFifteenth" },
+] as const;
 
 export const START_WINDOW_PRESETS = [15, 30, 60, 90, 120, 180];
 
@@ -89,7 +84,12 @@ function maxStartWindow(cron: string, timezone: string): number {
 /** A start window longer than the gap between runs, in the core's words; null when it fits. */
 export function startWindowProblem(cron: string, timezone: string, minutes: number): string | null {
   const max = maxStartWindow(cron, timezone);
-  return minutes > max ? startWindowTooLong(max) : null;
+  return minutes > max ? startWindowTooLong(max, currentLanguage()) : null;
+}
+
+/** Day of week (0 = Sunday) in the app language: "Monday" / "Montag", short "Mon" / "Mo". */
+function weekdayName(day: number, short = false): string {
+  return format(new Date(2023, 0, 1 + day), short ? "EEE" : "EEEE", { locale: dateLocale() }).replace(/\.$/, "");
 }
 
 /**
@@ -114,9 +114,11 @@ export function CronBuilder({
   problem?: string | null;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const [draft, setDraft] = useState<CronDraft>(() => draftOf(value));
   const cron = buildCron(draft);
-  const error = validateCron(cron) ?? problem ?? null;
+  const lang = currentLanguage();
+  const error = validateCron(cron, lang) ?? problem ?? null;
   const timed = draft.kind === "daily" || draft.kind === "weekdays" || draft.kind === "weekly" || draft.kind === "monthly";
   const ios = process.env.EXPO_OS === "ios";
 
@@ -131,19 +133,19 @@ export function CronBuilder({
   return (
     <View style={{ gap: space.sm }}>
       <Group>
-        <PickerRow title="Repeat" value={draft.kind as Kind} options={KINDS} onChange={(kind) => update({ kind })} />
+        <PickerRow title={t("cronBuilder.repeat")} value={draft.kind as Kind} options={KINDS.map((k) => ({ value: k, label: t(`cronBuilder.kinds.${k}`) }))} onChange={(kind) => update({ kind })} />
         {draft.kind === "hourly" ? (
-          <StepperRow title="At minute" value={draft.minute} min={0} max={59} steps={MINUTES} format={(m) => `:${pad(m)}`} onChange={(minute) => update({ minute })} />
+          <StepperRow title={t("cronBuilder.atMinute")} value={draft.minute} min={0} max={59} steps={MINUTES} format={(m) => `:${pad(m)}`} onChange={(minute) => update({ minute })} />
         ) : null}
         {draft.kind === "weekly" ? <WeekdayRow value={draft.weekday} onChange={(weekday) => update({ weekday })} /> : null}
         {draft.kind === "monthly" ? (
-          <StepperRow title="On day" value={draft.monthDay} min={1} max={31} steps={DAYS_OF_MONTH} format={ordinal} onChange={(monthDay) => update({ monthDay })} />
+          <StepperRow title={t("cronBuilder.onDay")} value={draft.monthDay} min={1} max={31} steps={DAYS_OF_MONTH} format={(n) => ordinal(n, lang)} onChange={(monthDay) => update({ monthDay })} />
         ) : null}
         {timed && ios ? <TimeRow hour={draft.hour} minute={draft.minute} onChange={(hour, minute) => update({ hour, minute })} /> : null}
         {timed && !ios ? (
-          <StepperRow title="Hour" value={draft.hour} min={0} max={23} format={pad} onChange={(hour) => update({ hour })} />
+          <StepperRow title={t("cronBuilder.hour")} value={draft.hour} min={0} max={23} format={pad} onChange={(hour) => update({ hour })} />
         ) : null}
-        {timed && !ios ? <StepperRow title="Minute" value={draft.minute} min={0} max={59} steps={MINUTES} format={pad} onChange={(minute) => update({ minute })} /> : null}
+        {timed && !ios ? <StepperRow title={t("cronBuilder.minute")} value={draft.minute} min={0} max={59} steps={MINUTES} format={pad} onChange={(minute) => update({ minute })} /> : null}
         {draft.kind === "custom" ? <CustomCronRow value={draft.custom} invalid={!!validateCron(cron)} onChange={(custom) => update({ custom })} /> : null}
       </Group>
       <View
@@ -152,7 +154,7 @@ export function CronBuilder({
       >
         <Icon name={error ? "warning" : "clock"} size={14} color={error ? c.danger : c.textMuted} />
         <T variant="footnote" color={error ? c.danger : c.text} style={{ flex: 1 }}>
-          {error ?? `${scheduleToHuman(cron, startWindowMinutes, runsPerWindow)}${zone ? ` (${zone})` : ""}`}
+          {error ?? `${scheduleToHuman(cron, startWindowMinutes, runsPerWindow, lang)}${zone ? ` (${zone})` : ""}`}
         </T>
         {!error ? (
           <T variant="caption" muted style={{ fontFamily: fonts.mono }}>
@@ -166,10 +168,11 @@ export function CronBuilder({
 
 function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: number) => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <View style={styles.stackedRow}>
       <T variant="callout" style={{ fontWeight: "500" }}>
-        On
+        {t("cronBuilder.on")}
       </T>
       <View style={{ flexDirection: "row", gap: 4 }}>
         {WEEK_ORDER.map((d) => {
@@ -178,7 +181,7 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
             <Pressable
               key={d}
               accessibilityRole="button"
-              accessibilityLabel={WEEKDAYS[d]}
+              accessibilityLabel={weekdayName(d)}
               accessibilityState={{ selected: active }}
               onPress={() => {
                 if (active) return;
@@ -188,7 +191,7 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
               style={[styles.day, { backgroundColor: active ? c.primary : c.sunken }]}
             >
               <T variant="footnote" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
-                {WEEKDAYS[d].slice(0, 3)}
+                {weekdayName(d, true)}
               </T>
             </Pressable>
           );
@@ -201,10 +204,11 @@ function WeekdayRow({ value, onChange }: { value: number; onChange: (weekday: nu
 /** "At" with the system's time picker. */
 function TimeRow({ hour, minute, onChange }: { hour: number; minute: number; onChange: (hour: number, minute: number) => void }) {
   const dark = useIsDark();
+  const { t } = useTranslation("components");
   return (
     <View style={styles.row}>
       <T variant="callout" style={{ flex: 1, fontWeight: "500" }}>
-        At
+        {t("cronBuilder.at")}
       </T>
       <Host matchContents colorScheme={dark ? "dark" : "light"}>
         <DatePicker
@@ -220,13 +224,14 @@ function TimeRow({ hour, minute, onChange }: { hour: number; minute: number; onC
 
 function CustomCronRow({ value, invalid, onChange }: { value: string; invalid: boolean; onChange: (cron: string) => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <View style={styles.stackedRow}>
       <T variant="footnote" muted>
-        Cron expression (minute hour day month weekday)
+        {t("cronBuilder.cronHint")}
       </T>
       <TextInput
-        accessibilityLabel="Cron expression"
+        accessibilityLabel={t("cronBuilder.cronLabel")}
         value={value}
         onChangeText={onChange}
         placeholder="0 9 * * 1-5"
@@ -251,7 +256,7 @@ function CustomCronRow({ value, invalid, onChange }: { value: string; invalid: b
               <T variant="caption" muted style={{ fontFamily: fonts.mono }}>
                 {ex.cron}
               </T>
-              {` · ${ex.label}`}
+              {` · ${t(ex.labelKey)}`}
             </T>
           </Pressable>
         ))}
@@ -263,6 +268,7 @@ function CustomCronRow({ value, invalid, onChange }: { value: string; invalid: b
 /** "Random start time": the run begins somewhere in a window after the scheduled time, 0 = on time (desktop: start-window-field.tsx). */
 export function StartWindowField({ cron, timezone, value, onChange }: { cron: string; timezone: string; value: number; onChange: (minutes: number) => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const [initial] = useState(value);
   const [remembered, setRemembered] = useState(value || 60);
   const on = value > 0;
@@ -272,15 +278,15 @@ export function StartWindowField({ cron, timezone, value, onChange }: { cron: st
   return (
     <Group>
       <SwitchRow
-        title="Random start time"
-        detail="Starts at a different moment every time — like a coworker who doesn't clock in on the dot."
+        title={t("cronBuilder.randomStart")}
+        detail={t("cronBuilder.randomStartHint")}
         value={on}
         onChange={(v) => onChange(v ? Math.min(remembered, max) : 0)}
       />
       {on ? (
         <View style={styles.stackedRow}>
           <T variant="footnote" muted>
-            Start within
+            {t("cronBuilder.startWithin")}
           </T>
           <View style={styles.examples}>
             {options.map((m) => {
@@ -299,7 +305,7 @@ export function StartWindowField({ cron, timezone, value, onChange }: { cron: st
                   style={[styles.chip, { backgroundColor: active ? c.primary : c.sunken }]}
                 >
                   <T variant="footnote" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600", fontVariant: ["tabular-nums"] }}>
-                    {formatMinutes(m)}
+                    {formatMinutes(m, currentLanguage())}
                   </T>
                 </Pressable>
               );

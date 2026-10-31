@@ -14,7 +14,7 @@ export const DEFAULT_SETTINGS: Settings = {
     launchAtLogin: false,
     minimizeToTray: true,
     desktopNotifications: true,
-    language: "en",
+    language: "system",
   },
   runner: {
     claudePath: "",

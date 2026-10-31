@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Boxes, ChevronDown, FlaskConical, Heading, KeyRound, MoreHorizontal, Pencil, Plus, Server, Trash2, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { McpServer } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ export function useMcpServers() {
 
 /** Custom (and Composio-managed) MCP servers with enable/test/edit/delete. */
 export function McpServersTab() {
+  const { t } = useTranslation(["integrations", "common"]);
   const qc = useQueryClient();
   const servers = useMcpServers();
   const [dialog, setDialog] = useState<McpDialogState>(null);
@@ -52,9 +54,9 @@ export function McpServersTab() {
     },
     onError: (e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.mcpServers, ctx.prev);
-      toastApiError(e, "Couldn't update the server", qc);
+      toastApiError(e, t("mcp.updateFailed"), qc);
     },
-    onSuccess: (s) => toast.success(s.enabled ? `${s.name} enabled` : `${s.name} disabled`),
+    onSuccess: (s) => toast.success(s.enabled ? t("mcp.enabledToast", { name: s.name }) : t("mcp.disabledToast", { name: s.name })),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mcpServers }),
   });
 
@@ -68,9 +70,9 @@ export function McpServersTab() {
     },
     onError: (e, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.mcpServers, ctx.prev);
-      toastApiError(e, "Couldn't delete the server", qc);
+      toastApiError(e, t("mcp.deleteFailed"), qc);
     },
-    onSuccess: () => toast.success("Server removed"),
+    onSuccess: () => toast.success(t("mcp.removed")),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.mcpServers });
       void qc.invalidateQueries({ queryKey: qk.agents });
@@ -87,44 +89,44 @@ export function McpServersTab() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-            <Server className="size-4 text-muted-foreground" /> MCP servers
+            <Server className="size-4 text-muted-foreground" /> {t("tabs.mcp")}
           </h2>
           <p className="mt-0.5 max-w-xl text-xs text-muted-foreground">
-            Any Model Context Protocol server — local commands or remote endpoints. Scope them globally, to a workspace, or to one agent.
+            {t("mcp.description")}
           </p>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
-                <Zap /> Quick add <ChevronDown className="opacity-60" />
+                <Zap /> {t("mcp.quickAdd")} <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Popular servers</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">{t("mcp.popular")}</DropdownMenuLabel>
               {MCP_PRESETS.map((p) => (
                 <DropdownMenuItem key={p.id} onClick={() => openPreset(p)} className="items-start gap-2.5 py-2">
                   <p.icon className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{p.name}</span>
-                    <span className="block text-xs text-muted-foreground">{p.description}</span>
+                    <span className="block text-xs text-muted-foreground">{t(p.description)}</span>
                   </span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => openPreset(null)}>
-                <Plus /> Custom server…
+                <Plus /> {t("mcp.customServer")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button onClick={() => openPreset(null)}>
-            <Plus /> Add server
+            <Plus /> {t("mcpDialog.addServer")}
           </Button>
         </div>
       </div>
 
       {servers.isError ? (
-        <QueryError error={servers.error} onRetry={() => servers.refetch()} title="Couldn't load MCP servers" />
+        <QueryError error={servers.error} onRetry={() => servers.refetch()} title={t("mcp.loadError")} />
       ) : servers.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -135,8 +137,8 @@ export function McpServersTab() {
         <div className="space-y-5">
           <EmptyState
             icon={<Server />}
-            title="No MCP servers yet"
-            description="Add a server to give agents new abilities — a database, your file system, an internal API. Start with one of these:"
+            title={t("mcp.emptyTitle")}
+            description={t("mcp.emptyDescription")}
           />
           <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
             {MCP_PRESETS.map((p, i) => (
@@ -154,7 +156,7 @@ export function McpServersTab() {
                 </span>
                 <span className="min-w-0">
                   <span className="block font-mono text-sm font-medium">{p.name}</span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{p.description}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{t(p.description)}</span>
                 </span>
               </motion.button>
             ))}
@@ -174,7 +176,7 @@ export function McpServersTab() {
           {managed.length > 0 && (
             <div className="space-y-2">
               <h3 className="eyebrow flex items-center gap-1.5">
-                <Boxes className="size-3.5" /> Managed by Composio
+                <Boxes className="size-3.5" /> {t("mcp.managedByComposio")}
               </h3>
               <ServerList servers={managed} onToggle={(s, enabled) => toggle.mutate({ id: s.id, enabled })} onTest={setTesting} onDelete={setDeleting} />
             </div>
@@ -187,9 +189,9 @@ export function McpServersTab() {
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Remove ${deleting?.name ?? "server"}?`}
-        description="Agents lose these tools from their next run. Stored environment variables and headers are deleted from the vault."
-        confirmLabel="Remove"
+        title={deleting ? t("mcp.removeTitle", { name: deleting.name }) : t("mcp.removeServerTitle")}
+        description={t("mcp.removeDescription")}
+        confirmLabel={t("common:actions.remove")}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
     </div>
@@ -241,7 +243,8 @@ function ServerRow({
   onEdit?: () => void;
   onDelete: () => void;
 }) {
-  const t = transportMeta(s.transport);
+  const { t } = useTranslation(["integrations", "common"]);
+  const meta = transportMeta(s.transport);
   const composio = s.source === "composio";
   const target = s.transport === "stdio" ? [s.command, formatArgs(s.args)].filter(Boolean).join(" ") : s.url;
   return (
@@ -257,13 +260,13 @@ function ServerRow({
           composio ? "bg-card text-foreground shadow-card" : "bg-paper-2 text-foreground",
         )}
       >
-        {composio ? <Boxes className="size-5" /> : <t.icon className="size-5" />}
+        {composio ? <Boxes className="size-5" /> : <meta.icon className="size-5" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate font-mono text-sm font-medium">{s.name}</span>
           <Badge variant="outline" className="h-5 gap-1 text-[10px] font-normal">
-            <t.icon /> {s.transport}
+            <meta.icon /> {s.transport}
           </Badge>
           {composio && <Badge variant="secondary" className="h-5 text-[10px]">Composio</Badge>}
         </div>
@@ -291,7 +294,7 @@ function ServerRow({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex items-center gap-1">
-                  <KeyRound className="size-3" /> {s.envKeys.length} env
+                  <KeyRound className="size-3" /> {t("mcp.envCount", { n: s.envKeys.length })}
                 </span>
               </TooltipTrigger>
               <TooltipContent className="font-mono text-[11px]">{s.envKeys.join(", ")}</TooltipContent>
@@ -301,7 +304,7 @@ function ServerRow({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-flex items-center gap-1">
-                  <Heading className="size-3" /> {s.headerKeys.length} header{s.headerKeys.length === 1 ? "" : "s"}
+                  <Heading className="size-3" /> {t("mcp.headerCount", { count: s.headerKeys.length })}
                 </span>
               </TooltipTrigger>
               <TooltipContent className="font-mono text-[11px]">{s.headerKeys.join(", ")}</TooltipContent>
@@ -313,33 +316,33 @@ function ServerRow({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="mr-1 inline-flex">
-              <Switch checked={s.enabled} onCheckedChange={onToggle} aria-label={`${s.enabled ? "Disable" : "Enable"} ${s.name}`} />
+              <Switch checked={s.enabled} onCheckedChange={onToggle} aria-label={s.enabled ? t("mcp.disableAria", { name: s.name }) : t("mcp.enableAria", { name: s.name })} />
             </span>
           </TooltipTrigger>
-          <TooltipContent>{s.enabled ? "Enabled" : "Disabled"}</TooltipContent>
+          <TooltipContent>{s.enabled ? t("mcpDialog.enabled") : t("mcp.disabled")}</TooltipContent>
         </Tooltip>
-        <Button size="sm" variant="ghost" onClick={onTest} aria-label={`Test ${s.name}`}>
-          <FlaskConical /> <span className="hidden @xl:inline">Test</span>
+        <Button size="sm" variant="ghost" onClick={onTest} aria-label={t("mcpTest.title", { name: s.name })}>
+          <FlaskConical /> <span className="hidden @xl:inline">{t("mcp.test")}</span>
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${s.name}`}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("mcp.moreActionsAria", { name: s.name })}>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {onEdit ? (
               <DropdownMenuItem onClick={onEdit}>
-                <Pencil /> Edit
+                <Pencil /> {t("common:actions.edit")}
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem disabled>
-                <Pencil /> Managed by Composio
+                <Pencil /> {t("mcp.managedByComposio")}
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 /> Remove
+              <Trash2 /> {t("common:actions.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

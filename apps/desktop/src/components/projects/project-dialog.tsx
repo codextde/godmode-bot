@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ArrowRight, Globe, Layers, Trash2 } from "lucide-react";
 import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Project, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
@@ -25,7 +26,6 @@ import { useUi } from "@/stores/ui";
 
 const MAX_NAME = 60;
 const WORKSPACE_DEFAULT = "__workspace";
-const CONTEXT_EXAMPLE = "Shopware 6 to Shopify Plus migration for ACME.\nStaging store: acme-staging.myshopify.com\nNever publish the live theme.";
 
 interface ProjectForm {
   name: string;
@@ -66,6 +66,7 @@ export function ProjectDialog({
   /** Edit this project; omitted = create one in `workspace`. */
   project?: Project | null;
 }) {
+  const { t } = useTranslation(["projects", "common"]);
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
   const scope = useUi((s) => s.workspace);
@@ -98,22 +99,22 @@ export function ProjectDialog({
       const input = { name: name.trim(), icon, color, description: description.trim(), instructions: instructions.trim(), browserProfileId, sources };
       if (!project) return api.projects.create({ ...input, workspaceId: workspace.id });
       // Asked for only when an agent wrote the project's context: its runs read secrets again once the human saved it.
-      return withGrant((grant) => api.projects.update(project.id, input, grant), `Confirm to let runs in ${project.name}, whose context an agent wrote, read secrets again.`);
+      return withGrant((grant) => api.projects.update(project.id, input, grant), t("dialog.grantReason", { name: project.name }));
     },
     onSuccess: (saved, key) => {
       const created = key === newKey;
       clearDraft(key);
       if (created) newLook.current = true;
       void qc.invalidateQueries({ queryKey: qk.workspaces });
-      if (!created) toast.success("Project updated");
+      if (!created) toast.success(t("dialog.updated"));
       else
-        toast.success(`${saved.icon} ${saved.name} created`, {
-          description: `A project in ${workspace.name}. Chats and tickets in it get its context and folders.`,
-          action: { label: "Switch to it", onClick: () => setScope(workspace.id, saved.id) },
+        toast.success(t("dialog.created", { icon: saved.icon, name: saved.name }), {
+          description: t("dialog.createdDescription", { workspace: workspace.name }),
+          action: { label: t("dialog.switchTo"), onClick: () => setScope(workspace.id, saved.id) },
         });
       onOpenChange(false);
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, editing ? "Could not update the project" : "Could not create the project", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, editing ? t("dialog.updateFailed") : t("dialog.createFailed"), qc),
   });
 
   const remove = useMutation({
@@ -123,10 +124,10 @@ export function ProjectDialog({
       if (scope === workspace.id && scopedProject === project!.id) setScope(workspace.id);
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      toast.success(`${project!.name} deleted`, { description: `Its chats, tickets and agents stay in ${workspace.name}.` });
+      toast.success(t("dialog.deleted", { name: project!.name }), { description: t("dialog.deletedDescription", { workspace: workspace.name }) });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Could not delete the project", qc),
+    onError: (e) => toastApiError(e, t("dialog.deleteFailed"), qc),
   });
 
   const submit = (e: FormEvent) => {
@@ -149,47 +150,45 @@ export function ProjectDialog({
                 <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" className="size-4.5 rounded text-[10px]" />
                 <span className="truncate">{workspace.name}</span>
                 <span className="opacity-40">/</span>
-                <span>{editing ? "Project" : "New project"}</span>
+                <span>{editing ? t("chip.project") : t("dialog.newTitle")}</span>
               </div>
-              <DialogTitle className="mt-1">{editing ? "Edit project" : "New project"}</DialogTitle>
-              <DialogDescription>
-                Projects are optional. Each one brings its own context, folders, repositories and browser on top of {workspace.name}'s.
-              </DialogDescription>
+              <DialogTitle className="mt-1">{editing ? t("dialog.editTitle") : t("dialog.newTitle")}</DialogTitle>
+              <DialogDescription>{t("dialog.description", { workspace: workspace.name })}</DialogDescription>
             </DialogHeader>
             <div className="mt-5 flex items-center gap-4">
               <IconPicker icon={icon} color={color} onChange={set("icon")} size="lg" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || "Untitled project"}</p>
-                <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || "Click the icon to change it"}</p>
+                <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || t("dialog.untitled")}</p>
+                <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || t("dialog.clickIcon")}</p>
               </div>
             </div>
           </div>
 
           <div className="max-h-[min(36rem,calc(100dvh-18rem))] space-y-5 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
-              <Label htmlFor="project-name">Name</Label>
+              <Label htmlFor="project-name">{t("common:words.name")}</Label>
               <Input
                 id="project-name"
                 autoFocus
                 required
                 maxLength={MAX_NAME}
-                placeholder="e.g. Shop relaunch, Phone support, Website"
+                placeholder={t("dialog.namePlaceholder")}
                 value={name}
                 onChange={(e) => set("name")(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label id="project-color-label">Color</Label>
+              <Label id="project-color-label">{t("dialog.color")}</Label>
               <ColorRadios value={color} onChange={set("color")} labelledBy="project-color-label" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="project-desc">
-                Description <span className="font-normal text-muted-foreground">(optional)</span>
+                {t("common:words.description")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
               </Label>
               <Textarea
                 id="project-desc"
                 rows={2}
-                placeholder="What is this project about? Agents see it as context."
+                placeholder={t("dialog.descriptionPlaceholder")}
                 value={description}
                 onChange={(e) => set("description")(e.target.value)}
               />
@@ -197,15 +196,15 @@ export function ProjectDialog({
             <div className="space-y-2">
               <div className="space-y-0.5">
                 <Label htmlFor="project-instructions">
-                  Agent context <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("dialog.agentContext")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
                 </Label>
-                <p className="text-xs text-muted-foreground">Given on every run in this project, after the workspace's context.</p>
+                <p className="text-xs text-muted-foreground">{t("dialog.agentContextHint")}</p>
               </div>
               <Textarea
                 id="project-instructions"
                 rows={5}
                 maxLength={MAX_INSTRUCTIONS_LENGTH}
-                placeholder={CONTEXT_EXAMPLE}
+                placeholder={t("dialog.contextExample")}
                 value={instructions}
                 onChange={(e) => set("instructions")(e.target.value)}
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
@@ -214,10 +213,10 @@ export function ProjectDialog({
             <div className="space-y-2">
               <div className="space-y-0.5">
                 <Label>
-                  Folders &amp; repositories <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("dialog.sources")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Added to every run in this project, next to the workspace's. A ticket's worktree comes from the project's first repository.
+                  {t("dialog.sourcesHint")}
                 </p>
               </div>
               <WorkspaceSourcesField workspaceId={workspace.id} projectId={project?.id ?? null} value={sources} onChange={set("sources")} />
@@ -228,16 +227,16 @@ export function ProjectDialog({
           <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4">
             {editing && (
               <Button type="button" variant="ghost" className="mr-auto text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-                <Trash2 /> Delete
+                <Trash2 /> {t("common:actions.delete")}
               </Button>
             )}
             {kept.saved && <DraftStatus onDiscard={kept.discard} className={editing ? undefined : "mr-auto"} />}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || save.isPending}>
               {save.isPending && <Spinner />}
-              {editing ? "Save changes" : "Create project"}
+              {editing ? t("dialog.saveChanges") : t("dialog.create")}
             </Button>
           </DialogFooter>
         </form>
@@ -246,9 +245,9 @@ export function ProjectDialog({
         <ConfirmDialog
           open={confirmDelete}
           onOpenChange={setConfirmDelete}
-          title={`Delete ${project.name}?`}
-          description={`Its chats, tickets and agents stay in ${workspace.name} without a project. Its cloned repositories move to the trash; your own folders are not touched.`}
-          confirmLabel="Delete project"
+          title={t("dialog.deleteTitle", { name: project.name })}
+          description={t("dialog.deleteDescription", { workspace: workspace.name })}
+          confirmLabel={t("dialog.deleteConfirm")}
           onConfirm={() => remove.mutate()}
         />
       )}
@@ -258,6 +257,7 @@ export function ProjectDialog({
 
 /** A global browser profile or one of the workspace's; none = the workspace's default. Nothing moves. */
 function ProjectProfileField({ workspace, value, onChange }: { workspace: Workspace; value: string | null; onChange: (id: string | null) => void }) {
+  const { t } = useTranslation("projects");
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, retry: false });
   if (!profiles) return null;
   const own = profiles.filter((p) => p.workspaceId === workspace.id);
@@ -267,9 +267,9 @@ function ProjectProfileField({ workspace, value, onChange }: { workspace: Worksp
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <Label htmlFor="project-browser">Browser profile</Label>
+        <Label htmlFor="project-browser">{t("profile.label")}</Label>
         <Link to="/browser" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          Manage profiles <ArrowRight className="size-3" />
+          {t("profile.manage")} <ArrowRight className="size-3" />
         </Link>
       </div>
       <Select value={value ?? WORKSPACE_DEFAULT} onValueChange={(v) => onChange(v === WORKSPACE_DEFAULT ? null : v)}>
@@ -279,7 +279,7 @@ function ProjectProfileField({ workspace, value, onChange }: { workspace: Worksp
         <SelectContent position="popper">
           <SelectItem value={WORKSPACE_DEFAULT}>
             <Layers className="size-4" />
-            Workspace default
+            {t("profile.workspaceDefault")}
             {fallback && <span className="text-xs text-muted-foreground">{fallback.name}</span>}
           </SelectItem>
           {own.length > 0 && (
@@ -300,7 +300,7 @@ function ProjectProfileField({ workspace, value, onChange }: { workspace: Worksp
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel>Global</SelectLabel>
+                <SelectLabel>{t("profile.global")}</SelectLabel>
                 {shared.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     <Globe className="size-4" />
@@ -312,7 +312,7 @@ function ProjectProfileField({ workspace, value, onChange }: { workspace: Worksp
           )}
         </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">Runs in this project browse with this profile, unless the chat or the agent picks its own.</p>
+      <p className="text-xs text-muted-foreground">{t("profile.hint")}</p>
     </div>
   );
 }

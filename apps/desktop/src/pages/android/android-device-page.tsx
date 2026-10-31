@@ -1,5 +1,6 @@
 import { useCallback, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -33,6 +34,7 @@ import { AndroidStateBadge, BatteryPill, CONNECTION_LABEL } from "@/components/a
 import { PhoneScreen } from "@/components/android/phone-screen";
 import { UsedBy } from "@/components/android/used-by";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t as translate } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
@@ -43,7 +45,7 @@ function useSend(device: AndroidDevice | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (event: AndroidInputEvent) => api.android.input(device!.id, { event }),
-    onError: (e) => toastApiError(e, "The phone didn't take that", qc),
+    onError: (e) => toastApiError(e, translate("android:device.sendFailed"), qc),
   });
 }
 
@@ -56,16 +58,16 @@ function Section({ title, children, className }: { title: string; children: Reac
   );
 }
 
-const BUTTONS: { key: AndroidKey; label: string; icon: ReactNode }[] = [
-  { key: "power", label: "Power", icon: <Power /> },
-  { key: "volume_down", label: "Volume down", icon: <Volume1 /> },
-  { key: "volume_up", label: "Volume up", icon: <Volume2 /> },
-  { key: "mute", label: "Mute", icon: <VolumeX /> },
-  { key: "wake", label: "Wake the screen", icon: <Sun /> },
-  { key: "sleep", label: "Turn the screen off", icon: <Moon /> },
-  { key: "notifications", label: "Notifications", icon: <Bell /> },
-  { key: "quick_settings", label: "Quick settings", icon: <Settings2 /> },
-];
+const BUTTONS = [
+  { key: "power", labelKey: "device.buttons.power", icon: <Power /> },
+  { key: "volume_down", labelKey: "device.buttons.volumeDown", icon: <Volume1 /> },
+  { key: "volume_up", labelKey: "device.buttons.volumeUp", icon: <Volume2 /> },
+  { key: "mute", labelKey: "device.buttons.mute", icon: <VolumeX /> },
+  { key: "wake", labelKey: "device.buttons.wake", icon: <Sun /> },
+  { key: "sleep", labelKey: "device.buttons.sleep", icon: <Moon /> },
+  { key: "notifications", labelKey: "device.buttons.notifications", icon: <Bell /> },
+  { key: "quick_settings", labelKey: "device.buttons.quickSettings", icon: <Settings2 /> },
+] as const satisfies readonly { key: AndroidKey; labelKey: string; icon: ReactNode }[];
 
 function NavButton({ label, onClick, children, disabled }: { label: string; onClick: () => void; children: ReactNode; disabled?: boolean }) {
   return (
@@ -81,6 +83,7 @@ function NavButton({ label, onClick, children, disabled }: { label: string; onCl
 }
 
 function TypePanel({ device }: { device: AndroidDevice }) {
+  const { t } = useTranslation("android");
   const send = useSend(device);
   const [text, setText] = useState("");
   const submit = async (e: FormEvent, enter: boolean) => {
@@ -94,29 +97,30 @@ function TypePanel({ device }: { device: AndroidDevice }) {
   return (
     <form onSubmit={(e) => void submit(e, false)} className="grid gap-2">
       <div className="flex gap-1.5">
-        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Text for the focused field" disabled={device.state !== "connected"} aria-label="Text to type on the phone" />
+        <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={t("device.typePlaceholder")} disabled={device.state !== "connected"} aria-label={t("device.typeAria")} />
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button type="button" variant="outline" size="icon" aria-label="Type and press Enter" disabled={!text || !ascii || send.isPending} onClick={(e) => void submit(e, true)}>
+            <Button type="button" variant="outline" size="icon" aria-label={t("device.typeEnter")} disabled={!text || !ascii || send.isPending} onClick={(e) => void submit(e, true)}>
               <CornerDownLeft />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Type and press Enter</TooltipContent>
+          <TooltipContent>{t("device.typeEnter")}</TooltipContent>
         </Tooltip>
       </div>
-      {!ascii && <p className="text-[11px] text-destructive">adb types plain ASCII only. Use the phone's keyboard for ä, é or emoji.</p>}
+      {!ascii && <p className="text-[11px] text-destructive">{t("device.asciiOnly")}</p>}
     </form>
   );
 }
 
 function CommandPanel({ device }: { device: AndroidDevice }) {
+  const { t } = useTranslation("android");
   const qc = useQueryClient();
   const [command, setCommand] = useState("");
   const [result, setResult] = useState<(AndroidExecResult & { command: string }) | null>(null);
   const run = useMutation({
     mutationFn: (cmd: string) => api.android.exec(device.id, { command: cmd }),
     onSuccess: (res, cmd) => setResult({ ...res, command: cmd }),
-    onError: (e) => toastApiError(e, "The command didn't run", qc),
+    onError: (e) => toastApiError(e, t("device.commandFailed"), qc),
   });
   return (
     <div className="grid gap-2">
@@ -134,9 +138,9 @@ function CommandPanel({ device }: { device: AndroidDevice }) {
           className="font-mono text-xs"
           spellCheck={false}
           disabled={device.state !== "connected"}
-          aria-label="Shell command"
+          aria-label={t("device.commandAria")}
         />
-        <Button type="submit" variant="outline" size="icon" aria-label="Run" disabled={!command.trim() || run.isPending}>
+        <Button type="submit" variant="outline" size="icon" aria-label={t("device.run")} disabled={!command.trim() || run.isPending}>
           {run.isPending ? <Spinner className="size-4" /> : <Terminal />}
         </Button>
       </form>
@@ -144,7 +148,7 @@ function CommandPanel({ device }: { device: AndroidDevice }) {
         <div className="overflow-hidden rounded-lg border bg-[#141414] text-[11.5px] leading-relaxed text-white/85">
           <div className="flex items-center justify-between border-b border-white/10 px-2.5 py-1.5 font-mono text-[10.5px] text-white/50">
             <span className="truncate">$ {result.command}</span>
-            <span className={cn("shrink-0", result.exitCode === 0 ? "text-emerald-400" : "text-red-400")}>{result.timedOut ? "timed out" : `exit ${result.exitCode}`}</span>
+            <span className={cn("shrink-0", result.exitCode === 0 ? "text-emerald-400" : "text-red-400")}>{result.timedOut ? t("device.timedOut") : `exit ${result.exitCode}`}</span>
           </div>
           <pre className="max-h-64 overflow-auto px-2.5 py-2 font-mono break-words whitespace-pre-wrap">
             {result.stdout || result.stderr ? (
@@ -153,7 +157,7 @@ function CommandPanel({ device }: { device: AndroidDevice }) {
                 {result.stderr && <span className="text-red-300">{result.stderr}</span>}
               </>
             ) : (
-              <span className="text-white/40">(no output)</span>
+              <span className="text-white/40">{t("device.noOutput")}</span>
             )}
           </pre>
         </div>
@@ -163,11 +167,12 @@ function CommandPanel({ device }: { device: AndroidDevice }) {
 }
 
 function About({ device }: { device: AndroidDevice }) {
+  const { t } = useTranslation(["android", "common"]);
   const rows: [string, ReactNode][] = [
-    ["Phone", androidSummary(device)],
-    ["Connection", device.connection ? CONNECTION_LABEL[device.connection] : "Not connected"],
-    ["Screen", device.width && device.height ? `${device.width} × ${device.height}` : "Unknown"],
-    ["Serial", <span className="font-mono text-[11px]">{device.serial.replace(/^avd:/, "")}</span>],
+    [t("device.about.phone"), androidSummary(device)],
+    [t("device.about.connection"), device.connection ? CONNECTION_LABEL[device.connection] : t("state.disconnected")],
+    [t("device.about.screen"), device.width && device.height ? `${device.width} × ${device.height}` : t("common:status.unknown")],
+    [t("device.about.serial"), <span className="font-mono text-[11px]">{device.serial.replace(/^avd:/, "")}</span>],
   ];
   return (
     <dl className="grid grid-cols-[5.5rem_1fr] gap-x-3 gap-y-1.5 text-xs">
@@ -183,6 +188,7 @@ function About({ device }: { device: AndroidDevice }) {
 
 /** One phone, full size and under the human's control. */
 export default function AndroidDevicePage() {
+  const { t } = useTranslation(["android", "common"]);
   const { id } = useParams();
   const list = useAndroidDevices();
   const device = list.data?.find((d) => d.id === id);
@@ -204,12 +210,12 @@ export default function AndroidDevicePage() {
       <div className="p-8">
         <EmptyState
           icon={<Smartphone />}
-          title={list.isError ? "Couldn't load the phone" : "This phone isn't known anymore"}
-          description={list.isError ? errorMessage(list.error) : "It may have been forgotten. Plug it in again and it shows up as a new phone."}
+          title={list.isError ? t("device.loadError") : t("device.unknown")}
+          description={list.isError ? errorMessage(list.error) : t("device.unknownDescription")}
           action={
             <Button asChild variant="outline">
               <Link to="/settings/android">
-                <ArrowLeft /> All phones
+                <ArrowLeft /> {t("device.allPhones")}
               </Link>
             </Button>
           }
@@ -223,7 +229,7 @@ export default function AndroidDevicePage() {
     <div className="flex h-full min-h-0 flex-col">
       <header className={cn("flex h-14 shrink-0 items-center gap-3 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
         <Button asChild variant="ghost" size="icon-sm" className="text-muted-foreground">
-          <Link to="/settings/android" aria-label="All phones">
+          <Link to="/settings/android" aria-label={t("device.allPhones")}>
             <ArrowLeft />
           </Link>
         </Button>
@@ -238,14 +244,14 @@ export default function AndroidDevicePage() {
               )}
             >
               <LiveDot live={live} />
-              {live ? "Live" : "Waiting"}
+              {live ? t("panel.live") : t("panel.waiting")}
             </span>
           )}
         </div>
         <div className="ml-auto flex items-center gap-3">
           <BatteryPill battery={connected ? device.battery : null} />
           <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setEditing(true)}>
-            <Pencil /> Rename
+            <Pencil /> {t("common:actions.rename")}
           </Button>
         </div>
       </header>
@@ -256,47 +262,47 @@ export default function AndroidDevicePage() {
             <PhoneScreen device={device} interactive onLive={onLive} className="h-full max-h-[920px]" />
           </div>
           <div className="flex shrink-0 items-center gap-6 rounded-full border bg-card px-4 py-1 shadow-card">
-            <NavButton label="Back" onClick={() => press("back")} disabled={!connected}>
+            <NavButton label={t("device.nav.back")} onClick={() => press("back")} disabled={!connected}>
               <ChevronLeft />
             </NavButton>
-            <NavButton label="Home" onClick={() => press("home")} disabled={!connected}>
+            <NavButton label={t("device.nav.home")} onClick={() => press("home")} disabled={!connected}>
               <Circle />
             </NavButton>
-            <NavButton label="Recent apps" onClick={() => press("recents")} disabled={!connected}>
+            <NavButton label={t("device.nav.recents")} onClick={() => press("recents")} disabled={!connected}>
               <Square />
             </NavButton>
           </div>
           <p className="shrink-0 text-center text-[11px] text-muted-foreground">
-            Click to tap · drag to swipe · hold to long-press · scroll to swipe · right click or <Kbd>Esc</Kbd> for back · type to enter text
+            <Trans t={t} i18nKey="device.hint" components={{ kbd: <Kbd /> }} />
           </p>
         </main>
 
-        <aside aria-label="Phone controls" className="w-80 shrink-0 overflow-y-auto border-l bg-background">
-          <Section title="Buttons">
+        <aside aria-label={t("device.controls")} className="w-80 shrink-0 overflow-y-auto border-l bg-background">
+          <Section title={t("device.sections.buttons")}>
             <div className="grid grid-cols-4 gap-1.5">
               {BUTTONS.map((b) => (
                 <Tooltip key={b.key}>
                   <TooltipTrigger asChild>
-                    <Button variant="outline" size="icon" aria-label={b.label} disabled={!connected} onClick={() => press(b.key)} className="h-9 w-full">
+                    <Button variant="outline" size="icon" aria-label={t(b.labelKey)} disabled={!connected} onClick={() => press(b.key)} className="h-9 w-full">
                       {b.icon}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{b.label}</TooltipContent>
+                  <TooltipContent>{t(b.labelKey)}</TooltipContent>
                 </Tooltip>
               ))}
             </div>
           </Section>
-          <Section title="Type">
+          <Section title={t("device.sections.type")}>
             <TypePanel device={device} />
           </Section>
-          <Section title="Run a command">
+          <Section title={t("device.sections.command")}>
             <CommandPanel device={device} />
           </Section>
-          <Section title="Agents">
+          <Section title={t("common:words.agents")}>
             <UsedBy device={device} />
             {device.description && <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{device.description}</p>}
           </Section>
-          <Section title="About" className="border-b-0">
+          <Section title={t("device.sections.about")} className="border-b-0">
             <About device={device} />
           </Section>
         </aside>

@@ -1,9 +1,11 @@
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { SshServer } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { dateLocale, t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export type SshStatus = "connected" | "failing" | "untested";
@@ -37,10 +39,10 @@ export function shortFingerprint(fingerprint: string, length = 18): string {
 /** "just now", "5 min ago", "3 h ago", then "4 days ago". */
 export function timeAgo(iso: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 45) return "just now";
-  if (seconds < 3600) return `${Math.max(1, Math.round(seconds / 60))} min ago`;
-  if (seconds < 86_400) return `${Math.round(seconds / 3600)} h ago`;
-  return formatDistanceToNowStrict(new Date(iso), { addSuffix: true });
+  if (seconds < 45) return t("ssh:time.justNow");
+  if (seconds < 3600) return t("ssh:time.minutesAgo", { n: Math.max(1, Math.round(seconds / 60)) });
+  if (seconds < 86_400) return t("ssh:time.hoursAgo", { n: Math.round(seconds / 3600) });
+  return formatDistanceToNowStrict(new Date(iso), { addSuffix: true, locale: dateLocale() });
 }
 
 /** `user@host:port`, `ssh -p 2222 user@host` or `host:port` pasted into the host field. */
@@ -66,9 +68,15 @@ export function SshStatusDot({ server, className }: { server: Pick<SshServer, "l
 }
 
 export const SSH_STATUS_LABEL: Record<SshStatus, string> = {
-  connected: "Connected",
-  failing: "Can't connect",
-  untested: "Not tested yet",
+  get connected() {
+    return t("ssh:status.connected");
+  },
+  get failing() {
+    return t("ssh:status.failing");
+  },
+  get untested() {
+    return t("ssh:status.untested");
+  },
 };
 
 const BADGE: Record<SshStatus | "testing", string> = {
@@ -79,6 +87,7 @@ const BADGE: Record<SshStatus | "testing", string> = {
 };
 
 export function SshStatusBadge({ server, testing, className }: { server: SshServer; testing?: boolean; className?: string }) {
+  const { t } = useTranslation("ssh");
   const status = sshStatus(server);
   const badge = (
     <span
@@ -91,21 +100,21 @@ export function SshStatusBadge({ server, testing, className }: { server: SshServ
     >
       {testing ? (
         <>
-          <Spinner className="size-3" aria-hidden /> Testing…
+          <Spinner className="size-3" aria-hidden /> {t("status.testing")}
         </>
       ) : status === "connected" ? (
         <>
           <LiveDot live={false} className="size-1.5 bg-brand" />
-          {SSH_STATUS_LABEL.connected}
+          {t("status.connected")}
           <span className="font-normal opacity-75">· {timeAgo(server.lastConnectedAt!)}</span>
         </>
       ) : status === "failing" ? (
         <>
-          <TriangleAlert aria-hidden /> {SSH_STATUS_LABEL.failing}
+          <TriangleAlert aria-hidden /> {t("status.failing")}
         </>
       ) : (
         <>
-          <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" /> {SSH_STATUS_LABEL.untested}
+          <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" /> {t("status.untested")}
         </>
       )}
     </span>
@@ -114,7 +123,7 @@ export function SshStatusBadge({ server, testing, className }: { server: SshServ
   return (
     <Tooltip>
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
-      <TooltipContent>Last signed in {format(new Date(server.lastConnectedAt!), "PPp")}</TooltipContent>
+      <TooltipContent>{t("status.lastSignedIn", { date: format(new Date(server.lastConnectedAt!), "PPp", { locale: dateLocale() }) })}</TooltipContent>
     </Tooltip>
   );
 }

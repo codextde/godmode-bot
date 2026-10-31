@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { AppWindow, ArrowRight, Eye, Fingerprint, Globe, Wrench } from "lucide-react";
 import type { Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -8,55 +9,53 @@ import { CaptchaSolving } from "./captcha-solving";
 import { CommitInput, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 export function BrowserSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch } = useSettingsPatch();
   const b = settings.browser;
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Browser"
-        description="Agents browse the web in a Godmode-managed Chromium (via browser-use), logged in with sessions you import from Chrome."
-      />
+      <SectionHeading title={t("browser.title")} description={t("browser.description")} />
 
       <SettingsGroup
-        title="Web browsing"
+        title={t("browser.web.title")}
         icon={<Globe />}
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link to="/browser">
-              Profiles & live view <ArrowRight />
+              {t("browser.web.profiles")} <ArrowRight />
             </Link>
           </Button>
         }
       >
-        <SettingRow label="Enable browser for agents" htmlFor="browser-enabled" description="When off, agents can't open websites — API tools and integrations still work.">
+        <SettingRow label={t("browser.web.enabled")} htmlFor="browser-enabled" description={t("browser.web.enabledDescription")}>
           <Switch id="browser-enabled" checked={b.enabled} onCheckedChange={(enabled) => patch({ browser: { enabled } })} />
         </SettingRow>
         <SettingRow
-          label="Run headless by default"
+          label={t("browser.web.headless")}
           htmlFor="headless"
           disabled={!b.enabled}
-          description="No visible window. You can still watch and take over from the live view. Agents can override this."
+          description={t("browser.web.headlessDescription")}
         >
           <Switch id="headless" checked={b.headless} disabled={!b.enabled} onCheckedChange={(headless) => patch({ browser: { headless } })} />
         </SettingRow>
         <SettingRow
-          label="Mute audio"
+          label={t("browser.web.mute")}
           htmlFor="mute-audio"
           disabled={!b.enabled}
-          description="Videos and sounds on pages agents open stay silent. Applies the next time a browser starts."
+          description={t("browser.web.muteDescription")}
         >
           <Switch id="mute-audio" checked={b.muteAudio} disabled={!b.enabled} onCheckedChange={(muteAudio) => patch({ browser: { muteAudio } })} />
         </SettingRow>
         <SettingRow
-          label="Passkeys from the vault"
+          label={t("browser.web.passkeys")}
           htmlFor="passkeys"
           disabled={!b.enabled}
           description={
             <>
-              Sites create and use passkeys stored in the vault, so agents sign in without a phone, fingerprint or security key. Off: Chrome's own passkey dialogs.{" "}
+              {t("browser.web.passkeysDescription")}{" "}
               <Link to="/vault/passkeys" className="font-medium text-foreground underline-offset-4 hover:underline">
-                Saved passkeys
+                {t("browser.web.savedPasskeys")}
               </Link>
             </>
           }
@@ -64,16 +63,16 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           <Switch id="passkeys" checked={b.passkeys} disabled={!b.enabled} onCheckedChange={(passkeys) => patch({ browser: { passkeys } })} />
         </SettingRow>
         <SettingRow
-          label="Keep browser alive"
+          label={t("browser.web.keepAlive")}
           htmlFor="keep-alive"
           disabled={!b.enabled}
-          description="A browser only starts when an agent opens a website and closes after this many idle minutes (0 keeps it open). Sessions and cookies are kept either way."
+          description={t("browser.web.keepAliveDescription")}
         >
           <NumberField
             id="keep-alive"
             min={0}
             max={1440}
-            suffix="min"
+            suffix={t("ai.limits.minutes")}
             disabled={!b.enabled}
             value={b.keepAliveMinutes}
             onCommit={(v) => v !== null && patch({ browser: { keepAliveMinutes: v } })}
@@ -82,15 +81,15 @@ export function BrowserSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup
-        title="Bot detection"
+        title={t("browser.bot.title")}
         icon={<Fingerprint />}
-        description="Many sites block browsers that look automated or bury them in CAPTCHAs. Godmode hides the signals they look for."
+        description={t("browser.bot.description")}
       >
         <SettingRow
-          label="Look like a regular browser"
+          label={t("browser.bot.stealth")}
           htmlFor="stealth"
           disabled={!b.enabled}
-          description="Hides the automation flag, and gives a headless browser the user agent and screen of a normal Chrome window. Applies the next time a browser starts."
+          description={t("browser.bot.stealthDescription")}
         >
           <Switch id="stealth" checked={b.stealth} disabled={!b.enabled} onCheckedChange={(stealth) => patch({ browser: { stealth } })} />
         </SettingRow>
@@ -99,33 +98,31 @@ export function BrowserSection({ settings }: { settings: Settings }) {
 
       <CaptchaSolving browser={b} />
 
-      <SettingsGroup title="Live view" icon={<Eye />}>
+      <SettingsGroup title={t("browser.live.title")} icon={<Eye />}>
         <SettingRow
-          label="Stream live view"
+          label={t("browser.live.stream")}
           htmlFor="live-view"
-          description="Watch what agents do in real time and take over to solve a CAPTCHA or log in yourself. Frames are only sent while you're watching."
+          description={t("browser.live.streamDescription")}
         >
           <Switch id="live-view" checked={b.liveView} onCheckedChange={(liveView) => patch({ browser: { liveView } })} />
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Advanced" icon={<Wrench />} description="Leave empty unless auto-detection picks the wrong binary.">
-        <SettingRow label="Chrome / Chromium path" htmlFor="chrome-path" description="Used for the managed browser and for importing your Chrome sessions.">
+      <SettingsGroup title={t("browser.advanced.title")} icon={<Wrench />} description={t("browser.advanced.description")}>
+        <SettingRow label={t("browser.advanced.chromePath")} htmlFor="chrome-path" description={t("browser.advanced.chromePathDescription")}>
           <CommitInput
             id="chrome-path"
             className="w-72 font-mono text-[13px]"
-            placeholder="Auto-detect"
+            placeholder={t("ai.cli.autoDetect")}
             value={b.chromePath}
             onCommit={(chromePath) => patch({ browser: { chromePath: chromePath.trim() } })}
           />
         </SettingRow>
         <SettingRow
-          label="browser-use MCP command"
+          label={t("browser.advanced.command")}
           htmlFor="browser-use-cmd"
           description={
-            <>
-              Custom command for the browser tools server. Default: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">uvx browser-use --mcp</code>
-            </>
+            <Trans t={t} i18nKey="browser.advanced.commandDescription" values={{ command: "uvx browser-use --mcp" }} components={{ code: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]" /> }} />
           }
         >
           <CommitInput
@@ -137,7 +134,7 @@ export function BrowserSection({ settings }: { settings: Settings }) {
           />
         </SettingRow>
         <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
-          <AppWindow className="size-3.5" /> Changes apply the next time a browser profile launches.
+          <AppWindow className="size-3.5" /> {t("browser.advanced.applyNote")}
         </div>
       </SettingsGroup>
     </div>
