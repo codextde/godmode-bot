@@ -661,6 +661,22 @@ describe("every task works in its own worktree", () => {
     expect(existsSync(join(offline, "TASK_CHANGE.md"))).toBe(false);
   });
 
+  test("a repository without commits: other tasks work in the folder without a warning, coding tasks say why they can't", async () => {
+    const fresh = join(tempRoot(), "fresh");
+    mkdirSync(fresh);
+    await git(["init", "-q", "-b", "master"], fresh);
+    const ws = createWorkspace({ name: "Fresh repo", sources: [{ kind: "folder", path: fresh }] }).id;
+    const warnings = () => listNotifications().filter((n) => n.title.includes("without its own worktree")).length;
+    const before = warnings();
+    const task = createTask({ workspaceId: ws, title: "Say hello in a fresh repository", type: "research", agentId: agent.id });
+    await settled(task.id, ["in_review"]);
+    expect(getTask(task.id).worktree).toBeNull();
+    expect(warnings()).toBe(before);
+    const coding = createTask({ workspaceId: ws, title: "TASK_EDIT in a fresh repository", type: "coding", agentId: agent.id });
+    await settled(coding.id, ["blocked"]);
+    expect(getTask(coding.id).blockedReason).toContain("has no commits yet");
+  });
+
   test("a task may name one of the workspace's repository folders, nothing else", async () => {
     expect(createTask({ workspaceId: repoWorkspace, title: "Named folder", repoPath: local }).repoPath).toBe(local);
     expect((await catchHttp(() => createTask({ workspaceId: repoWorkspace, title: "x", repoPath: tempRoot() }))).status).toBe(400);
