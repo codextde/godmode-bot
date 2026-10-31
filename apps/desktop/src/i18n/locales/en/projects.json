@@ -60,43 +60,5 @@
     "workspaceDefault": "Workspace default",
     "global": "Global",
     "hint": "Runs in this project browse with this profile, unless the chat or the agent picks its own."
-  },
-  "overview": {
-    "title": "Projects",
-    "description": "Every project across your workspaces at a glance: what waits for you, what's running and what's still open.",
-    "inWhichWorkspace": "In which workspace?",
-    "summary": {
-      "needsYou": "Needs you",
-      "working": "Working now",
-      "openTasks": "Open tasks"
-    },
-    "searchPlaceholder_one": "Search {{count}} project…",
-    "searchPlaceholder_other": "Search {{count}} projects…",
-    "searchLabel": "Search projects",
-    "sortLabel": "Sort projects",
-    "sort": {
-      "name": "A–Z",
-      "active": "Recently active",
-      "attention": "Needs you"
-    },
-    "loadFailed": "Couldn't load projects",
-    "emptyTitle": "No projects yet",
-    "emptyDescription": "Projects group chats, tickets and agents inside a workspace, each with its own context, folders and repositories.",
-    "noWorkspaces": "Projects live inside a workspace. Create a workspace first.",
-    "createWorkspace": "New workspace",
-    "noMatch": "No project matches “{{query}}”",
-    "noMatchHint": "Try another name, or a workspace's name.",
-    "add": "Add",
-    "current": "Current",
-    "edit": "Edit {{name}}",
-    "noDescription": "No description yet",
-    "stats": {
-      "openTasks": "Open tasks",
-      "doneTasks": "Done tasks",
-      "sources": "Folders & repositories"
-    },
-    "open": "Open",
-    "tasks": "Tasks",
-    "tasksOf": "Tasks of {{name}}"
   }
 }

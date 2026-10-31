@@ -23,7 +23,6 @@ import {
   Server,
   Settings,
   SquareKanban,
-  FolderKanban,
   Workflow,
   X,
 } from "lucide-react";
@@ -196,7 +195,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const workNav: NavItem[] = [
     { to: "/inbox", label: t("nav.inbox"), icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: t("nav.tasks"), icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
-    { to: "/projects", label: t("nav.projects"), icon: <FolderKanban /> },
     { to: "/agents", label: t("nav.agents"), icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: t("nav.automations"), icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: t("nav.activity"), icon: <Activity /> },
@@ -222,7 +220,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/vault/logins", t("nav.passwords")),
   ];
   const easyMore: NavItem[] = [
-    easyItem("/projects", t("nav.projects")),
     easyItem("/activity", t("system:easyPages.activity.title")),
     easyItem("/calls", t("system:easyPages.calls.title")),
     easyItem("/vault/cards", t("system:easyPages.cards.title")),

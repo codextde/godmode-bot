@@ -31,7 +31,6 @@ const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"
 const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
 const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
-const ProjectsPage = lazy(() => import("@/pages/projects/projects-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
 const TotpPage = lazy(() => import("@/pages/vault/totp-page"));
@@ -218,7 +217,6 @@ export function App() {
           <Route path="/mods" element={<LegacyModsRedirect />} />
           <Route path="/activity" element={<FeaturePage on={b.settings.activity.enabled} section="activity" keep="run"><ActivityPage /></FeaturePage>} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />
           <Route path="/vault/logins" element={<LoginsPage />} />
           <Route path="/vault/2fa" element={<TotpPage />} />
