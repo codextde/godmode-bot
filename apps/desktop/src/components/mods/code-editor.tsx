@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { tokenize, type CodeLanguage, type TokenKind } from "./highlight";
 
@@ -101,6 +102,7 @@ export function CodeEditor({
   jump?: { line: number } | null;
   className?: string;
 }) {
+  const { t } = useTranslation("mods");
   const area = useRef<HTMLTextAreaElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   // Tab indents; Escape lets the next Tab move the focus on, so the editor is no keyboard trap.
@@ -213,7 +215,7 @@ export function CodeEditor({
         </div>
       </div>
       <span id={hintId} className="sr-only">
-        Tab indents the code. Press Escape, then Tab, to leave the editor.
+        {t("code.editorHint")}
       </span>
     </div>
   );

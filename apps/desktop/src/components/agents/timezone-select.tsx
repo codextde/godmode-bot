@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown, Globe2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -8,6 +9,7 @@ import { allTimezones, localTimezone, timezoneOffset } from "./cron";
 
 /** Searchable IANA timezone picker; the local zone is pinned on top. */
 export function TimezoneSelect({ value, onChange, id }: { value: string; onChange: (tz: string) => void; id?: string }) {
+  const { t } = useTranslation("agents");
   const [open, setOpen] = useState(false);
   const local = localTimezone();
   const zones = useMemo(() => allTimezones().filter((z) => z !== local), [local]);
@@ -30,16 +32,16 @@ export function TimezoneSelect({ value, onChange, id }: { value: string; onChang
       </PopoverTrigger>
       <PopoverContent className="w-(--radix-popover-trigger-width) min-w-72 p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search timezone…" />
+          <CommandInput placeholder={t("timezoneSelect.search")} />
           <CommandList className="max-h-72">
-            <CommandEmpty>No timezone found.</CommandEmpty>
-            <CommandGroup heading="Your timezone">
+            <CommandEmpty>{t("timezoneSelect.empty")}</CommandEmpty>
+            <CommandGroup heading={t("timezoneSelect.yours")}>
               <TzItem tz={local} selected={value === local} onSelect={pick} />
               {value !== local && value !== "UTC" && !zones.includes(value) && (
                 <TzItem tz={value} selected onSelect={pick} />
               )}
             </CommandGroup>
-            <CommandGroup heading="All timezones">
+            <CommandGroup heading={t("timezoneSelect.all")}>
               {zones.map((tz) => (
                 <TzItem key={tz} tz={tz} selected={value === tz} onSelect={pick} />
               ))}

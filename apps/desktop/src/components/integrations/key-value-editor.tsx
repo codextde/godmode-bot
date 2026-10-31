@@ -1,11 +1,13 @@
 import { useId } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Lock, Pencil, Plus, Trash2, Undo2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { SECRET_MASK } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PasswordInput } from "@/components/vault/password-input";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export interface KeyValueRow {
@@ -42,16 +44,16 @@ export function rowsToRecord(rows: KeyValueRow[]): Record<string, string> {
   return out;
 }
 
-export function rowsError(rows: KeyValueRow[], pattern: RegExp, kind: string): string | null {
+export function rowsError(rows: KeyValueRow[], pattern: RegExp, kind: "env" | "header"): string | null {
   const seen = new Set<string>();
   for (const r of rows) {
     const k = r.key.trim();
     if (!k) {
-      if (r.value && r.value !== SECRET_MASK) return `Every ${kind} value needs a name.`;
+      if (r.value && r.value !== SECRET_MASK) return kind === "env" ? t("integrations:keyValue.envNeedsName") : t("integrations:keyValue.headerNeedsName");
       continue;
     }
-    if (!pattern.test(k)) return `“${k}” is not a valid ${kind} name.`;
-    if (seen.has(k.toLowerCase())) return `“${k}” is listed twice.`;
+    if (!pattern.test(k)) return kind === "env" ? t("integrations:keyValue.envInvalid", { key: k }) : t("integrations:keyValue.headerInvalid", { key: k });
+    if (seen.has(k.toLowerCase())) return t("integrations:keyValue.duplicate", { key: k });
     seen.add(k.toLowerCase());
   }
   return null;
@@ -65,7 +67,7 @@ export function KeyValueEditor({
   rows,
   onChange,
   keyPlaceholder,
-  valuePlaceholder = "Value",
+  valuePlaceholder,
   addLabel,
   keyTransform,
   label,
@@ -78,6 +80,7 @@ export function KeyValueEditor({
   keyTransform?: (s: string) => string;
   label: string;
 }) {
+  const { t } = useTranslation("integrations");
   const id = useId();
   const update = (u: string, patch: Partial<KeyValueRow>) => onChange(rows.map((r) => (r.uid === u ? { ...r, ...patch } : r)));
   const remove = (u: string) => onChange(rows.filter((r) => r.uid !== u));
@@ -95,7 +98,7 @@ export function KeyValueEditor({
             className="flex items-start gap-2"
           >
             <Input
-              aria-label={`${label} name ${i + 1}`}
+              aria-label={t("keyValue.nameAria", { label, n: i + 1 })}
               value={r.key}
               readOnly={r.stored}
               onChange={(e) => update(r.uid, { key: keyTransform ? keyTransform(e.target.value) : e.target.value })}
@@ -110,14 +113,14 @@ export function KeyValueEditor({
                 <div className="flex h-10 items-center gap-2 rounded-md border border-dashed px-3 text-xs text-muted-foreground">
                   <Lock className="size-3.5 shrink-0 text-brand-strong" />
                   <span className="truncate font-mono tracking-widest">{SECRET_MASK}</span>
-                  <span className="ml-auto hidden shrink-0 sm:inline">stored encrypted</span>
+                  <span className="ml-auto hidden shrink-0 sm:inline">{t("keyValue.storedEncrypted")}</span>
                 </div>
               ) : (
                 <PasswordInput
-                  aria-label={`${label} value ${i + 1}`}
+                  aria-label={t("keyValue.valueAria", { label, n: i + 1 })}
                   value={r.value === SECRET_MASK ? "" : r.value}
                   onChange={(e) => update(r.uid, { value: e.target.value })}
-                  placeholder={r.replacing ? "New value" : valuePlaceholder}
+                  placeholder={r.replacing ? t("keyValue.newValue") : (valuePlaceholder ?? t("keyValue.value"))}
                   autoFocus={r.replacing}
                   id={`${id}-v-${r.uid}`}
                 />
@@ -127,29 +130,29 @@ export function KeyValueEditor({
               (r.replacing ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button type="button" size="icon" variant="ghost" className="size-10" aria-label="Keep stored value" onClick={() => update(r.uid, { replacing: false, value: SECRET_MASK })}>
+                    <Button type="button" size="icon" variant="ghost" className="size-10" aria-label={t("keyValue.keepStored")} onClick={() => update(r.uid, { replacing: false, value: SECRET_MASK })}>
                       <Undo2 />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Keep stored value</TooltipContent>
+                  <TooltipContent>{t("keyValue.keepStored")}</TooltipContent>
                 </Tooltip>
               ) : (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button type="button" size="icon" variant="ghost" className="size-10" aria-label={`Replace ${r.key}`} onClick={() => update(r.uid, { replacing: true, value: "" })}>
+                    <Button type="button" size="icon" variant="ghost" className="size-10" aria-label={t("keyValue.replaceAria", { key: r.key })} onClick={() => update(r.uid, { replacing: true, value: "" })}>
                       <Pencil />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Replace value</TooltipContent>
+                  <TooltipContent>{t("keyValue.replaceValue")}</TooltipContent>
                 </Tooltip>
               ))}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button type="button" size="icon" variant="ghost" className="size-10 text-muted-foreground hover:text-destructive" aria-label={`Remove ${r.key || "row"}`} onClick={() => remove(r.uid)}>
+                <Button type="button" size="icon" variant="ghost" className="size-10 text-muted-foreground hover:text-destructive" aria-label={r.key ? t("keyValue.removeAria", { key: r.key }) : t("keyValue.removeRow")} onClick={() => remove(r.uid)}>
                   <Trash2 />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Remove</TooltipContent>
+              <TooltipContent>{t("keyValue.remove")}</TooltipContent>
             </Tooltip>
           </motion.div>
         ))}

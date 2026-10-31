@@ -28,6 +28,7 @@ import {
 } from "@godmode/shared";
 import { LiveDot } from "./ui";
 import { api } from "@/lib/api";
+import { t } from "@/lib/i18n";
 import { qk } from "@/lib/query";
 import { fonts, useColors, useIsDark } from "@/lib/theme";
 
@@ -110,6 +111,27 @@ export function moodOf(presence: AgentPresence): CharacterMood {
   }
 }
 
+/** What the agent is doing right now in words, the desktop's (presenceLabel) in the app language. */
+export function presenceText(p: AgentPresence): string {
+  switch (p.state) {
+    case "off":
+      return t("components:character.presence.off");
+    case "working":
+      return p.running > 1 ? t("components:character.presence.workingInChats", { count: p.running }) : t("components:character.presence.working");
+    case "waiting":
+      if (!p.waiting) return t("components:character.presence.needsLogin");
+      return p.waiting > 1 ? t("components:character.presence.needsYouQuestions", { count: p.waiting }) : t("components:character.presence.needsAnswer");
+    case "failed":
+      return t("components:character.presence.failed");
+    case "paused":
+      return p.paused > 1 ? t("components:character.presence.pausedChats", { count: p.paused }) : t("components:character.presence.paused");
+    case "queued":
+      return p.queued > 1 ? t("components:character.presence.queuedCount", { count: p.queued }) : t("components:character.presence.queued");
+    default:
+      return t("components:character.presence.idle");
+  }
+}
+
 export function useAgentMood(agent: PresenceAgent, live: { running?: number; queued?: number } = {}): CharacterMood {
   return moodOf(useAgentPresence(agent, live));
 }
@@ -131,12 +153,14 @@ export const Character = memo(function Character({
   mood = "idle",
   size = 40,
   seed,
+  faceScale: scaleOverride,
   style,
 }: {
   character: AgentCharacter;
   color: string;
   mood?: CharacterMood;
   size?: number;
+  faceScale?: number;
   /** Staggers the animations so a list of characters doesn't breathe and blink in unison. */
   seed?: string;
   style?: StyleProp<ViewStyle>;
@@ -146,7 +170,7 @@ export const Character = memo(function Character({
   const still = reduceMotion || !focused;
   const lively = size >= LIVELY_SIZE;
   const outline = useIsDark() ? OUTLINE.dark : OUTLINE.light;
-  const faceScale = size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1;
+  const faceScale = scaleOverride ?? (size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1);
   const open = drawing(character, color, mood, faceScale);
   const blinks = lively && !still && canBlink(character, mood);
   const closed = blinks ? drawing({ ...character, eyes: "lines" }, color, mood, faceScale) : null;

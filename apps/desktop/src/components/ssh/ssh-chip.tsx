@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, Loader2, Lock, Plus, Server, Settings2 } from "lucide-react";
 import type { Agent, SshServer } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -7,13 +8,15 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSshServers, useBootstrap } from "@/lib/hooks";
+import { t as translate } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { SshStatusDot, sshAddress } from "./ssh-parts";
 
 function listNames(servers: SshServer[]): string {
   const names = servers.map((s) => s.name);
-  if (names.length <= 2) return names.join(" and ");
-  return `${names.slice(0, 2).join(", ")} and ${names.length - 2} more`;
+  if (names.length <= 1) return names.join("");
+  if (names.length === 2) return translate("ssh:list.two", { first: names[0], second: names[1] });
+  return translate("ssh:list.more", { names: names.slice(0, 2).join(", "), count: names.length - 2 });
 }
 
 /**
@@ -33,6 +36,7 @@ export function SshChip({
   onChange: (sshServerIds: string[]) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("ssh");
   const on = !!useBootstrap().data?.settings.ssh.enabled;
   const { data: servers = [], isLoading } = useSshServers();
   const navigate = useNavigate();
@@ -53,10 +57,10 @@ export function SshChip({
   };
 
   const tooltip = !first
-    ? "Let this chat sign in to your servers"
+    ? t("chip.tooltipNone")
     : own.length === 0
-      ? `Can sign in to ${listNames(inherited)} — assigned to ${agent.name}`
-      : `This chat can sign in to ${listNames(active)}`;
+      ? t("chip.tooltipInherited", { names: listNames(inherited), agent: agent.name })
+      : t("chip.tooltipActive", { names: listNames(active) });
   const icon = busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Server className="size-3.5 shrink-0 text-muted-foreground" />;
 
   return (
@@ -67,7 +71,7 @@ export function SshChip({
             {first ? (
               <button
                 type="button"
-                aria-label={`SSH servers: ${active.map((s) => s.name).join(", ")}`}
+                aria-label={t("chip.ariaLabelList", { names: active.map((s) => s.name).join(", ") })}
                 className={cn(
                   "flex h-8 max-w-[12rem] min-w-14 shrink items-center gap-1.5 rounded-lg border pr-1.5 pl-2 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                   own.length > 0 ? "bg-card hover:bg-accent" : "border-dashed text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -84,7 +88,7 @@ export function SshChip({
               <Button
                 type="button"
                 variant="ghost"
-                aria-label="SSH servers"
+                aria-label={t("chip.title")}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
@@ -100,22 +104,22 @@ export function SshChip({
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">SSH servers</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat can sign in, run commands and move files. Godmode types the password or key.</p>
+          <p className="text-[13px] font-medium">{t("chip.title")}</p>
+          <p className="text-xs text-muted-foreground">{t("chip.description")}</p>
         </div>
         {!isLoading && servers.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">
-            <p className="text-xs text-muted-foreground">No SSH servers yet.</p>
+            <p className="text-xs text-muted-foreground">{t("chip.empty")}</p>
             <Button size="sm" onClick={() => go("/ssh?new=1")}>
-              <Plus /> Add server
+              <Plus /> {t("page.addServer")}
             </Button>
           </div>
         ) : (
           <>
             <Command>
-              {servers.length > 6 && <CommandInput placeholder="Find a server…" />}
+              {servers.length > 6 && <CommandInput placeholder={t("chip.findPlaceholder")} />}
               <CommandList className="max-h-72">
-                <CommandEmpty>No server with that name.</CommandEmpty>
+                <CommandEmpty>{t("chip.noMatch")}</CommandEmpty>
                 <CommandGroup>
                   {servers.map((s) => {
                     const locked = fromAgent.has(s.id);
@@ -138,13 +142,13 @@ export function SshChip({
                           </span>
                           {locked ? (
                             <span className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-                              <Lock className="size-3" aria-hidden /> Assigned to {agent.name}
+                              <Lock className="size-3" aria-hidden /> {t("chip.assignedTo", { agent: agent.name })}
                             </span>
                           ) : (
                             <span className="block truncate font-mono text-[11px] text-muted-foreground">{sshAddress(s)}</span>
                           )}
                         </span>
-                        {on && <Check className={cn("size-4", locked && "opacity-50")} aria-label={locked ? "Always on" : "Selected"} />}
+                        {on && <Check className={cn("size-4", locked && "opacity-50")} aria-label={locked ? t("chip.alwaysOn") : t("chip.selected")} />}
                       </CommandItem>
                     );
                   })}
@@ -153,10 +157,10 @@ export function SshChip({
             </Command>
             <div className="flex items-center gap-1 border-t p-1">
               <Button type="button" variant="ghost" size="sm" className="flex-1 justify-start font-normal text-muted-foreground" onClick={() => go("/ssh?new=1")}>
-                <Plus /> Add server
+                <Plus /> {t("page.addServer")}
               </Button>
               <Button type="button" variant="ghost" size="sm" className="font-normal text-muted-foreground" onClick={() => go("/ssh")}>
-                <Settings2 /> Manage
+                <Settings2 /> {t("chip.manage")}
               </Button>
             </div>
           </>

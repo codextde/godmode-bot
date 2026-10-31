@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ChatFile } from "@godmode/shared";
@@ -16,6 +17,7 @@ import { codeThemeCss, highlightCode, languageOf } from "./highlighter";
 const MAX_HIGHLIGHTED_CHARS = 400_000;
 
 export default function FilePanel({ file, line, local, onHide }: { file: ChatFile; line: number | null; local: boolean; onHide: () => void }) {
+  const { t } = useTranslation("chat");
   const width = "min(50vw, 760px)";
   const text = useQuery({
     queryKey: ["core-text", file.text],
@@ -40,7 +42,7 @@ export default function FilePanel({ file, line, local, onHide }: { file: ChatFil
   const reveal = () =>
     void api.files.reveal(file.path).catch((err) => {
       const gone = err instanceof ApiRequestError && err.status === 404;
-      toast.error(gone ? `${file.name} doesn't exist anymore` : `Couldn't open ${isMac ? "Finder" : "the file manager"}`, gone ? undefined : { description: errorMessage(err) });
+      toast.error(gone ? t("files.gone", { name: file.name }) : isMac ? t("files.finderError") : t("files.fileManagerError"), gone ? undefined : { description: errorMessage(err) });
     });
 
   return (
@@ -59,22 +61,21 @@ export default function FilePanel({ file, line, local, onHide }: { file: ChatFil
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium">{file.name}</p>
             <p className="truncate text-[11.5px] text-muted-foreground" title={file.path}>
-              {lines ? `${lines} ${lines === 1 ? "line" : "lines"} · ` : ""}
-              {line ? `line ${line} · ` : ""}read-only
+              {[lines ? t("filePanel.lines", { count: lines }) : null, line ? t("filePanel.atLine", { line }) : null, t("filePanel.readOnly")].filter(Boolean).join(" · ")}
             </p>
           </div>
-          <IconAction label="Reload" onClick={() => void text.refetch()} disabled={text.isFetching}>
+          <IconAction label={t("filePanel.reload")} onClick={() => void text.refetch()} disabled={text.isFetching}>
             <RefreshCw className={cn(text.isFetching && "animate-spin [animation-duration:1.6s]")} />
           </IconAction>
-          <IconAction label="Copy the contents" onClick={() => text.data != null && void copyText(text.data, "Copied")} disabled={text.data == null}>
+          <IconAction label={t("filePanel.copy")} onClick={() => text.data != null && void copyText(text.data, t("filePanel.copied"))} disabled={text.data == null}>
             <Copy />
           </IconAction>
           {canReveal && (
-            <IconAction label={isMac ? "Show in Finder" : "Show in folder"} onClick={reveal}>
+            <IconAction label={isMac ? t("files.showInFinder") : t("files.showInFolder")} onClick={reveal}>
               <FolderOpen />
             </IconAction>
           )}
-          <IconAction label="Close" onClick={onHide}>
+          <IconAction label={t("filePanel.close")} onClick={onHide}>
             <PanelRightClose />
           </IconAction>
         </header>
@@ -84,7 +85,7 @@ export default function FilePanel({ file, line, local, onHide }: { file: ChatFil
           ) : text.isError ? (
             <p className="flex gap-2 p-4 font-sans text-sm text-muted-foreground">
               <CircleAlert className="mt-0.5 size-4 shrink-0" />
-              {text.error instanceof ApiRequestError && text.error.status === 404 ? `${file.name} isn't there anymore, or can't be shown.` : `Couldn't read ${file.name}: ${errorMessage(text.error)}`}
+              {text.error instanceof ApiRequestError && text.error.status === 404 ? t("filePanel.gone", { name: file.name }) : t("filePanel.failed", { name: file.name, message: errorMessage(text.error) })}
             </p>
           ) : (
             <div className="space-y-2 p-4">

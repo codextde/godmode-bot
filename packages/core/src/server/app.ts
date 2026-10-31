@@ -7,6 +7,7 @@ import { logger } from "../log";
 import { hostGuard, isAllowedOrigin, isMobileChannel, isRelayed, requireAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSystemRoutes } from "./routes/system";
+import { registerClaudeAccountRoutes } from "./routes/claudeAccounts";
 import { registerVaultRoutes } from "./routes/vault";
 import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
@@ -180,6 +181,7 @@ export function createApp() {
   app.use("/api/*", remoteRouting);
 
   registerSystemRoutes(app);
+  registerClaudeAccountRoutes(app);
   registerVaultRoutes(app);
   registerCardRoutes(app);
   registerWorkspaceRoutes(app);

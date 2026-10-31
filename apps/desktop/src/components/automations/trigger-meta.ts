@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { Blocks, CalendarClock, Hand, Radar, Webhook } from "lucide-react";
 import type { AutomationEventSource, AutomationEventStatus, Routine, RoutineTriggerType } from "@godmode/shared";
+import { t } from "@/i18n";
 import { cronToHuman, scheduleToHuman } from "@/components/agents/cron";
 import { prettySlug } from "@/components/integrations/toolkit-logo";
 
@@ -22,48 +23,124 @@ export interface TriggerTypeMeta {
 export const TRIGGER_TYPES: Record<RoutineTriggerType, TriggerTypeMeta> = {
   schedule: {
     icon: CalendarClock,
-    label: "Schedule",
-    plural: "Schedule",
-    title: "On a schedule",
-    hint: "Every morning, each Monday, on the 1st…",
-    runLabel: "Run now",
-    promptPlaceholder: "Collect last week's numbers from Stripe and Google Analytics, write a short report and send it to me.",
+    get label() {
+      return t("automations:trigger.schedule.label");
+    },
+    get plural() {
+      return t("automations:trigger.schedule.plural");
+    },
+    get title() {
+      return t("automations:trigger.schedule.title");
+    },
+    get hint() {
+      return t("automations:trigger.schedule.hint");
+    },
+    get runLabel() {
+      return t("automations:trigger.schedule.runLabel");
+    },
+    get promptPlaceholder() {
+      return t("automations:trigger.schedule.promptPlaceholder");
+    },
   },
   app: {
     icon: Blocks,
-    label: "App event",
-    plural: "App events",
-    title: "When something happens in an app",
-    hint: "A new email, Slack message, calendar event…",
-    runLabel: "Send test event",
-    promptPlaceholder: "Save the invoice PDF to Drive and log sender, amount and due date in my Invoices sheet. The event details are passed along.",
+    get label() {
+      return t("automations:trigger.app.label");
+    },
+    get plural() {
+      return t("automations:trigger.app.plural");
+    },
+    get title() {
+      return t("automations:trigger.app.title");
+    },
+    get hint() {
+      return t("automations:trigger.app.hint");
+    },
+    get runLabel() {
+      return t("automations:trigger.app.runLabel");
+    },
+    get promptPlaceholder() {
+      return t("automations:trigger.app.promptPlaceholder");
+    },
   },
   condition: {
     icon: Radar,
-    label: "Condition",
-    plural: "Conditions",
-    title: "When a condition is met",
-    hint: "Checked regularly, in plain language",
-    runLabel: "Check now",
-    promptPlaceholder: "Compare their new plans with ours and update the pricing battlecard in Notion. What the check found is passed along.",
+    get label() {
+      return t("automations:trigger.condition.label");
+    },
+    get plural() {
+      return t("automations:trigger.condition.plural");
+    },
+    get title() {
+      return t("automations:trigger.condition.title");
+    },
+    get hint() {
+      return t("automations:trigger.condition.hint");
+    },
+    get runLabel() {
+      return t("automations:trigger.condition.runLabel");
+    },
+    get promptPlaceholder() {
+      return t("automations:trigger.condition.promptPlaceholder");
+    },
   },
   webhook: {
     icon: Webhook,
-    label: "Webhook",
-    plural: "Webhooks",
-    title: "When a webhook is called",
-    hint: "Any service that can send an HTTP POST",
-    runLabel: "Send test event",
-    promptPlaceholder: "Check whether the order qualifies for a recovery offer and draft a friendly email. The request body is passed along.",
+    get label() {
+      return t("automations:trigger.webhook.label");
+    },
+    get plural() {
+      return t("automations:trigger.webhook.plural");
+    },
+    get title() {
+      return t("automations:trigger.webhook.title");
+    },
+    get hint() {
+      return t("automations:trigger.webhook.hint");
+    },
+    get runLabel() {
+      return t("automations:trigger.webhook.runLabel");
+    },
+    get promptPlaceholder() {
+      return t("automations:trigger.webhook.promptPlaceholder");
+    },
   },
 };
 
 /** Easy mode: the same triggers in everyday words. */
 export const EASY_TRIGGER_TEXT: Record<RoutineTriggerType, { title: string; hint: string }> = {
-  schedule: { title: "On a schedule", hint: "Every morning, each Monday, on the 1st…" },
-  app: { title: "When something happens in an app", hint: "A new email, Slack message, calendar event…" },
-  condition: { title: "When a condition is true", hint: "Checked regularly, described in your own words" },
-  webhook: { title: "When another tool calls a link", hint: "A shop, a form or Zapier opens a secret link" },
+  schedule: {
+    get title() {
+      return t("automations:trigger.easy.schedule.title");
+    },
+    get hint() {
+      return t("automations:trigger.easy.schedule.hint");
+    },
+  },
+  app: {
+    get title() {
+      return t("automations:trigger.easy.app.title");
+    },
+    get hint() {
+      return t("automations:trigger.easy.app.hint");
+    },
+  },
+  condition: {
+    get title() {
+      return t("automations:trigger.easy.condition.title");
+    },
+    get hint() {
+      return t("automations:trigger.easy.condition.hint");
+    },
+  },
+  webhook: {
+    get title() {
+      return t("automations:trigger.easy.webhook.title");
+    },
+    get hint() {
+      return t("automations:trigger.easy.webhook.hint");
+    },
+  },
 };
 
 export const TRIGGER_ORDER: RoutineTriggerType[] = ["schedule", "app", "condition", "webhook"];
@@ -75,16 +152,16 @@ export function isEventTrigger(type: RoutineTriggerType): boolean {
 
 /** Plain-text trigger description — for search, compact lists and tooltips. */
 export function triggerText(routine: Routine): string {
-  const t = routine.trigger;
-  switch (t.type) {
+  const trigger = routine.trigger;
+  switch (trigger.type) {
     case "schedule":
-      return scheduleToHuman(routine.cron, t.startWindowMinutes, t.runsPerWindow);
+      return scheduleToHuman(routine.cron, trigger.startWindowMinutes, trigger.runsPerWindow);
     case "app":
-      return `${t.triggerName} · ${prettySlug(t.toolkit)}`;
+      return `${trigger.triggerName} · ${prettySlug(trigger.toolkit)}`;
     case "condition":
-      return `When ${t.condition} · checked ${lowerFirst(cronToHuman(routine.cron))}`;
+      return t("automations:trigger.conditionText", { condition: trigger.condition, schedule: lowerFirst(cronToHuman(routine.cron)) });
     case "webhook":
-      return "Webhook";
+      return t("automations:trigger.webhook.label");
   }
 }
 
@@ -93,17 +170,72 @@ export function lowerFirst(s: string): string {
 }
 
 export const EVENT_SOURCES: Record<AutomationEventSource, { label: string; icon: LucideIcon }> = {
-  schedule: { label: "Schedule", icon: CalendarClock },
-  app: { label: "App event", icon: Blocks },
-  webhook: { label: "Webhook", icon: Webhook },
-  condition: { label: "Condition met", icon: Radar },
-  manual: { label: "Manual", icon: Hand },
+  schedule: {
+    icon: CalendarClock,
+    get label() {
+      return t("automations:eventSource.schedule");
+    },
+  },
+  app: {
+    icon: Blocks,
+    get label() {
+      return t("automations:eventSource.app");
+    },
+  },
+  webhook: {
+    icon: Webhook,
+    get label() {
+      return t("automations:eventSource.webhook");
+    },
+  },
+  condition: {
+    icon: Radar,
+    get label() {
+      return t("automations:eventSource.condition");
+    },
+  },
+  manual: {
+    icon: Hand,
+    get label() {
+      return t("automations:eventSource.manual");
+    },
+  },
 };
 
 export const EVENT_STATUS: Record<AutomationEventStatus, { label: string; className: string; dot: string }> = {
-  pending: { label: "Waiting", className: "border-warning/25 bg-warning/[0.08] text-warning", dot: "bg-warning" },
-  running: { label: "Running", className: "border-brand/25 bg-brand-soft text-brand-strong", dot: "bg-brand animate-live-dot" },
-  done: { label: "Done", className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
-  failed: { label: "Failed", className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
-  skipped: { label: "Skipped", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
+  pending: {
+    className: "border-warning/25 bg-warning/[0.08] text-warning",
+    dot: "bg-warning",
+    get label() {
+      return t("automations:eventStatus.pending");
+    },
+  },
+  running: {
+    className: "border-brand/25 bg-brand-soft text-brand-strong",
+    dot: "bg-brand animate-live-dot",
+    get label() {
+      return t("automations:eventStatus.running");
+    },
+  },
+  done: {
+    className: "border-success/20 bg-success/[0.08] text-success",
+    dot: "bg-success",
+    get label() {
+      return t("automations:eventStatus.done");
+    },
+  },
+  failed: {
+    className: "border-destructive/20 bg-destructive/[0.06] text-destructive",
+    dot: "bg-destructive",
+    get label() {
+      return t("automations:eventStatus.failed");
+    },
+  },
+  skipped: {
+    className: "border-border bg-secondary text-muted-foreground",
+    dot: "bg-muted-foreground/60",
+    get label() {
+      return t("automations:eventStatus.skipped");
+    },
+  },
 };

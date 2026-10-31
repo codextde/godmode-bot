@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { Bot, LayoutGrid, List, Network, Plus, Search, Sparkles } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
@@ -29,6 +30,7 @@ const CREATE_PROMPT =
   "Create a new agent for me. Ask me what it should do, then configure sensible instructions and an automation if it should work on its own (on a schedule or when something happens).";
 
 export default function AgentsPage() {
+  const { t } = useTranslation(["agents", "common"]);
   const navigate = useNavigate();
   const scope = useUi((s) => s.workspace);
   const { data: workspaces = [] } = useWorkspaces();
@@ -59,8 +61,8 @@ export default function AgentsPage() {
   // "/" focuses search
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (e.key === "/" && !e.metaKey && !e.ctrlKey && t?.tagName !== "INPUT" && t?.tagName !== "TEXTAREA" && !t?.isContentEditable) {
+      const el = e.target as HTMLElement | null;
+      if (e.key === "/" && !e.metaKey && !e.ctrlKey && el?.tagName !== "INPUT" && el?.tagName !== "TEXTAREA" && !el?.isContentEditable) {
         e.preventDefault();
         searchRef.current?.focus();
       }
@@ -121,31 +123,38 @@ export default function AgentsPage() {
   const narrowed = !!search.trim() || filter !== "all";
   const groups = useMemo(() => (byWorkspace ? groupByWorkspace(visible, workspaces) : []), [byWorkspace, visible, workspaces]);
 
-  const scopeName =
-    scope === "all" ? "all workspaces" : scope === "global" ? "the global scope" : (workspaces.find((w) => w.id === scope)?.name ?? "this workspace");
+  const scopeWorkspace = workspaces.find((w) => w.id === scope)?.name;
+  const description =
+    scope === "all"
+      ? t("agentsPage.descriptionAll")
+      : scope === "global"
+        ? t("agentsPage.descriptionGlobal")
+        : scopeWorkspace
+          ? t("agentsPage.descriptionIn", { name: scopeWorkspace })
+          : t("agentsPage.descriptionThis");
 
   const FILTERS: { id: Filter; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "running", label: "Working" },
-    { id: "needs", label: "Needs you" },
-    { id: "scheduled", label: "Automated" },
-    { id: "disabled", label: "Off" },
+    { id: "all", label: t("common:words.all") },
+    { id: "running", label: t("agentsPage.filters.running") },
+    { id: "needs", label: t("agentsPage.filters.needs") },
+    { id: "scheduled", label: t("agentsPage.filters.scheduled") },
+    { id: "disabled", label: t("common:status.off") },
   ];
 
   return (
     <>
       <PageHeader
         icon={<Bot />}
-        title="Agents"
-        description={`Your team in ${scopeName}: who does what, who leads whom and what each is busy with.`}
+        title={t("common:words.agents")}
+        description={description}
         actions={
           <>
             <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)} className="hidden @md:inline-flex">
-              <Sparkles /> Ask Godmode
+              <Sparkles /> {t("agentsPage.askGodmode")}
             </Button>
             <Button asChild>
               <Link to="/agents/new">
-                <Plus /> New agent
+                <Plus /> {t("agentsPage.newAgent")}
               </Link>
             </Button>
           </>
@@ -160,15 +169,15 @@ export default function AgentsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && setSearch("")}
-              placeholder="Search agents…"
-              aria-label="Search agents"
+              placeholder={t("agentsPage.searchPlaceholder")}
+              aria-label={t("agentsPage.searchLabel")}
               className="pr-10 pl-9"
             />
             <span className="absolute top-1/2 right-2.5 -translate-y-1/2">
               <Kbd>/</Kbd>
             </span>
           </div>
-          <div role="tablist" aria-label="Filter agents" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+          <div role="tablist" aria-label={t("agentsPage.filterLabel")} className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
             {FILTERS.map((f) => (
               <button
                 key={f.id}
@@ -191,12 +200,12 @@ export default function AgentsPage() {
             ))}
           </div>
           {agents.length > 1 && view === "grid" && <Crew agents={agents} />}
-          <div role="group" aria-label="View" className={cn("flex items-center gap-1 rounded-lg border bg-paper-2 p-1", !(agents.length > 1 && view === "grid") && "ml-auto", "@max-3xl:ml-auto")}>
+          <div role="group" aria-label={t("agentsPage.view.label")} className={cn("flex items-center gap-1 rounded-lg border bg-paper-2 p-1", !(agents.length > 1 && view === "grid") && "ml-auto", "@max-3xl:ml-auto")}>
             {(
               [
-                { id: "grid", label: "Grid", icon: LayoutGrid },
-                { id: "list", label: "List", icon: List },
-                { id: "chart", label: "Org chart", icon: Network },
+                { id: "grid", label: t("agentsPage.view.grid"), icon: LayoutGrid },
+                { id: "list", label: t("agentsPage.view.list"), icon: List },
+                { id: "chart", label: t("agentsPage.view.chart"), icon: Network },
               ] as const
             ).map((v) => (
               <button
@@ -236,28 +245,28 @@ export default function AgentsPage() {
         ) : agentsQ.isError ? (
           <EmptyState
             icon={<Bot />}
-            title="Couldn't load agents"
+            title={t("agentsPage.loadError")}
             description={errorMessage(agentsQ.error)}
             action={
               <Button variant="outline" onClick={() => agentsQ.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : agents.length === 0 ? (
           <EmptyState
             art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={88} follow title="Godmode" />}
-            title="Create your first agent"
-            description="Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
+            title={t("agentsPage.empty.title")}
+            description={t("agentsPage.empty.description")}
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Button asChild>
                   <Link to="/agents/new">
-                    <Plus /> New agent
+                    <Plus /> {t("agentsPage.newAgent")}
                   </Link>
                 </Button>
                 <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(CREATE_PROMPT)}`)}>
-                  <Sparkles /> Ask Godmode to create one
+                  <Sparkles /> {t("agentsPage.empty.askGodmode")}
                 </Button>
               </div>
             }
@@ -268,9 +277,9 @@ export default function AgentsPage() {
           <>
             {matches && matches.size === 0 && (
               <p className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
-                No agents match “{search.trim()}”.
+                {t("agentsPage.noMatchQuery", { query: search.trim() })}
                 <Button size="xs" variant="ghost" onClick={() => setSearch("")}>
-                  Clear
+                  {t("agentsPage.clear")}
                 </Button>
               </p>
             )}
@@ -279,8 +288,8 @@ export default function AgentsPage() {
         ) : visible.length === 0 ? (
           <EmptyState
             icon={<Search />}
-            title="No agents match"
-            description={search ? `Nothing found for “${search}”.` : "No agents in this view."}
+            title={t("agentsPage.noMatch.title")}
+            description={search ? t("agentsPage.noMatch.nothingFound", { query: search }) : t("agentsPage.noMatch.emptyView")}
             action={
               <Button
                 variant="outline"
@@ -289,7 +298,7 @@ export default function AgentsPage() {
                   setFilter("all");
                 }}
               >
-                Clear filters
+                {t("agentsPage.noMatch.clearFilters")}
               </Button>
             }
           />
@@ -324,12 +333,11 @@ export default function AgentsPage() {
         )}
             {agents.some((a) => !a.isDefault) && (
               <p className="mt-6 text-xs text-muted-foreground">
-                {view === "chart"
-                  ? "Drag an agent onto another to change who it reports to, or onto a workspace to move it with its team."
-                  : "Drag an agent onto a workspace to move it there with its team."}{" "}
-                <Link to="/agents/new?start=structures" className="font-medium text-foreground underline-offset-2 hover:underline">
-                  Add a team or a whole company
-                </Link>
+                <Trans
+                  t={t}
+                  i18nKey={view === "chart" ? "agentsPage.dragHintChart" : "agentsPage.dragHint"}
+                  components={{ link: <Link to="/agents/new?start=structures" className="font-medium text-foreground underline-offset-2 hover:underline" /> }}
+                />
               </p>
             )}
           </AgentDnd>
@@ -338,9 +346,9 @@ export default function AgentsPage() {
         {!agentsQ.isLoading && allAgents.length > 0 && allAgents.every((a) => a.isDefault) && (
           <section className="mt-10" aria-labelledby="start-team">
             <h2 id="start-team" className="text-lg font-medium tracking-[-0.02em]">
-              Start a company
+              {t("agentsPage.startCompany.title")}
             </h2>
-            <p className="mb-4 text-sm text-muted-foreground">A whole org chart in one go — every agent has its job, and every lead hands out the work, reviews it and tells you what needs you.</p>
+            <p className="mb-4 text-sm text-muted-foreground">{t("agentsPage.startCompany.description")}</p>
             <TeamTemplates />
           </section>
         )}
@@ -368,6 +376,7 @@ function CardGrid({
   onRunTask: (agent: Agent) => void;
   onDelete: (agent: Agent) => void;
 }) {
+  const { t } = useTranslation("agents");
   return (
     <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3 @[96rem]:grid-cols-4">
       {agents.map((agent, i) => (
@@ -386,7 +395,7 @@ function CardGrid({
             <span className="grid size-9 place-items-center rounded-lg border bg-card text-foreground shadow-card">
               <Plus className="size-4" />
             </span>
-            New agent
+            {t("agentsPage.newAgent")}
           </Link>
         </motion.div>
       )}
@@ -396,9 +405,10 @@ function CardGrid({
 
 /** The team at a glance: every agent's face in a row, watching the pointer. */
 function Crew({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("agents");
   const shown = agents.slice(0, 8);
   return (
-    <div aria-label="Your crew" className="ml-auto hidden items-end @7xl:flex">
+    <div aria-label={t("agentsPage.crew")} className="ml-auto hidden items-end @7xl:flex">
       {shown.map((a, i) => (
         <Tooltip key={a.id}>
           <TooltipTrigger asChild>

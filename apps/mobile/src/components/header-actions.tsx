@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, sfSymbol, type IconName } from "./icon";
 import { Hairline, T, tap } from "./ui";
@@ -27,6 +28,7 @@ export interface HeaderMenuItem {
  */
 export function HeaderActions({ actions = [], menu = [], placement = "right" }: { actions?: HeaderAction[]; menu?: HeaderMenuItem[]; placement?: "left" | "right" }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [open, setOpen] = useState(false);
   if (process.env.EXPO_OS === "ios") {
     return (
@@ -45,7 +47,7 @@ export function HeaderActions({ actions = [], menu = [], placement = "right" }: 
           />
         ))}
         {menu.length > 0 && (
-          <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel="More">
+          <Stack.Toolbar.Menu icon="ellipsis" accessibilityLabel={t("headerActions.more")}>
             {menu.map((m) => (
               <Stack.Toolbar.MenuAction key={m.title} icon={sfSymbol(m.icon)} destructive={m.destructive} onPress={m.onPress}>
                 {m.title}
@@ -64,7 +66,7 @@ export function HeaderActions({ actions = [], menu = [], placement = "right" }: 
         </Pressable>
       ))}
       {menu.length > 0 && (
-        <Pressable accessibilityRole="button" accessibilityLabel="More" hitSlop={8} onPress={() => setOpen(true)} style={{ padding: 8 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("headerActions.more")} hitSlop={8} onPress={() => setOpen(true)} style={{ padding: 8 }}>
           <Icon name="more" size={22} color={c.text} />
         </Pressable>
       )}
@@ -81,10 +83,11 @@ export function HeaderActions({ actions = [], menu = [], placement = "right" }: 
 /** A short list of actions from the bottom of the screen. */
 export function MenuSheet({ items, open, onClose }: { items: HeaderMenuItem[]; open: boolean; onClose: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("common");
   const insets = useSafeAreaInsets();
   return (
     <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable accessibilityLabel="Close" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
+      <Pressable accessibilityLabel={t("actions.close")} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
       <View style={[styles.sheet, { backgroundColor: c.surface, paddingBottom: Math.max(insets.bottom, space.md) }]} accessibilityViewIsModal>
         {items.map((m, i) => (
           <View key={m.title}>

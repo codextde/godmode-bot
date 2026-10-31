@@ -1,18 +1,21 @@
-import { Fragment, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
 import { ArrowDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { dateLocale, t } from "@/i18n";
 import type { LiveRun } from "@/stores/live";
 import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
+import { BackgroundSubagentsPill } from "./subagents";
 import { useStickToBottom } from "./use-stick-to-bottom";
 
 function dayLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return format(d, d.getFullYear() === new Date().getFullYear() ? "EEEE, MMMM d" : "MMMM d, yyyy");
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
+  return format(d, d.getFullYear() === new Date().getFullYear() ? t("chat:thread.dayFormat") : t("chat:thread.dayFormatYear"), { locale: dateLocale() });
 }
 
 export interface ThreadProps {
@@ -30,10 +33,27 @@ export interface ThreadProps {
   delegatedFrom?: Conversation["delegatedFrom"];
   /** Under the last message while nothing is in flight (what to do about a turn that ended early). */
   after?: ReactNode;
+  focusId?: string | null;
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after }: ThreadProps) {
-  const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId }: ThreadProps) {
+  const { t } = useTranslation("chat");
+  const { scrollRef, contentRef, atBottom, scrollToBottom, unstick } = useStickToBottom();
+  const [flash, setFlash] = useState<string | null>(null);
+  const focusPresent = !!focusId && messages.some((m) => m.id === focusId);
+  useEffect(() => {
+    if (!focusId || !focusPresent) return;
+    const el = scrollRef.current?.querySelector(`[data-message-id="${CSS.escape(focusId)}"]`);
+    if (!el) return;
+    unstick();
+    const frame = requestAnimationFrame(() => el.scrollIntoView({ block: "center" }));
+    setFlash(focusId);
+    const timer = setTimeout(() => setFlash(null), 2400);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [focusId, focusPresent, scrollRef, unstick]);
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
   if (initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
@@ -43,7 +63,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
 
   return (
     <div className="relative min-h-0 flex-1">
-      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label="Messages">
+      <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain" tabIndex={-1} aria-label={t("thread.messages")}>
         <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 @xl:px-6">
           {isEmpty && empty}
           {messages.map((m) => {
@@ -61,6 +81,8 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
                   </div>
                 )}
                 <motion.div
+                  data-message-id={m.id}
+                  className={`rounded-xl transition-shadow duration-700 ${flash === m.id ? "ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : "ring-0"}`}
                   initial={animate ? { opacity: 0, y: 8 } : false}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
@@ -94,6 +116,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
         </div>
       </div>
 
+      {inflight?.live && <BackgroundSubagentsPill blocks={inflight.live.blocks} agent={agent} scrollRef={scrollRef} />}
       <AnimatePresence>
         {!atBottom && !isEmpty && (
           <motion.button
@@ -105,7 +128,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
             className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md glass px-3 py-1.5 text-xs font-medium transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <ArrowDown className="size-3.5" />
-            {inflight ? "Jump to live" : "Jump to latest"}
+            {inflight ? t("thread.jumpToLive") : t("thread.jumpToLatest")}
           </motion.button>
         )}
       </AnimatePresence>

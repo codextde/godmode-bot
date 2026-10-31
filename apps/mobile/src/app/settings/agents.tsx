@@ -1,5 +1,6 @@
 import { router, Stack } from "expo-router";
 import { ScrollView, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
@@ -10,19 +11,20 @@ import { space } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
 
 export default function Agents() {
+  const { t } = useTranslation(["settings", "common"]);
   const { data: agents } = useAgents();
   const { workspaces, id: picked } = useWorkspace();
   const groups = [
-    { key: "global", title: "Global", agents: (agents ?? []).filter((a) => !a.workspaceId) },
+    { key: "global", title: t("agents.global"), agents: (agents ?? []).filter((a) => !a.workspaceId) },
     ...workspaces.map((w) => ({ key: w.id, title: w.name, agents: (agents ?? []).filter((a) => a.workspaceId === w.id) })),
   ].filter((g) => g.agents.length);
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Agents" }} />
+      <Stack.Screen options={{ title: t("common:words.agents") }} />
       <CloseButton />
       <HeaderActions
-        actions={[{ icon: "plus", label: "New agent", onPress: () => router.push({ pathname: "/settings/new", params: { kind: "agent", workspaceId: picked ?? "" } }) }]}
+        actions={[{ icon: "plus", label: t("agents.new"), onPress: () => router.push({ pathname: "/settings/new", params: { kind: "agent", workspaceId: picked ?? "" } }) }]}
       />
       {groups.map((g) => (
         <Group key={g.key} title={g.title}>
@@ -36,12 +38,13 @@ export default function Agents() {
 }
 
 function AgentLink({ agent }: { agent: Agent }) {
+  const { t } = useTranslation(["settings", "common"]);
   return (
     <LinkRow
       lead={<CharacterAvatar agent={agent} size={34} />}
       title={agent.name}
       detail={agent.role || agent.description || undefined}
-      value={!agent.enabled ? "Off" : agent.heartbeat.enabled ? "Heartbeat" : undefined}
+      value={!agent.enabled ? t("common:status.off") : agent.heartbeat.enabled ? t("agents.heartbeat") : undefined}
       onPress={() => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } })}
     />
   );

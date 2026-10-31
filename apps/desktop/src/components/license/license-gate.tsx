@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { RefreshCw } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState } from "@godmode/shared";
 import { Backdrop } from "@/components/brand";
@@ -13,14 +14,15 @@ import { ActivatePanel } from "./activate";
 
 /** Replaces the app while the licence refuses new runs; a working key takes it away without a reload. */
 export function LicenseGate({ state }: { state: LicenseState }) {
+  const { t } = useTranslation("license");
   const qc = useQueryClient();
   const refresh = useMutation({
     mutationFn: api.license.refresh,
     onSuccess: (next) => {
       qc.setQueryData(qk.license, next);
-      if (next.blocked) toast("Nothing changed yet", { description: next.message ?? undefined });
+      if (next.blocked) toast(t("gate.nothingChanged"), { description: next.message ?? undefined });
     },
-    onError: (err) => toast.error("Couldn't check the licence", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("gate.checkFailed"), { description: errorMessage(err) }),
   });
 
   return (
@@ -37,10 +39,10 @@ export function LicenseGate({ state }: { state: LicenseState }) {
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} mood="idle" follow title="Godmode" />
           <p className="eyebrow mt-7">Godmode Pro</p>
           <h1 className="heading-display mt-2 text-[32px] sm:text-[36px]">
-            {state.status === "missing" && state.graceEndsAt ? "Your free week is over" : "Activate Godmode"}
+            {state.status === "missing" && state.graceEndsAt ? t("gate.freeWeekOver") : t("gate.activateTitle")}
           </h1>
           <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-balance text-muted-foreground">
-            {state.message ?? "Start your free trial, or enter your licence key to keep your agents working."}
+            {state.message ?? t("gate.subtitle")}
           </p>
         </motion.div>
 
@@ -57,14 +59,14 @@ export function LicenseGate({ state }: { state: LicenseState }) {
           {state.keyHint && (
             <>
               <span>
-                Key ending in <span className="font-mono text-foreground">{state.keyHint}</span>
+                <Trans t={t} i18nKey="gate.keyEndingIn" values={{ hint: state.keyHint }} components={{ key: <span className="font-mono text-foreground" /> }} />
               </span>
               <Button variant="ghost" size="sm" className="h-7 text-muted-foreground" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
-                {refresh.isPending ? <Spinner className="size-3.5" /> : <RefreshCw />} Check again
+                {refresh.isPending ? <Spinner className="size-3.5" /> : <RefreshCw />} {t("checkAgain")}
               </Button>
             </>
           )}
-          {!state.keyHint && <span>Your agents, chats and logins stay safe on this computer.</span>}
+          {!state.keyHint && <span>{t("gate.dataSafe")}</span>}
         </div>
       </div>
     </div>

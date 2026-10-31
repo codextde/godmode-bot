@@ -79,6 +79,20 @@ export const EFFORT_LABELS: Record<Effort, string> = {
   max: "Max",
 };
 
+const EFFORT_LABELS_DE: Record<Effort, string> = {
+  low: "Niedrig",
+  medium: "Mittel",
+  high: "Hoch",
+  xhigh: "Sehr hoch",
+  max: "Max",
+};
+
+export function effortLabel(effort: Effort, lang: "en" | "de" = "en"): string {
+  return (lang === "de" ? EFFORT_LABELS_DE : EFFORT_LABELS)[effort] ?? effort;
+}
+
+export const ULTRACODE_HINT_DE = "Dynamische Workflows bei jeder Aufgabe: Claude plant die Arbeit und lässt mehrere Agenten daran arbeiten. Gründlich, aber langsamer und mit deutlich mehr Tokens.";
+
 /** Ultracode needs a model with this effort level (Claude Code's rule). */
 export const ULTRACODE_EFFORT: Effort = "xhigh";
 export const ULTRACODE_HINT = "Dynamic workflows on every task: Claude plans the work and runs several agents on it. Thorough, but slower and far more tokens.";

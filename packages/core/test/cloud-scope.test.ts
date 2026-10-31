@@ -102,6 +102,15 @@ describe("cloud route classification", () => {
     expect(res.status).toBe(403);
   });
 
+  test("which Hex program runs is chosen on the computer only", async () => {
+    const current = getSettings().voice.hexPath;
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { hexPath: "/tmp/evil" } }))).toBe(
+      "These settings can only be changed in Godmode on the computer itself.",
+    );
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { hexPath: current, hexModel: "whisper_large_v3_turbo" } }))).toBeNull();
+    expect(await cloudRefusal("GET", "/api/voice/hex", "owner", async () => null)).toBeNull();
+  });
+
   test("pointing the voice provider somewhere else needs allowSecrets: the vault's OpenAI key goes there", async () => {
     const OPERATOR: CloudRelayUser = { ...OWNER, id: "usr_operator", role: "operator" };
     const current = getSettings().voice.openaiBaseUrl;

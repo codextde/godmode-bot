@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
 import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,12 +26,13 @@ import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
 import { CallMarker, callBlock } from "@/components/calls/call-chat";
 import { liveMood } from "./conversation-mood";
+import { dateLocale, t } from "@/i18n";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
 
 function timeOf(iso: string) {
   try {
-    return format(new Date(iso), "p");
+    return format(new Date(iso), "p", { locale: dateLocale() });
   } catch {
     return "";
   }
@@ -41,20 +43,21 @@ function timeOf(iso: string) {
 /* ------------------------------------------------------------------ */
 
 export function UserMessage({ message, pending }: { message: Message; pending?: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <div className="group/msg flex flex-col items-end">
       <UserBubble content={message.content} attachments={message.attachments} dim={pending} />
       <div className="mt-1 flex h-6 items-center gap-1.5 pr-1 text-[11px] text-muted-foreground">
         {pending ? (
           <span className="inline-flex items-center gap-1">
-            <Loader2 className="size-3 animate-spin" /> Sending…
+            <Loader2 className="size-3 animate-spin" /> {t("messages.sending")}
           </span>
         ) : (
           <span className="flex items-center gap-0.5 opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
             <time dateTime={message.createdAt} className="px-1">
               {timeOf(message.createdAt)}
             </time>
-            {message.content && <CopyButton text={message.content} label="Copy message" />}
+            {message.content && <CopyButton text={message.content} label={t("messages.copyMessage")} />}
           </span>
         )}
       </div>
@@ -70,6 +73,7 @@ const HANDOFF_PREFIX = /^\[(?:Delegated by ([^\]\n]+?)|From ([^,\]\n]+), another
  * is, on the left in a dashed card, never as the human's own bubble.
  */
 export function StartedMessage({ message, delegatedFrom }: { message: Message; delegatedFrom?: Conversation["delegatedFrom"] }) {
+  const { t } = useTranslation(["chat", "common"]);
   const { data: agents = [] } = useAllAgents();
   const { data: tasks = [] } = useTasks("all");
   const { data: boot } = useBootstrap();
@@ -82,7 +86,7 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
   const named = parsed && parsed.toLowerCase() !== human ? parsed : "";
   // Who handed the chat over is known to Godmode (delegatedFrom); a name in the text only labels the card.
   const from = message.source === "delegation" ? agents.find((a) => a.id === delegatedFrom?.agentId) : undefined;
-  const task = message.source === "task" ? tasks.find((t) => t.conversationId === message.conversationId) : undefined;
+  const task = message.source === "task" ? tasks.find((x) => x.conversationId === message.conversationId) : undefined;
   const long = body.length > 400 || body.split("\n").length > 4;
   const time = timeOf(message.createdAt);
 
@@ -90,23 +94,23 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
     message.source === "automation" ? (
       <>
         <Workflow className="size-3.5" aria-hidden />
-        <span className="font-medium text-foreground">Automation</span>
+        <span className="font-medium text-foreground">{t("messages.automation")}</span>
       </>
     ) : message.source === "offer" ? (
       <>
         <HandHelping className="size-3.5" aria-hidden />
-        <span className="font-medium text-foreground">Offer you took up</span>
+        <span className="font-medium text-foreground">{t("messages.offer")}</span>
       </>
     ) : message.source === "task" ? (
       <>
         <KanbanSquare className="size-3.5" aria-hidden />
-        <span className="font-medium text-foreground">{task ? `Board ticket #${task.number}` : "Board ticket"}</span>
+        <span className="font-medium text-foreground">{task ? t("messages.boardTicketN", { n: task.number }) : t("messages.boardTicket")}</span>
       </>
     ) : from ? (
       <>
         <AgentAvatar agent={from} size="sm" still className="size-4 rounded-[4px] text-[9px]" />
         <span className="min-w-0 truncate">
-          From <span className="font-medium text-foreground">{from.name}</span>
+          <Trans t={t} i18nKey="messages.from" values={{ name: from.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
           {from.role && ` · ${from.role}`}
         </span>
       </>
@@ -114,21 +118,21 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
       <span className="min-w-0 truncate">
         {named ? (
           <>
-            From <span className="font-medium text-foreground">{named}</span>, another agent
+            <Trans t={t} i18nKey="messages.fromNamedAgent" values={{ name: named }} components={{ b: <span className="font-medium text-foreground" /> }} />
           </>
         ) : (
-          <span className="font-medium text-foreground">From another agent</span>
+          <span className="font-medium text-foreground">{t("messages.fromAnotherAgent")}</span>
         )}
       </span>
     );
   const action =
     message.source === "task" && task ? (
       <Link to={`/tasks?task=${task.id}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
-        Open ticket <ArrowUpRight className="size-3" />
+        {t("messages.openTicket")} <ArrowUpRight className="size-3" />
       </Link>
     ) : message.source === "delegation" && from && delegatedFrom?.conversationId ? (
       <Link to={`/chat/${delegatedFrom.conversationId}`} className="inline-flex items-center gap-0.5 underline-offset-2 hover:text-foreground hover:underline">
-        Open {from.name}'s chat <ArrowUpRight className="size-3" />
+        {t("messages.openAgentChat", { name: from.name })} <ArrowUpRight className="size-3" />
       </Link>
     ) : null;
 
@@ -147,13 +151,13 @@ export function StartedMessage({ message, delegatedFrom }: { message: Message; d
         {body && <p className={cn("text-[14px] leading-relaxed break-words whitespace-pre-wrap text-foreground/85", long && !open && "line-clamp-4")}>{body}</p>}
         {long && (
           <button type="button" className="mt-1 text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            {open ? "Show less" : "Show all"}
+            {open ? t("common:actions.showLess") : t("blocks.showAll")}
           </button>
         )}
         {message.attachments.length > 0 && <AttachmentList files={message.attachments} className="mt-2" />}
       </div>
       <div className="mt-1 flex h-6 items-center gap-1.5 pl-1 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100">
-        {body && <CopyButton text={body} label="Copy message" />}
+        {body && <CopyButton text={body} label={t("messages.copyMessage")} />}
       </div>
     </div>
   );
@@ -177,22 +181,17 @@ export function SystemMessage({ message }: { message: Message }) {
   );
 }
 
-const AUTO_LABELS: Record<RetryCause, Record<RetryMode, string>> = {
-  restart: { continue: "Continued after Godmode restarted", again: "Sent again after Godmode restarted" },
-  offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
-  error: { continue: "Continued after an error", again: "Sent again after an error" },
-  background: { continue: "Continued after background work was stopped", again: "Sent again after background work was stopped" },
-  unfinished: { continue: "Continued: the last turn stopped before the work was done", again: "Sent again: the last turn stopped before the work was done" },
-};
-
 /** Where a turn that ended early was picked up: by the human, or by Godmode after a restart, a lost connection, an error or stopped background work. */
 function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retry" }>; at: string }) {
+  const { t } = useTranslation("chat");
   const Icon = block.mode === "continue" ? Play : RotateCcw;
+  const cause: RetryCause = block.cause ?? "restart";
+  const mode: RetryMode = block.mode;
   const label = block.auto
-    ? AUTO_LABELS[block.cause ?? "restart"][block.mode]
+    ? t(`messages.retry.${cause}.${mode}`)
     : block.mode === "continue"
-      ? "Continued where it stopped"
-      : "Tried again";
+      ? t("messages.continuedWhereStopped")
+      : t("messages.triedAgain");
   return (
     <div role="note" className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />
@@ -202,7 +201,7 @@ function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retr
         <time dateTime={at} className="tabular-nums">
           · {timeOf(at)}
         </time>
-        {block.masked && <span>· saved secrets stay masked</span>}
+        {block.masked && <span>· {t("messages.secretsMasked")}</span>}
       </span>
       <span className="h-px flex-1 bg-border" />
     </div>
@@ -211,18 +210,19 @@ function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retr
 
 /** Where the chat went to another computer of the device group; `continued`: the run working then picks up there. */
 function MovedMarker({ block }: { block: Extract<MessageBlock, { type: "moved" }> }) {
+  const { t } = useTranslation("chat");
   return (
     <div role="note" className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />
       <span className="inline-flex min-w-0 items-center gap-1.5">
         <ArrowRightLeft className="size-3 shrink-0" aria-hidden />
         <span className="truncate">
-          Moved from <span className="font-medium text-foreground">{block.from}</span> to <span className="font-medium text-foreground">{block.to}</span>
+          <Trans t={t} i18nKey="messages.movedFromTo" values={{ from: block.from, to: block.to }} components={{ b: <span className="font-medium text-foreground" /> }} />
         </span>
         <time dateTime={block.at} className="shrink-0 tabular-nums">
           · {timeOf(block.at)}
         </time>
-        {block.continued && <span className="shrink-0">· continued there</span>}
+        {block.continued && <span className="shrink-0">· {t("messages.continuedThere")}</span>}
       </span>
       <span className="h-px flex-1 bg-border" />
     </div>
@@ -234,15 +234,17 @@ function MovedMarker({ block }: { block: Extract<MessageBlock, { type: "moved" }
 /* ------------------------------------------------------------------ */
 
 function AgentHeader({ agent, children }: { agent?: Agent; children?: ReactNode }) {
+  const { t } = useTranslation("chat");
   return (
     <div className="mb-1.5 flex min-h-8 items-center gap-2 text-sm">
-      <span className="font-medium tracking-[-0.01em]">{agent?.name ?? "Assistant"}</span>
+      <span className="font-medium tracking-[-0.01em]">{agent?.name ?? t("messages.assistant")}</span>
       {children}
     </div>
   );
 }
 
 export function AssistantMessage({ message, agent }: { message: Message; agent?: Agent }) {
+  const { t } = useTranslation("chat");
   const [hovered, setHovered] = useState(false);
   const blocks: MessageBlock[] = useMemo(
     () => (message.blocks.length ? message.blocks : message.content ? [{ type: "text", text: message.content }] : []),
@@ -257,23 +259,23 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
       <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood="idle" still className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent} />
-        <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} />
+        <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} agent={agent} />
         <div className="mt-1.5 flex h-7 items-center gap-0.5 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100 [@media(hover:none)]:opacity-100">
-          {text && <CopyButton text={text} label="Copy reply" />}
+          {text && <CopyButton text={text} label={t("messages.copyReply")} />}
           {text && speaker.supported && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  aria-label={speaking ? "Stop reading" : "Read aloud"}
+                  aria-label={speaking ? t("messages.stopReading") : t("messages.readAloud")}
                   className={cn("text-muted-foreground hover:text-foreground", speaking && "text-foreground")}
                   onClick={() => (speaking ? speaker.stop() : void speaker.speak(text, message.id))}
                 >
                   {speaking ? <Square className="fill-current" /> : <Volume2 />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{speaking ? "Stop reading" : "Read aloud"}</TooltipContent>
+              <TooltipContent>{speaking ? t("messages.stopReading") : t("messages.readAloud")}</TooltipContent>
             </Tooltip>
           )}
           <time dateTime={message.createdAt} className="px-1.5">
@@ -287,6 +289,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 }
 
 function RunMeta({ runId }: { runId: string }) {
+  const { t } = useTranslation("chat");
   const modelLabel = useModelLabel();
   const { data: run } = useQuery({
     queryKey: qk.run(runId),
@@ -311,15 +314,15 @@ function RunMeta({ runId }: { runId: string }) {
       {(tokens != null || run.numTurns != null) && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button type="button" aria-label="Run details" className="inline-flex items-center hover:text-foreground">
+            <button type="button" aria-label={t("messages.runDetails")} className="inline-flex items-center hover:text-foreground">
               <Info className="size-3" />
             </button>
           </TooltipTrigger>
           <TooltipContent className="text-xs">
-            {run.numTurns != null && <div>{run.numTurns} turns</div>}
+            {run.numTurns != null && <div>{t("messages.turns", { count: run.numTurns })}</div>}
             {run.usage && (
               <div>
-                {formatTokens(run.usage.inputTokens)} in · {formatTokens(run.usage.outputTokens)} out · {formatTokens(run.usage.cacheReadTokens)} cached
+                {t("messages.tokenUsage", { input: formatTokens(run.usage.inputTokens), output: formatTokens(run.usage.outputTokens), cached: formatTokens(run.usage.cacheReadTokens) })}
               </div>
             )}
           </TooltipContent>
@@ -355,15 +358,15 @@ export function orbVariantFor(label: string): OrbVariant {
 }
 
 export function liveActivityLabel(live: LiveRun | null): string {
-  if (!live) return "Starting…";
-  if (live.status === "queued") return "Queued…";
+  if (!live) return t("chat:blocks.starting");
+  if (live.status === "queued") return t("chat:messages.queuedEllipsis");
   if (live.activity) return live.activity;
   const last = live.blocks[live.blocks.length - 1];
-  if (!last) return "Thinking…";
+  if (!last) return t("chat:mood.thinking");
   if (last.type === "tool_use" && last.result === undefined) return `${describeTool(last.name, last.input).title}…`;
-  if (last.type === "thinking") return "Thinking…";
-  if (last.type === "text") return "Writing…";
-  return "Working…";
+  if (last.type === "thinking") return t("chat:mood.thinking");
+  if (last.type === "text") return t("chat:mood.writing");
+  return t("chat:status.working");
 }
 
 export function LiveAssistantMessage({
@@ -384,6 +387,7 @@ export function LiveAssistantMessage({
   onPause?: () => void;
   pausing?: boolean;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const now = useNow(1000);
   const label = liveActivityLabel(live);
   const since = live?.startedAt ?? startedAt;
@@ -404,22 +408,22 @@ export function LiveAssistantMessage({
                   <TooltipTrigger asChild>
                     <Button type="button" variant="ghost" size="xs" onClick={onPause} disabled={pausing || stopping} className="gap-1.5 text-muted-foreground hover:text-foreground">
                       {pausing ? <Loader2 className="animate-spin" /> : <Pause className="size-2.5 fill-current" />}
-                      {pausing ? "Pausing…" : "Pause"}
+                      {pausing ? t("messages.pausing") : t("messages.pause")}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{pausing ? "Finishing the step it is in" : "Pause after the current step — continue anytime"}</TooltipContent>
+                  <TooltipContent>{pausing ? t("messages.pausingHint") : t("messages.pauseHint")}</TooltipContent>
                 </Tooltip>
               )}
               {onStop && (
                 <Button type="button" variant="ghost" size="xs" onClick={onStop} disabled={stopping} className="gap-1.5 text-muted-foreground hover:text-destructive">
                   {stopping ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />}
-                  Stop
+                  {t("common:actions.stop")}
                 </Button>
               )}
             </span>
           )}
         </AgentHeader>
-        <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} />
+        <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} agent={agent} />
       </div>
     </motion.div>
   );

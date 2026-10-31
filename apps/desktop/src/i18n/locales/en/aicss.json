@@ -1,0 +1,50 @@
+{
+  "thinking": "Thinking",
+  "reasoning": "Reasoning…",
+  "thought": {
+    "seconds": "<verb>Thought</verb> for {{seconds}}s",
+    "process": "<verb>Thought</verb> process",
+    "summary": "<verb>Thought</verb> {{summary}}"
+  },
+  "codeBlock": {
+    "copyCode": "Copy code"
+  },
+  "fileDiff": {
+    "unchanged_one": "{{count}} unchanged line",
+    "unchanged_other": "{{count}} unchanged lines",
+    "showMore_one": "Show {{count}} more line",
+    "showMore_other": "Show {{count}} more lines"
+  },
+  "reasoningEffort": {
+    "label": "Effort",
+    "ariaLabel": "Reasoning effort",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "extraHigh": "Extra High"
+  },
+  "orb": {
+    "thinking": "Thinking…",
+    "processing": "Processing…",
+    "working": "Working…",
+    "searching": "Searching…",
+    "finalizing": "Finalizing…",
+    "generating": "Generating…",
+    "solving": "Solving…",
+    "routing": "Routing…",
+    "loading": "Loading…",
+    "listening": "Listening…",
+    "streaming": "Streaming…",
+    "analyzing": "Analyzing…",
+    "compiling": "Compiling…",
+    "sequencing": "Sequencing…",
+    "uploading": "Uploading…",
+    "syncing": "Syncing…",
+    "idling": "Idling…",
+    "shaping": "Shaping…",
+    "expanding": "Expanding…",
+    "unfolding": "Unfolding…",
+    "transforming": "Transforming…",
+    "dispersing": "Dispersing…"
+  }
+}

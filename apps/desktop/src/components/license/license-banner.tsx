@@ -4,8 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { differenceInCalendarDays, format } from "date-fns";
 import { CreditCard, Gift, KeyRound, Sparkles, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { LicenseState } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
+import { dateLocale, t } from "@/i18n";
 import { api } from "@/lib/api";
 import { storageKey } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
@@ -43,10 +45,15 @@ function dismissedToday(kind: Kind): boolean {
   }
 }
 
-function inDays(iso: string): string {
+function trialText(iso: string, cancelAtPeriodEnd: boolean): string {
   const days = differenceInCalendarDays(new Date(iso), new Date());
-  return days <= 0 ? "today" : days === 1 ? "tomorrow" : `in ${days} days`;
+  if (cancelAtPeriodEnd) {
+    return days <= 0 ? t("license:banner.trialEnds.today") : days === 1 ? t("license:banner.trialEnds.tomorrow") : t("license:banner.trialEnds.inDays", { count: days });
+  }
+  return days <= 0 ? t("license:banner.trialRenews.today") : days === 1 ? t("license:banner.trialRenews.tomorrow") : t("license:banner.trialRenews.inDays", { count: days });
 }
+
+const shortDate = (iso: string) => format(new Date(iso), t("license:banner.dateFormat"), { locale: dateLocale() });
 
 function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () => void; refresh: () => void; trial: () => void }): Notice | null {
   if (s.blocked) return null;
@@ -57,12 +64,10 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
       kind: "trial",
       tone: "info",
       icon: <Sparkles />,
-      text: s.cancelAtPeriodEnd ? (
-        <>Your free trial ends {inDays(s.trialEndsAt)} and won't continue.</>
-      ) : (
-        <>Your free trial ends {inDays(s.trialEndsAt)}. Your plan continues on its own after that.</>
-      ),
-      action: s.manageUrl ? { label: s.cancelAtPeriodEnd ? "Keep Godmode" : "Manage plan", run: actions.manage } : { label: "View licence", run: actions.settings },
+      text: trialText(s.trialEndsAt, !!s.cancelAtPeriodEnd),
+      action: s.manageUrl
+        ? { label: s.cancelAtPeriodEnd ? t("license:banner.keepGodmode") : t("license:banner.managePlan"), run: actions.manage }
+        : { label: t("license:banner.viewLicence"), run: actions.settings },
     };
   }
   if (s.status === "past_due") {
@@ -70,8 +75,8 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
       kind: "past_due",
       tone: "warning",
       icon: <CreditCard />,
-      text: "The last payment didn't go through. Update your payment method to keep Godmode working.",
-      action: s.manageUrl ? { label: "Update payment", run: actions.manage } : { label: "View licence", run: actions.settings },
+      text: t("license:banner.pastDue"),
+      action: s.manageUrl ? { label: t("license:banner.updatePayment"), run: actions.manage } : { label: t("license:banner.viewLicence"), run: actions.settings },
     };
   }
   if (!s.enforced) return null;
@@ -80,9 +85,9 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
       kind: "grace",
       tone: "info",
       icon: <Gift />,
-      text: <>Free until {format(new Date(s.graceEndsAt), "MMMM d")}. Then add your licence key or start the 14-day free trial.</>,
-      action: { label: "Start free trial", run: actions.trial },
-      secondary: { label: "Add key", run: actions.settings },
+      text: t("license:banner.grace", { date: shortDate(s.graceEndsAt) }),
+      action: { label: t("license:banner.startTrial"), run: actions.trial },
+      secondary: { label: t("license:banner.addKey"), run: actions.settings },
     };
   }
   if (s.status === "unverified" && s.unverifiedUntil) {
@@ -90,8 +95,8 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
       kind: "unverified",
       tone: "info",
       icon: <KeyRound />,
-      text: <>Your licence key couldn't be checked yet. Godmode accepts it until {format(new Date(s.unverifiedUntil), "MMMM d")}.</>,
-      action: { label: "Check again", run: actions.refresh },
+      text: t("license:banner.unverified", { date: shortDate(s.unverifiedUntil) }),
+      action: { label: t("license:checkAgain"), run: actions.refresh },
     };
   }
   return null;
@@ -99,6 +104,7 @@ function noticeFor(s: LicenseState, actions: { settings: () => void; manage: () 
 
 /** One slim line above the page when the licence needs attention soon (not on the licence page); dismissed, it stays away for the day. */
 export function LicenseBanner() {
+  const { t } = useTranslation("license");
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const qc = useQueryClient();
@@ -158,7 +164,7 @@ export function LicenseBanner() {
                   {shown.action.label}
                 </Button>
               )}
-              <Button variant="ghost" size="icon-sm" className="size-7 shrink-0 text-muted-foreground" aria-label="Dismiss for today" onClick={() => dismiss(shown.kind)}>
+              <Button variant="ghost" size="icon-sm" className="size-7 shrink-0 text-muted-foreground" aria-label={t("banner.dismiss")} onClick={() => dismiss(shown.kind)}>
                 <X />
               </Button>
             </div>

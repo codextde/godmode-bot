@@ -1,5 +1,6 @@
 import type { ComputerDisplay, ComputerTab, ComputerTarget, ComputerWindow } from "@godmode/shared";
 import { computerView } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 
 export function windowTarget(w: ComputerWindow): ComputerTarget {
   return { kind: "window", windowId: w.id, pid: w.pid, app: w.app, title: w.title, bundleId: w.bundleId };
@@ -17,7 +18,7 @@ export function tabTarget(t: ComputerTab): ComputerTarget {
 export function viewsOf(target: ComputerTarget, displays: ComputerDisplay[] | undefined): { view: string; label: string }[] {
   if (target.kind === "desktop") {
     const list = displays?.length ? displays : [];
-    if (!list.length) return [{ view: computerView(target), label: "Primary display" }];
+    if (!list.length) return [{ view: computerView(target), label: translate("computer:primaryDisplay") }];
     return [...list].sort((a, b) => Number(b.primary) - Number(a.primary)).map((d) => ({ view: `display:${d.id}`, label: d.name }));
   }
   return [{ view: computerView(target), label: "" }];
@@ -27,11 +28,11 @@ export function viewsOf(target: ComputerTarget, displays: ComputerDisplay[] | un
 export function controlNote(target: ComputerTarget): string {
   switch (target.kind) {
     case "window":
-      return "Controlled in the background — you keep using your mouse and keyboard.";
+      return translate("computer:control.window");
     case "tab":
-      return "Controlled in the background, inside Godmode's browser.";
+      return translate("computer:control.tab");
     default:
-      return "Uses your real mouse and keyboard — you'll see everything the agent does.";
+      return translate("computer:control.desktop");
   }
 }
 

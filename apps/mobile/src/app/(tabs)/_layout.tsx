@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { isHumanTaskWaiting } from "@godmode/shared";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { useTranslation } from "react-i18next";
 import { DynamicColorIOS, Platform } from "react-native";
 import { LiveAccessory } from "@/components/live-accessory";
 import { api } from "@/lib/api";
@@ -13,6 +14,7 @@ const tint = Platform.OS === "ios" ? DynamicColorIOS({ light: "#1C1C1C", dark: "
 
 export default function TabsLayout() {
   const c = useColors();
+  const { t } = useTranslation("tabs");
   const working = useLive((s) => Object.keys(s.runs).length > 0);
   const running = useLive((s) => Object.values(s.runs).filter(({ run }) => run.status === "running").length);
   const offline = useLive((s) => s.status === "offline");
@@ -39,25 +41,25 @@ export default function TabsLayout() {
         </NativeTabs.BottomAccessory>
       )}
       <NativeTabs.Trigger name="(home)">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{t("tabBar.home")}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "house", selected: "house.fill" }} md="home" />
         {needsYou > 0 && <NativeTabs.Trigger.Badge>{String(needsYou)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="chats">
-        <NativeTabs.Trigger.Label>Chats</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{t("tabBar.chats")}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "bubble.left.and.bubble.right", selected: "bubble.left.and.bubble.right.fill" }} md="forum" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="tasks">
-        <NativeTabs.Trigger.Label>Tasks</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{t("tabBar.tasks")}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "rectangle.split.3x1", selected: "rectangle.split.3x1.fill" }} md="view_kanban" />
         {tasks > 0 && <NativeTabs.Trigger.Badge>{String(tasks)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="screens">
-        <NativeTabs.Trigger.Label>Screens</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{t("tabBar.screens")}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="macwindow.on.rectangle" md="desktop_windows" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="agents">
-        <NativeTabs.Trigger.Label>Agents</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>{t("tabBar.agents")}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: "face.smiling.inverse", selected: "face.smiling" }} md="smart_toy" />
         {running > 0 && <NativeTabs.Trigger.Badge>{String(running)}</NativeTabs.Trigger.Badge>}
       </NativeTabs.Trigger>

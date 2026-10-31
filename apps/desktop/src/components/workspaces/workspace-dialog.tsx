@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
+import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceClaudeAccounts, type WorkspaceSourceInput } from "@godmode/shared";
 import { DraftStatus } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,6 +21,7 @@ import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
 import { WorkspaceSourcesField, toSourceInput } from "./workspace-sources";
 import { ColorRadios, ICONS, IconPicker } from "./icon-picker";
+import { WorkspaceAccountsField } from "./workspace-accounts-field";
 
 const MAX_NAME = 60;
 const NEW_DRAFT = "workspace:new";
@@ -34,6 +36,7 @@ interface WorkspaceForm {
   browserProfileId: string | null;
   sources: WorkspaceSourceInput[];
   autoMerge: boolean;
+  claudeAccounts: WorkspaceClaudeAccounts | null;
 }
 
 function randomLook() {
@@ -51,9 +54,9 @@ function formFrom(workspace: Workspace | null | undefined, look: { icon: string;
     browserProfileId: workspace?.browserProfileId ?? null,
     sources: workspace?.sources.map(toSourceInput) ?? [],
     autoMerge: workspace?.autoMerge ?? false,
+    claudeAccounts: workspace?.claudeAccounts ?? null,
   };
 }
-const CONTEXT_EXAMPLE = "We are ACME GmbH. Write to clients in German.\nInvoices go to finance@acme.example.\nNever touch the production database.";
 
 export function WorkspaceDialog({
   open,
@@ -68,6 +71,7 @@ export function WorkspaceDialog({
   /** Start in the agent context field or at the folders and repositories instead of the name. */
   focus?: "instructions" | "sources";
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const qc = useQueryClient();
   const setScope = useUi((s) => s.setWorkspace);
   const editing = !!workspace;
@@ -81,7 +85,7 @@ export function WorkspaceDialog({
   const closing = useRef(live);
   if (open) closing.current = live;
   const form = open ? live : closing.current;
-  const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge } = form;
+  const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge, claudeAccounts } = form;
   const set =
     <K extends keyof WorkspaceForm>(key: K) =>
     (value: WorkspaceForm[K]) =>
@@ -100,14 +104,14 @@ export function WorkspaceDialog({
 
   useEffect(() => {
     if (!open || focus !== "sources") return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       const list = scrollRef.current;
       const section = sourcesRef.current;
       if (!list || !section) return;
       const top = section.getBoundingClientRect().top - list.getBoundingClientRect().top + list.scrollTop - 16;
       list.scrollTo({ top, behavior: "smooth" });
     }, 120);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [open, focus]);
 
   const save = useMutation({
@@ -121,6 +125,7 @@ export function WorkspaceDialog({
         instructions: instructions.trim(),
         sources,
         autoMerge,
+        ...(JSON.stringify(claudeAccounts) !== JSON.stringify(workspace?.claudeAccounts ?? null) ? { claudeAccounts } : {}),
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
         ...(browserProfileId !== (workspace?.browserProfileId ?? null) ? { browserProfileId } : {}),
@@ -134,15 +139,15 @@ export function WorkspaceDialog({
       void qc.invalidateQueries({ queryKey: qk.workspaces });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
-      if (edited) toast.success("Workspace updated");
+      if (edited) toast.success(t("dialog.updated"));
       else
-        toast.success(`${ws.icon} ${ws.name} created`, {
-          description: "Add agents, logins and integrations to it.",
-          action: { label: "Switch to it", onClick: () => setScope(ws.id) },
+        toast.success(t("dialog.created", { icon: ws.icon, name: ws.name }), {
+          description: t("dialog.createdDescription"),
+          action: { label: t("dialog.switchTo"), onClick: () => setScope(ws.id) },
         });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, editing ? "Could not update workspace" : "Could not create workspace", qc),
+    onError: (e) => toastApiError(e, editing ? t("dialog.updateFailed") : t("dialog.createFailed"), qc),
   });
 
   const submit = (e: FormEvent) => {
@@ -162,45 +167,43 @@ export function WorkspaceDialog({
         <form onSubmit={submit} className="min-w-0">
           <div className="relative overflow-hidden border-b bg-paper-2 px-6 pt-6 pb-5">
             <DialogHeader className="relative">
-              <DialogTitle>{editing ? "Edit workspace" : "New workspace"}</DialogTitle>
-              <DialogDescription>
-                A separate space for a client, project or area of your life — with its own agents, logins, 2FA codes and integrations.
-              </DialogDescription>
+              <DialogTitle>{editing ? t("dialog.editTitle") : t("dialog.newTitle")}</DialogTitle>
+              <DialogDescription>{t("dialog.description")}</DialogDescription>
             </DialogHeader>
             <div className="relative mt-5 flex items-center gap-4">
               <IconPicker icon={icon} color={color} onChange={setIcon} />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || "Untitled workspace"}</p>
-                <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || "Click the icon to change it"}</p>
+                <p className="truncate text-lg font-medium tracking-[-0.02em]">{name.trim() || t("dialog.untitled")}</p>
+                <p className="line-clamp-1 text-sm text-muted-foreground">{description.trim() || t("dialog.clickIcon")}</p>
               </div>
             </div>
           </div>
 
           <div ref={scrollRef} className="max-h-[min(36rem,calc(100dvh-18rem))] space-y-5 overflow-y-auto px-6 py-5">
             <div className="space-y-2">
-              <Label htmlFor="ws-name">Name</Label>
+              <Label htmlFor="ws-name">{t("common:words.name")}</Label>
               <Input
                 id="ws-name"
                 autoFocus={!focus}
                 required
                 maxLength={MAX_NAME}
-                placeholder="e.g. ACME Corp, Side project, Household"
+                placeholder={t("dialog.namePlaceholder")}
                 value={name}
                 onChange={(e) => set("name")(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label id="ws-color-label">Color</Label>
+              <Label id="ws-color-label">{t("dialog.color")}</Label>
               <ColorRadios value={color} onChange={set("color")} labelledBy="ws-color-label" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="ws-desc">
-                Description <span className="font-normal text-muted-foreground">(optional)</span>
+                {t("common:words.description")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
               </Label>
               <Textarea
                 id="ws-desc"
                 rows={3}
-                placeholder="What happens in this workspace? Agents see this as context."
+                placeholder={t("dialog.descriptionPlaceholder")}
                 value={description}
                 onChange={(e) => set("description")(e.target.value)}
               />
@@ -208,16 +211,16 @@ export function WorkspaceDialog({
             <div className="space-y-2">
               <div className="space-y-0.5">
                 <Label htmlFor="ws-instructions">
-                  Agent context <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("dialog.agentContext")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
                 </Label>
-                <p className="text-xs text-muted-foreground">Given to every agent in this workspace on every run.</p>
+                <p className="text-xs text-muted-foreground">{t("dialog.agentContextHint")}</p>
               </div>
               <Textarea
                 id="ws-instructions"
                 autoFocus={focus === "instructions"}
                 rows={5}
                 maxLength={MAX_INSTRUCTIONS_LENGTH}
-                placeholder={CONTEXT_EXAMPLE}
+                placeholder={t("dialog.contextExample")}
                 value={instructions}
                 onChange={(e) => set("instructions")(e.target.value)}
                 className="max-h-72 min-h-28 resize-y leading-relaxed"
@@ -226,37 +229,37 @@ export function WorkspaceDialog({
             <div ref={sourcesRef} className="space-y-2">
               <div className="space-y-0.5">
                 <Label>
-                  Folders &amp; repositories <span className="font-normal text-muted-foreground">(optional)</span>
+                  {t("dialog.sources")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  Every agent in this workspace can read and edit these and follows their CLAUDE.md. Repositories are cloned for them.
+                  {t("dialog.sourcesHint")}
                 </p>
               </div>
               <WorkspaceSourcesField workspaceId={workspace?.id ?? null} value={sources} onChange={set("sources")} />
             </div>
             <div className="flex items-start justify-between gap-4 rounded-xl border bg-card px-4 py-3">
               <div className="min-w-0 space-y-0.5">
-                <Label htmlFor="ws-auto-merge">Merge delivered tickets automatically</Label>
+                <Label htmlFor="ws-auto-merge">{t("dialog.autoMerge")}</Label>
                 <p className="text-xs text-muted-foreground">
-                  When an agent delivers a ticket with a pull request, Godmode merges it into its base branch and moves the ticket to Done — no
-                  approval needed.
+                  {t("dialog.autoMergeHint")}
                 </p>
               </div>
               <Switch id="ws-auto-merge" className="mt-0.5" checked={autoMerge} onCheckedChange={set("autoMerge")} />
             </div>
+            <WorkspaceAccountsField value={claudeAccounts} onChange={set("claudeAccounts")} />
             <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={set("browserProfileId")} />
             {vmChoices.available && (
               <VmSelectField
                 id="ws-vm"
                 label={
                   <>
-                    Virtual machine <span className="font-normal text-muted-foreground">(optional)</span>
+                    {t("dialog.vm")} <span className="font-normal text-muted-foreground">{t("dialog.optional")}</span>
                   </>
                 }
                 value={vmId}
                 onChange={set("vmId")}
-                noneLabel="None — agents work on this Mac"
-                hint="The workspace's agents work in this macOS VM, unless an agent or a chat has its own."
+                noneLabel={t("dialog.vmNone")}
+                hint={t("dialog.vmHint")}
               />
             )}
           </div>
@@ -264,11 +267,11 @@ export function WorkspaceDialog({
           <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4">
             {kept.saved && <DraftStatus onDiscard={kept.discard} className="mr-auto" />}
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || save.isPending}>
               {save.isPending && <Spinner />}
-              {editing ? "Save changes" : "Create workspace"}
+              {editing ? t("dialog.saveChanges") : t("dialog.create")}
             </Button>
           </DialogFooter>
         </form>

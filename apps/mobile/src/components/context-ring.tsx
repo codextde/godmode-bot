@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet } from "react-native";
+import { useTranslation } from "react-i18next";
 import Svg, { Circle } from "react-native-svg";
 import type { ContextGauge } from "@godmode/shared";
 import { T, tap } from "./ui";
@@ -33,13 +34,14 @@ export function Ring({ share, color, track, size = 18, stroke = 2.4 }: { share: 
 /** How full the chat's memory is, in the composer's toolbar; opens the Chat memory sheet. */
 export function ContextRing({ gauge, conversationId }: { gauge: ContextGauge; conversationId: string }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const pct = gauge.share === null ? null : Math.round(gauge.share * 100);
   const color = toneColor(c, gauge.tone);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={pct === null ? "Chat memory" : `Chat memory ${pct}% full`}
-      accessibilityHint="Shows how full this chat is and lets you compress it"
+      accessibilityLabel={pct === null ? t("contextRing.label") : t("contextRing.labelFull", { pct })}
+      accessibilityHint={t("contextRing.hint")}
       hitSlop={6}
       onPress={() => {
         tap();

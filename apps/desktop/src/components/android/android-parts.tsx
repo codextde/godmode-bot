@@ -1,9 +1,21 @@
 import { BatteryCharging, BatteryFull, BatteryLow, BatteryMedium, Cable, MonitorSmartphone, Wifi } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AndroidConnection, AndroidDevice } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
-export const CONNECTION_LABEL: Record<AndroidConnection, string> = { usb: "USB", wifi: "Wi-Fi", emulator: "Emulator" };
+export const CONNECTION_LABEL: Record<AndroidConnection, string> = {
+  get usb() {
+    return t("android:connection.usb");
+  },
+  get wifi() {
+    return t("android:connection.wifi");
+  },
+  get emulator() {
+    return t("android:connection.emulator");
+  },
+};
 
 export function ConnectionIcon({ connection, className }: { connection: AndroidConnection | null; className?: string }) {
   const Icon = connection === "wifi" ? Wifi : connection === "emulator" ? MonitorSmartphone : Cable;
@@ -12,13 +24,14 @@ export function ConnectionIcon({ connection, className }: { connection: AndroidC
 
 /** "Connected", "Allow USB debugging", "Offline", "Not connected". */
 export function stateLabel(device: Pick<AndroidDevice, "state" | "busy">): string {
-  if (device.state === "connected") return device.busy ? "Agent working" : "Connected";
-  if (device.state === "unauthorized") return "Allow USB debugging";
-  if (device.state === "offline") return "Offline";
-  return "Not connected";
+  if (device.state === "connected") return device.busy ? t("android:state.agentWorking") : t("android:state.connected");
+  if (device.state === "unauthorized") return t("android:state.unauthorized");
+  if (device.state === "offline") return t("android:state.offline");
+  return t("android:state.disconnected");
 }
 
 export function AndroidStateBadge({ device, className }: { device: Pick<AndroidDevice, "state" | "busy" | "connection">; className?: string }) {
+  useTranslation("android");
   const connected = device.state === "connected";
   const waiting = device.state === "unauthorized" || device.state === "offline";
   return (

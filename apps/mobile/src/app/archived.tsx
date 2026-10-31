@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Stack } from "expo-router";
 import { memo, useCallback, useMemo } from "react";
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { ConversationRow } from "@/components/rows";
 import { EmptyState, ErrorState, Hairline, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import { useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -20,6 +22,7 @@ const LIMIT = 200;
 
 /** Chats taken out of the list. Archiving stops nothing, so the ones with work ahead come first. */
 export default function ArchivedChats() {
+  const { t } = useTranslation("tasks");
   const { id: workspaceId, projectId } = useWorkspace();
   const projects = useProjectIndex();
   const list = useQuery({ queryKey: qk.archivedChats(workspaceId), queryFn: () => api.conversations.list({ archived: true, limit: LIMIT, workspaceId }) });
@@ -34,13 +37,13 @@ export default function ArchivedChats() {
     const out: Item[] = [];
     const add = (group: Conversation[]) => group.forEach((conversation, i) => out.push({ kind: "chat", key: conversation.id, conversation, divided: i > 0 }));
     if (going.length) {
-      out.push({ kind: "header", key: "h-going", title: "Still going", hint: "Archived, but the agent keeps working or comes back to them." });
+      out.push({ kind: "header", key: "h-going", title: t("archivedChats.stillGoing"), hint: t("archivedChats.stillGoingHint") });
       add(going);
-      if (going.length < chats.length) out.push({ kind: "header", key: "h-archived", title: "Archived" });
+      if (going.length < chats.length) out.push({ kind: "header", key: "h-archived", title: t("archivedChats.archived") });
     }
     add(chats.filter((conv) => !isGoing(conv)));
     return out;
-  }, [list.data, projectId, byId, running]);
+  }, [list.data, projectId, byId, running, t]);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item }) => {
@@ -56,7 +59,7 @@ export default function ArchivedChats() {
 
   return (
     <>
-      <Stack.Title>Archived chats</Stack.Title>
+      <Stack.Title>{t("archivedChats.title")}</Stack.Title>
       <FlashList
         data={items}
         keyExtractor={(item) => item.key}
@@ -72,9 +75,9 @@ export default function ArchivedChats() {
               <SkeletonRows count={8} />
             </View>
           ) : list.isError ? (
-            <ErrorState title="Couldn't load archived chats" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("archivedChats.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : (
-            <EmptyState icon="archive" title="Nothing archived" body="Long-press a chat and archive it to tidy up. It lands here, with every message intact." />
+            <EmptyState icon="archive" title={t("archivedChats.emptyTitle")} body={t("archivedChats.emptyBody")} />
           )
         }
       />
@@ -109,21 +112,21 @@ function unarchiveChat(id: string) {
   dropFromArchive(id);
   api.conversations
     .update(id, { archived: false })
-    .catch((err) => Alert.alert("Couldn't unarchive the chat", errorText(err)))
+    .catch((err) => Alert.alert(t("tasks:archivedChats.unarchiveFailed"), errorText(err)))
     .finally(refreshChats);
 }
 
 function deleteChat(id: string) {
-  Alert.alert("Delete this chat?", "It's removed on your computer too.", [
-    { text: "Cancel", style: "cancel" },
+  Alert.alert(t("tasks:archivedChats.deleteTitle"), t("tasks:archivedChats.deleteBody"), [
+    { text: t("common:actions.cancel"), style: "cancel" },
     {
-      text: "Delete",
+      text: t("common:actions.delete"),
       style: "destructive",
       onPress: () => {
         dropFromArchive(id);
         api.conversations
           .delete(id)
-          .catch((err) => Alert.alert("Couldn't delete the chat", errorText(err)))
+          .catch((err) => Alert.alert(t("tasks:archivedChats.deleteFailed"), errorText(err)))
           .finally(refreshChats);
       },
     },
@@ -145,6 +148,7 @@ const ArchivedChat = memo(function ArchivedChat({
   divided: boolean;
 }) {
   const c = useColors();
+  const { t } = useTranslation(["tasks", "common"]);
   const row = <ConversationRow conversation={conversation} agent={agent} running={running} project={project} />;
   if (process.env.EXPO_OS !== "ios") {
     return (
@@ -154,7 +158,7 @@ const ArchivedChat = memo(function ArchivedChat({
           <View style={{ flex: 1, minWidth: 0 }}>{row}</View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Unarchive ${conversation.title || "this chat"}`}
+            accessibilityLabel={conversation.title ? t("archivedChats.unarchiveA11y", { title: conversation.title }) : t("archivedChats.unarchiveThis")}
             hitSlop={8}
             onPress={() => {
               tap();
@@ -163,7 +167,7 @@ const ArchivedChat = memo(function ArchivedChat({
             style={({ pressed }) => [styles.action, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
           >
             <T variant="footnote" style={{ fontWeight: "600" }}>
-              Unarchive
+              {t("archivedChats.unarchive")}
             </T>
           </Pressable>
         </View>
@@ -180,8 +184,8 @@ const ArchivedChat = memo(function ArchivedChat({
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        <Link.MenuAction title="Unarchive" icon="arrow.uturn.backward" onPress={() => unarchiveChat(conversation.id)} />
-        <Link.MenuAction title="Delete" icon="trash" destructive onPress={() => deleteChat(conversation.id)} />
+        <Link.MenuAction title={t("archivedChats.unarchive")} icon="arrow.uturn.backward" onPress={() => unarchiveChat(conversation.id)} />
+        <Link.MenuAction title={t("common:actions.delete")} icon="trash" destructive onPress={() => deleteChat(conversation.id)} />
       </Link.Menu>
     </Link>
   );

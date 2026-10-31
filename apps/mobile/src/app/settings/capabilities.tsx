@@ -1,24 +1,27 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CloseButton } from "@/components/close-button";
 import { Group, PickerRow, StepperRow, SwitchRow } from "@/components/form";
+import { t } from "@/lib/i18n";
 import { patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
 const IDLE = [0, 5, 10, 15, 30, 60, 120, 240, 480, 1440] as const;
 
 function minutes(n: number): string {
-  if (n === 0) return "Never";
+  if (n === 0) return t("common:words.never");
   return n < 60 ? `${n} min` : `${n / 60} h`;
 }
 
 export default function Capabilities() {
+  const { t } = useTranslation("settings");
   const settings = useSettings();
   const s = settings.data;
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Browser & computer" }} />
+      <Stack.Screen options={{ title: t("capabilities.title") }} />
       <CloseButton />
       {!s ? (
         <View style={styles.loading}>
@@ -26,29 +29,29 @@ export default function Capabilities() {
         </View>
       ) : (
         <>
-          <Group title="Browser" footer="Agents browse in their own profiles, with your saved logins filled in by Godmode.">
-            <SwitchRow icon="globe" title="Browser for agents" value={s.browser.enabled} onChange={(enabled) => void patchSettings({ browser: { enabled } })} />
+          <Group title={t("capabilities.browser.title")} footer={t("capabilities.browser.footer")}>
+            <SwitchRow icon="globe" title={t("capabilities.browser.enabled")} value={s.browser.enabled} onChange={(enabled) => void patchSettings({ browser: { enabled } })} />
             <SwitchRow
               icon="eye"
-              title="Run in the background"
-              detail="No browser window opens on your computer."
+              title={t("capabilities.browser.headless")}
+              detail={t("capabilities.browser.headlessDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.headless}
               onChange={(headless) => void patchSettings({ browser: { headless } })}
             />
             <SwitchRow
               icon="shield"
-              title="Look like a person"
-              detail="Hides automation signals so sites don't block agents."
+              title={t("capabilities.browser.stealth")}
+              detail={t("capabilities.browser.stealthDetail")}
               disabled={!s.browser.enabled}
               value={s.browser.stealth}
               onChange={(stealth) => void patchSettings({ browser: { stealth } })}
             />
-            <SwitchRow icon="bell" title="Mute sound" disabled={!s.browser.enabled} value={s.browser.muteAudio} onChange={(muteAudio) => void patchSettings({ browser: { muteAudio } })} />
-            <SwitchRow icon="screens" title="Live view" detail="Watch the browser while an agent works." disabled={!s.browser.enabled} value={s.browser.liveView} onChange={(liveView) => void patchSettings({ browser: { liveView } })} />
+            <SwitchRow icon="bell" title={t("capabilities.browser.mute")} disabled={!s.browser.enabled} value={s.browser.muteAudio} onChange={(muteAudio) => void patchSettings({ browser: { muteAudio } })} />
+            <SwitchRow icon="screens" title={t("capabilities.liveView")} detail={t("capabilities.browser.liveViewDetail")} disabled={!s.browser.enabled} value={s.browser.liveView} onChange={(liveView) => void patchSettings({ browser: { liveView } })} />
             <StepperRow
               icon="clock"
-              title="Close idle browser after"
+              title={t("capabilities.browser.keepAlive")}
               value={s.browser.keepAliveMinutes}
               min={0}
               max={1440}
@@ -58,21 +61,21 @@ export default function Capabilities() {
             />
           </Group>
 
-          <Group title="Computer use" footer="Agents only see and control a screen, window or tab you share with them in a chat.">
-            <SwitchRow icon="display" title="Computer use" value={s.computer.enabled} onChange={(enabled) => void patchSettings({ computer: { enabled } })} />
+          <Group title={t("capabilities.computer.title")} footer={t("capabilities.computer.footer")}>
+            <SwitchRow icon="display" title={t("capabilities.computer.title")} value={s.computer.enabled} onChange={(enabled) => void patchSettings({ computer: { enabled } })} />
             <SwitchRow
               icon="expand"
-              title="Bring windows to the front"
-              detail="Briefly, when a background action doesn't land."
+              title={t("capabilities.computer.foreground")}
+              detail={t("capabilities.computer.foregroundDetail")}
               disabled={!s.computer.enabled}
               value={s.computer.allowForeground}
               onChange={(allowForeground) => void patchSettings({ computer: { allowForeground } })}
             />
-            <SwitchRow icon="cursor" title="Show the agent's cursor" disabled={!s.computer.enabled} value={s.computer.agentCursor} onChange={(agentCursor) => void patchSettings({ computer: { agentCursor } })} />
-            <SwitchRow icon="screens" title="Live view" disabled={!s.computer.enabled} value={s.computer.liveView} onChange={(liveView) => void patchSettings({ computer: { liveView } })} />
+            <SwitchRow icon="cursor" title={t("capabilities.computer.cursor")} disabled={!s.computer.enabled} value={s.computer.agentCursor} onChange={(agentCursor) => void patchSettings({ computer: { agentCursor } })} />
+            <SwitchRow icon="screens" title={t("capabilities.liveView")} disabled={!s.computer.enabled} value={s.computer.liveView} onChange={(liveView) => void patchSettings({ computer: { liveView } })} />
             <StepperRow
               icon="film"
-              title="Live view speed"
+              title={t("capabilities.computer.liveViewSpeed")}
               value={s.computer.liveViewFps}
               min={1}
               max={10}
@@ -81,22 +84,22 @@ export default function Capabilities() {
             />
           </Group>
 
-          <Group title="Virtual machines" footer="Agents with a VM work inside it instead of on this computer.">
-            <SwitchRow icon="vm" title="Virtual machines" value={s.vm.enabled} onChange={(enabled) => void patchSettings({ vm: { enabled } })} />
+          <Group title={t("capabilities.vm.title")} footer={t("capabilities.vm.footer")}>
+            <SwitchRow icon="vm" title={t("capabilities.vm.title")} value={s.vm.enabled} onChange={(enabled) => void patchSettings({ vm: { enabled } })} />
             <PickerRow
               icon="power"
-              title="When Godmode quits"
+              title={t("capabilities.vm.onQuit")}
               value={s.vm.onQuit}
               options={[
-                { value: "suspend", label: "Suspend", detail: "Resume where they left off." },
-                { value: "stop", label: "Shut down" },
-                { value: "keep", label: "Keep running" },
+                { value: "suspend", label: t("capabilities.vm.suspend"), detail: t("capabilities.vm.suspendDetail") },
+                { value: "stop", label: t("capabilities.vm.stop") },
+                { value: "keep", label: t("capabilities.vm.keep") },
               ]}
               onChange={(onQuit) => void patchSettings({ vm: { onQuit } })}
             />
             <StepperRow
               icon="clock"
-              title="Stop idle VMs after"
+              title={t("capabilities.vm.idleStop")}
               value={s.vm.idleStopMinutes}
               min={0}
               max={1440}

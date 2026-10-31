@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Dices } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AgentCharacter, CharacterMood } from "@godmode/shared";
 import {
   AGENT_COLORS,
@@ -11,6 +12,7 @@ import {
   CHARACTER_NECKS,
   CHARACTER_TOPS,
   PERSONALITY_PRESETS,
+  personalityText,
   characterGreeting,
   personalityPreset,
   randomCharacter,
@@ -20,16 +22,17 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { currentLanguage } from "@/i18n";
 
 type Part = keyof AgentCharacter;
 
-const PARTS: { part: Part; label: string; options: readonly string[]; zoom?: number }[] = [
-  { part: "body", label: "Body", options: CHARACTER_BODIES },
-  { part: "eyes", label: "Eyes", options: CHARACTER_EYES, zoom: 1.3 },
-  { part: "mouth", label: "Mouth", options: CHARACTER_MOUTHS, zoom: 1.3 },
-  { part: "top", label: "Hat", options: CHARACTER_TOPS },
-  { part: "face", label: "Face", options: CHARACTER_FACES, zoom: 1.15 },
-  { part: "neck", label: "Neck", options: CHARACTER_NECKS },
+const PARTS: { part: Part; options: readonly string[]; zoom?: number }[] = [
+  { part: "body", options: CHARACTER_BODIES },
+  { part: "eyes", options: CHARACTER_EYES, zoom: 1.3 },
+  { part: "mouth", options: CHARACTER_MOUTHS, zoom: 1.3 },
+  { part: "top", options: CHARACTER_TOPS },
+  { part: "face", options: CHARACTER_FACES, zoom: 1.15 },
+  { part: "neck", options: CHARACTER_NECKS },
 ];
 
 /** Moods the preview runs through while hovered — a quick look at how the agent will act. */
@@ -58,6 +61,7 @@ export function CharacterStage({
   onSurprise?: () => void;
   className?: string;
 }) {
+  const { t } = useTranslation("agents");
   const [hovered, setHovered] = useState(false);
   const [reel, setReel] = useState(0);
   const [cheer, setCheer] = useState(false);
@@ -81,7 +85,7 @@ export function CharacterStage({
   }, [hovered]);
 
   const mood: CharacterMood = cheer ? "happy" : hovered ? SHOWREEL[reel]! : "idle";
-  const greeting = characterGreeting({ name: name.trim() || "Your agent", personality, human, seed: "studio" });
+  const greeting = characterGreeting({ name: name.trim() || t("characterStudio.yourAgent"), personality, human, seed: "studio", lang: currentLanguage() });
 
   return (
     <div
@@ -95,7 +99,7 @@ export function CharacterStage({
       </div>
       {onSurprise && (
         <Button type="button" variant="outline" size="xs" onClick={onSurprise} className="mt-3 bg-card">
-          <Dices /> Surprise me
+          <Dices /> {t("characterStudio.surprise")}
         </Button>
       )}
     </div>
@@ -112,18 +116,19 @@ export function CharacterPartsPicker({
   color: string;
   onChange: (character: AgentCharacter) => void;
 }) {
+  const { t } = useTranslation("agents");
   return (
     <Tabs defaultValue="body">
       <TabsList variant="line" className="w-full justify-start overflow-x-auto">
         {PARTS.map((p) => (
           <TabsTrigger key={p.part} value={p.part} className="flex-none px-2.5">
-            {p.label}
+            {t(`characterStudio.parts.${p.part}`)}
           </TabsTrigger>
         ))}
       </TabsList>
-      {PARTS.map(({ part, label, options, zoom }) => (
+      {PARTS.map(({ part, options, zoom }) => (
         <TabsContent key={part} value={part} className="pt-2">
-          <div role="radiogroup" aria-label={label} className="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-2">
+          <div role="radiogroup" aria-label={t(`characterStudio.parts.${part}`)} className="grid grid-cols-[repeat(auto-fill,minmax(4.5rem,1fr))] gap-2">
             {options.map((option) => {
               const selected = character[part] === option;
               const optionLabel = (CHARACTER_LABELS[part] as Record<string, string>)[option] ?? option;
@@ -153,6 +158,7 @@ export function CharacterPartsPicker({
 
 /** How the agent talks: a preset voice, none, or the human's own words. Stored as the preset id or the custom text. */
 export function PersonalityPicker({ value, onChange }: { value: string; onChange: (personality: string) => void }) {
+  const { t } = useTranslation("agents");
   const isCustom = !!value.trim() && !personalityPreset(value);
   const [custom, setCustom] = useState(isCustom);
   const lastCustom = useRef(isCustom ? value : "");
@@ -167,7 +173,7 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
 
   return (
     <div className="space-y-3">
-      <div role="radiogroup" aria-label="Personality" className="grid grid-cols-1 gap-2 @md:grid-cols-2 @3xl:grid-cols-3">
+      <div role="radiogroup" aria-label={t("characterStudio.personality")} className="grid grid-cols-1 gap-2 @md:grid-cols-2 @3xl:grid-cols-3">
         {PERSONALITY_PRESETS.map((p) => (
           <button
             key={p.id}
@@ -180,8 +186,8 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
             }}
             className={card(!customOn && value === p.id)}
           >
-            <span className="text-sm font-medium">{p.label}</span>
-            <span className="text-xs text-muted-foreground">{p.blurb}</span>
+            <span className="text-sm font-medium">{personalityText(p, currentLanguage()).label}</span>
+            <span className="text-xs text-muted-foreground">{personalityText(p, currentLanguage()).blurb}</span>
           </button>
         ))}
         <button
@@ -194,8 +200,8 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
           }}
           className={card(!customOn && !value.trim())}
         >
-          <span className="text-sm font-medium">Neutral</span>
-          <span className="text-xs text-muted-foreground">No particular voice — plain and helpful</span>
+          <span className="text-sm font-medium">{t("characterStudio.neutral")}</span>
+          <span className="text-xs text-muted-foreground">{t("characterStudio.neutralBlurb")}</span>
         </button>
         <button
           type="button"
@@ -207,8 +213,8 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
           }}
           className={card(customOn)}
         >
-          <span className="text-sm font-medium">Custom…</span>
-          <span className="text-xs text-muted-foreground">Describe the voice in your own words</span>
+          <span className="text-sm font-medium">{t("characterStudio.custom")}</span>
+          <span className="text-xs text-muted-foreground">{t("characterStudio.customBlurb")}</span>
         </button>
       </div>
       {customOn && (
@@ -216,8 +222,8 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
           autoFocus={!isCustom}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Warm and a bit nerdy. Explains things with food metaphors, keeps replies short and always ends with the next step."
-          aria-label="Custom personality"
+          placeholder={t("characterStudio.customPlaceholder")}
+          aria-label={t("characterStudio.customLabel")}
           maxLength={600}
           className="min-h-20 resize-y text-sm"
         />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, RefreshCw, Wand2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,6 +26,7 @@ function loadOptions(): GeneratorOptions {
 
 /** Wand button (for PasswordInput `trailing`) opening a generator popover. */
 export function PasswordGeneratorButton({ onUse }: { onUse: (password: string) => void }) {
+  const { t } = useTranslation(["vault", "common"]);
   const [open, setOpen] = useState(false);
   const [opts, setOpts] = useState<GeneratorOptions>(loadOptions);
   const [pw, setPw] = useState(() => generatePassword(opts));
@@ -44,21 +46,21 @@ export function PasswordGeneratorButton({ onUse }: { onUse: (password: string) =
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <InputGroupButton size="icon-xs" aria-label="Generate password">
+            <InputGroupButton size="icon-xs" aria-label={t("generator.generate")}>
               <Wand2 />
             </InputGroupButton>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Generate a strong password</TooltipContent>
+        <TooltipContent>{t("generator.tooltip")}</TooltipContent>
       </Tooltip>
       <PopoverContent align="end" className="w-80 space-y-4 rounded-xl p-4">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1 rounded-lg border bg-paper-2 px-3 py-2 font-mono text-sm break-all select-all">{pw}</div>
           <div className="flex flex-col gap-1">
-            <Button size="icon-sm" variant="ghost" aria-label="Regenerate" onClick={() => setPw(generatePassword(opts))}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("generator.regenerate")} onClick={() => setPw(generatePassword(opts))}>
               <RefreshCw />
             </Button>
-            <Button size="icon-sm" variant="ghost" aria-label="Copy" onClick={() => copySecret(pw, "Password copied")}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("common:actions.copy")} onClick={() => copySecret(pw, t("generator.copied"))}>
               <Copy />
             </Button>
           </div>
@@ -66,16 +68,16 @@ export function PasswordGeneratorButton({ onUse }: { onUse: (password: string) =
         <StrengthMeter password={pw} showFeedback={false} />
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <Label htmlFor="pwgen-length">Length</Label>
+            <Label htmlFor="pwgen-length">{t("generator.length")}</Label>
             <span className="font-mono text-sm tabular-nums">{opts.length}</span>
           </div>
           <Slider id="pwgen-length" min={8} max={64} step={1} value={[opts.length]} onValueChange={([v]) => setOpts((o) => ({ ...o, length: v }))} />
           <div className="flex items-center justify-between">
-            <Label htmlFor="pwgen-numbers">Numbers</Label>
+            <Label htmlFor="pwgen-numbers">{t("generator.numbers")}</Label>
             <Switch id="pwgen-numbers" checked={opts.numbers} onCheckedChange={(numbers) => setOpts((o) => ({ ...o, numbers }))} />
           </div>
           <div className="flex items-center justify-between">
-            <Label htmlFor="pwgen-symbols">Symbols</Label>
+            <Label htmlFor="pwgen-symbols">{t("generator.symbols")}</Label>
             <Switch id="pwgen-symbols" checked={opts.symbols} onCheckedChange={(symbols) => setOpts((o) => ({ ...o, symbols }))} />
           </div>
         </div>
@@ -86,7 +88,7 @@ export function PasswordGeneratorButton({ onUse }: { onUse: (password: string) =
             setOpen(false);
           }}
         >
-          <Check /> Use this password
+          <Check /> {t("generator.use")}
         </Button>
       </PopoverContent>
     </Popover>

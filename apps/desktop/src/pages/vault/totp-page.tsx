@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import { Eye, EyeOff, Keyboard, Lock, ScanQrCode, Search, SearchX, ShieldCheck, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -18,6 +19,7 @@ import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { useTotpCodes } from "@/components/vault/use-totp-codes";
 import { useNow } from "@/components/vault/use-now";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
+import { t as tg } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
@@ -34,6 +36,7 @@ function loadHide(): boolean {
 }
 
 export default function TotpPage() {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const sidebarScope = useUi((s) => s.workspace);
   const [scope, setScope] = useState(sidebarScope);
@@ -49,7 +52,7 @@ export default function TotpPage() {
   const credById = useMemo(() => new Map((creds.data ?? []).map((c) => [c.id, c])), [creds.data]);
 
   useEffect(() => {
-    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, "Vault locked", qc);
+    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, tg("vault:passwordImport.vaultLocked"), qc);
   }, [list.error, qc]);
 
   const entries = useMemo(() => {
@@ -83,10 +86,10 @@ export default function TotpPage() {
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.credentials });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success("2FA code deleted");
+      toast.success(t("totpPage.deleted"));
       setToDelete(null);
     },
-    onError: (e) => toastApiError(e, "Could not delete 2FA code", qc),
+    onError: (e) => toastApiError(e, t("totpPage.deleteFailed"), qc),
   });
 
   const toggleHide = () => {
@@ -110,14 +113,14 @@ export default function TotpPage() {
           <>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" onClick={toggleHide} aria-pressed={hideCodes} aria-label={hideCodes ? "Show codes" : "Hide codes"}>
+                <Button variant="outline" size="icon" onClick={toggleHide} aria-pressed={hideCodes} aria-label={hideCodes ? t("totpPage.showCodes") : t("totpPage.hideCodes")}>
                   {hideCodes ? <EyeOff className="text-brand-strong" /> : <Eye />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{hideCodes ? "Codes hidden — hover a card to peek" : "Hide codes (privacy mode)"}</TooltipContent>
+              <TooltipContent>{hideCodes ? t("totpPage.codesHidden") : t("totpPage.hideCodesHint")}</TooltipContent>
             </Tooltip>
             <Button onClick={() => openImport("images")}>
-              <ScanQrCode /> Import codes
+              <ScanQrCode /> {t("totpPage.importCodes")}
             </Button>
           </>
         }
@@ -129,10 +132,10 @@ export default function TotpPage() {
               <InputGroupAddon>
                 <Search />
               </InputGroupAddon>
-              <InputGroupInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search services or accounts…" aria-label="Search 2FA codes" />
+              <InputGroupInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("totpPage.searchPlaceholder")} aria-label={t("totpPage.searchLabel")} />
               {search && (
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setSearch("")}>
+                  <InputGroupButton size="icon-xs" aria-label={t("passwordImport.clearSearch")} onClick={() => setSearch("")}>
                     <X />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -141,7 +144,7 @@ export default function TotpPage() {
             <ScopeFilterSelect value={scope} onChange={setScope} />
             {list.data && (
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                {entries.length} {entries.length === 1 ? "code" : "codes"}
+                {t("totpPage.count", { count: entries.length })}
               </span>
             )}
           </div>
@@ -160,26 +163,26 @@ export default function TotpPage() {
         ) : list.isError && !list.data ? (
           <EmptyState
             icon={<Lock />}
-            title={isVaultLocked(list.error) ? "The vault is locked" : "Couldn't load 2FA codes"}
-            description={isVaultLocked(list.error) ? "Unlock the vault to see your codes." : errorMessage(list.error)}
+            title={isVaultLocked(list.error) ? t("cardsPage.lockedTitle") : t("totpPage.loadFailed")}
+            description={isVaultLocked(list.error) ? t("totpPage.lockedDescription") : errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : !hasEntries ? (
           <EmptyState
             icon={<ShieldCheck />}
-            title={scope === "all" ? "No 2FA codes yet" : "No 2FA codes in this scope"}
-            description="Import your authenticator codes so agents can finish two-factor sign-ins without pinging you. Moving from Google Authenticator takes about a minute."
+            title={scope === "all" ? t("totpPage.emptyTitle") : t("totpPage.emptyScopeTitle")}
+            description={t("totpPage.emptyDescription")}
             action={
               <div className="flex flex-wrap justify-center gap-2">
                 <Button onClick={() => openImport("images")}>
-                  <ScanQrCode /> Import from screenshots
+                  <ScanQrCode /> {t("totpPage.importScreenshots")}
                 </Button>
                 <Button variant="outline" onClick={() => openImport("manual")}>
-                  <Keyboard /> Enter a setup key
+                  <Keyboard /> {t("totpPage.enterKey")}
                 </Button>
               </div>
             }
@@ -187,11 +190,11 @@ export default function TotpPage() {
         ) : entries.length === 0 ? (
           <EmptyState
             icon={<SearchX />}
-            title={`Nothing matches “${search.trim()}”`}
-            description="Try another service or account name."
+            title={t("nothingMatchesQuery", { query: search.trim() })}
+            description={t("totpPage.noMatchDescription")}
             action={
               <Button variant="outline" onClick={() => setSearch("")}>
-                Clear search
+                {t("passwordImport.clearSearch")}
               </Button>
             }
           />
@@ -199,17 +202,17 @@ export default function TotpPage() {
           <div className="@container">
             <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
               <AnimatePresence initial={false}>
-                {entries.map((t, i) => (
+                {entries.map((entry, i) => (
                   <TotpCard
-                    key={t.id}
-                    entry={t}
-                    code={codes.get(t.id)}
+                    key={entry.id}
+                    entry={entry}
+                    code={codes.get(entry.id)}
                     now={now}
-                    credential={t.credentialId ? credById.get(t.credentialId) : undefined}
+                    credential={entry.credentialId ? credById.get(entry.credentialId) : undefined}
                     hideCodes={hideCodes}
                     index={i}
-                    onEdit={(focusLink) => setEditing({ entry: t, focusLink: !!focusLink })}
-                    onDelete={() => setToDelete(t)}
+                    onEdit={(focusLink) => setEditing({ entry, focusLink: !!focusLink })}
+                    onDelete={() => setToDelete(entry)}
                   />
                 ))}
               </AnimatePresence>
@@ -223,13 +226,14 @@ export default function TotpPage() {
       <ConfirmDeleteDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
-        title={`Delete 2FA for ${toDelete?.issuer ?? "this account"}?`}
+        title={toDelete?.issuer ? t("totpPage.deleteTitle", { name: toDelete.issuer }) : t("totpPage.deleteTitleGeneric")}
         description={
-          <>
-            Agents won't be able to complete two-factor sign-in for{" "}
-            <strong className="text-foreground">{toDelete?.accountName || toDelete?.issuer}</strong> anymore. To add it back you'll need the QR code from the
-            service or your authenticator app. Make sure you still have another way to sign in.
-          </>
+          <Trans
+            t={t}
+            i18nKey="totpPage.deleteDescription"
+            values={{ name: toDelete?.accountName || toDelete?.issuer }}
+            components={{ strong: <strong className="text-foreground" /> }}
+          />
         }
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}

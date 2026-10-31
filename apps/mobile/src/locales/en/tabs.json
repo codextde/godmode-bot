@@ -1,0 +1,176 @@
+{
+  "tabBar": {
+    "home": "Home",
+    "chats": "Chats",
+    "tasks": "Tasks",
+    "screens": "Screens",
+    "agents": "Agents"
+  },
+  "home": {
+    "yourComputer": "Your computer",
+    "newChat": "New chat",
+    "newTask": "New task",
+    "inbox": "Inbox",
+    "calls": "Calls",
+    "status": {
+      "connectedThrough": "Connected through {{computer}} — {{away}} is away",
+      "connected": "{{computer}} · connected",
+      "connecting": "Connecting to {{computer}}…",
+      "outOfReach": "{{computer}} is out of reach"
+    },
+    "datePattern": "EEEE, MMMM d",
+    "agentsReady_one": "1 agent ready",
+    "agentsReady_other": "{{count}} agents ready",
+    "prompt": "What should we get done?",
+    "askAgent": "Ask {{name}} anything, or hand over a task…",
+    "ask": "Ask anything, or hand over a task…",
+    "offline": {
+      "title": "Can't reach {{computer}}",
+      "hint": "Make sure it's awake and connected to Tailscale or Godmode Cloud.",
+      "body": "{{reason}} Tap to retry."
+    },
+    "needs": {
+      "title": "Needs you",
+      "anAgent": "An agent",
+      "elsewhere_one": "Nothing waits for you here. {{count}} thing waits in other workspaces",
+      "elsewhere_other": "Nothing waits for you here. {{count}} things wait in other workspaces",
+      "moreElsewhere_one": "+{{count}} in other workspaces · Inbox",
+      "moreElsewhere_other": "+{{count}} in other workspaces · Inbox",
+      "allInInbox_one": "All {{count}} in the Inbox",
+      "allInInbox_other": "All {{count}} in the Inbox",
+      "vaultLocked": "The vault is locked",
+      "vaultLockedBody": "Agents can't sign in until you unlock it on your computer."
+    },
+    "workingNow": "Working now",
+    "queued_one": "{{count}} queued",
+    "queued_other": "{{count}} queued",
+    "liveScreens": "Live screens",
+    "recent": {
+      "title": "Pick up where you left off",
+      "yourAgents": "Your agents",
+      "loadError": "Couldn't load your chats. {{error}}"
+    },
+    "question": {
+      "taskNumber": "Task #{{number}}",
+      "openChat": "Open the chat to answer",
+      "approve": "Approve",
+      "decline": "Decline"
+    },
+    "hideSuggestions": "Hide suggestions"
+  },
+  "chats": {
+    "title": "Chats",
+    "search": "Search chats",
+    "archived": "Archived chats",
+    "pinned": "Pinned",
+    "markAllRead": "Mark all read",
+    "markReadFailed": "Couldn't mark the chats read",
+    "changeFailed": "Couldn't change the chat",
+    "deleteFailed": "Couldn't delete the chat",
+    "loadError": "Couldn't load your chats",
+    "archivedOngoing_one": "1 archived chat still has work ahead",
+    "archivedOngoing_other": "{{count}} archived chats still have work ahead",
+    "sourceLabel": "Who started the chats",
+    "filterLabel": "Filter recent chats",
+    "source": {
+      "mine": { "label": "Mine", "hint": "Chats you started" },
+      "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
+      "agents": { "label": "Agents", "hint": "Started by an agent: handovers, board tasks, heartbeats" },
+      "all": { "label": "All", "hint": "Every chat" }
+    },
+    "filter": {
+      "all": { "label": "All", "hint": "Every recent chat" },
+      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
+      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
+      "done": { "label": "Done", "hint": "Finished chats" }
+    },
+    "empty": {
+      "all": { "title": "No chats yet", "body": "New chats you start land in this list, on your computer too." },
+      "running": { "title": "Nothing running", "body": "Chats that work or wait for you show up here." },
+      "scheduled": { "title": "Nothing scheduled", "body": "When an agent plans to check back later, the chat waits here." },
+      "done": { "title": "Nothing finished yet", "body": "Finished chats land here." }
+    },
+    "emptySource": {
+      "mine": { "title": "No chats from you yet", "body": "Chats you start show up here. Automations and agents have their own tabs." },
+      "automations": { "title": "No automation chats", "body": "When an automation runs, its chat lands here." },
+      "agents": { "title": "No agent chats", "body": "Handovers, board tasks and heartbeats agents start themselves land here." }
+    },
+    "emptyScope": {
+      "title": "No chats in {{name}} yet",
+      "body": "New chats you start here land in this list."
+    },
+    "noResults": {
+      "title": "Nothing found",
+      "body": "No chat mentions “{{query}}”."
+    },
+    "deleteDialog": {
+      "title": "Delete this chat?",
+      "body": "It's removed on your computer too."
+    },
+    "menu": {
+      "markRead": "Mark as read",
+      "markUnread": "Mark as unread",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "archive": "Archive"
+    }
+  },
+  "tasks": {
+    "title": "Tasks",
+    "myTasks": "My tasks",
+    "myTasksCount": "My tasks · {{count}}",
+    "archived": "Archived tasks",
+    "filterActive": "Active",
+    "loadError": "Couldn't load the board",
+    "thisView": "this view",
+    "emptyStatus": "Nothing in {{status}}",
+    "emptyActive": {
+      "title": "Nothing in the works",
+      "body": "Every ticket is parked, done or cancelled. Hand an agent a new one to get going."
+    },
+    "empty": {
+      "title": "No tasks yet",
+      "body": "Hand an agent a task and follow it here: it works on it, then asks you to review."
+    },
+    "archiveFailed": "Couldn't archive the task",
+    "stopDialog": {
+      "title": "Stop the agent?",
+      "body": "{{name}} is still working on it. Archiving it stops the run.",
+      "theAgent": "The agent",
+      "keep": "Keep working",
+      "confirm": "Stop and archive"
+    }
+  },
+  "screens": {
+    "title": "Screens",
+    "liveNow": "Live now",
+    "loading": "Looking for screens…",
+    "browsers": "Browsers",
+    "vms": "Virtual machines",
+    "android": "Android phones",
+    "empty": {
+      "title": "Nothing on screen right now",
+      "body": "When an agent browses, works in a VM, on an Android phone or on a screen you shared, you can watch it here live."
+    }
+  },
+  "agents": {
+    "title": "Agents",
+    "automations": "Automations",
+    "activity": "Activity",
+    "newAgent": "New agent",
+    "loadError": "Couldn't load agents",
+    "filter": {
+      "running": "Working",
+      "needs": "Needs you",
+      "scheduled": "Automated"
+    },
+    "noMatch": {
+      "title": "No agents match",
+      "body": "No agents in this view."
+    },
+    "empty": {
+      "title": "Create your first agent",
+      "body": "Agents are coworkers with their own instructions, memory and schedule — e.g. one that downloads your invoices every month."
+    }
+  }
+}

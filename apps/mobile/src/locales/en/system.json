@@ -1,0 +1,188 @@
+{
+  "time": {
+    "now": "now",
+    "todayAt": "today at {{time}}",
+    "tomorrowAt": "tomorrow at {{time}}",
+    "yesterdayAt": "yesterday at {{time}}",
+    "dateAt": "{{date}} at {{time}}"
+  },
+  "formats": {
+    "dayMonth": "MMM d",
+    "dayMonthYear": "MMM d, yyyy",
+    "weekdayDayMonth": "EEE, MMM d",
+    "weekdayDayMonthYear": "EEE, MMM d yyyy",
+    "fullWeekdayDayMonth": "EEEE, MMM d",
+    "dueThisYear": "EEE d MMM",
+    "dueOtherYear": "d MMM yyyy"
+  },
+  "days": {
+    "tomorrow": "Tomorrow",
+    "previous7": "Previous 7 days",
+    "previous30": "Previous 30 days"
+  },
+  "greeting": {
+    "late": "Working late",
+    "night": "Good night",
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "suggestions": {
+    "emails": "Summarize my unread emails",
+    "invoices": "Create an agent that downloads my invoices every month",
+    "github": "Log into GitHub and check my notifications",
+    "research": "Research competitors and write a report",
+    "hideTitle": "Hide suggestions?",
+    "hideBody": "Show them again anytime in Settings → App.",
+    "hide": "Hide"
+  },
+  "priority": {
+    "urgent": "Urgent",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "none": "No priority"
+  },
+  "blocked": {
+    "needsInput": "{{agent}} needs something from you",
+    "failed": "The run failed",
+    "stopped": "Stopped",
+    "interrupted": "Interrupted by a restart",
+    "publish": "Couldn't publish the work",
+    "setup": "Couldn't set it up",
+    "manual": "Blocked"
+  },
+  "needs": {
+    "needsOk": "{{agent}} needs your OK",
+    "asksYou": "{{agent}} asks you",
+    "leftDecision": "{{agent}} left you a decision: {{title}}",
+    "needsYouTo": "{{agent}} needs you to: {{title}}",
+    "onIt": "You're on it",
+    "forTask": "For task #{{number}}",
+    "couldNotLogIn": "{{agent}} couldn't log in to {{service}}",
+    "needs2fa": "{{agent}} needs a 2FA code for {{service}}",
+    "needsLogin": "{{agent}} needs a login for {{service}}",
+    "readyForReview": "#{{number}} {{title}} is ready for review",
+    "isBlocked": "#{{number}} {{title}} is blocked",
+    "delivered": "{{agent}} delivered it"
+  },
+  "tools": {
+    "openedHost": "Opened {{host}}",
+    "openedPage": "Opened a page",
+    "clickedPage": "Clicked on the page",
+    "typedText": "Typed text",
+    "scrolledDirection": "Scrolled {{direction}}",
+    "direction": {
+      "up": "up",
+      "down": "down",
+      "left": "left",
+      "right": "right"
+    },
+    "tookScreenshot": "Took a screenshot",
+    "wentBack": "Went back",
+    "readPage": "Read the page",
+    "lookedAtScreen": "Looked at the screen",
+    "clicked": "Clicked",
+    "pressed": "Pressed {{keys}}",
+    "pressedKeys": "Pressed keys",
+    "scrolled": "Scrolled",
+    "usedComputer": "Used the computer",
+    "ranCommandInVm": "Ran a command in the VM",
+    "lookedAtVmScreen": "Looked at the VM's screen",
+    "usedVm": "Used the VM",
+    "filledLogin": "Filled a login from the vault",
+    "needsLoginFor": "Needs a login for {{service}}",
+    "needsLoginForSite": "Needs a login for a site",
+    "handedTask": "Handed a task to another agent",
+    "sentNotification": "Sent you a notification",
+    "askedYou": "Asked you",
+    "askedForOk": "Asked for your OK",
+    "lookedAtBoard": "Looked at the board",
+    "readTask": "Read a task",
+    "filedTask": "Filed a task",
+    "changedTask": "Changed a task",
+    "sentTaskMessage": "Sent a message into a task",
+    "leftNote": "Left a note on the task",
+    "reportedNeeds": "Reported what it needs",
+    "pausedAutomation": "Paused one of its automations",
+    "enabledAutomation": "Switched one of its automations on",
+    "ranCommand": "Ran a command",
+    "readFile": "Read {{name}}",
+    "readAFile": "Read a file",
+    "wroteFile": "Wrote {{name}}",
+    "wroteAFile": "Wrote a file",
+    "editedFile": "Edited {{name}}",
+    "editedAFile": "Edited a file",
+    "searchedFiles": "Searched files",
+    "searchedWeb": "Searched the web",
+    "readHost": "Read {{host}}",
+    "readWebPage": "Read a web page",
+    "startedHelper": "Started a helper",
+    "updatedPlan": "Updated the plan"
+  },
+  "doing": {
+    "thinking": "Thinking",
+    "working": "Working",
+    "openingPage": "Opening a page",
+    "clicking": "Clicking",
+    "typing": "Typing",
+    "scrolling": "Scrolling",
+    "lookingAtScreen": "Looking at the screen",
+    "readingPage": "Reading the page",
+    "runningCommand": "Running a command",
+    "readingFiles": "Reading files",
+    "editingFiles": "Editing files",
+    "searchingWeb": "Searching the web",
+    "readingWebPage": "Reading a web page",
+    "signingIn": "Signing in",
+    "handingOff": "Handing off to a helper"
+  },
+  "chatFilters": {
+    "source": {
+      "mine": { "label": "Mine", "hint": "Chats you started" },
+      "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
+      "agents": { "label": "Agents", "hint": "Started by an agent: handovers, board tasks, heartbeats" },
+      "all": { "label": "All", "hint": "Every chat" }
+    },
+    "tab": {
+      "all": { "label": "All", "hint": "Every recent chat" },
+      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
+      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
+      "done": { "label": "Done", "hint": "Finished chats" }
+    }
+  },
+  "attachments": {
+    "tooMany": "{{name}}: up to {{max}} files per message",
+    "tooLarge": "{{name}} is larger than {{size}}",
+    "tooMuch": "{{name}}: {{size}} per message at most",
+    "leftOut_one": "A file was left out",
+    "leftOut_other": "Some files were left out",
+    "cameraOffTitle": "Camera is off for Godmode",
+    "cameraOffBody": "Allow camera access in Settings to take a photo for your agent.",
+    "notNow": "Not now",
+    "openSettings": "Open Settings",
+    "limitTitle": "That's the most for one message",
+    "limitBody": "Send up to {{max}} files at a time.",
+    "couldNotAdd": "Couldn't add the file",
+    "photoLibrary": "Photo Library",
+    "takePhoto": "Take Photo",
+    "chooseFile": "Choose File",
+    "attach": "Attach"
+  },
+  "composer": {
+    "customModel": "Custom model id"
+  },
+  "api": {
+    "license": "Godmode needs an active licence on your computer. Add your licence key in Godmode there, under Settings → License.",
+    "updateDesktop": "Update Godmode on your computer to do this from your phone.",
+    "offline": "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.",
+    "offlinePairing": "Can't reach your computer. Turn on Tailscale on this phone with the computer's account, or link the computer to Godmode Cloud.",
+    "noAnswer": "No answer from your computer. Check whether it went through before trying again.",
+    "requestFailed": "Request failed ({{status}})",
+    "notPaired": "This phone isn't paired.",
+    "removed": "This phone was removed from Godmode.",
+    "codeExpired": "This code has expired. Show a new one on your computer.",
+    "codeUntrusted": "This code points somewhere Godmode doesn't send your phone's key.",
+    "differentComputer": "A different computer answered. Scan the code again."
+  }
+}

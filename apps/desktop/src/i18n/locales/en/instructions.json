@@ -1,0 +1,24 @@
+{
+  "global": "Global",
+  "hint": {
+    "global": "Every agent",
+    "workspace": "Workspace",
+    "project": "Project",
+    "agent": "Agent"
+  },
+  "chip": {
+    "thisChat": "this chat",
+    "everyAgent": "every agent",
+    "ariaSet": "Instructions for this chat (set)",
+    "title": "Instructions for this chat",
+    "label": "Instructions",
+    "tooltip": "Instructions: {{summary}}",
+    "add": "Add instructions for this chat",
+    "description": "Followed on every message here. When they disagree with the agent's, workspace or global instructions, these win.",
+    "placeholder": "e.g. Reply in German.\nWork on the feature/checkout branch and open a draft pull request.",
+    "alsoApplies": "Also applies",
+    "rulesLiveIn": "Rules for every agent or a whole workspace live in <link>Settings → Instructions</link>.",
+    "clear": "Clear",
+    "escDiscards": "Esc discards changes"
+  }
+}

@@ -1,4 +1,5 @@
 import { useContext, type AnchorHTMLAttributes, type MouseEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { parsePullRequestUrl } from "@godmode/shared";
 import { SidePanelScope, useChatSidePanel } from "@/components/side-panel/store";
 
@@ -11,6 +12,7 @@ export function opensElsewhere(e: MouseEvent) {
 }
 
 export function PullRequestLink({ href, children, ...rest }: AnchorHTMLAttributes<HTMLAnchorElement> & { href: string; children?: ReactNode }) {
+  const { t } = useTranslation("chat");
   const scope = useContext(SidePanelScope);
   const show = useChatSidePanel((s) => s.show);
   if (!scope) {
@@ -27,7 +29,7 @@ export function PullRequestLink({ href, children, ...rest }: AnchorHTMLAttribute
       href={href}
       rel="noreferrer noopener"
       data-gm-panel=""
-      title="Show beside the chat · ⌘-click opens GitHub"
+      title={t("pullRequest.linkHint")}
       aria-current={current?.kind === "pull" && current.url === href ? "true" : undefined}
       onClick={(e) => {
         if (opensElsewhere(e)) return;

@@ -1,10 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, AndroidDevice, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
 import { characterGreeting, computerTargetLabel } from "@godmode/shared";
 import { Archive, ArchiveRestore, ArrowUpRight, Brain, MessageSquareDashed, MessageSquarePlus, Moon, Power, PowerOff, Sparkles, Wand2 } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,6 +60,7 @@ import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
 import { speak, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+import { currentLanguage } from "@/i18n";
 
 const FilePanel = lazy(() => import("@/components/side-panel/file-panel"));
 
@@ -71,6 +73,8 @@ export default function ChatConversation() {
 }
 
 function ConversationView({ conversationId }: { conversationId: string }) {
+  const { t } = useTranslation(["chat", "common"]);
+  const focusMessage = useSearchParams()[0].get("m");
   const qc = useQueryClient();
   const key = qk.conversation(conversationId);
   const projectIndex = useProjectIndex();
@@ -131,7 +135,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const [computerFocus, setComputerFocus] = useState<ComputerFocusMode | null>(null);
   const vmInherited = [
     agent?.vmId ? { vmId: agent.vmId, from: agent.name } : null,
-    agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: `the ${agentWorkspace.name} workspace` } : null,
+    agentWorkspace?.vmId ? { vmId: agentWorkspace.vmId, from: t("home.workspaceFrom", { name: agentWorkspace.name }) } : null,
   ];
   // A chat that works in a VM does everything there: its panel shows the VM, not this Mac's browser or screen.
   const chatVm = useChatVm(onRunner ? null : (conv?.vmId ?? null), onRunner ? NO_INHERITED_VMS : vmInherited);
@@ -184,9 +188,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const waiting = paused?.reason === "question" ? paused : null;
   const approval = waiting?.question?.kind === "approval";
   const mood = waiting
-    ? { mood: "attention" as const, label: approval ? "Needs your OK" : "Needs your answer" }
+    ? { mood: "attention" as const, label: approval ? t("status.needsOk") : t("status.needsAnswer") }
     : paused
-      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" }
+      ? { mood: "idle" as const, label: paused.reason === "limit" ? t("conv.waitingLimitReset") : t("status.paused") }
       : liveMood;
   const { pause } = usePauseActions(conversationId);
   const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
@@ -281,7 +285,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           old ? { ...old, messages: old.messages.filter((m) => m.id !== ctx.tempId), queue: old.queue.filter((m) => m.id !== ctx.id) } : old,
         );
       }
-      if (!isLicenseRequired(err)) toast.error("Message not sent", { description: errorMessage(err) });
+      if (!isLicenseRequired(err)) toast.error(t("conv.sendError"), { description: errorMessage(err) });
     },
   });
 
@@ -301,7 +305,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     },
     onError: (err, patch, ctx) => {
       if (ctx) qc.setQueryData<ConversationWithMessages>(key, (c) => (c ? { ...c, ...ctx.prev } : c));
-      toast.error(patch.ultracode !== undefined && patch.model === undefined ? "Couldn't switch Ultracode" : "Couldn't switch the model", { description: errorMessage(err) });
+      toast.error(patch.ultracode !== undefined && patch.model === undefined ? t("conv.switchUltracodeError") : t("conv.switchModelError"), { description: errorMessage(err) });
     },
   });
 
@@ -311,22 +315,22 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
       qc.invalidateQueries({ queryKey: qk.recentFolders });
       const folder = updated.workingDirectory ?? agent?.workingDirectory ?? null;
-      toast.success(folder ? `Working in ${folderName(folder)}` : "Folder removed", {
-        description: folder ? "The next messages run in this folder." : `${agent?.name ?? "The agent"} works in its own repository again.`,
+      toast.success(folder ? t("conv.workingIn", { name: folderName(folder) }) : t("conv.folderRemoved"), {
+        description: folder ? t("conv.folderHint") : t("conv.ownRepo", { name: agent?.name ?? t("turnEnd.theAgent") }),
       });
     },
-    onError: (err) => toast.error("Couldn't change the folder", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.folderError"), { description: errorMessage(err) }),
   });
 
   const setInstructions = useMutation({
     mutationFn: (instructions: string) => api.conversations.update(conversationId, { instructions }),
     onSuccess: (updated) => {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
-      toast.success(updated.instructions ? "Chat instructions saved" : "Chat instructions removed", {
-        description: busyRef.current ? "They apply from your next message." : undefined,
+      toast.success(updated.instructions ? t("conv.instructionsSaved") : t("conv.instructionsRemoved"), {
+        description: busyRef.current ? t("conv.instructionsNext") : undefined,
       });
     },
-    onError: (err) => toast.error("Couldn't save the instructions", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.instructionsError"), { description: errorMessage(err) }),
   });
 
   const setVm = useMutation({
@@ -337,12 +341,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.invalidateQueries({ queryKey: qk.vmList });
       const vm = updated.vmId ? qc.getQueryData<Vm[]>(qk.vmList)?.find((v) => v.id === updated.vmId) : undefined;
       if (updated.vmId)
-        toast.success(`Working in ${vm?.name ?? "the VM"}`, {
-          description: vm?.state === "running" ? "The next messages run in this VM." : "The next messages run in this VM — it starts when the agent needs it.",
+        toast.success(vm ? t("conv.workingIn", { name: vm.name }) : t("conv.workingInVm"), {
+          description: vm?.state === "running" ? t("conv.vmRunning") : t("conv.vmStarts"),
         });
-      else toast.success("Back to the default", { description: `${agent?.name ?? "The agent"} uses its own or its workspace's VM again, if there is one.` });
+      else toast.success(t("conv.backToDefault"), { description: t("conv.vmDefaultHint", { name: agent?.name ?? t("turnEnd.theAgent") }) });
     },
-    onError: (err) => toast.error("Couldn't change the VM", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.vmError"), { description: errorMessage(err) }),
   });
 
   const setProject = useMutation({
@@ -351,11 +355,10 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       const project = updated.projectId ? projectIndex.get(updated.projectId)?.project : undefined;
-      const when = busyRef.current ? "From your next message on" : "From now on";
-      if (project) toast.success(`Working on ${project.name}`, { description: `${when} runs get its context, folders and repositories.` });
-      else toast.success("Back to the default", { description: `${agent?.name ?? "The agent"} works on its own project again, if it has one.` });
+      if (project) toast.success(t("conv.workingOn", { name: project.name }), { description: busyRef.current ? t("conv.projectNext") : t("conv.projectNow") });
+      else toast.success(t("conv.backToDefault"), { description: t("conv.projectDefaultHint", { name: agent?.name ?? t("turnEnd.theAgent") }) });
     },
-    onError: (err) => toast.error("Couldn't change the project", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.projectError"), { description: errorMessage(err) }),
   });
 
   const setBrowserProfile = useMutation({
@@ -366,11 +369,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       const profile = updated.browserProfileId
         ? profiles.find((p) => p.id === updated.browserProfileId)
         : agent && agentBrowserProfile(agent, profiles, null, updated.workspaceId, effectiveProject(agent, updated.projectId, projectIndex)?.project ?? null);
-      const when = busyRef.current ? "Your next message uses" : "The next messages use";
-      if (updated.browserProfileId) toast.success(`Browsing in ${profile?.name ?? "the new profile"}`, { description: `${when} its cookies and logins.` });
-      else toast.success("Back to the default profile", { description: `${agent?.name ?? "The agent"} browses in ${profile?.name ?? "its own profile"} again.` });
+      if (updated.browserProfileId)
+        toast.success(profile ? t("conv.browsingIn", { name: profile.name }) : t("conv.browsingInNew"), {
+          description: busyRef.current ? t("conv.profileNext") : t("conv.profileNow"),
+        });
+      else
+        toast.success(t("conv.backToDefaultProfile"), {
+          description: profile
+            ? t("conv.browsesIn", { name: agent?.name ?? t("turnEnd.theAgent"), profile: profile.name })
+            : t("conv.browsesInOwn", { name: agent?.name ?? t("turnEnd.theAgent") }),
+        });
     },
-    onError: (err) => toast.error("Couldn't change the browser profile", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.profileError"), { description: errorMessage(err) }),
   });
 
   const setSshServers = useMutation({
@@ -387,18 +397,18 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated, sshServerIds: old.sshServerIds } : old));
       qc.invalidateQueries({ queryKey: qk.sshServers });
       const servers = qc.getQueryData<SshServer[]>(qk.sshServers) ?? [];
-      const nameOf = (id: string) => servers.find((s) => s.id === id)?.name ?? "the server";
+      const nameOf = (id: string) => servers.find((s) => s.id === id)?.name ?? t("conv.theServer");
       const added = next.find((id) => !ctx.prev.includes(id));
       const removed = ctx.prev.find((id) => !next.includes(id));
       if (added)
-        toast.success(`Next message can use ${nameOf(added)}`, {
-          description: "Godmode signs in for the agent — the password or key stays in the vault.",
+        toast.success(t("conv.nextCanUse", { name: nameOf(added) }), {
+          description: t("conv.sshAddedHint"),
         });
-      else if (removed) toast.success(`Removed ${nameOf(removed)}`, { description: "Runs in this chat can't sign in to it anymore." });
+      else if (removed) toast.success(t("conv.removedNamed", { name: nameOf(removed) }), { description: t("conv.sshRemovedHint") });
     },
     onError: (err) => {
       void qc.invalidateQueries({ queryKey: key });
-      toast.error("Couldn't change the SSH servers", { description: errorMessage(err) });
+      toast.error(t("conv.sshError"), { description: errorMessage(err) });
     },
   });
 
@@ -416,15 +426,15 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated, androidDeviceIds: old.androidDeviceIds } : old));
       qc.invalidateQueries({ queryKey: qk.android });
       const devices = qc.getQueryData<AndroidDevice[]>(qk.androidDevices) ?? [];
-      const nameOf = (id: string) => devices.find((d) => d.id === id)?.name ?? "the phone";
+      const nameOf = (id: string) => devices.find((d) => d.id === id)?.name ?? t("conv.thePhone");
       const added = next.find((id) => !ctx.prev.includes(id));
       const removed = ctx.prev.find((id) => !next.includes(id));
-      if (added) toast.success(`Next message can use ${nameOf(added)}`, { description: "The agent sees its screen and can tap, type and open apps." });
-      else if (removed) toast.success(`Removed ${nameOf(removed)}`, { description: "Runs in this chat can't control it anymore." });
+      if (added) toast.success(t("conv.nextCanUse", { name: nameOf(added) }), { description: t("conv.phoneAddedHint") });
+      else if (removed) toast.success(t("conv.removedNamed", { name: nameOf(removed) }), { description: t("conv.phoneRemovedHint") });
     },
     onError: (err) => {
       void qc.invalidateQueries({ queryKey: key });
-      toast.error("Couldn't change the phones", { description: errorMessage(err) });
+      toast.error(t("conv.phonesError"), { description: errorMessage(err) });
     },
   });
 
@@ -434,12 +444,12 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...updated } : old));
       if (target) {
         setComputerPanel(true);
-        toast.success(`Sharing ${computerTargetLabel(target)}`, {
-          description: busyRef.current ? "The agent can use it from your next message." : `${agent?.name ?? "The agent"} can see and control it in this chat.`,
+        toast.success(t("conv.sharing", { target: computerTargetLabel(target, currentLanguage()) }), {
+          description: busyRef.current ? t("conv.shareNext") : t("conv.shareNow", { name: agent?.name ?? t("turnEnd.theAgent") }),
         });
-      } else toast("Stopped sharing");
+      } else toast(t("conv.stoppedSharing"));
     },
-    onError: (err) => toast.error("Couldn't change what's shared", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("conv.shareError"), { description: errorMessage(err) }),
   });
 
   const cancel = useMutation({
@@ -447,8 +457,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       await api.runs.cancel(runId);
       return settleRun(runId);
     },
-    onSuccess: (ended) => toast(ended ? "That run had already ended" : "Stopping the agent…"),
-    onError: (err) => toast.error("Couldn't stop the run", { description: errorMessage(err) }),
+    onSuccess: (ended) => toast(ended ? t("conv.alreadyEnded") : t("conv.stopping")),
+    onError: (err) => toast.error(t("pause.stopError"), { description: errorMessage(err) }),
   });
 
   // Read replies aloud: a dictated message with auto-speak on. Voice mode speaks by itself.
@@ -486,11 +496,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
       <div className="grid h-full place-items-center p-8">
         <EmptyState
           icon={<MessageSquareDashed />}
-          title={notFound ? "This chat doesn't exist anymore" : "Couldn't load this chat"}
-          description={notFound ? "It may have been deleted." : errorMessage(error)}
+          title={notFound ? t("conv.notFound") : t("conv.loadError")}
+          description={notFound ? t("conv.maybeDeleted") : errorMessage(error)}
           action={
             <Button asChild>
-              <Link to="/">Start a new chat</Link>
+              <Link to="/">{t("conv.startNew")}</Link>
             </Button>
           }
         />
@@ -515,7 +525,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           agent={agent}
           mood={mood}
           onVoiceMode={dreamLog ? undefined : onVoiceMode}
-          move={(onRunner || inGroup) && moveTargets.length ? { onSelect: () => openMove(onRunner ? (placeOf(hereId) ?? moveTargets[0]!) : moveTargets[0]!), blocked: null, label: onRunner ? undefined : "Move to another computer" } : undefined}
+          move={(onRunner || inGroup) && moveTargets.length ? { onSelect: () => openMove(onRunner ? (placeOf(hereId) ?? moveTargets[0]!) : moveTargets[0]!), blocked: null, label: onRunner ? undefined : t("conv.moveToAnother") } : undefined}
           browserToggle={
             <>
             {chatArtifacts.length > 0 && !showArtifactPanel && wide && (
@@ -554,7 +564,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           targets={moveTargets}
           initial={moveTo}
           working={moveWorking}
-          agentName={agent?.name ?? "The agent"}
+          agentName={agent?.name ?? t("turnEnd.theAgent")}
           open={moving}
           onOpenChange={setMoving}
         />
@@ -562,10 +572,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
           <SidePanelScopeProvider value={wide ? { conversationId, current: showSidePanel ? side : null } : null}>
-          <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
+          <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? t("turnEnd.theAgent"), openId: waiting?.question?.id ?? null }}>
             <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
               <Thread
                 messages={visibleMessages}
+                focusId={focusMessage}
                 agent={agent}
                 delegatedFrom={conv.delegatedFrom}
                 inflight={inflight}
@@ -586,7 +597,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
         {dreamLog ? (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
-            <DreamLogNote agent={agent ?? { id: conv.agentId, name: "The agent", enabled: true }} />
+            <DreamLogNote agent={agent ?? { id: conv.agentId, name: t("turnEnd.theAgent"), enabled: true }} />
           </div>
         ) : (
           <div className="relative shrink-0 px-3 pb-3 @xl:px-6 @xl:pb-4">
@@ -604,11 +615,14 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
                       <Archive className="size-3.5 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">
-                        <span className="font-medium text-foreground">Archived.</span>{" "}
-                        {activeRunId || paused || conv.followup ? "The work here still goes on. " : ""}Send a message to move it back to Recent.
+                        <Trans
+                          t={t}
+                          i18nKey={activeRunId || paused || conv.followup ? "conv.archivedBarOngoing" : "conv.archivedBar"}
+                          components={{ b: <span className="font-medium text-foreground" /> }}
+                        />
                       </span>
                       <Button size="xs" variant="ghost" onClick={() => setArchived(conv, false)}>
-                        <ArchiveRestore /> Unarchive
+                        <ArchiveRestore /> {t("header.unarchive")}
                       </Button>
                     </div>
                   </motion.div>
@@ -634,7 +648,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? t("turnEnd.theAgent")} queued={queue.length} />
                   </motion.div>
                 )}
                 {runnerAway && runner && (
@@ -658,7 +672,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? "The agent"} running={!!activeRunId || !!paused} />
+                    <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? t("turnEnd.theAgent")} running={!!activeRunId || !!paused} />
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -678,16 +692,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                       className="overflow-hidden"
                     >
-                      <CompressBar gauge={gauge} agentName={agent?.name ?? "The agent"} running={!!activeRunId} onCompress={compress} onDismiss={() => setCompressHiddenAt(gauge.tokens)} />
+                      <CompressBar gauge={gauge} agentName={agent?.name ?? t("turnEnd.theAgent")} running={!!activeRunId} onCompress={compress} onDismiss={() => setCompressHiddenAt(gauge.tokens)} />
                     </motion.div>
                   )}
               </AnimatePresence>
-              {(!conv.runnerId || inGroup) && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? "The agent"} />}
+              {(!conv.runnerId || inGroup) && <HumanTaskBar conversationId={conversationId} agentName={agent?.name ?? t("turnEnd.theAgent")} />}
               <QueueTray
                 ref={queueRef}
                 conversationId={conversationId}
                 queue={queue}
-                agentName={agent?.name ?? "The agent"}
+                agentName={agent?.name ?? t("turnEnd.theAgent")}
                 running={!!activeRunId}
                 paused={paused?.reason ?? null}
                 onLost={(text) => composerRef.current?.insert(text)}
@@ -771,31 +785,33 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
+                sendHint={waiting ? t("question.sendAnswer") : paused ? (paused.reason === "limit" ? t("composer.queueMessage") : t("conv.sendAndContinue")) : undefined}
                 placeholder={
                   runnerAway && chatPlace
                     ? chatPlace.state === "connecting"
-                      ? `Connecting to ${chatPlace.name}…`
-                      : `${chatPlace.name} ${chatPlace.state === "offline" ? "is offline" : "needs an update"}`
+                      ? t("conv.connectingTo", { name: chatPlace.name })
+                      : chatPlace.state === "offline"
+                        ? t("conv.isOffline", { name: chatPlace.name })
+                        : t("conv.needsUpdate", { name: chatPlace.name })
                     : !agent
-                    ? "Message…"
+                    ? t("conv.messageEllipsis")
                     : !agent.enabled
-                      ? `${agent.name} is switched off — your message waits here as a draft`
+                      ? t("conv.switchedOffDraft", { name: agent.name })
                     : waiting
                       ? approval
-                        ? `Reply to ${agent.name} — or use Approve / Decline above`
-                        : `Answer ${agent.name}…`
+                        ? t("conv.replyOrApprove", { name: agent.name })
+                        : t("question.answerPlaceholder", { name: agent.name })
                     : paused?.reason === "user"
-                      ? `Message ${agent.name} to continue with new instructions…`
+                      ? t("conv.continueWithNew", { name: agent.name })
                       : paused
-                        ? `Message ${agent.name} — it goes along when the limit resets`
-                        : `Message ${agent.name} — or type / for commands`
+                        ? t("conv.goesAlongLimit", { name: agent.name })
+                        : t("conv.messageOrCommands", { name: agent.name })
                 }
                 status={
                   gauge && (
                     <ContextMeter
                       gauge={gauge}
-                      agentName={agent?.name ?? "The agent"}
+                      agentName={agent?.name ?? t("turnEnd.theAgent")}
                       running={!!activeRunId}
                       compressing={compressing || compressQueued}
                       disabled={runnerAway || send.isPending}
@@ -887,6 +903,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
 /** A switched-off agent answers nothing: say so where the human types, with the way back. */
 function SwitchedOffBar({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("chat");
   const toggle = useToggleAgent();
   return (
     <div className="mb-2 flex items-center gap-3 rounded-xl border bg-card py-2 pr-2 pl-2.5 shadow-card" role="status">
@@ -894,11 +911,11 @@ function SwitchedOffBar({ agent }: { agent: Agent }) {
         <PowerOff className="size-4" aria-hidden />
       </span>
       <div className="min-w-0 flex-1 leading-snug">
-        <p className="truncate text-[13px] font-medium">{agent.name} is switched off</p>
-        <p className="text-xs text-muted-foreground">It doesn't answer, run its automations or take handoffs until you switch it on.</p>
+        <p className="truncate text-[13px] font-medium">{t("conv.switchedOff", { name: agent.name })}</p>
+        <p className="text-xs text-muted-foreground">{t("conv.switchedOffHint")}</p>
       </div>
       <Button size="sm" variant="outline" className="shrink-0" disabled={toggle.isPending} onClick={() => toggle.mutate({ id: agent.id, enabled: true })}>
-        {toggle.isPending ? <Spinner /> : <Power />} Switch on
+        {toggle.isPending ? <Spinner /> : <Power />} {t("conv.switchOn")}
       </Button>
     </div>
   );
@@ -906,6 +923,7 @@ function SwitchedOffBar({ agent }: { agent: Agent }) {
 
 /** Footer of an agent's dream log: nothing to send here — point to a fresh chat instead. */
 function DreamLogNote({ agent }: { agent: Pick<Agent, "id" | "name" | "enabled"> }) {
+  const { t } = useTranslation("chat");
   const agentName = agent.name;
   const chat = useStartAgentChat();
   return (
@@ -914,39 +932,40 @@ function DreamLogNote({ agent }: { agent: Pick<Agent, "id" | "name" | "enabled">
         <Moon className="size-3.5" aria-hidden />
       </span>
       <span className="min-w-0 flex-1 basis-56">
-        This is where <span className="font-medium text-foreground">{agentName}</span> dreams — start a new chat to talk to it.
+        <Trans t={t} i18nKey="conv.dreamLog" values={{ name: agentName }} components={{ b: <span className="font-medium text-foreground" /> }} />
       </span>
       <Button size="sm" variant="outline" disabled={chat.isPending} onClick={() => chat.mutate(agent)}>
-        {chat.isPending ? <Spinner /> : <MessageSquarePlus />} New chat
+        {chat.isPending ? <Spinner /> : <MessageSquarePlus />} {t("header.newChat")}
       </Button>
     </div>
   );
 }
 
 function ConversationWelcome({ agent, seed, onPick }: { agent?: Agent; seed: string; onPick: (text: string) => void }) {
+  const { t } = useTranslation("chat");
   const { data: boot } = useBootstrap();
   const ideas = agent?.isDefault
     ? [
-        { icon: Sparkles, text: "What can you do for me?" },
-        { icon: Wand2, text: "Create an agent that checks my inbox every morning and summarizes it" },
-        { icon: Brain, text: "What do you remember about me?" },
+        { icon: Sparkles, text: t("conv.ideas.whatCanYouDo") },
+        { icon: Wand2, text: t("conv.ideas.inboxAgent") },
+        { icon: Brain, text: t("conv.ideas.remember") },
       ]
     : [
-        { icon: Sparkles, text: "What can you do for me?" },
-        { icon: Wand2, text: "Run your usual task now and tell me what you found" },
-        { icon: Brain, text: "What have you learned so far?" },
+        { icon: Sparkles, text: t("conv.ideas.whatCanYouDo") },
+        { icon: Wand2, text: t("conv.ideas.runUsual") },
+        { icon: Brain, text: t("conv.ideas.learned") },
       ];
   return (
     <div className="flex flex-col items-center pt-[8vh] text-center">
       {agent && (
         <>
           <SpeechBubble tail="bottom" className="max-w-sm text-balance">
-            {characterGreeting({ name: agent.name, personality: agent.personality, human: boot?.settings.general.userName, seed })}
+            {characterGreeting({ name: agent.name, personality: agent.personality, human: boot?.settings.general.userName, seed, lang: currentLanguage() })}
           </SpeechBubble>
           <AgentAvatar agent={agent} size="xl" follow className="mt-4 size-28" />
         </>
       )}
-      <h2 className="mt-4 text-lg font-medium tracking-[-0.02em]">{agent?.name ?? "Your agent"}</h2>
+      <h2 className="mt-4 text-lg font-medium tracking-[-0.02em]">{agent?.name ?? t("conv.yourAgent")}</h2>
       {agent?.description && <p className="mt-1 max-w-md text-sm text-muted-foreground">{agent.description}</p>}
       <div className="mt-8 grid w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-card">
         {ideas.map(({ icon: Icon, text }) => (

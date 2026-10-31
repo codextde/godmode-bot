@@ -14,7 +14,6 @@ import {
   KeyRound,
   Lock,
   MessageSquarePlus,
-  MessagesSquare,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -27,6 +26,7 @@ import {
   Workflow,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { modState, modUpdateAvailable } from "@godmode/shared";
 import {
   Sidebar,
@@ -42,12 +42,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Logo, Wordmark } from "@/components/brand";
+import { Logo } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
@@ -60,7 +59,7 @@ import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
 import { ClaudeSignedOutBanner } from "@/components/layout/claude-signed-out";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { LidModeButton } from "@/components/layout/lid-mode";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { UsageRing } from "@/components/layout/usage-ring";
 import { useTheme } from "@/components/theme-provider";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
@@ -112,11 +111,14 @@ const isActive = (item: NavItem, pathname: string) =>
   item.end ? pathname === item.to || (item.to === "/" && pathname.startsWith("/chat/")) : [item.to, ...(item.also ?? [])].some((to) => pathname.startsWith(to));
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { t } = useTranslation(["layout", "system"]);
   const { data: boot } = useBootstrap();
   const navigate = useNavigate();
   const setCommandOpen = useUi((s) => s.setCommandOpen);
   const { toggle: toggleTheme } = useTheme();
   const collapsed = useUi((s) => s.sidebarCollapsed);
+  const sidebarWidth = useUi((s) => s.sidebarWidth);
+  const [resizing, setResizing] = useState(false);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useRunningCount();
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -190,45 +192,46 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Pages of features the human turned off leave the sidebar (Settings → Features turns them on again).
   const shown = (item: NavItem) => pageOn(boot?.settings, item.to);
-  const chatItem: NavItem = { to: "/", label: "Chat", icon: <MessagesSquare />, end: true };
   const workNav: NavItem[] = [
-    { to: "/inbox", label: "Needs you", icon: <Inbox />, badge: inboxCount || undefined },
-    { to: "/tasks", label: "Agent tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
-    { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
-    { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
-    { to: "/activity", label: "Activity", icon: <Activity /> },
-    { to: "/calls", label: "Calls", icon: <Phone /> },
-    { to: "/plugins", label: "Plugins", icon: <Puzzle />, badge: modsWaiting || undefined },
-    { to: "/vault/logins", label: "Passwords", icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
-    { to: "/vault/cards", label: "Cards", icon: <CreditCard /> },
+    { to: "/inbox", label: t("nav.inbox"), icon: <Inbox />, badge: inboxCount || undefined },
+    { to: "/tasks", label: t("nav.tasks"), icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
+    { to: "/agents", label: t("nav.agents"), icon: <Bot />, badge: runningCount || undefined },
+    { to: "/automations", label: t("nav.automations"), icon: <Workflow />, badge: attention?.automation || undefined },
+    { to: "/activity", label: t("nav.activity"), icon: <Activity /> },
+    { to: "/calls", label: t("nav.calls"), icon: <Phone /> },
+    { to: "/plugins", label: t("nav.plugins"), icon: <Puzzle />, badge: modsWaiting || undefined },
+    { to: "/vault/logins", label: t("nav.passwords"), icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
+    { to: "/vault/cards", label: t("nav.cards"), icon: <CreditCard /> },
   ];
   const machineNav: NavItem[] = [
-    { to: "/browser", label: "Browser", icon: <Globe /> },
-    { to: "/computer", label: "Computer", icon: <MonitorUp /> },
-    { to: "/vms", label: "Virtual machines", icon: <Box /> },
-    { to: "/ssh", label: "SSH servers", icon: <Server /> },
+    { to: "/browser", label: t("nav.browser"), icon: <Globe /> },
+    { to: "/computer", label: t("nav.computer"), icon: <MonitorUp /> },
+    { to: "/vms", label: t("nav.vms"), icon: <Box /> },
+    { to: "/ssh", label: t("nav.ssh"), icon: <Server /> },
   ];
   // Easy mode: the everyday pages in plain words up front, every other page under More.
   const byPath = new Map([...workNav, ...machineNav].map((item) => [item.to, item]));
   const easyItem = (to: string, label: string): NavItem => ({ ...byPath.get(to)!, label });
   const easyNav: NavItem[] = [
-    easyItem("/inbox", "Needs you"),
-    easyItem("/agents", "Agents"),
-    easyItem("/automations", "Automations"),
-    easyItem("/tasks", "Agent tasks"),
-    easyItem("/vault/logins", "Passwords"),
+    easyItem("/inbox", t("nav.inbox")),
+    easyItem("/agents", t("nav.agents")),
+    easyItem("/automations", t("nav.automations")),
+    easyItem("/tasks", t("nav.tasks")),
+    easyItem("/vault/logins", t("nav.passwords")),
   ];
   const easyMore: NavItem[] = [
-    easyItem("/activity", "History"),
-    easyItem("/calls", "Phone calls"),
-    easyItem("/vault/cards", "Payment cards"),
-    easyItem("/plugins", "Add-ons"),
-    easyItem("/browser", "Browser"),
-    easyItem("/computer", "Computer control"),
-    easyItem("/vms", "Virtual machines"),
-    easyItem("/ssh", "Servers"),
+    easyItem("/activity", t("system:easyPages.activity.title")),
+    easyItem("/calls", t("system:easyPages.calls.title")),
+    easyItem("/vault/cards", t("system:easyPages.cards.title")),
+    easyItem("/plugins", t("system:easyPages.plugins.title")),
+    easyItem("/browser", t("nav.browser")),
+    easyItem("/computer", t("system:easyPages.computer.title")),
+    easyItem("/vms", t("nav.vms")),
+    easyItem("/ssh", t("system:easyPages.ssh.title")),
   ].filter(shown);
   const workItems = easy ? easyNav : workNav.filter(shown);
+  const machineItems = machineNav.filter(shown);
+  const visible = (items: NavItem[]) => items.filter((item) => !hiddenNav.includes(item.to));
 
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
@@ -236,55 +239,58 @@ export function AppShell({ children }: { children: ReactNode }) {
     <SidebarProvider
       open={compact ? peek : !collapsed}
       onOpenChange={(open) => (compact ? setPeek(open) : setCollapsed(!open))}
-      className="h-svh min-h-0 overflow-hidden"
+      className={cn(
+        "h-svh min-h-0 overflow-hidden",
+        resizing && "cursor-col-resize select-none [&_[data-slot=sidebar-container]]:transition-none [&_[data-slot=sidebar-gap]]:transition-none",
+      )}
       // The macOS traffic lights reach 72px in; widen the icon rail so they never sit on top of a page.
-      style={isTauri && isMac ? ({ "--sidebar-width-icon": "5rem" } as CSSProperties) : undefined}
+      style={
+        {
+          ...(isTauri && isMac ? { "--sidebar-width-icon": "5rem" } : {}),
+          ...(sidebarWidth ? { "--sidebar-width": `${sidebarWidth}px` } : {}),
+        } as CSSProperties
+      }
     >
       <Sidebar collapsible="icon" variant="sidebar">
-        <SidebarHeader className={cn("gap-3 px-3 pt-3 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-10")} data-tauri-drag-region>
-          <div className="relative flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
-            <Link to="/" className="no-drag">
-              <Wordmark className="group-data-[collapsible=icon]:[&>div:last-child]:hidden" />
+        <SidebarHeader
+          className={cn("gap-2 px-3 pt-2 pb-1 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-[15px] group-data-[collapsible=icon]:pt-10")}
+          data-tauri-drag-region
+        >
+          <div
+            className={cn("relative flex h-7 items-center gap-0.5 group-data-[collapsible=icon]:justify-center", isTauri && isMac && "pl-16 group-data-[collapsible=icon]:pl-0")}
+            data-tauri-drag-region
+          >
+            <Link to="/" className={cn("no-drag rounded-md", isTauri && isMac && "hidden group-data-[collapsible=icon]:block")} aria-label={t("shell.home")}>
+              <Logo className="size-6" />
             </Link>
+            <div className="flex-1 self-stretch group-data-[collapsible=icon]:hidden" data-tauri-drag-region />
+            <SearchButton className="group-data-[collapsible=icon]:hidden" />
             <SidebarToggle />
           </div>
-          <WorkspaceSwitcher />
-          <div className="flex gap-2 group-data-[collapsible=icon]:flex-col">
+          <div className="-mx-1 group-data-[collapsible=icon]:mx-0">
+            <WorkspaceSwitcher />
+          </div>
+          <div className="-mx-1 flex gap-1.5 group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:flex-col">
             <Button
               asChild
               className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
             >
               <Link to="/">
                 <MessageSquarePlus className="size-4" />
-                <span className="group-data-[collapsible=icon]:hidden">New chat</span>
+                <span className="group-data-[collapsible=icon]:hidden">{t("shell.newChat")}</span>
                 <kbd className="ml-auto font-mono text-[10px] tracking-wide opacity-55 group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
               </Link>
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" className="size-9 shrink-0 group-data-[collapsible=icon]:size-8" onClick={() => setCommandOpen(true)}>
-                  <Search className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Search & commands ({modKey}K)</TooltipContent>
-            </Tooltip>
+            <SearchButton className="hidden group-data-[collapsible=icon]:inline-flex" />
           </div>
         </SidebarHeader>
 
         <SidebarContent>
-          <NavSection
-            id="work"
-            label="Work"
-            items={[chatItem, ...workItems.filter((item) => !hiddenNav.includes(item.to))]}
-            action={<EditSidebarButton items={workItems} />}
-            defaultOpen
-          />
+          <NavSection id="work" label={t("shell.sections.work")} items={visible(workItems)} defaultOpen action={<EditSidebarButton items={workItems} section={t("shell.sections.work")} />} />
           {easy ? (
-            <NavSection id="more" label="More" items={easyMore} folded="list" />
+            <NavSection id="more" label={t("shell.sections.more")} items={visible(easyMore)} folded="list" action={<EditSidebarButton items={easyMore} section={t("shell.sections.more")} />} />
           ) : (
-            <>
-              <NavSection id="machines" label="Machines" items={machineNav.filter(shown)} />
-            </>
+            <NavSection id="machines" label={t("shell.sections.machines")} items={visible(machineItems)} action={<EditSidebarButton items={machineItems} section={t("shell.sections.machines")} />} />
           )}
           <RecentChats />
         </SidebarContent>
@@ -297,7 +303,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>
-        <SidebarRail />
+        <ResizeRail onResizing={setResizing} />
       </Sidebar>
 
       <SidebarInset className="group/inset relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
@@ -317,17 +323,104 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+const SIDEBAR_MIN = 208;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 256;
+
+function ResizeRail({ onResizing }: { onResizing: (resizing: boolean) => void }) {
+  const { t } = useTranslation("layout");
+  const { state, isMobile, toggleSidebar } = useSidebar();
+  const setWidth = useUi((s) => s.setSidebarWidth);
+  if (isMobile) return null;
+  const expanded = state === "expanded";
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const container = e.currentTarget.closest<HTMLElement>("[data-slot=sidebar-container]");
+    const startWidth = container?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
+    let dragged = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (!dragged && Math.abs(dx) < 4) return;
+      if (!dragged) {
+        dragged = true;
+        onResizing(true);
+      }
+      if (!expanded) {
+        if (dx > 24) {
+          toggleSidebar();
+          cleanup();
+        }
+        return;
+      }
+      const next = startWidth + dx;
+      if (next < SIDEBAR_MIN - 64) {
+        toggleSidebar();
+        cleanup();
+        return;
+      }
+      setWidth(Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next))));
+    };
+    const up = () => {
+      if (!dragged) toggleSidebar();
+      cleanup();
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onResizing(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <button
+      type="button"
+      data-sidebar="rail"
+      tabIndex={-1}
+      aria-label={expanded ? t("shell.resizeSidebar") : t("shell.expandSidebar")}
+      title={expanded ? t("shell.resizeHint") : t("shell.expandHint")}
+      onPointerDown={onPointerDown}
+      className="absolute inset-y-0 -right-2 z-20 hidden w-4 cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:transition-colors hover:after:bg-sidebar-border sm:flex"
+    />
+  );
+}
+
+function SearchButton({ className }: { className?: string }) {
+  const { t } = useTranslation("layout");
+  const setCommandOpen = useUi((s) => s.setCommandOpen);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className={cn("no-drag size-7 text-muted-foreground hover:text-foreground", className)}
+          aria-label={t("shell.search")}
+          aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
+          onClick={() => setCommandOpen(true)}
+        >
+          <Search className="size-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{t("shell.searchTooltip", { shortcut: `${modKey}K` })}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function SidebarToggle() {
+  const { t } = useTranslation("layout");
   const { open, isMobile, toggleSidebar } = useSidebar();
   const expanded = isMobile || open;
-  const label = isMobile ? "Close navigation" : expanded ? "Collapse sidebar" : "Expand sidebar";
+  const label = isMobile ? t("shell.closeNavigation") : expanded ? t("shell.collapseSidebar") : t("shell.expandSidebar");
   const Icon = expanded ? PanelLeftClose : PanelLeftOpen;
   const button = (
     <Button
       variant="ghost"
       size="icon-sm"
       className={cn(
-        "size-7 text-muted-foreground hover:text-foreground",
+        "no-drag size-7 text-muted-foreground hover:text-foreground",
         // The rail has no room for another row: the button takes the logo's place while the rail is hovered or it has focus.
         !expanded &&
           "absolute top-1/2 left-1/2 -translate-1/2 bg-sidebar opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
@@ -352,6 +445,7 @@ function SidebarToggle() {
 }
 
 function MobileBar({ attention }: { attention: boolean }) {
+  const { t } = useTranslation("layout");
   const { isMobile, openMobile, setOpenMobile } = useSidebar();
   const setCommandOpen = useUi((s) => s.setCommandOpen);
   const location = useLocation();
@@ -370,7 +464,7 @@ function MobileBar({ attention }: { attention: boolean }) {
         variant="ghost"
         size="icon"
         className="relative"
-        aria-label={attention ? "Open navigation — something needs you" : "Open navigation"}
+        aria-label={attention ? t("shell.openNavigationAttention") : t("shell.openNavigation")}
         aria-haspopup="dialog"
         aria-expanded={openMobile}
         onClick={() => setOpenMobile(true)}
@@ -378,15 +472,15 @@ function MobileBar({ attention }: { attention: boolean }) {
         <PanelLeft className="size-[18px]" />
         {attention && <span className="absolute top-2 right-2 size-1.5 rounded-full bg-brand ring-2 ring-background" />}
       </Button>
-      <Link to="/" className="no-drag flex min-w-0 items-center gap-2 rounded-md px-1 py-1" aria-label="Godmode home">
+      <Link to="/" className="no-drag flex min-w-0 items-center gap-2 rounded-md px-1 py-1" aria-label={t("shell.home")}>
         <Logo className="size-6" />
         <span className="truncate text-[15px] font-medium tracking-[-0.02em]">{cloudContext?.deviceName ?? "Godmode"}</span>
       </Link>
       <div className="ml-auto flex items-center gap-1">
-        <Button variant="ghost" size="icon" aria-label="Search and commands" aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"} onClick={() => setCommandOpen(true)}>
+        <Button variant="ghost" size="icon" aria-label={t("shell.search")} aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"} onClick={() => setCommandOpen(true)}>
           <Search className="size-[18px]" />
         </Button>
-        <Button size="icon" className="size-8" aria-label="New chat" asChild>
+        <Button size="icon" className="size-8" aria-label={t("shell.newChat")} asChild>
           <Link to="/">
             <MessageSquarePlus className="size-4" />
           </Link>
@@ -421,6 +515,7 @@ function NavSection({
   defaultOpen?: boolean;
   action?: ReactNode;
 }) {
+  const { t } = useTranslation("layout");
   const expanded = useUi((s) => (defaultOpen ? !s.collapsedNav.includes(id) : s.expandedNav.includes(id)));
   const toggle = useUi((s) => (defaultOpen ? s.toggleNavCollapsed : s.toggleNavSection));
   const { state, isMobile } = useSidebar();
@@ -430,7 +525,7 @@ function NavSection({
   const open = expanded || railed;
   const toggleButton = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
   const header = action ? (
-    <div className="group/section flex min-w-0 items-center justify-between gap-1 pr-1">
+    <div className="group/section flex min-w-0 flex-1 items-center justify-between gap-1 pr-1">
       {toggleButton}
       {action}
     </div>
@@ -454,10 +549,10 @@ function NavSection({
     const current = items.find((item) => isActive(item, pathname));
     const waiting = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
     return (
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="py-0">
         <div className="flex items-center justify-between gap-1">
           {header}
-          {waiting > 0 && <span className="mr-2 size-1.5 rounded-full bg-brand" aria-label={`${waiting} waiting`} />}
+          {waiting > 0 && <span className="mr-2 size-1.5 rounded-full bg-brand" aria-label={t("shell.waiting", { count: waiting })} />}
         </div>
         {current && (
           <SidebarGroupContent id={listId}>
@@ -513,7 +608,7 @@ function NavMenuItem({ item }: { item: NavItem }) {
         asChild
         isActive={active}
         tooltip={item.label}
-        className="h-8 gap-2.5 text-[13.5px] text-sidebar-foreground/85 [&>svg]:size-4 [&>svg]:text-muted-foreground data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border data-[active=true]:[&>svg]:text-foreground"
+        className="h-7 gap-2.5 text-[13px] text-sidebar-foreground/85 [&>svg]:size-4 [&>svg]:text-muted-foreground data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border data-[active=true]:[&>svg]:text-foreground"
       >
         <NavLink to={item.to} end={item.end}>
           {item.icon}
@@ -527,6 +622,7 @@ function NavMenuItem({ item }: { item: NavItem }) {
 
 /** Cloud mode: which computer this is, and the way back to the cloud's list of computers (a page outside this app). */
 function CloudComputerLink() {
+  const { t } = useTranslation("layout");
   const cloud = cloudContext!;
   return (
     <Tooltip>
@@ -539,18 +635,19 @@ function CloudComputerLink() {
             <ArrowLeft className="size-4" />
           </span>
           <span className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
-            <span className="block text-[11px] text-muted-foreground">All computers</span>
+            <span className="block text-[11px] text-muted-foreground">{t("cloud.allComputers")}</span>
             <span className="block truncate text-[13px] font-medium text-foreground">{cloud.deviceName}</span>
           </span>
         </a>
       </TooltipTrigger>
-      <TooltipContent side="right">All computers in Godmode Cloud</TooltipContent>
+      <TooltipContent side="right">{t("cloud.allComputersTooltip")}</TooltipContent>
     </Tooltip>
   );
 }
 
 /** Cloud mode: the cloud serves its own build of this dashboard, which can be older or newer than Godmode on the computer. */
 function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiVersion: string }) {
+  const { t } = useTranslation(["layout", "common"]);
   const key = storageKey("gm:version-note");
   const pair = `${coreVersion}|${uiVersion}`;
   const [dismissed, setDismissed] = useState(() => {
@@ -572,10 +669,9 @@ function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiV
   return (
     <div className="relative shrink-0 px-3 pt-3">
       <Callout className="pr-10">
-        This computer runs Godmode {coreVersion}; this cloud shows the dashboard of {uiVersion}. If something looks wrong, update Godmode or ask the
-        cloud's administrator to update.
+        {t("cloud.versionNote", { coreVersion, uiVersion })}
       </Callout>
-      <Button variant="ghost" size="icon-xs" className="absolute top-5 right-5 text-muted-foreground" aria-label="Dismiss" onClick={dismiss}>
+      <Button variant="ghost" size="icon-xs" className="absolute top-5 right-5 text-muted-foreground" aria-label={t("cloud.dismiss")} onClick={dismiss}>
         <X />
       </Button>
     </div>
@@ -586,6 +682,7 @@ function CloudVersionNote({ coreVersion, uiVersion }: { coreVersion: string; uiV
 const SETTINGS_PATHS = ["/settings", "/files", "/android/", "/artifacts/"];
 
 function FooterBar() {
+  const { t } = useTranslation(["layout", "common"]);
   const { data: boot } = useBootstrap();
   // People waiting to talk to a bot: Settings → Messaging shows who.
   const requests = boot?.settings.messaging.enabled ? boot.counts.messagingRequests : 0;
@@ -602,17 +699,17 @@ function FooterBar() {
         <TooltipTrigger asChild>
           <div className="flex h-8 flex-1 items-center gap-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
             <LiveDot live={false} className={connected ? "bg-brand" : "animate-pulse bg-warning"} />
-            {connected ? "Online" : "Reconnecting…"}
+            {connected ? t("footer.online") : t("footer.reconnecting")}
           </div>
         </TooltipTrigger>
         <TooltipContent>
           {cloudContext
             ? connected
-              ? `Connected to ${cloudContext.deviceName} through Godmode Cloud`
-              : `Connection to ${cloudContext.deviceName} lost — retrying`
+              ? t("footer.connectedCloud", { device: cloudContext.deviceName })
+              : t("footer.lostCloud", { device: cloudContext.deviceName })
             : connected
-              ? "Connected to Godmode core"
-              : "Connection to core lost — retrying"}
+              ? t("footer.connectedCore")
+              : t("footer.lostCore")}
         </TooltipContent>
       </Tooltip>
       <Tooltip>
@@ -621,17 +718,17 @@ function FooterBar() {
             <Lock className="size-4" />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Lock vault</TooltipContent>
+        <TooltipContent>{t("footer.lockVault")}</TooltipContent>
       </Tooltip>
       <LidModeButton />
-      <ThemeToggle />
+      <UsageRing />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
             variant={SETTINGS_PATHS.some((p) => location.pathname.startsWith(p)) ? "secondary" : "ghost"}
             size="icon"
             className="relative size-8"
-            aria-label={requests ? `Settings (${requests} waiting in Messaging)` : "Settings"}
+            aria-label={requests ? t("footer.settingsWaitingLabel", { count: requests }) : t("common:words.settings")}
             asChild
           >
             <Link to={requests ? "/settings/messaging" : "/settings/general"}>
@@ -640,7 +737,7 @@ function FooterBar() {
             </Link>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{requests ? `Settings · ${requests} waiting in Messaging` : `Settings (${modKey},)`}</TooltipContent>
+        <TooltipContent>{requests ? t("footer.settingsWaiting", { count: requests }) : t("footer.settingsShortcut", { shortcut: `${modKey},` })}</TooltipContent>
       </Tooltip>
     </div>
   );

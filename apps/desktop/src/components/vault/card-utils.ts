@@ -1,29 +1,15 @@
 import { CARD_BRAND_LABELS, formatMoney, type CardBrand, type PaymentCard } from "@godmode/shared";
+import { t } from "@/i18n";
 
 /** Countries offered for billing addresses (ISO 3166-1 alpha-2). */
-export const BILLING_COUNTRIES: { code: string; name: string }[] = [
-  { code: "DE", name: "Germany" },
-  { code: "AT", name: "Austria" },
-  { code: "CH", name: "Switzerland" },
-  { code: "US", name: "United States" },
-  { code: "GB", name: "United Kingdom" },
-  { code: "FR", name: "France" },
-  { code: "NL", name: "Netherlands" },
-  { code: "BE", name: "Belgium" },
-  { code: "IT", name: "Italy" },
-  { code: "ES", name: "Spain" },
-  { code: "PL", name: "Poland" },
-  { code: "SE", name: "Sweden" },
-  { code: "DK", name: "Denmark" },
-  { code: "IE", name: "Ireland" },
-  { code: "LU", name: "Luxembourg" },
-  { code: "PT", name: "Portugal" },
-  { code: "CA", name: "Canada" },
-  { code: "AU", name: "Australia" },
-];
+export const BILLING_COUNTRIES = ["DE", "AT", "CH", "US", "GB", "FR", "NL", "BE", "IT", "ES", "PL", "SE", "DK", "IE", "LU", "PT", "CA", "AU"] as const;
+
+type BillingCountry = (typeof BILLING_COUNTRIES)[number];
+
+export const isBillingCountry = (code: string): code is BillingCountry => (BILLING_COUNTRIES as readonly string[]).includes(code);
 
 export function countryName(code: string): string {
-  return BILLING_COUNTRIES.find((c) => c.code === code)?.name ?? code;
+  return isBillingCountry(code) ? t(`vault:countries.${code}`) : code;
 }
 
 /** "08/29" */
@@ -57,7 +43,7 @@ export function toMinor(text: string): number | null {
 
 /** "Asks every time" / "Asks above EUR 20.00" / "No approval within limits" */
 export function approvalText(card: Pick<PaymentCard, "askAbove" | "currency">): string {
-  if (card.askAbove === null) return "No approval within limits";
-  if (card.askAbove === 0) return "Asks every time";
-  return `Asks above ${formatMoney(card.askAbove, card.currency)}`;
+  if (card.askAbove === null) return t("vault:approval.none");
+  if (card.askAbove === 0) return t("vault:approval.always");
+  return t("vault:approval.above", { amount: formatMoney(card.askAbove, card.currency) });
 }

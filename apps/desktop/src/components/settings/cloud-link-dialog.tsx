@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Cloud, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { CloudStatus } from "@godmode/shared";
 import {
   AlertDialog,
@@ -77,6 +78,7 @@ function approvalUrl(status: CloudStatus): string | null {
 }
 
 export function useUnlinkCloud() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.cloud.unlink,
@@ -84,25 +86,23 @@ export function useUnlinkCloud() {
       qc.setQueryData(qk.cloud, next);
       void qc.invalidateQueries({ queryKey: qk.cloudBilling });
     },
-    onError: (e) => toastApiError(e, "Could not unlink", qc),
+    onError: (e) => toastApiError(e, t("cloud.link.unlinkError"), qc),
   });
 }
 
 export function UnlinkCloudDialog({ open, onOpenChange, onConfirm }: { open: boolean; onOpenChange: (open: boolean) => void; onConfirm: () => void }) {
+  const { t } = useTranslation(["settings", "common"]);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Unlink this computer?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Browsers and phones can't reach it through Godmode Cloud anymore, and the cloud forgets it. Godmode keeps working here, and you can link
-            it again later.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t("cloud.link.unlinkTitle")}</AlertDialogTitle>
+          <AlertDialogDescription>{t("cloud.link.unlinkDescription")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={onConfirm}>
-            Unlink
+            {t("cloud.unlink.title")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -115,6 +115,7 @@ export function UnlinkCloudDialog({ open, onOpenChange, onConfirm }: { open: boo
  * Approval arrives as the "cloud" entity event (or the poll above) and turns into the success state.
  */
 export function CloudLinkDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const { data: status } = useCloudStatus(open);
   // Whether this dialog started (or picked up) a link, so a linked computer shows the success state and not the form.
@@ -145,8 +146,8 @@ export function CloudLinkDialog({ open, onOpenChange }: { open: boolean; onOpenC
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[calc(100svh-2rem)] gap-0 overflow-y-auto p-0 sm:max-w-[560px]">
         <DialogHeader className="border-b px-6 pt-6 pb-5 text-left">
-          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Connect to Godmode Cloud</DialogTitle>
-          <DialogDescription>Open this computer in any browser and reach it from your phone, through your cloud account.</DialogDescription>
+          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{t("cloud.hero.connect")}</DialogTitle>
+          <DialogDescription>{t("cloud.link.description")}</DialogDescription>
         </DialogHeader>
 
         <AnimatePresence mode="wait" initial={false}>
@@ -159,14 +160,12 @@ export function CloudLinkDialog({ open, onOpenChange }: { open: boolean; onOpenC
               <div className="grid size-14 place-items-center rounded-full bg-brand-soft text-brand-strong">
                 <DrawCheck className="size-7" />
               </div>
-              <h3 className="mt-5 text-lg font-medium tracking-[-0.02em]">Linked to {status.account?.email ?? hostOf(status.url)}</h3>
-              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-                Sign in to {hostOf(status.url)} in any browser to open this computer. You can change what the cloud may do in Settings → Cloud.
-              </p>
+              <h3 className="mt-5 text-lg font-medium tracking-[-0.02em]">{t("cloud.status.linkedTo", { email: status.account?.email ?? hostOf(status.url) })}</h3>
+              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">{t("cloud.link.linkedBody", { host: hostOf(status.url) })}</p>
               <div className="mt-7 flex flex-wrap justify-center gap-2">
-                <Button onClick={() => onOpenChange(false)}>Done</Button>
+                <Button onClick={() => onOpenChange(false)}>{t("common:actions.done")}</Button>
                 <Button variant="ghost" className="text-muted-foreground" onClick={() => setConfirmUnlink(true)} disabled={unlink.isPending}>
-                  {unlink.isPending && <Spinner />} Unlink
+                  {unlink.isPending && <Spinner />} {t("cloud.unlink.title")}
                 </Button>
               </div>
             </motion.div>
@@ -198,7 +197,7 @@ export function CloudLinkDialog({ open, onOpenChange }: { open: boolean; onOpenC
             unlink.mutate(undefined, {
               onSuccess: () => {
                 onOpenChange(false);
-                toast.success("Unlinked from Godmode Cloud");
+                toast.success(t("cloud.unlinked"));
               },
             })
           }
@@ -222,6 +221,7 @@ function LinkForm({
   onCancel: () => void;
 }) {
   // A computer removed in the cloud links again to the same address; otherwise the default address, if any.
+  const { t } = useTranslation(["settings", "common"]);
   const preset = status?.url ?? status?.defaultUrl ?? "";
   const [value, setValue] = useState(preset);
   const [custom, setCustom] = useState(!preset);
@@ -236,7 +236,7 @@ function LinkForm({
     <motion.form initial={{ opacity: 0 }} animate={{ opacity: 1 }} onSubmit={submit} className="space-y-5 px-6 py-6">
       {custom ? (
         <div className="space-y-1.5">
-          <Label htmlFor="cloud-url">Cloud address</Label>
+          <Label htmlFor="cloud-url">{t("cloud.link.address")}</Label>
           <Input
             id="cloud-url"
             value={value}
@@ -249,34 +249,34 @@ function LinkForm({
             aria-invalid={!!error || undefined}
             className="text-base md:text-sm"
           />
-          <p className="text-xs text-muted-foreground">The address of your Godmode Cloud. It is shown on the Computers page there.</p>
+          <p className="text-xs text-muted-foreground">{t("cloud.link.addressHint")}</p>
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-paper-2 px-3.5 py-3">
           <Cloud className="size-4 shrink-0" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-muted-foreground">Cloud</p>
+            <p className="text-xs text-muted-foreground">{t("cloud.title")}</p>
             <p className="truncate font-mono text-[13px]">{hostOf(url)}</p>
           </div>
           <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setCustom(true)}>
-            Use a different cloud
+            {t("cloud.link.different")}
           </Button>
         </div>
       )}
 
       <Callout tone="warning" icon={<ShieldAlert className="text-warning" />}>
-        Only connect to a cloud you trust. It relays, and can see, everything you do through it.
+        {t("cloud.link.trust")}
       </Callout>
 
       <ol className="space-y-4">
-        <Step n={1} title="Connect">
-          Godmode opens the cloud in your browser with a short code.
+        <Step n={1} title={t("cloud.link.step1")}>
+          {t("cloud.link.step1Body")}
         </Step>
-        <Step n={2} title="Approve in the browser">
-          Sign in and check that the cloud shows the same code as this window.
+        <Step n={2} title={t("cloud.link.step2")}>
+          {t("cloud.link.step2Body")}
         </Step>
-        <Step n={3} title="Open it anywhere">
-          This computer appears under Computers in the cloud, ready to open in any browser.
+        <Step n={3} title={t("cloud.link.step3")}>
+          {t("cloud.link.step3Body")}
         </Step>
       </ol>
 
@@ -288,10 +288,10 @@ function LinkForm({
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" onClick={onCancel}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button type="submit" disabled={!url || pending}>
-          {pending ? <Spinner /> : <Cloud />} {pending ? "Connecting…" : "Connect"}
+          {pending ? <Spinner /> : <Cloud />} {pending ? t("cloud.state.connecting") : t("cloud.link.step1")}
         </Button>
       </div>
     </motion.form>
@@ -311,6 +311,7 @@ function PendingLink({
   onCancel: () => void;
   cancelling: boolean;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const now = useNow(1000);
   const pending = status.pending!;
   const page = approvalUrl(status);
@@ -320,31 +321,29 @@ function PendingLink({
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-5 px-6 py-6">
       <div className="flex flex-col items-center gap-3 rounded-xl border bg-paper-2 px-4 py-6 text-center">
-        <p className="eyebrow">Code</p>
+        <p className="eyebrow">{t("cloud.code")}</p>
         <p className="font-mono text-[28px] leading-none font-medium tracking-[0.12em] tabular-nums">{pending.userCode}</p>
         {expired ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            The code expired.
+            {t("cloud.link.expired")}
             <Button variant="ghost" size="xs" className="text-foreground" onClick={onRetry} disabled={retrying}>
-              {retrying ? <Spinner /> : <RefreshCw />} New code
+              {retrying ? <Spinner /> : <RefreshCw />} {t("pairPhone.newCode")}
             </Button>
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
             <ExpiryRing seconds={remaining} total={LINK_SECONDS} />
-            Expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
+            {t("pairPhone.expires", { time: `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` })}
           </div>
         )}
       </div>
 
-      <p className="text-sm text-muted-foreground">
-        Approve this computer in your browser. Only approve if the cloud shows exactly this code.
-      </p>
+      <p className="text-sm text-muted-foreground">{t("cloud.link.approveHint")}</p>
 
       <div className="flex items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 text-xs text-muted-foreground shadow-card">
         <Cloud className="size-4 shrink-0 text-foreground" />
         <span className="min-w-0">
-          Waiting for approval on <span className="font-mono text-[11px] text-foreground">{hostOf(status.url)}</span>
+          <Trans t={t} i18nKey="cloud.link.waitingOn" values={{ host: hostOf(status.url) }} components={{ code: <span className="font-mono text-[11px] text-foreground" /> }} />
         </span>
         <span className="ml-auto flex gap-1" aria-hidden>
           {[0, 1, 2].map((i) => (
@@ -360,11 +359,11 @@ function PendingLink({
 
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="ghost" onClick={onCancel} disabled={cancelling}>
-          {cancelling && <Spinner />} Cancel linking
+          {cancelling && <Spinner />} {t("cloud.cancelLinking")}
         </Button>
         {page && !expired && (
           <Button variant="outline" onClick={() => void openExternal(page)}>
-            <ExternalLink /> Open the approval page
+            <ExternalLink /> {t("cloud.link.openApproval")}
           </Button>
         )}
       </div>

@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { t } from "@/i18n";
 import { ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
@@ -16,7 +17,7 @@ export function toastApiError(err: unknown, title: string, qc?: QueryClient) {
   // App already shows the licence toast with its Activate action.
   if (isLicenseRequired(err)) return;
   if (isVaultLocked(err)) {
-    toast.warning("Vault is locked", { description: "Unlock the vault to continue." });
+    toast.warning(t("vault:locked.title"), { description: t("vault:locked.description") });
     void qc?.invalidateQueries({ queryKey: qk.bootstrap });
     void qc?.invalidateQueries({ queryKey: qk.vaultStatus });
     return;

@@ -128,16 +128,17 @@ export function computerView(target: ComputerTarget, displayId?: string): Comput
 }
 
 /** Short human label, e.g. "Safari — Apple", "Studio Display", "Entire desktop". */
-export function computerTargetLabel(target: ComputerTarget): string {
+export function computerTargetLabel(target: ComputerTarget, lang: "en" | "de" = "en"): string {
+  const de = lang === "de";
   switch (target.kind) {
     case "desktop":
-      return "Entire desktop";
+      return de ? "Ganzer Bildschirm" : "Entire desktop";
     case "display":
-      return target.name || `Display ${target.displayId}`;
+      return target.name || `${de ? "Bildschirm" : "Display"} ${target.displayId}`;
     case "window":
       return target.title ? `${target.app} — ${target.title}` : target.app;
     case "tab":
-      return target.title || target.url || "Browser tab";
+      return target.title || target.url || (de ? "Browser-Tab" : "Browser tab");
   }
 }
 

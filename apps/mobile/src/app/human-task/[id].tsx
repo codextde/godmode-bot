@@ -2,7 +2,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask, type HumanTaskLane, type HumanTaskPriority } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { humanTaskAnswer, humanTaskRef, isHumanTaskActive, type HumanTask, type HumanTaskLane, type HumanTaskPriority } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { MenuSheet, type HeaderMenuItem } from "@/components/header-actions";
 import { humanStatus } from "@/components/human-task-row";
@@ -11,7 +12,7 @@ import { Markdown } from "@/components/markdown";
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
 import { Badge, Button, Card, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { hostOf, shortTime } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
@@ -23,6 +24,7 @@ import { radius, space, useColors } from "@/lib/theme";
  */
 export default function HumanTaskSheet() {
   const c = useColors();
+  const { t } = useTranslation(["humanTasks", "common"]);
   const { id, fromChat } = useLocalSearchParams<{ id: string; fromChat?: string }>();
   const [settled, setSettled] = useState<HumanTask>();
   // Whichever list brought the human here already has the task: the sheet opens from that copy while every task loads.
@@ -47,7 +49,7 @@ export default function HumanTaskSheet() {
   const move = useMutation({
     mutationFn: (status: HumanTaskLane) => api.humanTasks.move(id, status),
     onSuccess: settle,
-    onError: (err) => Alert.alert("Couldn't move the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+    onError: (err) => Alert.alert(t("detail.moveFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const update = useMutation({
     mutationFn: (patch: { priority?: HumanTaskPriority; title?: string; body?: string }) => api.humanTasks.update(id, patch),
@@ -55,7 +57,7 @@ export default function HumanTaskSheet() {
       settle(next);
       setEditing(null);
     },
-    onError: (err) => Alert.alert("Couldn't update the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+    onError: (err) => Alert.alert(t("detail.updateFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const remove = useMutation({
     mutationFn: () => api.humanTasks.remove(id),
@@ -64,27 +66,27 @@ export default function HumanTaskSheet() {
       void queryClient.invalidateQueries({ queryKey: qk.humanTasks });
       router.back();
     },
-    onError: (err) => Alert.alert("Couldn't delete the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+    onError: (err) => Alert.alert(t("detail.deleteFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const close = useMutation({
     mutationFn: (outcome: "done" | "declined") => api.humanTasks.close(id, outcome, note.trim() || undefined, outcome === "done" ? (picked ?? undefined) : undefined),
     onSuccess: (result) => {
       settle(result.task);
-      if (result.notContinued) Alert.alert("Saved", result.notContinued);
+      if (result.notContinued) Alert.alert(t("common:status.saved"), result.notContinued);
       router.back();
     },
-    onError: (err) => Alert.alert("Couldn't close the task", errorText(err)),
+    onError: (err) => Alert.alert(t("detail.closeFailed"), errorText(err)),
   });
 
   if (!task) {
     return (
       <View style={[styles.fill, { backgroundColor: c.background }]}>
         {list.isLoading ? (
-          <LoadingState label="Loading the task…" />
+          <LoadingState label={t("detail.loading")} />
         ) : list.isError ? (
-          <ErrorState title="Couldn't load the task" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+          <ErrorState title={t("detail.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
         ) : (
-          <ErrorState title="This task is gone" error="It was deleted or taken back on your computer." />
+          <ErrorState title={t("detail.goneTitle")} error={t("detail.goneBody")} />
         )}
       </View>
     );
@@ -97,27 +99,26 @@ export default function HumanTaskSheet() {
   // The human's own task: its words are theirs to change, and it can go. A closed one can go too.
   const own = !task.agentId && !task.runId;
   const actions: HeaderMenuItem[] = [
-    ...(active ? [{ icon: "warning" as const, title: task.priority === "high" ? "Not urgent" : "Mark urgent", onPress: () => update.mutate({ priority: task.priority === "high" ? "normal" : "high" }) }] : []),
-    ...(own && active ? [{ icon: "pencil" as const, title: "Edit", onPress: () => setEditing({ title: task.title, body: task.body }) }] : []),
+    ...(active ? [{ icon: "warning" as const, title: task.priority === "high" ? t("detail.notUrgent") : t("detail.markUrgent"), onPress: () => update.mutate({ priority: task.priority === "high" ? "normal" : "high" }) }] : []),
+    ...(own && active ? [{ icon: "pencil" as const, title: t("common:actions.edit"), onPress: () => setEditing({ title: task.title, body: task.body }) }] : []),
     ...(own || !active
       ? [
           {
             icon: "trash" as const,
-            title: "Delete",
+            title: t("common:actions.delete"),
             destructive: true,
             onPress: () =>
-              Alert.alert(`Delete ${humanTaskRef(task)}?`, "It's removed on your computer too.", [
-                { text: "Cancel", style: "cancel" },
-                { text: "Delete", style: "destructive", onPress: () => remove.mutate() },
+              Alert.alert(t("detail.deleteTitle", { ref: humanTaskRef(task) }), t("detail.deleteBody"), [
+                { text: t("common:actions.cancel"), style: "cancel" },
+                { text: t("common:actions.delete"), style: "destructive", onPress: () => remove.mutate() },
               ]),
           },
         ]
       : []),
   ];
-  const words = HUMAN_TASK_WORDS[task.kind];
   const decision = task.kind === "decision";
   const approval = task.kind === "approval";
-  const who = task.agentName ?? agent?.name ?? "the agent";
+  const who = task.agentName ?? agent?.name;
   const ready = !decision || !!note.trim() || !!picked;
   const answered = humanTaskAnswer(task);
   const link = task.url && /^https?:\/\//i.test(task.url) ? task.url : null;
@@ -136,11 +137,11 @@ export default function HumanTaskSheet() {
             {humanTaskRef(task)}
           </T>
           <Badge label={status.label} tone={status.tone} live={task.status === "doing"} />
-          {task.priority === "high" && active ? <Badge label="Urgent" tone="danger" /> : null}
+          {task.priority === "high" && active ? <Badge label={t("detail.urgent")} tone="danger" /> : null}
           {actions.length ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="More"
+              accessibilityLabel={t("detail.more")}
               hitSlop={10}
               disabled={busy}
               onPress={() => {
@@ -157,7 +158,7 @@ export default function HumanTaskSheet() {
           <TextInput
             value={editing.title}
             onChangeText={(title) => setEditing({ ...editing, title })}
-            placeholder="What do you need to do?"
+            placeholder={t("detail.titlePlaceholder")}
             placeholderTextColor={c.textFaint}
             autoFocus
             maxLength={200}
@@ -169,7 +170,7 @@ export default function HumanTaskSheet() {
         <Row style={{ gap: space.sm }}>
           {agent ? <CharacterAvatar agent={agent} size={22} /> : <Icon name="person" size={15} color={c.textMuted} />}
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
-            {task.agentId ? `From ${task.agentName ?? agent?.name ?? "an agent"}` : "Your own task"} · {shortTime(task.createdAt)}
+            {task.agentId ? (who ? t("detail.from", { name: who }) : t("detail.fromAgent")) : t("detail.ownTask")} · {shortTime(task.createdAt)}
           </T>
         </Row>
       </View>
@@ -188,7 +189,7 @@ export default function HumanTaskSheet() {
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
-              Open {hostOf(link) || "the link"}
+              {hostOf(link) ? t("detail.openHost", { host: hostOf(link) }) : t("detail.openLink")}
             </T>
             <T variant="caption" muted numberOfLines={1}>
               {link}
@@ -203,15 +204,15 @@ export default function HumanTaskSheet() {
           <TextInput
             value={editing.body}
             onChangeText={(body) => setEditing({ ...editing, body })}
-            placeholder="Note (optional)"
+            placeholder={t("detail.noteOptional")}
             placeholderTextColor={c.textFaint}
             multiline
             style={[styles.note, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
           />
           <Row style={{ gap: space.sm }}>
-            <Button title="Cancel" variant="secondary" disabled={update.isPending} onPress={() => setEditing(null)} style={{ flex: 1 }} />
+            <Button title={t("common:actions.cancel")} variant="secondary" disabled={update.isPending} onPress={() => setEditing(null)} style={{ flex: 1 }} />
             <Button
-              title="Save"
+              title={t("common:actions.save")}
               icon="check"
               loading={update.isPending}
               disabled={!editing.title.trim()}
@@ -228,8 +229,8 @@ export default function HumanTaskSheet() {
 
       {(task.taskId || task.conversationId) && (
         <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
-          {task.taskId ? <LinkChip icon="tasks" label={task.taskNumber != null ? `Ticket #${task.taskNumber}` : "Ticket"} onPress={() => leaveFor(() => openTask(task.taskId!))} /> : null}
-          {task.conversationId ? <LinkChip icon="chats" label={task.conversationTitle || "Open the chat"} onPress={() => (fromChat === task.conversationId ? router.back() : leaveFor(() => openChat(task.conversationId!)))} /> : null}
+          {task.taskId ? <LinkChip icon="tasks" label={task.taskNumber != null ? t("detail.ticketNumber", { number: task.taskNumber }) : t("detail.ticket")} onPress={() => leaveFor(() => openTask(task.taskId!))} /> : null}
+          {task.conversationId ? <LinkChip icon="chats" label={task.conversationTitle || t("detail.openChat")} onPress={() => (fromChat === task.conversationId ? router.back() : leaveFor(() => openChat(task.conversationId!)))} /> : null}
         </Row>
       )}
 
@@ -264,7 +265,7 @@ export default function HumanTaskSheet() {
                         </T>
                       ) : null}
                     </View>
-                    {o.recommended ? <Badge label="Recommended" tone="neutral" /> : null}
+                    {o.recommended ? <Badge label={t("detail.recommended")} tone="neutral" /> : null}
                   </Pressable>
                 );
               })}
@@ -274,17 +275,27 @@ export default function HumanTaskSheet() {
             value={note}
             onChangeText={setNote}
             placeholder={
-              !task.agentId ? "Note (optional)" : decision ? (task.options.length ? "Or answer in your own words" : `Your answer for ${who}`) : `Note for ${who} (optional)`
+              !task.agentId
+                ? t("detail.noteOptional")
+                : decision
+                  ? task.options.length
+                    ? t("detail.ownWords")
+                    : who
+                      ? t("detail.answerFor", { name: who })
+                      : t("detail.answerForAgent")
+                  : who
+                    ? t("detail.noteFor", { name: who })
+                    : t("detail.noteForAgent")
             }
             placeholderTextColor={c.textFaint}
             multiline
             editable={!busy}
             style={[styles.note, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
           />
-          <Button title={words.done} icon="check" size="lg" loading={close.isPending && close.variables === "done"} disabled={busy || !ready} onPress={() => close.mutate("done")} />
+          <Button title={t(`detail.words.${task.kind}.done`)} icon="check" size="lg" loading={close.isPending && close.variables === "done"} disabled={busy || !ready} onPress={() => close.mutate("done")} />
           <Row style={{ gap: space.sm }}>
             <Button
-              title={task.status === "open" ? (decision || approval ? "Thinking about it" : "I'm on it") : "Back to To do"}
+              title={task.status === "open" ? (decision || approval ? t("detail.thinking") : t("detail.onIt")) : t("detail.backToTodo")}
               variant="secondary"
               loading={move.isPending && move.variables !== "backlog"}
               disabled={busy}
@@ -292,7 +303,7 @@ export default function HumanTaskSheet() {
               style={{ flex: 1 }}
             />
             <Button
-              title={words.declined}
+              title={t(`detail.words.${task.kind}.declined`)}
               variant="secondary"
               loading={close.isPending && close.variables === "declined"}
               disabled={busy}
@@ -311,17 +322,19 @@ export default function HumanTaskSheet() {
               style={({ pressed }) => [{ alignSelf: "center", paddingVertical: space.xs, paddingHorizontal: space.md }, pressed && { opacity: 0.5 }]}
             >
               <T variant="subhead" muted>
-                {move.isPending && move.variables === "backlog" ? "Moving…" : "Later: move to backlog"}
+                {move.isPending && move.variables === "backlog" ? t("detail.moving") : t("detail.later")}
               </T>
             </Pressable>
           )}
           {task.agentId ? (
             <T variant="footnote" muted style={{ textAlign: "center" }}>
               {task.questionId
-                ? `${task.agentName ?? "The agent"} stands still until you ${approval ? "decide" : "answer"}.`
+                ? approval
+                  ? t("detail.waitsDecide", { name: task.agentName ?? t("detail.theAgent") })
+                  : t("detail.waitsAnswer", { name: task.agentName ?? t("detail.theAgent") })
                 : decision
-                  ? `${task.agentName ?? "The agent"} goes on with your answer. Dismiss it when there is nothing to decide.`
-                  : `${task.agentName ?? "The agent"} continues by itself once you close it.`}
+                  ? t("detail.goesOn", { name: task.agentName ?? t("detail.theAgent") })
+                  : t("detail.continues", { name: task.agentName ?? t("detail.theAgent") })}
             </T>
           ) : null}
         </View>

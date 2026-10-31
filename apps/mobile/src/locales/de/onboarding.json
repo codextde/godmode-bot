@@ -1,0 +1,63 @@
+{
+  "welcome": {
+    "eyebrow": "Godmode für {{platform}}",
+    "title": "Deine KI-Kollegen, immer dabei.",
+    "intro": "Diese App steuert das Godmode auf deinem Computer. Kopple sie einmal mit dem Code auf dem Bildschirm deines Computers.",
+    "removed": "Dieses Handy wurde auf deinem Computer entfernt. Scanne einen neuen Code, um dich wieder zu verbinden.",
+    "points": {
+      "handOver": {
+        "title": "Arbeit von überall übergeben",
+        "body": "Starte eine Aufgabe, lies die Antwort mit, während sie entsteht, und stoppe sie mit einem Tipp."
+      },
+      "watch": {
+        "title": "Über die Schulter schauen",
+        "body": "Sieh live zu, wie ein Agent im Browser, auf einem geteilten Bildschirm oder in einer VM arbeitet."
+      },
+      "inCharge": {
+        "title": "Dein Computer behält die Kontrolle",
+        "body": "Dein Handy erreicht ihn über Tailscale oder Godmode Cloud mit einem eigenen Schlüssel, den der Computer jederzeit widerrufen kann. Logins bleiben auf dem Computer."
+      }
+    },
+    "howTo": "Auf deinem Computer: Einstellungen → Handy → Handy verbinden.\nTailscale auf beiden (gleiches Konto) oder der Computer mit Godmode Cloud verknüpft.",
+    "scan": "QR-Code scannen"
+  },
+  "pair": {
+    "invalid": {
+      "title": "Kein Godmode-Code",
+      "body": "Öffne auf deinem Computer Einstellungen → Handy und scanne den Code dort.",
+      "scanAgain": "Erneut scannen"
+    },
+    "server": "Server",
+    "title": "Mit {{name}} verbinden?",
+    "body": "Dieses Handy bekommt einen eigenen Schlüssel und kann Godmode auf diesem Computer steuern.",
+    "replaces": "Ersetzt die Verbindung zu {{name}}.",
+    "expired": "Dieser Code ist abgelaufen. Lass dir auf deinem Computer einen neuen zeigen.",
+    "scanNew": "Neuen Code scannen",
+    "connecting": "Verbinde…",
+    "connect": "Verbinden"
+  },
+  "scan": {
+    "notGodmode": "Das ist kein Godmode-Code. Öffne auf deinem Computer Einstellungen → Handy.",
+    "copyFirst": "Kopiere zuerst den Kopplungslink auf deinem Computer.",
+    "camera": {
+      "title": "Kamerazugriff",
+      "why": "Godmode nutzt die Kamera nur, um den Kopplungscode auf deinem Computer zu lesen.",
+      "off": "Der Kamerazugriff ist aus. Schalte ihn in den Einstellungen ein oder füge stattdessen den Kopplungslink ein.",
+      "openSettings": "Einstellungen öffnen"
+    },
+    "point": "Richte die Kamera auf den Code auf deinem Computer",
+    "path": "Einstellungen → Handy → Handy verbinden",
+    "paste": "Kopplungslink einfügen"
+  },
+  "layout": {
+    "memory": "Gedächtnis",
+    "myTasks": "Meine Aufgaben",
+    "archivedChats": "Archivierte Chats",
+    "archivedTasks": "Archivierte Aufgaben",
+    "automations": "Automationen",
+    "activity": "Aktivität",
+    "inbox": "Eingang",
+    "calls": "Anrufe",
+    "dream": "Traum"
+  }
+}

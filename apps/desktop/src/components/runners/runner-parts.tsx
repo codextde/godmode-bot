@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { format } from "date-fns";
 import { Check, Copy, SquareTerminal, TriangleAlert, WifiOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { RemoteRunner, RunnerState } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
@@ -8,22 +9,32 @@ import { copyText } from "@/components/chat/copy-button";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { t } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { isMac } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 /** What the computer the human sits at is called in "run on" choices — and inside a sentence. */
-export const THIS_COMPUTER = isMac ? "This Mac" : "This computer";
-export const THIS_COMPUTER_INLINE = isMac ? "this Mac" : "this computer";
+export const thisComputer = () => (isMac ? t("runners:thisMac") : t("runners:thisComputer"));
+export const thisComputerInline = () => (isMac ? t("runners:thisMacInline") : t("runners:thisComputerInline"));
 
 /* ------------------------------------------------------------------ */
 /* Connection                                                           */
 /* ------------------------------------------------------------------ */
 
 export const RUNNER_STATE_LABEL: Record<RunnerState, string> = {
-  online: "Online",
-  connecting: "Connecting…",
-  offline: "Offline",
-  update_required: "Update needed",
+  get online() {
+    return t("runners:state.online");
+  },
+  get connecting() {
+    return t("runners:state.connecting");
+  },
+  get offline() {
+    return t("runners:state.offline");
+  },
+  get update_required() {
+    return t("runners:state.updateRequired");
+  },
 };
 
 /** Small dot for pickers and pills: green while connected, pulsing while dialing, amber when the versions differ. */
@@ -43,9 +54,10 @@ export function RunnerStateDot({ state, className }: { state: RunnerState; class
 
 /** "Runner" next to a name, where a runner and a computer of the device group may be called the same. */
 export function RunnerTag({ className }: { className?: string }) {
+  const { t } = useTranslation("runners");
   return (
     <span className={cn("inline-flex h-[18px] shrink-0 items-center rounded-[4px] border bg-secondary px-1 text-[10.5px] leading-none font-medium text-muted-foreground", className)}>
-      Runner
+      {t("tag")}
     </span>
   );
 }
@@ -58,6 +70,8 @@ const STATE_BADGE: Record<RunnerState, string> = {
 };
 
 export function RunnerStateBadge({ runner, className }: { runner: Pick<RemoteRunner, "state" | "latencyMs" | "lastSeenAt">; className?: string }) {
+  const { t } = useTranslation("runners");
+  const { dateLocale } = useLocale();
   const { state } = runner;
   const seen = state !== "online" && runner.lastSeenAt ? runner.lastSeenAt : null;
   const badge = (
@@ -86,15 +100,15 @@ export function RunnerStateBadge({ runner, className }: { runner: Pick<RemoteRun
   return (
     <Tooltip>
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
-      <TooltipContent>Last online {format(new Date(seen), "PPp")}</TooltipContent>
+      <TooltipContent>{t("lastOnline", { when: format(new Date(seen), "PPp", { locale: dateLocale }) })}</TooltipContent>
     </Tooltip>
   );
 }
 
 /** "3 chats · 1 working" */
 export function runnerWorkLine(runner: Pick<RemoteRunner, "conversations" | "activeRuns">): string {
-  const chats = runner.conversations === 0 ? "No chats yet" : runner.conversations === 1 ? "1 chat" : `${runner.conversations} chats`;
-  return runner.activeRuns > 0 ? `${chats} · ${runner.activeRuns} working` : chats;
+  const chats = runner.conversations === 0 ? t("runners:work.noChats") : t("runners:work.chats", { count: runner.conversations });
+  return runner.activeRuns > 0 ? t("runners:work.withWorking", { chats, count: runner.activeRuns }) : chats;
 }
 
 /* ------------------------------------------------------------------ */
@@ -105,13 +119,14 @@ export function runnerWorkLine(runner: Pick<RemoteRunner, "conversations" | "act
  * A long shell command: it wraps instead of scrolling sideways, a click selects all of it, and Copy shows a check for
  * two seconds. `children` renders the same text with something highlighted.
  */
-export function CommandBlock({ text, label = "Copy command", title = "Terminal", children, className }: { text: string; label?: string; title?: ReactNode; children?: ReactNode; className?: string }) {
+export function CommandBlock({ text, label, title, children, className }: { text: string; label?: string; title?: ReactNode; children?: ReactNode; className?: string }) {
+  const { t } = useTranslation(["runners", "common"]);
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
   const copy = async () => {
-    if (!(await copyText(text))) return void toast.error("Couldn't copy the command", { description: "Select it and copy it by hand." });
+    if (!(await copyText(text))) return void toast.error(t("command.copyFailed"), { description: t("command.copyFailedHint") });
     setCopied(true);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => setCopied(false), 2000);
@@ -121,10 +136,10 @@ export function CommandBlock({ text, label = "Copy command", title = "Terminal",
     <div className={cn("overflow-hidden rounded-lg border bg-paper-2", className)}>
       <div className="flex items-center gap-2 border-b py-1 pr-1 pl-3 text-[11px] text-muted-foreground">
         <SquareTerminal className="size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0 flex-1 truncate">{title}</span>
-        <Button type="button" variant="outline" size="xs" onClick={() => void copy()} aria-label={copied ? "Copied" : label}>
+        <span className="min-w-0 flex-1 truncate">{title ?? t("command.terminal")}</span>
+        <Button type="button" variant="outline" size="xs" onClick={() => void copy()} aria-label={copied ? t("common:actions.copied") : (label ?? t("command.copy"))}>
           {copied ? <Check className="text-success" /> : <Copy />}
-          <span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
+          <span aria-live="polite">{copied ? t("common:actions.copied") : t("common:actions.copy")}</span>
         </Button>
       </div>
       <pre className="max-h-40 overflow-y-auto px-3 py-2.5 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground/90 select-all">{children ?? text}</pre>

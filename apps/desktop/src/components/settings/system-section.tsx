@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router";
 import { CircleArrowDown, FolderOpen, HeartPulse, RotateCcw, ScrollText, Server, ShieldCheck, WandSparkles, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { Bootstrap, Settings } from "@godmode/shared";
 import {
   AlertDialog,
@@ -34,6 +35,7 @@ function joinPath(dir: string, ...parts: string[]) {
 
 /** Renders without the settings document too (see STANDALONE in the settings page): only the upkeep switches need it. */
 export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | undefined; settings: Settings | undefined }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirmOnboarding, setConfirmOnboarding] = useState(false);
   const doctor = useDoctor();
@@ -44,12 +46,12 @@ export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | 
   const fixAll = useMutation({
     mutationFn: api.doctor.fixAll,
     onSuccess: (report) => {
-      if (!report.results.length) toast.info("Nothing to fix");
-      else if (report.results.every((r) => r.outcome === "fixed")) toast.success(`Fixed ${report.results.map((r) => r.name).join(", ")}`);
+      if (!report.results.length) toast.info(t("system.nothingToFix"));
+      else if (report.results.every((r) => r.outcome === "fixed")) toast.success(t("system.fixed", { names: report.results.map((r) => r.name).join(", ") }));
       else report.results.forEach(toastFix);
       void qc.invalidateQueries({ queryKey: qk.doctor });
     },
-    onError: (e) => toastApiError(e, "Could not fix the problems", qc),
+    onError: (e) => toastApiError(e, t("system.fixError"), qc),
   });
   const rerun = useMutation({
     mutationFn: () => api.settings.update({ onboardingComplete: false }),
@@ -57,7 +59,7 @@ export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | 
       void qc.invalidateQueries({ queryKey: qk.settings });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
-    onError: (e) => toastApiError(e, "Could not restart onboarding", qc),
+    onError: (e) => toastApiError(e, t("system.onboardingError"), qc),
   });
 
   const dataDir = bootstrap?.dataDir ?? "";
@@ -65,18 +67,18 @@ export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | 
 
   return (
     <div className="space-y-5">
-      <SectionHeading title="System" description="Health of the tools Godmode relies on, and where your data lives." />
+      <SectionHeading title={t("system.title")} description={t("system.description")} />
 
       <SettingsGroup
-        title="System check"
+        title={t("system.check.title")}
         icon={<HeartPulse />}
-        description="Everything agents need to work. Missing pieces can be installed with one click."
+        description={t("system.check.description")}
         bodyClassName="py-4"
         actions={
           fixable > 0 && (
             <Button size="sm" onClick={() => fixAll.mutate()} disabled={fixAll.isPending}>
               {fixAll.isPending ? <Spinner /> : <Wrench />}
-              {fixAll.isPending ? "Fixing…" : "Fix all"}
+              {fixAll.isPending ? t("system.check.fixing") : t("system.check.fixAll")}
             </Button>
           )
         }
@@ -85,61 +87,62 @@ export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | 
       </SettingsGroup>
 
       <SettingsGroup
-        title="Permissions"
+        title={t("system.permissions.title")}
         icon={<ShieldCheck />}
-        description="What Godmode may do on this computer: its own files, its tools, and what the system lets it see and control."
+        description={t("system.permissions.description")}
         bodyClassName="py-4"
       >
         <PermissionsChecklist />
       </SettingsGroup>
 
-      <SettingsGroup title="Updates" icon={<CircleArrowDown />} description="The tools Godmode has installed, and their versions." actions={<UpdateActions updates={updates} />}>
+      <SettingsGroup title={t("system.updates.title")} icon={<CircleArrowDown />} description={t("system.updates.description")} actions={<UpdateActions updates={updates} />}>
         <ToolUpdateList updates={updates} />
       </SettingsGroup>
 
       {settings && (
-        <SettingsGroup title="Automatic upkeep" icon={<WandSparkles />} description="Let Godmode look after its tools in the background.">
+        <SettingsGroup title={t("system.upkeep.title")} icon={<WandSparkles />} description={t("system.upkeep.description")}>
           <UpkeepSettings settings={settings} />
         </SettingsGroup>
       )}
 
-      <SettingsGroup title="Installation" icon={<Server />}>
-        <InfoRow label="Version">
+      <SettingsGroup title={t("system.install.title")} icon={<Server />}>
+        <InfoRow label={t("system.install.version")}>
           <span className="font-mono text-xs">{bootstrap?.version ?? "—"}</span>
         </InfoRow>
-        <InfoRow label="Mode">
+        <InfoRow label={t("general.appearance.mode")}>
           <Badge variant="secondary" className="font-normal">
-            {bootstrap?.mode === "server" ? "Web dashboard (godmode serve)" : isTauri ? "Desktop app" : "Desktop core"}
+            {bootstrap?.mode === "server" ? t("system.install.modeServer") : isTauri ? t("system.install.modeApp") : t("system.install.modeCore")}
           </Badge>
         </InfoRow>
-        <InfoRow label="Platform">
+        <InfoRow label={t("system.install.platform")}>
           <span className="font-mono text-xs">{bootstrap?.platform ?? "—"}</span>
         </InfoRow>
-        <InfoRow label={<span className="flex items-center gap-1.5"><FolderOpen className="size-3.5" /> Data directory</span>}>
+        <InfoRow label={<span className="flex items-center gap-1.5"><FolderOpen className="size-3.5" /> {t("system.install.dataDir")}</span>}>
           <code className="truncate rounded-[4px] bg-secondary px-1.5 py-0.5 font-mono text-[11px]" title={dataDir}>
             {dataDir || "—"}
           </code>
-          {dataDir && <CopyButton value={dataDir} label="Copy path" size="icon-xs" toastLabel="Path copied" />}
+          {dataDir && <CopyButton value={dataDir} label={t("system.install.copyPath")} size="icon-xs" toastLabel={t("system.install.pathCopied")} />}
         </InfoRow>
-        <InfoRow label={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5" /> Logs</span>}>
+        <InfoRow label={<span className="flex items-center gap-1.5"><ScrollText className="size-3.5" /> {t("logs.title")}</span>}>
           <code className="truncate rounded-[4px] bg-secondary px-1.5 py-0.5 font-mono text-[11px]" title={logPath}>
             {logPath || "—"}
           </code>
-          {logPath && <CopyButton value={logPath} label="Copy log path" size="icon-xs" toastLabel="Path copied" />}
+          {logPath && <CopyButton value={logPath} label={t("system.install.copyLogPath")} size="icon-xs" toastLabel={t("system.install.pathCopied")} />}
         </InfoRow>
         <p className="py-3 text-xs text-muted-foreground">
-          Something off?{" "}
-          <Link to="/settings/logs" className="font-medium text-foreground underline-offset-4 hover:underline">
-            Open the logs
-          </Link>{" "}
-          to copy them for Claude, or run <code className="rounded-[4px] bg-secondary px-1 font-mono">godmode doctor</code> in a terminal.
+          <Trans
+            t={t}
+            i18nKey="system.install.help"
+            values={{ command: "godmode doctor" }}
+            components={{ link: <Link to="/settings/logs" className="font-medium text-foreground underline-offset-4 hover:underline" />, code: <code className="rounded-[4px] bg-secondary px-1 font-mono" /> }}
+          />
         </p>
       </SettingsGroup>
 
-      <SettingsGroup title="Setup" icon={<RotateCcw />}>
-        <SettingRow label="Run onboarding again" description="Walk through the setup wizard again. Your data, vault and agents are kept.">
+      <SettingsGroup title={t("system.setup.title")} icon={<RotateCcw />}>
+        <SettingRow label={t("system.setup.label")} description={t("system.setup.description")}>
           <Button variant="outline" size="sm" onClick={() => setConfirmOnboarding(true)} disabled={rerun.isPending}>
-            {rerun.isPending ? <Spinner /> : <RotateCcw />} Re-run onboarding
+            {rerun.isPending ? <Spinner /> : <RotateCcw />} {t("system.setup.button")}
           </Button>
         </SettingRow>
       </SettingsGroup>
@@ -147,14 +150,12 @@ export function SystemSection({ bootstrap, settings }: { bootstrap: Bootstrap | 
       <AlertDialog open={confirmOnboarding} onOpenChange={setConfirmOnboarding}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Re-run onboarding?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You'll see the welcome wizard again. Nothing is deleted — steps that are already done (like the vault) are skipped.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("system.setup.confirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("system.setup.confirmDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => rerun.mutate()}>Start onboarding</AlertDialogAction>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => rerun.mutate()}>{t("system.setup.start")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

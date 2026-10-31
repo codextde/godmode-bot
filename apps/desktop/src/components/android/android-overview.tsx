@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Download, RefreshCw, ShieldQuestion, Smartphone, Wifi } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { AndroidDevice } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -17,19 +18,20 @@ import { useAndroidDevices, useAndroidStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 
 const STEPS = [
-  { title: "Turn on developer options", body: "Settings → About phone → tap Build number seven times." },
-  { title: "Allow USB debugging", body: "Settings → System → Developer options → USB debugging." },
-  { title: "Plug it in and tap Allow", body: "Tick “Always allow from this computer” so it stays allowed." },
-];
+  { id: "developer", title: "overview.steps.developer.title", body: "overview.steps.developer.body" },
+  { id: "debugging", title: "overview.steps.debugging.title", body: "overview.steps.debugging.body" },
+  { id: "plugIn", title: "overview.steps.plugIn.title", body: "overview.steps.plugIn.body" },
+] as const;
 
 function SetupSteps() {
+  const { t } = useTranslation("android");
   return (
     <ol className="mx-auto mt-6 grid max-w-3xl gap-3 text-left @3xl:grid-cols-3">
       {STEPS.map((s, i) => (
-        <li key={s.title} className="rounded-lg border bg-card p-3.5 shadow-card">
+        <li key={s.id} className="rounded-lg border bg-card p-3.5 shadow-card">
           <span className="grid size-6 place-items-center rounded-md border bg-paper-2 font-mono text-[11px] text-muted-foreground">{i + 1}</span>
-          <p className="mt-2.5 text-[13px] font-medium">{s.title}</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.body}</p>
+          <p className="mt-2.5 text-[13px] font-medium">{t(s.title)}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{t(s.body)}</p>
         </li>
       ))}
     </ol>
@@ -60,6 +62,7 @@ function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; o
 
 /** Android phones connected over adb: watch them, take control, give them to agents. */
 export function AndroidOverview() {
+  const { t } = useTranslation(["android", "common"]);
   const qc = useQueryClient();
   const status = useAndroidStatus();
   const list = useAndroidDevices();
@@ -71,16 +74,16 @@ export function AndroidOverview() {
   const refresh = useMutation({
     mutationFn: api.android.refresh,
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.android }),
-    onError: (e) => toastApiError(e, "Couldn't look for phones", qc),
+    onError: (e) => toastApiError(e, t("overview.lookFailed"), qc),
   });
   const install = useMutation({
     mutationFn: api.android.install,
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: qk.android });
       if (res.ok) toast.success(res.output);
-      else toast.error("Couldn't install adb", { description: res.output });
+      else toast.error(t("overview.installFailed"), { description: res.output });
     },
-    onError: (e) => toastApiError(e, "Couldn't install adb", qc),
+    onError: (e) => toastApiError(e, t("overview.installFailed"), qc),
   });
 
   const adb = status.data?.adb;
@@ -90,13 +93,13 @@ export function AndroidOverview() {
   return (
     <div className="@container relative space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="eyebrow">{devices.length ? `${connected} of ${devices.length} connected` : "Phones"}</h3>
+        <h3 className="eyebrow">{devices.length ? t("overview.countConnected", { connected, total: devices.length }) : t("overview.phones")}</h3>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon-sm" aria-label="Look for phones again" onClick={() => refresh.mutate()} disabled={refresh.isPending || !adb?.installed}>
+          <Button variant="outline" size="icon-sm" aria-label={t("overview.lookAgain")} onClick={() => refresh.mutate()} disabled={refresh.isPending || !adb?.installed}>
             {refresh.isPending ? <Spinner className="size-4" /> : <RefreshCw />}
           </Button>
           <Button variant="outline" size="sm" onClick={() => setWifiOpen(true)} disabled={!adb?.installed}>
-            <Wifi /> Connect over Wi-Fi
+            <Wifi /> {t("overview.connectWifi")}
           </Button>
         </div>
       </div>
@@ -110,16 +113,16 @@ export function AndroidOverview() {
         ) : adb && !adb.installed ? (
           <EmptyState
             icon={<Download />}
-            title="Godmode needs adb to talk to phones"
+            title={t("overview.adbTitle")}
             description={
               status.data?.canInstall
-                ? "adb is Android's free debugging bridge from Google. Godmode installs its own copy (about 16 MB) — nothing else on your computer changes."
-                : "Install Android's platform-tools (adb) and make sure it's on your PATH, or set its path below."
+                ? t("overview.adbCanInstall")
+                : t("overview.adbManual")
             }
             action={
               status.data?.canInstall && (
                 <Button onClick={() => install.mutate()} disabled={install.isPending}>
-                  {install.isPending ? <Spinner className="size-3.5" /> : <Download />} {install.isPending ? "Installing…" : "Install adb"}
+                  {install.isPending ? <Spinner className="size-3.5" /> : <Download />} {install.isPending ? t("overview.installing") : t("overview.install")}
                 </Button>
               )
             }
@@ -127,11 +130,11 @@ export function AndroidOverview() {
         ) : list.isError ? (
           <EmptyState
             icon={<Smartphone />}
-            title="Couldn't load your phones"
+            title={t("overview.loadError")}
             description={errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -150,7 +153,7 @@ export function AndroidOverview() {
                     <ShieldQuestion className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-medium">
-                        A phone is waiting {p.state === "unauthorized" ? "for your OK" : "to connect"}
+                        {p.state === "unauthorized" ? t("overview.waitingOk") : t("overview.waitingConnect")}
                         <span className="ml-1.5 font-mono text-[11px] font-normal text-muted-foreground">
                           {p.adbSerial} · {CONNECTION_LABEL[p.connection]}
                         </span>
@@ -171,13 +174,13 @@ export function AndroidOverview() {
             {devices.length === 0 ? (
               <EmptyState
                 icon={<Smartphone />}
-                title="Connect your first phone"
-                description="Plug an Android phone into this computer with a USB cable. It shows up here on its own."
+                title={t("overview.emptyTitle")}
+                description={t("overview.emptyDescription")}
                 action={
                   <>
                     <SetupSteps />
                     <Button variant="link" className="mt-3 text-muted-foreground" onClick={() => setWifiOpen(true)}>
-                      <Wifi /> Or connect over Wi-Fi
+                      <Wifi /> {t("overview.orWifi")}
                     </Button>
                   </>
                 }
@@ -186,8 +189,8 @@ export function AndroidOverview() {
               <>
                 <DeviceGrid devices={devices.filter((d) => d.state !== "disconnected")} onEdit={setEditing} onForget={setForgetting} />
                 {devices.some((d) => d.state === "disconnected") && (
-                  <section aria-label="Not connected" className="mt-4 grid gap-3">
-                    <h2 className="eyebrow text-[10.5px]">Not connected</h2>
+                  <section aria-label={t("state.disconnected")} className="mt-4 grid gap-3">
+                    <h2 className="eyebrow text-[10.5px]">{t("state.disconnected")}</h2>
                     <DeviceGrid devices={devices.filter((d) => d.state === "disconnected")} onEdit={setEditing} onForget={setForgetting} />
                   </section>
                 )}

@@ -1,21 +1,23 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
-import { presenceLabel } from "@godmode/shared";
-import { CharacterAvatar, moodOf, useAgentPresence } from "./character";
+import { CharacterAvatar, moodOf, presenceText, useAgentPresence } from "./character";
 import { ProjectTag } from "./project-picker";
 import { Icon, type IconName } from "./icon";
 import { Badge, Card, LiveDot, Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { activityText, elapsed, shortTime, whenText } from "@/lib/format";
 import { useAgents, useNow } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import type { LiveRun } from "@/lib/live";
 import { alpha, radius, space, useColors } from "@/lib/theme";
+import { useTypewriter } from "@/lib/typewriter";
 
 const ORIGIN_LABEL: Partial<Record<Conversation["origin"], string>> = {
-  routine: "Automation",
-  delegation: "Handed over",
-  heartbeat: "Heartbeat",
+  get routine() { return t("components:rows.origin.routine"); },
+  get delegation() { return t("components:rows.origin.delegation"); },
+  get heartbeat() { return t("components:rows.origin.heartbeat"); },
   slack: "Slack",
   telegram: "Telegram",
   teams: "Teams",
@@ -27,18 +29,22 @@ type ChatStatus = { text: string; icon: IconName; tone: "warning" | "brand" | "m
 /** What a chat still has ahead, the way the desktop's chat lists say it. Null: nothing. */
 export function chatStatus(c: Pick<Conversation, "paused" | "followup">, live: { running?: boolean; queued?: boolean }): ChatStatus | null {
   if (live.running && !c.paused) return null;
-  if (live.queued && !c.paused) return { text: "Queued — waiting for a free slot", icon: "clock", tone: "muted" };
+  if (live.queued && !c.paused) return { text: t("components:rows.queued"), icon: "clock", tone: "muted" };
   const p = c.paused;
   if (p?.reason === "question") {
-    const what = p.question?.kind === "approval" ? "Needs your OK" : "Needs your answer";
+    const what = p.question?.kind === "approval" ? t("components:rows.needsOk") : t("components:rows.needsAnswer");
     return { text: p.question?.title ? `${what} · ${p.question.title}` : what, icon: "question", tone: "warning" };
   }
   if (p) {
     const text =
-      p.reason === "user" ? "Paused" : p.auto && p.resumeAt ? `Continues ${whenText(p.resumeAt)}` : "Waiting for the limit";
+      p.reason === "user"
+        ? t("components:rows.paused")
+        : p.auto && p.resumeAt
+          ? t("components:rows.continues", { when: whenText(p.resumeAt) })
+          : t("components:rows.waitingForLimit");
     return { text, icon: p.reason === "user" ? "pause" : "clock", tone: p.reason === "user" ? "muted" : "warning" };
   }
-  if (c.followup) return { text: `Continues ${whenText(c.followup.dueAt)}`, icon: "clock", tone: "brand" };
+  if (c.followup) return { text: t("components:rows.continues", { when: whenText(c.followup.dueAt) }), icon: "clock", tone: "brand" };
   return null;
 }
 
@@ -65,10 +71,12 @@ export function ConversationRow({
   project?: Pick<Project, "name" | "icon">;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const { byId } = useAgents();
   const handedBy = from ?? (conversation.delegatedFrom ? byId.get(conversation.delegatedFrom.agentId) : undefined);
-  const origin = conversation.origin === "delegation" && handedBy ? `From ${handedBy.name}` : ORIGIN_LABEL[conversation.origin];
+  const origin = conversation.origin === "delegation" && handedBy ? t("rows.from", { name: handedBy.name }) : ORIGIN_LABEL[conversation.origin];
   const status = chatStatus(conversation, { running, queued });
+  const title = useTypewriter(conversation.title || t("rows.newChat"));
   const unread = conversation.unread;
   const statusColor = status?.tone === "warning" ? c.warning : status?.tone === "brand" ? c.brandStrong : c.textMuted;
   return (
@@ -78,19 +86,19 @@ export function ConversationRow({
         <Row style={{ gap: space.sm }}>
           {conversation.pinned && <Icon name="pin" size={11} color={c.textMuted} />}
           <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: unread ? "700" : undefined }}>
-            {conversation.title || "New chat"}
+            {title}
           </T>
           {unread ? (
             <View
               accessibilityRole="image"
-              accessibilityLabel={unread.failed ? "Something went wrong here" : "New reply"}
+              accessibilityLabel={unread.failed ? t("rows.somethingWentWrong") : t("rows.newReply")}
               style={[styles.unread, { backgroundColor: unread.failed ? c.danger : c.brandStrong }]}
             />
           ) : null}
           {project ? <ProjectTag project={project} /> : null}
           <View style={{ flex: 1 }} />
           <T variant="footnote" color={running ? c.brandStrong : c.textMuted} style={running ? { fontWeight: "500" } : undefined}>
-            {running ? "Working" : shortTime(conversation.lastMessageAt ?? conversation.createdAt)}
+            {running ? t("rows.working") : shortTime(conversation.lastMessageAt ?? conversation.createdAt)}
           </T>
         </Row>
         {status ? (
@@ -104,7 +112,7 @@ export function ConversationRow({
         <T variant="subhead" muted numberOfLines={status ? 1 : 2}>
           {origin ? <T variant="subhead" color={c.text} style={{ fontWeight: "500" }}>{`${origin} · `}</T> : null}
           {agent ? `${agent.name}: ` : ""}
-          {conversation.preview || "No messages yet"}
+          {conversation.preview || t("rows.noMessages")}
         </T>
       </View>
     </Pressable>
@@ -113,6 +121,7 @@ export function ConversationRow({
 
 export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; title?: string }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const now = useNow(1000);
   const { run, activity } = live;
   const queued = run.status === "queued";
@@ -122,14 +131,14 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
         <CharacterAvatar agent={agent} size={40} mood={queued ? "idle" : "working"} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-            {agent?.name ?? "Agent"}
+            {agent?.name ?? t("common:words.agent")}
           </T>
           <T variant="footnote" muted numberOfLines={1}>
-            {title || run.prompt.slice(0, 80) || "Working on a task"}
+            {title || run.prompt.slice(0, 80) || t("rows.workingOnTask")}
           </T>
         </View>
         <Pressable
-          accessibilityLabel="Stop"
+          accessibilityLabel={t("common:actions.stop")}
           hitSlop={8}
           onPress={() => {
             tap();
@@ -143,7 +152,7 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
       <Row style={[styles.activity, { backgroundColor: c.surfaceAlt }]}>
         <LiveDot live={!queued} />
         <T variant="footnote" numberOfLines={1} style={{ flex: 1, fontWeight: "500" }}>
-          {queued ? "Waiting to start" : activityText(activity)}
+          {queued ? t("rows.waitingToStart") : activityText(activity)}
         </T>
         <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
           {elapsed(run.startedAt ?? run.createdAt, now)}
@@ -155,6 +164,7 @@ export function RunCard({ live, agent, title }: { live: LiveRun; agent?: Agent; 
 
 export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; running?: number; queued?: number; onPress: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   // The desktop's states and words (AgentStatus), a missing login included.
   const presence = useAgentPresence(agent, { running, queued });
   const { state } = presence;
@@ -169,13 +179,13 @@ export function AgentRow({ agent, running, queued, onPress }: { agent: Agent; ru
           <T variant="callout" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
             {agent.name}
           </T>
-          {agent.isDefault && <Badge label="Built-in" dot={false} />}
+          {agent.isDefault && <Badge label={t("rows.builtIn")} dot={false} />}
         </Row>
         <Row style={{ gap: 6 }}>
           {state === "working" ? <LiveDot size={6} /> : <View style={[styles.presenceDot, { backgroundColor: dot }]} />}
           <T variant="footnote" numberOfLines={1} style={{ flex: 1 }} color={c.textMuted}>
             <T variant="footnote" color={tone} style={state === "working" ? { fontWeight: "500" } : undefined}>
-              {presenceLabel(presence)}
+              {presenceText(presence)}
             </T>
             {subtitle ? ` · ${subtitle}` : ""}
           </T>

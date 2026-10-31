@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Boxes, ChevronDown, Clock, RefreshCw, Search, TriangleAlert, Zap } from "lucide-react";
 import type { Agent, ComposioConnection, ComposioTriggerType } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { useAllAgents, useComposioTriggerType, useComposioTriggerTypes, useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useComposioConnections, useComposioStatus } from "@/components/integrations/composio-tab";
@@ -57,9 +59,13 @@ export type AppTriggerSchema = ReturnType<typeof useAppTriggerSchema>;
 /** Why the app trigger can't be saved yet, per part. */
 export function appTriggerProblems(app: AppTriggerDraft, schema: AppTriggerSchema) {
   return {
-    connection: !app.connectionId ? "Pick a connected account" : null,
-    trigger: !app.triggerSlug ? "Pick the event to react to" : null,
-    schema: schema.loading ? "Loading the event's settings…" : schema.failed ? "Couldn't load the event's settings" : null,
+    connection: !app.connectionId ? translate("automations:appTrigger.pickAccount") : null,
+    trigger: !app.triggerSlug ? translate("automations:appTrigger.pickEvent") : null,
+    schema: schema.loading
+      ? translate("automations:appTrigger.loadingSettings")
+      : schema.failed
+        ? translate("automations:appTrigger.settingsFailed")
+        : null,
     config: schema.triggerType ? configProblems(schema.fields, app.config) : {},
   };
 }
@@ -79,6 +85,7 @@ export function AppTriggerFields({
   agent: Agent | undefined;
   showProblems: boolean;
 }) {
+  const { t } = useTranslation(["automations", "common"]);
   const status = useComposioStatus();
   const ready = !!status.data?.configured && status.data.valid !== false;
   const connectionsQ = useComposioConnections(ready);
@@ -96,7 +103,7 @@ export function AppTriggerFields({
         : [],
     [connections, agent, value.connectionId],
   );
-  const listLogo = list.data?.find((t) => t.toolkitLogo)?.toolkitLogo;
+  const listLogo = list.data?.find((type) => type.toolkitLogo)?.toolkitLogo;
   const logoOf = (toolkit: string) => (toolkit === value.toolkit && listLogo) || toolkitLogoUrl(toolkit);
 
   if (status.isLoading || (ready && connectionsQ.isLoading)) {
@@ -107,21 +114,21 @@ export function AppTriggerFields({
       </div>
     );
   }
-  if (status.isError) return <QueryError error={status.error} onRetry={() => status.refetch()} title="Couldn't reach Composio settings" />;
+  if (status.isError) return <QueryError error={status.error} onRetry={() => status.refetch()} title={t("appTrigger.composioFailed")} />;
   if (!ready) {
     return (
       <ConnectHint
-        title="Connect your apps first"
-        description="App events come from Composio. Add your Composio API key and connect Gmail, Slack, Calendar or any other app — then pick what should start this automation."
-        action="Set up Composio"
+        title={t("appTrigger.connectFirstTitle")}
+        description={t("appTrigger.connectFirstDescription")}
+        action={t("appTrigger.setUpComposio")}
       />
     );
   }
-  if (connectionsQ.isError) return <QueryError error={connectionsQ.error} onRetry={() => connectionsQ.refetch()} title="Couldn't load connected accounts" />;
+  if (connectionsQ.isError) return <QueryError error={connectionsQ.error} onRetry={() => connectionsQ.refetch()} title={t("appTrigger.accountsFailed")} />;
   if (!agent) {
     return (
       <p className="rounded-lg border border-dashed bg-card/60 px-3 py-2.5 text-sm text-muted-foreground">
-        Choose the agent first — it can only watch accounts it has access to.
+        {t("appTrigger.chooseAgentFirst")}
       </p>
     );
   }
@@ -129,15 +136,15 @@ export function AppTriggerFields({
     const elsewhere = connections.some((c) => c.status.toUpperCase() === "ACTIVE");
     return elsewhere ? (
       <ConnectHint
-        title={`No account ${agent.name} can use`}
-        description={`The connected accounts belong to other agents or workspaces. Connect one for ${agent.name}, its workspace or globally, then pick the event that starts this automation.`}
-        action="Connect an app"
+        title={t("appTrigger.noUsableTitle", { name: agent.name })}
+        description={t("appTrigger.noUsableDescription", { name: agent.name })}
+        action={t("appTrigger.connectApp")}
       />
     ) : (
       <ConnectHint
-        title="No connected apps yet"
-        description="Connect an app like Gmail, Slack or Google Calendar on the Integrations page, then come back to pick the event that starts this automation."
-        action="Connect an app"
+        title={t("appTrigger.noAppsTitle")}
+        description={t("appTrigger.noAppsDescription")}
+        action={t("appTrigger.connectApp")}
       />
     );
   }
@@ -149,18 +156,18 @@ export function AppTriggerFields({
     onChange(sameToolkit ? { ...value, connectionId: c.id } : { ...EMPTY_APP_TRIGGER, connectionId: c.id, toolkit: c.toolkit });
   };
 
-  const pickTrigger = (t: ComposioTriggerType) =>
-    onChange({ ...value, triggerSlug: t.slug, triggerName: t.name, config: defaultConfig(schemaFields(t.config)) });
+  const pickTrigger = (type: ComposioTriggerType) =>
+    onChange({ ...value, triggerSlug: type.slug, triggerName: type.name, config: defaultConfig(schemaFields(type.config)) });
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="automation-connection" className="text-xs text-muted-foreground">
-            Account
+            {t("appTrigger.account")}
           </Label>
           <Link to="/settings/integrations" className="flex items-center gap-0.5 text-xs text-muted-foreground transition hover:text-foreground">
-            Connect another app <ArrowUpRight className="size-3" />
+            {t("appTrigger.connectAnother")} <ArrowUpRight className="size-3" />
           </Link>
         </div>
         <Select value={value.connectionId} onValueChange={pickConnection}>
@@ -170,7 +177,7 @@ export function AppTriggerFields({
             aria-invalid={showProblems && !!problems.connection}
             aria-describedby={showProblems && problems.connection ? "automation-connection-error" : undefined}
           >
-            <SelectValue placeholder="Choose which account to watch" />
+            <SelectValue placeholder={t("appTrigger.accountPlaceholder")} />
           </SelectTrigger>
           <SelectContent position="popper">
             {options.map((c) => (
@@ -207,10 +214,10 @@ export function AppTriggerFields({
           role={schema.failed ? "alert" : "status"}
         >
           {schema.failed ? <TriangleAlert className="size-3.5 shrink-0" /> : <Spinner className="size-3.5" aria-hidden />}
-          <span className="min-w-0 flex-1">{schema.failed ? `${problems.schema} — check Composio, then try again.` : problems.schema}</span>
+          <span className="min-w-0 flex-1">{schema.failed ? t("appTrigger.settingsFailedHint", { problem: problems.schema }) : problems.schema}</span>
           {schema.failed && (
             <Button type="button" size="xs" variant="outline" onClick={() => schema.retry()}>
-              <RefreshCw /> Retry
+              <RefreshCw /> {t("common:actions.retry")}
             </Button>
           )}
         </div>
@@ -218,7 +225,7 @@ export function AppTriggerFields({
 
       {triggerType && fields.length > 0 && (
         <div className="space-y-2.5">
-          <div className="eyebrow">Settings</div>
+          <div className="eyebrow">{t("common:words.settings")}</div>
           <JsonSchemaForm
             key={triggerType.slug}
             fields={fields}
@@ -235,13 +242,14 @@ export function AppTriggerFields({
 }
 
 function ConnectionScope({ connection }: { connection: ComposioConnection }) {
+  const { t } = useTranslation("automations");
   const { data: workspaces = [] } = useWorkspaces();
   const { data: agents = [] } = useAllAgents();
   const label = connection.agentId
-    ? (agents.find((a) => a.id === connection.agentId)?.name ?? "One agent")
+    ? (agents.find((a) => a.id === connection.agentId)?.name ?? t("appTrigger.scope.oneAgent"))
     : connection.workspaceId
-      ? (workspaces.find((w) => w.id === connection.workspaceId)?.name ?? "Workspace")
-      : "Global";
+      ? (workspaces.find((w) => w.id === connection.workspaceId)?.name ?? t("appTrigger.scope.workspace"))
+      : t("appTrigger.scope.global");
   const inactive = connection.status.toUpperCase() !== "ACTIVE";
   return (
     <span className={cn("text-xs text-muted-foreground", inactive && "text-warning")}>
@@ -271,11 +279,12 @@ function ConnectHint({ title, description, action }: { title: string; descriptio
 }
 
 function KindBadge({ kind }: { kind: ComposioTriggerType["kind"] }) {
+  const { t } = useTranslation("automations");
   if (!kind) return null;
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-px text-[10px] font-medium text-muted-foreground">
       {kind === "webhook" ? <Zap className="size-3" /> : <Clock className="size-3" />}
-      {kind === "webhook" ? "Instant" : "Every few min"}
+      {kind === "webhook" ? t("appTrigger.instant") : t("appTrigger.everyFewMin")}
     </span>
   );
 }
@@ -295,22 +304,23 @@ function TriggerTypePicker({
   onPick: (t: ComposioTriggerType) => void;
   problem: string | null;
 }) {
+  const { t } = useTranslation("automations");
   const [open, setOpen] = useState(!selectedSlug);
   const [search, setSearch] = useState("");
   const app = prettySlug(toolkit);
   const types = query.data ?? [];
   const q = search.trim().toLowerCase();
-  const visible = q ? types.filter((t) => `${t.name} ${t.description}`.toLowerCase().includes(q)) : types;
+  const visible = q ? types.filter((type) => `${type.name} ${type.description}`.toLowerCase().includes(q)) : types;
 
   return (
     <div className="space-y-1.5">
       <div className="flex min-h-6 items-center justify-between gap-2">
         <span id="automation-trigger-label" className="text-xs text-muted-foreground">
-          Event
+          {t("appTrigger.event")}
         </span>
         {open && selectedSlug && (
           <Button type="button" size="xs" variant="ghost" className="text-muted-foreground" onClick={() => setOpen(false)}>
-            Keep {selected?.name ?? "current event"}
+            {t("appTrigger.keep", { name: selected?.name ?? t("appTrigger.currentEvent") })}
           </Button>
         )}
       </div>
@@ -325,21 +335,21 @@ function TriggerTypePicker({
               </div>
               {selected?.description && <p className="mt-0.5 text-xs text-muted-foreground">{selected.description}</p>}
             </div>
-            <Button type="button" size="xs" variant="outline" onClick={() => setOpen(true)} aria-label="Change the event">
-              Change <ChevronDown />
+            <Button type="button" size="xs" variant="outline" onClick={() => setOpen(true)} aria-label={t("appTrigger.changeEvent")}>
+              {t("appTrigger.change")} <ChevronDown />
             </Button>
           </div>
           {selected?.kind === "poll" && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <Clock className="mt-px size-3.5 shrink-0" />
-              Composio checks {app} for this every few minutes, so new events can take a few minutes to arrive.
+              {t("appTrigger.pollHint", { app })}
             </p>
           )}
           {selected?.requiresWebhookSetup && (
             <div className="rounded-lg border border-warning/25 bg-warning/[0.07] p-3 text-xs">
               <p className="flex items-start gap-1.5 font-medium text-foreground">
                 <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" />
-                Needs a one-time setup in {app} before events arrive.
+                {t("appTrigger.needsSetup", { app })}
               </p>
               {selected.instructions && <p className="mt-1.5 pl-5 whitespace-pre-line text-muted-foreground">{selected.instructions}</p>}
             </div>
@@ -352,25 +362,25 @@ function TriggerTypePicker({
           ))}
         </div>
       ) : query.isError ? (
-        <QueryError error={query.error} onRetry={() => query.refetch()} title={`Couldn't load ${app} events`} />
+        <QueryError error={query.error} onRetry={() => query.refetch()} title={t("appTrigger.eventsFailed", { app })} />
       ) : types.length === 0 ? (
         <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-          {app} doesn't offer any events to react to. Try a condition instead — the agent checks it regularly.
+          {t("appTrigger.noEvents", { app })}
         </p>
       ) : (
         <div className="space-y-2">
           {types.length >= TRIGGER_SEARCH_THRESHOLD && (
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${app} events…`} aria-label={`Search ${app} events`} className="h-8 pl-9" />
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("appTrigger.searchPlaceholder", { app })} aria-label={t("appTrigger.searchLabel", { app })} className="h-8 pl-9" />
             </div>
           )}
           <RadioGroup
             value={selectedSlug}
             onValueChange={(slug) => {
-              const t = types.find((x) => x.slug === slug);
-              if (!t) return;
-              onPick(t);
+              const type = types.find((x) => x.slug === slug);
+              if (!type) return;
+              onPick(type);
               setOpen(false);
             }}
             aria-labelledby="automation-trigger-label"
@@ -379,25 +389,25 @@ function TriggerTypePicker({
             className="max-h-64 gap-1.5 overflow-y-auto rounded-lg border bg-card p-1.5 shadow-card"
           >
             <AnimatePresence initial={false}>
-              {visible.map((t) => (
-                <motion.div key={t.slug} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              {visible.map((type) => (
+                <motion.div key={type.slug} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <Label
-                    htmlFor={`trigger-${t.slug}`}
+                    htmlFor={`trigger-${type.slug}`}
                     className="flex cursor-pointer items-start gap-3 rounded-md p-2.5 font-normal transition-colors hover:bg-accent has-[[data-state=checked]]:bg-paper-2 has-[[data-state=checked]]:ring-1 has-[[data-state=checked]]:ring-foreground/15"
                   >
-                    <RadioGroupItem id={`trigger-${t.slug}`} value={t.slug} className="mt-0.5" />
+                    <RadioGroupItem id={`trigger-${type.slug}`} value={type.slug} className="mt-0.5" />
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-medium">{t.name}</span>
-                        <KindBadge kind={t.kind} />
+                        <span className="text-sm font-medium">{type.name}</span>
+                        <KindBadge kind={type.kind} />
                       </span>
-                      {t.description && <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-muted-foreground">{t.description}</span>}
+                      {type.description && <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-muted-foreground">{type.description}</span>}
                     </span>
                   </Label>
                 </motion.div>
               ))}
             </AnimatePresence>
-            {visible.length === 0 && <p className="p-3 text-center text-xs text-muted-foreground">No {app} events match “{search.trim()}”.</p>}
+            {visible.length === 0 && <p className="p-3 text-center text-xs text-muted-foreground">{t("appTrigger.noMatch", { app, query: search.trim() })}</p>}
           </RadioGroup>
         </div>
       )}

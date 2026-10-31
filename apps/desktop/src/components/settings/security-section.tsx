@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Eye, Globe2, KeyRound, Lock, LockKeyhole, MonitorSmartphone, ShieldCheck, Wand2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { SecretAccessMode, Settings } from "@godmode/shared";
 import {
   AlertDialog,
@@ -39,6 +40,7 @@ import {
 } from "./settings-kit";
 
 export function SecuritySection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const { patch } = useSettingsPatch();
   const { data: boot } = useBootstrap();
@@ -67,11 +69,11 @@ export function SecuritySection({ settings }: { settings: Settings }) {
   const lock = useMutation({
     mutationFn: api.vault.lock,
     onSuccess: () => {
-      toast.success("Vault locked");
+      toast.success(t("security.locked"));
       void qc.invalidateQueries({ queryKey: qk.vaultStatus });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
-    onError: (e) => toastApiError(e, "Could not lock the vault", qc),
+    onError: (e) => toastApiError(e, t("security.lockError"), qc),
   });
 
   const remember = useMutation({
@@ -80,65 +82,62 @@ export function SecuritySection({ settings }: { settings: Settings }) {
     onSuccess: (status, on) => {
       qc.setQueryData(qk.vaultStatus, status);
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success(on ? "This device will unlock automatically" : "Device key removed", {
-        description: on ? "The vault key is stored in your OS keychain." : "You'll enter your passphrase after every restart.",
+      toast.success(on ? t("security.rememberOn") : t("security.rememberOff"), {
+        description: on ? t("security.rememberOnDescription") : t("security.rememberOffDescription"),
       });
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not change device unlock", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("security.rememberError"), qc),
   });
 
   const rememberOn = remember.isPending ? !!remember.variables : !!vault?.rememberDevice;
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Security"
-        description="Your vault, how agents may use secrets, and who can reach the dashboard. Every secret access is audited."
-      />
+      <SectionHeading title={t("security.title")} description={t("security.description")} />
 
       <SettingsGroup
-        title="Vault"
+        title={t("security.vault.title")}
         icon={<LockKeyhole />}
-        description="AES-256-GCM encrypted. The key is derived from your passphrase and only lives in memory — or in your OS keychain if you allow it."
+        description={t("security.vault.description")}
         actions={
           <Badge variant="outline" className={cn("gap-1.5 font-normal", vault?.unlocked ? "border-brand/25 bg-brand-soft text-brand-strong" : "text-muted-foreground")}>
             <span className={cn("size-1.5 rounded-full", vault?.unlocked ? "bg-brand" : "bg-muted-foreground")} />
-            {vault?.unlocked ? "Unlocked" : "Locked"}
+            {vault?.unlocked ? t("security.vault.unlocked") : t("security.vault.lockedBadge")}
           </Badge>
         }
       >
-        <SettingRow label="Lock vault now" description="Agents can't use logins or 2FA codes until you unlock again.">
+        <SettingRow label={t("security.vault.lock")} description={t("security.vault.lockDescription")}>
           <Button variant="outline" size="sm" onClick={() => lock.mutate()} disabled={lock.isPending || !vault?.unlocked}>
-            {lock.isPending ? <Spinner /> : <Lock />} Lock now
+            {lock.isPending ? <Spinner /> : <Lock />} {t("security.vault.lockNow")}
           </Button>
         </SettingRow>
-        <SettingRow label="Passphrase" description="Change the passphrase that protects your vault.">
+        <SettingRow label={t("security.vault.passphrase")} description={t("security.vault.passphraseDescription")}>
           <Button variant="outline" size="sm" onClick={() => setPassphraseOpen(true)}>
-            <KeyRound /> Change…
+            <KeyRound /> {t("security.change")}
           </Button>
         </SettingRow>
         <SettingRow
-          label="Remember on this device"
+          label={t("security.vault.remember")}
           htmlFor="remember-device"
-          description="Stores the vault key in the macOS Keychain / Windows Credential Manager so automations can run unattended after a restart. Turn off for maximum security on shared machines."
+          description={t("security.vault.rememberDescription")}
         >
           <Switch id="remember-device" checked={rememberOn} disabled={remember.isPending} onCheckedChange={(on) => remember.mutate(on)} />
         </SettingRow>
-        <SettingRow label="Auto-lock" htmlFor="auto-lock" description="Lock the vault after this many idle minutes. 0 = never.">
+        <SettingRow label={t("security.vault.autoLock")} htmlFor="auto-lock" description={t("security.vault.autoLockDescription")}>
           <NumberField
             id="auto-lock"
             min={0}
             max={10080}
-            suffix="min"
+            suffix={t("ai.limits.minutes")}
             value={sec.autoLockMinutes}
             onCommit={(v) => v !== null && patch({ security: { autoLockMinutes: v } })}
           />
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Agents & secrets" icon={<ShieldCheck />} description="Defaults for new agents. Each agent can be adjusted individually.">
+      <SettingsGroup title={t("security.secrets.title")} icon={<ShieldCheck />} description={t("security.secrets.description")}>
         <div className="space-y-2 py-4">
-          <p className="text-sm font-medium">Default secret access</p>
+          <p className="text-sm font-medium">{t("security.secrets.defaultAccess")}</p>
           <ChoiceCards<SecretAccessMode>
             name="secret-access"
             value={sec.defaultSecretAccess}
@@ -147,43 +146,43 @@ export function SecuritySection({ settings }: { settings: Settings }) {
               {
                 value: "fill",
                 icon: <Wand2 />,
-                title: "Fill only",
+                title: t("security.secrets.fill"),
                 badge: (
                   <Badge variant="secondary" className="h-5 text-[10px]">
-                    Recommended
+                    {t("memory.backend.recommended")}
                   </Badge>
                 ),
-                description: "Godmode types passwords and 2FA codes straight into the page. The AI never sees them.",
+                description: t("security.secrets.fillDescription"),
               },
               {
                 value: "reveal",
                 icon: <Eye />,
-                title: "Allow reveal",
-                description: "The AI may read raw passwords and codes — needed for API-only tools. Every reveal is audited.",
+                title: t("security.secrets.reveal"),
+                description: t("security.secrets.revealDescription"),
               },
             ]}
           />
         </div>
         <SettingRow
-          label="Redact secrets"
+          label={t("security.secrets.redact")}
           htmlFor="redact"
-          description="Mask every known password, token and code in transcripts, run logs and the live stream."
+          description={t("security.secrets.redactDescription")}
         >
           <Switch id="redact" checked={sec.redactSecrets} onCheckedChange={(redactSecrets) => patch({ security: { redactSecrets } })} />
         </SettingRow>
         <SettingRow
-          label="Load website icons"
+          label={t("security.secrets.icons")}
           htmlFor="site-icons"
-          description="Show login icons from Google's favicon service. This tells Google which sites you have saved; turn off for maximum privacy."
+          description={t("security.secrets.iconsDescription")}
         >
           <Switch id="site-icons" checked={sec.fetchSiteIcons} onCheckedChange={(fetchSiteIcons) => patch({ security: { fetchSiteIcons } })} />
         </SettingRow>
-        <SettingRow label="Keep audit log for" htmlFor="audit-retention" description="Older entries are pruned automatically.">
+        <SettingRow label={t("security.secrets.retention")} htmlFor="audit-retention" description={t("security.secrets.retentionDescription")}>
           <NumberField
             id="audit-retention"
             min={1}
             max={3650}
-            suffix="days"
+            suffix={t("security.secrets.days")}
             value={sec.auditRetentionDays}
             onCommit={(v) => v !== null && patch({ security: { auditRetentionDays: v } })}
           />
@@ -191,30 +190,30 @@ export function SecuritySection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup
-        title="Web dashboard"
+        title={t("security.web.title")}
         icon={<MonitorSmartphone />}
-        description={<InlineCode text="Use Godmode from any browser with `godmode serve`. Host, port and remote access apply after a restart." />}
+        description={<InlineCode text={t("security.web.description")} />}
       >
         <SettingRow
-          label="Dashboard password"
+          label={t("security.web.password")}
           description={
             srv.hasDashboardPassword ? (
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-1.5 rounded-full bg-success" /> Password is set
+                <span className="size-1.5 rounded-full bg-success" /> {t("security.web.passwordSet")}
               </span>
             ) : (
-              <InlineCode text="Not set — only the access token (`godmode token`) can sign in." />
+              <InlineCode text={t("security.web.passwordNotSet")} />
             )
           }
         >
           <Button variant="outline" size="sm" onClick={() => setDashboardOpen(true)}>
-            <KeyRound /> {srv.hasDashboardPassword ? "Change…" : "Set password…"}
+            <KeyRound /> {srv.hasDashboardPassword ? t("security.change") : t("security.web.setPassword")}
           </Button>
         </SettingRow>
         <SettingRow
-          label="Allow remote access"
+          label={t("security.web.remote")}
           htmlFor="remote-access"
-          description="Listen on your network instead of only this computer (127.0.0.1)."
+          description={t("security.web.remoteDescription")}
         >
           <Switch
             id="remote-access"
@@ -224,14 +223,13 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         </SettingRow>
         {srv.remoteAccess && (
           <div className="py-4">
-            <Callout tone="danger" title="Only expose Godmode through a reverse proxy with TLS">
-              Anyone who reaches this port can try to sign in to a coworker with full access to your machine and vault. Put it behind HTTPS (e.g.
-              Caddy, Cloudflare Tunnel or Tailscale), set a strong dashboard password, and restrict allowed origins.
-              {!srv.hasDashboardPassword && <strong className="mt-1 block text-destructive">No dashboard password is set yet.</strong>}
+            <Callout tone="danger" title={t("security.web.exposeTitle")}>
+              {t("security.web.exposeBody")}
+              {!srv.hasDashboardPassword && <strong className="mt-1 block text-destructive">{t("security.web.noPassword")}</strong>}
             </Callout>
           </div>
         )}
-        <SettingRow label="Host" htmlFor="host" description={srv.remoteAccess ? "e.g. 0.0.0.0 for all interfaces." : "Loopback only while remote access is off."}>
+        <SettingRow label={t("security.web.host")} htmlFor="host" description={srv.remoteAccess ? t("security.web.hostRemote") : t("security.web.hostLocal")}>
           <CommitInput
             id="host"
             className="w-44 font-mono text-[13px]"
@@ -240,14 +238,14 @@ export function SecuritySection({ settings }: { settings: Settings }) {
             onCommit={(host) => patch({ server: { host: host.trim() } })}
           />
         </SettingRow>
-        <SettingRow label="Port" htmlFor="port">
+        <SettingRow label={t("security.web.port")} htmlFor="port">
           <NumberField id="port" min={1} max={65535} value={srv.port} onCommit={(v) => v !== null && patch({ server: { port: v } })} />
         </SettingRow>
         <SettingRow
           stacked
-          label="Allowed origins"
+          label={t("security.web.origins")}
           htmlFor="origins"
-          description="Extra origins allowed to call the API (one per line), e.g. the HTTPS URL of your reverse proxy."
+          description={t("security.web.originsDescription")}
         >
           <LinesTextarea
             id="origins"
@@ -267,17 +265,16 @@ export function SecuritySection({ settings }: { settings: Settings }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Globe2 className="size-5 text-destructive" /> Allow remote access?
+              <Globe2 className="size-5 text-destructive" /> {t("security.remoteConfirm.title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Godmode will accept connections from other devices after a restart. Only do this behind a reverse proxy with TLS, and set a strong
-              dashboard password first.
+              {t("security.remoteConfirm.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => patch({ server: { remoteAccess: true } })}>
-              Allow remote access
+              {t("security.web.remote")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

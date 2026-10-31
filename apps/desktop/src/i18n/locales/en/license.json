@@ -1,0 +1,54 @@
+{
+  "checkAgain": "Check again",
+  "divider": "Already have a key?",
+  "gate": {
+    "nothingChanged": "Nothing changed yet",
+    "checkFailed": "Couldn't check the licence",
+    "freeWeekOver": "Your free week is over",
+    "activateTitle": "Activate Godmode",
+    "subtitle": "Start your free trial, or enter your licence key to keep your agents working.",
+    "keyEndingIn": "Key ending in <key>{{hint}}</key>",
+    "dataSafe": "Your agents, chats and logins stay safe on this computer."
+  },
+  "banner": {
+    "trialEnds": {
+      "today": "Your free trial ends today and won't continue.",
+      "tomorrow": "Your free trial ends tomorrow and won't continue.",
+      "inDays_one": "Your free trial ends in {{count}} day and won't continue.",
+      "inDays_other": "Your free trial ends in {{count}} days and won't continue."
+    },
+    "trialRenews": {
+      "today": "Your free trial ends today. Your plan continues on its own after that.",
+      "tomorrow": "Your free trial ends tomorrow. Your plan continues on its own after that.",
+      "inDays_one": "Your free trial ends in {{count}} day. Your plan continues on its own after that.",
+      "inDays_other": "Your free trial ends in {{count}} days. Your plan continues on its own after that."
+    },
+    "dateFormat": "MMMM d",
+    "keepGodmode": "Keep Godmode",
+    "managePlan": "Manage plan",
+    "viewLicence": "View licence",
+    "pastDue": "The last payment didn't go through. Update your payment method to keep Godmode working.",
+    "updatePayment": "Update payment",
+    "grace": "Free until {{date}}. Then add your licence key or start the 14-day free trial.",
+    "startTrial": "Start free trial",
+    "addKey": "Add key",
+    "unverified": "Your licence key couldn't be checked yet. Godmode accepts it until {{date}}.",
+    "dismiss": "Dismiss for today"
+  },
+  "keyForm": {
+    "label": "Licence key",
+    "activate": "Activate",
+    "invalid": "That doesn't look like a licence key. It has the form {{format}}.",
+    "cantUse": "This licence can't be used right now.",
+    "trialActive": "Your free trial is active",
+    "activated": "Godmode is activated"
+  },
+  "panel": {
+    "startTrial": "Start 14-day free trial",
+    "seePlans": "See plans",
+    "finishCheckout": "Finish the checkout in your browser, then paste your licence key below.",
+    "pricing": "14 days free, then $39 a month. Cancel any time.",
+    "lostKey": "Lost your key?",
+    "lostKeyHint": "It's on the page you see after checkout and on your invoices."
+  }
+}

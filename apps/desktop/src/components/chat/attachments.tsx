@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useReducedMotion } from "motion/react";
 import { File as FileGeneric, FileArchive, FileAudio, FileCode2, FileImage, FileSpreadsheet, FileText, FileVideo, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Attachment } from "@godmode/shared";
 import { MAX_MESSAGE_ATTACHMENT_BYTES } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 export interface PendingAttachment {
   id: string;
@@ -80,9 +82,13 @@ export async function readAttachments(files: File[], used: number, notify: (mess
   const results = await Promise.allSettled(fitting.map(readAttachment));
   const failed = fitting.filter((_, i) => results[i]!.status === "rejected");
   const notes = [
-    big.length === 1 ? `${big[0]!.name} is larger than ${mb(MAX_ATTACHMENT_BYTES)}.` : big.length ? `${big.length} files are larger than ${mb(MAX_ATTACHMENT_BYTES)}.` : "",
-    over ? `${over} ${over === 1 ? "file" : "files"} didn't fit: a message carries up to ${mb(MAX_MESSAGE_ATTACHMENT_BYTES)}.` : "",
-    failed.length === 1 ? `Could not read ${failed[0]!.name}.` : failed.length ? `Could not read ${failed.length} files.` : "",
+    big.length === 1
+      ? t("chat:attachments.tooBigOne", { name: big[0]!.name, max: mb(MAX_ATTACHMENT_BYTES) })
+      : big.length
+        ? t("chat:attachments.tooBigMany", { n: big.length, max: mb(MAX_ATTACHMENT_BYTES) })
+        : "",
+    over ? t("chat:attachments.didntFit", { count: over, max: mb(MAX_MESSAGE_ATTACHMENT_BYTES) }) : "",
+    failed.length === 1 ? t("chat:attachments.readFailedOne", { name: failed[0]!.name }) : failed.length ? t("chat:attachments.readFailedMany", { n: failed.length }) : "",
   ].filter(Boolean);
   if (notes.length) notify(notes.join(" "));
   return results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
@@ -104,6 +110,7 @@ export function AttachmentChip({
   onRemove?: () => void;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
   const Icon = fileIcon(mime, name);
   return (
     <div
@@ -129,7 +136,7 @@ export function AttachmentChip({
         <button
           type="button"
           onClick={onRemove}
-          aria-label={`Remove ${name}`}
+          aria-label={t("attachments.remove", { name })}
           className="absolute -top-1.5 -right-1.5 grid size-5 place-items-center rounded-full border bg-background text-muted-foreground opacity-0 shadow-sm transition group-hover/chip:opacity-100 hover:text-foreground focus-visible:opacity-100"
         >
           <X className="size-3" />
@@ -155,6 +162,7 @@ export function AttachmentTray({
   tall?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
   const listRef = useRef<HTMLUListElement>(null);
   const shown = useRef(files.length);
   const reduce = useReducedMotion();
@@ -170,17 +178,18 @@ export function AttachmentTray({
       {files.length >= SUMMARY_FROM && (
         <div className="flex h-7 items-center justify-between gap-2 pl-1.5">
           <span className="truncate text-xs text-muted-foreground tabular-nums" aria-live="polite">
-            {files.length} files · {formatBytes(total)}
-            {total > MAX_MESSAGE_ATTACHMENT_BYTES / 2 && ` of ${mb(MAX_MESSAGE_ATTACHMENT_BYTES)}`}
+            {total > MAX_MESSAGE_ATTACHMENT_BYTES / 2
+              ? t("attachments.trayCountOf", { n: files.length, size: formatBytes(total), max: mb(MAX_MESSAGE_ATTACHMENT_BYTES) })
+              : t("attachments.trayCount", { n: files.length, size: formatBytes(total) })}
           </span>
           <Button type="button" size="xs" variant="ghost" className="text-muted-foreground" onClick={onClear}>
-            Remove all
+            {t("attachments.removeAll")}
           </Button>
         </div>
       )}
       <ul
         ref={listRef}
-        aria-label="Attached files"
+        aria-label={t("attachments.attached")}
         className={cn(
           "scroll-fade-y grid scroll-py-6 grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2 overflow-y-auto p-1.5",
           tall ? "max-h-48" : "max-h-[8.5rem]",
@@ -200,6 +209,7 @@ const FOLD_AFTER = 6;
 
 /** The files of a sent message; past a handful the rest fold away, so one message can't fill the thread. */
 export function AttachmentList({ files, className }: { files: Pick<Attachment, "name" | "mime" | "size">[]; className?: string }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   // One hidden file would take the room of the button that reveals it.
   const folds = files.length > FOLD_AFTER + 1;
@@ -215,7 +225,7 @@ export function AttachmentList({ files, className }: { files: Pick<Attachment, "
           onClick={() => setOpen((o) => !o)}
           className="min-h-[46px] rounded-xl border border-dashed px-3 text-xs font-medium text-muted-foreground tabular-nums transition-colors hover:border-foreground/25 hover:text-foreground"
         >
-          {open ? "Show fewer" : `+${files.length - FOLD_AFTER} more`}
+          {open ? t("attachments.showFewer") : t("attachments.more", { n: files.length - FOLD_AFTER })}
         </button>
       )}
     </div>

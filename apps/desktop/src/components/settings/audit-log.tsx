@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { ChevronRight, Cpu, RefreshCw, ScrollText, SquareTerminal, UserRound } from "lucide-react";
 import type { AuditEntry } from "@godmode/shared";
 import { AgentAvatar, EmptyState } from "@/components/common";
@@ -11,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api, errorMessage } from "@/lib/api";
+import { dateLocale } from "@/i18n";
 import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -27,6 +29,7 @@ function actionTone(action: string): string {
 }
 
 function Actor({ actor, agents, app }: { actor: string; agents: Map<string, { id: string; name: string; avatar: string; color: string }>; app?: string }) {
+  const { t } = useTranslation("settings");
   // A connected app (Settings → Claude Code & MCP); its entries carry the name it had.
   if (actor.startsWith("connector:"))
     return (
@@ -34,7 +37,7 @@ function Actor({ actor, agents, app }: { actor: string; agents: Map<string, { id
         <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-secondary text-foreground">
           <SquareTerminal className="size-3.5" />
         </span>
-        <span className="truncate">{app ?? "Connected app"}</span>
+        <span className="truncate">{app ?? t("audit.connectedApp")}</span>
       </span>
     );
   if (actor.startsWith("agent:")) {
@@ -54,7 +57,7 @@ function Actor({ actor, agents, app }: { actor: string; agents: Map<string, { id
         <span className="grid size-6 place-items-center rounded-md border bg-secondary text-foreground">
           <UserRound className="size-3.5" />
         </span>
-        You
+        {t("audit.you")}
       </span>
     );
   return (
@@ -62,13 +65,14 @@ function Actor({ actor, agents, app }: { actor: string; agents: Map<string, { id
       <span className="grid size-6 place-items-center rounded-md border bg-paper-2">
         <Cpu className="size-3.5" />
       </span>
-      {actor === "system" ? "System" : actor}
+      {actor === "system" ? t("audit.system") : actor}
     </span>
   );
 }
 
 /** Every secret access and security-relevant action, newest first. */
 export function AuditLog() {
+  const { t } = useTranslation(["settings", "common"]);
   const [action, setAction] = useState("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [seenActions, setSeenActions] = useState<string[]>([]);
@@ -89,18 +93,18 @@ export function AuditLog() {
 
   return (
     <SettingsGroup
-      title="Audit log"
+      title={t("audit.title")}
       icon={<ScrollText />}
-      description="Every time an agent or you uses a secret — and every vault event — is recorded here."
+      description={t("audit.description")}
       bodyClassName="px-0"
       actions={
         <>
           <Select value={action} onValueChange={setAction}>
-            <SelectTrigger size="sm" className="w-44" aria-label="Filter by action">
+            <SelectTrigger size="sm" className="w-44" aria-label={t("audit.filter")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All actions</SelectItem>
+              <SelectItem value="all">{t("audit.allActions")}</SelectItem>
               <SelectSeparator />
               {actions.map((a) => (
                 <SelectItem key={a} value={a}>
@@ -111,11 +115,11 @@ export function AuditLog() {
           </Select>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon-sm" variant="ghost" aria-label="Refresh audit log" onClick={() => query.refetch()} disabled={query.isFetching}>
+              <Button size="icon-sm" variant="ghost" aria-label={t("audit.refresh")} onClick={() => query.refetch()} disabled={query.isFetching}>
                 <RefreshCw className={cn(query.isFetching && "animate-spin")} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Refresh</TooltipContent>
+            <TooltipContent>{t("common:actions.refresh")}</TooltipContent>
           </Tooltip>
         </>
       }
@@ -128,15 +132,15 @@ export function AuditLog() {
         </div>
       ) : query.isError ? (
         <div className="p-5 text-sm">
-          <p className="font-medium text-destructive">Could not load the audit log</p>
+          <p className="font-medium text-destructive">{t("audit.loadError")}</p>
           <p className="mt-1 text-muted-foreground">{errorMessage(query.error)}</p>
         </div>
       ) : !query.data?.length ? (
         <div className="p-5">
           <EmptyState
             icon={<ScrollText />}
-            title={action === "all" ? "Nothing recorded yet" : "No matching entries"}
-            description={action === "all" ? "Secret fills, reveals and vault events will show up here." : `No “${action}” events in the recent log.`}
+            title={action === "all" ? t("audit.emptyTitle") : t("audit.noMatchTitle")}
+            description={action === "all" ? t("audit.emptyDescription") : t("audit.noMatchDescription", { action })}
             className="py-10"
           />
         </div>
@@ -146,10 +150,10 @@ export function AuditLog() {
             <TableHeader className="sticky top-0 z-10 bg-paper-2">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-8 pl-5" />
-                <TableHead>Time</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead className="pr-5">Target</TableHead>
+                <TableHead>{t("audit.time")}</TableHead>
+                <TableHead>{t("audit.actor")}</TableHead>
+                <TableHead>{t("audit.action")}</TableHead>
+                <TableHead className="pr-5">{t("audit.target")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -196,9 +200,9 @@ function AuditRow({
         <TableCell className="whitespace-nowrap">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground tabular-nums">{format(ts, "MMM d, HH:mm:ss")}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{format(ts, "MMM d, pp", { locale: dateLocale() })}</span>
             </TooltipTrigger>
-            <TooltipContent>{formatDistanceToNow(ts, { addSuffix: true })}</TooltipContent>
+            <TooltipContent>{formatDistanceToNow(ts, { addSuffix: true, locale: dateLocale() })}</TooltipContent>
           </Tooltip>
         </TableCell>
         <TableCell className="max-w-44">

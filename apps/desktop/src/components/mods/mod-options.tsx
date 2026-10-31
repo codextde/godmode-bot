@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FolderSearch, Plus, RotateCcw, Save, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { MOD_MANIFEST_PATH, type Mod, type ModOption, type ModOptionValue } from "@godmode/shared";
 import { FolderPickerDialog } from "@/components/chat/folder-picker";
@@ -36,6 +37,7 @@ function same(a: Field, b: Field): boolean {
 
 /** A form made from the options a mod declares; it saves only what changed, and `null` for what went back to its default. */
 export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions: ModActions; onDirtyChange: (dirty: boolean) => void }) {
+  const { t } = useTranslation("mods");
   const qc = useQueryClient();
   const [draft, setDraft] = useState<Draft>({});
   const [showProblems, setShowProblems] = useState(false);
@@ -62,17 +64,17 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
     const v = current(o);
     if (o.type === "number" && typeof v === "string") {
       const text = v.trim();
-      if (!text) return o.required && o.default === null ? "Enter a number." : null;
+      if (!text) return o.required && o.default === null ? t("options.enterNumber") : null;
       const n = Number(text);
-      if (!Number.isFinite(n)) return "Enter a number.";
-      if (o.min !== null && n < o.min) return `Enter ${o.min} or more.`;
-      if (o.max !== null && n > o.max) return `Enter ${o.max} or less.`;
+      if (!Number.isFinite(n)) return t("options.enterNumber");
+      if (o.min !== null && n < o.min) return t("options.enterMin", { min: o.min });
+      if (o.max !== null && n > o.max) return t("options.enterMax", { max: o.max });
       return null;
     }
     if (!o.required) return null;
-    if (o.sensitive) return v !== "" || (hasSecret(o) && draft[o.key] !== null) ? null : "This plugin needs a value here.";
-    if (Array.isArray(v)) return v.some(Boolean) ? null : "Add at least one entry.";
-    return v === "" ? "This plugin needs a value here." : null;
+    if (o.sensitive) return v !== "" || (hasSecret(o) && draft[o.key] !== null) ? null : t("options.needsValue");
+    if (Array.isArray(v)) return v.some(Boolean) ? null : t("options.addOneEntry");
+    return v === "" ? t("options.needsValue") : null;
   };
 
   const dirty = mod.options.some(changed);
@@ -89,9 +91,9 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
       actions.put(next);
       setDraft({});
       setShowProblems(false);
-      toast.success("Options saved", { description: "They apply from the next message." });
+      toast.success(t("options.saved"), { description: t("options.savedDescription") });
     },
-    onError: (e) => toastApiError(e, "Couldn't save the options", qc),
+    onError: (e) => toastApiError(e, t("options.saveFailed"), qc),
   });
 
   const submit = () => {
@@ -111,8 +113,12 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
   if (mod.options.length === 0) {
     return (
       <p className="p-5 text-sm text-muted-foreground">
-        This plugin has no options. A plugin declares them under <span className="font-mono text-[12.5px] text-foreground/80">userConfig</span> in{" "}
-        <span className="font-mono text-[12.5px] text-foreground/80">{MOD_MANIFEST_PATH}</span>.
+        <Trans
+          t={t}
+          i18nKey="options.none"
+          values={{ key: "userConfig", manifest: MOD_MANIFEST_PATH }}
+          components={{ code: <span className="font-mono text-[12.5px] text-foreground/80" /> }}
+        />
       </p>
     );
   }
@@ -151,14 +157,13 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                     id={id}
                     value={value}
                     onChange={(e) => set(o, e.target.value)}
-                    placeholder={hasSecret(o) ? (draft[o.key] === null ? "The saved value goes when you save" : "A value is saved — type to replace it") : "Not set"}
+                    placeholder={hasSecret(o) ? (draft[o.key] === null ? t("options.secretRemoved") : t("options.secretSaved")) : t("options.notSet")}
                     aria-invalid={!!shownError}
                     aria-describedby={describedBy}
                     groupClassName="h-9 @xl:max-w-md"
                   />
                   <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
-                    Kept sealed in the vault. Runs that load this plugin are handed the value, where an agent with full access to this computer could read
-                    it — use a key made for this plugin.
+                    {t("options.secretHint")}
                   </p>
                 </div>
               );
@@ -166,7 +171,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
               control = (
                 <Select value={value} onValueChange={(v) => set(o, v)}>
                   <SelectTrigger id={id} className="w-full @xl:w-72" aria-invalid={!!shownError} aria-describedby={describedBy}>
-                    <SelectValue placeholder="Choose…" />
+                    <SelectValue placeholder={t("options.choose")} />
                   </SelectTrigger>
                   <SelectContent position="popper">
                     {o.choices.map((c) => (
@@ -195,7 +200,11 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                   />
                   {(o.min !== null || o.max !== null) && (
                     <span className="text-xs text-muted-foreground tabular-nums">
-                      {o.min !== null && o.max !== null ? `${o.min} to ${o.max}` : o.min !== null ? `${o.min} or more` : `${o.max} or less`}
+                      {o.min !== null && o.max !== null
+                        ? t("options.range", { min: o.min, max: o.max })
+                        : o.min !== null
+                          ? t("options.orMore", { min: o.min })
+                          : t("options.orLess", { max: o.max })}
                     </span>
                   )}
                 </div>
@@ -208,7 +217,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                   id={id}
                   value={value}
                   onChange={(e) => set(o, e.target.value)}
-                  placeholder={o.type === "file" ? "/path/to/file" : undefined}
+                  placeholder={o.type === "file" ? t("options.filePlaceholder") : undefined}
                   autoComplete="off"
                   spellCheck={false}
                   aria-invalid={!!shownError}
@@ -228,7 +237,7 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                       {o.title}
                     </Label>
                     <span className="font-mono text-[11px] text-muted-foreground">{o.key}</span>
-                    {o.required && <span className="text-[11px] text-muted-foreground">· required</span>}
+                    {o.required && <span className="text-[11px] text-muted-foreground">· {t("options.required")}</span>}
                   </div>
                   {o.description && (
                     <p id={hintId} className="mt-1 max-w-prose text-xs leading-relaxed text-muted-foreground">
@@ -243,10 +252,10 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
                   size="xs"
                   disabled={!canReset}
                   onClick={() => set(o, null)}
-                  aria-label={`Reset ${o.title} to its default`}
+                  aria-label={t("options.resetAria", { title: o.title })}
                   className={cn("shrink-0 text-muted-foreground hover:text-foreground", !canReset && "invisible")}
                 >
-                  <RotateCcw /> Reset
+                  <RotateCcw /> {t("options.reset")}
                 </Button>
                 {isSwitch && <Switch id={id} checked={value === true} onCheckedChange={(v) => set(o, v)} aria-describedby={describedBy} className="mt-0.5 shrink-0" />}
               </div>
@@ -262,9 +271,9 @@ export function ModOptions({ mod, actions, onDirtyChange }: { mod: Mod; actions:
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t bg-paper-2/70 px-5 py-3">
-        <p className="text-xs text-muted-foreground">{dirty ? "Unsaved changes. They apply from the next message once saved." : "Changes apply from the next message."}</p>
+        <p className="text-xs text-muted-foreground">{dirty ? t("options.unsavedHint") : t("options.appliesNext")}</p>
         <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
-          {save.isPending ? <Spinner /> : <Save />} Save options
+          {save.isPending ? <Spinner /> : <Save />} {t("options.save")}
         </Button>
       </div>
     </form>
@@ -287,6 +296,7 @@ function ListEditor({
   describedBy?: string;
   invalid?: boolean;
 }) {
+  const { t } = useTranslation("mods");
   const inputs = useRef<(HTMLInputElement | null)[]>([]);
   const focusNext = useRef<number | null>(null);
   const rows = values.length ? values : [""];
@@ -344,7 +354,7 @@ function ListEditor({
               inputs.current[i] = el;
             }}
             id={i === 0 ? id : undefined}
-            aria-label={i === 0 ? undefined : `${label}, entry ${i + 1}`}
+            aria-label={i === 0 ? undefined : t("options.entryAria", { label, n: i + 1 })}
             aria-describedby={i === 0 ? describedBy : undefined}
             aria-invalid={invalid && i === 0}
             value={row}
@@ -363,7 +373,7 @@ function ListEditor({
             size="icon-sm"
             disabled={rows.length === 1 && !row}
             onClick={() => (rows.length === 1 ? onChange([]) : remove(i))}
-            aria-label={`Remove entry ${i + 1}`}
+            aria-label={t("options.removeEntry", { n: i + 1 })}
             className="shrink-0 text-muted-foreground hover:text-foreground"
           >
             <X />
@@ -371,7 +381,7 @@ function ListEditor({
         </div>
       ))}
       <Button type="button" variant="outline" size="xs" className="ml-[26px] border-dashed" onClick={() => insert(rows.length)}>
-        <Plus /> Add entry
+        <Plus /> {t("options.addEntry")}
       </Button>
     </div>
   );
@@ -418,6 +428,7 @@ function DirectoryInput({
   invalid?: boolean;
   describedBy?: string;
 }) {
+  const { t } = useTranslation("mods");
   const [picking, setPicking] = useState(false);
   return (
     <div className="flex gap-2 @xl:max-w-xl">
@@ -425,7 +436,7 @@ function DirectoryInput({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="/path/to/folder"
+        placeholder={t("options.folderPlaceholder")}
         autoComplete="off"
         autoCapitalize="off"
         autoCorrect="off"
@@ -435,7 +446,7 @@ function DirectoryInput({
         className="font-mono text-[13px] md:text-[13px]"
       />
       <Button type="button" variant="outline" onClick={() => setPicking(true)}>
-        <FolderSearch /> Browse
+        <FolderSearch /> {t("importDialog.browse")}
       </Button>
       <FolderPickerDialog
         open={picking}
@@ -443,7 +454,7 @@ function DirectoryInput({
         value={value || null}
         onPick={onChange}
         title={title}
-        description="A folder on the computer running Godmode."
+        description={t("options.folderDescription")}
       />
     </div>
   );

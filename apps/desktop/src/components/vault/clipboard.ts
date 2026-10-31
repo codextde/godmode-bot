@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { t } from "@/i18n";
 
 const CLEAR_AFTER_SECONDS = 30;
 let clearTimer: ReturnType<typeof setTimeout> | null = null;
@@ -20,12 +21,12 @@ export async function writeClipboard(text: string) {
 }
 
 /** Copy non-sensitive text (usernames, URLs). */
-export async function copyText(text: string, label = "Copied") {
+export async function copyText(text: string, label = t("common:actions.copied")) {
   try {
     await writeClipboard(text);
     toast.success(label);
   } catch {
-    toast.error("Could not access the clipboard");
+    toast.error(t("vault:clipboard.accessFailed"));
   }
 }
 
@@ -33,14 +34,14 @@ export async function copyText(text: string, label = "Copied") {
  * Copy a secret and clear the clipboard after 30 s — but only if it still holds that secret
  * (when the clipboard can't be read back we clear anyway; a lingering secret is the bigger risk).
  */
-export async function copySecret(secret: string, label = "Copied") {
+export async function copySecret(secret: string, label = t("common:actions.copied")) {
   try {
     await writeClipboard(secret);
   } catch {
-    toast.error("Could not access the clipboard");
+    toast.error(t("vault:clipboard.accessFailed"));
     return;
   }
-  toast.success(label, { description: `Clipboard clears automatically in ${CLEAR_AFTER_SECONDS} s.` });
+  toast.success(label, { description: t("vault:clipboard.clearsIn", { seconds: CLEAR_AFTER_SECONDS }) });
   if (clearTimer) clearTimeout(clearTimer);
   clearTimer = setTimeout(async () => {
     clearTimer = null;

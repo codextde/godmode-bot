@@ -29,6 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { MAX_TASK_ATTACHMENT_BYTES } from "@godmode/shared";
 import { fileIcon, formatBytes } from "@/components/chat/attachments";
 import { downloadCoreFile, isCoreFile, useCoreFileUrl } from "@/components/chat/core-file";
@@ -177,6 +178,7 @@ export const DescriptionEditor = forwardRef<
   { value, onChange, placeholder, autoFocus, className, textClassName = "text-[15px]", minHeight = 96, toolbar, onBusyChange, "aria-label": ariaLabel },
   ref,
 ) {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const picking = useRef(false);
@@ -219,7 +221,7 @@ export const DescriptionEditor = forwardRef<
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
-      attributes: { "aria-label": ariaLabel ?? "Description", "aria-multiline": "true", role: "textbox", class: cn("gm-editor prose-chat", textClassName) },
+      attributes: { "aria-label": ariaLabel ?? t("common:words.description"), "aria-multiline": "true", role: "textbox", class: cn("gm-editor prose-chat", textClassName) },
       // ⌘↵ is the form's (save, create; it bubbles up to it) — not a line break.
       handleKeyDown: (_view, e) => e.key === "Enter" && (e.metaKey || e.ctrlKey),
       handlePaste: (view, e) => {
@@ -258,7 +260,7 @@ export const DescriptionEditor = forwardRef<
     if (!files.length) return;
     for (const file of files) {
       if (file.size > MAX_TASK_ATTACHMENT_BYTES) {
-        toast.error(`${file.name} is too large`, { description: `Files can be up to ${formatBytes(MAX_TASK_ATTACHMENT_BYTES)}.` });
+        toast.error(t("editor.tooLarge", { name: file.name }), { description: t("editor.maxSize", { size: formatBytes(MAX_TASK_ATTACHMENT_BYTES) }) });
         continue;
       }
       const id = `upload-${++uploadSeq}`;
@@ -307,7 +309,7 @@ export const DescriptionEditor = forwardRef<
         })
         .catch((err) => {
           replaceUpload(editor, id, null);
-          toastApiError(err, `Could not attach ${file.name}`, props.current.qc);
+          toastApiError(err, t("editor.attachError", { name: file.name }), props.current.qc);
         })
         .finally(() => {
           if (preview) URL.revokeObjectURL(preview);
@@ -386,7 +388,7 @@ export const DescriptionEditor = forwardRef<
       {dragging && (
         <div className="pointer-events-none absolute -inset-1 grid place-items-center rounded-xl border-2 border-dashed border-primary/50 bg-background/80 text-sm font-medium text-foreground backdrop-blur-[1px]">
           <span className="flex items-center gap-2">
-            <Paperclip className="size-4" /> Drop to attach
+            <Paperclip className="size-4" /> {t("editor.dropToAttach")}
           </span>
         </div>
       )}
@@ -519,12 +521,13 @@ function renamed(file: File, i: number): File {
 /* -------------------------------------------------------------------------- */
 
 function RemoveButton({ name, onRemove, className }: { name: string; onRemove: () => void; className?: string }) {
+  const { t } = useTranslation(["tasks", "common"]);
   return (
     <button
       type="button"
       contentEditable={false}
-      aria-label={`Remove ${name}`}
-      title="Remove"
+      aria-label={t("editor.removeName", { name })}
+      title={t("common:actions.remove")}
       onMouseDown={(e) => e.preventDefault()}
       onClick={(e) => {
         e.stopPropagation();
@@ -541,6 +544,7 @@ function RemoveButton({ name, onRemove, className }: { name: string; onRemove: (
 }
 
 function ImageView({ node, selected, deleteNode, editor }: NodeViewProps) {
+  const { t } = useTranslation("tasks");
   const src = node.attrs.src as string;
   const alt = (node.attrs.alt as string) || "";
   const core = isCoreFile(src);
@@ -550,26 +554,27 @@ function ImageView({ node, selected, deleteNode, editor }: NodeViewProps) {
     <NodeViewWrapper as="span" className="group/node relative inline-block max-w-full align-top" data-drag-handle="">
       {core && file.failed ? (
         <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-2.5 py-1.5 text-xs text-muted-foreground">
-          <ImageOff className="size-3.5" /> {alt || "Image"} isn't available anymore
+          <ImageOff className="size-3.5" /> {alt ? t("editor.unavailable", { name: alt }) : t("editor.imageUnavailable")}
         </span>
       ) : shown ? (
         <img src={shown} alt={alt} draggable={false} className={cn("max-h-96 max-w-full rounded-lg border transition", selected && "ring-2 ring-ring/60 ring-offset-2 ring-offset-background")} />
       ) : (
         <span aria-label={alt} className="inline-block h-40 w-64 max-w-full animate-pulse rounded-lg border bg-muted" />
       )}
-      {editor.isEditable && <RemoveButton name={alt || "image"} onRemove={deleteNode} className="absolute top-1.5 right-1.5" />}
+      {editor.isEditable && <RemoveButton name={alt || t("editor.image")} onRemove={deleteNode} className="absolute top-1.5 right-1.5" />}
     </NodeViewWrapper>
   );
 }
 
 function FileChipView({ node, selected, deleteNode, editor }: NodeViewProps) {
+  const { t } = useTranslation("tasks");
   const name = node.attrs.name as string;
   const href = node.attrs.href as string;
   const Icon = fileIcon("", name);
   return (
     <NodeViewWrapper as="span" className="group/node relative mx-0.5 inline-flex max-w-full align-middle" data-drag-handle="">
       <span
-        title={`${name} — double-click to download`}
+        title={t("editor.doubleClickDownload", { name })}
         onDoubleClick={() => void downloadCoreFile(href, name)}
         className={cn(
           "inline-flex max-w-full items-center gap-1.5 rounded-lg border bg-card py-0.5 pr-2 pl-1 text-[13px] leading-6 font-medium shadow-xs",
@@ -587,6 +592,7 @@ function FileChipView({ node, selected, deleteNode, editor }: NodeViewProps) {
 }
 
 function UploadingView({ node }: NodeViewProps) {
+  const { t } = useTranslation("tasks");
   const name = node.attrs.name as string;
   const preview = node.attrs.preview as string | null;
   if (preview) {
@@ -595,7 +601,7 @@ function UploadingView({ node }: NodeViewProps) {
         <img src={preview} alt="" className="max-h-96 max-w-full rounded-lg border opacity-50 blur-[1px]" />
         <span className="absolute inset-0 grid place-items-center">
           <span className="flex items-center gap-1.5 rounded-full bg-background/90 px-2.5 py-1 text-xs font-medium shadow-sm">
-            <Paperclip className="size-3 animate-pulse" /> Uploading…
+            <Paperclip className="size-3 animate-pulse" /> {t("dialog.uploading")}
           </span>
         </span>
       </NodeViewWrapper>
@@ -604,7 +610,7 @@ function UploadingView({ node }: NodeViewProps) {
   return (
     <NodeViewWrapper as="span" className="mx-0.5 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-dashed py-0.5 pr-2 pl-1.5 align-middle text-[13px] leading-6 text-muted-foreground">
       <Paperclip className="size-3 shrink-0 animate-pulse" />
-      <span className="truncate">Uploading {name}…</span>
+      <span className="truncate">{t("editor.uploadingName", { name })}</span>
     </NodeViewWrapper>
   );
 }
@@ -614,6 +620,7 @@ function UploadingView({ node }: NodeViewProps) {
 /* -------------------------------------------------------------------------- */
 
 function Toolbar({ editor, onAttach }: { editor: Editor; onAttach: () => void }) {
+  const { t } = useTranslation("tasks");
   const on = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -634,20 +641,20 @@ function Toolbar({ editor, onAttach }: { editor: Editor; onAttach: () => void })
   return (
     // Clicks here keep the focus (and the selection) in the text.
     <div className="-mx-1 mb-2 flex flex-wrap items-center gap-0.5 border-b pb-1.5" onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
-      <Tool icon={Heading2} label="Heading" active={on.heading} onClick={() => chain().toggleHeading({ level: 2 }).run()} />
-      <Tool icon={Bold} label="Bold" keys={`${modKey}B`} active={on.bold} onClick={() => chain().toggleBold().run()} />
-      <Tool icon={Italic} label="Italic" keys={`${modKey}I`} active={on.italic} onClick={() => chain().toggleItalic().run()} />
-      <Tool icon={Strikethrough} label="Strikethrough" active={on.strike} onClick={() => chain().toggleStrike().run()} />
-      <Tool icon={Code} label="Inline code" active={on.code} onClick={() => chain().toggleCode().run()} />
+      <Tool icon={Heading2} label={t("editor.heading")} active={on.heading} onClick={() => chain().toggleHeading({ level: 2 }).run()} />
+      <Tool icon={Bold} label={t("editor.bold")} keys={`${modKey}B`} active={on.bold} onClick={() => chain().toggleBold().run()} />
+      <Tool icon={Italic} label={t("editor.italic")} keys={`${modKey}I`} active={on.italic} onClick={() => chain().toggleItalic().run()} />
+      <Tool icon={Strikethrough} label={t("editor.strikethrough")} active={on.strike} onClick={() => chain().toggleStrike().run()} />
+      <Tool icon={Code} label={t("editor.inlineCode")} active={on.code} onClick={() => chain().toggleCode().run()} />
       <Divider />
-      <Tool icon={List} label="Bulleted list" active={on.bulletList} onClick={() => chain().toggleBulletList().run()} />
-      <Tool icon={ListOrdered} label="Numbered list" active={on.orderedList} onClick={() => chain().toggleOrderedList().run()} />
-      <Tool icon={ListChecks} label="Checklist" active={on.taskList} onClick={() => chain().toggleTaskList().run()} />
+      <Tool icon={List} label={t("editor.bulletList")} active={on.bulletList} onClick={() => chain().toggleBulletList().run()} />
+      <Tool icon={ListOrdered} label={t("editor.numberedList")} active={on.orderedList} onClick={() => chain().toggleOrderedList().run()} />
+      <Tool icon={ListChecks} label={t("editor.checklist")} active={on.taskList} onClick={() => chain().toggleTaskList().run()} />
       <Divider />
-      <Tool icon={Quote} label="Quote" active={on.blockquote} onClick={() => chain().toggleBlockquote().run()} />
-      <Tool icon={SquareCode} label="Code block" active={on.codeBlock} onClick={() => chain().toggleCodeBlock().run()} />
+      <Tool icon={Quote} label={t("editor.quote")} active={on.blockquote} onClick={() => chain().toggleBlockquote().run()} />
+      <Tool icon={SquareCode} label={t("editor.codeBlock")} active={on.codeBlock} onClick={() => chain().toggleCodeBlock().run()} />
       <LinkTool editor={editor} active={on.link} />
-      <Tool icon={Paperclip} label="Attach files" hint="or paste / drop them into the text" className="ml-auto" onClick={onAttach} />
+      <Tool icon={Paperclip} label={t("dialog.attach")} hint={t("editor.attachHint")} className="ml-auto" onClick={onAttach} />
     </div>
   );
 }
@@ -700,6 +707,7 @@ function Tool({
 }
 
 function LinkTool({ editor, active }: { editor: Editor; active: boolean }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const apply = () => {
@@ -726,7 +734,7 @@ function LinkTool({ editor, active }: { editor: Editor; active: boolean }) {
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label="Link"
+              aria-label={t("editor.link")}
               aria-pressed={active}
               className={cn(
                 "grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
@@ -737,7 +745,7 @@ function LinkTool({ editor, active }: { editor: Editor; active: boolean }) {
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent side="top">Link</TooltipContent>
+        <TooltipContent side="top">{t("editor.link")}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" className="w-80 p-2" onCloseAutoFocus={(e) => (e.preventDefault(), editor.commands.focus())}>
         <form
@@ -747,9 +755,9 @@ function LinkTool({ editor, active }: { editor: Editor; active: boolean }) {
             apply();
           }}
         >
-          <Input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label="Link address" className="h-8 text-sm" />
+          <Input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" aria-label={t("editor.linkAddress")} className="h-8 text-sm" />
           <Button type="submit" size="sm" className="h-8">
-            {url.trim() || !active ? "Link" : "Remove"}
+            {url.trim() || !active ? t("editor.link") : t("common:actions.remove")}
           </Button>
         </form>
       </PopoverContent>

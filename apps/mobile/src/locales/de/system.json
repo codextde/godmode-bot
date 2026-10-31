@@ -1,0 +1,188 @@
+{
+  "time": {
+    "now": "jetzt",
+    "todayAt": "heute um {{time}}",
+    "tomorrowAt": "morgen um {{time}}",
+    "yesterdayAt": "gestern um {{time}}",
+    "dateAt": "{{date}} um {{time}}"
+  },
+  "formats": {
+    "dayMonth": "d. MMM",
+    "dayMonthYear": "d. MMM yyyy",
+    "weekdayDayMonth": "EEE, d. MMM",
+    "weekdayDayMonthYear": "EEE, d. MMM yyyy",
+    "fullWeekdayDayMonth": "EEEE, d. MMM",
+    "dueThisYear": "EEE, d. MMM",
+    "dueOtherYear": "d. MMM yyyy"
+  },
+  "days": {
+    "tomorrow": "Morgen",
+    "previous7": "Letzte 7 Tage",
+    "previous30": "Letzte 30 Tage"
+  },
+  "greeting": {
+    "late": "Späte Schicht",
+    "night": "Gute Nacht",
+    "morning": "Guten Morgen",
+    "afternoon": "Guten Tag",
+    "evening": "Guten Abend"
+  },
+  "suggestions": {
+    "emails": "Fasse meine ungelesenen E-Mails zusammen",
+    "invoices": "Erstelle einen Agenten, der jeden Monat meine Rechnungen herunterlädt",
+    "github": "Melde dich bei GitHub an und prüfe meine Mitteilungen",
+    "research": "Recherchiere die Konkurrenz und schreib einen Bericht",
+    "hideTitle": "Vorschläge ausblenden?",
+    "hideBody": "Du kannst sie jederzeit unter Einstellungen → App wieder einblenden.",
+    "hide": "Ausblenden"
+  },
+  "priority": {
+    "urgent": "Dringend",
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig",
+    "none": "Keine Priorität"
+  },
+  "blocked": {
+    "needsInput": "{{agent}} braucht etwas von dir",
+    "failed": "Der Lauf ist fehlgeschlagen",
+    "stopped": "Gestoppt",
+    "interrupted": "Durch einen Neustart unterbrochen",
+    "publish": "Die Arbeit konnte nicht veröffentlicht werden",
+    "setup": "Konnte nicht eingerichtet werden",
+    "manual": "Blockiert"
+  },
+  "needs": {
+    "needsOk": "{{agent}} braucht deine Freigabe",
+    "asksYou": "{{agent}} fragt dich",
+    "leftDecision": "{{agent}} überlässt dir eine Entscheidung: {{title}}",
+    "needsYouTo": "{{agent}} braucht dich für: {{title}}",
+    "onIt": "Du bist dran",
+    "forTask": "Für Aufgabe #{{number}}",
+    "couldNotLogIn": "{{agent}} konnte sich nicht bei {{service}} anmelden",
+    "needs2fa": "{{agent}} braucht einen 2FA-Code für {{service}}",
+    "needsLogin": "{{agent}} braucht einen Login für {{service}}",
+    "readyForReview": "#{{number}} {{title}} ist bereit zur Prüfung",
+    "isBlocked": "#{{number}} {{title}} ist blockiert",
+    "delivered": "{{agent}} hat geliefert"
+  },
+  "tools": {
+    "openedHost": "{{host}} geöffnet",
+    "openedPage": "Eine Seite geöffnet",
+    "clickedPage": "Auf der Seite geklickt",
+    "typedText": "Text eingegeben",
+    "scrolledDirection": "{{direction}} gescrollt",
+    "direction": {
+      "up": "Nach oben",
+      "down": "Nach unten",
+      "left": "Nach links",
+      "right": "Nach rechts"
+    },
+    "tookScreenshot": "Screenshot gemacht",
+    "wentBack": "Zurückgegangen",
+    "readPage": "Die Seite gelesen",
+    "lookedAtScreen": "Auf den Bildschirm geschaut",
+    "clicked": "Geklickt",
+    "pressed": "{{keys}} gedrückt",
+    "pressedKeys": "Tasten gedrückt",
+    "scrolled": "Gescrollt",
+    "usedComputer": "Den Computer benutzt",
+    "ranCommandInVm": "Einen Befehl in der VM ausgeführt",
+    "lookedAtVmScreen": "Auf den Bildschirm der VM geschaut",
+    "usedVm": "Die VM benutzt",
+    "filledLogin": "Einen Login aus dem Tresor eingetragen",
+    "needsLoginFor": "Braucht einen Login für {{service}}",
+    "needsLoginForSite": "Braucht einen Login für eine Website",
+    "handedTask": "Eine Aufgabe an einen anderen Agenten übergeben",
+    "sentNotification": "Dir eine Mitteilung geschickt",
+    "askedYou": "Hat dich gefragt",
+    "askedForOk": "Um deine Freigabe gebeten",
+    "lookedAtBoard": "Das Board angesehen",
+    "readTask": "Eine Aufgabe gelesen",
+    "filedTask": "Eine Aufgabe angelegt",
+    "changedTask": "Eine Aufgabe geändert",
+    "sentTaskMessage": "Eine Nachricht in eine Aufgabe geschickt",
+    "leftNote": "Eine Notiz an der Aufgabe hinterlassen",
+    "reportedNeeds": "Gemeldet, was es braucht",
+    "pausedAutomation": "Eine seiner Automationen pausiert",
+    "enabledAutomation": "Eine seiner Automationen eingeschaltet",
+    "ranCommand": "Einen Befehl ausgeführt",
+    "readFile": "{{name}} gelesen",
+    "readAFile": "Eine Datei gelesen",
+    "wroteFile": "{{name}} geschrieben",
+    "wroteAFile": "Eine Datei geschrieben",
+    "editedFile": "{{name}} bearbeitet",
+    "editedAFile": "Eine Datei bearbeitet",
+    "searchedFiles": "Dateien durchsucht",
+    "searchedWeb": "Im Web gesucht",
+    "readHost": "{{host}} gelesen",
+    "readWebPage": "Eine Webseite gelesen",
+    "startedHelper": "Einen Helfer gestartet",
+    "updatedPlan": "Den Plan aktualisiert"
+  },
+  "doing": {
+    "thinking": "Denkt nach",
+    "working": "Arbeitet",
+    "openingPage": "Öffnet eine Seite",
+    "clicking": "Klickt",
+    "typing": "Tippt",
+    "scrolling": "Scrollt",
+    "lookingAtScreen": "Schaut auf den Bildschirm",
+    "readingPage": "Liest die Seite",
+    "runningCommand": "Führt einen Befehl aus",
+    "readingFiles": "Liest Dateien",
+    "editingFiles": "Bearbeitet Dateien",
+    "searchingWeb": "Sucht im Web",
+    "readingWebPage": "Liest eine Webseite",
+    "signingIn": "Meldet sich an",
+    "handingOff": "Übergibt an einen Helfer"
+  },
+  "chatFilters": {
+    "source": {
+      "mine": { "label": "Meine", "hint": "Chats, die du gestartet hast" },
+      "automations": { "label": "Automationen", "hint": "Von einer Automation oder der API gestartet" },
+      "agents": { "label": "Agenten", "hint": "Von einem Agenten gestartet: Übergaben, Board-Aufgaben, Heartbeats" },
+      "all": { "label": "Alle", "hint": "Jeder Chat" }
+    },
+    "tab": {
+      "all": { "label": "Alle", "hint": "Jeder aktuelle Chat" },
+      "running": { "label": "Laufend", "hint": "Arbeitet, in der Warteschlange oder wartet auf dich" },
+      "scheduled": { "label": "Geplant", "hint": "Machen später von selbst weiter" },
+      "done": { "label": "Fertig", "hint": "Abgeschlossene Chats" }
+    }
+  },
+  "attachments": {
+    "tooMany": "{{name}}: höchstens {{max}} Dateien pro Nachricht",
+    "tooLarge": "{{name}} ist größer als {{size}}",
+    "tooMuch": "{{name}}: höchstens {{size}} pro Nachricht",
+    "leftOut_one": "Eine Datei wurde weggelassen",
+    "leftOut_other": "Einige Dateien wurden weggelassen",
+    "cameraOffTitle": "Kamera für Godmode ist aus",
+    "cameraOffBody": "Erlaube den Kamerazugriff in den Einstellungen, um ein Foto für deinen Agenten aufzunehmen.",
+    "notNow": "Nicht jetzt",
+    "openSettings": "Einstellungen öffnen",
+    "limitTitle": "Mehr geht nicht in eine Nachricht",
+    "limitBody": "Sende bis zu {{max}} Dateien auf einmal.",
+    "couldNotAdd": "Datei konnte nicht hinzugefügt werden",
+    "photoLibrary": "Fotomediathek",
+    "takePhoto": "Foto aufnehmen",
+    "chooseFile": "Datei auswählen",
+    "attach": "Anhängen"
+  },
+  "composer": {
+    "customModel": "Eigene Modell-ID"
+  },
+  "api": {
+    "license": "Godmode braucht auf deinem Computer eine aktive Lizenz. Trag deinen Lizenzschlüssel dort in Godmode unter Einstellungen → Lizenz ein.",
+    "updateDesktop": "Aktualisiere Godmode auf deinem Computer, um das vom Handy aus zu tun.",
+    "offline": "Dein Computer ist nicht erreichbar. Prüfe, ob er wach und mit Tailscale oder Godmode Cloud verbunden ist.",
+    "offlinePairing": "Dein Computer ist nicht erreichbar. Schalte Tailscale auf diesem Handy mit dem Konto des Computers ein oder verbinde den Computer mit Godmode Cloud.",
+    "noAnswer": "Keine Antwort von deinem Computer. Prüfe, ob es durchgegangen ist, bevor du es noch mal versuchst.",
+    "requestFailed": "Anfrage fehlgeschlagen ({{status}})",
+    "notPaired": "Dieses Handy ist nicht gekoppelt.",
+    "removed": "Dieses Handy wurde aus Godmode entfernt.",
+    "codeExpired": "Dieser Code ist abgelaufen. Lass dir auf deinem Computer einen neuen anzeigen.",
+    "codeUntrusted": "Dieser Code zeigt auf ein Ziel, an das Godmode den Schlüssel deines Handys nicht sendet.",
+    "differentComputer": "Ein anderer Computer hat geantwortet. Scanne den Code noch mal."
+  }
+}

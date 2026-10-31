@@ -1,0 +1,90 @@
+{
+  "title": "Mac-Berechtigungen",
+  "copy": {
+    "accessibility": {
+      "label": "Gerätesteuerung",
+      "title": "Agenten klicken und tippen lassen",
+      "purpose": "Agenten bewegen den Zeiger, tippen und drücken Buttons in den Fenstern, die du teilst. macOS nennt das Bedienungshilfen."
+    },
+    "screenRecording": {
+      "label": "Bildschirmaufnahme",
+      "title": "Agenten deinen Bildschirm sehen lassen",
+      "purpose": "Agenten sehen die Fenster und Bildschirme, die du in einem Chat teilst — nichts anderes, und nur solange geteilt wird."
+    },
+    "fullDiskAccess": {
+      "label": "Festplattenvollzugriff",
+      "title": "Agenten geschützte Ordner öffnen lassen",
+      "purpose": "Importiert Anmeldungen aus deinen Browserprofilen und lässt Agenten Mail, Nachrichten und andere von macOS gesperrte Ordner lesen, wenn eine Aufgabe es braucht."
+    }
+  },
+  "steps": {
+    "fullDisk1": "Klick auf „Systemeinstellungen öffnen“. Godmode zeigt seine App außerdem im Finder.",
+    "fullDisk2": "Zieh {{app}} aus dem Finder in die Liste, oder klick auf + und wähl es unter Programme aus.",
+    "fullDisk3": "Schalte {{app}} ein und starte Godmode dann einmal neu.",
+    "allow1": "Klick auf „Erlauben“. Zeigt macOS einen Dialog, wähl „Systemeinstellungen öffnen“.",
+    "allow2": "Schalte {{app}} unter {{pane}} ein. macOS fragt nach deinem Mac-Passwort.",
+    "allow3": "Fertig. Diese Seite merkt es von selbst.",
+    "screenRecording3": "Bietet macOS „Beenden & erneut öffnen“ an, wähl „Später“ — Godmode erkennt es von selbst."
+  },
+  "guide": {
+    "allowedCount": "{{done}} von {{total}} erlaubt",
+    "checking": "Wird geprüft…",
+    "checksAgain": "Prüft alle paar Sekunden erneut",
+    "nothingToSetUp": "Auf diesem Computer gibt es nichts einzurichten."
+  },
+  "pill": {
+    "restart": "Neustart",
+    "allowed": "Erlaubt",
+    "needed": "Benötigt",
+    "off": "Aus"
+  },
+  "toast": {
+    "settingsDidntOpen": "Systemeinstellungen haben sich nicht geöffnet",
+    "askError": "{{name}} konnte nicht angefragt werden",
+    "resetError": "{{name}} konnte nicht zurückgesetzt werden"
+  },
+  "pane": {
+    "step": "Schritt {{step}} von {{total}} · {{pane}}",
+    "restartToGo": "Erlaubt — noch ein Neustart",
+    "isAllowed": "{{label}} ist erlaubt",
+    "runsFrom": "Godmode läuft gerade aus {{app}}, deshalb fragt macOS nach {{app}}. Schalte das ein oder starte stattdessen die Godmode-App.",
+    "openSettings": "Systemeinstellungen öffnen",
+    "allow": "Erlauben",
+    "showInFinder": "{{app}} im Finder zeigen",
+    "openPane": "Bereich öffnen",
+    "waiting": "Warte auf den Schalter…",
+    "helpToggle": "Eingeschaltet, aber trotzdem nicht erlaubt?",
+    "helpReset": "Nach einem Update behält macOS manchmal einen alten Eintrag: Der Schalter ist an, zählt aber nicht mehr. Setz ihn zurück und schalte ihn wieder ein.",
+    "helpManual": "Nach einem Update behält macOS manchmal einen alten Eintrag: Der Schalter ist an, zählt aber nicht mehr. Entferne {{app}} mit −, füg es mit + wieder hinzu und schalte es ein.",
+    "resetAndAsk": "Zurücksetzen und neu fragen",
+    "skipForNow": "Vorerst überspringen"
+  },
+  "restart": {
+    "error": "Godmode konnte nicht neu gestartet werden",
+    "button": "Godmode neu starten",
+    "confirmTitle": "Godmode neu starten?",
+    "confirmDescription_one": "1 Agent arbeitet noch. Ein Neustart stoppt ihn — sobald Godmode zurück ist, machst du da weiter, wo du aufgehört hast.",
+    "confirmDescription_other": "{{count}} Agenten arbeiten noch. Ein Neustart stoppt sie — sobald Godmode zurück ist, machst du da weiter, wo du aufgehört hast.",
+    "confirm": "Jetzt neu starten"
+  },
+  "mock": {
+    "systemSettings": "Systemeinstellungen",
+    "wifi": "WLAN",
+    "bluetooth": "Bluetooth",
+    "notifications": "Mitteilungen",
+    "privacy": "Datenschutz & Sicherheit",
+    "desktop": "Schreibtisch & Dock"
+  },
+  "button": {
+    "restartToFinish": "Godmode neu starten, um abzuschließen",
+    "toAllowList": "{{count}} zu erlauben · {{list}}",
+    "setUpLabel": "Mac-Berechtigungen einrichten",
+    "tooltip": "Mac-Berechtigungen: {{count}} zu erlauben"
+  },
+  "summary": {
+    "partial": "{{done}} von {{total}} erlaubt — eine kurze Anleitung zeigt, wo du sie einschaltest.",
+    "all": "Alles ist erlaubt.",
+    "setUp": "Einrichten",
+    "review": "Ansehen"
+  }
+}

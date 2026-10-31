@@ -1,0 +1,176 @@
+{
+  "tabBar": {
+    "home": "Start",
+    "chats": "Chats",
+    "tasks": "Aufgaben",
+    "screens": "Bildschirme",
+    "agents": "Agenten"
+  },
+  "home": {
+    "yourComputer": "Dein Computer",
+    "newChat": "Neuer Chat",
+    "newTask": "Neue Aufgabe",
+    "inbox": "Eingang",
+    "calls": "Anrufe",
+    "status": {
+      "connectedThrough": "Verbunden über {{computer}} — {{away}} ist abwesend",
+      "connected": "{{computer}} · verbunden",
+      "connecting": "Verbinde mit {{computer}}…",
+      "outOfReach": "{{computer}} ist nicht erreichbar"
+    },
+    "datePattern": "EEEE, d. MMMM",
+    "agentsReady_one": "1 Agent bereit",
+    "agentsReady_other": "{{count}} Agenten bereit",
+    "prompt": "Was packen wir heute an?",
+    "askAgent": "Frag {{name}} etwas oder übergib eine Aufgabe…",
+    "ask": "Frag etwas oder übergib eine Aufgabe…",
+    "offline": {
+      "title": "{{computer}} ist nicht erreichbar",
+      "hint": "Achte darauf, dass er wach und mit Tailscale oder Godmode Cloud verbunden ist.",
+      "body": "{{reason}} Tippen zum erneuten Versuch."
+    },
+    "needs": {
+      "title": "Braucht dich",
+      "anAgent": "Ein Agent",
+      "elsewhere_one": "Hier wartet nichts auf dich. {{count}} Sache wartet in anderen Workspaces",
+      "elsewhere_other": "Hier wartet nichts auf dich. {{count}} Sachen warten in anderen Workspaces",
+      "moreElsewhere_one": "+{{count}} in anderen Workspaces · Eingang",
+      "moreElsewhere_other": "+{{count}} in anderen Workspaces · Eingang",
+      "allInInbox_one": "{{count}} im Eingang",
+      "allInInbox_other": "Alle {{count}} im Eingang",
+      "vaultLocked": "Der Tresor ist gesperrt",
+      "vaultLockedBody": "Agenten können sich erst anmelden, wenn du ihn auf deinem Computer entsperrst."
+    },
+    "workingNow": "Arbeitet gerade",
+    "queued_one": "{{count}} in der Warteschlange",
+    "queued_other": "{{count}} in der Warteschlange",
+    "liveScreens": "Live-Bildschirme",
+    "recent": {
+      "title": "Mach da weiter, wo du aufgehört hast",
+      "yourAgents": "Deine Agenten",
+      "loadError": "Deine Chats konnten nicht geladen werden. {{error}}"
+    },
+    "question": {
+      "taskNumber": "Aufgabe #{{number}}",
+      "openChat": "Öffne den Chat, um zu antworten",
+      "approve": "Freigeben",
+      "decline": "Ablehnen"
+    },
+    "hideSuggestions": "Vorschläge ausblenden"
+  },
+  "chats": {
+    "title": "Chats",
+    "search": "Chats durchsuchen",
+    "archived": "Archivierte Chats",
+    "pinned": "Angeheftet",
+    "markAllRead": "Alle als gelesen markieren",
+    "markReadFailed": "Chats konnten nicht als gelesen markiert werden",
+    "changeFailed": "Chat konnte nicht geändert werden",
+    "deleteFailed": "Chat konnte nicht gelöscht werden",
+    "loadError": "Deine Chats konnten nicht geladen werden",
+    "archivedOngoing_one": "1 archivierter Chat hat noch Arbeit vor sich",
+    "archivedOngoing_other": "{{count}} archivierte Chats haben noch Arbeit vor sich",
+    "sourceLabel": "Wer die Chats gestartet hat",
+    "filterLabel": "Letzte Chats filtern",
+    "source": {
+      "mine": { "label": "Meine", "hint": "Chats, die du gestartet hast" },
+      "automations": { "label": "Automationen", "hint": "Von einer Automation oder der API gestartet" },
+      "agents": { "label": "Agenten", "hint": "Von einem Agenten gestartet: Übergaben, Board-Aufgaben, Heartbeats" },
+      "all": { "label": "Alle", "hint": "Alle Chats" }
+    },
+    "filter": {
+      "all": { "label": "Alle", "hint": "Alle letzten Chats" },
+      "running": { "label": "Aktiv", "hint": "Arbeiten, warten in der Schlange oder auf dich" },
+      "scheduled": { "label": "Geplant", "hint": "Machen später von selbst weiter" },
+      "done": { "label": "Fertig", "hint": "Abgeschlossene Chats" }
+    },
+    "empty": {
+      "all": { "title": "Noch keine Chats", "body": "Neue Chats landen in dieser Liste, auch auf deinem Computer." },
+      "running": { "title": "Nichts aktiv", "body": "Chats, die arbeiten oder auf dich warten, erscheinen hier." },
+      "scheduled": { "title": "Nichts geplant", "body": "Wenn ein Agent später nachsehen will, wartet der Chat hier." },
+      "done": { "title": "Noch nichts fertig", "body": "Abgeschlossene Chats landen hier." }
+    },
+    "emptySource": {
+      "mine": { "title": "Noch keine Chats von dir", "body": "Chats, die du startest, erscheinen hier. Automationen und Agenten haben eigene Tabs." },
+      "automations": { "title": "Keine Automation-Chats", "body": "Wenn eine Automation läuft, landet ihr Chat hier." },
+      "agents": { "title": "Keine Agenten-Chats", "body": "Übergaben, Board-Aufgaben und Heartbeats, die Agenten selbst starten, landen hier." }
+    },
+    "emptyScope": {
+      "title": "Noch keine Chats in {{name}}",
+      "body": "Neue Chats, die du hier startest, landen in dieser Liste."
+    },
+    "noResults": {
+      "title": "Nichts gefunden",
+      "body": "Kein Chat erwähnt „{{query}}“."
+    },
+    "deleteDialog": {
+      "title": "Diesen Chat löschen?",
+      "body": "Er wird auch auf deinem Computer entfernt."
+    },
+    "menu": {
+      "markRead": "Als gelesen markieren",
+      "markUnread": "Als ungelesen markieren",
+      "pin": "Anheften",
+      "unpin": "Loslösen",
+      "archive": "Archivieren"
+    }
+  },
+  "tasks": {
+    "title": "Aufgaben",
+    "myTasks": "Meine Aufgaben",
+    "myTasksCount": "Meine Aufgaben · {{count}}",
+    "archived": "Archivierte Aufgaben",
+    "filterActive": "Aktiv",
+    "loadError": "Das Board konnte nicht geladen werden",
+    "thisView": "dieser Ansicht",
+    "emptyStatus": "Nichts in „{{status}}“",
+    "emptyActive": {
+      "title": "Gerade nichts in Arbeit",
+      "body": "Jede Aufgabe ist geparkt, erledigt oder abgebrochen. Gib einem Agenten eine neue, um loszulegen."
+    },
+    "empty": {
+      "title": "Noch keine Aufgaben",
+      "body": "Gib einem Agenten eine Aufgabe und verfolge sie hier: Er arbeitet daran und bittet dich dann um Prüfung."
+    },
+    "archiveFailed": "Aufgabe konnte nicht archiviert werden",
+    "stopDialog": {
+      "title": "Agenten stoppen?",
+      "body": "{{name}} arbeitet noch daran. Beim Archivieren wird der Lauf gestoppt.",
+      "theAgent": "Der Agent",
+      "keep": "Weiterarbeiten",
+      "confirm": "Stoppen und archivieren"
+    }
+  },
+  "screens": {
+    "title": "Bildschirme",
+    "liveNow": "Gerade live",
+    "loading": "Suche nach Bildschirmen…",
+    "browsers": "Browser",
+    "vms": "Virtuelle Maschinen",
+    "android": "Android-Handys",
+    "empty": {
+      "title": "Gerade nichts auf dem Bildschirm",
+      "body": "Wenn ein Agent surft, in einer VM, auf einem Android-Handy oder auf einem geteilten Bildschirm arbeitet, kannst du hier live zusehen."
+    }
+  },
+  "agents": {
+    "title": "Agenten",
+    "automations": "Automationen",
+    "activity": "Aktivität",
+    "newAgent": "Neuer Agent",
+    "loadError": "Agenten konnten nicht geladen werden",
+    "filter": {
+      "running": "Arbeitet",
+      "needs": "Braucht dich",
+      "scheduled": "Automatisiert"
+    },
+    "noMatch": {
+      "title": "Keine passenden Agenten",
+      "body": "In dieser Ansicht gibt es keine Agenten."
+    },
+    "empty": {
+      "title": "Erstelle deinen ersten Agenten",
+      "body": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan — z. B. einer, der jeden Monat deine Rechnungen herunterlädt."
+    }
+  }
+}

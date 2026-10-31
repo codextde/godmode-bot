@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import { Bot, CreditCard, Lock, Plus, ShieldCheck, SearchX } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { PaymentCard } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
@@ -14,6 +15,7 @@ import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
+import { t as tg } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -23,6 +25,7 @@ import { toast } from "sonner";
 const byName = new Intl.Collator(undefined, { sensitivity: "base" });
 
 export default function CardsPage() {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const sidebarScope = useUi((s) => s.workspace);
   const [scope, setScope] = useState(sidebarScope);
@@ -34,7 +37,7 @@ export default function CardsPage() {
   const agentsById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
 
   useEffect(() => {
-    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, "Vault locked", qc);
+    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, tg("vault:passwordImport.vaultLocked"), qc);
   }, [list.error, qc]);
 
   const cards = useMemo(() => [...(list.data ?? [])].sort((a, b) => byName.compare(a.name, b.name)), [list.data]);
@@ -63,14 +66,14 @@ export default function CardsPage() {
 
   const freeze = useMutation({
     mutationFn: (card: PaymentCard) =>
-      withGrant((grant) => api.cards.update(card.id, { frozen: !card.frozen }, grant), "Confirm with your vault passphrase to unfreeze this card."),
+      withGrant((grant) => api.cards.update(card.id, { frozen: !card.frozen }, grant), tg("vault:cardsPage.grantUnfreeze")),
     onSuccess: (saved) => {
       qc.setQueriesData<PaymentCard[]>({ queryKey: qk.cards }, (old) => (Array.isArray(old) ? old.map((c) => (c.id === saved.id ? saved : c)) : old));
       void qc.invalidateQueries({ queryKey: qk.cards });
-      if (saved.frozen) toast.success("Card frozen", { description: "Agents can't pay with it until you unfreeze it." });
-      else toast.success("Card unfrozen", { description: "Agents can pay with it again, within its limits." });
+      if (saved.frozen) toast.success(t("cardsPage.frozen"), { description: t("cardsPage.frozenDescription") });
+      else toast.success(t("cardsPage.unfrozen"), { description: t("cardsPage.unfrozenDescription") });
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not change the card", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("cardsPage.changeFailed"), qc),
   });
   const toggleFreeze = useCallback((card: PaymentCard) => freeze.mutate(card), [freeze.mutate]);
 
@@ -80,10 +83,10 @@ export default function CardsPage() {
     onSuccess: (_r, id) => {
       qc.setQueriesData<PaymentCard[]>({ queryKey: qk.cards }, (old) => (Array.isArray(old) ? old.filter((c) => c.id !== id) : old));
       void qc.invalidateQueries({ queryKey: qk.cards });
-      toast.success("Card deleted");
+      toast.success(t("cardsPage.deleted"));
       setToDelete(null);
     },
-    onError: (e) => toastApiError(e, "Could not delete card", qc),
+    onError: (e) => toastApiError(e, t("cardsPage.deleteFailed"), qc),
   });
 
   const busyId = details.revealingId ?? (freeze.isPending ? freeze.variables?.id : undefined);
@@ -94,11 +97,11 @@ export default function CardsPage() {
     <div className="relative">
       <PageHeader
         icon={<CreditCard />}
-        title="Cards"
-        description="Payment cards your agents can pay with, within the limits you set. Encrypted in your local vault."
+        title={t("cardsPage.title")}
+        description={t("cardsPage.description")}
         actions={
           <Button onClick={openCreate}>
-            <Plus /> Add card
+            <Plus /> {t("cardDialog.addTitle")}
           </Button>
         }
       />
@@ -110,7 +113,7 @@ export default function CardsPage() {
             <ScopeFilterSelect value={scope} onChange={setScope} />
             {list.data && (
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                {cards.length} {cards.length === 1 ? "card" : "cards"}
+                {t("cardsPage.count", { count: cards.length })}
               </span>
             )}
           </div>
@@ -127,11 +130,11 @@ export default function CardsPage() {
         ) : list.isError && !list.data ? (
           <EmptyState
             icon={<Lock />}
-            title={isVaultLocked(list.error) ? "The vault is locked" : "Couldn't load cards"}
-            description={isVaultLocked(list.error) ? "Unlock the vault to see your cards." : errorMessage(list.error)}
+            title={isVaultLocked(list.error) ? t("cardsPage.lockedTitle") : t("cardsPage.loadFailed")}
+            description={isVaultLocked(list.error) ? t("cardsPage.lockedDescription") : errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -139,22 +142,22 @@ export default function CardsPage() {
           scope !== "all" ? (
             <EmptyState
               icon={<SearchX />}
-              title="No cards in this scope"
-              description="Cards saved as Global are available everywhere. Switch the scope filter to see them."
+              title={t("cardsPage.emptyScopeTitle")}
+              description={t("cardsPage.emptyScopeDescription")}
               action={
                 <Button onClick={openCreate}>
-                  <Plus /> Add card
+                  <Plus /> {t("cardDialog.addTitle")}
                 </Button>
               }
             />
           ) : (
             <EmptyState
               icon={<CreditCard />}
-              title="Let your agents pay for what they need"
-              description="Add a card with a spending limit. Agents ask before they buy, Godmode types the card into the checkout, and every purchase is listed here."
+              title={t("cardsPage.emptyTitle")}
+              description={t("cardsPage.emptyDescription")}
               action={
                 <Button onClick={openCreate}>
-                  <Plus /> Add a card
+                  <Plus /> {t("cardsPage.addFirst")}
                 </Button>
               }
             />
@@ -194,8 +197,8 @@ export default function CardsPage() {
       <ConfirmDeleteDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
-        title={`Delete “${toDelete?.name}”?`}
-        description="The card is removed from the vault. Its purchase history is deleted too."
+        title={t("deleteTitle", { name: toDelete?.name })}
+        description={t("cardsPage.deleteDescription")}
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}
       />
@@ -204,10 +207,11 @@ export default function CardsPage() {
 }
 
 function TrustStrip() {
+  const { t } = useTranslation("vault");
   const items = [
-    { icon: <Lock />, title: "Encrypted on this device", text: "AES-256-GCM, unlocked by your vault passphrase." },
-    { icon: <Bot />, title: "Agents never see the card", text: "Godmode types it into the checkout and masks it wherever an agent could read it back." },
-    { icon: <ShieldCheck />, title: "Your limits, enforced", text: "Loosening a card's limits needs your passphrase." },
+    { icon: <Lock />, title: t("cardsPage.trust.encryptedTitle"), text: t("cardsPage.trust.encryptedText") },
+    { icon: <Bot />, title: t("cardsPage.trust.hiddenTitle"), text: t("cardsPage.trust.hiddenText") },
+    { icon: <ShieldCheck />, title: t("cardsPage.trust.limitsTitle"), text: t("cardsPage.trust.limitsText") },
   ];
   return (
     <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border shadow-card @3xl:grid-cols-3">

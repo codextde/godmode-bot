@@ -1,6 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./Orb.module.css";
 
 /** The stage the geometry is tuned on; --orb-k scales it to `size`. */
@@ -32,33 +33,33 @@ export const HELIX_VARIANTS: HelixVariant[] = ["G1", "G2", "G3", "G4", "G5"];
 
 export const MORPH_VARIANTS: MorphVariant[] = ["M1", "M2", "M3", "M4", "M5"];
 
-export const ORB_TASKS: Record<OrbVariant, string> = {
-  S1: "Thinking",
-  S2: "Processing",
-  S3: "Working",
-  S4: "Searching",
-  S5: "Finalizing",
-  B1: "Thinking",
-  B2: "Searching",
-  B3: "Generating",
-  B4: "Solving",
-  B5: "Routing",
-  C1: "Loading",
-  C2: "Listening",
-  C3: "Streaming",
-  C4: "Analyzing",
-  C5: "Compiling",
-  G1: "Processing",
-  G2: "Sequencing",
-  G3: "Uploading",
-  G4: "Syncing",
-  G5: "Idling",
-  M1: "Shaping",
-  M2: "Expanding",
-  M3: "Unfolding",
-  M4: "Transforming",
-  M5: "Dispersing",
-};
+export const ORB_TASKS = {
+  S1: "orb.thinking",
+  S2: "orb.processing",
+  S3: "orb.working",
+  S4: "orb.searching",
+  S5: "orb.finalizing",
+  B1: "orb.thinking",
+  B2: "orb.searching",
+  B3: "orb.generating",
+  B4: "orb.solving",
+  B5: "orb.routing",
+  C1: "orb.loading",
+  C2: "orb.listening",
+  C3: "orb.streaming",
+  C4: "orb.analyzing",
+  C5: "orb.compiling",
+  G1: "orb.processing",
+  G2: "orb.sequencing",
+  G3: "orb.uploading",
+  G4: "orb.syncing",
+  G5: "orb.idling",
+  M1: "orb.shaping",
+  M2: "orb.expanding",
+  M3: "orb.unfolding",
+  M4: "orb.transforming",
+  M5: "orb.dispersing",
+} as const satisfies Record<OrbVariant, string>;
 
 function isLattice(v: OrbVariant): v is LatticeVariant {
   return (LATTICE_VARIANTS as OrbVariant[]).includes(v);
@@ -568,7 +569,8 @@ export function Orb({
   className,
   style,
 }: OrbProps) {
-  const text = label ?? ORB_TASKS[variant] + "…";
+  const { t } = useTranslation("aicss");
+  const text = label ?? t(ORB_TASKS[variant]);
   return (
     <span
       className={styles.root + (className ? " " + className : "")}

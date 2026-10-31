@@ -51,6 +51,10 @@ export function useStickToBottom(threshold = 72) {
     return () => ro.disconnect();
   }, [threshold]);
 
+  const unstick = useCallback(() => {
+    stickRef.current = false;
+  }, []);
+
   const scrollToBottom = useCallback((smooth = true) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -58,5 +62,5 @@ export function useStickToBottom(threshold = 72) {
     el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
-  return { scrollRef, contentRef, atBottom, scrollToBottom, isStuck: () => stickRef.current };
+  return { scrollRef, contentRef, atBottom, scrollToBottom, unstick, isStuck: () => stickRef.current };
 }

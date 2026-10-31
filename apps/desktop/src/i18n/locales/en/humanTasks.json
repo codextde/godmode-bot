@@ -1,0 +1,149 @@
+{
+  "age": {
+    "seconds": "{{n}}s",
+    "minutes": "{{n}}m",
+    "hours": "{{n}}h",
+    "days": "{{n}}d",
+    "months": "{{n}}mo",
+    "years": "{{n}}y"
+  },
+  "words": {
+    "task": {
+      "done": "Mark done",
+      "declined": "Can't do it",
+      "wasDone": "Done",
+      "wasDeclined": "Couldn't do it"
+    },
+    "decision": {
+      "done": "Answer",
+      "declined": "Dismiss",
+      "wasDone": "Answered",
+      "wasDeclined": "Dismissed"
+    },
+    "approval": {
+      "done": "Approve",
+      "declined": "Decline",
+      "wasDone": "Approved",
+      "wasDeclined": "Declined"
+    }
+  },
+  "status": {
+    "backlog": "Backlog",
+    "open": "To do",
+    "doing": "Doing",
+    "withdrawn": "Taken back"
+  },
+  "kind": {
+    "decision": "Decision",
+    "approval": "Needs your OK"
+  },
+  "card": {
+    "urgent": "Urgent",
+    "onIt": "On it",
+    "yourOwn": "Your own",
+    "agentRemoved": "Agent removed"
+  },
+  "chat": {
+    "youAnswered": "You answered",
+    "youDid": "You did",
+    "youCouldnt": "You couldn't do",
+    "moreInNeedsYou_one": "+{{count}} more in Needs you",
+    "moreInNeedsYou_other": "+{{count}} more in Needs you",
+    "waitingAnswer": "Waiting for your answer",
+    "waitingYou": "Waiting for you",
+    "replyHere": "reply here to answer",
+    "dismissHint": "Nothing to decide — {{name}} isn't woken",
+    "done": "Done",
+    "doneHint": "Mark it done — {{name}} continues"
+  },
+  "board": {
+    "addError": "Couldn't add the task",
+    "search": "Search tasks",
+    "refreshError": "Couldn't refresh the list",
+    "loadError": "Couldn't load your tasks",
+    "emptyTitle": "Nothing waits for you",
+    "emptyDescription": "When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself.",
+    "addOwn": "Add one of your own",
+    "addTask": "Add a task",
+    "dropDone": "Drop to mark it done",
+    "dropHere": "Drop here",
+    "quickAddPlaceholder": "What do you need to do?",
+    "quickAddHint": "Enter to add · Esc to close"
+  },
+  "columns": {
+    "backlog": {
+      "label": "Backlog",
+      "hint": "Park what can wait. It stays open for its agent but doesn't count as waiting for you."
+    },
+    "open": {
+      "label": "To do",
+      "hint": "What your agents need from you shows up here: things to do, questions, decisions."
+    },
+    "doing": {
+      "label": "Doing",
+      "hint": "Drag a task here while you work on it."
+    },
+    "closed": {
+      "label": "Done",
+      "hint": "Drop a task here to close or answer it — its agent picks up from there."
+    }
+  },
+  "closedToast": {
+    "taskDone": "{{ref}} done",
+    "taskDeclined": "{{ref}} closed",
+    "decisionDone": "{{ref}} answered",
+    "decisionDeclined": "{{ref}} dismissed",
+    "approvalDone": "{{ref}} approved",
+    "approvalDeclined": "{{ref}} declined",
+    "continued": "{{name}} picks it up from here."
+  },
+  "actions": {
+    "updateError": "Couldn't update the task",
+    "closeError": "Couldn't close the task",
+    "deleted": "Task deleted",
+    "deleteError": "Couldn't delete the task"
+  },
+  "detail": {
+    "more": "More",
+    "openChat": "Open chat",
+    "openTask": "Open task #{{number}}",
+    "moveToOpen": "Move to To do",
+    "moveToBacklog": "Move to backlog",
+    "notUrgent": "Not urgent",
+    "markUrgent": "Mark urgent",
+    "yourOwnTask": "Your own task",
+    "removedAgent": "An agent that was removed",
+    "forTask": "for task #{{number}}",
+    "openHost": "Open {{host}}",
+    "notes": "Notes",
+    "bodyHeading": {
+      "task": "What to do",
+      "decision": "What it's about",
+      "approval": "Why"
+    },
+    "fromAnswer": "{{name}} left this open in the answer it finished with. <link>Read the whole answer</link>",
+    "theAgentCap": "The agent",
+    "theAgent": "the agent",
+    "tookBack": "{{name}} took it back"
+  },
+  "closeHint": {
+    "waitsForDecision": "{{name}} stands still until you decide, and goes on right after.",
+    "waitsForAnswer": "{{name}} stands still until you answer, and goes on right after.",
+    "decision": "{{name}} goes on with your answer. Replying in its chat works too.",
+    "task": "{{name}} continues by itself once you close this. Anything it should know goes in the note."
+  },
+  "closeBox": {
+    "note": "Note (optional)",
+    "ownWords": "Or answer in your own words",
+    "answerFor": "Your answer for {{name}}",
+    "noteFor": "Note for {{name}} (optional)",
+    "suggested": "Suggested answers",
+    "recommended": "Recommended",
+    "attach": "Attach files",
+    "thinking": "Thinking about it",
+    "onIt": "I'm on it",
+    "backToOpen": "Back to To do",
+    "noAnswerNeeded": "No answer needed anymore. {{name}} goes on without it.",
+    "nothingToDecide": "Nothing to decide here. {{name}} isn't woken."
+  }
+}

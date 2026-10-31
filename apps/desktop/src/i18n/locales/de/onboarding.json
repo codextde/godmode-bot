@@ -1,0 +1,245 @@
+{
+  "kit": {
+    "steps": "Einrichtungsschritte",
+    "stepOf": "Schritt {{current}} von {{total}}",
+    "atLeast_one": "Mindestens {{count}} Zeichen",
+    "atLeast_other": "Mindestens {{count}} Zeichen",
+    "useAtLeast_one": "Nutze mindestens {{count}} Zeichen.",
+    "useAtLeast_other": "Nutze mindestens {{count}} Zeichen.",
+    "confirm": "Bestätigen",
+    "typeAgain": "Noch einmal eingeben",
+    "matches": "Stimmt überein",
+    "mismatch": "Stimmt noch nicht überein."
+  },
+  "unlock": {
+    "tooMany": "Zu viele Versuche – warte eine Minute und versuch es erneut.",
+    "wrong": "Diese Passphrase stimmt nicht."
+  },
+  "remote": {
+    "eyebrow": "Remote-Dashboard",
+    "title": "Schütz dein Dashboard.",
+    "description": "Godmode läuft als Server. Leg ein Passwort fest, damit du dich im Browser anmelden kannst, ohne Zugriffstokens herumzukopieren.",
+    "warningTitle": "Wer dieses Passwort kennt, steuert deine Agenten und ihre Logins.",
+    "warning": "Nutze ein langes, einzigartiges Passwort und mach das Dashboard nur über einen Reverse Proxy mit TLS erreichbar.",
+    "passwordLabel": "Dashboard-Passwort",
+    "alreadySet": "Ein Dashboard-Passwort ist bereits festgelegt.",
+    "change": "Ändern",
+    "keep": "Aktuelles behalten",
+    "skip": "Überspringen – nur Tokens nutzen",
+    "set": "Passwort festlegen"
+  },
+  "claude": {
+    "startFailed": "Anmeldung konnte nicht gestartet werden",
+    "codeFailed": "Code konnte nicht gesendet werden",
+    "signedIn": "Bei Claude angemeldet",
+    "signedInDescription": "Deine Agenten können wieder arbeiten.",
+    "linkCopiedToast": "Anmeldelink kopiert",
+    "copyFailed": "Link konnte nicht kopiert werden",
+    "copyFailedHint": "Öffne stattdessen die Anmeldeseite.",
+    "signInHere": "Auf diesem Gerät anmelden",
+    "finishInBrowser": "Schließ die Anmeldung im Browser ab",
+    "stepsAfar": "Öffne die Anmeldeseite, melde dich mit deinem Claude-Konto an und klick auf <b>Authorize</b>. Füg dann unten den angezeigten Code ein.",
+    "steps": "Melde dich mit deinem Claude-Konto an und klick auf <b>Authorize</b>. Das hier aktualisiert sich von selbst.",
+    "gettingLink": "Anmeldelink wird geholt…",
+    "linkCopied": "Anmeldelink kopiert.",
+    "pasteAfar": "Füg ihn in einen Browser auf diesem Gerät ein, falls die Seite nicht aufgegangen ist.",
+    "pasteHere": "Kein Browserfenster aufgegangen? Füg ihn in deinen Browser ein.",
+    "openAfar": "Öffne die Seite hier oder kopier den Link in einen anderen Browser.",
+    "openHere": "Kein Browserfenster aufgegangen? Öffne die Seite oder kopier den Link in deinen Browser.",
+    "openPage": "Anmeldeseite öffnen",
+    "copyAgain": "Erneut kopieren",
+    "copyLink": "Link kopieren",
+    "codeLabelAfar": "Code von der Anmeldeseite",
+    "codeLabel": "Code von der Anmeldeseite bekommen? Füg ihn hier ein.",
+    "codePlaceholder": "Code einfügen"
+  },
+  "vault": {
+    "guarantees": {
+      "key": "Aus deiner Passphrase wird der Schlüssel abgeleitet (scrypt). Sie wird nie gespeichert oder irgendwohin gesendet.",
+      "encryption": "Jedes Passwort, jedes 2FA-Geheimnis und jeder API-Key wird einzeln mit AES-256-GCM verschlüsselt.",
+      "fill": "Agenten tragen Geheimnisse direkt im Browser ein – das KI-Modell sieht sie nie, außer du erlaubst es."
+    },
+    "eyebrow": "Tresor",
+    "readyTitle": "Dein Tresor ist bereit.",
+    "readyDescription": "Er ist entsperrt und auf diesem Gerät verschlüsselt.",
+    "readyBody": "Logins, 2FA-Codes und API-Keys, die du hinzufügst, werden mit deiner Passphrase verschlüsselt.",
+    "createTitle": "Leg deinen Tresor an.",
+    "createSubtitle": "Versiegelt auf diesem Gerät.",
+    "createDescription": "Der Tresor bewahrt Website-Logins, 2FA-Geheimnisse und API-Keys auf, damit sich deine Agenten anmelden können, ohne dich zu unterbrechen.",
+    "passphrase": "Tresor-Passphrase",
+    "noRecovery": "Sie lässt sich nicht wiederherstellen.",
+    "noRecoveryHint": "Speicher sie in deinem Passwortmanager – ohne sie lässt sich der Tresor nur zurücksetzen.",
+    "remember": "Auf diesem Gerät merken",
+    "rememberHint": "Empfohlen, damit Automationen unbeaufsichtigt laufen. Der Tresorschlüssel liegt im Schlüsselbund deines Betriebssystems und der Tresor entsperrt sich auf diesem Gerät automatisch. Schalt es aus, um die Passphrase nach jedem Neustart einzugeben.",
+    "create": "Tresor anlegen",
+    "unlockTitle": "Entsperr deinen Tresor.",
+    "unlockDescription": "Auf diesem Gerät gibt es bereits einen Tresor. Gib seine Passphrase ein, um mit der Einrichtung weiterzumachen.",
+    "unlock": "Entsperren"
+  },
+  "doctor": {
+    "fix": {
+      "browserUse": "Installier es mit uv: `uv tool install browser-use`."
+    },
+    "hints": {
+      "claudeAuth": "Lieber einen API-Key? Füg später einen Anthropic-Key unter Integrationen → API-Keys hinzu.",
+      "browserUse": "Gibt Agenten einen echten Browser zum Arbeiten.",
+      "chrome": "Wird genutzt, um deine bestehenden Anmeldungen in den Browser von Godmode zu übernehmen.",
+      "git": "Optional – das Gedächtnis der Agenten wird mit einer eingebauten Git-Implementierung versioniert."
+    },
+    "checkFailed": "Prüfung fehlgeschlagen",
+    "runFailed": "Systemprüfung konnte nicht ausgeführt werden",
+    "recheck": "Neu prüfen",
+    "installed": "{{name}} installiert",
+    "installFailed": "Installation von {{name}} fehlgeschlagen",
+    "seeLog": "Details findest du im Log.",
+    "ok": "OK",
+    "missing": "Fehlt",
+    "installing": "Wird installiert…",
+    "install": "Installieren",
+    "installLog": "Installationslog",
+    "installFailedShowLog": "Installation fehlgeschlagen – Log zeigen",
+    "noOutput": "(keine Ausgabe)",
+    "signedInChecking": "Angemeldet. Wird geprüft…",
+    "ownerOnly": "Nur der Besitzer dieses Computers kann Claude anmelden.",
+    "signInAgain": "Erneut anmelden",
+    "signIn": "Bei Claude anmelden",
+    "opensHere": "Öffnet hier die Anmeldeseite. Funktioniert mit einem Claude-Pro- oder Max-Abo.",
+    "opensBrowser": "Öffnet deinen Browser. Funktioniert mit einem Claude-Pro- oder Max-Abo."
+  },
+  "done": {
+    "next": {
+      "agent": {
+        "title": "Stell deinen ersten Agenten ein",
+        "body": "Wähl eine Vorlage oder beschreib die Aufgabe."
+      },
+      "logins": {
+        "title": "Speicher deine Logins",
+        "body": "Agenten melden sich an wie du, inklusive 2FA."
+      },
+      "totp": {
+        "title": "2FA-Codes importieren",
+        "body": "Scanne Exporte aus dem Google Authenticator."
+      },
+      "memory": {
+        "title": "Bring dein Gedächtnis mit",
+        "body": "Aus ChatGPT, Claude oder Gemini."
+      }
+    },
+    "shortDate": "d. MMM",
+    "trialUntil": "Kostenlose Testphase bis {{date}}",
+    "activated": "Aktiviert",
+    "freeUntil": "Kostenlos bis {{date}}",
+    "freeBuild": "In diesem Build kostenlos",
+    "needsKey": "Braucht einen Lizenzschlüssel",
+    "notActivated": "Noch nicht aktiviert",
+    "allSetNamed": "Alles bereit, {{name}}.",
+    "allSet": "Alles bereit.",
+    "ready": "Dein Kollege legt los.",
+    "intro": "Sag in normalen Worten, was du brauchst. Er meldet sich an, surft und berichtet dir.",
+    "setup": "Auf diesem Computer eingerichtet",
+    "setupMissing": "Es fehlt noch etwas. Siehe Einstellungen, System.",
+    "setupOk": "Installiert und angemeldet",
+    "vault": "Verschlüsselter Tresor",
+    "vaultCreated": "Angelegt",
+    "vaultUnlocked": "Entsperrt",
+    "activate": "Aktivieren",
+    "passwordSet": "Festgelegt",
+    "passwordNotSet": "Nicht festgelegt. Melde dich mit Zugriffstokens an.",
+    "nextUp": "Als Nächstes",
+    "activateToStart": "Aktivier Godmode, um loszulegen.",
+    "start": "Loslegen",
+    "chrome": {
+      "noProfile": "Es gibt noch kein Godmode-Browserprofil. Importier später über die Browser-Seite.",
+      "label": "Chrome-Anmeldungen",
+      "imported_one": "Von {{formatted}} Website importiert",
+      "imported_other": "Von {{formatted}} Websites importiert",
+      "looking": "Suche nach Chrome…",
+      "none": "Kein Chrome-Profil gefunden. Importier später über Browser.",
+      "hint": "Optional. Agenten sind direkt bei den Websites angemeldet, die du nutzt.",
+      "profile": "Chrome-Profil",
+      "importing": "Wird importiert…",
+      "import": "Importieren",
+      "importFrom": "Aus {{name}} importieren",
+      "keychain": "macOS fragt eventuell nach Zugriff auf den Schlüsselbund. Erlaube ihn, damit die Cookies von Chrome gelesen werden können."
+    }
+  },
+  "setup": {
+    "noReason": "Die Installation wurde ohne Begründung abgebrochen.",
+    "bubble": {
+      "ready": "Alles bereit. Ich kann loslegen.",
+      "working": "Ich mache mich startklar. Das dauert ein paar Minuten.",
+      "hiNamed": "Hi {{name}}, ich bin Godmode, dein neuer Kollege.",
+      "hi": "Hi, ich bin Godmode, dein neuer Kollege."
+    },
+    "title": "Machen wir Godmode startklar.",
+    "subtitle": "Ein Klick, ein paar Minuten.",
+    "introReady": "Alles, was Godmode braucht, ist schon auf diesem Computer. Wähl, wie es aussehen soll, und mach weiter.",
+    "intro": "Godmode richtet alles, was es braucht, selbst auf diesem Computer ein. Du gibst nur die Claude-Anmeldung im Browser frei.",
+    "nameLabel": "Wie soll Godmode dich nennen?",
+    "namePlaceholder": "Dein Vorname",
+    "checkFailed": "Dieser Computer konnte nicht geprüft werden",
+    "status": {
+      "ready": "Godmode ist startklar.",
+      "almost": "Fast geschafft.",
+      "working": "Wird eingerichtet…"
+    },
+    "progress": "{{done}} von {{total}}",
+    "installed": "Installiert",
+    "installedVersion": "Installiert · {{version}}",
+    "signedIn": "Angemeldet",
+    "rows": {
+      "claude": {
+        "body": "Die KI, die die Arbeit macht."
+      },
+      "account": {
+        "title": "Dein Claude-Konto",
+        "body": "Melde dich mit einem Claude-Pro- oder Max-Abo an.",
+        "active": "Wartet im Browser auf dich",
+        "starting": "Anmeldung wird gestartet…",
+        "waitsForClaude": "Startet, sobald Claude Code installiert ist",
+        "action": "Noch nicht angemeldet. Das öffnet sich in deinem Browser.",
+        "unfinished": "Die Anmeldung wurde nicht abgeschlossen.",
+        "needsClaude": "Braucht zuerst Claude Code.",
+        "signIn": "Anmelden"
+      },
+      "browser": {
+        "title": "Webbrowser",
+        "body": "Damit deine Agenten Websites öffnen und sich anmelden können.",
+        "downloading": "Browser wird heruntergeladen…"
+      }
+    },
+    "hideDetails": "Details ausblenden",
+    "showDetails": "Details zeigen",
+    "lookWhileWaiting": "Während du wartest: Wie soll Godmode aussehen?",
+    "look": "Wie soll Godmode aussehen?",
+    "lookHint": "Gleiche Funktionen in beiden Fällen. Du kannst jederzeit in den Einstellungen wechseln.",
+    "start": "Godmode einrichten",
+    "startHint": "Installiert alles selbst und öffnet dann die Claude-Anmeldung.",
+    "continueAnyway": "Trotzdem weiter",
+    "keepOpen": "Du kannst dieses Fenster offen lassen, es wird von selbst fertig.",
+    "finishLater": "Agenten legen los, sobald oben alles grün ist. Du kannst das später unter Einstellungen, System abschließen.",
+    "waiting": "Wartet",
+    "didNotInstall": "Nicht installiert.",
+    "byHand": "So installierst du es von Hand:",
+    "optionalSuffix": "(optional)"
+  },
+  "steps": {
+    "setup": {
+      "title": "Einrichten",
+      "hint": "Installiert und meldet sich selbst an"
+    },
+    "vault": {
+      "title": "Tresor",
+      "hint": "Hält deine Logins sicher"
+    },
+    "remote": {
+      "title": "Remote-Dashboard",
+      "hint": "Passwort für den Webzugriff"
+    },
+    "done": {
+      "title": "Fertig",
+      "hint": "Loslegen"
+    }
+  },
+  "staysHere": "Alles bleibt auf diesem Gerät. Du kannst das später jederzeit in den Einstellungen ändern."
+}

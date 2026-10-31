@@ -1,9 +1,11 @@
 import { ListTree, Unlink } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AgentMemory } from "@godmode/shared";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useLocale } from "@/i18n/language";
 
 export interface MemorySection {
   title: string;
@@ -52,12 +54,13 @@ export function memoryLinkTarget(href: string | null): string | null {
 }
 
 export function SectionMenu({ sections, onPick }: { sections: MemorySection[]; onPick: (s: MemorySection) => void }) {
+  const { t } = useTranslation("agents");
   if (sections.length < 2) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Jump to a section">
-          <ListTree /> Sections
+        <Button variant="ghost" size="sm" aria-label={t("memoryEditorParts.jumpToSection")}>
+          <ListTree /> {t("memoryEditorParts.sections")}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="max-h-80 w-64 overflow-y-auto">
@@ -73,33 +76,35 @@ export function SectionMenu({ sections, onPick }: { sections: MemorySection[]; o
 
 /** Live size of the draft against what dreams keep it under (`target`) and what a chat loads (`limit`). */
 export function MemoryBudget({ chars, memory }: { chars: number; memory: Pick<AgentMemory, "target" | "limit"> }) {
+  const { t } = useTranslation("agents");
+  const { intlLocale } = useLocale();
   const { target, limit } = memory;
   const cut = chars > limit;
   const over = chars > target;
   const tone = cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70";
   const hint = cut
-    ? `Chats load only the first ${limit.toLocaleString()} characters — the end is missing.`
+    ? t("memoryEditorParts.budgetCut", { limit: limit.toLocaleString(intlLocale) })
     : over
-      ? `${(chars - target).toLocaleString()} over the target — the next dream shortens it.`
-      : "Loaded in full into every chat.";
+      ? t("memoryEditorParts.budgetOver", { over: (chars - target).toLocaleString(intlLocale) })
+      : t("memoryEditorParts.budgetOk");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="flex items-center gap-2">
           <div
             role="meter"
-            aria-label="Size of MEMORY.md"
+            aria-label={t("memoryEditorParts.sizeLabel")}
             aria-valuemin={0}
             aria-valuemax={limit}
             aria-valuenow={Math.min(chars, limit)}
-            aria-valuetext={`${chars.toLocaleString()} of ${target.toLocaleString()} characters`}
+            aria-valuetext={t("memoryEditorParts.sizeValue", { chars: chars.toLocaleString(intlLocale), target: target.toLocaleString(intlLocale) })}
             className="relative h-1 w-24 rounded-full bg-secondary"
           >
             <div className={cn("h-full rounded-full transition-[width] duration-300", tone)} style={{ width: `${Math.min(100, (chars / limit) * 100)}%` }} />
             <span aria-hidden className="absolute -top-0.5 -bottom-0.5 w-px bg-foreground/35" style={{ left: `${(target / limit) * 100}%` }} />
           </div>
           <span className={cn("tabular-nums", cut ? "text-destructive" : over ? "text-warning" : undefined)}>
-            {chars.toLocaleString()} / {target.toLocaleString()} chars
+            {t("memoryEditorParts.chars", { chars: chars.toLocaleString(intlLocale), target: target.toLocaleString(intlLocale) })}
           </span>
         </div>
       </TooltipTrigger>
@@ -109,17 +114,18 @@ export function MemoryBudget({ chars, memory }: { chars: number; memory: Pick<Ag
 }
 
 export function BrokenLinks({ paths }: { paths: string[] }) {
+  const { t } = useTranslation("agents");
   if (!paths.length) return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex items-center gap-1 text-warning">
           <Unlink className="size-3" />
-          {paths.length === 1 ? "1 broken link" : `${paths.length} broken links`}
+          {t("memoryEditorParts.brokenLinks", { count: paths.length })}
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-80">
-        <p className="mb-1">These notes don't exist:</p>
+        <p className="mb-1">{t("memoryEditorParts.missingNotes")}</p>
         {paths.map((p) => (
           <p key={p} className="font-mono text-[11px]">
             {p}

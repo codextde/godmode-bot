@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
+import { Trans, useTranslation } from "react-i18next";
 import { AppWindow, ArrowUpRight, Bot, CircleArrowDown, ExternalLink, Globe, Heart, Layers, Plug, RefreshCw, RotateCw, Scale } from "lucide-react";
 import { LICENSE_SITE } from "@godmode/shared";
 import { Backdrop, Logo } from "@/components/brand";
@@ -12,19 +13,21 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { openExternal } from "@/lib/desktop";
+import { dateLocale } from "@/i18n";
 import { checkForUpdates, setCanaryUpdates, useUpdater } from "@/stores/updater";
 
 export const SITE = LICENSE_SITE;
 
-const CREDITS: { name: string; description: string; url: string; icon: ReactNode }[] = [
-  { name: "Claude Code", description: "The agentic brain behind every coworker.", url: "https://docs.anthropic.com/en/docs/claude-code", icon: <Bot /> },
-  { name: "browser-use", description: "Lets agents see and drive a real browser.", url: "https://github.com/browser-use/browser-use", icon: <Globe /> },
-  { name: "Composio", description: "Hundreds of app integrations with managed OAuth.", url: "https://composio.dev", icon: <Plug /> },
-  { name: "shadcn/ui", description: "Beautiful, accessible building blocks for the UI.", url: "https://ui.shadcn.com", icon: <Layers /> },
-  { name: "Tauri", description: "A tiny, secure native shell for the desktop app.", url: "https://tauri.app", icon: <AppWindow /> },
-];
+const CREDITS = [
+  { name: "Claude Code", descriptionKey: "about.credits.claude", url: "https://docs.anthropic.com/en/docs/claude-code", icon: <Bot /> },
+  { name: "browser-use", descriptionKey: "about.credits.browserUse", url: "https://github.com/browser-use/browser-use", icon: <Globe /> },
+  { name: "Composio", descriptionKey: "about.credits.composio", url: "https://composio.dev", icon: <Plug /> },
+  { name: "shadcn/ui", descriptionKey: "about.credits.shadcn", url: "https://ui.shadcn.com", icon: <Layers /> },
+  { name: "Tauri", descriptionKey: "about.credits.tauri", url: "https://tauri.app", icon: <AppWindow /> },
+] as const satisfies readonly { name: string; descriptionKey: string; url: string; icon: ReactNode }[];
 
 export function AboutSection({ version }: { version: string | undefined }) {
+  const { t } = useTranslation("settings");
   return (
     <div className="space-y-5">
       <motion.section
@@ -46,13 +49,13 @@ export function AboutSection({ version }: { version: string | undefined }) {
               v{version}
             </Badge>
           )}
-          <p className="mt-3 max-w-md text-balance text-muted-foreground">The AI coworker that works like a human on your computer.</p>
+          <p className="mt-3 max-w-md text-balance text-muted-foreground">{t("about.tagline")}</p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button onClick={() => void openExternal(SITE)}>
-              <Globe /> Website
+              <Globe /> {t("about.website")}
             </Button>
             <Button variant="outline" onClick={() => void openExternal(`${SITE}/legal/terms`)}>
-              <Scale /> License terms
+              <Scale /> {t("about.terms")}
             </Button>
           </div>
         </div>
@@ -62,7 +65,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
 
       <section className="rounded-xl border bg-card p-5 shadow-card">
         <h3 className="eyebrow flex items-center gap-2">
-          <Heart className="size-3.5" /> Built on the shoulders of
+          <Heart className="size-3.5" /> {t("about.builtOn")}
         </h3>
         <div className="mt-4 grid grid-cols-1 gap-3 @xl:grid-cols-2">
           {CREDITS.map((c, i) => (
@@ -81,17 +84,17 @@ export function AboutSection({ version }: { version: string | undefined }) {
                   {c.name}
                   <ExternalLink className="size-3 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
                 </span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{c.description}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{t(c.descriptionKey)}</span>
               </span>
             </motion.button>
           ))}
         </div>
         <p className="mt-5 text-center text-xs text-muted-foreground">
-          Commercial software by Codext GmbH, licensed under the{" "}
-          <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline" onClick={() => void openExternal(`${SITE}/legal/terms`)}>
-            Godmode terms
-          </button>
-          . Made with care for people who'd rather delegate.
+          <Trans
+            t={t}
+            i18nKey="about.footer"
+            components={{ link: <button type="button" className="font-medium text-foreground underline-offset-4 hover:underline" onClick={() => void openExternal(`${SITE}/legal/terms`)} /> }}
+          />
         </p>
       </section>
     </div>
@@ -101,6 +104,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
 const MB = 1024 * 1024;
 
 function UpdatesCard({ version }: { version: string | undefined }) {
+  const { t } = useTranslation("settings");
   const update = useUpdater((s) => s.update);
   const canary = useUpdater((s) => s.canary);
   const { restart, dialog } = useRestartToUpdate();
@@ -108,7 +112,7 @@ function UpdatesCard({ version }: { version: string | undefined }) {
 
   const checkButton = (
     <Button variant="outline" size="sm" onClick={() => void checkForUpdates().catch(() => {})}>
-      <RefreshCw /> Check now
+      <RefreshCw /> {t("system.updates.checkNow")}
     </Button>
   );
 
@@ -117,24 +121,24 @@ function UpdatesCard({ version }: { version: string | undefined }) {
   let action: ReactNode = checkButton;
   switch (update.status) {
     case "idle":
-      label = "Automatic updates are on";
-      description = "Godmode looks for a new version every few hours.";
+      label = t("about.updates.idle");
+      description = t("about.updates.idleDescription");
       break;
     case "checking":
-      label = "Checking for updates…";
+      label = t("about.updates.checkingLabel");
       action = (
         <Button variant="outline" size="sm" disabled>
-          <Spinner className="size-3.5" /> Checking
+          <Spinner className="size-3.5" /> {t("about.updates.checking")}
         </Button>
       );
       break;
     case "upToDate":
-      label = "You're up to date";
-      description = `${version ? `v${version} is the latest version` : "Latest version installed"} · checked ${formatDistanceToNow(update.checkedAt, { addSuffix: true })}`;
+      label = t("about.updates.upToDate");
+      description = `${version ? t("about.updates.latest", { version }) : t("about.updates.latestInstalled")} · ${t("cleanup.storage.checked", { time: formatDistanceToNow(update.checkedAt, { addSuffix: true, locale: dateLocale() }) })}`;
       break;
     case "downloading": {
       const pct = update.total ? Math.min(100, Math.round((update.downloaded / update.total) * 100)) : null;
-      label = `Downloading v${update.version}…`;
+      label = t("about.updates.downloading", { version: update.version });
       description = (
         <div className="flex items-center gap-3 pt-1">
           <Progress value={pct ?? 0} className="h-1 max-w-56 bg-foreground/[0.07] [&>[data-slot=progress-indicator]]:bg-brand" />
@@ -147,36 +151,36 @@ function UpdatesCard({ version }: { version: string | undefined }) {
       break;
     }
     case "ready":
-      label = `v${update.version} is ready to install`;
+      label = t("about.updates.ready", { version: update.version });
       description = (
         <>
-          Downloaded in the background. Restart whenever it suits you — it only takes a few seconds.{" "}
+          {t("about.updates.readyDescription")}{" "}
           <button
             type="button"
             onClick={() => void openExternal(`${SITE}/changelog#v${update.version}`)}
             className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-4 hover:underline"
           >
-            What's new <ArrowUpRight className="size-3" />
+            {t("about.updates.whatsNew")} <ArrowUpRight className="size-3" />
           </button>
         </>
       );
       action = (
         <Button size="sm" onClick={restart}>
-          <RotateCw /> Restart to update
+          <RotateCw /> {t("about.updates.restart")}
         </Button>
       );
       break;
     case "installing":
-      label = `Installing v${update.version}…`;
-      description = "Godmode will reopen in a moment.";
+      label = t("about.updates.installing", { version: update.version });
+      description = t("about.updates.installingDescription");
       action = (
         <Button size="sm" disabled>
-          <Spinner className="size-3.5" /> Restarting
+          <Spinner className="size-3.5" /> {t("about.updates.restarting")}
         </Button>
       );
       break;
     case "error":
-      label = "Couldn't check for updates";
+      label = t("system.updates.checkError");
       description = <span className="line-clamp-2 break-all" title={update.message}>{update.message}</span>;
       break;
   }
@@ -184,16 +188,16 @@ function UpdatesCard({ version }: { version: string | undefined }) {
   return (
     <SettingsGroup
       icon={<CircleArrowDown />}
-      title="Updates"
-      description="New versions download quietly in the background. You decide when to restart."
+      title={t("system.updates.title")}
+      description={t("about.updates.description")}
     >
       <SettingRow label={label} description={description}>
         {action ?? undefined}
       </SettingRow>
       <SettingRow
-        label="Canary channel"
+        label={t("about.updates.canary")}
         htmlFor="updates-canary"
-        description="Get a new build every time code lands on main. Expect rough edges. Turning it off keeps your build until the next stable release."
+        description={t("about.updates.canaryDescription")}
       >
         <Switch id="updates-canary" checked={canary} onCheckedChange={(enabled) => void setCanaryUpdates(enabled).catch(() => {})} />
       </SettingRow>

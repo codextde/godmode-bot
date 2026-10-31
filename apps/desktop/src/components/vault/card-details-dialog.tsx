@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { cardDigits, cardGroups, type PaymentCard, type PaymentCardSecrets } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { t as tg } from "@/i18n";
 import { api } from "@/lib/api";
 import { CopyButton } from "./copy-button";
 import { PaymentCardFace } from "./payment-card-face";
@@ -35,12 +37,12 @@ export function useCardDetails() {
     async (card: PaymentCard) => {
       setRevealingId(card.id);
       try {
-        const secrets = await withGrant((grant) => api.cards.reveal(card.id, grant), "Confirm with your vault passphrase to show this card's details.");
+        const secrets = await withGrant((grant) => api.cards.reveal(card.id, grant), tg("vault:cardDetails.grantReason"));
         if (clearTimer.current) clearTimeout(clearTimer.current);
         setRevealed({ card, secrets });
         setOpen(true);
       } catch (e) {
-        if (!isGrantCancelled(e)) toastApiError(e, "Could not show card details", qc);
+        if (!isGrantCancelled(e)) toastApiError(e, tg("vault:cardDetails.showFailed"), qc);
       } finally {
         setRevealingId(null);
       }
@@ -67,10 +69,11 @@ export function useCardDetails() {
 }
 
 function CardDetails({ revealed: { card, secrets }, open, onClose }: { revealed: Revealed; open: boolean; onClose: () => void }) {
+  const { t } = useTranslation("vault");
   useEffect(() => {
     if (!open) return;
-    const t = setTimeout(onClose, SHOW_SECONDS * 1000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(onClose, SHOW_SECONDS * 1000);
+    return () => clearTimeout(timer);
   }, [open, onClose]);
 
   const digits = cardDigits(secrets.number);
@@ -95,7 +98,7 @@ function CardDetails({ revealed: { card, secrets }, open, onClose }: { revealed:
         />
         <div className="min-w-0 pr-6">
           <DialogTitle className="truncate text-lg">{card.name}</DialogTitle>
-          <DialogDescription className="mt-1">Hides automatically after {SHOW_SECONDS} seconds. Revealing a card is audited.</DialogDescription>
+          <DialogDescription className="mt-1">{t("cardDetails.description", { seconds: SHOW_SECONDS })}</DialogDescription>
         </div>
         <motion.div
           key={card.id}
@@ -108,19 +111,19 @@ function CardDetails({ revealed: { card, secrets }, open, onClose }: { revealed:
       </div>
 
       <dl className="divide-y border-y bg-paper-2/60">
-        <DetailRow label="Card number" copy={<CopyButton value={digits} secret label="Copy card number" toastLabel="Card number copied" />}>
+        <DetailRow label={t("card.number")} copy={<CopyButton value={digits} secret label={t("cardDetails.copyNumber")} toastLabel={t("cardDetails.numberCopied")} />}>
           <span className="font-mono text-[15px] tracking-[0.06em] tabular-nums select-all">{cardGroups(digits).join(" ")}</span>
         </DetailRow>
-        <DetailRow label="Expires" copy={<CopyButton value={expiry} label="Copy expiry" toastLabel="Expiry copied" />}>
+        <DetailRow label={t("card.expires")} copy={<CopyButton value={expiry} label={t("cardDetails.copyExpiry")} toastLabel={t("cardDetails.expiryCopied")} />}>
           <span className="font-mono tabular-nums">{expiry}</span>
         </DetailRow>
-        <DetailRow label="Security code" copy={secrets.cvc ? <CopyButton value={secrets.cvc} secret label="Copy security code" toastLabel="Security code copied" /> : null}>
-          {secrets.cvc ? <span className="font-mono tabular-nums select-all">{secrets.cvc}</span> : <span className="text-muted-foreground italic">Not saved</span>}
+        <DetailRow label={t("card.cvc")} copy={secrets.cvc ? <CopyButton value={secrets.cvc} secret label={t("cardDetails.copyCvc")} toastLabel={t("cardDetails.cvcCopied")} /> : null}>
+          {secrets.cvc ? <span className="font-mono tabular-nums select-all">{secrets.cvc}</span> : <span className="text-muted-foreground italic">{t("cardDetails.notSaved")}</span>}
         </DetailRow>
-        <DetailRow label="Name on card" copy={card.holderName ? <CopyButton value={card.holderName} label="Copy name" toastLabel="Name copied" /> : null}>
-          {card.holderName ? <span>{card.holderName}</span> : <span className="text-muted-foreground italic">Not saved</span>}
+        <DetailRow label={t("card.holder")} copy={card.holderName ? <CopyButton value={card.holderName} label={t("cardDetails.copyName")} toastLabel={t("cardDetails.nameCopied")} /> : null}>
+          {card.holderName ? <span>{card.holderName}</span> : <span className="text-muted-foreground italic">{t("cardDetails.notSaved")}</span>}
         </DetailRow>
-        <DetailRow label="Billing address" copy={addressLines.length ? <CopyButton value={addressLines.join("\n")} label="Copy address" toastLabel="Address copied" /> : null}>
+        <DetailRow label={t("card.billing")} copy={addressLines.length ? <CopyButton value={addressLines.join("\n")} label={t("cardDetails.copyAddress")} toastLabel={t("cardDetails.addressCopied")} /> : null}>
           {addressLines.length ? (
             <address className="not-italic">
               {addressLines.map((line, i) => (
@@ -130,14 +133,14 @@ function CardDetails({ revealed: { card, secrets }, open, onClose }: { revealed:
               ))}
             </address>
           ) : (
-            <span className="text-muted-foreground italic">Not saved</span>
+            <span className="text-muted-foreground italic">{t("cardDetails.notSaved")}</span>
           )}
         </DetailRow>
       </dl>
 
       <div className="flex justify-end px-6 py-4">
         <Button variant="outline" onClick={onClose}>
-          Hide details
+          {t("cardDetails.hide")}
         </Button>
       </div>
     </div>

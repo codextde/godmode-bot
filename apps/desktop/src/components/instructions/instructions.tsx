@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowUpRight, Globe2, ScrollText } from "lucide-react";
 import { MAX_INSTRUCTIONS_LENGTH, type Agent } from "@godmode/shared";
 import { AgentAvatar, Kbd } from "@/components/common";
@@ -32,6 +33,7 @@ export function firstLine(text: string): string {
 
 /** Instructions an agent in this workspace receives besides a chat's own, most general first. Only layers with text. */
 export function useInheritedInstructions(workspaceId: string | null | undefined, agent?: Agent, projectId?: string | null): InstructionLayer[] {
+  const { t } = useTranslation("instructions");
   const { data: boot } = useBootstrap();
   const { data: workspaces } = useWorkspaces();
   const global = boot?.settings.runner.appendSystemPrompt?.trim() ?? "";
@@ -42,7 +44,7 @@ export function useInheritedInstructions(workspaceId: string | null | undefined,
     if (global)
       layers.push({
         key: "global",
-        label: "Global",
+        label: t("global"),
         text: global,
         icon: (
           <span className="grid size-6 place-items-center rounded-md border bg-card text-muted-foreground">
@@ -70,17 +72,18 @@ export function useInheritedInstructions(workspaceId: string | null | undefined,
     if (agent?.instructions.trim())
       layers.push({ key: "agent", label: agent.name, text: agent.instructions, icon: <AgentAvatar agent={agent} size="sm" />, href: `/agents/${agent.id}/settings#instructions` });
     return layers;
-  }, [global, workspace, project, agent]);
+  }, [global, workspace, project, agent, t]);
 }
 
-const LAYER_HINT: Record<InstructionLayer["key"], string> = {
-  global: "Every agent",
-  workspace: "Workspace",
-  project: "Project",
-  agent: "Agent",
-};
+const LAYER_HINT = {
+  global: "hint.global",
+  workspace: "hint.workspace",
+  project: "hint.project",
+  agent: "hint.agent",
+} as const satisfies Record<InstructionLayer["key"], string>;
 
 export function InheritedInstructions({ layers, onNavigate, className }: { layers: InstructionLayer[]; onNavigate?: () => void; className?: string }) {
+  const { t } = useTranslation("instructions");
   return (
     <ul className={cn("space-y-0.5", className)}>
       {layers.map((l) => (
@@ -94,7 +97,7 @@ export function InheritedInstructions({ layers, onNavigate, className }: { layer
             <span className="min-w-0 flex-1">
               <span className="flex items-baseline gap-1.5">
                 <span className="truncate text-[13px] font-medium">{l.label}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{LAYER_HINT[l.key]}</span>
+                <span className="shrink-0 text-[11px] text-muted-foreground">{t(LAYER_HINT[l.key])}</span>
               </span>
               <span className="block truncate text-xs text-muted-foreground">{firstLine(l.text)}</span>
             </span>
@@ -121,6 +124,7 @@ export function InstructionsChip({
   onChange: (text: string) => Promise<unknown> | void;
   busy?: boolean;
 }) {
+  const { t } = useTranslation(["instructions", "common"]);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
   const discard = useRef(false);
@@ -151,7 +155,7 @@ export function InstructionsChip({
     } else if (!discard.current && !(await commit(draft))) setOpen(true);
   };
 
-  const summary = [own && "this chat", ...inherited.map((l) => (l.key === "global" ? "every agent" : l.label))].filter(Boolean).join(" · ");
+  const summary = [own && t("chip.thisChat"), ...inherited.map((l) => (l.key === "global" ? t("chip.everyAgent") : l.label))].filter(Boolean).join(" · ");
 
   return (
     <Popover open={open} onOpenChange={(next) => void onOpenChange(next)}>
@@ -160,7 +164,7 @@ export function InstructionsChip({
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={own ? "Instructions for this chat (set)" : "Instructions for this chat"}
+              aria-label={own ? t("chip.ariaSet") : t("chip.title")}
               className={cn(
                 "flex h-8 min-w-0 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                 own ? "border bg-card font-medium hover:bg-accent" : "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -168,7 +172,7 @@ export function InstructionsChip({
               )}
             >
               {busy ? <Spinner className="size-3.5" /> : <ScrollText className={cn("size-4 shrink-0", own && "size-3.5 text-muted-foreground")} />}
-              <span className="@max-md/composer:sr-only">Instructions</span>
+              <span className="@max-md/composer:sr-only">{t("chip.label")}</span>
               {own ? (
                 <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
               ) : (
@@ -181,7 +185,7 @@ export function InstructionsChip({
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>{summary ? `Instructions: ${summary}` : "Add instructions for this chat"}</TooltipContent>
+        <TooltipContent>{summary ? t("chip.tooltip", { summary }) : t("chip.add")}</TooltipContent>
       </Tooltip>
       <PopoverContent
         align="start"
@@ -200,14 +204,14 @@ export function InstructionsChip({
         >
           <div className="px-4 pt-4 pb-3">
             <h3 className="flex items-center gap-2 text-sm font-medium">
-              <ScrollText className="size-4 text-muted-foreground" /> Instructions for this chat
+              <ScrollText className="size-4 text-muted-foreground" /> {t("chip.title")}
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              Followed on every message here. When they disagree with the agent's, workspace or global instructions, these win.
+              {t("chip.description")}
             </p>
             <Textarea
               autoFocus
-              aria-label="Instructions for this chat"
+              aria-label={t("chip.title")}
               value={draft}
               maxLength={MAX_INSTRUCTIONS_LENGTH}
               onChange={(e) => setDraft(e.target.value)}
@@ -217,40 +221,48 @@ export function InstructionsChip({
                   e.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder={"e.g. Reply in German.\nWork on the feature/checkout branch and open a draft pull request."}
+              placeholder={t("chip.placeholder")}
               className="mt-3 max-h-72 min-h-28 resize-y text-[13px] leading-relaxed"
             />
           </div>
           <div className="border-t bg-muted/40 px-2 py-2">
             {inherited.length > 0 ? (
               <>
-                <p className="px-2 pt-0.5 pb-1 text-[11px] font-medium text-muted-foreground">Also applies</p>
+                <p className="px-2 pt-0.5 pb-1 text-[11px] font-medium text-muted-foreground">{t("chip.alsoApplies")}</p>
                 <InheritedInstructions layers={inherited} onNavigate={() => void onOpenChange(false)} />
               </>
             ) : (
               <p className="px-2 py-1 text-xs text-muted-foreground">
-                Rules for every agent or a whole workspace live in{" "}
-                <Link to="/settings/instructions" onClick={() => void onOpenChange(false)} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-                  Settings → Instructions
-                </Link>
-                .
+                <Trans
+                  t={t}
+                  i18nKey="chip.rulesLiveIn"
+                  components={{
+                    link: (
+                      <Link
+                        to="/settings/instructions"
+                        onClick={() => void onOpenChange(false)}
+                        className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground"
+                      />
+                    ),
+                  }}
+                />
               </p>
             )}
           </div>
           <div className="flex items-center gap-2 border-t px-3 py-2.5">
             {own && (
               <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" disabled={busy} onClick={() => void save("")}>
-                Clear
+                {t("chip.clear")}
               </Button>
             )}
-            {dirty && <span className="truncate text-[11px] text-muted-foreground">Esc discards changes</span>}
+            {dirty && <span className="truncate text-[11px] text-muted-foreground">{t("chip.escDiscards")}</span>}
             <span className="ml-auto hidden items-center gap-1 text-[11px] text-muted-foreground sm:flex">
               <Kbd>{modKey}</Kbd>
               <Kbd>↵</Kbd>
             </span>
             <Button type="submit" size="sm" disabled={!dirty || busy}>
               {busy && <Spinner />}
-              Save
+              {t("common:actions.save")}
             </Button>
           </div>
         </form>

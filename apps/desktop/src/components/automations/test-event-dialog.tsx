@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { FlaskConical } from "lucide-react";
 import type { Routine } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { modKey } from "@/lib/desktop";
@@ -25,7 +27,7 @@ function parsePayload(text: string): { input: { payload?: unknown }; error: stri
   try {
     return { input: { payload: JSON.parse(raw) }, error: null };
   } catch {
-    return { input: {}, error: "That looks like JSON but doesn't parse. Fix it, or send plain text." };
+    return { input: {}, error: translate("automations:testEvent.invalidJson") };
   }
 }
 
@@ -41,9 +43,13 @@ export function TestEventDialog({
   onOpenChange: (open: boolean) => void;
   onViewEvents: () => void;
 }) {
+  const { t } = useTranslation(["automations", "common"]);
   const qc = useQueryClient();
   const [text, setText] = useState("");
-  const asIf = routine.trigger.type === "app" ? `as if ${prettySlug(routine.trigger.toolkit)} sent this` : "as if its URL was called with this";
+  const description =
+    routine.trigger.type === "app"
+      ? t("testEvent.descriptionApp", { name: routine.name, app: prettySlug(routine.trigger.toolkit) })
+      : t("testEvent.descriptionWebhook", { name: routine.name });
   const placeholder =
     routine.trigger.type === "app"
       ? '{\n  "from": "billing@acme.com",\n  "subject": "Invoice #1042"\n}'
@@ -55,11 +61,11 @@ export function TestEventDialog({
     onSuccess: (event) => {
       qc.invalidateQueries({ queryKey: qk.automationEvents });
       qc.invalidateQueries({ queryKey: qk.routines });
-      toast.success("Test event sent", { description: event.title, action: { label: "View events", onClick: onViewEvents } });
+      toast.success(t("testEvent.sent"), { description: event.title, action: { label: t("testEvent.viewEvents"), onClick: onViewEvents } });
       setText("");
       onOpenChange(false);
     },
-    onError: (err) => toast.error("Couldn't send the test event", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("testEvent.sendFailed"), { description: errorMessage(err) }),
   });
 
   const submit = () => {
@@ -75,10 +81,8 @@ export function TestEventDialog({
               <FlaskConical className="size-5" />
             </div>
             <div className="min-w-0">
-              <DialogTitle>Send a test event</DialogTitle>
-              <DialogDescription>
-                Runs “{routine.name}” {asIf}. The filter is checked just as for a real event.
-              </DialogDescription>
+              <DialogTitle>{t("testEvent.title")}</DialogTitle>
+              <DialogDescription>{description}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -97,7 +101,7 @@ export function TestEventDialog({
         >
           <div className="space-y-1.5">
             <Label htmlFor="test-event-payload">
-              Event data <span className="font-normal text-muted-foreground">optional</span>
+              {t("testEvent.dataLabel")} <span className="font-normal text-muted-foreground">{t("common:words.optional")}</span>
             </Label>
             <Textarea
               id="test-event-payload"
@@ -115,20 +119,20 @@ export function TestEventDialog({
               </p>
             )}
             <p id="test-event-hint" className="text-xs text-muted-foreground">
-              JSON or plain text. Leave it empty to send a small example.
+              {t("testEvent.hint")}
             </p>
           </div>
           <DialogFooter className="items-center sm:justify-between">
             <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
               <Kbd>{modKey}</Kbd>
-              <Kbd>↵</Kbd> to send
+              <Kbd>↵</Kbd> {t("testEvent.toSend")}
             </span>
             <div className="flex gap-2">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={send.isPending || !!parsed.error}>
-                {send.isPending ? <Spinner /> : <FlaskConical />} Send test event
+                {send.isPending ? <Spinner /> : <FlaskConical />} {t("testEvent.submit")}
               </Button>
             </div>
           </DialogFooter>

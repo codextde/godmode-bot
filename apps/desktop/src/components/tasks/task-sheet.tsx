@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlarmClock,
   AlarmClockOff,
@@ -66,6 +67,7 @@ import { useNow } from "@/components/vault/use-now";
 import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
 import { usePauseActions } from "@/components/chat/pause";
 import { TASK_TYPES } from "@godmode/shared";
+import { useLocale } from "@/i18n/language";
 
 export function TaskSheet({
   task,
@@ -87,10 +89,11 @@ export function TaskSheet({
   onReassign: (task: Task, agentId: string | null) => void;
 }) {
   /** A file is uploading into the description: closing now would lose it (as the new-task dialog). */
+  const { t } = useTranslation("tasks");
   const uploading = useRef(false);
   const close = () => {
     if (uploading.current) {
-      toast("Wait for the upload to finish", { description: "The file is still on its way into the description." });
+      toast(t("dialog.waitUpload"), { description: t("sheet.uploadPending") });
       return;
     }
     onClose();
@@ -144,6 +147,7 @@ const PROP_CONTROL = "-ml-2.5 h-8 w-auto max-w-full border-transparent bg-transp
  * waits until its parts are delivered, done, cancelled or archived; then its agent continues with their results.
  */
 function PartsSection({ task, board, agents, workspaces }: { task: Task; board: Task[]; agents: Agent[]; workspaces: Map<string, Workspace> }) {
+  const { t } = useTranslation("tasks");
   const [adding, setAdding] = useState(false);
   const parent = task.parentId ? board.find((t) => t.id === task.parentId) : undefined;
   const parts = board.filter((t) => t.parentId === task.id).sort((a, b) => a.number - b.number);
@@ -158,21 +162,23 @@ function PartsSection({ task, board, agents, workspaces }: { task: Task; board: 
     <section className="space-y-2" aria-labelledby={`parts-${task.id}`}>
       <div className="flex items-center gap-2">
         <h3 id={`parts-${task.id}`} className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          {parts.length ? `Parts · ${(task.subtasks?.total ?? 0) - (task.subtasks?.open ?? 0)} of ${task.subtasks?.total ?? parts.length} finished` : "Parts"}
+          {parts.length ? t("parts.titleCount", { done: (task.subtasks?.total ?? 0) - (task.subtasks?.open ?? 0), total: task.subtasks?.total ?? parts.length }) : t("parts.title")}
         </h3>
         {canAdd && (
           <Button size="xs" variant="ghost" className="ml-auto text-muted-foreground" onClick={() => setAdding(true)}>
-            <ListTree /> Add a part
+            <ListTree /> {t("parts.add")}
           </Button>
         )}
       </div>
       {task.parentNumber && (
         <p className="flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
           <CornerDownRight className="size-3.5 shrink-0" aria-hidden />
-          Part of{" "}
-          <Link to={`/tasks?task=${task.parentId}`} className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline">
-            #{task.parentNumber} {parent?.title ?? ""}
-          </Link>
+          <Trans
+            t={t}
+            i18nKey="parts.partOf"
+            values={{ number: task.parentNumber, title: parent?.title ?? "" }}
+            components={{ link: <Link to={`/tasks?task=${task.parentId}`} className="min-w-0 truncate font-medium text-foreground underline-offset-2 hover:underline" /> }}
+          />
         </p>
       )}
       {parts.length > 0 && (
@@ -185,16 +191,16 @@ function PartsSection({ task, board, agents, workspaces }: { task: Task; board: 
                   <StatusIcon status={p.status} className="size-3.5 shrink-0" />
                   <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{p.number}</span>
                   <span className="min-w-0 flex-1 truncate">{p.title}</span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{who?.name ?? "Unassigned"}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground">{who?.name ?? t("card.unassigned")}</span>
                 </Link>
               </li>
             );
           })}
         </ul>
       )}
-      {hidden > 0 && <p className="text-xs text-muted-foreground">{hidden === 1 ? "1 more part is archived." : `${hidden} more parts are archived.`}</p>}
+      {hidden > 0 && <p className="text-xs text-muted-foreground">{t("parts.archived", { count: hidden })}</p>}
       {!parts.length && !task.parentNumber && (
-        <p className="text-xs text-muted-foreground">Split the work: each part is a ticket of its own, and this one waits until they're finished.</p>
+        <p className="text-xs text-muted-foreground">{t("parts.hint")}</p>
       )}
       <TaskDialog
         open={adding}
@@ -230,6 +236,8 @@ function TaskDetail({
   onDelete: (task: Task) => void;
   onReassign: (task: Task, agentId: string | null) => void;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const { data: board = [] } = useTasks("all");
   const labelsInUse = [...new Set(board.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b));
@@ -253,7 +261,7 @@ function TaskDetail({
     onSuccess: (t, patch) => put((x) => ({ ...x, ...Object.fromEntries(Object.keys(patch).map((k) => [k, t[k as keyof Task]])) })),
     onError: (e) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
-      toastApiError(e, "Could not update the task", qc);
+      toastApiError(e, t("sheet.updateError"), qc);
     },
   });
 
@@ -266,7 +274,7 @@ function TaskDetail({
               <span>{workspace.icon}</span> {workspace.name}
             </>
           ) : (
-            "Global"
+            t("card.global")
           )}
         </span>
         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/50" />
@@ -277,7 +285,7 @@ function TaskDetail({
         <div className="ml-auto flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+              <Button variant="ghost" size="icon" className="size-8" aria-label={t("sheet.more")}>
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -285,21 +293,21 @@ function TaskDetail({
               {task.conversationId && (
                 <DropdownMenuItem asChild>
                   <Link to={`/chat/${task.conversationId}`}>
-                    <MessagesSquare /> Open chat
+                    <MessagesSquare /> {t("actions.openChat")}
                   </Link>
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => onArchive(task, !task.archivedAt)}>
-                {task.archivedAt ? <ArchiveRestore /> : <Archive />} {task.archivedAt ? "Restore to the board" : "Archive task"}
+                {task.archivedAt ? <ArchiveRestore /> : <Archive />} {task.archivedAt ? t("sheet.restoreToBoard") : t("sheet.archiveTask")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(task)}>
-                <Trash2 /> Delete task
+                <Trash2 /> {t("sheet.deleteTask")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={onClose}>
-            Close <kbd className="ml-1 font-mono text-[10px] opacity-60">Esc</kbd>
+            {t("common:actions.close")} <kbd className="ml-1 font-mono text-[10px] opacity-60">Esc</kbd>
           </Button>
         </div>
       </header>
@@ -308,11 +316,15 @@ function TaskDetail({
         <div className="flex shrink-0 items-center gap-3 border-b bg-foreground/[0.025] px-6 py-2.5">
           <Archive className="size-4 shrink-0 text-muted-foreground" />
           <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
-            <span className="font-medium text-foreground">Archived</span> {formatDistanceToNowStrict(new Date(task.archivedAt), { addSuffix: true })} — off the
-            board, nothing is lost.
+            <Trans
+              t={t}
+              i18nKey="sheet.archivedBanner"
+              values={{ when: formatDistanceToNowStrict(new Date(task.archivedAt), { addSuffix: true, locale: dateLocale }) }}
+              components={{ b: <span className="font-medium text-foreground" /> }}
+            />
           </p>
           <Button size="sm" variant="outline" className="h-7 shrink-0" onClick={() => onArchive(task, false)}>
-            <ArchiveRestore /> Restore
+            <ArchiveRestore /> {t("archived.restore")}
           </Button>
         </div>
       )}
@@ -323,7 +335,7 @@ function TaskDetail({
             <SheetTitle asChild>
               <EditableTitle value={task.title} onSave={(title) => save.mutate({ title })} />
             </SheetTitle>
-            <SheetDescription className="sr-only">Task details</SheetDescription>
+            <SheetDescription className="sr-only">{t("sheet.srDescription")}</SheetDescription>
             <EditableDescription
               taskId={task.id}
               value={task.description}
@@ -333,35 +345,35 @@ function TaskDetail({
           </div>
 
           <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 border-t pt-4 text-sm">
-            <Prop label="Status">
+            <Prop label={t("fields.status")}>
               <StatusSelect value={task.status} onChange={(s) => onMove(task, s)} className={PROP_CONTROL} />
             </Prop>
-            <Prop label="Agent">
+            <Prop label={t("common:words.agent")}>
               <AgentSelect agents={reachable} value={task.agentId} onChange={(agentId) => onReassign(task, agentId)} className={PROP_CONTROL} />
             </Prop>
-            <Prop label="Priority">
+            <Prop label={t("fields.priority")}>
               <PrioritySelect value={task.priority} onChange={(priority) => save.mutate({ priority })} className={PROP_CONTROL} />
             </Prop>
-            <Prop label="Due date">
+            <Prop label={t("fields.dueDate")}>
               <DueDateField value={task.dueDate} status={task.status} onChange={(dueDate) => save.mutate({ dueDate })} />
             </Prop>
-            <Prop label="Waits for">
+            <Prop label={t("sheet.waitsFor")}>
               <WaitsForField task={task} board={board} onChange={(waitsFor) => save.mutate({ waitsFor })} />
             </Prop>
-            <Prop label="Goal">
+            <Prop label={t("goals.goal")}>
               <GoalSelect task={task} onChange={(goalId) => save.mutate({ goalId })} className={PROP_CONTROL} />
             </Prop>
             {(workspace?.projects.length ?? 0) > 0 && (
-              <Prop label="Project">
+              <Prop label={t("dialog.project")}>
                 <ProjectSelect task={task} workspace={workspace!} onChange={(projectId) => save.mutate({ projectId })} className={PROP_CONTROL} />
               </Prop>
             )}
-            <Prop label="Labels">
+            <Prop label={t("sheet.labels")}>
               <LabelsInput value={task.labels} onChange={(labels) => save.mutate({ labels })} suggestions={labelsInUse} />
             </Prop>
-            <Prop label="Type">
+            <Prop label={t("fields.type")}>
               <Select value={task.type} onValueChange={(type) => save.mutate({ type: type as Task["type"] })} disabled={started}>
-                <SelectTrigger aria-label="Type" className={cn(PROP_CONTROL, "disabled:opacity-100 disabled:hover:bg-transparent")}>
+                <SelectTrigger aria-label={t("fields.type")} className={cn(PROP_CONTROL, "disabled:opacity-100 disabled:hover:bg-transparent")}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent position="popper">
@@ -375,7 +387,7 @@ function TaskDetail({
             </Prop>
             {(task.type === "coding" || task.branch) && (
               <>
-                <Prop label="Repository">
+                <Prop label={t("dialog.repository")}>
                   {started || task.repoPath ? (
                     <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.repoPath || task.repoUrl || undefined}>
                       <span className="truncate">{taskRepoLabel(task, defaultRepo)}</span>
@@ -388,50 +400,53 @@ function TaskDetail({
                     />
                   )}
                 </Prop>
-                <Prop label={task.branch ? "Branch" : "Base branch"}>
+                <Prop label={task.branch ? t("sheet.branch") : t("dialog.baseBranch")}>
                   {task.branch ? (
                     <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]">
                       <GitBranch className="size-3.5 shrink-0 text-muted-foreground" />
                       <span className="truncate">{task.branch}</span>
                       <span className="shrink-0 text-muted-foreground">→ {task.baseBranch}</span>
-                      <CopyButton value={task.branch} label="Copy branch name" size="icon-xs" />
+                      <CopyButton value={task.branch} label={t("sheet.copyBranch")} size="icon-xs" />
                       {github && <GitHubActions task={task} branchUrl={github} />}
                     </span>
                   ) : (
                     <BlurInput
                       value={task.baseBranch}
-                      placeholder={defaultRepo?.branch || "default branch"}
+                      placeholder={defaultRepo?.branch || t("sheet.defaultBranch")}
                       onSave={(baseBranch) => save.mutate({ baseBranch })}
                     />
                   )}
                 </Prop>
                 {task.type === "coding" && (
-                  <Prop label="Merge">
+                  <Prop label={t("sheet.merge")}>
                     <label className="flex h-8 min-w-0 cursor-pointer items-center gap-2 text-[13px]">
                       <Switch
                         size="sm"
                         checked={task.autoMerge}
                         disabled={task.pullRequest?.state === "merged"}
                         onCheckedChange={(autoMerge) => save.mutate({ autoMerge })}
-                        aria-label="Merge the pull request by itself once delivered"
+                        aria-label={t("sheet.autoMergeLabel")}
                       />
                       <span className={cn("truncate", !task.autoMerge && "text-muted-foreground")}>
                         {task.autoMerge ? (
-                          <>
-                            Into <span className="font-mono">{task.baseBranch || "the default branch"}</span> by itself once delivered
-                          </>
+                          <Trans
+                            t={t}
+                            i18nKey="sheet.autoMergeOn"
+                            values={{ branch: task.baseBranch || t("sheet.theDefaultBranch") }}
+                            components={{ code: <span className="font-mono" /> }}
+                          />
                         ) : (
-                          "After your review"
+                          t("sheet.afterReview")
                         )}
                       </span>
                     </label>
                   </Prop>
                 )}
                 {task.worktree && (
-                  <Prop label="Worktree">
+                  <Prop label={t("sheet.worktree")}>
                     <span className="flex h-8 min-w-0 items-center gap-1.5 font-mono text-[13px]" title={task.worktree}>
                       <span className="truncate">{task.worktree}</span>
-                      <CopyButton value={task.worktree} label="Copy the worktree's path" size="icon-xs" />
+                      <CopyButton value={task.worktree} label={t("sheet.copyWorktree")} size="icon-xs" />
                     </span>
                   </Prop>
                 )}
@@ -447,14 +462,14 @@ function TaskDetail({
             onStartWithoutWaiting={() => save.mutate({ waitsFor: task.waitsFor.filter((w) => w.finished).map((w) => w.id) })}
           />
 
-          {task.conversationId && <HumanTaskBar conversationId={task.conversationId} agentName={agent?.name ?? "The agent"} />}
+          {task.conversationId && <HumanTaskBar conversationId={task.conversationId} agentName={agent?.name ?? t("sheet.theAgent")} />}
 
           <PartsSection task={task} board={board} agents={agents} workspaces={workspaces} />
 
           {task.summary && (
             <section className="space-y-2">
               <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                {isWorking(task) ? "Previous result" : task.type === "research" ? "Report" : "Result"}
+                {isWorking(task) ? t("sheet.previousResult") : task.type === "research" ? t("sheet.report") : t("sheet.result")}
               </h3>
               <div className="rounded-xl border bg-card px-4 py-3 text-sm shadow-card">
                 <ChatFilesScope conversationId={task.conversationId}>
@@ -467,13 +482,19 @@ function TaskDetail({
           <TaskTimeline task={task} agents={agents} />
 
           <p className="text-xs text-muted-foreground">
-            Filed by {task.createdBy === "user" ? "you" : (agents.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? "an agent")} on{" "}
-            {format(new Date(task.createdAt), "d MMM yyyy, HH:mm")}
+            {task.createdBy === "user"
+              ? t("sheet.filedByYou", { date: format(new Date(task.createdAt), t("sheet.dateFormat"), { locale: dateLocale }) })
+              : t("sheet.filedBy", {
+                  name: agents.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? t("sheet.anAgent"),
+                  date: format(new Date(task.createdAt), t("sheet.dateFormat"), { locale: dateLocale }),
+                })}
             {task.runCount > 0 &&
-              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"}${
-                isWorking(task) ? " so far" : ""
+              ` · ${
+                isWorking(task)
+                  ? t("sheet.workedSoFar", { name: agent?.name ?? t("sheet.theAgent"), time: formatWork(task.workMs), count: task.runCount })
+                  : t("sheet.worked", { name: agent?.name ?? t("sheet.theAgent"), time: formatWork(task.workMs), count: task.runCount })
               }`}
-            {task.completedAt && ` · closed ${formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}`}
+            {task.completedAt && ` · ${t("sheet.closedAgo", { when: formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true, locale: dateLocale }) })}`}
           </p>
         </div>
       </div>
@@ -485,6 +506,7 @@ function TaskDetail({
 
 /** Tickets this one waits for: it starts once each is delivered. Chips to remove, a picker to add (no loops: the core says). */
 function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
+  const { t: tr } = useTranslation("tasks");
   const ADD = "add";
   const ids = task.waitsFor.map((w) => w.id);
   // Not what it is part of, nor its own parts (that would hold both), and only its workspace's tickets or global ones.
@@ -506,19 +528,19 @@ function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; o
       {task.waitsFor.map((w) => (
         <span key={w.id} className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs", w.finished && "text-muted-foreground line-through decoration-foreground/30")} title={w.title}>
           #{w.number} <span className="max-w-32 truncate">{w.title}</span>
-          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`Stop waiting for #${w.number}`} onClick={() => onChange(ids.filter((id) => id !== w.id))}>
+          <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={tr("sheet.stopWaiting", { number: w.number })} onClick={() => onChange(ids.filter((id) => id !== w.id))}>
             ×
           </button>
         </span>
       ))}
       {choices.length > 0 && ids.length < 10 && (
         <Select value={ADD} onValueChange={(v) => v !== ADD && onChange([...ids, v])}>
-          <SelectTrigger aria-label="Wait for another ticket" className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground">
+          <SelectTrigger aria-label={tr("sheet.waitForAnother")} className="h-7 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground">
             <SelectValue />
           </SelectTrigger>
           <SelectContent position="popper" className="max-h-72">
             <SelectItem value={ADD} disabled>
-              {ids.length ? "Also wait for…" : "Wait for a ticket…"}
+              {ids.length ? tr("sheet.alsoWaitFor") : tr("sheet.waitForTicket")}
             </SelectItem>
             {choices.map((t) => (
               <SelectItem key={t.id} value={t.id}>
@@ -528,24 +550,25 @@ function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; o
           </SelectContent>
         </Select>
       )}
-      {!ids.length && !choices.length && <span className="text-xs text-muted-foreground">Nothing</span>}
+      {!ids.length && !choices.length && <span className="text-xs text-muted-foreground">{tr("sheet.nothing")}</span>}
     </span>
   );
 }
 
 /** The goal a ticket serves — active ones of its workspace and global ones (a part serves its ticket's). */
 function GoalSelect({ task, onChange, className }: { task: Task; onChange: (goalId: string | null) => void; className?: string }) {
+  const { t } = useTranslation("tasks");
   const { data: goals = [] } = useGoals(task.workspaceId ?? "global");
   const NONE = "none";
   const choices = goals.filter((g) => g.status === "active" || g.id === task.goalId);
   return (
     <Select value={task.goalId ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)} disabled={!!task.parentId}>
-      <SelectTrigger aria-label="Goal" className={cn(className, "disabled:opacity-100 disabled:hover:bg-transparent")} title={task.parentId ? "A part serves its ticket's goal" : undefined}>
+      <SelectTrigger aria-label={t("goals.goal")} className={cn(className, "disabled:opacity-100 disabled:hover:bg-transparent")} title={task.parentId ? t("sheet.partGoal") : undefined}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
         <SelectItem value={NONE}>
-          <span className="text-muted-foreground">No goal</span>
+          <span className="text-muted-foreground">{t("sheet.noGoal")}</span>
         </SelectItem>
         {choices.map((g) => (
           <SelectItem key={g.id} value={g.id}>
@@ -569,15 +592,16 @@ function ProjectSelect({
   onChange: (projectId: string | null) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("tasks");
   const NONE = "none";
   return (
     <Select value={task.projectId ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
-      <SelectTrigger aria-label="Project" className={className}>
+      <SelectTrigger aria-label={t("dialog.project")} className={className}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
         <SelectItem value={NONE}>
-          <span className="text-muted-foreground">No project</span>
+          <span className="text-muted-foreground">{t("dialog.noProject")}</span>
         </SelectItem>
         {workspace.projects.map((p) => (
           <SelectItem key={p.id} value={p.id}>
@@ -600,6 +624,7 @@ function Prop({ label, children }: { label: string; children: ReactNode }) {
 
 /** The branch on GitHub, and a pull request for it. Godmode pushes the branch first when it hasn't yet. */
 function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
+  const { t: tr } = useTranslation("tasks");
   const qc = useQueryClient();
   const put = (t: Task) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x)));
   const push = useMutation({
@@ -608,17 +633,17 @@ function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
       put(t);
       void openExternal(branchUrl);
     },
-    onError: (e) => toastApiError(e, "Couldn't push the branch", qc),
+    onError: (e) => toastApiError(e, tr("github.pushError"), qc),
   });
   const create = useMutation({
     mutationFn: () => api.tasks.openPullRequest(task.id),
     onSuccess: (t) => {
       put(t);
       const pr = t.pullRequest;
-      if (pr?.number && pr.state === "open") toast.success(`Pull request #${pr.number} is open`, { action: { label: "View", onClick: () => void openExternal(pr.url) } });
+      if (pr?.number && pr.state === "open") toast.success(tr("github.prOpen", { number: pr.number }), { action: { label: tr("github.view"), onClick: () => void openExternal(pr.url) } });
       else if (pr && !pr.number) void openExternal(pr.url);
     },
-    onError: (e) => toastApiError(e, "Couldn't create the pull request", qc),
+    onError: (e) => toastApiError(e, tr("github.createError"), qc),
   });
   const pending = push.isPending || create.isPending;
   const idle = pending || (task.status !== "in_progress" && !task.activity);
@@ -631,22 +656,22 @@ function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="icon-xs" className={icon} asChild>
-              <a href={branchUrl} target="_blank" rel="noreferrer" aria-label="Open the branch on GitHub">
+              <a href={branchUrl} target="_blank" rel="noreferrer" aria-label={tr("github.openBranch")}>
                 <GitHubMark />
               </a>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Open on GitHub</TooltipContent>
+          <TooltipContent>{tr("github.openOnGithub")}</TooltipContent>
         </Tooltip>
       ) : (
         idle && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className={icon} aria-label="Push the branch and open it on GitHub" disabled={pending} onClick={() => push.mutate()}>
+              <Button variant="ghost" size="icon-xs" className={icon} aria-label={tr("github.pushAndOpenLabel")} disabled={pending} onClick={() => push.mutate()}>
                 {push.isPending ? <Spinner className="size-3" /> : <GitHubMark />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Push to GitHub and open</TooltipContent>
+            <TooltipContent>{tr("github.pushAndOpen")}</TooltipContent>
           </Tooltip>
         )
       )}
@@ -655,11 +680,11 @@ function GitHubActions({ task, branchUrl }: { task: Task; branchUrl: string }) {
           <TooltipTrigger asChild>
             <Button variant="outline" size="xs" className="ml-auto shrink-0 font-sans" disabled={pending} onClick={() => create.mutate()}>
               {create.isPending ? <Spinner className="size-3" /> : <GitPullRequestCreateArrow />}
-              {create.isPending ? "Creating…" : "Create PR"}
+              {create.isPending ? tr("github.creating") : tr("github.createPr")}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            Push {task.branchPushed ? "the latest changes" : "the branch"} and open a pull request into {task.baseBranch}
+            {task.branchPushed ? tr("github.pushChangesHint", { branch: task.baseBranch }) : tr("github.pushBranchHint", { branch: task.baseBranch })}
           </TooltipContent>
         </Tooltip>
       )}
@@ -690,28 +715,30 @@ function WorkPanel({
   /** Drop what it waits for (it starts then). */
   onStartWithoutWaiting: () => void;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const activity = useTaskActivity(task);
   const working = isWorking(task);
   const { resume } = usePauseActions(task.conversationId ?? "");
   const followups = useFollowupActions();
   const { data: open = [] } = useQuestions("open");
-  const who = agent?.name ?? "The agent";
+  const who = agent?.name ?? t("sheet.theAgent");
   const publish = useMutation({
     mutationFn: () => api.tasks.openPullRequest(task.id),
     onSuccess: (t) => qc.setQueriesData<Task[]>({ queryKey: qk.tasks }, (list) => list?.map((x) => (x.id === t.id ? t : x))),
-    onError: (e) => toastApiError(e, "Couldn't publish", qc),
+    onError: (e) => toastApiError(e, t("sheet.publishError"), qc),
   });
   const merging = useMutationState({ filters: { mutationKey: APPROVE_KEY, status: "pending" }, select: (m) => (m.state.variables as Task).id }).includes(task.id);
-  const approve = (t: Task) => {
-    onMove(t, "done", true);
+  const approve = (ticket: Task) => {
+    onMove(ticket, "done", true);
     // Merging can't be undone; the page tells how that went.
-    if (!mergesOnApprove(t)) toast.success(`#${t.number} approved`, { action: { label: "Undo", onClick: () => onMove(t, "in_review") } });
+    if (!mergesOnApprove(ticket)) toast.success(t("sheet.approvedToast", { number: ticket.number }), { action: { label: t("common:actions.undo"), onClick: () => onMove(ticket, "in_review") } });
   };
-  const reopen = (t: Task) => {
-    const back = reopenStatus(t);
-    onMove(t, back);
-    toast(`#${t.number} reopened`, { action: { label: "Undo", onClick: () => onMove(t, t.status) } });
+  const reopen = (ticket: Task) => {
+    const back = reopenStatus(ticket);
+    onMove(ticket, back);
+    toast(t("sheet.reopenedToast", { number: ticket.number }), { action: { label: t("common:actions.undo"), onClick: () => onMove(ticket, ticket.status) } });
   };
 
   if (task.pause?.reason === "question" && task.status === "in_progress") {
@@ -721,18 +748,18 @@ function WorkPanel({
         {question ? (
           <QuestionCard question={viewOfQuestion(question)} agentName={agent?.name} answerable inline conversationId={task.conversationId ?? undefined} className="shadow-none" />
         ) : (
-          <p className="text-sm font-medium">{task.pause.question?.kind === "approval" ? `${agent?.name ?? "The agent"} needs your OK` : `${agent?.name ?? "The agent"} is waiting for your answer`}</p>
+          <p className="text-sm font-medium">{task.pause.question?.kind === "approval" ? t("work.needsOk", { name: agent?.name ?? t("sheet.theAgent") }) : t("work.waitingAnswer", { name: agent?.name ?? t("sheet.theAgent") })}</p>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           {task.conversationId && (
             <Button size="sm" variant="outline" asChild>
               <Link to={`/chat/${task.conversationId}`}>
-                <MessagesSquare /> Open chat
+                <MessagesSquare /> {t("actions.openChat")}
               </Link>
             </Button>
           )}
           <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onMove(task, "backlog")}>
-            <Square className="size-3.5" /> Stop
+            <Square className="size-3.5" /> {t("common:actions.stop")}
           </Button>
         </div>
       </Panel>
@@ -741,37 +768,37 @@ function WorkPanel({
 
   if (pauseLabel(task) && task.pause) {
     const { pause } = task;
-    const who = agent?.name ?? "The agent";
+    const who = agent?.name ?? t("sheet.theAgent");
     return (
       <Panel>
         <div className="flex items-start gap-3">
           {pause.reason === "limit" ? <Hourglass className="mt-0.5 size-4 shrink-0 text-warning" /> : <Pause className="mt-0.5 size-4 shrink-0 fill-current text-foreground/70" />}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium">{pause.reason === "limit" ? `Claude's ${pause.limit ?? "usage limit"} is reached` : "Paused"}</p>
+            <p className="text-sm font-medium">{pause.reason === "limit" ? t("work.limitReached", { limit: pause.limit ?? t("pause.usageLimit") }) : t("pause.paused")}</p>
             <p className="mt-0.5 text-[13px] text-muted-foreground">
               {pause.reason === "user"
-                ? `${who} picks the work up where it stopped.`
+                ? t("work.pausedUser", { name: who })
                 : pause.auto && pause.resumeAt
-                  ? `${who} continues by itself ${followupWhen(pause.resumeAt)}, where it stopped.`
+                  ? t("work.pausedAuto", { name: who, when: followupWhen(pause.resumeAt) })
                   : pause.resumeAt
-                    ? `The limit resets ${followupWhen(pause.resumeAt)} — continue it then.`
-                    : "Continue it when the limit has reset."}
+                    ? t("work.limitResets", { when: followupWhen(pause.resumeAt) })
+                    : t("work.continueWhenReset")}
             </p>
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" variant={pause.reason === "limit" ? "outline" : "default"} disabled={resume.isPending} onClick={() => resume.mutate()}>
-            {resume.isPending ? <Spinner /> : <Play className="fill-current" />} {pause.reason === "limit" ? "Continue now" : "Continue"}
+            {resume.isPending ? <Spinner /> : <Play className="fill-current" />} {pause.reason === "limit" ? t("work.continueNow") : t("actions.continue")}
           </Button>
           {task.conversationId && (
             <Button size="sm" variant="outline" asChild>
               <Link to={`/chat/${task.conversationId}`}>
-                <MessagesSquare /> Open chat
+                <MessagesSquare /> {t("actions.openChat")}
               </Link>
             </Button>
           )}
           <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onMove(task, "backlog")}>
-            <Square className="size-3.5" /> Stop
+            <Square className="size-3.5" /> {t("common:actions.stop")}
           </Button>
         </div>
       </Panel>
@@ -785,7 +812,7 @@ function WorkPanel({
           <WorkingTicks className="mt-1.5 text-amber-500" count={10} />
           <div className="min-w-0 flex-1">
             <p className="flex items-baseline justify-between gap-2 text-sm font-medium" aria-live="polite">
-              <span>{agent ? `${agent.name} is working on it` : "Working on it"}</span>
+              <span>{agent ? t("work.workingOnIt", { name: agent.name }) : t("work.working")}</span>
               {task.runStartedAt && task.runStatus === "running" && <Elapsed since={task.runStartedAt} className="text-xs font-normal text-muted-foreground" />}
             </p>
             <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{activity}</p>
@@ -795,12 +822,12 @@ function WorkPanel({
           {task.conversationId && (
             <Button size="sm" variant="outline" asChild>
               <Link to={`/chat/${task.conversationId}`}>
-                <MessagesSquare /> Watch live
+                <MessagesSquare /> {t("work.watchLive")}
               </Link>
             </Button>
           )}
           <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onMove(task, "backlog")}>
-            <Square className="size-3.5" /> Stop
+            <Square className="size-3.5" /> {t("common:actions.stop")}
           </Button>
         </div>
       </Panel>
@@ -817,31 +844,31 @@ function WorkPanel({
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium" aria-live="polite">
-              Waiting — continues {followupWhen(f.dueAt)}
+              {t("waiting.continues", { when: followupWhen(f.dueAt) })}
             </p>
             {f.note && (
               <p className="mt-0.5 line-clamp-2 text-[13px] text-muted-foreground" title={f.note}>
-                {who}'s plan: {f.note}
+                {t("work.plan", { name: who, note: f.note })}
               </p>
             )}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" disabled={followups.runNow.isPending} onClick={() => task.conversationId && followups.runNow.mutate(task.conversationId)}>
-            {followups.runNow.isPending ? <Spinner /> : <Play className="fill-current" />} Continue now
+            {followups.runNow.isPending ? <Spinner /> : <Play className="fill-current" />} {t("work.continueNow")}
           </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="sm" variant="outline" disabled={followups.cancel.isPending} onClick={() => task.conversationId && followups.cancel.mutate(task.conversationId)}>
-                <AlarmClockOff /> Cancel follow-up
+                <AlarmClockOff /> {t("work.cancelFollowup")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{who} won't continue on its own — the task goes to In review</TooltipContent>
+            <TooltipContent>{t("work.cancelFollowupHint", { name: who })}</TooltipContent>
           </Tooltip>
           {task.conversationId && (
             <Button size="sm" variant="ghost" asChild>
               <Link to={`/chat/${task.conversationId}`}>
-                <MessagesSquare /> Open chat
+                <MessagesSquare /> {t("actions.openChat")}
               </Link>
             </Button>
           )}
@@ -853,10 +880,10 @@ function WorkPanel({
   if (task.status === "blocked") {
     const kind = task.blockedKind;
     const meta = kind ? BLOCKED_META[kind] : null;
-    const reason = task.blockedReason || (kind === "manual" ? "" : "Something needs your attention.");
+    const reason = task.blockedReason || (kind === "manual" ? "" : t("work.needsAttention"));
     const advice =
       kind === "failed" && /timed out/i.test(reason)
-        ? "It hit the run's time limit. Try again, or split the task into smaller ones."
+        ? t("work.timedOut")
         : null;
     const restart = (label: string, icon = <RotateCcw />) =>
       task.agentId ? (
@@ -867,7 +894,7 @@ function WorkPanel({
     const chat = task.conversationId ? (
       <Button size="sm" variant="outline" asChild>
         <Link to={`/chat/${task.conversationId}`}>
-          <MessagesSquare /> Open chat
+          <MessagesSquare /> {t("actions.openChat")}
         </Link>
       </Button>
     ) : null;
@@ -877,17 +904,17 @@ function WorkPanel({
           <OctagonAlert className="mt-0.5 size-4 shrink-0 text-rose-500" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium" aria-live="polite">
-              {meta ? meta.title(who) : "Blocked"}
+              {meta ? meta.title(who) : t("blocked.manual.title")}
             </p>
             {kind === "interrupted" ? (
-              <p className="mt-0.5 text-[13px] text-muted-foreground">Godmode restarted while {who} was working. It continues in the same chat, with what it did so far.</p>
+              <p className="mt-0.5 text-[13px] text-muted-foreground">{t("work.interrupted", { name: who })}</p>
             ) : kind === "manual" ? (
               <BlockedReason task={task} onSave={onReason} />
             ) : (
               reason && <p className="mt-0.5 text-[13px] whitespace-pre-wrap text-muted-foreground">{reason}</p>
             )}
             {advice && <p className="mt-1 text-[13px]">{advice}</p>}
-            {!task.agentId && <p className="mt-1 text-[13px] text-muted-foreground">Assign an agent to go on.</p>}
+            {!task.agentId && <p className="mt-1 text-[13px] text-muted-foreground">{t("work.assignToGoOn")}</p>}
           </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -895,47 +922,47 @@ function WorkPanel({
             <>
               {task.agentId && (
                 <Button size="sm" onClick={() => focusReply(task.id)}>
-                  <MessageSquareReply /> Answer
+                  <MessageSquareReply /> {t("work.answer")}
                 </Button>
               )}
               {chat}
             </>
           ) : kind === "failed" ? (
             <>
-              {restart("Try again")}
+              {restart(t("common:actions.tryAgain"))}
               {chat}
             </>
           ) : kind === "stopped" ? (
             <>
-              {restart("Start again", <Play />)}
+              {restart(t("actions.startAgain"), <Play />)}
               {chat}
             </>
           ) : kind === "interrupted" ? (
             <>
-              {restart("Continue", <Play className="fill-current" />)}
+              {restart(t("actions.continue"), <Play className="fill-current" />)}
               {chat}
             </>
           ) : kind === "publish" ? (
             <>
               {task.branch && (
                 <Button size="sm" disabled={publish.isPending} onClick={() => publish.mutate()}>
-                  {publish.isPending ? <Spinner /> : <GitPullRequestCreateArrow />} {publish.isPending ? "Publishing…" : "Publish again"}
+                  {publish.isPending ? <Spinner /> : <GitPullRequestCreateArrow />} {publish.isPending ? t("work.publishing") : t("work.publishAgain")}
                 </Button>
               )}
               {task.agentId && (
                 <Button size="sm" variant="outline" onClick={() => onMove(task, "todo")}>
-                  <RotateCcw /> Start again
+                  <RotateCcw /> {t("actions.startAgain")}
                 </Button>
               )}
               {chat}
             </>
           ) : kind === "setup" ? (
-            restart("Try again")
+            restart(t("common:actions.tryAgain"))
           ) : kind === "manual" ? (
-            restart(task.startedAt ? "Start again" : "Start", <Play />)
+            restart(task.startedAt ? t("actions.startAgain") : t("actions.start"), <Play />)
           ) : (
             <>
-              {restart("Try again")}
+              {restart(t("common:actions.tryAgain"))}
               {chat}
             </>
           )}
@@ -949,35 +976,39 @@ function WorkPanel({
     return (
       <Panel tone="review">
         <p className="text-sm font-medium" aria-live="polite">
-          Delivered — ready for your review
+          {t("work.delivered")}
         </p>
         {pr && (
           <div className="mt-2 flex items-center gap-2">
             <PullRequestChip task={task} className="h-6 text-xs" />
             <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-              {pr.number ? repoLabel(pr.url.replace(/\/pull\/\d+$/, "")) : `Branch pushed — open the pull request on ${new URL(pr.url).hostname}`}
+              {pr.number ? repoLabel(pr.url.replace(/\/pull\/\d+$/, "")) : t("work.branchPushed", { host: new URL(pr.url).hostname })}
             </span>
             <Button size="sm" variant="ghost" asChild>
               <a href={pr.url} target="_blank" rel="noreferrer">
-                {pr.number ? "Review" : "Open pull request"} <ArrowUpRight />
+                {pr.number ? t("work.review") : t("pr.openNew")} <ArrowUpRight />
               </a>
             </Button>
           </div>
         )}
         <div className="mt-3 flex flex-wrap gap-2">
           <Button size="sm" disabled={merging} onClick={() => approve(task)}>
-            {merging ? <Spinner /> : mergesOnApprove(task) ? <GitMerge /> : <Check />} {merging ? "Merging…" : mergesOnApprove(task) ? "Approve & merge" : "Approve"}
+            {merging ? <Spinner /> : mergesOnApprove(task) ? <GitMerge /> : <Check />} {merging ? t("work.merging") : mergesOnApprove(task) ? t("actions.approveMerge") : t("actions.approve")}
           </Button>
           {task.agentId && task.conversationId && (
             <Button size="sm" variant="outline" onClick={() => focusReply(task.id)}>
-              <MessageSquareReply /> Request changes
+              <MessageSquareReply /> {t("work.requestChanges")}
             </Button>
           )}
         </div>
         {mergesOnApprove(task) && (
           <p className="mt-2.5 text-xs text-muted-foreground">
-            Merges #{pr!.number} into <span className="font-mono text-[11px] text-foreground/80">{task.baseBranch}</span> on {new URL(pr!.url).hostname} and moves the
-            ticket to Done.
+            <Trans
+              t={t}
+              i18nKey="work.mergesInto"
+              values={{ number: pr!.number, branch: task.baseBranch, host: new URL(pr!.url).hostname }}
+              components={{ code: <span className="font-mono text-[11px] text-foreground/80" /> }}
+            />
           </p>
         )}
       </Panel>
@@ -990,14 +1021,14 @@ function WorkPanel({
         <div className="flex items-center gap-3">
           <StatusIcon status={task.status} className="size-4" />
           <p className="min-w-0 flex-1 text-sm font-medium">
-            {task.status === "done" ? "Done" : "Cancelled"}
+            {task.status === "done" ? t("status.done.label") : t("status.cancelled.label")}
             {task.completedAt && (
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">closed {formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}</span>
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">{t("sheet.closedAgo", { when: formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true, locale: dateLocale }) })}</span>
             )}
           </p>
           {task.pullRequest && <PullRequestChip task={task} className="h-6 text-xs" />}
           <Button size="sm" variant="outline" onClick={() => reopen(task)}>
-            <RotateCcw /> Reopen
+            <RotateCcw /> {t("actions.reopen")}
           </Button>
         </div>
       </Panel>
@@ -1011,11 +1042,11 @@ function WorkPanel({
         <div className="flex items-center gap-3">
           <PullRequestChip task={task} className="h-6 text-xs" />
           <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-            {pr.number ? repoLabel(pr.url.replace(/\/pull\/\d+$/, "")) : `Branch pushed — open the pull request on ${new URL(pr.url).hostname}`}
+            {pr.number ? repoLabel(pr.url.replace(/\/pull\/\d+$/, "")) : t("work.branchPushed", { host: new URL(pr.url).hostname })}
           </span>
           <Button size="sm" variant={pr.number ? "outline" : "default"} asChild>
             <a href={pr.url} target="_blank" rel="noreferrer">
-              {pr.number ? "Review" : "Open pull request"} <ArrowUpRight />
+              {pr.number ? t("work.review") : t("pr.openNew")} <ArrowUpRight />
             </a>
           </Button>
         </div>
@@ -1030,10 +1061,10 @@ function WorkPanel({
       <Panel>
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] text-muted-foreground">
-            Waits for {open.map((w) => `#${w.number}`).join(", ")} — {agent.name} starts by itself once {open.length === 1 ? "it is" : "they are"} delivered, with {open.length === 1 ? "its" : "their"} result.
+            {t("work.waitsFor", { list: open.map((w) => `#${w.number}`).join(", "), name: agent.name, count: open.length })}
           </p>
           <Button size="sm" variant="outline" onClick={() => onStartWithoutWaiting()}>
-            <Play /> Start without waiting
+            <Play /> {t("work.startWithoutWaiting")}
           </Button>
         </div>
       </Panel>
@@ -1046,14 +1077,14 @@ function WorkPanel({
         <div className="flex items-center justify-between gap-3">
           <p className="text-[13px] text-muted-foreground">
             {agent
-              ? `Ready for ${agent.name}.`
+              ? t("work.readyFor", { name: agent.name })
               : task.status === "todo"
-                ? "Assign an agent — it starts right away."
-                : "Assign an agent and move it to Todo to start it."}
+                ? t("work.assignStarts")
+                : t("work.assignAndMove")}
           </p>
           {agent && (
             <Button size="sm" onClick={() => onMove(task, "todo")}>
-              <Play /> Start
+              <Play /> {t("actions.start")}
             </Button>
           )}
         </div>
@@ -1072,6 +1103,7 @@ export function focusReply(taskId: string) {
 
 /** A reason the human set when they moved the ticket to Blocked: shown, and editable in place. */
 function BlockedReason({ task, onSave }: { task: Task; onSave: (reason: string) => void }) {
+  const { t } = useTranslation("tasks");
   const [value, setValue] = useState(task.blockedReason ?? "");
   useEffect(() => setValue(task.blockedReason ?? ""), [task.blockedReason]);
   return (
@@ -1086,8 +1118,8 @@ function BlockedReason({ task, onSave }: { task: Task; onSave: (reason: string) 
           e.currentTarget.blur();
         }
       }}
-      placeholder="Add a reason…"
-      aria-label="Why it is blocked"
+      placeholder={t("work.reasonPlaceholder")}
+      aria-label={t("work.reasonLabel")}
       maxLength={2000}
       className="mt-1 h-8 border-transparent bg-transparent px-1.5 text-[13px] shadow-none hover:bg-accent/60"
     />
@@ -1096,9 +1128,10 @@ function BlockedReason({ task, onSave }: { task: Task; onSave: (reason: string) 
 
 /** "4m 12s", ticking. */
 function Elapsed({ since, className }: { since: string; className?: string }) {
+  const { t } = useTranslation("tasks");
   const now = useNow(1000);
   const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
-  const text = s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
+  const text = s < 3600 ? t("card.elapsedMinutes", { m: Math.floor(s / 60), s: String(s % 60).padStart(2, "0") }) : t("card.elapsedHours", { h: Math.floor(s / 3600), m: String(Math.floor((s % 3600) / 60)).padStart(2, "0") });
   return <span className={cn("tabular-nums", className)}>{text}</span>;
 }
 
@@ -1118,6 +1151,7 @@ function Panel({ children, tone }: { children: ReactNode; tone?: "working" | "bl
 }
 
 function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: string) => void }) {
+  const { t } = useTranslation("tasks");
   const [draft, setDraft] = useState(value);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => setDraft(value), [value]);
@@ -1137,7 +1171,7 @@ function EditableTitle({ value, onSave, ...rest }: { value: string; onSave: (v: 
       {...rest}
       ref={ref}
       rows={1}
-      aria-label="Title"
+      aria-label={t("dialog.title")}
       maxLength={MAX_TASK_TITLE_LENGTH}
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -1172,6 +1206,7 @@ function EditableDescription({
   onSave: (v: string) => Promise<unknown>;
   onUploading: (uploading: boolean) => void;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const draftKey = `task:${taskId}:description`;
   const [editing, setEditing] = useState(() => draftKeys(draftKey).length > 0);
   /** Just saved: shown until the task has it, so leaving the editor never shows the old text for a frame. */
@@ -1292,7 +1327,7 @@ function EditableDescription({
       <div
         role="button"
         tabIndex={0}
-        aria-label={empty ? "Add a description" : "Edit the description"}
+        aria-label={empty ? t("sheet.addDescription") : t("sheet.editDescription")}
         onClick={(e) => {
           // Links and file cards inside do their own thing.
           if ((e.target as HTMLElement).closest("a, button")) return;
@@ -1310,8 +1345,8 @@ function EditableDescription({
       >
         {empty ? (
           <span className="flex items-center gap-2 text-[15px] text-muted-foreground/70">
-            <AlignLeft className="size-4 opacity-70" /> Add a description…
-            <span className="ml-auto text-xs opacity-0 transition-opacity group-hover/desc:opacity-100">Text, checklists, screenshots, files</span>
+            <AlignLeft className="size-4 opacity-70" /> {t("sheet.addDescriptionPlaceholder")}
+            <span className="ml-auto text-xs opacity-0 transition-opacity group-hover/desc:opacity-100">{t("sheet.descriptionKinds")}</span>
           </span>
         ) : (
           <Markdown breaks className="text-[15px]">
@@ -1356,13 +1391,13 @@ function EditableDescription({
         ref={editor}
         autoFocus
         toolbar
-        aria-label="Description"
+        aria-label={t("common:words.description")}
         value={draft}
         onChange={setText}
         onBusyChange={setUploading}
         // The text alone (the toolbar comes on top): at least the text's former height, and room to write.
         minHeight={Math.max(120, shownHeight - 20)}
-        placeholder="Details, acceptance criteria, links… Type # for a heading, - for a list, [] for a checklist."
+        placeholder={t("sheet.descriptionPlaceholder")}
         textClassName="text-[15px]"
         className="px-3 pt-1.5 pb-3"
       />
@@ -1373,7 +1408,7 @@ function EditableDescription({
           onRetry={() => push(withoutPlaceholders(draft))}
         />
         <Button type="button" size="sm" variant="secondary" className="ml-auto h-7 gap-1.5 px-3 text-xs" onClick={finish} disabled={uploading}>
-          Done
+          {t("common:actions.done")}
           <kbd className="font-sans text-[10px] opacity-60">{modKey}↵</kbd>
         </Button>
       </div>
@@ -1382,27 +1417,28 @@ function EditableDescription({
 }
 
 function SaveStatus({ status, onRetry }: { status: "idle" | "saving" | "saved" | "failed" | "uploading"; onRetry: () => void }) {
+  const { t } = useTranslation(["tasks", "common"]);
   return (
     <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
       {status === "uploading" || status === "saving" ? (
         <>
           <Spinner className="size-3 shrink-0" />
-          <span className="truncate">{status === "uploading" ? "Uploading…" : "Saving…"}</span>
+          <span className="truncate">{status === "uploading" ? t("dialog.uploading") : t("common:status.saving")}</span>
         </>
       ) : status === "saved" ? (
         <>
           <Check className="size-3.5 shrink-0 text-success" />
-          <span className="truncate">Saved</span>
+          <span className="truncate">{t("common:status.saved")}</span>
         </>
       ) : status === "failed" ? (
         <>
-          <span className="truncate text-destructive">Not saved</span>
+          <span className="truncate text-destructive">{t("sheet.notSaved")}</span>
           <button type="button" onClick={onRetry} className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">
-            Retry
+            {t("common:actions.retry")}
           </button>
         </>
       ) : (
-        <span className="truncate">Saves as you type · paste or drop screenshots and files</span>
+        <span className="truncate">{t("sheet.savesAsYouType")}</span>
       )}
     </span>
   );
@@ -1433,6 +1469,7 @@ function BlurInput({ value, placeholder, onSave }: { value: string; placeholder:
 
 /** Review feedback or an answer for the agent (with files, like a chat); it picks the task up again in the same conversation. */
 function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   // Kept when the sheet closes or the page changes: a half-written review isn't lost.
   const [text, setText, { discard }] = useDraft(`task:${task.id}:reply`, "");
@@ -1473,7 +1510,7 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
       if (ctx) qc.setQueryData<TaskEvent[]>(qk.taskEvents(task.id), (list) => list?.filter((x) => x.id !== ctx.pending.id));
       setText(msg.text);
       setFiles(msg.files);
-      toastApiError(e, "Could not send", qc);
+      toastApiError(e, t("reply.sendError"), qc);
     },
   });
   const add = async (picked: File[]) => {
@@ -1486,7 +1523,7 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
   };
   const ready = (!!text.trim() || files.length > 0) && !send.isPending;
   const submit = () => ready && send.mutate({ text: text.trim(), files });
-  const name = agent?.name ?? "the agent";
+  const name = agent?.name ?? t("sheet.theAgentLower");
   return (
     <div className="shrink-0 border-t bg-paper-2 p-3">
       <div className="rounded-xl border bg-card p-1.5 shadow-card focus-within:ring-[3px] focus-within:ring-ring/40">
@@ -1501,7 +1538,7 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
           />
         )}
         <div className="flex items-end gap-1">
-          <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label="Attach files" onClick={() => input.current?.click()}>
+          <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label={t("dialog.attach")} onClick={() => input.current?.click()}>
             <Paperclip className="size-4" />
           </Button>
           <input
@@ -1533,24 +1570,24 @@ function FollowUp({ task, agent }: { task: Task; agent?: Agent }) {
             }}
             placeholder={
               task.pause?.reason === "question" || (task.status === "blocked" && task.blockedKind === "needs_input")
-                ? `Answer ${name}…`
+                ? t("reply.answer", { name })
                 : task.status === "in_review"
                   ? task.pullRequest?.state === "open"
-                    ? `What should ${name} change? The pull request updates.`
-                    : `What should ${name} change?`
+                    ? t("reply.changePr", { name })
+                    : t("reply.change", { name })
                   : task.status === "blocked"
-                    ? `Tell ${name} how to go on…`
+                    ? t("reply.howToGoOn", { name })
                     : isWaiting(task)
-                      ? `Message ${name} — it continues right away`
+                      ? t("reply.continuesNow", { name })
                       : isWorking(task)
-                        ? `Message ${name} — it reads it when this run is done`
+                        ? t("reply.readsLater", { name })
                         : task.status === "done" || task.status === "cancelled"
-                          ? `Something still missing? Tell ${name} — the task reopens.`
-                          : `Message ${name}…`
+                          ? t("reply.reopens", { name })
+                          : t("reply.message", { name })
             }
             className="max-h-40 min-h-9 resize-none border-0 px-2 py-2 text-sm shadow-none focus-visible:ring-0"
           />
-          <Button size="icon" className="size-8 shrink-0" aria-label="Send" disabled={!ready} onClick={submit}>
+          <Button size="icon" className="size-8 shrink-0" aria-label={t("common:actions.send")} disabled={!ready} onClick={submit}>
             {send.isPending ? <Spinner /> : <SendHorizontal className="size-4" />}
           </Button>
         </div>

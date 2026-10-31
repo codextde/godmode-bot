@@ -108,3 +108,4 @@ export async function saveBlob(blob: Blob, filename: string) {
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const modKey = isMac ? "⌘" : "Ctrl";
+export const altKey = isMac ? "⌥" : "Alt+";

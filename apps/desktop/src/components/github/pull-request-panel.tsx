@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GithubErrorCode, parsePullRequestUrl, type PullRequestMergeMethod, type PullRequestCheck, type PullRequestReview, type PullRequestView, type PullRequestViewState } from "@godmode/shared";
 import {
@@ -28,6 +29,7 @@ import { api, ApiRequestError } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { intlLocale } from "@/i18n";
 import { SidePanelScopeProvider } from "@/components/side-panel/store";
 import { toast } from "sonner";
 import {
@@ -68,10 +70,11 @@ function usePullRequest(url: string) {
 function timeOf(iso: string | null | undefined) {
   if (!iso) return null;
   const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? null : at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(at.getTime()) ? null : at.toLocaleTimeString(intlLocale(), { hour: "2-digit", minute: "2-digit" });
 }
 
 export function PullRequestPanel({ conversationId, url, onHide }: { conversationId: string; url: string; onHide: () => void }) {
+  const { t } = useTranslation("chat");
   const ref = parsePullRequestUrl(url);
   const qc = useQueryClient();
   const query = usePullRequest(url);
@@ -91,7 +94,7 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
 
   return (
     <motion.aside
-      aria-label="Pull request"
+      aria-label={t("pullRequest.title")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -102,20 +105,20 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
           <GitPullRequest className="size-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-medium">{ref ? `${ref.owner}/${ref.repo} #${ref.number}` : "Pull request"}</p>
+            <p className="truncate text-[13px] font-medium">{ref ? `${ref.owner}/${ref.repo} #${ref.number}` : t("pullRequest.title")}</p>
             {data && (
               <p className="truncate text-[11.5px] text-muted-foreground">
-                {data.stale ? `Last loaded ${ago(data.fetchedAt)}` : `Updated ${ago(data.updatedAt)}`}
+                {data.stale ? t("pullRequest.lastLoaded", { ago: ago(data.fetchedAt) }) : t("pullRequest.updated", { ago: ago(data.updatedAt) })}
               </p>
             )}
           </div>
-          <IconAction label="Refresh" onClick={() => void refresh()} disabled={refreshing || query.isFetching}>
+          <IconAction label={t("pullRequest.refresh")} onClick={() => void refresh()} disabled={refreshing || query.isFetching}>
             <RefreshCw className={cn((refreshing || query.isFetching) && "animate-spin [animation-duration:1.6s]")} />
           </IconAction>
-          <IconAction label="Open on GitHub" onClick={() => void openExternal(data?.url ?? url)}>
+          <IconAction label={t("pullRequest.openOnGithub")} onClick={() => void openExternal(data?.url ?? url)}>
             <ArrowUpRight />
           </IconAction>
-          <IconAction label="Close" onClick={onHide}>
+          <IconAction label={t("pullRequest.close")} onClick={onHide}>
             <PanelRightClose />
           </IconAction>
         </header>
@@ -160,16 +163,19 @@ function Loading() {
 }
 
 function Failure({ error, url, onRetry }: { error: Error; url: string; onRetry: () => void }) {
+  const { t } = useTranslation("chat");
   const code = error instanceof ApiRequestError ? error.code : undefined;
   const retryAt = error instanceof ApiRequestError ? timeOf((error.details as { retryAt?: string | null } | undefined)?.retryAt) : null;
   const text =
     code === GithubErrorCode.RateLimited
-      ? `GitHub only allows a certain number of looks per hour, and they're used up${retryAt ? ` until ${retryAt}` : " for now"}.`
+      ? retryAt
+        ? t("pullRequest.errors.rateLimitedUntil", { time: retryAt })
+        : t("pullRequest.errors.rateLimited")
       : code === GithubErrorCode.NotFound
-        ? "GitHub can't find this pull request. If it's private, this computer needs to be signed in to GitHub: run “gh auth login” in Terminal."
+        ? t("pullRequest.errors.notFound")
         : code === GithubErrorCode.Unauthorized
-          ? "GitHub didn't accept this computer's GitHub login. Run “gh auth login” in Terminal to sign in again."
-          : `Couldn't load it from GitHub: ${error.message}`;
+          ? t("pullRequest.errors.unauthorized")
+          : t("pullRequest.errors.other", { message: error.message });
   return (
     <div className="flex flex-col items-start gap-3 p-4 text-sm">
       <p className="flex gap-2 text-muted-foreground">
@@ -179,39 +185,46 @@ function Failure({ error, url, onRetry }: { error: Error; url: string; onRetry: 
       <div className="flex gap-2">
         {code !== GithubErrorCode.RateLimited && (
           <Button size="sm" variant="outline" onClick={onRetry}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("pullRequest.tryAgain")}
           </Button>
         )}
         <Button size="sm" variant="outline" onClick={() => void openExternal(url)}>
-          Open on GitHub <ArrowUpRight />
+          {t("pullRequest.openOnGithub")} <ArrowUpRight />
         </Button>
       </div>
     </div>
   );
 }
 
-const STATES: Record<PullRequestViewState, { label: string; icon: typeof GitPullRequest; className: string }> = {
-  open: { label: "Open", icon: GitPullRequest, className: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" },
-  draft: { label: "Draft", icon: GitPullRequestDraft, className: "bg-muted text-muted-foreground" },
-  merged: { label: "Merged", icon: GitMerge, className: "bg-violet-500/12 text-violet-700 dark:text-violet-400" },
-  closed: { label: "Closed", icon: GitPullRequestClosed, className: "bg-red-500/12 text-red-700 dark:text-red-400" },
+const STATES: Record<PullRequestViewState, { icon: typeof GitPullRequest; className: string }> = {
+  open: { icon: GitPullRequest, className: "bg-emerald-500/12 text-emerald-700 dark:text-emerald-400" },
+  draft: { icon: GitPullRequestDraft, className: "bg-muted text-muted-foreground" },
+  merged: { icon: GitMerge, className: "bg-violet-500/12 text-violet-700 dark:text-violet-400" },
+  closed: { icon: GitPullRequestClosed, className: "bg-red-500/12 text-red-700 dark:text-red-400" },
 };
 
 function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
+  const { t } = useTranslation("chat");
   const state = STATES[pr.state];
   const StateIcon = state.icon;
-  const when = pr.state === "merged" ? `merged ${ago(pr.mergedAt)}` : pr.state === "closed" ? `closed ${ago(pr.closedAt)}` : `opened ${ago(pr.createdAt)}`;
+  const when =
+    pr.state === "merged"
+      ? t("pullRequest.when.merged", { ago: ago(pr.mergedAt) })
+      : pr.state === "closed"
+        ? t("pullRequest.when.closed", { ago: ago(pr.closedAt) })
+        : t("pullRequest.when.opened", { ago: ago(pr.createdAt) });
   return (
     <div className="space-y-4 p-4">
       {pr.stale && (
         <p className="rounded-lg border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          GitHub's hourly limit is used up, so this is what was loaded {ago(pr.fetchedAt)}
-          {timeOf(pr.retryAt) ? `. It refreshes after ${timeOf(pr.retryAt)}.` : "."}
+          {timeOf(pr.retryAt)
+            ? t("pullRequest.staleUntil", { ago: ago(pr.fetchedAt), time: timeOf(pr.retryAt) })
+            : t("pullRequest.stale", { ago: ago(pr.fetchedAt) })}
         </p>
       )}
       {!pr.signedIn && (
         <p className="rounded-lg border bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-          This computer isn't signed in to GitHub, so GitHub allows only a few looks per hour. Run “gh auth login” in Terminal for more.
+          {t("pullRequest.signedOut")}
         </p>
       )}
 
@@ -220,7 +233,7 @@ function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium", state.className)}>
             <StateIcon className="size-3.5" />
-            {state.label}
+            {t(`pullRequest.states.${pr.state}`)}
           </span>
           <span className="inline-flex items-center gap-1.5">
             {pr.authorAvatarUrl && <img src={pr.authorAvatarUrl} alt="" className="size-4 rounded-full" />}
@@ -235,10 +248,10 @@ function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
             <span className="text-emerald-600 dark:text-emerald-400">+{pr.additions}</span> <span className="text-red-600 dark:text-red-400">−{pr.deletions}</span>
           </span>
           <span className="inline-flex items-center gap-1">
-            <FileText className="size-3.5" /> {pr.changedFiles} {pr.changedFiles === 1 ? "file" : "files"}
+            <FileText className="size-3.5" /> {t("pullRequest.files", { count: pr.changedFiles })}
           </span>
           <span>
-            {pr.commits} {pr.commits === 1 ? "commit" : "commits"}
+            {t("pullRequest.commits", { count: pr.commits })}
           </span>
           {pr.comments > 0 && (
             <span className="inline-flex items-center gap-1">
@@ -261,7 +274,7 @@ function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
       {(pr.state === "open" || pr.state === "draft") && pr.mergeable !== "clean" && pr.mergeable !== "unknown" && (
         <p className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs">
           <CircleAlert className="size-3.5 shrink-0 text-amber-600" />
-          {pr.mergeable === "conflicting" ? "Has conflicts with the base branch" : "Can't be merged yet: a required review or check is missing"}
+          {pr.mergeable === "conflicting" ? t("pullRequest.conflicts") : t("pullRequest.blocked")}
         </p>
       )}
 
@@ -271,7 +284,7 @@ function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
       {pr.checks && pr.checks.length > 0 && <Checks checks={pr.checks} />}
 
       {pr.body.trim() && (
-        <Section title="Description">
+        <Section title={t("pullRequest.sections.description")}>
           <Collapsible long={pr.body.length > 700 || pr.body.split("\n").length > 14}>
             <Markdown className="text-[13px]">{pr.body}</Markdown>
           </Collapsible>
@@ -296,23 +309,23 @@ function Section({ title, aside, children }: { title: string; aside?: ReactNode;
 }
 
 function Collapsible({ long, children }: { long: boolean; children: ReactNode }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   if (!long) return <>{children}</>;
   return (
     <div className="relative">
       <div className={cn(!open && "max-h-64 overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)]")}>{children}</div>
       <button type="button" className="mt-1 text-xs text-muted-foreground hover:text-foreground" onClick={() => setOpen(!open)}>
-        {open ? "Show less" : "Show all"}
+        {open ? t("pullRequest.showLess") : t("pullRequest.showAll")}
       </button>
     </div>
   );
 }
 
-const REVIEW_LABEL: Record<PullRequestReview["state"], string> = { approved: "approved", changes_requested: "wants changes", commented: "commented" };
-
 function Reviews({ reviews }: { reviews: PullRequestReview[] }) {
+  const { t } = useTranslation("chat");
   return (
-    <Section title="Reviews">
+    <Section title={t("pullRequest.sections.reviews")}>
       <ul className="space-y-1">
         {reviews.map((r) => (
           <li key={r.author} className="flex items-center gap-2 text-[13px]">
@@ -325,7 +338,7 @@ function Reviews({ reviews }: { reviews: PullRequestReview[] }) {
             )}
             {r.avatarUrl && <img src={r.avatarUrl} alt="" className="size-4 rounded-full" />}
             <span className="font-medium">{r.author}</span>
-            <span className="text-muted-foreground">{REVIEW_LABEL[r.state]}</span>
+            <span className="text-muted-foreground">{t(`pullRequest.review.${r.state}`)}</span>
           </li>
         ))}
       </ul>
@@ -347,19 +360,20 @@ function CheckIcon({ state }: { state: PullRequestCheck["state"] }) {
 }
 
 function Checks({ checks }: { checks: PullRequestCheck[] }) {
+  const { t } = useTranslation("chat");
   const [all, setAll] = useState(false);
   const count = (state: PullRequestCheck["state"]) => checks.filter((c) => c.state === state).length;
   const summary = [
-    count("failure") && `${count("failure")} failed`,
-    count("pending") && `${count("pending")} running`,
-    count("success") && `${count("success")} passed`,
-    count("neutral") && `${count("neutral")} skipped`,
+    count("failure") && t("pullRequest.checks.failed", { count: count("failure") }),
+    count("pending") && t("pullRequest.checks.running", { count: count("pending") }),
+    count("success") && t("pullRequest.checks.passed", { count: count("success") }),
+    count("neutral") && t("pullRequest.checks.skipped", { count: count("neutral") }),
   ]
     .filter(Boolean)
     .join(" · ");
   const shown = all ? checks : checks.slice(0, CHECKS_SHOWN);
   return (
-    <Section title="Checks" aside={summary}>
+    <Section title={t("pullRequest.sections.checks")} aside={summary}>
       <ul className="space-y-0.5">
         {shown.map((c) => (
           <li key={c.name} className="flex items-center gap-2 text-[13px]">
@@ -376,7 +390,7 @@ function Checks({ checks }: { checks: PullRequestCheck[] }) {
       </ul>
       {checks.length > CHECKS_SHOWN && (
         <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setAll(!all)}>
-          {all ? "Show fewer" : `Show all ${checks.length}`}
+          {all ? t("pullRequest.showFewer") : t("pullRequest.showAllCount", { count: checks.length })}
         </button>
       )}
     </Section>
@@ -384,12 +398,13 @@ function Checks({ checks }: { checks: PullRequestCheck[] }) {
 }
 
 function Files({ pr }: { pr: PullRequestView }) {
+  const { t } = useTranslation("chat");
   const [all, setAll] = useState(false);
   const files = pr.files ?? [];
   const shown = all ? files : files.slice(0, FILES_SHOWN);
   const hidden = pr.changedFiles - files.length;
   return (
-    <Section title="Files">
+    <Section title={t("pullRequest.sections.files")}>
       <ul className="space-y-0.5">
         {shown.map((f) => (
           <li key={f.path} className="flex items-center gap-2 text-[12.5px]">
@@ -414,12 +429,12 @@ function Files({ pr }: { pr: PullRequestView }) {
         <div className="flex gap-3 text-xs text-muted-foreground">
           {files.length > FILES_SHOWN && (
             <button type="button" className="hover:text-foreground" onClick={() => setAll(!all)}>
-              {all ? "Show fewer" : `Show all ${files.length}`}
+              {all ? t("pullRequest.showFewer") : t("pullRequest.showAllCount", { count: files.length })}
             </button>
           )}
           {hidden > 0 && (
             <a href={`${pr.url}/files`} target="_blank" rel="noreferrer noopener" className="hover:text-foreground">
-              {hidden} more on GitHub
+              {t("pullRequest.moreOnGithub", { count: hidden })}
             </a>
           )}
         </div>
@@ -428,11 +443,6 @@ function Files({ pr }: { pr: PullRequestView }) {
   );
 }
 
-const METHOD_LABEL: Record<PullRequestMergeMethod, { button: string; hint: string }> = {
-  merge: { button: "Merge", hint: "All commits, plus a merge commit" },
-  squash: { button: "Squash and merge", hint: "All changes as one commit" },
-  rebase: { button: "Rebase and merge", hint: "The commits, replayed on the base branch" },
-};
 const METHOD_KEY = "gm.github.mergeMethod";
 
 function preferredMethod(methods: PullRequestMergeMethod[]): PullRequestMergeMethod | null {
@@ -441,6 +451,7 @@ function preferredMethod(methods: PullRequestMergeMethod[]): PullRequestMergeMet
 }
 
 function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
+  const { t } = useTranslation("chat");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<PullRequestMergeMethod | null>(() => preferredMethod(pr.mergeMethods));
@@ -448,20 +459,20 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const blocker =
     pr.state === "draft"
-      ? "It's still a draft. Mark it ready for review on GitHub first."
+      ? t("pullRequest.merge.blockedDraft")
       : pr.mergeable === "conflicting"
-        ? "Resolve the conflicts with the base branch first."
+        ? t("pullRequest.merge.blockedConflicts")
         : pr.mergeMethods.length === 0
-          ? "This repository allows no merge method."
+          ? t("pullRequest.merge.blockedNoMethod")
           : null;
   const failing = (pr.checks ?? []).filter((c) => c.state === "failure").length;
   const running = (pr.checks ?? []).filter((c) => c.state === "pending").length;
   const wantsChanges = (pr.reviews ?? []).some((r) => r.state === "changes_requested");
   const warnings = [
-    failing > 0 && `${failing} ${failing === 1 ? "check failed" : "checks failed"}`,
-    running > 0 && `${running} ${running === 1 ? "check is" : "checks are"} still running`,
-    wantsChanges && "a reviewer asked for changes",
-    pr.mergeable === "blocked" && "GitHub reports a required review or check missing",
+    failing > 0 && t("pullRequest.merge.warnFailing", { count: failing }),
+    running > 0 && t("pullRequest.merge.warnRunning", { count: running }),
+    wantsChanges && t("pullRequest.merge.warnChanges"),
+    pr.mergeable === "blocked" && t("pullRequest.merge.warnBlocked"),
   ].filter((w): w is string => !!w);
 
   const merge = async () => {
@@ -473,7 +484,7 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
       const view = await api.github.merge({ url, method, headSha: pr.headSha });
       qc.setQueryData(qk.pullRequest(url), view);
       setOpen(false);
-      toast.success(`Merged #${pr.ref.number} into ${pr.baseBranch}`);
+      toast.success(t("pullRequest.merge.done", { number: pr.ref.number, base: pr.baseBranch }));
     } catch (err) {
       setProblem(err instanceof Error ? err.message : String(err));
       if (err instanceof ApiRequestError && err.code === GithubErrorCode.MergeRefused) void qc.invalidateQueries({ queryKey: qk.pullRequest(url) });
@@ -485,7 +496,7 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
   return (
     <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
       <GitMerge className="size-4 shrink-0 text-muted-foreground" />
-      <p className="min-w-0 flex-1 text-xs text-muted-foreground">{blocker ?? `Into ${pr.baseBranch}`}</p>
+      <p className="min-w-0 flex-1 text-xs text-muted-foreground">{blocker ?? t("pullRequest.merge.into", { base: pr.baseBranch })}</p>
       <Button
         size="sm"
         disabled={!!blocker || !method}
@@ -495,18 +506,16 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
           setOpen(true);
         }}
       >
-        <GitMerge /> Merge…
+        <GitMerge /> {t("pullRequest.merge.button")}
       </Button>
       <AlertDialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Merge #{pr.ref.number} into {pr.baseBranch}?
-            </AlertDialogTitle>
+            <AlertDialogTitle>{t("pullRequest.merge.confirmTitle", { number: pr.ref.number, base: pr.baseBranch })}</AlertDialogTitle>
             <AlertDialogDescription className="break-words">{pr.title}</AlertDialogDescription>
           </AlertDialogHeader>
           {pr.mergeMethods.length > 1 && (
-            <div className="grid gap-1.5" role="radiogroup" aria-label="How to merge">
+            <div className="grid gap-1.5" role="radiogroup" aria-label={t("pullRequest.merge.how")}>
               {pr.mergeMethods.map((m) => (
                 <button
                   key={m}
@@ -516,8 +525,8 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
                   onClick={() => setMethod(m)}
                   className={cn("rounded-lg border px-3 py-2 text-left transition", method === m ? "border-brand/50 bg-brand-soft/40 ring-2 ring-brand/15" : "hover:border-foreground/15")}
                 >
-                  <span className="block text-sm font-medium">{METHOD_LABEL[m].button}</span>
-                  <span className="block text-xs text-muted-foreground">{METHOD_LABEL[m].hint}</span>
+                  <span className="block text-sm font-medium">{t(`pullRequest.merge.methods.${m}.label`)}</span>
+                  <span className="block text-xs text-muted-foreground">{t(`pullRequest.merge.methods.${m}.hint`)}</span>
                 </button>
               ))}
             </div>
@@ -525,19 +534,19 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
           {warnings.length > 0 && (
             <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
-              <span>Heads up: {warnings.join(", ")}.</span>
+              <span>{t("pullRequest.merge.headsUp", { warnings: warnings.join(", ") })}</span>
             </p>
           )}
           {problem && (
             <p className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive" role="alert">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-              <span>GitHub didn't merge it: {problem}</span>
+              <span>{t("pullRequest.merge.refused", { reason: problem })}</span>
             </p>
           )}
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={busy}>{t("pullRequest.merge.cancel")}</AlertDialogCancel>
             <Button onClick={() => void merge()} disabled={busy || !method}>
-              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />} {method ? METHOD_LABEL[method].button : "Merge"}
+              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />} {method ? t(`pullRequest.merge.methods.${method}.label`) : t("pullRequest.merge.button")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -135,7 +135,7 @@ import { currentVmPage, fillIntoVm, probeOtpInVm, solveCaptchaInVm } from "../vm
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
 import { callApiTool, METHODS, type ApiCallResult, type CallPlaces } from "../integrations/apiToolRequest";
-import { chatSources, createProject, getProject, projectOfChat, updateProject } from "../services/projects";
+import { chatSources, createProject, deleteProject, getProject, projectOfChat, updateProject } from "../services/projects";
 import { all, get } from "../db";
 import { config } from "../config";
 import { link } from "../remote/runners";
@@ -954,6 +954,7 @@ const CONNECTOR_TOOLS: ReadonlyMap<string, ConnectorAccess> = new Map([
   ["workspace_update", "manage"],
   ["project_create", "manage"],
   ["project_update", "manage"],
+  ["project_delete", "manage"],
   ["logins_overview", "read"],
   ["missing_logins_list", "read"],
   ["vms_list", "read"],
@@ -3175,7 +3176,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
   defineTool({
     name: "project_update",
     description:
-      "Change a project's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Projects stay in their workspace; removing sources and deleting a project is the human's. " +
+      "Change a project's name, description, emoji, colour or instructions, and attach more folders or git repositories (addSources). Projects stay in their workspace; removing sources is the human's, project_delete deletes one. " +
       "Refused while an agent you couldn't hand work to (it reads secrets, or controls this computer) works on it; your changes are marked like project_create's.",
     schema: z.object({
       projectId: z.string(),
@@ -3198,6 +3199,29 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       const updated = updateProject(project.id, { ...patch, sources }, contextWriter(agent, ctx, project.workspaceId));
       audit(`agent:${agent.id}`, "project.update", project.id, { fields: Object.keys({ ...patch, ...(sources ? { sources } : {}) }) });
       return json(projectSummary(updated));
+    },
+  }),
+
+  defineTool({
+    name: "project_delete",
+    description:
+      "Delete a project. Its chats, tickets and agents stay in the workspace without a project; the git repositories Godmode cloned for it go to the trash, the human's own folders are not touched. Only do this when the human explicitly asked for it. " +
+      "Refused while an agent you couldn't hand work to (it reads secrets, or controls this computer) works on it.",
+    schema: z.object({ projectId: z.string().describe("Project id (workspaces_list shows them)") }),
+    when: managesSetup,
+    run: async ({ projectId }, { agent, ctx }) => {
+      let project: Project;
+      try {
+        project = getProject(projectId);
+      } catch {
+        return fail(`There is no project "${projectId}". workspaces_list shows them.`);
+      }
+      const ids = projectAgentIds(project.id);
+      const refusal = setupOffHostRefusal(ctx) ?? memberRefusal(agent, ctx, (a) => ids.has(a.id), "delete its project");
+      if (refusal) return fail(refusal);
+      await deleteProject(project.id);
+      audit(`agent:${agent.id}`, "project.delete", project.id, { name: project.name, workspaceId: project.workspaceId });
+      return `Deleted project "${project.name}". Its chats, tickets and agents stay in the workspace without a project.`;
     },
   }),
 
