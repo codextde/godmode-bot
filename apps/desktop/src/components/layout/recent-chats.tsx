@@ -191,7 +191,7 @@ export function RecentChats() {
       </div>
       {open && (
         <SidebarGroupContent id="recent-chats-panel">
-          <SidebarMenu className="gap-px">
+          <SidebarMenu className="gap-0.5">
             {matching.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
             {rows.map(({ c, heading, folded }, i) => {
               const headingNode = heading && (
@@ -229,10 +229,10 @@ export function RecentChats() {
                     <SidebarMenuButton
                       asChild
                       isActive={conversationId === c.id}
-                      className="h-auto min-h-7 py-1 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                      className="h-auto min-h-9 py-2 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                     >
                       <Link to={`/chat/${c.id}`} title={hover} className="flex items-start gap-2">
-                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="mt-px size-4" />
+                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-my-0.5 size-5" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
                             <span className={cn("min-w-0 flex-1 truncate text-[13px]", unread && "font-semibold text-foreground")}>
