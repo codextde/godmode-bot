@@ -17,8 +17,9 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ArrowRight, Ban, Bot, Check, CornerDownRight, Ellipsis, FolderInput, KeyRound, Layers, LayersPlus, MonitorCog } from "lucide-react";
+import { ArrowRight, Ban, Bot, Check, CornerDownRight, Ellipsis, FolderInput, KeyRound, Layers, LayersPlus, MonitorCog, Trash2 } from "lucide-react";
 import type { Project, ScopeMoveCounts, ScopeMoveResult, Workspace } from "@godmode/shared";
+import { DeleteProjectDialog } from "@/components/projects/delete-project";
 import { besideCursor, innermost, swallowNextClick } from "@/components/agents/agent-dnd";
 import {
   AlertDialog,
@@ -36,6 +37,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -703,7 +705,9 @@ export function WorkspaceMoveMenu({ workspace }: { workspace: Workspace }) {
 export function ProjectMoveMenu({ project, className }: { project: Project; className?: string }) {
   const { t } = useTranslation(["workspaces", "common"]);
   const { workspaces, move } = useContext(Ctx);
+  const [deleting, setDeleting] = useState(false);
   return (
+    <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon-sm" aria-label={t("workspaces:scope.moveNamed", { name: project.name })} className={cn("text-muted-foreground", className)}>
@@ -733,7 +737,18 @@ export function ProjectMoveMenu({ project, className }: { project: Project; clas
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onClick={() => setDeleting(true)}>
+          <Trash2 /> {t("common:actions.delete")}
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    <DeleteProjectDialog
+      project={project}
+      workspaceName={workspaces.find((w) => w.id === project.workspaceId)?.name ?? ""}
+      open={deleting}
+      onOpenChange={setDeleting}
+    />
+    </>
   );
 }

@@ -12,6 +12,7 @@ import {
   messageImage,
   messageWindow,
   markConversationsRead,
+  markConversationsUnread,
   sendMessage,
   startChat,
   updateConversation,
@@ -142,6 +143,12 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/read", async (c) => {
     const { ids } = await body(c, z.object({ ids: z.union([z.literal("all"), z.array(z.string().min(1).max(100)).max(500)]) }));
     return c.json({ read: markConversationsRead(ids) });
+  });
+
+  // "Mark as unread" from a chat's menu: it shows as new again until it is opened.
+  app.post("/api/conversations/unread", async (c) => {
+    const { ids } = await body(c, z.object({ ids: z.array(z.string().min(1).max(100)).min(1).max(500) }));
+    return c.json({ unread: markConversationsUnread(ids) });
   });
 
   // Pick up a turn that ended early: continue where it stopped, or send it again.

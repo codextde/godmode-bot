@@ -1,5 +1,6 @@
 import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
+  HexStatus,
   AndroidConnectInput,
   AndroidConnectResult,
   AndroidDevice,
@@ -668,6 +669,8 @@ export const api = {
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
+    /** Show these chats as new again until they are opened. */
+    unread: (ids: string[]) => post<{ unread: number }>("/api/conversations/unread", { ids }),
     /** `ongoing`: only chats with work ahead (working, standing still, or continuing by themselves later). */
     list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
@@ -1058,6 +1061,8 @@ export const api = {
       return request<{ text: string }>("POST", "/api/voice/transcribe", form);
     },
     speak: (text: string) => request<Blob>("POST", "/api/voice/speak", { text }),
+    hex: () => get<HexStatus>("/api/voice/hex"),
+    prepareHex: (language?: string) => post<HexStatus>("/api/voice/hex/prepare", { language }),
   },
 
   calls: {

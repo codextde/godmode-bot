@@ -189,6 +189,7 @@
       "createdProjectNamed": "Created project {{name}}",
       "createdProject": "Created project",
       "updatedProject": "Updated a project",
+      "deletedProject": "Deleted a project",
       "sentNotification": "Sent you a notification",
       "willContinue": "Will continue {{when}}",
       "cancelledFollowup": "Cancelled its follow-up",
@@ -550,14 +551,26 @@
       "subagent": "Subagent",
       "report": "Report"
     },
+    "subagents": {
+      "subagents_one": "{{count}} subagent",
+      "subagents_other": "{{count}} subagents",
+      "helpers_one": "{{count}} helper",
+      "helpers_other": "{{count}} helpers",
+      "running_one": "{{count}} working",
+      "running_other": "{{count}} working",
+      "done_one": "{{count}} done",
+      "done_other": "{{count}} done",
+      "failed_one": "{{count}} failed",
+      "failed_other": "{{count}} failed",
+      "stopped_one": "{{count}} stopped",
+      "stopped_other": "{{count}} stopped"
+    },
     "background": {
-      "helpersWorking": "Helpers working",
-      "subagentsWorking": "Subagents working",
-      "helpersInBackground_one": "{{count}} helper is working in the background",
-      "helpersInBackground_other": "{{count}} helpers are working in the background",
-      "subagentsInBackground_one": "{{count}} subagent is working in the background",
-      "subagentsInBackground_other": "{{count}} subagents are working in the background",
-      "continuesWhen": "Continues when they report back"
+      "continuesWhen": "Continues when they report back",
+      "helpersCount_one": "Helper working",
+      "helpersCount_other": "{{count}} helpers working",
+      "subagentsCount_one": "Subagent working",
+      "subagentsCount_other": "{{count}} subagents working"
     },
     "tokens": "{{tokens}} tokens",
     "workflow": {

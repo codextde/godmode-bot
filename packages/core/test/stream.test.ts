@@ -397,6 +397,19 @@ describe("StreamAccumulator — synthetic cases", () => {
     expect(fg.activityLabel()).toBe("Subagent working · Map the code");
   });
 
+  test("a subagent's card knows the model it runs on, whether its first message comes before or after its task", () => {
+    const acc = new StreamAccumulator();
+    acc.push({ type: "assistant", message: { id: "m1", model: "claude-opus-5-5", content: [{ type: "tool_use", id: "a1", name: "Agent", input: {} }, { type: "tool_use", id: "a2", name: "Agent", input: {} }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag1", tool_use_id: "a1", description: "Map", task_type: "local_agent", is_backgrounded: true });
+    expect(acc.push({ type: "assistant", parent_tool_use_id: "a1", message: { id: "s1", model: "claude-haiku-5-5", content: [{ type: "text", text: "On it" }] } })).toBe(true);
+    acc.push({ type: "assistant", parent_tool_use_id: "a2", message: { id: "s2", model: "claude-sonnet-5-5", content: [{ type: "text", text: "On it" }] } });
+    acc.push({ type: "system", subtype: "task_started", task_id: "ag2", tool_use_id: "a2", description: "Review", task_type: "local_agent", is_backgrounded: true });
+    acc.push({ type: "assistant", parent_tool_use_id: "a1", message: { id: "s3", model: "<synthetic>", content: [{ type: "text", text: "API error" }] } });
+    const [first, second] = acc.blocks.filter((b) => b.type === "tool_use" && !b.parentToolUseId);
+    expect(first?.type === "tool_use" && first.task?.model).toBe("claude-haiku-5-5");
+    expect(second?.type === "tool_use" && second.task?.model).toBe("claude-sonnet-5-5");
+  });
+
   test("a turn that ends while its subagents work: the label says they work, not done, until they report back", () => {
     const acc = new StreamAccumulator();
     acc.push({ type: "assistant", message: { id: "m1", content: [{ type: "tool_use", id: "a1", name: "Agent", input: { run_in_background: true } }] } });

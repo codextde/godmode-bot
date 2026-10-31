@@ -504,6 +504,7 @@ const GODMODE_TOOLS = new Set([
   "workspace_update",
   "project_create",
   "project_update",
+  "project_delete",
   "notify_user",
   "followup_schedule",
   "followup_cancel",
@@ -731,6 +732,8 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       };
     case "project_update":
       return { kind: "agents", icon: FolderKanban, title: t("chat:tools.godmode.updatedProject") };
+    case "project_delete":
+      return { kind: "agents", icon: FolderKanban, title: t("chat:tools.godmode.deletedProject") };
     case "notify_user":
       return { kind: "notify", icon: Bell, title: t("chat:tools.godmode.sentNotification"), detail: str(input.title) || undefined };
     case "followup_schedule":
