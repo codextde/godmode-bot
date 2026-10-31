@@ -10,7 +10,7 @@ export type UpdateState =
   | { status: "installing"; version: string }
   | { status: "error"; message: string };
 
-export const useUpdater = create<{ update: UpdateState }>(() => ({ update: { status: "disabled" } }));
+export const useUpdater = create<{ update: UpdateState; canary: boolean }>(() => ({ update: { status: "disabled" }, canary: false }));
 
 const set = (update: UpdateState) => useUpdater.setState({ update });
 
@@ -27,7 +27,8 @@ export function syncUpdater() {
     });
     if (cancelled) return unlisten();
     stop = unlisten;
-    const snapshot = await invoke<UpdateState>("update_state");
+    const [snapshot, canary] = await Promise.all([invoke<UpdateState>("update_state"), invoke<boolean>("canary_updates")]);
+    useUpdater.setState({ canary });
     if (!heard) set(snapshot);
   })().catch(() => {});
   return () => {
@@ -44,4 +45,15 @@ export async function checkForUpdates() {
 export async function installUpdate() {
   const { invoke } = await import("@tauri-apps/api/core");
   await invoke("install_update");
+}
+
+export async function setCanaryUpdates(enabled: boolean) {
+  const { invoke } = await import("@tauri-apps/api/core");
+  useUpdater.setState({ canary: enabled });
+  try {
+    await invoke("set_canary_updates", { enabled });
+  } catch (err) {
+    useUpdater.setState({ canary: !enabled });
+    throw err;
+  }
 }

@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { openExternal } from "@/lib/desktop";
-import { checkForUpdates, useUpdater } from "@/stores/updater";
+import { checkForUpdates, setCanaryUpdates, useUpdater } from "@/stores/updater";
 
 export const SITE = LICENSE_SITE;
 
@@ -101,6 +102,7 @@ const MB = 1024 * 1024;
 
 function UpdatesCard({ version }: { version: string | undefined }) {
   const update = useUpdater((s) => s.update);
+  const canary = useUpdater((s) => s.canary);
   const { restart, dialog } = useRestartToUpdate();
   if (update.status === "disabled") return null;
 
@@ -187,6 +189,13 @@ function UpdatesCard({ version }: { version: string | undefined }) {
     >
       <SettingRow label={label} description={description}>
         {action ?? undefined}
+      </SettingRow>
+      <SettingRow
+        label="Canary channel"
+        htmlFor="updates-canary"
+        description="Get a new build every time code lands on main. Expect rough edges. Turning it off keeps your build until the next stable release."
+      >
+        <Switch id="updates-canary" checked={canary} onCheckedChange={(enabled) => void setCanaryUpdates(enabled).catch(() => {})} />
       </SettingRow>
       {dialog}
     </SettingsGroup>
