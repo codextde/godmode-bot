@@ -3,6 +3,7 @@ import { format, formatDistanceToNowStrict, isSameDay } from "date-fns";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View, type StyleProp, type TextStyle } from "react-native";
+import { useTranslation } from "react-i18next";
 import { findModel, type Agent, type Run, type RunStatus, type RunTrigger } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Icon, type IconName } from "@/components/icon";
@@ -15,6 +16,7 @@ import { ApiError, api, errorText } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
 import { activityText } from "@/lib/format";
 import { useAgents, useNow } from "@/lib/hooks";
+import { dateLocale } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { fonts, radius, space, useColors } from "@/lib/theme";
@@ -48,6 +50,7 @@ const unfinished = (status: RunStatus | undefined) => status === "running" || st
 
 /** Everything about one run, like the desktop's run sheet: who, what started it, what it took, its result and its log. */
 export default function RunScreen() {
+  const { t } = useTranslation("runs");
   const { id } = useLocalSearchParams<{ id: string }>();
   const seed = useMemo(() => listedRun(id) ?? useLive.getState().runs[id]?.run, [id]);
   const liveStatus = useLive((s) => s.runs[id]?.run.status);
@@ -61,13 +64,13 @@ export default function RunScreen() {
   if (!run.data) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Run</Stack.Title>
+        <Stack.Title>{t("title")}</Stack.Title>
         {run.error instanceof ApiError && run.error.code === "device_forbidden" ? (
-          <EmptyState icon="pulse" title="Runs aren't available yet" body="Update Godmode on your computer to see runs here." />
+          <EmptyState icon="pulse" title={t("unavailableTitle")} body={t("unavailableBody")} />
         ) : run.isError ? (
-          <ErrorState title="Couldn't open this run" error={errorText(run.error)} onRetry={() => void run.refetch()} />
+          <ErrorState title={t("openFailed")} error={errorText(run.error)} onRetry={() => void run.refetch()} />
         ) : (
-          <LoadingState label="Loading the run…" />
+          <LoadingState label={t("loading")} />
         )}
       </View>
     );
@@ -77,6 +80,7 @@ export default function RunScreen() {
 
 function RunDetail({ run }: { run: Run }) {
   const c = useColors();
+  const { t } = useTranslation(["runs", "common"]);
   const { byId } = useAgents();
   const agent = byId.get(run.agentId);
   const live = useLive((s) => s.runs[run.id]);
@@ -84,7 +88,7 @@ function RunDetail({ run }: { run: Run }) {
   const running = status === "running";
   const cancellable = running || status === "queued" || status === "paused";
   const catalog = useModelCatalog();
-  const modelLabel = run.model ? (findModel(catalog.data?.models ?? [], run.model)?.label ?? run.model) : "Default";
+  const modelLabel = run.model ? (findModel(catalog.data?.models ?? [], run.model)?.label ?? run.model) : t("defaultModel");
   // A paused run may wait for the human's answer: that, not Continue, is the way on.
   const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open, enabled: status === "paused" });
   const asked = status === "paused" ? questions.data?.find((q) => q.runId === run.id) : undefined;
@@ -96,18 +100,18 @@ function RunDetail({ run }: { run: Run }) {
   const cancel = useMutation({
     mutationFn: () => api.runs.cancel(run.id),
     onSuccess: refresh,
-    onError: (err) => Alert.alert("Couldn't cancel the run", errorText(err)),
+    onError: (err) => Alert.alert(t("cancelFailed"), errorText(err)),
   });
   const resume = useMutation({
     mutationFn: () => api.conversations.continue(run.conversationId),
     onSuccess: refresh,
-    onError: (err) => Alert.alert("Couldn't continue", errorText(err)),
+    onError: (err) => Alert.alert(t("continueFailed"), errorText(err)),
   });
 
   const confirmCancel = () =>
-    Alert.alert("Cancel this run?", `${agent?.name ?? "The agent"} stops where it is.`, [
-      { text: "Keep running", style: "cancel" },
-      { text: "Cancel run", style: "destructive", onPress: () => cancel.mutate() },
+    Alert.alert(t("cancelTitle"), t("cancelBody", { agent: agent?.name ?? t("theAgent") }), [
+      { text: t("keepRunning"), style: "cancel" },
+      { text: t("cancelRun"), style: "destructive", onPress: () => cancel.mutate() },
     ]);
   const answer = () => {
     if (!asked) return;
@@ -120,19 +124,19 @@ function RunDetail({ run }: { run: Run }) {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Title>Run</Stack.Title>
+      <Stack.Title>{t("title")}</Stack.Title>
 
       <Card style={styles.hero} onPress={agent ? () => router.push({ pathname: "/agent/[id]", params: { id: agent.id } }) : undefined}>
         <CharacterAvatar agent={agent} size={48} running={running} />
         <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
           <T variant="headline" numberOfLines={1}>
-            {agent?.name ?? "Run"}
+            {agent?.name ?? t("title")}
           </T>
           <Row style={{ gap: 6, flexWrap: "wrap" }}>
             <RunStatusBadge run={run} status={status} waitingFor={asked ? (asked.kind === "approval" ? "approval" : "answer") : null} />
-            <Badge label={TRIGGER_LABEL[run.trigger] ?? "Manual"} icon={<Icon name={TRIGGER_ICON[run.trigger] ?? "hand"} size={10} color={c.textMuted} />} />
+            <Badge label={TRIGGER_LABEL[run.trigger] ?? t("manual")} icon={<Icon name={TRIGGER_ICON[run.trigger] ?? "hand"} size={10} color={c.textMuted} />} />
             <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
-              {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
+              {formatDistanceToNowStrict(new Date(when), { addSuffix: true, locale: dateLocale() })}
             </T>
           </Row>
         </View>
@@ -146,26 +150,32 @@ function RunDetail({ run }: { run: Run }) {
       <View style={{ gap: space.sm }}>
         {status === "paused" ? (
           asked ? (
-            <Button title={`Answer in ${asked.taskId ? "the task" : "chat"}`} icon="reply" onPress={answer} />
+            <Button title={asked.taskId ? t("answerInTask") : t("answerInChat")} icon="reply" onPress={answer} />
           ) : (
-            <Button title="Continue" icon="play" loading={resume.isPending} onPress={() => resume.mutate()} />
+            <Button title={t("common:actions.continue")} icon="play" loading={resume.isPending} onPress={() => resume.mutate()} />
           )
         ) : null}
-        <Button title="Open chat" icon="chats" variant="secondary" onPress={() => openChat(run.conversationId)} />
-        {cancellable ? <Button title="Cancel run" icon="stop" variant="danger" loading={cancel.isPending} onPress={confirmCancel} /> : null}
+        <Button title={t("openChat")} icon="chats" variant="secondary" onPress={() => openChat(run.conversationId)} />
+        {cancellable ? <Button title={t("cancelRun")} icon="stop" variant="danger" loading={cancel.isPending} onPress={confirmCancel} /> : null}
       </View>
 
       <Card style={styles.facts}>
-        <Fact label="Duration" value={running && run.startedAt ? <Elapsed since={run.startedAt} /> : formatDuration(run.durationMs)} />
-        <Fact label="Turns" value={run.numTurns != null ? String(run.numTurns) : "—"} />
-        <Fact label="Model" value={modelLabel} />
+        <Fact label={t("facts.duration")} value={running && run.startedAt ? <Elapsed since={run.startedAt} /> : formatDuration(run.durationMs)} />
+        <Fact label={t("facts.turns")} value={run.numTurns != null ? String(run.numTurns) : "—"} />
+        <Fact label={t("facts.model")} value={modelLabel} />
         <Fact
-          label="Tokens in / out"
+          label={t("facts.tokens")}
           value={run.usage ? `${formatTokens(tokensIn)} / ${formatTokens(run.usage.outputTokens)}` : "—"}
-          detail={run.usage ? `${formatTokens(run.usage.cacheReadTokens)} cache read · ${formatTokens(run.usage.cacheWriteTokens)} cache write` : undefined}
+          detail={run.usage ? t("facts.cache", { read: formatTokens(run.usage.cacheReadTokens), write: formatTokens(run.usage.cacheWriteTokens) }) : undefined}
         />
-        <Fact label="Started" value={run.startedAt ? format(new Date(run.startedAt), "MMM d, HH:mm") : "—"} last={!finished} />
-        {finished ? <Fact label="Ended" value={format(finished, run.startedAt && isSameDay(finished, new Date(run.startedAt)) ? "HH:mm" : "MMM d, HH:mm")} last /> : null}
+        <Fact label={t("facts.started")} value={run.startedAt ? format(new Date(run.startedAt), t("facts.dateTime"), { locale: dateLocale() }) : "—"} last={!finished} />
+        {finished ? (
+          <Fact
+            label={t("facts.ended")}
+            value={format(finished, run.startedAt && isSameDay(finished, new Date(run.startedAt)) ? "HH:mm" : t("facts.dateTime"), { locale: dateLocale() })}
+            last
+          />
+        ) : null}
       </Card>
 
       {run.parentRunId || run.routineId ? (
@@ -180,14 +190,14 @@ function RunDetail({ run }: { run: Run }) {
               }}
             >
               <T variant="footnote" muted>
-                Started by an automation
+                {t("startedByAutomation")}
               </T>
             </Chip>
           ) : null}
         </Row>
       ) : null}
 
-      <Section title="Prompt" action={run.prompt ? <CopyButton text={run.prompt} label="Copy prompt" /> : undefined}>
+      <Section title={t("prompt")} action={run.prompt ? <CopyButton text={run.prompt} label={t("copyPrompt")} /> : undefined}>
         <Card style={styles.block}>
           {run.prompt ? (
             <>
@@ -197,14 +207,14 @@ function RunDetail({ run }: { run: Run }) {
               {run.prompt.length > PROMPT_FOLD ? (
                 <Pressable hitSlop={8} onPress={() => setPromptOpen((o) => !o)} style={{ alignSelf: "flex-start" }}>
                   <T variant="footnote" style={{ fontWeight: "600" }}>
-                    {promptOpen ? "Show less" : "Show all"}
+                    {promptOpen ? t("common:actions.showLess") : t("showAll")}
                   </T>
                 </Pressable>
               ) : null}
             </>
           ) : (
             <T variant="subhead" muted>
-              (empty)
+              {t("empty")}
             </T>
           )}
         </Card>
@@ -215,7 +225,7 @@ function RunDetail({ run }: { run: Run }) {
           <Row style={{ gap: 6 }}>
             <Icon name="warning" size={14} color={c.danger} />
             <T variant="subhead" color={c.danger} style={{ fontWeight: "500" }}>
-              Error
+              {t("error")}
             </T>
           </Row>
           <T variant="caption" selectable color={c.danger} style={styles.mono}>
@@ -225,7 +235,7 @@ function RunDetail({ run }: { run: Run }) {
       ) : null}
 
       {run.result ? (
-        <Section title="Result" done={status === "succeeded"} action={<CopyButton text={run.result} label="Copy result" />}>
+        <Section title={t("result")} done={status === "succeeded"} action={<CopyButton text={run.result} label={t("copyResult")} />}>
           <Card style={styles.block}>
             <Markdown text={run.result} />
           </Card>
@@ -233,7 +243,7 @@ function RunDetail({ run }: { run: Run }) {
       ) : !running && !run.error ? (
         <View style={[styles.dashed, { borderColor: c.borderStrong }]}>
           <T variant="footnote" muted style={{ textAlign: "center" }}>
-            {"This run didn't produce a final answer."}
+            {t("noResult")}
           </T>
         </View>
       ) : null}
@@ -250,10 +260,10 @@ function RunDetail({ run }: { run: Run }) {
         >
           <Icon name="doc" size={16} color={c.textMuted} />
           <T variant="callout" style={{ fontWeight: "500" }}>
-            Raw log
+            {t("rawLog")}
           </T>
           <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>
-            stream-json events
+            {t("rawLogHint")}
           </T>
           <Icon name={logOpen ? "down" : "chevron"} size={12} color={c.textMuted} weight="semibold" />
         </Pressable>
@@ -268,7 +278,7 @@ function RunDetail({ run }: { run: Run }) {
         <T variant="caption" color={c.textFaint} selectable style={styles.mono}>
           {run.id}
         </T>
-        <CopyButton text={run.id} label="Copy run ID" />
+        <CopyButton text={run.id} label={t("copyRunId")} />
       </Row>
     </ScrollView>
   );
@@ -277,6 +287,7 @@ function RunDetail({ run }: { run: Run }) {
 /** What the agent does right now and for how long. */
 function Working({ since, activity }: { since: string | null; activity: string | null }) {
   const c = useColors();
+  const { t } = useTranslation("runs");
   return (
     <Card style={[styles.working, { borderColor: c.brandSoft }]}>
       <LiveDot size={8} />
@@ -285,10 +296,10 @@ function Working({ since, activity }: { since: string | null; activity: string |
           {activityText(activity)}
         </T>
         {since ? (
-          <Elapsed since={since} suffix=" elapsed" variant="caption" muted style={styles.mono} />
+          <Elapsed since={since} elapsedLabel variant="caption" muted style={styles.mono} />
         ) : (
           <T variant="caption" muted>
-            Starting…
+            {t("starting")}
           </T>
         )}
       </View>
@@ -299,21 +310,23 @@ function Working({ since, activity }: { since: string | null; activity: string |
 /** The live timer, ticking on its own so the rest of the screen doesn't re-render every second. */
 function Elapsed({
   since,
-  suffix = "",
+  elapsedLabel,
   variant = "subhead",
   muted,
   style,
 }: {
   since: string;
-  suffix?: string;
+  elapsedLabel?: boolean;
   variant?: "subhead" | "caption";
   muted?: boolean;
   style?: StyleProp<TextStyle>;
 }) {
   const now = useNow(1000);
+  const { t } = useTranslation("runs");
+  const time = formatElapsed(now - new Date(since).getTime());
   return (
     <T variant={variant} muted={muted} numberOfLines={1} style={[{ fontVariant: ["tabular-nums"] }, style]}>
-      {`${formatElapsed(now - new Date(since).getTime())}${suffix}`}
+      {elapsedLabel ? t("elapsed", { time }) : time}
     </T>
   );
 }
@@ -380,6 +393,7 @@ function Chip({ icon, onPress, children }: { icon: IconName; onPress?: () => voi
 /** "Handed over by [face] Lena": opens the run that handed this one over. */
 function HandedOverBy({ parentRunId }: { parentRunId: string }) {
   const c = useColors();
+  const { t } = useTranslation("runs");
   const parent = useQuery({ queryKey: qk.run(parentRunId), queryFn: () => api.runs.get(parentRunId), retry: false });
   const { byId } = useAgents();
   const from = parent.data ? byId.get(parent.data.agentId) : undefined;
@@ -388,7 +402,7 @@ function HandedOverBy({ parentRunId }: { parentRunId: string }) {
     return (
       <Chip icon="subagent">
         <T variant="footnote" muted>
-          Handed over by an agent that no longer exists
+          {t("handedOverByGone")}
         </T>
       </Chip>
     );
@@ -396,7 +410,7 @@ function HandedOverBy({ parentRunId }: { parentRunId: string }) {
   return (
     <Chip icon="subagent" onPress={() => openRun(parentRunId)}>
       <T variant="footnote" muted>
-        Handed over by
+        {t("handedOverBy")}
       </T>
       {from ? (
         <>
@@ -407,7 +421,7 @@ function HandedOverBy({ parentRunId }: { parentRunId: string }) {
         </>
       ) : (
         <T variant="footnote" muted>
-          another agent
+          {t("anotherAgent")}
         </T>
       )}
     </Chip>
@@ -417,6 +431,7 @@ function HandedOverBy({ parentRunId }: { parentRunId: string }) {
 /** This run is why the agent says "Last run failed": the human can let that go. */
 function FailureNotice({ agent }: { agent: Agent }) {
   const c = useColors();
+  const { t } = useTranslation("runs");
   const dismiss = useMutation({
     mutationFn: () => api.agents.dismissFailure(agent.id),
     onSuccess: (next) => {
@@ -424,13 +439,13 @@ function FailureNotice({ agent }: { agent: Agent }) {
       queryClient.setQueryData<Agent[]>(qk.agents, (list) => list?.map((a) => (a.id === next.id ? next : a)));
       void queryClient.invalidateQueries({ queryKey: qk.agents });
     },
-    onError: (err) => Alert.alert("Couldn't dismiss it", errorText(err)),
+    onError: (err) => Alert.alert(t("dismissFailed"), errorText(err)),
   });
   return (
     <View style={[styles.notice, { backgroundColor: c.dangerSoft }]}>
       <Icon name="warning" size={15} color={c.danger} />
       <T variant="footnote" style={{ flex: 1 }}>
-        {`This is why ${agent.name} shows “Last run failed”.`}
+        {t("failureNotice", { name: agent.name })}
       </T>
       <Pressable
         accessibilityRole="button"
@@ -443,7 +458,7 @@ function FailureNotice({ agent }: { agent: Agent }) {
         style={({ pressed }) => ({ opacity: dismiss.isPending ? 0.5 : pressed ? 0.6 : 1 })}
       >
         <T variant="footnote" style={{ fontWeight: "600" }}>
-          Dismiss
+          {t("dismiss")}
         </T>
       </Pressable>
     </View>

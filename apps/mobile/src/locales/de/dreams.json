@@ -1,0 +1,56 @@
+{
+  "view": {
+    "title": "Traum",
+    "openFailed": "Traum konnte nicht geöffnet werden",
+    "loading": "Traum wird geladen…",
+    "theAgent": "Der Agent",
+    "reverted": "Dieser Traum wurde rückgängig gemacht — die Dateien sind wieder wie vorher.",
+    "undoOnComputer": "Mach einen Traum in Godmode auf deinem Computer rückgängig.",
+    "cantUndo": "Das Gedächtnis hat sich nach diesem Traum geändert, daher lässt er sich nicht automatisch rückgängig machen.",
+    "eyebrow": "Traum · {{when}}",
+    "heading": "Was {{name}} geändert hat",
+    "attempted": "Was versucht wurde",
+    "notes": "Notizen des Agenten",
+    "rolledBack": "Soweit möglich zurückgesetzt",
+    "rolledBackAll": "Zurückgesetzt — nichts wurde behalten",
+    "noNotes": "{{name}} hat die Änderungen nicht beschrieben — der Diff zeigt genau, was geschrieben wurde.",
+    "changes": "Änderungen",
+    "nothingLeft": "Von diesem Traum ist nichts in den Gedächtnisdateien übrig.",
+    "noChanges": "Dieser Traum hat keine Gedächtnisdateien geändert.",
+    "otherFiles": "Das Handy zeigt MEMORY.md. Die anderen Gedächtnisdateien, die dieser Traum geändert hat, findest du in Godmode auf deinem Computer."
+  },
+  "file": {
+    "new": "Neue Datei",
+    "deleted": "Gelöscht",
+    "createdEmpty": "Leere Datei erstellt.",
+    "deletedEmpty": "Leere Datei gelöscht.",
+    "onlyNewlineAdded": "Nur der Zeilenumbruch am Dateiende wurde hinzugefügt.",
+    "onlyNewlineRemoved": "Nur der Zeilenumbruch am Dateiende wurde entfernt.",
+    "noLineChanges": "Keine Zeilenänderungen."
+  },
+  "diff": {
+    "showUnchanged_one": "{{count}} unveränderte Zeile anzeigen",
+    "showUnchanged_other": "{{count}} unveränderte Zeilen anzeigen",
+    "notShown_one": "{{n}} weitere Zeile nicht angezeigt",
+    "notShown_other": "{{n}} weitere Zeilen nicht angezeigt",
+    "showEverything": "Alles anzeigen",
+    "newlineAdded": "Zeilenumbruch am Dateiende hinzugefügt",
+    "newlineRemoved": "Kein Zeilenumbruch mehr am Dateiende",
+    "added": "Hinzugefügt: {{text}}",
+    "removed": "Entfernt: {{text}}"
+  },
+  "workspace": {
+    "title": "Workspace",
+    "stuck": "Konnte nicht zurückgelegt werden",
+    "sizeNow": "jetzt {{size}}",
+    "removedAfterWeek": "nach einer Woche entfernt",
+    "counts": {
+      "move_one": "{{count}} einsortiert",
+      "move_other": "{{count}} einsortiert",
+      "rewrite_one": "{{count}} umgeschrieben",
+      "rewrite_other": "{{count}} umgeschrieben",
+      "discard_one": "{{count}} verworfen",
+      "discard_other": "{{count}} verworfen"
+    }
+  }
+}

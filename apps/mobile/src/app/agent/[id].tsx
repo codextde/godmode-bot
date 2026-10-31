@@ -3,6 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, type ReactNode } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { findModel, leadOf, presenceLabel, reportsOf, type Agent, type Routine, type TaskStatus } from "@godmode/shared";
 import { AgentHistory, FailedRunBanner } from "@/components/agent-history";
 import { DreamsCard } from "@/components/dreams-card";
@@ -18,6 +19,7 @@ import { useProjectIndex, useWorkspace } from "@/lib/workspace";
 import { api, errorText } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
 import { activityText, whenText } from "@/lib/format";
+import { dateLocale, intlLocale, currentLanguage } from "@/lib/i18n";
 import { chatListQuery, useAgents } from "@/lib/hooks";
 import { useLive, useRunCounts } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -27,6 +29,7 @@ const TICKET_ORDER: TaskStatus[] = ["in_progress", "blocked", "in_review", "todo
 const SHOWN_TICKETS = 6;
 
 export default function AgentScreen() {
+  const { t } = useTranslation(["agents", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const agents = useAgents();
   const agent = agents.byId.get(id);
@@ -34,13 +37,13 @@ export default function AgentScreen() {
   if (!agent) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Agent</Stack.Title>
+        <Stack.Title>{t("common:words.agent")}</Stack.Title>
         {agents.isLoading ? (
-          <LoadingState label="Loading the agent…" />
+          <LoadingState label={t("detail.loading")} />
         ) : (
           <ErrorState
-            title={agents.isError ? "Couldn't load this agent" : "Agent not found"}
-            error={agents.isError ? errorText(agents.error) : "It may have been deleted."}
+            title={agents.isError ? t("detail.loadFailed") : t("detail.notFound")}
+            error={agents.isError ? errorText(agents.error) : t("detail.maybeDeleted")}
             onRetry={agents.isError ? () => void agents.refetch() : undefined}
           />
         )}
@@ -56,6 +59,7 @@ export default function AgentScreen() {
  */
 function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   const id = agent.id;
+  const { t } = useTranslation(["agents", "common"]);
   const { workspaces } = useWorkspace();
   const project = useProjectIndex().get(agent.projectId ?? "")?.project;
   const catalog = useModelCatalog();
@@ -66,18 +70,18 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.agents.update(id, { enabled }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: qk.agents }),
-    onError: (err) => Alert.alert("Couldn't switch it on", errorText(err)),
+    onError: (err) => Alert.alert(t("detail.switchOnFailed"), errorText(err)),
   });
 
   const lead = leadOf(agent, team);
   const reports = reportsOf(agent, team);
   const workspace = workspaces.find((w) => w.id === agent.workspaceId);
-  const model = agent.model ? (findModel(catalog.data?.models ?? [], agent.model)?.label ?? agent.model) : "Default model";
+  const model = agent.model ? (findModel(catalog.data?.models ?? [], agent.model)?.label ?? agent.model) : t("detail.defaultModel");
   const meta = [
-    agent.isDefault ? "Reports to you" : lead ? `Reports to ${lead.name}` : null,
-    reports.length ? `Leads ${reports.length}` : null,
-    workspace ? `${workspace.icon ? `${workspace.icon} ` : ""}${workspace.name}` : "Global",
-    [model, agent.effort ? `${agent.effort} effort` : null, agent.ultracode ? "Ultracode" : null].filter(Boolean).join(" · "),
+    agent.isDefault ? t("detail.reportsToYou") : lead ? t("detail.reportsTo", { name: lead.name }) : null,
+    reports.length ? t("detail.leads", { count: reports.length }) : null,
+    workspace ? `${workspace.icon ? `${workspace.icon} ` : ""}${workspace.name}` : t("detail.global"),
+    [model, agent.effort ? t("detail.effort", { effort: agent.effort }) : null, agent.ultracode ? "Ultracode" : null].filter(Boolean).join(" · "),
   ].filter(Boolean);
   const tone = presence.state === "working" ? "brand" : presence.state === "failed" ? "danger" : presence.needsYou ? "warning" : "neutral";
   const runTask = () => router.push({ pathname: "/new-task", params: { agentId: agent.id } });
@@ -85,12 +89,12 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
       <Stack.Title>{agent.name}</Stack.Title>
-      <HeaderActions actions={[{ icon: "slider", label: `Set up ${agent.name}`, onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) }]} />
+      <HeaderActions actions={[{ icon: "slider", label: t("detail.setUp", { name: agent.name }), onPress: () => router.push({ pathname: "/settings/agent/[id]", params: { id: agent.id } }) }]} />
       <View style={styles.hero}>
         <CharacterAvatar agent={agent} size={76} mood={moodOf(presence)} style={{ marginTop: space.md }} />
         <Row style={{ gap: space.sm }}>
           <T variant="title">{agent.name}</T>
-          {agent.isDefault && <Badge label="Built-in" />}
+          {agent.isDefault && <Badge label={t("detail.builtIn")} />}
         </Row>
         {agent.role ? (
           <T variant="subhead" style={{ textAlign: "center", fontWeight: "600" }}>
@@ -103,15 +107,15 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
           </T>
         ) : null}
         <Row style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
-          <Badge label={presenceLabel(presence)} tone={tone} live={presence.state === "working"} />
+          <Badge label={presenceLabel(presence, currentLanguage())} tone={tone} live={presence.state === "working"} />
           {project ? <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} /> : null}
         </Row>
         <T variant="footnote" muted style={{ textAlign: "center" }}>
           {meta.join("  ·  ")}
         </T>
         <Row style={{ gap: space.sm, alignSelf: "stretch", marginTop: space.sm }}>
-          <Button title="Run task" icon="play" variant="secondary" disabled={!agent.enabled} onPress={runTask} style={{ flex: 1 }} />
-          <Button title="Chat" icon="compose" onPress={() => router.push({ pathname: "/compose", params: { agentId: agent.id } })} style={{ flex: 1 }} />
+          <Button title={t("detail.runTask")} icon="play" variant="secondary" disabled={!agent.enabled} onPress={runTask} style={{ flex: 1 }} />
+          <Button title={t("detail.chat")} icon="compose" onPress={() => router.push({ pathname: "/compose", params: { agentId: agent.id } })} style={{ flex: 1 }} />
         </Row>
       </View>
 
@@ -127,8 +131,8 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
 
       <View>
         <SectionTitle
-          title="Automations"
-          action={agent.enabled ? "New automation" : undefined}
+          title={t("detail.automations")}
+          action={agent.enabled ? t("detail.newAutomation") : undefined}
           onAction={() => router.push({ pathname: "/automation-edit", params: { agentId: agent.id } })}
         />
         <Card style={{ overflow: "hidden" }}>
@@ -143,7 +147,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
             <SkeletonRows count={2} avatar={0} />
           ) : (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              {`No automations yet. Let ${agent.name} get to work on its own — even while you're away.`}
+              {t("detail.noAutomations", { name: agent.name })}
             </T>
           )}
         </Card>
@@ -152,7 +156,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
       <HeartbeatCard agent={agent} />
 
       <View>
-        <SectionTitle title="Recent chats" />
+        <SectionTitle title={t("detail.recentChats")} />
         <Card style={{ paddingVertical: 4 }}>
           {chats.data?.length ? (
             chats.data.map((conv) => <ConversationRow key={conv.id} conversation={conv} agent={agent} running={!!conv.running} />)
@@ -160,7 +164,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
             <SkeletonRows count={3} />
           ) : (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              No chats with {agent.name} yet.
+              {t("detail.noChats", { name: agent.name })}
             </T>
           )}
         </Card>
@@ -175,6 +179,7 @@ function AgentView({ agent, team }: { agent: Agent; team: Agent[] }) {
  */
 function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRunTask: () => void; onSwitchOn: () => void; switching: boolean }) {
   const c = useColors();
+  const { t } = useTranslation(["agents", "common"]);
   const runs = useLive((s) => s.runs);
   const live = useMemo(() => Object.values(runs).filter((r) => r.run.agentId === agent.id), [runs, agent.id]);
   const paused = useQuery({ queryKey: [...qk.runs, "paused", agent.id], queryFn: () => api.runs.list({ agentId: agent.id, status: "paused", limit: 50 }) });
@@ -184,46 +189,46 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
   const routines = useQuery({ queryKey: qk.agentRoutines(agent.id), queryFn: () => api.routines.list({ agentId: agent.id }) });
 
   const tickets = (tasks.data ?? [])
-    .filter((t) => t.agentId === agent.id && !t.archivedAt && TICKET_ORDER.includes(t.status))
+    .filter((task) => task.agentId === agent.id && !task.archivedAt && TICKET_ORDER.includes(task.status))
     .sort((a, b) => TICKET_ORDER.indexOf(a.status) - TICKET_ORDER.indexOf(b.status) || a.position - b.position);
   const promised = (chats.data ?? []).filter((conv) => conv.agentId === agent.id && conv.followup).sort((a, b) => a.followup!.dueAt.localeCompare(b.followup!.dueAt));
   const next = (routines.data ?? []).filter((r) => r.enabled && r.nextRunAt).sort((a, b) => a.nextRunAt!.localeCompare(b.nextRunAt!));
   const liveIds = new Set(live.map((r) => r.run.id));
   const standing = (paused.data ?? []).filter((r) => !liveIds.has(r.id));
   const titleOf = (conversationId: string, prompt?: string) =>
-    (tasks.data ?? []).find((t) => t.conversationId === conversationId)?.title ??
+    (tasks.data ?? []).find((task) => task.conversationId === conversationId)?.title ??
     (chats.data ?? []).find((conv) => conv.id === conversationId)?.title ??
-    (prompt ? prompt.replace(/^\[[^\]]*\]\s*/, "").slice(0, 80) : "A chat");
+    (prompt ? prompt.replace(/^\[[^\]]*\]\s*/, "").slice(0, 80) : t("plate.aChat"));
 
   const loading = paused.isLoading || tasks.isLoading || routines.isLoading;
   const empty = !live.length && !standing.length && !tickets.length && !promised.length && !next.length;
 
   return (
     <View>
-      <SectionTitle title="On its plate" />
+      <SectionTitle title={t("plate.title")} />
       <Card style={styles.plate}>
         {loading && empty ? (
           <SkeletonRows count={2} avatar={0} />
         ) : empty ? (
           <View style={{ gap: space.md, padding: space.sm }}>
             <T variant="subhead" muted>
-              {agent.enabled ? `Nothing on ${agent.name}'s plate right now.` : `${agent.name} is switched off.`}
+              {agent.enabled ? t("plate.empty", { name: agent.name }) : t("plate.switchedOff", { name: agent.name })}
             </T>
             {agent.enabled ? (
-              <Button title="Run task" icon="play" variant="secondary" onPress={onRunTask} />
+              <Button title={t("detail.runTask")} icon="play" variant="secondary" onPress={onRunTask} />
             ) : (
-              <Button title="Switch on" icon="power" variant="secondary" loading={switching} onPress={onSwitchOn} />
+              <Button title={t("plate.switchOn")} icon="power" variant="secondary" loading={switching} onPress={onSwitchOn} />
             )}
           </View>
         ) : (
           <View style={{ gap: space.md }}>
             {live.length > 0 || standing.length > 0 ? (
-              <PlateGroup label="Now">
+              <PlateGroup label={t("plate.now")}>
                 {live.map(({ run, activity }) => (
                   <PlateRow
                     key={run.id}
                     icon={run.status === "running" ? <LiveDot size={7} /> : <Icon name="clock" size={13} color={c.textMuted} />}
-                    title={run.status === "running" ? (activity ? activityText(activity) : "Working…") : "Queued — waiting for a free slot"}
+                    title={run.status === "running" ? (activity ? activityText(activity) : t("plate.working")) : t("plate.queued")}
                     detail={titleOf(run.conversationId)}
                     onPress={() => openChat(run.conversationId)}
                   />
@@ -237,10 +242,12 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
                       icon={<Icon name={waiting ? "warning" : limit ? "clock" : "pause"} size={13} color={waiting || limit ? c.warning : c.textMuted} />}
                       title={
                         waiting
-                          ? "Waiting for your answer"
+                          ? t("plate.waitingAnswer")
                           : limit
-                            ? `Waiting for Claude's ${run.pause?.limit ?? "usage limit"}${run.pause?.auto && run.pause.resumeAt ? ` · continues ${whenText(run.pause.resumeAt)}` : ""}`
-                            : "Paused"
+                            ? run.pause?.auto && run.pause.resumeAt
+                              ? t("plate.waitingLimitResumes", { limit: run.pause?.limit ?? t("plate.usageLimit"), when: whenText(run.pause.resumeAt) })
+                              : t("plate.waitingLimit", { limit: run.pause?.limit ?? t("plate.usageLimit") })
+                            : t("plate.paused")
                       }
                       detail={titleOf(run.conversationId, run.prompt)}
                       onPress={() => openChat(run.conversationId)}
@@ -250,30 +257,30 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
               </PlateGroup>
             ) : null}
             {tickets.length > 0 ? (
-              <PlateGroup label="Board tickets">
-                {tickets.slice(0, SHOWN_TICKETS).map((t) => (
+              <PlateGroup label={t("plate.tickets")}>
+                {tickets.slice(0, SHOWN_TICKETS).map((task) => (
                   <PlateRow
-                    key={t.id}
+                    key={task.id}
                     icon={<Icon name="tasks" size={13} color={c.textMuted} />}
-                    title={`#${t.number} ${t.title}`}
-                    detail={t.status === "blocked" && t.blockedReason ? `${STATUS_META[t.status].label} — ${t.blockedReason}` : STATUS_META[t.status].label}
-                    onPress={() => openTask(t.id)}
+                    title={`#${task.number} ${task.title}`}
+                    detail={task.status === "blocked" && task.blockedReason ? `${STATUS_META[task.status].label} — ${task.blockedReason}` : STATUS_META[task.status].label}
+                    onPress={() => openTask(task.id)}
                   />
                 ))}
                 {tickets.length > SHOWN_TICKETS ? (
                   <T variant="footnote" muted style={styles.more}>
-                    {tickets.length - SHOWN_TICKETS} more on the board
+                    {t("plate.moreOnBoard", { count: tickets.length - SHOWN_TICKETS })}
                   </T>
                 ) : null}
               </PlateGroup>
             ) : null}
             {promised.length > 0 ? (
-              <PlateGroup label="Follow-ups">
+              <PlateGroup label={t("plate.followups")}>
                 {promised.map((conv) => (
                   <PlateRow
                     key={conv.id}
                     icon={<Icon name="clock" size={13} color={c.brandStrong} />}
-                    title={conv.followup!.note || conv.title || "Follow-up"}
+                    title={conv.followup!.note || conv.title || t("plate.followup")}
                     detail={whenText(conv.followup!.dueAt)}
                     onPress={() => openChat(conv.id)}
                   />
@@ -281,18 +288,18 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
               </PlateGroup>
             ) : null}
             {next.length > 0 ? (
-              <PlateGroup label={next.length > 1 ? "Next automations" : "Next automation"}>
+              <PlateGroup label={t("plate.nextAutomations", { count: next.length })}>
                 {next.slice(0, 3).map((r) => (
                   <PlateRow
                     key={r.id}
                     icon={<Icon name="workflow" size={13} color={c.textMuted} />}
                     title={r.name}
-                    detail={`${triggerText(r)} · ${formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true })}`}
+                    detail={`${triggerText(r)} · ${formatDistanceToNowStrict(new Date(r.nextRunAt!), { addSuffix: true, locale: dateLocale() })}`}
                   />
                 ))}
                 {next.length > 3 ? (
                   <T variant="footnote" muted style={styles.more}>
-                    and {next.length - 3} more
+                    {t("plate.andMore", { count: next.length - 3 })}
                   </T>
                 ) : null}
               </PlateGroup>
@@ -307,19 +314,22 @@ function Plate({ agent, onRunTask, onSwitchOn, switching }: { agent: Agent; onRu
 /** MEMORY.md at a glance; hidden when the computer runs a Godmode without the memory editor. */
 function MemoryCard({ agent }: { agent: Agent }) {
   const c = useColors();
+  const { t } = useTranslation(["agents", "common"]);
   const memory = useQuery({ queryKey: qk.agentMemory(agent.id), queryFn: () => api.agents.memory(agent.id), retry: false });
   if (!memory.data) return null;
   const { chars, target, updatedAt, dreaming } = memory.data;
   const detail = !chars
-    ? "Nothing remembered yet"
-    : `${chars.toLocaleString()} of ${target.toLocaleString()} characters${updatedAt ? ` · updated ${formatDistanceToNowStrict(new Date(updatedAt), { addSuffix: true })}` : ""}`;
+    ? t("memoryCard.empty")
+    : updatedAt
+      ? t("memoryCard.sizeUpdated", { chars: chars.toLocaleString(intlLocale()), target: target.toLocaleString(intlLocale()), ago: formatDistanceToNowStrict(new Date(updatedAt), { addSuffix: true, locale: dateLocale() }) })
+      : t("memoryCard.size", { chars: chars.toLocaleString(intlLocale()), target: target.toLocaleString(intlLocale()) });
   return (
     <View>
-      <SectionTitle title="Memory" />
+      <SectionTitle title={t("memoryCard.title")} />
       <Card style={styles.plate}>
         <PlateRow
           icon={<Icon name={dreaming ? "moon" : "brain"} size={14} color={dreaming ? c.dream : chars > target ? c.warning : c.textMuted} />}
-          title={dreaming ? "Dreaming — tidying up its memory" : "What it remembers"}
+          title={dreaming ? t("memoryCard.dreaming") : t("memoryCard.remembers")}
           detail={detail}
           onPress={() => router.push({ pathname: "/memory/[id]", params: { id: agent.id } })}
         />
@@ -366,15 +376,16 @@ function PlateRow({ icon, title, detail, onPress }: { icon: ReactNode; title: st
 
 function RoutineRow({ routine }: { routine: Routine }) {
   const c = useColors();
+  const { t } = useTranslation(["agents", "common"]);
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => api.routines.setEnabled(routine.id, enabled),
     onSettled: () => queryClient.invalidateQueries({ queryKey: qk.routines }),
-    onError: (err) => Alert.alert("Couldn't change the automation", errorText(err)),
+    onError: (err) => Alert.alert(t("routine.changeFailed"), errorText(err)),
   });
   const run = useMutation({
     mutationFn: () => api.routines.run(routine.id),
     onSuccess: (r) => useLive.getState().runStarted(r),
-    onError: (err) => Alert.alert("Couldn't run it", errorText(err)),
+    onError: (err) => Alert.alert(t("routine.runFailed"), errorText(err)),
   });
   const enabled = toggle.isPending ? !!toggle.variables : routine.enabled;
   const canRun = routine.enabled && !run.isPending;
@@ -393,12 +404,12 @@ function RoutineRow({ routine }: { routine: Routine }) {
         </T>
         <T variant="footnote" muted numberOfLines={2}>
           {triggerText(routine)}
-          {routine.lastStatus === "failed" ? " · last run failed" : ""}
+          {routine.lastStatus === "failed" ? t("routine.lastRunFailed") : ""}
         </T>
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Run ${routine.name} now`}
+        accessibilityLabel={t("routine.runNow", { name: routine.name })}
         accessibilityState={{ disabled: !canRun }}
         hitSlop={6}
         // Not `disabled`: a press on it must not fall through to the row and open the automation.

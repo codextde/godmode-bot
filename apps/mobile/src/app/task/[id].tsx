@@ -1,9 +1,10 @@
-import { isOverdue, isWaiting, mergesOnApprove, reopenStatus, ticketList, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
+import { isOverdue, isWaiting, mergesOnApprove, reopenStatus, waitsForAnswer, waitsForSubtasks, waitsForTickets } from "@godmode/shared";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { useMemo, useState, type ReactNode } from "react";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Task, TaskStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Composer } from "@/components/composer";
@@ -19,6 +20,7 @@ import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { BLOCKED_TITLE, dueLabel, formatWork, isWorking, PRIORITY_LABEL, taskRepoLabel } from "@/lib/desktop-parity";
 import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
+import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
@@ -26,6 +28,7 @@ import { radius, space, useColors } from "@/lib/theme";
 /** A task: what it's about, how far its agent got, and the buttons to move it along. */
 export default function TaskScreen() {
   const c = useColors();
+  const { t: tr } = useTranslation(["tasks", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   // The board already has the ticket, without its long texts: the screen opens from that copy while the whole one loads.
   const seed = useMemo(() => boardTicket(id), [id]);
@@ -43,25 +46,23 @@ export default function TaskScreen() {
     onSuccess: onDone,
     onError: (err, patch) =>
       Alert.alert(
-        "Couldn't change the task",
-        err instanceof ApiError && err.code === "device_forbidden" && patch.projectId !== undefined
-          ? "Update Godmode on your computer to change a ticket's project from the phone."
-          : errorText(err),
+        tr("task.changeFailed"),
+        err instanceof ApiError && err.code === "device_forbidden" && patch.projectId !== undefined ? tr("task.projectNeedsUpdate") : errorText(err),
       ),
   });
   const approve = useMutation({
     mutationFn: () => api.tasks.approve(id),
     onSuccess: (next) => {
       onDone(next);
-      if (next.pullRequest?.state === "open") Alert.alert(`#${next.pullRequest.number} is queued to merge`, "The ticket moves to Done once GitHub merges it.");
+      if (next.pullRequest?.state === "open") Alert.alert(tr("task.queuedToMerge", { number: next.pullRequest.number }), tr("task.queuedToMergeBody"));
     },
     onError: (err) => {
       // A computer on an older Godmode: approving only marks it done.
       if (err instanceof ApiError && err.status === 404) return update.mutate({ status: "done" });
-      if (!(err instanceof ApiError && err.code === "merge_failed")) return Alert.alert("Couldn't approve it", errorText(err));
-      Alert.alert(`Couldn't merge #${task.data?.pullRequest?.number ?? ""}`, errorText(err), [
-        { text: "Cancel", style: "cancel" },
-        { text: "Mark done anyway", onPress: () => update.mutate({ status: "done" }) },
+      if (!(err instanceof ApiError && err.code === "merge_failed")) return Alert.alert(tr("task.approveFailed"), errorText(err));
+      Alert.alert(tr("task.mergeFailed", { number: task.data?.pullRequest?.number ?? "" }), errorText(err), [
+        { text: tr("common:actions.cancel"), style: "cancel" },
+        { text: tr("task.markDoneAnyway"), onPress: () => update.mutate({ status: "done" }) },
       ]);
     },
   });
@@ -72,8 +73,8 @@ export default function TaskScreen() {
     if (!task.isError) return <TaskSkeleton />;
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Task not found</Stack.Title>
-        <ErrorState title="Couldn't open this task" error={errorText(task.error)} onRetry={() => void task.refetch()} />
+        <Stack.Title>{tr("task.notFound")}</Stack.Title>
+        <ErrorState title={tr("task.openFailed")} error={errorText(task.error)} onRetry={() => void task.refetch()} />
       </View>
     );
   }
@@ -98,19 +99,23 @@ export default function TaskScreen() {
   const canFollowUp =
     !!t.conversationId && !!t.agentId && !t.archivedAt && (t.status === "in_review" || t.status === "blocked" || t.status === "done" || isWaiting(t));
   const assignable = agentsFor(agents ?? [], t.workspaceId).filter((a) => a.enabled);
+  const filedAt = format(new Date(t.createdAt), tr("task.filedFormat"), { locale: dateLocale() });
+  const filer = t.createdBy === "user" ? undefined : agents?.find((a) => `agent:${a.id}` === t.createdBy)?.name;
+  const filedLine =
+    t.createdBy === "user" ? tr("task.filedByYou", { date: filedAt }) : filer ? tr("task.filedBy", { name: filer, date: filedAt }) : tr("task.filedByAgent", { date: filedAt });
 
   const move = (status: TaskStatus) => {
     tap();
     if (status === "done" && mergesOnApprove(t)) return approve.mutate();
     if (!(working || waiting) || status === "in_progress") return update.mutate({ status });
     Alert.alert(
-      "Stop the agent?",
+      tr("task.stopAgentTitle"),
       working
-        ? `${agent?.name ?? "The agent"} is still working on it. Moving it to ${STATUS_META[status].label} stops the run.`
-        : `It waits to go on. Moving it to ${STATUS_META[status].label} stops that.`,
+        ? tr("task.stopWorking", { agent: agent?.name ?? tr("task.theAgent"), status: STATUS_META[status].label })
+        : tr("task.stopWaiting", { status: STATUS_META[status].label }),
       [
-        { text: "Keep working", style: "cancel" },
-        { text: "Stop", style: "destructive", onPress: () => update.mutate({ status }) },
+        { text: tr("task.keepWorking"), style: "cancel" },
+        { text: tr("common:actions.stop"), style: "destructive", onPress: () => update.mutate({ status }) },
       ],
     );
   };
@@ -118,9 +123,9 @@ export default function TaskScreen() {
   const archive = (archived: boolean) => {
     tap();
     if (!archived || !working) return update.mutate({ archived });
-    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Archiving it stops the run.`, [
-      { text: "Keep working", style: "cancel" },
-      { text: "Stop and archive", style: "destructive", onPress: () => update.mutate({ archived }) },
+    Alert.alert(tr("task.stopAgentTitle"), tr("task.stopArchiving", { agent: agent?.name ?? tr("task.theAgent") }), [
+      { text: tr("task.keepWorking"), style: "cancel" },
+      { text: tr("task.stopAndArchive"), style: "destructive", onPress: () => update.mutate({ archived }) },
     ]);
   };
 
@@ -128,7 +133,7 @@ export default function TaskScreen() {
     try {
       onDone(await api.tasks.message(id, content, await encodeFiles(files)));
     } catch (err) {
-      Alert.alert("Couldn't send it", errorText(err));
+      Alert.alert(tr("task.sendFailed"), errorText(err));
       throw err;
     }
   };
@@ -141,11 +146,11 @@ export default function TaskScreen() {
         <T variant="title">{t.title}</T>
         <Row style={{ gap: 6, flexWrap: "wrap" }}>
           <TaskStatusBadge task={t} />
-          {t.archivedAt ? <Badge label="Archived" /> : null}
-          <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : "Global"} />
+          {t.archivedAt ? <Badge label={tr("task.archived")} /> : null}
+          <Badge label={workspace ? `${workspace.icon || "🗂️"} ${workspace.name}` : tr("task.global")} />
           {projects.length > 0 && !t.archivedAt ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={project ? `Project ${project.name}. Change` : "Add to a project"} hitSlop={6} onPress={pickProject}>
-              <Badge label={project ? `${project.icon ? `${project.icon} ` : ""}${project.name}` : "+ Project"} tone={project ? "brand" : "neutral"} />
+            <Pressable accessibilityRole="button" accessibilityLabel={project ? tr("task.projectA11y", { name: project.name }) : tr("task.addToProject")} hitSlop={6} onPress={pickProject}>
+              <Badge label={project ? `${project.icon ? `${project.icon} ` : ""}${project.name}` : tr("task.addProject")} tone={project ? "brand" : "neutral"} />
             </Pressable>
           ) : project ? (
             <Badge label={`${project.icon ? `${project.icon} ` : ""}${project.name}`} tone="brand" />
@@ -160,7 +165,7 @@ export default function TaskScreen() {
               setPicking(false);
               if (projectId !== t.projectId) update.mutate({ projectId });
             }}
-            hint="Its agent works with the project's context, folders and repositories."
+            hint={tr("task.projectHint")}
           />
         )}
       </View>
@@ -170,15 +175,15 @@ export default function TaskScreen() {
           <Icon name="wifi" size={15} color={c.textMuted} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
-              {"Couldn't refresh"}
+              {tr("task.couldNotRefresh")}
             </T>
             <T variant="footnote" muted numberOfLines={2}>
-              {slim ? "This is the board's copy, without its texts." : errorText(task.error)}
+              {slim ? tr("task.boardCopy") : errorText(task.error)}
             </T>
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Try refreshing the task again"
+            accessibilityLabel={tr("task.retryA11y")}
             hitSlop={10}
             onPress={() => {
               tap();
@@ -187,7 +192,7 @@ export default function TaskScreen() {
             style={({ pressed }) => [styles.retry, { backgroundColor: c.surface, opacity: pressed ? 0.6 : 1 }]}
           >
             <T variant="footnote" style={{ fontWeight: "600" }}>
-              Try again
+              {tr("common:actions.tryAgain")}
             </T>
           </Pressable>
         </View>
@@ -197,30 +202,30 @@ export default function TaskScreen() {
         {agent ? <CharacterAvatar agent={agent} size={40} running={working} /> : <UnassignedAvatar size={40} />}
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-            {agent?.name ?? "Unassigned"}
+            {agent?.name ?? tr("task.unassigned")}
           </T>
           <T variant="footnote" muted numberOfLines={2}>
             {working
               ? t.activity
                 ? activityText(t.activity)
                 : t.runStatus === "queued"
-                  ? "Queued — waiting for a free slot"
-                  : "Working on it"
+                  ? tr("task.queued")
+                  : tr("task.workingOnIt")
               : waitsForAnswer(t)
-                ? "Waiting for your answer"
+                ? tr("task.waitingAnswer")
                 : waitsForTickets(t)
-                  ? `Waits for ${t.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ")} — starts once delivered`
+                  ? tr("task.waitsForTickets", { tickets: t.waitsFor.filter((w) => !w.finished).map((w) => `#${w.number}`).join(", ") })
                 : waitsForSubtasks(t)
-                  ? `Waiting for ${t.subtasks!.open === 1 ? "1 part" : `${t.subtasks!.open} parts`}`
+                  ? tr("task.waitingParts", { count: t.subtasks!.open })
                 : isWaiting(t)
-                  ? "Waiting for its follow-up"
+                  ? tr("task.waitingFollowUp")
                   : t.pause
-                    ? "Paused"
+                    ? tr("task.paused")
                     : t.status === "todo"
-                      ? "About to start"
+                      ? tr("task.aboutToStart")
                       : agent
-                        ? "Assigned"
-                        : "Pick one below to start"}
+                        ? tr("task.assigned")
+                        : tr("task.pickBelow")}
           </T>
         </View>
         {agent && <Icon name="chevron" size={13} color={c.textFaint} />}
@@ -232,13 +237,13 @@ export default function TaskScreen() {
           <View style={{ flex: 1, gap: 2 }}>
             {t.blockedKind && t.blockedKind !== "manual" ? (
               <T variant="subhead" style={{ fontWeight: "600" }}>
-                {BLOCKED_TITLE[t.blockedKind](agent?.name ?? "The agent")}
+                {BLOCKED_TITLE[t.blockedKind](agent?.name ?? tr("task.theAgent"))}
               </T>
             ) : null}
             {t.blockedReason ? <T variant="subhead">{t.blockedReason}</T> : null}
             {t.blockedKind === "publish" ? (
               <T variant="footnote" muted>
-                Publishing failed — publish it again on your computer.
+                {tr("task.publishFailed")}
               </T>
             ) : null}
           </View>
@@ -249,11 +254,11 @@ export default function TaskScreen() {
           <Icon name="check" size={16} color={c.brandStrong} />
           <View style={{ flex: 1, gap: 2 }}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
-              Delivered — ready for your review
+              {tr("task.deliveredReview")}
             </T>
             {mergesOnApprove(t) ? (
               <T variant="footnote" muted>
-                Merges #{t.pullRequest!.number} into {t.baseBranch || "the default branch"} on {hostOf(t.pullRequest!.url)} and moves the ticket to Done.
+                {tr("task.mergesInto", { number: t.pullRequest!.number, branch: t.baseBranch || tr("task.defaultBranch"), host: hostOf(t.pullRequest!.url) })}
               </T>
             ) : null}
           </View>
@@ -271,7 +276,7 @@ export default function TaskScreen() {
 
       {!agent && (t.status === "backlog" || t.status === "todo") && assignable.length > 0 && (
         <View>
-          <SectionTitle title="Hand it to" />
+          <SectionTitle title={tr("task.handTo")} />
           <View style={styles.chips}>
             {assignable.map((a) => (
               <Pressable
@@ -308,10 +313,10 @@ export default function TaskScreen() {
           <Icon name="branch" size={17} color={c.textMuted} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="headline" style={{ fontSize: 16 }}>
-              {t.pullRequest.number ? `Pull request #${t.pullRequest.number}` : "Open the pull request"}
+              {t.pullRequest.number ? tr("task.pullRequest", { number: t.pullRequest.number }) : tr("task.openPullRequest")}
             </T>
             <T variant="footnote" muted numberOfLines={1}>
-              {t.pullRequest.state ? `${t.pullRequest.state[0]!.toUpperCase()}${t.pullRequest.state.slice(1)}` : "Not opened yet"}
+              {t.pullRequest.state ? tr(`task.prState.${t.pullRequest.state}`) : tr("task.notOpened")}
               {t.branch ? ` · ${t.branch}` : ""}
             </T>
           </View>
@@ -320,28 +325,43 @@ export default function TaskScreen() {
       )}
 
       {t.summary && (whole || loadingTexts) ? (
-        <TextSection title={isWorking(t) ? "Previous result" : t.type === "research" ? "Report" : "Result"} text={whole ? t.summary : undefined} />
+        <TextSection title={isWorking(t) ? tr("task.previousResult") : t.type === "research" ? tr("task.report") : tr("task.result")} text={whole ? t.summary : undefined} />
       ) : null}
-      {(whole && t.description) || loadingTexts ? <TextSection title="Details" text={whole ? t.description : undefined} /> : null}
+      {(whole && t.description) || loadingTexts ? <TextSection title={tr("task.details")} text={whole ? t.description : undefined} /> : null}
 
       {canFollowUp && (
         <View>
-          <SectionTitle title={t.status === "in_review" ? "Request changes" : t.blockedKind === "needs_input" && t.status === "blocked" ? "Answer" : t.status === "blocked" ? "Help it along" : "Ask for changes"} />
-          <Composer draftKey={`task:${id}`} onSend={followUp} attachments placeholder={`Tell ${agent?.name ?? "the agent"} what to change…`} />
+          <SectionTitle
+            title={
+              t.status === "in_review"
+                ? tr("task.requestChanges")
+                : t.blockedKind === "needs_input" && t.status === "blocked"
+                  ? tr("task.answer")
+                  : t.status === "blocked"
+                    ? tr("task.helpAlong")
+                    : tr("task.askForChanges")
+            }
+          />
+          <Composer
+            draftKey={`task:${id}`}
+            onSend={followUp}
+            attachments
+            placeholder={agent ? tr("task.composerPlaceholder", { agent: agent.name }) : tr("task.composerPlaceholderUnnamed")}
+          />
         </View>
       )}
 
       <View>
-        <SectionTitle title="Activity" />
+        <SectionTitle title={tr("task.activity")} />
         <TaskTimeline task={t} agents={agents} />
       </View>
 
       <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
-        Filed by {t.createdBy === "user" ? "you" : (agents?.find((a) => `agent:${a.id}` === t.createdBy)?.name ?? "an agent")} on {format(new Date(t.createdAt), "d MMM yyyy, HH:mm")}
+        {filedLine}
         {t.runCount > 0
-          ? ` · ${agent?.name ?? "The agent"} worked ${formatWork(t.workMs)} in ${t.runCount} run${t.runCount === 1 ? "" : "s"}${isWorking(t) ? " so far" : ""}`
+          ? ` · ${tr(isWorking(t) ? "task.workedSoFar" : "task.worked", { agent: agent?.name ?? tr("task.theAgent"), time: formatWork(t.workMs), count: t.runCount })}`
           : ""}
-        {t.completedAt ? ` · closed ${formatDistanceToNowStrict(new Date(t.completedAt), { addSuffix: true })}` : ""}
+        {t.completedAt ? ` · ${tr("task.closedAgo", { ago: formatDistanceToNowStrict(new Date(t.completedAt), { addSuffix: true, locale: dateLocale() }) })}` : ""}
       </T>
     </ScrollView>
   );
@@ -358,10 +378,11 @@ function boardTicket(id: string): Task | undefined {
 
 /** The screen's shape while a ticket nothing is known about yet loads. */
 function TaskSkeleton() {
+  const { t } = useTranslation("tasks");
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} scrollEnabled={false}>
-      <Stack.Title>Task</Stack.Title>
-      <View style={{ gap: space.lg }} accessibilityRole="progressbar" accessibilityLabel="Loading the task">
+      <Stack.Title>{t("task.title")}</Stack.Title>
+      <View style={{ gap: space.lg }} accessibilityRole="progressbar" accessibilityLabel={t("task.loadingTask")}>
         <View style={{ gap: space.sm }}>
           <Skeleton width="86%" height={22} radius={8} />
           <Skeleton width="52%" height={22} radius={8} />
@@ -402,6 +423,7 @@ function TextSkeleton() {
 
 /** A titled card of Markdown; without `text` it is still loading. */
 function TextSection({ title, text }: { title: string; text?: string }) {
+  const { t } = useTranslation("tasks");
   return (
     <View>
       <SectionTitle title={title} />
@@ -409,7 +431,7 @@ function TextSection({ title, text }: { title: string; text?: string }) {
         {text ? (
           <Markdown text={text} />
         ) : (
-          <View accessibilityRole="progressbar" accessibilityLabel={`Loading the ${title.toLowerCase()}`}>
+          <View accessibilityRole="progressbar" accessibilityLabel={t("task.loadingSection", { section: title })}>
             <TextSkeleton />
           </View>
         )}
@@ -435,40 +457,51 @@ function Actions({
   onArchive: (archived: boolean) => void;
   onOpenChat?: () => void;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const buttons: Action[] = [];
   if (task.archivedAt) {
-    buttons.push({ title: "Back on the board", icon: "unarchive", archived: false, primary: true });
-    if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
+    buttons.push({ title: t("task.backOnBoard"), icon: "unarchive", archived: false, primary: true });
+    if (onOpenChat) buttons.push({ title: t("task.openChat"), icon: "chats", onPress: onOpenChat });
     return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
   }
   switch (task.status) {
     case "backlog":
-      if (hasAgent) buttons.push({ title: "Start", icon: "play", status: "todo", primary: true });
+      if (hasAgent) buttons.push({ title: t("task.start"), icon: "play", status: "todo", primary: true });
       break;
     case "todo":
-      buttons.push({ title: "Back to backlog", icon: "pause", status: "backlog" });
+      buttons.push({ title: t("task.backToBacklog"), icon: "pause", status: "backlog" });
       break;
     case "in_progress":
-      buttons.push({ title: "Stop", icon: "stop", status: "backlog" });
+      buttons.push({ title: t("common:actions.stop"), icon: "stop", status: "backlog" });
       break;
     case "in_review":
-      buttons.push({ title: busy && mergesOnApprove(task) ? "Merging…" : mergesOnApprove(task) ? "Approve & merge" : "Approve", icon: "check", status: "done", primary: true });
+      buttons.push({
+        title: busy && mergesOnApprove(task) ? t("task.merging") : mergesOnApprove(task) ? t("task.approveMerge") : t("task.approve"),
+        icon: "check",
+        status: "done",
+        primary: true,
+      });
       break;
     case "blocked":
       // When the agent asked for something, the answer goes in the message box below.
       if (hasAgent && task.blockedKind !== "needs_input") {
-        const title = task.blockedKind === "interrupted" ? "Continue" : task.blockedKind === "stopped" || task.blockedKind === "manual" || task.blockedKind === "publish" ? "Start again" : "Try again";
+        const title =
+          task.blockedKind === "interrupted"
+            ? t("common:actions.continue")
+            : task.blockedKind === "stopped" || task.blockedKind === "manual" || task.blockedKind === "publish"
+              ? t("task.startAgain")
+              : t("common:actions.tryAgain");
         buttons.push({ title, icon: "refresh", status: "todo", primary: true });
       }
       break;
     case "done":
     case "cancelled":
-      buttons.push({ title: "Reopen", icon: "refresh", status: reopenStatus(task) });
+      buttons.push({ title: t("task.reopen"), icon: "refresh", status: reopenStatus(task) });
       break;
   }
-  if (onOpenChat) buttons.push({ title: "Open chat", icon: "chats", onPress: onOpenChat });
-  buttons.push({ title: "Archive", icon: "archive", archived: true });
-  if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: "Cancel task", icon: "close", status: "cancelled" });
+  if (onOpenChat) buttons.push({ title: t("task.openChat"), icon: "chats", onPress: onOpenChat });
+  buttons.push({ title: t("task.archive"), icon: "archive", archived: true });
+  if (task.status !== "done" && task.status !== "cancelled") buttons.push({ title: t("task.cancelTask"), icon: "close", status: "cancelled" });
   return <ActionButtons buttons={buttons} busy={busy} onMove={onMove} onArchive={onArchive} />;
 }
 
@@ -503,21 +536,26 @@ function ActionButtons({
 /** The ticket's fields, read-only on the phone: they are set on the computer. */
 function Properties({ task: t }: { task: Task }) {
   const c = useColors();
+  const { t: tr } = useTranslation("tasks");
+  const tickets = (numbers: number[]) => {
+    const n = numbers.map((x) => `#${x}`);
+    return n.length < 2 ? (n[0] ?? "") : tr("task.ticketList", { list: n.slice(0, -1).join(", "), last: n[n.length - 1] });
+  };
   const coding = t.type === "coding" || !!t.branch;
   const open = (t.waitsFor ?? []).filter((w) => !w.finished);
   return (
     <Card style={styles.props}>
-      <Prop label="Priority" value={PRIORITY_LABEL[t.priority]} color={t.priority === "urgent" ? c.danger : undefined} />
-      {t.dueDate ? <Prop label="Due date" value={dueLabel(t.dueDate)} color={isOverdue(t) ? c.danger : undefined} /> : null}
+      <Prop label={tr("task.priority")} value={PRIORITY_LABEL[t.priority]} color={t.priority === "urgent" ? c.danger : undefined} />
+      {t.dueDate ? <Prop label={tr("task.dueDate")} value={dueLabel(t.dueDate)} color={isOverdue(t) ? c.danger : undefined} /> : null}
       {t.waitsFor?.length ? (
         <Prop
-          label="Waits for"
-          value={open.length ? ticketList(open.map((w) => w.number)) : "Nothing — all delivered"}
+          label={tr("task.waitsFor")}
+          value={open.length ? tickets(open.map((w) => w.number)) : tr("task.nothingWaiting")}
           detail={open.length === 1 ? open[0]!.title : undefined}
         />
       ) : null}
       {t.labels?.length ? (
-        <Prop label="Labels">
+        <Prop label={tr("task.labels")}>
           <Row style={{ gap: 4, flexWrap: "wrap", flex: 1 }}>
             {(t.labels ?? []).map((l) => (
               <Badge key={l} label={l} />
@@ -525,11 +563,11 @@ function Properties({ task: t }: { task: Task }) {
           </Row>
         </Prop>
       ) : null}
-      <Prop label="Type" value={TYPE_META[t.type].label} detail={TYPE_META[t.type].hint} />
-      {coding ? <Prop label="Repository" value={taskRepoLabel(t) || "The workspace's"} mono /> : null}
-      {t.branch ? <Prop label="Branch" value={`${t.branch} → ${t.baseBranch || "default"}`} mono /> : null}
+      <Prop label={tr("task.type")} value={TYPE_META[t.type].label} detail={TYPE_META[t.type].hint} />
+      {coding ? <Prop label={tr("task.repository")} value={taskRepoLabel(t) || tr("task.workspaceRepo")} mono /> : null}
+      {t.branch ? <Prop label={tr("task.branch")} value={`${t.branch} → ${t.baseBranch || tr("task.defaultBranchShort")}`} mono /> : null}
       {t.type === "coding" ? (
-        <Prop label="Merge" value={t.autoMerge ? `Into ${t.baseBranch || "the default branch"} by itself once delivered` : "After your review"} />
+        <Prop label={tr("task.merge")} value={t.autoMerge ? tr("task.autoMerge", { branch: t.baseBranch || tr("task.defaultBranch") }) : tr("task.afterReview")} />
       ) : null}
     </Card>
   );
@@ -560,6 +598,7 @@ function Prop({ label, value, detail, color, mono, children }: { label: string; 
 /** What the ticket is part of, and its own parts (a lead's ticket waits until they're finished). */
 function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }) {
   const c = useColors();
+  const { t } = useTranslation("tasks");
   const { byId } = useAgents();
   // The board the Tasks tab keeps (and live events patch), so this is the same request, not one more.
   const board = useQuery({ queryKey: qk.taskList(workspaceId), queryFn: () => api.tasks.list({ workspaceId }), enabled: !!task.subtasks || !!task.parentId });
@@ -577,7 +616,7 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
           <Icon name="branch" size={17} color={c.textMuted} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="footnote" muted>
-              Part of
+              {t("task.partOf")}
             </T>
             <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
               #{task.parentNumber} {parentTitle ?? ""}
@@ -588,10 +627,10 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
       ) : null}
       {task.subtasks ? (
         <View>
-          <SectionTitle title={`Parts · ${task.subtasks.total - task.subtasks.open} of ${task.subtasks.total} finished`} />
+          <SectionTitle title={t("task.partsTitle", { done: task.subtasks.total - task.subtasks.open, total: task.subtasks.total })} />
           <Card style={{ paddingVertical: 4 }}>
             {!parts.length && board.isPending ? (
-              <View style={styles.partsLoading} accessibilityRole="progressbar" accessibilityLabel="Loading the parts">
+              <View style={styles.partsLoading} accessibilityRole="progressbar" accessibilityLabel={t("task.loadingParts")}>
                 {Array.from({ length: Math.min(task.subtasks.total, 4) }, (_, i) => (
                   <Skeleton key={i} width={`${78 - ((i * 19) % 30)}%`} height={13} />
                 ))}
@@ -602,7 +641,7 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
                 key={p.id}
                 onPress={() => open(p.id)}
                 accessibilityRole="button"
-                accessibilityLabel={`Part #${p.number}, ${p.title}, ${STATUS_META[p.status].label}`}
+                accessibilityLabel={t("task.partA11y", { number: p.number, title: p.title, status: STATUS_META[p.status].label })}
                 style={({ pressed }) => [styles.part, { opacity: pressed ? 0.6 : 1 }]}
               >
                 <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
@@ -613,7 +652,7 @@ function Parts({ task, workspaceId }: { task: Task; workspaceId: string | null }
                 </T>
                 <T variant="footnote" muted numberOfLines={1}>
                   {STATUS_META[p.status].label}
-                  {p.agentId ? ` · ${byId.get(p.agentId)?.name ?? "an agent"}` : ""}
+                  {p.agentId ? ` · ${byId.get(p.agentId)?.name ?? t("task.anAgent")}` : ""}
                 </T>
               </Pressable>
             ))}

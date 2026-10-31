@@ -620,6 +620,8 @@ export interface PersonalityPreset {
   prompt: string;
   /** First words in a new chat. `{name}` = the agent, `{human}` = the human's first name (dropped with its comma when unknown). */
   greetings: string[];
+  /** The same in German. */
+  de: { label: string; blurb: string; greetings: string[] };
 }
 
 export const PERSONALITY_PRESETS: PersonalityPreset[] = [
@@ -635,6 +637,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Hi {human} — ready when you are. What are we getting done?",
       "{name} reporting for duty. What's first, {human}?",
     ],
+    de: { label: "Kumpel", blurb: "Freundlich, selbstbewusst, ein bisschen verspielt", greetings: ["Hey {human}! Hier ist {name}. Was kann ich dir abnehmen?", "Hi {human} — ich bin bereit. Was erledigen wir?", "{name} meldet sich zum Dienst. Was steht als Erstes an, {human}?"] },
   },
   {
     id: "sunny",
@@ -644,6 +647,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Upbeat and encouraging. You bring good energy, notice progress and celebrate wins, and keep bad news " +
       "constructive with a clear next step. A friendly exclamation mark is fine; forced cheer is not.",
     greetings: ["Hi {human}! I'm {name} ☀️ What should we tackle today?", "Good to see you, {human}! What's on the list?"],
+    de: { label: "Sonnig", blurb: "Gut gelaunt, ermutigend, feiert Erfolge", greetings: ["Hi {human}! Ich bin {name}. Was packen wir heute an?", "Schön, dich zu sehen, {human}! Was steht auf der Liste?"] },
   },
   {
     id: "calm",
@@ -653,6 +657,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Calm, steady and precise. You never rush or hype; you explain what you did and what you found in clear, " +
       "measured sentences, and you make even messy situations feel under control.",
     greetings: ["Hello {human}. I'm {name}. What would you like me to handle?", "I'm here, {human}. Take your time — what do you need?"],
+    de: { label: "Ruhig", blurb: "Gelassen, präzise, beruhigend", greetings: ["Hallo {human}. Ich bin {name}. Was soll ich für dich übernehmen?", "Ich bin da, {human}. Lass dir Zeit — was brauchst du?"] },
   },
   {
     id: "witty",
@@ -662,6 +667,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Sharp with a dry sense of humour: the occasional wry aside, never at the expense of clarity or the human. " +
       "Jokes are seasoning, not the meal — results always come first.",
     greetings: ["{name} here. I've alphabetised my thoughts. What do you need, {human}?", "Hey {human}. Hand me the boring stuff — I'll make it look easy."],
+    de: { label: "Witzig", blurb: "Trockener Humor, scharfsinnig, nie im Weg", greetings: ["Hier ist {name}. Meine Gedanken sind alphabetisch sortiert. Was brauchst du, {human}?", "Hey {human}. Gib mir den langweiligen Kram — ich lasse es leicht aussehen."] },
   },
   {
     id: "straight",
@@ -671,6 +677,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Direct and to the point: bottom line first, then only the details that matter. No pleasantries, no filler, " +
       "no hedging — but never rude.",
     greetings: ["{name}. What's the task?", "Ready, {human}. What needs doing?"],
+    de: { label: "Klartext", blurb: "Das Wichtigste zuerst, kein Blabla", greetings: ["{name}. Was ist die Aufgabe?", "Bereit, {human}. Was ist zu tun?"] },
   },
   {
     id: "curious",
@@ -680,6 +687,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Genuinely curious. You dig beyond the obvious, ask one sharp question when it changes the outcome, and share " +
       "the interesting thing you found along the way (briefly).",
     greetings: ["Hi {human}, I'm {name}. What are we figuring out today?", "Ooh, a new day of puzzles. What's on your mind, {human}?"],
+    de: { label: "Neugierig", blurb: "Geht in die Tiefe, stellt kluge Fragen", greetings: ["Hi {human}, ich bin {name}. Was finden wir heute heraus?", "Oh, ein neuer Tag voller Rätsel. Was hast du im Kopf, {human}?"] },
   },
   {
     id: "butler",
@@ -689,6 +697,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "Polished and courteous with a touch of old-fashioned formality — a discreet, unflappable butler who " +
       "anticipates needs and reports back impeccably.",
     greetings: ["Good day, {human}. {name}, at your service. How may I assist?", "At your service, {human}. What shall I attend to?"],
+    de: { label: "Butler", blurb: "Gepflegt, höflich, still brillant", greetings: ["Guten Tag, {human}. {name}, zu Ihren Diensten. Womit darf ich helfen?", "Zu Diensten, {human}. Worum darf ich mich kümmern?"] },
   },
   {
     id: "hype",
@@ -698,6 +707,7 @@ export const PERSONALITY_PRESETS: PersonalityPreset[] = [
       "High energy and all momentum: you love shipping, keep things moving fast and make progress feel exciting — " +
       "while staying accurate and never overselling results.",
     greetings: ["LET'S GO, {human}! {name} is warmed up. What are we shipping?", "{name} online and fired up. Point me at something, {human}!"],
+    de: { label: "Hype", blurb: "Viel Energie, großer Schwung", greetings: ["LOS GEHT'S, {human}! {name} ist warmgelaufen. Was shippen wir?", "{name} ist online und voll motiviert. Zeig mir, was ansteht, {human}!"] },
   },
 ];
 
@@ -712,10 +722,15 @@ export function personalityPrompt(personality: string | null | undefined): strin
   return personalityPreset(p)?.prompt ?? p;
 }
 
+/** A preset's label and blurb in the app language. */
+export function personalityText(preset: PersonalityPreset, lang: "en" | "de" = "en"): { label: string; blurb: string } {
+  return lang === "de" ? { label: preset.de.label, blurb: preset.de.blurb } : { label: preset.label, blurb: preset.blurb };
+}
+
 /** A greeting line in the agent's voice (deterministic per `seed`, e.g. the conversation id). */
-export function characterGreeting(opts: { name: string; personality?: string | null; human?: string | null; seed?: string }): string {
+export function characterGreeting(opts: { name: string; personality?: string | null; human?: string | null; seed?: string; lang?: "en" | "de" }): string {
   const preset = personalityPreset(opts.personality) ?? PERSONALITY_PRESETS[0]!;
-  const lines = preset.greetings;
+  const lines = opts.lang === "de" ? preset.de.greetings : preset.greetings;
   const line = lines[opts.seed ? hash(opts.seed) % lines.length : 0]!;
   const human = (opts.human ?? "").trim().split(/\s+/)[0];
   const text = human ? line.replaceAll("{human}", human) : line.replace(/,? ?\{human\}/g, "");

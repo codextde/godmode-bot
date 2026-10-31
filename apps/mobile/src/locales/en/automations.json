@@ -1,0 +1,145 @@
+{
+  "list": {
+    "title": "Automations",
+    "new": "New automation",
+    "loadFailed": "Couldn't load automations",
+    "noMatch": "No automations match",
+    "clearFilters": "Clear filters",
+    "emptyTitle": "No automations yet",
+    "emptyBody": "Set one up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
+  },
+  "status": {
+    "active": "Active",
+    "paused": "Paused",
+    "failing": "Failing"
+  },
+  "notify": {
+    "failures": "When a run fails",
+    "always": "After every run",
+    "never": "Never"
+  },
+  "automation": {
+    "title": "Automation",
+    "loading": "Loading the automation…",
+    "loadFailed": "Couldn't load this automation",
+    "notFound": "Automation not found",
+    "maybeDeleted": "It may have been deleted.",
+    "deleteTitle": "Delete “{{name}}”?",
+    "deleteMessageApp": "Godmode stops listening for “{{trigger}}” in {{app}}. Past runs and conversations stay in your history.",
+    "deleteMessageWebhook": "Its webhook URL stops working. Past runs and conversations stay in your history.",
+    "deleteMessage": "It won't run again. Past runs and conversations stay in your history.",
+    "delete": "Delete automation",
+    "deleteFailed": "Couldn't delete automation",
+    "openChat": "Open chat",
+    "openChatFailed": "Couldn't open the chat",
+    "openAgent": "Open {{name}}",
+    "openRunChat": "Opens the chat of this run",
+    "runningNow": "Running now",
+    "fillOnly": "Fill-only secrets",
+    "triggerBroken": "The trigger isn't working.",
+    "triggerSettingUp": "Setting up the trigger…",
+    "trigger": "Trigger",
+    "changeTriggerOnComputer": "Change the trigger in Godmode on your computer.",
+    "nextCheck": "Next check",
+    "nextRun": "Next run",
+    "lastRun": "Last run",
+    "onlyWhen": "Only when…",
+    "condition": "Condition",
+    "when": "When {{condition}}",
+    "lastCheck": "Last check",
+    "lastCheckAgo": "Last check · {{ago}}",
+    "nothingNoted": "Nothing noted yet.",
+    "whatItDoes": "What it does",
+    "enabled": "Enabled",
+    "enabledHint": "Paused automations keep their settings but don't run.",
+    "enabledHintEvents": "Paused automations keep their settings and ignore new events.",
+    "tellMe": "Tell me",
+    "keepOneChat": "Keep one chat",
+    "logins": "Logins",
+    "loginsFillOnly": "Filled in, raw passwords stay hidden",
+    "loginsLikeAgent": "Like its agent",
+    "recentEvents": "Recent events",
+    "recentEventsCount": "Recent events · {{n}}",
+    "eventsFailed": "Couldn't load events",
+    "latestEvents_one": "Showing the latest event.",
+    "latestEvents_other": "Showing the latest {{count}} events.",
+    "source": {
+      "schedule": "Schedule",
+      "app": "App event",
+      "webhook": "Webhook",
+      "condition": "Condition met",
+      "manual": "Manual"
+    },
+    "eventStatus": {
+      "pending": "Waiting",
+      "running": "Running",
+      "done": "Done",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "empty": {
+      "scheduleTitle": "No runs yet",
+      "scheduleNext": "The first run is {{when}}.",
+      "scheduleBody": "Runs show up here when the schedule fires.",
+      "appTitle": "Waiting for the first event",
+      "appBody": "Godmode is listening for “{{trigger}}” in {{app}}.",
+      "conditionTitle": "Not met yet",
+      "conditionNext": "The next check is {{when}}.",
+      "conditionBody": "Once a check finds the condition true, it shows up here.",
+      "webhookTitle": "No calls yet",
+      "webhookBody": "Call the webhook URL — or send a test event — and it shows up here."
+    }
+  },
+  "edit": {
+    "titleNew": "New automation",
+    "titleEdit": "Edit automation",
+    "loadFailed": "Couldn't load the automation",
+    "createFailed": "Couldn't create automation",
+    "updateFailed": "Couldn't update automation",
+    "intro": "When it happens, the agent gets to work — even while you're away.",
+    "whenRun": "When should it run?",
+    "when": "When…",
+    "conditionPlaceholder": "a competitor changes the price of their Pro plan (acme.com/pricing)",
+    "conditionHint": "In plain language. The agent checks it on the schedule below and gets to work once it's true.",
+    "checkedInZone": "Checked in {{zone}} time.",
+    "howOften": "How often to check",
+    "onlyWhenOptional": "Only when… (optional)",
+    "onlyWhen": "Only when",
+    "filterHint": "In plain language. Events that don't match are skipped; leave empty to act on every event.",
+    "whatToDo": "What should it do?",
+    "keepOneChat": "Every run continues the same chat, so it remembers previous runs.",
+    "keepOneChatEvent": "Every event continues the same chat. Off: each event gets its own chat, named after it.",
+    "problem": {
+      "agent": "Pick an agent",
+      "name": "Name your automation",
+      "condition": "Describe what to watch for",
+      "prompt": "Tell the agent what to do each time",
+      "promptEvent": "Tell the agent what to do with each event"
+    },
+    "namePlaceholder": {
+      "schedule": "Weekly numbers report",
+      "app": "Invoice emails to Drive",
+      "condition": "Competitor pricing watch",
+      "webhook": "Abandoned checkout recovery"
+    },
+    "promptPlaceholder": {
+      "schedule": "Collect last week's numbers from Stripe and Google Analytics, write a short report and send it to me.",
+      "app": "Save the invoice PDF to Drive and log sender, amount and due date in my Invoices sheet. The event details are passed along.",
+      "condition": "Compare their new plans with ours and update the pricing battlecard in Notion. What the check found is passed along.",
+      "webhook": "Check whether the order qualifies for a recovery offer and draft a friendly email. The request body is passed along."
+    },
+    "filterPlaceholder": {
+      "app": "the sender is a customer, or the subject mentions an invoice",
+      "webhook": "the order total is over $100"
+    },
+    "triggerHint": {
+      "schedule": "Every morning, each Monday, on the 1st…",
+      "condition": "Checked regularly, in plain language"
+    },
+    "notifyFooter": {
+      "never": "No notifications. A failing automation still shows under Needs you. Set up or changed on the phone, its runs fill in logins but never read raw passwords.",
+      "always": "A notification after every run, with what it did. Set up or changed on the phone, its runs fill in logins but never read raw passwords.",
+      "failures": "A failure is told once, until a run works again. Set up or changed on the phone, its runs fill in logins but never read raw passwords."
+    }
+  }
+}

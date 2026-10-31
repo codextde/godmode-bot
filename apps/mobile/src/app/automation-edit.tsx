@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
   cronToHuman,
   DEFAULT_CRON,
@@ -23,6 +24,7 @@ import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
+import { currentLanguage } from "@/lib/i18n";
 
 type PhoneTrigger = "schedule" | "condition";
 
@@ -30,41 +32,37 @@ type PhoneTrigger = "schedule" | "condition";
 const DEFAULT_CHECK_CRON = "0 * * * *";
 const CHECK_EVERY = ["*/5 * * * *", "*/15 * * * *", "*/30 * * * *", "0 * * * *", "0 9 * * *"];
 
-const NAME_PLACEHOLDERS: Record<RoutineTriggerType, string> = {
-  schedule: "Weekly numbers report",
-  app: "Invoice emails to Drive",
-  condition: "Competitor pricing watch",
-  webhook: "Abandoned checkout recovery",
-};
+const NAME_PLACEHOLDERS = {
+  schedule: "edit.namePlaceholder.schedule",
+  app: "edit.namePlaceholder.app",
+  condition: "edit.namePlaceholder.condition",
+  webhook: "edit.namePlaceholder.webhook",
+} as const satisfies Record<RoutineTriggerType, string>;
 
-const PROMPT_PLACEHOLDERS: Record<RoutineTriggerType, string> = {
-  schedule: "Collect last week's numbers from Stripe and Google Analytics, write a short report and send it to me.",
-  app: "Save the invoice PDF to Drive and log sender, amount and due date in my Invoices sheet. The event details are passed along.",
-  condition: "Compare their new plans with ours and update the pricing battlecard in Notion. What the check found is passed along.",
-  webhook: "Check whether the order qualifies for a recovery offer and draft a friendly email. The request body is passed along.",
-};
+const PROMPT_PLACEHOLDERS = {
+  schedule: "edit.promptPlaceholder.schedule",
+  app: "edit.promptPlaceholder.app",
+  condition: "edit.promptPlaceholder.condition",
+  webhook: "edit.promptPlaceholder.webhook",
+} as const satisfies Record<RoutineTriggerType, string>;
 
-const FILTER_PLACEHOLDERS: Partial<Record<RoutineTriggerType, string>> = {
-  app: "the sender is a customer, or the subject mentions an invoice",
-  webhook: "the order total is over $100",
-};
+const FILTER_PLACEHOLDERS = {
+  app: "edit.filterPlaceholder.app",
+  webhook: "edit.filterPlaceholder.webhook",
+} as const satisfies Partial<Record<RoutineTriggerType, string>>;
 
-const TRIGGER_OPTIONS: { type: PhoneTrigger; icon: IconName; hint: string }[] = [
-  { type: "schedule", icon: "clock", hint: "Every morning, each Monday, on the 1st…" },
-  { type: "condition", icon: "eye", hint: "Checked regularly, in plain language" },
-];
+const TRIGGER_OPTIONS = [
+  { type: "schedule", icon: "clock", hint: "edit.triggerHint.schedule" },
+  { type: "condition", icon: "eye", hint: "edit.triggerHint.condition" },
+] as const satisfies readonly { type: PhoneTrigger; icon: IconName; hint: string }[];
 
-const NOTIFY_OPTIONS: Option<RoutineNotify>[] = [
-  { value: "failures", label: "When a run fails" },
-  { value: "always", label: "After every run" },
-  { value: "never", label: "Never" },
-];
+const NOTIFY_VALUES: RoutineNotify[] = ["failures", "always", "never"];
 
-const NOTIFY_HINTS: Record<RoutineNotify, string> = {
-  never: "No notifications. A failing automation still shows under Needs you.",
-  always: "A notification after every run, with what it did.",
-  failures: "A failure is told once, until a run works again.",
-};
+const NOTIFY_FOOTERS = {
+  never: "edit.notifyFooter.never",
+  always: "edit.notifyFooter.always",
+  failures: "edit.notifyFooter.failures",
+} as const satisfies Record<RoutineNotify, string>;
 
 interface Draft {
   agentId: string;
@@ -108,6 +106,7 @@ function initialDraft(routine: Routine | null, agentId: string): Draft {
 
 /** Create (`agentId` preselects the agent) or edit (`id`) an automation that runs on a schedule or when a condition is met. */
 export default function AutomationEdit() {
+  const { t } = useTranslation(["automations", "common"]);
   const { id, agentId } = useLocalSearchParams<{ id?: string; agentId?: string }>();
   const list = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list(), enabled: !!id });
   const agents = useAgents();
@@ -118,14 +117,14 @@ export default function AutomationEdit() {
     const error = id && list.isError ? list.error : agents.isError ? agents.error : null;
     return (
       <View style={{ flex: 1 }}>
-        <Header title={id ? "Edit automation" : "New automation"} />
+        <Header title={id ? t("edit.titleEdit") : t("edit.titleNew")} />
         <View style={{ flex: 1, justifyContent: "center" }}>
           {loading ? (
             <LoadingState />
           ) : (
             <ErrorState
-              title={error ? "Couldn't load the automation" : "Automation not found"}
-              error={error ? errorText(error) : "It may have been deleted."}
+              title={error ? t("edit.loadFailed") : t("automation.notFound")}
+              error={error ? errorText(error) : t("automation.maybeDeleted")}
               onRetry={error ? () => void (id && list.isError ? list.refetch() : agents.refetch()) : undefined}
             />
           )}
@@ -139,6 +138,7 @@ export default function AutomationEdit() {
 
 function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine | null; agents: Agent[]; defaultAgentId: string }) {
   const c = useColors();
+  const { t } = useTranslation(["automations", "common"]);
   const editing = !!routine;
   const [draft, setDraft] = useState(() => initialDraft(routine, defaultAgentId));
   const [touched, setTouched] = useState(false);
@@ -154,15 +154,16 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   const windowProblem = type === "schedule" ? startWindowProblem(draft.cron, timezone, draft.startWindow) : null;
   const cronError = type === "schedule" ? (validateCron(draft.cron) ?? windowProblem) : type === "condition" ? validateCron(draft.checkCron) : null;
   const problems = {
-    agentId: !draft.agentId ? "Pick an agent" : null,
-    name: !draft.name.trim() ? "Name your automation" : null,
-    condition: type === "condition" && !draft.condition.trim() ? "Describe what to watch for" : null,
-    prompt: !draft.prompt.trim() ? (eventTrigger ? "Tell the agent what to do with each event" : "Tell the agent what to do each time") : null,
+    agentId: !draft.agentId ? t("edit.problem.agent") : null,
+    name: !draft.name.trim() ? t("edit.problem.name") : null,
+    condition: type === "condition" && !draft.condition.trim() ? t("edit.problem.condition") : null,
+    prompt: !draft.prompt.trim() ? (eventTrigger ? t("edit.problem.promptEvent") : t("edit.problem.prompt")) : null,
   };
   const firstProblem = Object.values(problems).find(Boolean) ?? cronError;
   const choosable = agents.filter((a) => a.enabled || a.id === draft.agentId);
   const agent = agents.find((a) => a.id === draft.agentId);
-  const checkOptions: Option<string>[] = [...new Set([...CHECK_EVERY, draft.checkCron])].map((cron) => ({ value: cron, label: cronToHuman(cron) }));
+  const notifyOptions: Option<RoutineNotify>[] = NOTIFY_VALUES.map((value) => ({ value, label: t(`notify.${value}`) }));
+  const checkOptions: Option<string>[] = [...new Set([...CHECK_EVERY, draft.checkCron])].map((cron) => ({ value: cron, label: cronToHuman(cron, currentLanguage()) }));
 
   const buildTrigger = (): RoutineTrigger => {
     if (type === "condition") {
@@ -179,7 +180,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
     setTouched(true);
     if (saving) return;
     if (firstProblem) {
-      Alert.alert(editing ? "Couldn't update automation" : "Couldn't create automation", firstProblem);
+      Alert.alert(editing ? t("edit.updateFailed") : t("edit.createFailed"), firstProblem);
       return;
     }
     const common = {
@@ -201,7 +202,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
       tap();
       router.back();
     } catch (err) {
-      Alert.alert(editing ? "Couldn't update automation" : "Couldn't create automation", errorText(err));
+      Alert.alert(editing ? t("edit.updateFailed") : t("edit.createFailed"), errorText(err));
     } finally {
       setSaving(false);
     }
@@ -215,19 +216,19 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
       keyboardDismissMode="interactive"
       automaticallyAdjustKeyboardInsets
     >
-      <Header title={editing ? "Edit automation" : "New automation"} action={editing ? "Save" : "Create"} saving={saving} onSave={() => void save()} />
+      <Header title={editing ? t("edit.titleEdit") : t("edit.titleNew")} action={editing ? t("common:actions.save") : t("common:actions.create")} saving={saving} onSave={() => void save()} />
       <View style={styles.content}>
         <T variant="subhead" muted>
-          When it happens, the agent gets to work — even while you&apos;re away.
+          {t("edit.intro")}
         </T>
 
         <View style={{ gap: space.sm }}>
           <View style={[styles.fields, { backgroundColor: c.surface, borderColor: touched && problems.name ? c.danger : c.border }]}>
             <TextInput
-              accessibilityLabel="Name"
+              accessibilityLabel={t("common:words.name")}
               value={draft.name}
               onChangeText={(v) => set("name", v)}
-              placeholder={NAME_PLACEHOLDERS[type]}
+              placeholder={t(NAME_PLACEHOLDERS[type])}
               placeholderTextColor={c.textFaint}
               maxLength={120}
               autoFocus={!editing}
@@ -241,7 +242,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
 
         <View style={{ gap: space.sm }}>
           <T variant="eyebrow" muted>
-            Agent
+            {t("common:words.agent")}
           </T>
           {editing ? (
             <View style={styles.chips}>
@@ -259,16 +260,16 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
 
         <View style={{ gap: space.sm }}>
           <T variant="eyebrow" muted>
-            When should it run?
+            {t("edit.whenRun")}
           </T>
           {phoneTrigger ? (
             <Group>
               {TRIGGER_OPTIONS.map((o) => (
-                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} hint={o.hint} active={type === o.type} onPress={() => set("triggerType", o.type)} />
+                <TriggerOption key={o.type} icon={o.icon} title={TRIGGER_TITLES[o.type]} hint={t(o.hint)} active={type === o.type} onPress={() => set("triggerType", o.type)} />
               ))}
             </Group>
           ) : (
-            <Group footer="Change the trigger in Godmode on your computer.">
+            <Group footer={t("automation.changeTriggerOnComputer")}>
               <View style={styles.row}>
                 <Tile icon={type === "webhook" ? "link" : "layers"} />
                 <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
@@ -305,24 +306,24 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           <View style={{ gap: space.md }}>
             <View style={{ gap: space.sm }}>
               <T variant="eyebrow" muted>
-                When…
+                {t("edit.when")}
               </T>
               <TextInput
-                accessibilityLabel="Condition"
+                accessibilityLabel={t("automation.condition")}
                 value={draft.condition}
                 onChangeText={(v) => set("condition", v)}
-                placeholder="a competitor changes the price of their Pro plan (acme.com/pricing)"
+                placeholder={t("edit.conditionPlaceholder")}
                 placeholderTextColor={c.textFaint}
                 multiline
                 style={[styles.area, { minHeight: 76, color: c.text, backgroundColor: c.surface, borderColor: touched && problems.condition ? c.danger : c.border }]}
               />
               <Problem text={touched ? problems.condition : null} />
               <T variant="footnote" muted>
-                In plain language. The agent checks it on the schedule below and gets to work once it&apos;s true.
+                {t("edit.conditionHint")}
               </T>
             </View>
-            <Group footer={zone ? `Checked in ${zone} time.` : undefined}>
-              <PickerRow title="How often to check" value={draft.checkCron} options={checkOptions} onChange={(cron) => set("checkCron", cron)} />
+            <Group footer={zone ? t("edit.checkedInZone", { zone }) : undefined}>
+              <PickerRow title={t("edit.howOften")} value={draft.checkCron} options={checkOptions} onChange={(cron) => set("checkCron", cron)} />
             </Group>
           </View>
         ) : null}
@@ -330,32 +331,32 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
         {eventTrigger ? (
           <View style={{ gap: space.sm }}>
             <T variant="eyebrow" muted>
-              Only when… (optional)
+              {t("edit.onlyWhenOptional")}
             </T>
             <TextInput
-              accessibilityLabel="Only when"
+              accessibilityLabel={t("edit.onlyWhen")}
               value={draft.filter}
               onChangeText={(v) => set("filter", v)}
-              placeholder={FILTER_PLACEHOLDERS[type]}
+              placeholder={type === "app" || type === "webhook" ? t(FILTER_PLACEHOLDERS[type]) : undefined}
               placeholderTextColor={c.textFaint}
               multiline
               style={[styles.area, { minHeight: 52, color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
             />
             <T variant="footnote" muted>
-              In plain language. Events that don&apos;t match are skipped; leave empty to act on every event.
+              {t("edit.filterHint")}
             </T>
           </View>
         ) : null}
 
         <View style={{ gap: space.sm }}>
           <T variant="eyebrow" muted>
-            What should it do?
+            {t("edit.whatToDo")}
           </T>
           <TextInput
-            accessibilityLabel="What should it do?"
+            accessibilityLabel={t("edit.whatToDo")}
             value={draft.prompt}
             onChangeText={(v) => set("prompt", v)}
-            placeholder={PROMPT_PLACEHOLDERS[type]}
+            placeholder={t(PROMPT_PLACEHOLDERS[type])}
             placeholderTextColor={c.textFaint}
             multiline
             style={[styles.area, { minHeight: 130, color: c.text, backgroundColor: c.surface, borderColor: touched && problems.prompt ? c.danger : c.border }]}
@@ -363,24 +364,24 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
           <Problem text={touched ? problems.prompt : null} />
         </View>
 
-        <Group footer={`${NOTIFY_HINTS[draft.notify]} Set up or changed on the phone, its runs fill in logins but never read raw passwords.`}>
+        <Group footer={t(NOTIFY_FOOTERS[draft.notify])}>
           <SwitchRow
-            title="Keep one chat"
+            title={t("automation.keepOneChat")}
             detail={
               eventTrigger
-                ? "Every event continues the same chat. Off: each event gets its own chat, named after it."
-                : "Every run continues the same chat, so it remembers previous runs."
+                ? t("edit.keepOneChatEvent")
+                : t("edit.keepOneChat")
             }
             value={draft.reuseConversation}
             onChange={(v) => set("reuseConversation", v)}
           />
           <SwitchRow
-            title="Enabled"
-            detail={eventTrigger ? "Paused automations keep their settings and ignore new events." : "Paused automations keep their settings but don't run."}
+            title={t("automation.enabled")}
+            detail={eventTrigger ? t("automation.enabledHintEvents") : t("automation.enabledHint")}
             value={draft.enabled}
             onChange={(v) => set("enabled", v)}
           />
-          <PickerRow title="Tell me" value={draft.notify} options={NOTIFY_OPTIONS} onChange={(v) => set("notify", v)} />
+          <PickerRow title={t("automation.tellMe")} value={draft.notify} options={notifyOptions} onChange={(v) => set("notify", v)} />
         </Group>
       </View>
     </ScrollView>
@@ -390,11 +391,12 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
 /** The sheet's bar: Cancel, the title and Save. */
 function Header({ title, action, saving, onSave }: { title: string; action?: string; saving?: boolean; onSave?: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("common");
   return (
     <View style={[styles.header, { borderBottomColor: c.border, backgroundColor: c.background }]}>
       <Pressable accessibilityRole="button" hitSlop={8} onPress={() => router.back()} style={styles.headerSide}>
         <T variant="callout" color={c.textMuted}>
-          Cancel
+          {t("actions.cancel")}
         </T>
       </Pressable>
       <T variant="headline" numberOfLines={1} style={{ flex: 1, textAlign: "center" }}>
@@ -446,6 +448,7 @@ function TriggerOption({ icon, title, hint, active, onPress }: { icon: IconName;
 
 function AgentChip({ agent, active, onPress }: { agent: Agent | undefined; active: boolean; onPress?: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("common");
   return (
     <Pressable
       accessibilityRole="button"
@@ -459,7 +462,7 @@ function AgentChip({ agent, active, onPress }: { agent: Agent | undefined; activ
     >
       <CharacterAvatar agent={agent} size={24} />
       <T variant="subhead" color={active ? c.onPrimary : c.text} style={{ fontWeight: "600" }} numberOfLines={1}>
-        {agent?.name ?? "Agent"}
+        {agent?.name ?? t("words.agent")}
       </T>
     </Pressable>
   );

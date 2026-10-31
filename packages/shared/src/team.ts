@@ -173,22 +173,27 @@ export function agentPresence(
   return { state, running, queued, waiting, paused, needsLogin, failed, needsYou: agent.enabled && (waiting > 0 || needsLogin || failed) };
 }
 
-export function presenceLabel(p: AgentPresence): string {
+export function presenceLabel(p: AgentPresence, lang: "en" | "de" = "en"): string {
+  const de = lang === "de";
   switch (p.state) {
     case "off":
-      return "Switched off";
+      return de ? "Ausgeschaltet" : "Switched off";
     case "working":
-      return p.running > 1 ? `Working in ${p.running} chats` : "Working…";
+      if (p.running > 1) return de ? `Arbeitet in ${p.running} Chats` : `Working in ${p.running} chats`;
+      return de ? "Arbeitet…" : "Working…";
     case "waiting":
-      if (!p.waiting) return "Needs a login";
-      return p.waiting > 1 ? `Needs you · ${p.waiting} questions` : "Needs your answer";
+      if (!p.waiting) return de ? "Braucht einen Login" : "Needs a login";
+      if (p.waiting > 1) return de ? `Braucht dich · ${p.waiting} Fragen` : `Needs you · ${p.waiting} questions`;
+      return de ? "Wartet auf deine Antwort" : "Needs your answer";
     case "failed":
-      return "Last run failed";
+      return de ? "Letzter Lauf fehlgeschlagen" : "Last run failed";
     case "paused":
-      return p.paused > 1 ? `Paused · ${p.paused} chats` : "Paused";
+      if (p.paused > 1) return de ? `Pausiert · ${p.paused} Chats` : `Paused · ${p.paused} chats`;
+      return de ? "Pausiert" : "Paused";
     case "queued":
-      return p.queued > 1 ? `Queued · ${p.queued}` : "Queued";
+      if (p.queued > 1) return de ? `In der Warteschlange · ${p.queued}` : `Queued · ${p.queued}`;
+      return de ? "In der Warteschlange" : "Queued";
     default:
-      return "Idle";
+      return de ? "Bereit" : "Idle";
   }
 }

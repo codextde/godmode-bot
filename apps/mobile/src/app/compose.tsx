@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CharacterAvatar } from "@/components/character";
 import { Composer, type ComposerHandle } from "@/components/composer";
 import { ModelButton } from "@/components/model-button";
@@ -19,6 +20,7 @@ import { radius, space, useColors } from "@/lib/theme";
 /** A new chat in the picked workspace: pick who does it, say what to do. */
 export default function Compose() {
   const c = useColors();
+  const { t } = useTranslation("chat");
   const { agentId, prompt } = useLocalSearchParams<{ agentId?: string; prompt?: string }>();
   const { data: agents, isLoading } = useAgents();
   const { id: workspaceId, projectId: scopeProject, workspaces } = useWorkspace();
@@ -63,7 +65,7 @@ export default function Compose() {
       router.dismiss();
       router.push({ pathname: "/chat/[id]", params: { id: result.conversation.id } });
     } catch (err) {
-      Alert.alert("Couldn't start the chat", errorText(err));
+      Alert.alert(t("compose.startFailed"), errorText(err));
       throw err;
     }
   };
@@ -77,11 +79,11 @@ export default function Compose() {
       automaticallyAdjustKeyboardInsets
     >
       <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
-        <T variant="title">New chat</T>
+        <T variant="title">{t("compose.title")}</T>
         <WorkspaceChip />
       </View>
       {isLoading && !enabled.length ? (
-        <View style={[styles.agents, { flexDirection: "row" }]} accessibilityLabel="Loading agents">
+        <View style={[styles.agents, { flexDirection: "row" }]} accessibilityLabel={t("compose.loadingAgents")}>
           {[112, 136, 96].map((w) => (
             <Skeleton key={w} width={w} height={36} radius={18} />
           ))}
@@ -129,7 +131,7 @@ export default function Compose() {
           attachments
           onSend={start}
           autoFocus
-          placeholder={current ? `Ask ${current.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
+          placeholder={current ? t("compose.placeholderAgent", { name: current.name }) : t("compose.placeholder")}
           trailing={current ? <ModelButton agent={current} choice={choice} /> : null}
         />
       </View>
@@ -139,11 +141,11 @@ export default function Compose() {
         onChange={setProjectPick}
         inset={space.xl}
         allowNone={!current?.projectId}
-        hint={projectId ? "It works with the project's context, folders and repositories." : undefined}
+        hint={projectId ? t("compose.projectHint") : undefined}
       />
       <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
         <T variant="eyebrow" muted>
-          Try
+          {t("compose.try")}
         </T>
         {SUGGESTIONS.map(({ text }) => (
           <Pressable

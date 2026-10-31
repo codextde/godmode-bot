@@ -1,0 +1,63 @@
+{
+  "welcome": {
+    "eyebrow": "Godmode for {{platform}}",
+    "title": "Your AI coworkers, in your pocket.",
+    "intro": "This app controls the Godmode running on your computer. Pair it once with the code on your computer's screen.",
+    "removed": "This phone was removed on your computer. Scan a new code to connect again.",
+    "points": {
+      "handOver": {
+        "title": "Hand over work from anywhere",
+        "body": "Start a task, follow the answer as it's written, stop it with one tap."
+      },
+      "watch": {
+        "title": "Look over their shoulder",
+        "body": "Watch the browser, shared screen or VM an agent works in, live."
+      },
+      "inCharge": {
+        "title": "Your computer stays in charge",
+        "body": "Your phone reaches it over Tailscale or Godmode Cloud with a key of its own, which the computer can revoke anytime. Logins stay on the computer."
+      }
+    },
+    "howTo": "On your computer: Settings → Phone → Connect a phone.\nTailscale on both (same account), or the computer linked to Godmode Cloud.",
+    "scan": "Scan QR code"
+  },
+  "pair": {
+    "invalid": {
+      "title": "Not a Godmode code",
+      "body": "Open Settings → Phone on your computer and scan the code shown there.",
+      "scanAgain": "Scan again"
+    },
+    "server": "Server",
+    "title": "Connect to {{name}}?",
+    "body": "This phone gets its own key and can control Godmode on this computer.",
+    "replaces": "Replaces the connection to {{name}}.",
+    "expired": "This code has expired. Show a new one on your computer.",
+    "scanNew": "Scan a new code",
+    "connecting": "Connecting…",
+    "connect": "Connect"
+  },
+  "scan": {
+    "notGodmode": "That's not a Godmode code. Open Settings → Phone on your computer.",
+    "copyFirst": "Copy the pairing link on your computer first.",
+    "camera": {
+      "title": "Camera access",
+      "why": "Godmode only uses the camera to read the pairing code on your computer.",
+      "off": "Camera access is off. Turn it on in Settings, or paste the pairing link instead.",
+      "openSettings": "Open Settings"
+    },
+    "point": "Point at the code on your computer",
+    "path": "Settings → Phone → Connect a phone",
+    "paste": "Paste pairing link"
+  },
+  "layout": {
+    "memory": "Memory",
+    "myTasks": "My tasks",
+    "archivedChats": "Archived chats",
+    "archivedTasks": "Archived tasks",
+    "automations": "Automations",
+    "activity": "Activity",
+    "inbox": "Inbox",
+    "calls": "Calls",
+    "dream": "Dream"
+  }
+}

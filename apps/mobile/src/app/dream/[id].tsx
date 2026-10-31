@@ -2,14 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState, type ReactNode } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { formatBytes, type DreamDetail, type DreamFileChange, type DreamWorkspaceChange } from "@godmode/shared";
 import { ACTIVE_DREAM, ChangeKindChip, DreamReasonBadge, DreamStatusBadge, ROLLED_BACK, dreamWhen, reviewedLabel } from "@/components/dream-parts";
 import { Icon, type IconName } from "@/components/icon";
 import { Badge, Card, ErrorState, Hairline, LoadingState, Row, SectionTitle, T, tap } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { diffFile, foldContext, type DiffLine, type FileDiff } from "@/lib/line-diff";
 import { qk } from "@/lib/query";
+import { intlLocale } from "@/lib/i18n";
 import { alpha, fonts, radius, space, useColors, type Colors } from "@/lib/theme";
 
 /** Rows rendered per file before "Show everything" (a new or deleted note can be long). */
@@ -17,6 +19,7 @@ const MAX_ROWS = 400;
 
 /** One dream, read-only like the desktop's review: what the agent says it did, and a line diff of every file it changed. */
 export default function DreamScreen() {
+  const { t } = useTranslation("dreams");
   const { id } = useLocalSearchParams<{ id: string }>();
   const q = useQuery({
     queryKey: qk.dream(id),
@@ -28,11 +31,11 @@ export default function DreamScreen() {
     const tooOld = q.error instanceof ApiError && (q.error.code === "device_forbidden" || q.error.status === 403);
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Dream</Stack.Title>
+        <Stack.Title>{t("view.title")}</Stack.Title>
         {q.isError ? (
-          <ErrorState title="Couldn't open this dream" error={tooOld ? UPDATE_DESKTOP_MESSAGE : errorText(q.error)} onRetry={tooOld ? undefined : () => void q.refetch()} />
+          <ErrorState title={t("view.openFailed")} error={tooOld ? updateDesktopMessage() : errorText(q.error)} onRetry={tooOld ? undefined : () => void q.refetch()} />
         ) : (
-          <LoadingState label="Loading the dream…" />
+          <LoadingState label={t("view.loading")} />
         )}
       </View>
     );
@@ -42,30 +45,31 @@ export default function DreamScreen() {
 
 function DreamView({ dream: d }: { dream: DreamDetail }) {
   const c = useColors();
-  const agentName = useAgents().byId.get(d.agentId)?.name ?? "The agent";
+  const { t } = useTranslation("dreams");
+  const agentName = useAgents().byId.get(d.agentId)?.name ?? t("view.theAgent");
   const files = useMemo(() => d.fileChanges.map((f) => ({ file: f, diff: diffFile(f.before, f.after) })), [d.fileChanges]);
-  const totals = files.reduce((t, f) => ({ added: t.added + f.diff.added, removed: t.removed + f.diff.removed }), { added: 0, removed: 0 });
+  const totals = files.reduce((sum, f) => ({ added: sum.added + f.diff.added, removed: sum.removed + f.diff.removed }), { added: 0, removed: 0 });
   const rolledBack = ROLLED_BACK.includes(d.status);
   const note =
     d.status === "reverted"
-      ? "This dream was undone — the files are back the way they were before it."
+      ? t("view.reverted")
       : d.canRevert
-        ? "Undo a dream in Godmode on your computer."
+        ? t("view.undoOnComputer")
         : d.files.length && !ACTIVE_DREAM.includes(d.status)
-          ? "The memory changed after this dream, so it can't be undone automatically."
+          ? t("view.cantUndo")
           : null;
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content}>
-      <Stack.Title>Dream</Stack.Title>
+      <Stack.Title>{t("view.title")}</Stack.Title>
       <View style={{ gap: space.sm, paddingTop: space.md }}>
         <Row style={{ gap: 6 }}>
           <Icon name="moon" size={13} color={c.dream} />
           <T variant="eyebrow" muted>
-            Dream · {dreamWhen(d.createdAt)}
+            {t("view.eyebrow", { when: dreamWhen(d.createdAt) })}
           </T>
         </Row>
-        <T variant="title">What {agentName} changed</T>
+        <T variant="title">{t("view.heading", { name: agentName })}</T>
         <T variant="subhead" muted>
           {d.summary || reviewedLabel(d)}
         </T>
@@ -104,13 +108,13 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
       ) : null}
 
       <View>
-        <SectionTitle title={rolledBack ? "What it attempted" : "The agent's notes"} />
+        <SectionTitle title={rolledBack ? t("view.attempted") : t("view.notes")} />
         <Card style={{ padding: space.lg, gap: space.md }}>
           {rolledBack && d.changes.length > 0 ? (
             <Row style={{ gap: 6 }}>
               <Icon name="refresh" size={11} color={c.textMuted} />
               <T variant="caption" muted style={{ fontWeight: "500" }}>
-                {d.files.length ? "Rolled back where possible" : "Rolled back — nothing was kept"}
+                {d.files.length ? t("view.rolledBack") : t("view.rolledBackAll")}
               </T>
             </Row>
           ) : null}
@@ -125,20 +129,20 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
             ))
           ) : (
             <T variant="footnote" muted>
-              {`${agentName} didn't describe its changes — the diff shows exactly what it wrote.`}
+              {t("view.noNotes", { name: agentName })}
             </T>
           )}
         </Card>
       </View>
 
       <View style={{ gap: space.md }}>
-        <SectionTitle title="Changes" />
+        <SectionTitle title={t("view.changes")} />
         {files.length ? (
           files.map((f, i) => <FileChangeCard key={`${i}-${f.file.path}`} file={f.file} diff={f.diff} />)
         ) : (
           <Card style={{ padding: space.lg }}>
             <T variant="footnote" muted style={{ textAlign: "center" }}>
-              {rolledBack ? "Nothing from this dream is left in the memory files." : "This dream didn't change any memory files."}
+              {rolledBack ? t("view.nothingLeft") : t("view.noChanges")}
             </T>
           </Card>
         )}
@@ -146,7 +150,7 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
 
       {d.files.some((path) => path !== "MEMORY.md") ? (
         <T variant="footnote" muted style={{ textAlign: "center" }}>
-          The phone shows MEMORY.md. The other memory files this dream changed are in Godmode on your computer.
+          {t("view.otherFiles")}
         </T>
       ) : null}
       {d.workspace.length > 0 ? <WorkspaceMoves moves={d.workspace} stuck={rolledBack} /> : null}
@@ -156,15 +160,18 @@ function DreamView({ dream: d }: { dream: DreamDetail }) {
 
 function FileChangeCard({ file, diff }: { file: DreamFileChange; diff: FileDiff }) {
   const c = useColors();
+  const { t } = useTranslation("dreams");
   const state = file.before === null ? "created" : file.after === null ? "deleted" : "edited";
   const empty =
     state === "created"
-      ? "Created an empty file."
+      ? t("file.createdEmpty")
       : state === "deleted"
-        ? "Deleted an empty file."
+        ? t("file.deletedEmpty")
         : diff.finalNewline
-          ? `Only the newline at the end of the file was ${diff.finalNewline}.`
-          : "No line changes.";
+          ? diff.finalNewline === "added"
+            ? t("file.onlyNewlineAdded")
+            : t("file.onlyNewlineRemoved")
+          : t("file.noLineChanges");
   return (
     <Card style={{ overflow: "hidden" }}>
       <Row style={styles.fileHead}>
@@ -172,7 +179,7 @@ function FileChangeCard({ file, diff }: { file: DreamFileChange; diff: FileDiff 
         <T variant="caption" numberOfLines={1} style={{ flex: 1, fontFamily: fonts.mono, fontSize: 12.5 }}>
           {file.path}
         </T>
-        {state !== "edited" ? <Badge label={state === "created" ? "New file" : "Deleted"} tone={state === "created" ? "success" : "danger"} dot={false} /> : null}
+        {state !== "edited" ? <Badge label={state === "created" ? t("file.new") : t("file.deleted")} tone={state === "created" ? "success" : "danger"} dot={false} /> : null}
         <T variant="caption" style={{ fontFamily: fonts.mono }}>
           <T variant="caption" color={c.success} style={{ fontFamily: fonts.mono }}>{`+${diff.added}`}</T>{" "}
           <T variant="caption" color={c.danger} style={{ fontFamily: fonts.mono }}>{`−${diff.removed}`}</T>
@@ -192,6 +199,7 @@ function FileChangeCard({ file, diff }: { file: DreamFileChange; diff: FileDiff 
 
 function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: FileDiff["finalNewline"] }) {
   const c = useColors();
+  const { t } = useTranslation("dreams");
   const blocks = useMemo(() => foldContext(lines), [lines]);
   const [unfolded, setUnfolded] = useState<Set<number>>(() => new Set());
   const [everything, setEverything] = useState(false);
@@ -219,7 +227,7 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
         >
           <Icon name="scroll" size={11} color={c.textMuted} />
           <T variant="caption" muted>
-            Show {b.lines.length} unchanged lines
+            {t("diff.showUnchanged", { count: b.lines.length })}
           </T>
         </Pressable>,
       );
@@ -237,18 +245,18 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
       {notShown > 0 ? (
         <View style={[styles.note, { backgroundColor: c.surfaceAlt, borderColor: c.border, justifyContent: "space-between" }]}>
           <T variant="caption" muted>
-            {notShown.toLocaleString()} more lines not shown
+            {t("diff.notShown", { count: notShown, n: notShown.toLocaleString(intlLocale()) })}
           </T>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setEverything(true)}>
             <T variant="caption" style={{ fontWeight: "600" }}>
-              Show everything
+              {t("diff.showEverything")}
             </T>
           </Pressable>
         </View>
       ) : finalNewline ? (
         <View style={[styles.note, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
           <T variant="caption" muted>
-            {finalNewline === "added" ? "Newline added at end of file" : "No newline at end of file anymore"}
+            {finalNewline === "added" ? t("diff.newlineAdded") : t("diff.newlineRemoved")}
           </T>
         </View>
       ) : null}
@@ -258,12 +266,13 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
 
 function DiffRow({ line }: { line: DiffLine }) {
   const c = useColors();
+  const { t } = useTranslation("dreams");
   const add = line.kind === "add";
   const del = line.kind === "del";
   const mark = add ? alpha(c.success, 0.2) : alpha(c.danger, 0.15);
   return (
     <View
-      accessibilityLabel={`${add ? "Added: " : del ? "Removed: " : ""}${line.text}`}
+      accessibilityLabel={add ? t("diff.added", { text: line.text }) : del ? t("diff.removed", { text: line.text }) : line.text}
       style={[styles.diffRow, add && { backgroundColor: alpha(c.success, 0.07) }, del && { backgroundColor: alpha(c.danger, 0.055) }]}
     >
       <View style={[styles.bar, { backgroundColor: add ? c.success : del ? alpha(c.danger, 0.7) : "transparent" }]} />
@@ -285,22 +294,23 @@ function DiffRow({ line }: { line: DiffLine }) {
   );
 }
 
-const MOVE_META: Record<DreamWorkspaceChange["action"], { label: string; icon: IconName; color: (c: Colors) => string }> = {
-  move: { label: "sorted", icon: "move", color: (c) => c.sky },
-  rewrite: { label: "rewritten", icon: "pencil", color: (c) => c.violet },
-  discard: { label: "discarded", icon: "trash", color: (c) => c.rose },
+const MOVE_META: Record<DreamWorkspaceChange["action"], { icon: IconName; color: (c: Colors) => string }> = {
+  move: { icon: "move", color: (c) => c.sky },
+  rewrite: { icon: "pencil", color: (c) => c.violet },
+  discard: { icon: "trash", color: (c) => c.rose },
 };
 
 /** How the dream tidied the workspace; after a rollback, what couldn't be moved back. */
 function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("dreams");
   const counts = (["move", "rewrite", "discard"] as const)
     .map((action) => ({ action, n: moves.filter((m) => m.action === action).length }))
     .filter((x) => x.n > 0)
-    .map((x) => `${x.n} ${MOVE_META[x.action].label}`);
+    .map((x) => t(`workspace.counts.${x.action}`, { count: x.n }));
   return (
     <View>
-      <SectionTitle title={stuck ? "Couldn't be put back" : "Workspace"} />
+      <SectionTitle title={stuck ? t("workspace.stuck") : t("workspace.title")} />
       <Card style={{ overflow: "hidden" }}>
         <T variant="footnote" muted style={{ paddingHorizontal: space.lg, paddingVertical: space.md }}>
           {counts.join(" · ")}
@@ -317,7 +327,7 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
                     {m.from}
                   </T>
                   <T variant="caption" muted numberOfLines={1} style={m.action === "move" ? { fontFamily: fonts.mono } : undefined}>
-                    {m.action === "move" ? `→ ${m.to}` : m.action === "rewrite" ? `${formatBytes(m.bytes)} now` : "removed after a week"}
+                    {m.action === "move" ? `→ ${m.to}` : m.action === "rewrite" ? t("workspace.sizeNow", { size: formatBytes(m.bytes) }) : t("workspace.removedAfterWeek")}
                   </T>
                 </View>
               </Row>
