@@ -136,8 +136,10 @@ if (args[0] === "plugin" && args[1] === "validate") {
   const manifest = { file: manifestFile, type: "plugin", errors: [] as unknown[], warnings: [] as unknown[], notes: [] as string[] };
   let name = "plugin";
   try {
-    const parsed = JSON.parse(readFileSync(manifestFile, "utf8")) as { name?: string; author?: unknown; userConfig?: Record<string, { title?: unknown }> };
+    const parsed = JSON.parse(readFileSync(manifestFile, "utf8")) as { name?: string; author?: unknown; skills?: string | string[]; userConfig?: Record<string, { title?: unknown }> };
     name = parsed.name ?? name;
+    const skills = parsed.skills === undefined ? [] : Array.isArray(parsed.skills) ? parsed.skills : [parsed.skills];
+    skills.forEach((path, i) => existsSync(join(dir, path)) || manifest.errors.push(problem(`skills[${i}]`, `Path not found: ${path}`)));
     if (!parsed.author) manifest.warnings.push(problem("author", "No author information provided. Consider adding author details for plugin attribution"));
     for (const [key, field] of Object.entries(parsed.userConfig ?? {})) {
       if (typeof field?.title !== "string") manifest.errors.push(problem(`userConfig.${key}.title`, "Invalid input: expected string, received undefined"));

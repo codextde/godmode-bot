@@ -104,6 +104,8 @@ export interface ModSource {
   path: string;
   /** The commit that runs. */
   commit: string;
+  /** The npm package the repository's marketplace ships the plugin as: its files run in place of the repository's. */
+  npm?: { package: string; version: string } | null;
   /** The version its manifest names at that commit. */
   version: string | null;
   installedAt: ISODate;
