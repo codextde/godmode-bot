@@ -54,7 +54,7 @@ import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces 
 import { ProjectChip } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
-import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
+import { speak, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 
@@ -437,7 +437,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error("Couldn't stop the run", { description: errorMessage(err) }),
   });
 
-  // Read replies aloud: speak-replies toggle, or a dictated message with auto-speak on. Voice mode speaks by itself.
+  // Read replies aloud: a dictated message with auto-speak on. Voice mode speaks by itself.
   const settingsRef = useRef(voiceSettings);
   settingsRef.current = voiceSettings;
   useEffect(
@@ -446,7 +446,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         if (e.type !== "run.finished" || e.run.conversationId !== conversationId) return;
         if (useUi.getState().voiceMode || e.run.status !== "succeeded") return;
         const wasVoice = !!useVoiceSession.getState().voiceRunIds[e.run.id];
-        const wanted = useVoicePrefs.getState().speakReplies || (wasVoice && (settingsRef.current?.autoSpeak ?? true));
+        const wanted = wasVoice && (settingsRef.current?.autoSpeak ?? true);
         if (!wanted) return;
         const runId = e.run.id;
         void qc
@@ -796,9 +796,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 }
                 onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />
-              <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
-                Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.
-              </p>
             </div>
           </div>
         )}
