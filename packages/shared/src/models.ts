@@ -1358,6 +1358,7 @@ export interface CompactInfo {
 export interface RunnerSettings {
   /** Path to claude CLI; empty = auto-detect */
   claudePath: string;
+  claudeConfigDir: string;
   model: string;
   fallbackModel: string;
   effort: Effort;
