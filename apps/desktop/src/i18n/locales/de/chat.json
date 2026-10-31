@@ -876,7 +876,8 @@
     "save": "Speichern",
     "enlarge": "{{name}} vergrößern",
     "downloadError": "{{name}} konnte nicht heruntergeladen werden",
-    "download": "{{name}} herunterladen"
+    "download": "{{name}} herunterladen",
+    "sideHint": "Neben dem Chat zeigen · ⌘-Klick: {{action}} · {{path}}"
   },
   "question": {
     "alreadySettled": "Schon erledigt",
@@ -1221,6 +1222,51 @@
       "skipped": "{{count}} übersprungen"
     },
     "moreOnGithub": "{{count}} weitere auf GitHub",
-    "linkHint": "Neben dem Chat anzeigen · ⌘-Klick öffnet GitHub"
+    "linkHint": "Neben dem Chat anzeigen · ⌘-Klick öffnet GitHub",
+    "merge": {
+      "button": "Mergen…",
+      "into": "In {{base}}",
+      "blockedDraft": "Noch ein Entwurf. Markiere ihn zuerst auf GitHub als bereit zum Review.",
+      "blockedConflicts": "Löse zuerst die Konflikte mit dem Basis-Branch.",
+      "blockedNoMethod": "Dieses Repository erlaubt keine Merge-Methode.",
+      "warnFailing_one": "{{count}} Check fehlgeschlagen",
+      "warnFailing_other": "{{count}} Checks fehlgeschlagen",
+      "warnRunning_one": "{{count}} Check läuft noch",
+      "warnRunning_other": "{{count}} Checks laufen noch",
+      "warnChanges": "ein Reviewer hat Änderungen angefordert",
+      "warnBlocked": "laut GitHub fehlt ein erforderliches Review oder ein Check",
+      "headsUp": "Achtung: {{warnings}}.",
+      "refused": "GitHub hat nicht gemergt: {{reason}}",
+      "confirmTitle": "#{{number}} in {{base}} mergen?",
+      "how": "Wie mergen",
+      "cancel": "Abbrechen",
+      "done": "#{{number}} in {{base}} gemergt",
+      "methods": {
+        "merge": {
+          "label": "Mergen",
+          "hint": "Alle Commits plus ein Merge-Commit"
+        },
+        "squash": {
+          "label": "Squashen und mergen",
+          "hint": "Alle Änderungen als ein Commit"
+        },
+        "rebase": {
+          "label": "Rebasen und mergen",
+          "hint": "Die Commits, neu auf den Basis-Branch gesetzt"
+        }
+      }
+    }
+  },
+  "filePanel": {
+    "lines_one": "{{count}} Zeile",
+    "lines_other": "{{count}} Zeilen",
+    "atLine": "Zeile {{line}}",
+    "readOnly": "schreibgeschützt",
+    "reload": "Neu laden",
+    "copy": "Inhalt kopieren",
+    "copied": "Kopiert",
+    "close": "Schließen",
+    "gone": "{{name}} gibt es nicht mehr oder kann nicht angezeigt werden.",
+    "failed": "{{name}} konnte nicht gelesen werden: {{message}}"
   }
 }
