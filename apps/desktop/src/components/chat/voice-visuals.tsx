@@ -106,7 +106,7 @@ export function VoiceOrb({
         className="absolute inset-[24%] rounded-full border bg-card shadow-float transition-[border-color] duration-500 group-data-[phase=listening]:border-brand/30"
         style={{ transform: "scale(calc(1 + var(--lvl) * 0.08))" }}
       />
-      <span className="relative transition-transform duration-300 [--orb-fg:currentColor] group-active:scale-[0.97]">
+      <span className="relative transition-transform duration-150 ease-out [--orb-fg:currentColor] group-active:scale-[0.97]">
         <Orb variant={ORB_FOR_PHASE[phase]} size={56} label={label} />
       </span>
     </button>

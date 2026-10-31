@@ -148,7 +148,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
                   key={c.id}
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.025 }}
+                  transition={{ delay: Math.min(i, 8) * 0.03 }}
                   className="grid grid-cols-[auto_1fr] items-start gap-x-3 border-b px-3.5 py-2.5 last:border-b-0 @lg:grid-cols-[auto_9rem_1fr]"
                 >
                   <s.icon role="img" className={cn("mt-px size-4", s.text)} aria-label={s.label} />

@@ -200,7 +200,7 @@ function PresetGallery({ onPick }: { onPick: (p: ApiToolPreset | null) => void }
             type="button"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: Math.min(i, 12) * 0.035 }}
+            transition={{ delay: Math.min(i, 6) * 0.04 }}
             onClick={() => onPick(c.preset)}
             className={cn(
               "group flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",

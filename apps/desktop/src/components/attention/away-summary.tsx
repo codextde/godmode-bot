@@ -8,6 +8,7 @@ import { AgentAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { useAway } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { useUi } from "@/stores/ui";
 
 const ICON: Record<AwayHighlight["kind"], LucideIcon> = { delivered: KanbanSquare, failed: AlertTriangle, replied: MessageCircle, automation: Workflow };
@@ -35,7 +36,7 @@ export function AwaySummaryCard({ agents }: { agents: Agent[] }) {
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+      transition={{ duration: 0.25, ease: EASE_OUT }}
       aria-labelledby="away-title"
     >
       <div className="mb-3 flex items-center gap-2">

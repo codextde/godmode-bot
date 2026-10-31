@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, CircleCheck, Globe, KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { storageKey } from "@/lib/core";
+import { EASE_OUT } from "@/lib/motion";
 
 const DISMISS_KEY = storageKey("godmode-integrations-no-connectors");
 
@@ -81,7 +82,7 @@ export function NoConnectorsNote() {
                   key={s.label}
                   initial={{ opacity: 0, x: 6 }}
                   animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.08 + i * 0.06, duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                  transition={{ delay: 0.08 + i * 0.06, duration: 0.25, ease: EASE_OUT }}
                   className="relative flex items-center gap-2.5 py-1.5 text-xs"
                 >
                   <span

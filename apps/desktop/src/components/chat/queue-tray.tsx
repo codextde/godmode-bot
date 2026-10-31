@@ -13,14 +13,13 @@ import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api
 import { pendingQueued } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { CommandText } from "./slash-commands";
 
 export interface QueueTrayHandle {
   /** Edit the newest queued message; false when nothing waits. */
   editLast: () => boolean;
 }
-
-const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 /**
  * Docked on top of the composer: the messages sent while the agent works. The agent takes them at its next step; until
@@ -143,7 +142,7 @@ export function QueueTray({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2, ease: EASE }}
+          transition={{ duration: 0.2, ease: EASE_OUT }}
           className="overflow-hidden"
         >
           <div className="mx-3 overflow-hidden rounded-t-xl border border-b-0 bg-muted/60 @xl:mx-4" role="region" aria-label="Queued messages">
@@ -185,7 +184,7 @@ export function QueueTray({
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.18, ease: EASE }}
+                    transition={{ duration: 0.18, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <QueueRow

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 
 /** Full-screen hero on paper: flat logo, display heading, and a hairline card for the form — used by login and unlock screens. */
 export function AuthLayout({
@@ -30,7 +31,7 @@ export function AuthLayout({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
         className={cn("relative w-full max-w-md", className)}
       >
         <div className="mb-8 flex flex-col items-center text-center">

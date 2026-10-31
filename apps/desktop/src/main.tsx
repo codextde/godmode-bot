@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { MotionConfig } from "motion/react";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
@@ -40,17 +41,19 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider delayDuration={250}>
-          <BrowserRouter basename={cloudContext?.base}>
-            <App />
-          </BrowserRouter>
-          <Toaster richColors position="bottom-right" />
-          <VaultGrantDialog />
-          <MacPermissionsGuide />
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <MotionConfig reducedMotion="user">
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <TooltipProvider delayDuration={250}>
+            <BrowserRouter basename={cloudContext?.base}>
+              <App />
+            </BrowserRouter>
+            <Toaster richColors position="bottom-right" />
+            <VaultGrantDialog />
+            <MacPermissionsGuide />
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </MotionConfig>
   </StrictMode>,
 );

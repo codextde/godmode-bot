@@ -4,6 +4,7 @@ import { Backdrop } from "@/components/brand";
 import { Character } from "@/components/character";
 import { Orb } from "@/components/aicss/Orb";
 import { Button } from "@/components/ui/button";
+import { EASE_OUT } from "@/lib/motion";
 
 export function SplashScreen({ error }: { error?: string }) {
   return (
@@ -12,7 +13,7 @@ export function SplashScreen({ error }: { error?: string }) {
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
         className="relative flex flex-col items-center gap-6 text-center"
       >
         <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={error ? "error" : "working"} title="Godmode" />
