@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { assetRedirect, assetText, releaseFor } from '@/lib/releases';
+import { assetRedirect, assetText, LAST_FULL_RELEASE, releaseFor } from '@/lib/releases';
 import { allowed } from '@/lib/limit';
 
 export const prerender = false;
@@ -13,7 +13,10 @@ export const GET: APIRoute = async ({ params, url, request }) => {
   if (!SERVER_FILE.test(name)) return new Response('Not found', { status: 404 });
   if (!(await allowed('CHECKOUT_LIMIT', request))) return new Response('Too many requests', { status: 429 });
   try {
-    const release = await releaseFor(url.searchParams.get('version'));
+    const version = url.searchParams.get('version');
+    let release = await releaseFor(version);
+    const base = name.replace(/\.sha256$/, '');
+    if ((!version || version === 'latest') && !release.assets.some((a) => a.name === base)) release = await releaseFor(LAST_FULL_RELEASE);
     const asset = release.assets.find((a) => a.name === name);
     if (asset) return await assetRedirect(asset);
     // Newer releases keep the checksums in one SHA256SUMS file instead of one .sha256 file per binary.
