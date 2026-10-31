@@ -199,7 +199,7 @@ async function compile(opts: {
       ? {
           title: "Godmode Bot",
           publisher: "Codext GmbH",
-          version: `${opts.version}.0`,
+          version: `${opts.version.split("-")[0]}.0`,
           description: opts.sidecar ? "Godmode Bot core" : "Godmode Bot server",
           copyright: "© 2026 Codext GmbH",
           icon: join(repoDir, "apps/desktop/src-tauri/icons/icon.ico"),
