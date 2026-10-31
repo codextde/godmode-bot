@@ -115,7 +115,7 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       throw badRequest("The adb binary must be an absolute path (or empty)");
     }
   }
-  for (const feature of ["artifacts", "integrations", "messaging"] as const) {
+  for (const feature of ["artifacts", "integrations", "messaging", "activity", "plugins", "cards", "ssh"] as const) {
     const value = patch[feature] as Record<string, unknown> | undefined;
     if (isObject(value) && value.enabled !== undefined && typeof value.enabled !== "boolean") throw badRequest(`${feature}.enabled must be true or false`);
   }

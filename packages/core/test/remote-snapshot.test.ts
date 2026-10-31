@@ -287,7 +287,7 @@ describe("building a snapshot", () => {
     expect(snapshot.tables.workspace_sources!.map((r) => r.id)).toEqual(["src_site"]);
     expect(snapshot.tables.workspace_sources![0]).not.toHaveProperty("commit_sha");
 
-    expect(Object.keys(snapshot.settings).sort()).toEqual(["artifacts", "browser", "computer", "general", "integrations", "memory", "messaging", "runner", "security", "vm", "voice"]);
+    expect(Object.keys(snapshot.settings).sort()).toEqual(["activity", "artifacts", "browser", "cards", "computer", "general", "integrations", "memory", "messaging", "plugins", "runner", "security", "ssh", "vm", "voice"]);
     expect(snapshot.settings.runner).toMatchObject({ model: "claude-test-model" });
     expect(snapshot.settings.runner).not.toHaveProperty("claudePath");
     expect(snapshot.settings.runner).not.toHaveProperty("extraArgs");

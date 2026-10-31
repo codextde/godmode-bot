@@ -75,6 +75,20 @@ WHERE key = 'android' AND json_valid(value) AND json_type(value, '$.enabled') IS
 `;
 
 /**
+ * Plugins, cards, SSH servers and virtual machines are off for new installs too. An install that already has one set
+ * up keeps it on: a plugin, a saved card, an SSH server, a VM (VMs were on by default). Idempotent, like
+ * FEATURE_SWITCHES_SQL; also run after a restore. Migration 108 embeds it.
+ */
+export const MODULE_SWITCHES_SQL = /* sql */ `
+INSERT OR IGNORE INTO settings (key, value) SELECT 'plugins', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM mods);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'cards', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM payment_cards);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'ssh', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM ssh_servers);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'vm', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM vms);
+UPDATE settings SET value = json_set(value, '$.enabled', json(CASE WHEN EXISTS (SELECT 1 FROM vms) THEN 'true' ELSE 'false' END))
+WHERE key = 'vm' AND json_valid(value) AND json_type(value, '$.enabled') IS NULL;
+`;
+
+/**
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */
@@ -1764,5 +1778,10 @@ CREATE TABLE IF NOT EXISTS offers (
 CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
 `,
+  },
+  {
+    id: 108,
+    name: "module_switches",
+    sql: MODULE_SWITCHES_SQL,
   },
 ];

@@ -60,7 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
     screenshotMaxSize: 1280,
   },
   vm: {
-    enabled: true,
+    enabled: false,
     isolateHostShell: true,
     vaultFill: false,
     onQuit: "suspend",
@@ -75,6 +75,10 @@ export const DEFAULT_SETTINGS: Settings = {
   artifacts: { enabled: false },
   integrations: { enabled: false },
   messaging: { enabled: false },
+  activity: { enabled: true },
+  plugins: { enabled: false },
+  cards: { enabled: false },
+  ssh: { enabled: false },
   voice: {
     enabled: true,
     sttProvider: "browser",
