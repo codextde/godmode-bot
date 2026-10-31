@@ -22,7 +22,8 @@ import { api, errorText } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
-import { currentLanguage } from "@/lib/i18n";
+import { currentLanguage, t as translate } from "@/lib/i18n";
+import { templateText } from "@/lib/templates";
 
 type Kind = "workspace" | "project" | "agent";
 
@@ -51,8 +52,9 @@ export default function New() {
 
   const start = (picked: AgentTemplate | null) => {
     setTemplate(picked);
-    setName(picked?.name ?? "");
-    setRole(picked?.role ?? "");
+    const shown = picked ? templateText(picked) : null;
+    setName(shown?.name ?? "");
+    setRole(shown?.role ?? "");
     setInstructions(picked?.instructions ?? "");
     setPicked(true);
   };
@@ -72,7 +74,7 @@ export default function New() {
         router.replace({ pathname: "/settings/project/[id]", params: { id: p.id } });
       } else {
         const look = template
-          ? { avatar: template.avatar, color: template.color, character: template.character, personality: template.personality, description: template.description }
+          ? { avatar: template.avatar, color: template.color, character: template.character, personality: template.personality, description: templateText(template).description }
           : {};
         const a = await api.agents.create({ ...look, name: name.trim(), role: role.trim() || undefined, instructions: text, workspaceId: workspaceId || null });
         await queryClient.invalidateQueries({ queryKey: qk.agents });
@@ -102,7 +104,7 @@ export default function New() {
         <View style={styles.from}>
           {template ? <Character character={template.character} color={template.color} size={36} seed={template.id} /> : null}
           <T variant="subhead" muted style={{ flex: 1 }} numberOfLines={1}>
-            {template ? t("new.from", { name: template.name }) : t("new.fromScratch")}
+            {template ? t("new.from", { name: templateText(template).name }) : t("new.fromScratch")}
           </T>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setPicked(false)}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
@@ -206,7 +208,7 @@ export default function New() {
             <View style={styles.hint}>
               <Icon name="clock" size={13} color={c.textMuted} />
               <T variant="footnote" muted style={{ flex: 1 }}>
-                {t("new.routineHint", { name: template.routine.name, schedule: cronToHuman(template.routine.cron, currentLanguage()) })}
+                {t("new.routineHint", { name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron, currentLanguage()) })}
               </T>
             </View>
           ) : null}
@@ -236,19 +238,22 @@ const wordStarts = (query: string) =>
     .filter(Boolean)
     .map((term) => new RegExp(`(^|[^a-z0-9])${escape(term)}`, "i"));
 
-const searchText = (t: AgentTemplate) => [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? [])].join(" ");
+const searchText = (t: AgentTemplate) => {
+  const shown = templateText(t);
+  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`settings:new.categoryTitles.${t.category}`), ...(shown.covers ?? [])].join(" ");
+};
 
 const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers?.length : t.category === f);
 
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
 function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) => void }) {
   const c = useColors();
-  const { t } = useTranslation(["settings", "common"]);
+  const { t, i18n } = useTranslation(["settings", "common"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x)))), [templates.data, terms]);
+  const found = useMemo(() => (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x)))), [templates.data, terms, i18n.language]);
   const shown = found.filter((x) => inFilter(x, filter));
   const chips = (["all", "all-in-one", ...AGENT_TEMPLATE_CATEGORIES] as Filter[]).filter((f) => f === "all" || f === filter || found.some((x) => inFilter(x, f)));
 
@@ -344,9 +349,10 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
   );
 }
 
-function TemplateRow({ template: tpl, onPress }: { template: AgentTemplate; onPress: () => void }) {
+function TemplateRow({ template, onPress }: { template: AgentTemplate; onPress: () => void }) {
   const c = useColors();
   const { t } = useTranslation("settings");
+  const tpl = templateText(template);
   const allInOne = !!tpl.covers?.length;
   return (
     <Pressable

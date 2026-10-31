@@ -30,10 +30,12 @@ import de_humanTasks from "./de/humanTasks.json";
 import de_inbox from "./de/inbox.json";
 import de_runs from "./de/runs.json";
 import de_calls from "./de/calls.json";
+import en_templates from "./en/templates.json";
+import de_templates from "./de/templates.json";
 
 export const resources = {
-  en: { common: en_common, system: en_system, components: en_components, tabs: en_tabs, settings: en_settings, onboarding: en_onboarding, chat: en_chat, agents: en_agents, automations: en_automations, memory: en_memory, dreams: en_dreams, tasks: en_tasks, humanTasks: en_humanTasks, inbox: en_inbox, runs: en_runs, calls: en_calls },
-  de: { common: de_common, system: de_system, components: de_components, tabs: de_tabs, settings: de_settings, onboarding: de_onboarding, chat: de_chat, agents: de_agents, automations: de_automations, memory: de_memory, dreams: de_dreams, tasks: de_tasks, humanTasks: de_humanTasks, inbox: de_inbox, runs: de_runs, calls: de_calls },
+  en: { common: en_common, system: en_system, components: en_components, tabs: en_tabs, settings: en_settings, onboarding: en_onboarding, chat: en_chat, agents: en_agents, automations: en_automations, memory: en_memory, dreams: en_dreams, tasks: en_tasks, humanTasks: en_humanTasks, inbox: en_inbox, runs: en_runs, calls: en_calls, templates: en_templates },
+  de: { common: de_common, system: de_system, components: de_components, tabs: de_tabs, settings: de_settings, onboarding: de_onboarding, chat: de_chat, agents: de_agents, automations: de_automations, memory: de_memory, dreams: de_dreams, tasks: de_tasks, humanTasks: de_humanTasks, inbox: de_inbox, runs: de_runs, calls: de_calls, templates: de_templates },
 } as const;
 
-export const NAMESPACES = ["common", "system", "components", "tabs", "settings", "onboarding", "chat", "agents", "automations", "memory", "dreams", "tasks", "humanTasks", "inbox", "runs", "calls"] as const;
+export const NAMESPACES = ["common", "system", "components", "tabs", "settings", "onboarding", "chat", "agents", "automations", "memory", "dreams", "tasks", "humanTasks", "inbox", "runs", "calls", "templates"] as const;
