@@ -11,10 +11,10 @@ import type { ModContents } from "@godmode/shared";
 import { githubRepoOf, isValidBranch, MOD_HOOKS_PATH, MOD_MANIFEST_PATH, MOD_NAME_RE, modNameFrom, parseGitUrl } from "@godmode/shared";
 import { config } from "../config";
 import { claudeEnv, resolveClaudeCommand } from "../runner/claude";
-import { runCommand, stripAnsi } from "../services/doctor";
+import { runCommand, stripAnsi, toolPath } from "../services/doctor";
 import { gitFailure, runGit } from "../services/workspaceSources";
 import type { McpServerJson } from "../types";
-import { badRequest, HttpError } from "../util";
+import { badRequest, childEnv, HttpError } from "../util";
 
 const CLONE_TIMEOUT_MS = 10 * 60_000;
 const LS_REMOTE_TIMEOUT_MS = 30_000;
@@ -107,6 +107,60 @@ export function checkoutPath(modId: string, commit: string): string {
 
 export function pluginDirIn(checkout: string, path: string): string {
   return path ? join(checkout, ...path.split("/")) : checkout;
+}
+
+/** A plugin its marketplace ships as an npm package, as Claude Code installs it. */
+export interface NpmPackage {
+  package: string;
+  version: string;
+}
+
+const NPM_DIR = ".godmode-npm";
+const NPM_REGISTRY = "https://registry.npmjs.org";
+const NPM_NAME_RE = /^(@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*$/i;
+const EXACT_VERSION_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+
+/** The folder a run loads: the repository's, or the npm package installed next to it. */
+export function sourceDir(checkout: string, source: { path: string; npm?: NpmPackage | null }): string {
+  return source.npm ? join(checkout, NPM_DIR, "node_modules", ...source.npm.package.split("/")) : pluginDirIn(checkout, source.path);
+}
+
+/** Only a pinned version: what runs is what was reviewed. */
+export function npmPackageOf(v: unknown): NpmPackage | null {
+  if (!isObj(v) || typeof v.package !== "string" || !NPM_NAME_RE.test(v.package) || typeof v.version !== "string" || !EXACT_VERSION_RE.test(v.version)) return null;
+  return { package: v.package, version: v.version };
+}
+
+/** A marketplace entry's npm source, from the public registry only. */
+function npmSource(listing: Json | null | undefined): NpmPackage | null {
+  const s = listing?.source;
+  if (!isObj(s) || s.source !== "npm") return null;
+  if (s.registry !== undefined && (typeof s.registry !== "string" || s.registry.replace(/\/+$/, "") !== NPM_REGISTRY)) return null;
+  return npmPackageOf(s);
+}
+
+let npmForTests: string[] | null = null;
+export function __setNpmForTests(argv: string[] | null): void {
+  npmForTests = argv;
+}
+
+/** Install the plugin's npm package with its dependencies into the checkout, without running install scripts. */
+export async function installNpmPlugin(checkout: string, pkg: NpmPackage): Promise<void> {
+  const root = join(checkout, NPM_DIR);
+  const found = Bun.which("npm", { PATH: toolPath() });
+  const npm = npmForTests ?? (found ? [found] : null);
+  if (!npm) throw new HttpError(502, `${pkg.package} comes as an npm package: install Node.js (npm) on this computer and try again.`, "npm_missing");
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  writeFileSync(join(root, "package.json"), '{ "private": true }\n');
+  const res = await runCommand(
+    [...npm, "install", `${pkg.package}@${pkg.version}`, "--ignore-scripts", "--omit=dev", "--no-audit", "--no-fund", "--no-package-lock", `--registry=${NPM_REGISTRY}`, "--loglevel=error"],
+    { cwd: root, timeoutMs: CLONE_TIMEOUT_MS, env: childEnv({ PATH: toolPath(), npm_config_yes: "true" }) },
+  );
+  if (res.code !== 0 || !isDir(sourceDir(checkout, { path: "", npm: pkg }))) {
+    const why = stripAnsi(res.stderr).trim().split("\n").filter(Boolean).at(-1) ?? (res.timedOut ? "it took too long" : "unknown error");
+    throw new HttpError(502, `npm couldn't install ${pkg.package}@${pkg.version}: ${why}`, "npm_failed");
+  }
 }
 
 function gitError(res: Parameters<typeof gitFailure>[0], url: string, ref: string | null): HttpError {
@@ -364,6 +418,8 @@ export interface ResolvedPlugin {
   description: string;
   /** The manifest to lay into its folder when it ships none: Claude Code would name it after the folder otherwise. */
   manifest: Json | null;
+  /** The npm package its marketplace ships it as, installed in place of the repository's files. */
+  npm: NpmPackage | null;
 }
 
 /** What a marketplace entry may say in place of the plugin's own manifest. */
@@ -390,7 +446,7 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
     chosen = { dir: base, path, listing: listed.find((p) => p.name === plugin && relative(p) === base) ?? null };
   } else if (plugin && listed.some((p) => p.name === plugin)) {
     const listing = listed.find((p) => p.name === plugin)!;
-    const dir = relative(listing);
+    const dir = relative(listing) ?? (npmSource(listing) ? base : null);
     if (!dir) throw badRequest(`"${plugin}" lives in another repository: install it from there.`);
     chosen = { dir, path: pathOf(dir), listing };
   } else if (plugin && (ownName !== null || listed.length > 0)) {
@@ -404,6 +460,8 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
     throw new HttpError(409, `This repository has ${local.length} plugins. Pick the one to install.`, "pick_plugin", {
       plugins: local.map((p) => ({ name: String(p.name), description: typeof p.description === "string" ? p.description : "" })),
     });
+  } else if (listed.length === 1 && npmSource(listed[0])) {
+    chosen = { dir: base, path, listing: listed[0]! };
   } else if (listed.length > 0) {
     throw badRequest("The plugins this repository lists live in other repositories: install them from there.");
   } else if (looksLikePlugin(base)) {
@@ -427,8 +485,18 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
         : typeof fromRepository?.description === "string"
           ? fromRepository.description
           : "";
+  const npm = npmSource(listed.find((p) => p.name === name));
   let written: Json | null = null;
-  if (declared === null) {
+  if (npm) {
+    // Used only when the package ships no manifest of its own: what the marketplace entry and server.json say.
+    const registry = registryServer(chosen.dir);
+    written = { name, version: npm.version, ...(description ? { description } : {}) };
+    if (registry) {
+      written.mcpServers = { [registry.name]: registry.server };
+      if (Object.keys(registry.userConfig).length) written.userConfig = registry.userConfig;
+    }
+    for (const field of LISTING_FIELDS) if (chosen.listing && chosen.listing[field] !== undefined) written[field] = chosen.listing[field];
+  } else if (declared === null) {
     // A plugin its marketplace describes, or one that is only folders: the manifest says what the entry says.
     // A repository that is an MCP server with skills for agents: what its server.json and skills folders say.
     written = { name, ...fromRepository };
@@ -437,7 +505,7 @@ export function resolvePlugin(checkout: string, path: string, plugin: string | u
       throw badRequest("No Claude Code plugin in that folder of the repository.");
     }
   }
-  return { path: chosen.path, name, description, manifest: written };
+  return { path: chosen.path, name, description, manifest: written, npm };
 }
 
 /** Lay the manifest of a plugin that ships none into its folder (see `ResolvedPlugin.manifest`). */
@@ -450,7 +518,7 @@ export function writeManifest(dir: string, manifest: Json): void {
   writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-function readName(dir: string): string | null {
+export function readName(dir: string): string | null {
   const manifest = readJson(join(dir, ...MOD_MANIFEST_PATH.split("/")));
   return isObj(manifest) && typeof manifest.name === "string" ? manifest.name : null;
 }
