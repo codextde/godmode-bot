@@ -56,6 +56,7 @@ export const SHARED_TOOLS: ReadonlySet<string> = new Set([
   "workspace_update",
   "project_create",
   "project_update",
+  "project_delete",
   "plugins_list",
   "plugin_install",
   "plugin_update",
