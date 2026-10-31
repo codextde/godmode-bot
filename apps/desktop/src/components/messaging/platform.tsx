@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { useTranslation } from "react-i18next";
 import type { MessagingConnection, MessagingProvider, MessagingState } from "@godmode/shared";
 import { cn } from "@/lib/utils";
 
@@ -38,26 +39,26 @@ function TeamsGlyph(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-export const PLATFORMS: Record<MessagingProvider, { label: string; glyph: typeof SlackGlyph; blurb: string; noun: string }> = {
+export const PLATFORMS = {
   slack: {
     label: "Slack",
     glyph: SlackGlyph,
-    blurb: "DM the bot or mention it in a channel — it answers in the thread. No public address needed.",
+    blurbKey: "platforms.slack",
     noun: "workspace",
   },
   telegram: {
     label: "Telegram",
     glyph: TelegramGlyph,
-    blurb: "Chat with your agents from your phone, in private or in groups. Set up in a minute with @BotFather.",
+    blurbKey: "platforms.telegram",
     noun: "chat",
   },
   teams: {
     label: "Microsoft Teams",
     glyph: TeamsGlyph,
-    blurb: "Bring agents into chats and channels through an Azure bot. Needs a public https address.",
+    blurbKey: "platforms.teams",
     noun: "tenant",
   },
-};
+} as const satisfies Record<MessagingProvider, { label: string; glyph: typeof SlackGlyph; blurbKey: string; noun: string }>;
 
 export function PlatformLogo({ provider, size = "md", className }: { provider: MessagingProvider; size?: "sm" | "md" | "lg"; className?: string }) {
   const Glyph = PLATFORMS[provider].glyph;
@@ -70,17 +71,18 @@ export function PlatformLogo({ provider, size = "md", className }: { provider: M
   );
 }
 
-const STATE_META: Record<MessagingState, { label: string; dot: string; text: string }> = {
-  connected: { label: "Connected", dot: "bg-success", text: "text-foreground/80" },
-  connecting: { label: "Connecting…", dot: "bg-warning animate-pulse", text: "text-muted-foreground" },
-  error: { label: "Needs attention", dot: "bg-destructive", text: "text-destructive" },
-  off: { label: "Off", dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
-};
+const STATE_META = {
+  connected: { labelKey: "state.connected", dot: "bg-success", text: "text-foreground/80" },
+  connecting: { labelKey: "state.connecting", dot: "bg-warning animate-pulse", text: "text-muted-foreground" },
+  error: { labelKey: "state.error", dot: "bg-destructive", text: "text-destructive" },
+  off: { labelKey: "state.off", dot: "bg-muted-foreground/40", text: "text-muted-foreground" },
+} as const satisfies Record<MessagingState, { labelKey: string; dot: string; text: string }>;
 
 export function StatusPill({ connection, className }: { connection: MessagingConnection; className?: string }) {
+  const { t } = useTranslation("messaging");
   const state = connection.status.state;
   const meta = STATE_META[state];
-  const label = state === "off" && connection.enabled ? "Waiting for the vault" : meta.label;
+  const label = state === "off" && connection.enabled ? t("state.waitingForVault") : t(meta.labelKey);
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] font-medium", meta.text, className)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />

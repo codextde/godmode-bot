@@ -23,6 +23,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { CleanupId, CleanupItem, CleanupReport, CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import {
@@ -41,6 +42,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Spinner } from "@/components/ui/spinner";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
+import { dateLocale, t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { SettingsGroup } from "./settings-kit";
@@ -71,15 +73,16 @@ function toastRun(run: CleanupRun) {
   const failed = run.results.filter((r) => !r.ok);
   const done = run.results.filter((r) => r.ok && r.removed);
   if (done.length || !failed.length) {
-    toast.success(run.freedBytes ? `Freed ${formatBytes(run.freedBytes)}` : "All clean", {
-      description: done.length ? done.map((r) => r.name).join(" · ") : "There was nothing left to remove.",
+    toast.success(run.freedBytes ? translate("settings:cleanup.items.freed", { size: formatBytes(run.freedBytes) }) : translate("settings:cleanup.items.allClean"), {
+      description: done.length ? done.map((r) => r.name).join(" · ") : translate("settings:cleanup.items.nothingLeft"),
     });
   }
-  for (const r of failed) toast.error(`${r.name}: not everything could go`, { description: <span className="whitespace-pre-line">{r.output}</span> });
+  for (const r of failed) toast.error(translate("settings:cleanup.items.partial", { name: r.name }), { description: <span className="whitespace-pre-line">{r.output}</span> });
 }
 
 /** What can go, picked by the human: recommended items are preselected, the rest needs a look first. */
 export function CleanupItems({ report, refreshing }: { report: CleanupReport; refreshing: boolean }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   // null = the recommended selection, which follows the report until the human changes it.
   const [picked, setPicked] = useState<Set<CleanupId> | null>(null);
@@ -102,7 +105,7 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
       setPicked(null);
       void qc.invalidateQueries({ queryKey: qk.cleanup });
     },
-    onError: (e) => toastApiError(e, "Couldn't clean up", qc),
+    onError: (e) => toastApiError(e, t("cleanup.items.error"), qc),
   });
 
   const toggle = (id: CleanupId, on: boolean) => {
@@ -115,15 +118,15 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
 
   return (
     <SettingsGroup
-      title="Clean up"
+      title={t("cleanup.items.title")}
       icon={<BroomSparkles />}
-      description="Safe items are picked for you. Anything that may still hold work stays."
+      description={t("cleanup.items.description")}
       bodyClassName="py-1"
       actions={
         items.length > 0 && (
           <Button size="sm" onClick={start} disabled={!selected.size || run.isPending || refreshing}>
             {run.isPending ? <Spinner /> : <BroomSparkles />}
-            {run.isPending ? "Cleaning…" : total ? `Free ${formatBytes(total)}` : "Clean up"}
+            {run.isPending ? t("cleanup.items.cleaning") : total ? t("cleanup.items.free", { size: formatBytes(total) }) : t("cleanup.items.title")}
           </Button>
         )
       }
@@ -134,8 +137,8 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
             <CircleCheck className="size-5" />
           </div>
           <div>
-            <p className="text-sm font-medium">Nothing to clean up</p>
-            <p className="text-xs text-muted-foreground">Godmode's data folder is tidy.</p>
+            <p className="text-sm font-medium">{t("cleanup.items.emptyTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("cleanup.items.emptyBody")}</p>
           </div>
         </div>
       )}
@@ -153,7 +156,7 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
       ))}
       {clean.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3.5 text-xs text-muted-foreground">
-          <span>Already clean</span>
+          <span>{t("cleanup.items.alreadyClean")}</span>
           {clean.map((i) => (
             <span key={i.id} className="flex items-center gap-1">
               <CircleCheck className="size-3.5 text-success" /> {i.name}
@@ -165,10 +168,10 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove for good?</AlertDialogTitle>
+            <AlertDialogTitle>{t("cleanup.items.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="w-full space-y-3">
-                <p>These can't be brought back once they are gone:</p>
+                <p>{t("cleanup.items.confirmBody")}</p>
                 <ul className="space-y-1.5">
                   {forGood.map((i) => (
                     <li key={i.id} className="flex items-center justify-between gap-4 rounded-md bg-secondary/70 px-3 py-2 text-foreground">
@@ -181,9 +184,9 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => run.mutate([...selected])}>
-              Remove
+              {t("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -207,6 +210,7 @@ function ItemRow({
   onExpand: () => void;
   busy: boolean;
 }) {
+  const { t } = useTranslation("settings");
   const Icon = ICONS[item.id];
   const kept = item.entries.filter((e) => e.kept).length;
   const id = `cleanup-${item.id}`;
@@ -224,7 +228,7 @@ function ItemRow({
             </label>
             {!item.recommended && (
               <Badge variant="outline" className="h-5 rounded-[5px] border-warning/30 text-[10px] font-normal text-warning">
-                Review first
+                {t("cleanup.items.review")}
               </Badge>
             )}
           </div>
@@ -243,9 +247,9 @@ function ItemRow({
           className="group flex shrink-0 items-center gap-2 rounded-md py-1 pr-1 pl-2 text-right outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <span>
-            <span className="block text-sm font-medium tabular-nums">{item.count ? formatBytes(item.bytes) : "Nothing to remove"}</span>
+            <span className="block text-sm font-medium tabular-nums">{item.count ? formatBytes(item.bytes) : t("cleanup.items.nothingToRemove")}</span>
             <span className="block text-[11px] text-muted-foreground tabular-nums">
-              {[item.count > 0 && `${item.count} ${item.count === 1 ? "item" : "items"}`, kept > 0 && `${kept} kept`].filter(Boolean).join(" · ")}
+              {[item.count > 0 && t("cleanup.items.count", { count: item.count }), kept > 0 && t("cleanup.items.kept", { count: kept })].filter(Boolean).join(" · ")}
             </span>
           </span>
           <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", expanded && "rotate-180")} />
@@ -273,7 +277,7 @@ function ItemRow({
                         <Lock className="size-3 shrink-0" /> {e.kept}
                       </p>
                     ) : (
-                      e.modifiedAt && <p className="mt-0.5 text-muted-foreground">{formatDistanceToNow(new Date(e.modifiedAt), { addSuffix: true })}</p>
+                      e.modifiedAt && <p className="mt-0.5 text-muted-foreground">{formatDistanceToNow(new Date(e.modifiedAt), { addSuffix: true, locale: dateLocale() })}</p>
                     )}
                   </div>
                   <span className={cn("shrink-0 tabular-nums", e.kept ? "text-muted-foreground/70 line-through" : "text-muted-foreground")}>{formatBytes(e.bytes)}</span>

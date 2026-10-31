@@ -64,6 +64,7 @@ import {
   ZoomIn,
   Zap,
 } from "lucide-react";
+import { intlLocale, t } from "@/i18n";
 
 export type ToolKind =
   | "browser"
@@ -139,88 +140,117 @@ function humanize(tool: string): string {
 
 type Input = Record<string, unknown>;
 
+const SCROLL_KEY = {
+  up: "chat:tools.common.scrolledUp",
+  down: "chat:tools.common.scrolledDown",
+  left: "chat:tools.common.scrolledLeft",
+  right: "chat:tools.common.scrolledRight",
+} as const;
+
+function scrolled(direction: string): string {
+  const d = direction || "down";
+  return d in SCROLL_KEY ? t(SCROLL_KEY[d as keyof typeof SCROLL_KEY]) : t("chat:tools.common.scrolledTo", { direction: d });
+}
+
+function pressed(keys: string): string {
+  return keys ? t("chat:tools.common.pressed", { keys }) : t("chat:tools.common.pressedKeys");
+}
+
+function clicked(kind: "clicked" | "doubleClicked" | "tripleClicked" | "rightClicked", element: boolean, at: string): string {
+  if (element) return t(`chat:tools.computer.${kind}Control`);
+  return at ? t(`chat:tools.computer.${kind}At`, { at }) : t(`chat:tools.computer.${kind}`);
+}
+
 function browserMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "server" | "tool"> {
-  const t = tool.replace(/^browser_/, "");
+  const action = tool.replace(/^browser_/, "");
   const index = str(input.index ?? input.element_index ?? input.element);
-  switch (t) {
+  switch (action) {
     case "navigate": {
       const host = hostOf(input.url);
-      return { icon: Globe, title: host ? `Opened ${host}` : "Opened a page", detail: str(input.url) };
+      return { icon: Globe, title: host ? t("chat:tools.common.opened", { name: host }) : t("chat:tools.browser.openedPage"), detail: str(input.url) };
     }
     case "click":
       return {
         icon: MousePointerClick,
-        title: index ? `Clicked element ${index}` : input.coordinate_x != null ? "Clicked on the page" : "Clicked",
+        title: index
+          ? t("chat:tools.browser.clickedElement", { index })
+          : input.coordinate_x != null
+            ? t("chat:tools.common.clickedPage")
+            : t("chat:tools.computer.clicked"),
       };
     case "type":
     case "input_text":
-      return { icon: Type, title: index ? `Typed text into element ${index}` : "Typed text" };
+      return { icon: Type, title: index ? t("chat:tools.browser.typedIntoElement", { index }) : t("chat:tools.common.typedText") };
     case "get_state":
     case "state":
-      return { icon: ScanText, title: "Read page" };
+      return { icon: ScanText, title: t("chat:tools.browser.readPage") };
     case "extract_content":
     case "extract":
-      return { icon: FileSearch, title: "Extracted content", detail: truncate(str(input.query), 80) || undefined };
+      return { icon: FileSearch, title: t("chat:tools.browser.extracted"), detail: truncate(str(input.query), 80) || undefined };
     case "get_html":
-      return { icon: Code2, title: "Read page HTML" };
+      return { icon: Code2, title: t("chat:tools.browser.readHtml") };
     case "scroll":
-      return { icon: ScrollText, title: `Scrolled ${str(input.direction) || "down"}` };
+      return { icon: ScrollText, title: scrolled(str(input.direction)) };
     case "go_back":
-      return { icon: ArrowLeft, title: "Went back" };
+      return { icon: ArrowLeft, title: t("chat:tools.browser.wentBack") };
     case "screenshot":
-      return { icon: Camera, title: "Took a screenshot" };
+      return { icon: Camera, title: t("chat:tools.browser.screenshot") };
     case "list_tabs":
-      return { icon: PanelsTopLeft, title: "Listed tabs" };
+      return { icon: PanelsTopLeft, title: t("chat:tools.browser.listedTabs") };
     case "switch_tab":
-      return { icon: PanelsTopLeft, title: "Switched tab" };
+      return { icon: PanelsTopLeft, title: t("chat:tools.common.switchedTab") };
     case "close_tab":
-      return { icon: X, title: "Closed tab" };
+      return { icon: X, title: t("chat:tools.common.closedTab") };
     case "send_keys":
-      return { icon: Type, title: `Pressed ${str(input.keys) || "keys"}` };
+      return { icon: Type, title: pressed(str(input.keys)) };
     case "retry_with_browser_use_agent":
-      return { icon: Wand2, title: "Ran the browser agent", detail: truncate(str(input.task), 80) || undefined };
+      return { icon: Wand2, title: t("chat:tools.browser.browserAgent"), detail: truncate(str(input.task), 80) || undefined };
     default:
       return { icon: Globe, title: humanize(tool) };
   }
 }
 
 function computerMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "server" | "tool"> {
-  if (tool === "computer_ui") return { icon: ListTree, title: input.query ? `Looked for “${truncate(str(input.query), 40)}” in the window` : "Read the window's controls" };
-  if (tool === "computer_info") return { icon: Monitor, title: "Checked the shared screen" };
-  if (tool === "computer_windows") return { icon: AppWindow, title: input.focus != null ? "Switched window" : "Listed windows" };
-  if (tool === "computer_open_app") return { icon: AppWindow, title: `Opened ${str(input.name) || "an app"}` };
-  const at = Array.isArray(input.coordinate) ? ` at ${input.coordinate.map((n) => Math.round(Number(n))).join(", ")}` : "";
-  const element = input.element ? " a control" : "";
+  if (tool === "computer_ui")
+    return {
+      icon: ListTree,
+      title: input.query ? t("chat:tools.computer.lookedForInWindow", { query: truncate(str(input.query), 40) }) : t("chat:tools.common.readControls"),
+    };
+  if (tool === "computer_info") return { icon: Monitor, title: t("chat:tools.computer.checkedSharedScreen") };
+  if (tool === "computer_windows") return { icon: AppWindow, title: input.focus != null ? t("chat:tools.computer.switchedWindow") : t("chat:tools.common.listedWindows") };
+  if (tool === "computer_open_app") return { icon: AppWindow, title: str(input.name) ? t("chat:tools.common.opened", { name: str(input.name) }) : t("chat:tools.common.openedApp") };
+  const at = Array.isArray(input.coordinate) ? input.coordinate.map((n) => Math.round(Number(n))).join(", ") : "";
+  const element = !!input.element;
   switch (str(input.action)) {
     case "screenshot":
-      return { icon: Camera, title: "Looked at the screen", detail: input.display ? `display ${str(input.display)}` : undefined };
+      return { icon: Camera, title: t("chat:tools.common.lookedAtScreen"), detail: input.display ? t("chat:tools.computer.display", { display: str(input.display) }) : undefined };
     case "left_click":
-      return { icon: MousePointerClick, title: element ? "Clicked a control" : `Clicked${at}` };
+      return { icon: MousePointerClick, title: clicked("clicked", element, at) };
     case "double_click":
-      return { icon: MousePointerClick, title: `Double-clicked${element || at}` };
+      return { icon: MousePointerClick, title: clicked("doubleClicked", element, at) };
     case "triple_click":
-      return { icon: MousePointerClick, title: `Triple-clicked${element || at}` };
+      return { icon: MousePointerClick, title: clicked("tripleClicked", element, at) };
     case "right_click":
-      return { icon: MousePointerClick, title: `Right-clicked${element || at}` };
+      return { icon: MousePointerClick, title: clicked("rightClicked", element, at) };
     case "middle_click":
-      return { icon: MousePointerClick, title: `Middle-clicked${at}` };
+      return { icon: MousePointerClick, title: at ? t("chat:tools.computer.middleClickedAt", { at }) : t("chat:tools.computer.middleClicked") };
     case "mouse_move":
-      return { icon: Move, title: `Moved the pointer${at}` };
+      return { icon: Move, title: at ? t("chat:tools.computer.movedPointerAt", { at }) : t("chat:tools.common.movedPointer") };
     case "left_click_drag":
-      return { icon: Move, title: "Dragged" };
+      return { icon: Move, title: t("chat:tools.computer.dragged") };
     case "scroll":
-      return { icon: ScrollText, title: `Scrolled ${str(input.scroll_direction) || "down"}` };
+      return { icon: ScrollText, title: scrolled(str(input.scroll_direction)) };
     case "type":
-      return { icon: Type, title: element ? "Typed into a field" : "Typed text", detail: truncate(str(input.text), 80) || undefined };
+      return { icon: Type, title: element ? t("chat:tools.computer.typedIntoField") : t("chat:tools.common.typedText"), detail: truncate(str(input.text), 80) || undefined };
     case "key":
     case "hold_key":
-      return { icon: Keyboard, title: `Pressed ${truncate(str(input.text), 40) || "keys"}` };
+      return { icon: Keyboard, title: pressed(truncate(str(input.text), 40)) };
     case "wait":
-      return { icon: Hourglass, title: `Waited ${str(input.duration) || "1"}s` };
+      return { icon: Hourglass, title: t("chat:tools.computer.waited", { seconds: str(input.duration) || "1" }) };
     case "zoom":
-      return { icon: ZoomIn, title: "Zoomed in" };
+      return { icon: ZoomIn, title: t("chat:tools.computer.zoomedIn") };
     case "cursor_position":
-      return { icon: MousePointerClick, title: "Checked the pointer position" };
+      return { icon: MousePointerClick, title: t("chat:tools.computer.checkedPointer") };
     default:
       return { icon: MonitorUp, title: humanize(tool) };
   }
@@ -231,29 +261,30 @@ function vmMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> {
   const path = str(input.path);
   switch (tool) {
     case "shell":
-      return { kind: "shell", icon: Terminal, title: "Ran a command in the VM", detail: truncate(str(input.command), 120) || undefined };
+      return { kind: "shell", icon: Terminal, title: t("chat:tools.vm.ranCommand"), detail: truncate(str(input.command), 120) || undefined };
     case "read_file":
-      return { kind: "file", icon: FileText, title: path ? `Read ${basename(path)} in the VM` : "Read a file in the VM", detail: path || undefined };
+      return { kind: "file", icon: FileText, title: path ? t("chat:tools.vm.readFile", { name: basename(path) }) : t("chat:tools.vm.readAFile"), detail: path || undefined };
     case "write_file":
-      return { kind: "file", icon: FilePlus2, title: path ? `Wrote ${basename(path)} in the VM` : "Wrote a file in the VM", detail: path || undefined };
+      return { kind: "file", icon: FilePlus2, title: path ? t("chat:tools.vm.wroteFile", { name: basename(path) }) : t("chat:tools.vm.wroteAFile"), detail: path || undefined };
     case "edit_file":
-      return { kind: "file", icon: FilePen, title: path ? `Edited ${basename(path)} in the VM` : "Edited a file in the VM", detail: path || undefined };
+      return { kind: "file", icon: FilePen, title: path ? t("chat:tools.vm.editedFile", { name: basename(path) }) : t("chat:tools.vm.editedAFile"), detail: path || undefined };
     case "info":
-      return { kind: "other", icon: Box, title: "Checked the VM" };
+      return { kind: "other", icon: Box, title: t("chat:tools.vm.checked") };
     default:
       return { ...computerMeta(tool, input), kind: "computer" };
   }
 }
 
-/** "the server" unless the input names it (a name, not an `ssh_…` id). */
+/** The server's name when the input names it (a name, not an `ssh_…` id), "" otherwise. */
 function sshTarget(input: Input): string {
   const server = input.server;
-  return typeof server === "string" && server.trim() && !server.startsWith("ssh_") ? server.trim() : "the server";
+  return typeof server === "string" && server.trim() && !server.startsWith("ssh_") ? server.trim() : "";
 }
 
 /** The `ssh` server: commands, files and transfers on the user's SSH servers. */
 function sshMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> {
-  const on = sshTarget(input);
+  const named = sshTarget(input);
+  const on = named || t("chat:tools.ssh.theServer");
   const path = str(input.path ?? input.remotePath ?? input.remote_path);
   const local = str(input.localPath ?? input.local_path);
   switch (tool) {
@@ -261,34 +292,59 @@ function sshMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "tool"> 
       return {
         kind: "shell",
         icon: Terminal,
-        title: `Ran a command on ${on}${input.sudo === true ? " as root" : ""}`,
+        title: input.sudo === true ? t("chat:tools.ssh.ranCommandRoot", { target: on }) : t("chat:tools.common.ranCommandOn", { target: on }),
         detail: truncate(str(input.command), 120) || undefined,
       };
     case "read_file":
-      return { kind: "file", icon: FileText, title: path ? `Read ${basename(path)} on ${on}` : `Read a file on ${on}`, detail: path || undefined };
+      return {
+        kind: "file",
+        icon: FileText,
+        title: path ? t("chat:tools.common.readFileOn", { name: basename(path), target: on }) : t("chat:tools.common.readAFileOn", { target: on }),
+        detail: path || undefined,
+      };
     case "write_file":
-      return { kind: "file", icon: FilePlus2, title: path ? `Wrote ${basename(path)} on ${on}` : `Wrote a file on ${on}`, detail: path || undefined };
+      return {
+        kind: "file",
+        icon: FilePlus2,
+        title: path ? t("chat:tools.common.wroteFileOn", { name: basename(path), target: on }) : t("chat:tools.common.wroteAFileOn", { target: on }),
+        detail: path || undefined,
+      };
     case "edit_file":
-      return { kind: "file", icon: FilePen, title: path ? `Edited ${basename(path)} on ${on}` : `Edited a file on ${on}`, detail: path || undefined };
+      return {
+        kind: "file",
+        icon: FilePen,
+        title: path ? t("chat:tools.common.editedFileOn", { name: basename(path), target: on }) : t("chat:tools.common.editedAFileOn", { target: on }),
+        detail: path || undefined,
+      };
     case "upload": {
       const name = basename(local || path);
-      return { kind: "file", icon: FileUp, title: name ? `Uploaded ${name} to ${on}` : `Uploaded a file to ${on}`, detail: path || undefined };
+      return {
+        kind: "file",
+        icon: FileUp,
+        title: name ? t("chat:tools.ssh.uploaded", { name, target: on }) : t("chat:tools.ssh.uploadedAFile", { target: on }),
+        detail: path || undefined,
+      };
     }
     case "download": {
       const name = basename(path || local);
-      return { kind: "file", icon: FileDown, title: name ? `Downloaded ${name} from ${on}` : `Downloaded a file from ${on}`, detail: local || undefined };
+      return {
+        kind: "file",
+        icon: FileDown,
+        title: name ? t("chat:tools.ssh.downloaded", { name, target: on }) : t("chat:tools.ssh.downloadedAFile", { target: on }),
+        detail: local || undefined,
+      };
     }
     case "list_servers":
-      return { kind: "other", icon: Server, title: "Checked SSH servers" };
+      return { kind: "other", icon: Server, title: t("chat:tools.ssh.checkedServers") };
     default:
-      return { kind: "other", icon: Server, title: humanize(tool), detail: on === "the server" ? undefined : on };
+      return { kind: "other", icon: Server, title: humanize(tool), detail: named || undefined };
   }
 }
 
-/** "the phone" unless the input names it (a name, not an `adr_…` id). */
+/** The phone's name when the input names it (a name, not an `adr_…` id), "" otherwise. */
 function phoneTarget(input: Input): string {
   const device = input.device;
-  return typeof device === "string" && device.trim() && !device.startsWith("adr_") ? device.trim() : "the phone";
+  return typeof device === "string" && device.trim() && !device.startsWith("adr_") ? device.trim() : "";
 }
 
 /** "[540, 1200]" for an `[x, y]` coordinate, "" for anything else. */
@@ -298,32 +354,40 @@ function point(v: unknown): string {
 
 /** The `android` server: screen, touch, apps, shell and files on the user's Android phones. */
 function androidMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMeta, "server" | "tool"> {
-  const on = phoneTarget(input);
-  const named = on === "the phone" ? undefined : on;
+  const named = phoneTarget(input) || undefined;
+  const on = named ?? t("chat:tools.android.thePhone");
   const local = str(input.local_path);
   const remote = str(input.remote_path);
   switch (tool) {
     case "list_devices":
-      return { kind: "other", icon: Smartphone, title: "Checked the phones" };
+      return { kind: "other", icon: Smartphone, title: t("chat:tools.android.checkedPhones") };
     case "screenshot":
-      return { kind: "other", icon: Smartphone, title: "Looked at the screen", detail: named };
+      return { kind: "other", icon: Smartphone, title: t("chat:tools.common.lookedAtScreen"), detail: named };
     case "ui_elements":
-      return { kind: "other", icon: ListTree, title: input.filter ? `Looked for “${truncate(str(input.filter), 40)}” on the screen` : "Read the screen", detail: named };
+      return {
+        kind: "other",
+        icon: ListTree,
+        title: input.filter ? t("chat:tools.android.lookedForOnScreen", { query: truncate(str(input.filter), 40) }) : t("chat:tools.android.readScreen"),
+        detail: named,
+      };
     case "tap":
-      return { kind: "other", icon: Pointer, title: `Tapped ${point(input.coordinate)}`.trim(), detail: named };
+      return { kind: "other", icon: Pointer, title: point(input.coordinate) ? t("chat:tools.android.tappedAt", { at: point(input.coordinate) }) : t("chat:tools.android.tapped"), detail: named };
     case "long_press":
-      return { kind: "other", icon: Pointer, title: `Pressed and held ${point(input.coordinate)}`.trim(), detail: named };
+      return { kind: "other", icon: Pointer, title: point(input.coordinate) ? t("chat:tools.android.heldAt", { at: point(input.coordinate) }) : t("chat:tools.android.held"), detail: named };
     case "swipe": {
       const path = point(input.start_coordinate) && point(input.coordinate) ? `${point(input.start_coordinate)} → ${point(input.coordinate)}` : "";
-      return { kind: "other", icon: Move, title: "Swiped", detail: [path, named].filter(Boolean).join(" · ") || undefined };
+      return { kind: "other", icon: Move, title: t("chat:tools.android.swiped"), detail: [path, named].filter(Boolean).join(" · ") || undefined };
     }
     case "scroll":
-      return { kind: "other", icon: ScrollText, title: `Scrolled ${str(input.direction) || "down"}`, detail: named };
+      return { kind: "other", icon: ScrollText, title: scrolled(str(input.direction)), detail: named };
     case "type_text":
-      return { kind: "other", icon: Type, title: "Typed text", detail: truncate(str(input.text), 80) || undefined };
+      return { kind: "other", icon: Type, title: t("chat:tools.common.typedText"), detail: truncate(str(input.text), 80) || undefined };
     case "press_key": {
-      const key = str(input.key).replace(/^KEYCODE_/i, "").replace(/_/g, " ").toLowerCase();
-      return { kind: "other", icon: Keyboard, title: `${input.long === true ? "Held" : "Pressed"} ${truncate(key, 40) || "a key"}`, detail: named };
+      const key = truncate(str(input.key).replace(/^KEYCODE_/i, "").replace(/_/g, " ").toLowerCase(), 40);
+      const title = input.long === true
+        ? key ? t("chat:tools.android.heldKey", { key }) : t("chat:tools.android.heldAKey")
+        : key ? t("chat:tools.common.pressed", { keys: key }) : t("chat:tools.common.pressedAKey");
+      return { kind: "other", icon: Keyboard, title, detail: named };
     }
     case "open_app": {
       const pkg = str(input.package);
@@ -331,32 +395,54 @@ function androidMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
       // An app link ("myapp://screen") has no website to name.
       const appLink = /^[a-z][a-z0-9+.-]*:/i.test(url) && !/^https?:/i.test(url);
       const host = appLink ? "" : hostOf(url);
-      return { kind: "other", icon: AppWindow, title: pkg ? `Opened ${pkg}` : url ? `Opened ${host || "a link"}` : "Opened an app", detail: url || named };
+      const title = pkg
+        ? t("chat:tools.common.opened", { name: pkg })
+        : url
+          ? host ? t("chat:tools.common.opened", { name: host }) : t("chat:tools.android.openedLink")
+          : t("chat:tools.common.openedApp");
+      return { kind: "other", icon: AppWindow, title, detail: url || named };
     }
     case "list_apps":
-      return { kind: "other", icon: AppWindow, title: "Listed apps", detail: named };
+      return { kind: "other", icon: AppWindow, title: t("chat:tools.common.listedApps"), detail: named };
     case "shell":
-      return { kind: "shell", icon: Terminal, title: `Ran a command on ${on}`, detail: truncate(str(input.command), 120) || undefined };
+      return { kind: "shell", icon: Terminal, title: t("chat:tools.common.ranCommandOn", { target: on }), detail: truncate(str(input.command), 120) || undefined };
     case "install_apk":
-      return { kind: "other", icon: PackagePlus, title: local ? `Installed ${basename(local)} on ${on}` : `Installed an app on ${on}` };
+      return {
+        kind: "other",
+        icon: PackagePlus,
+        title: local ? t("chat:tools.android.installed", { name: basename(local), target: on }) : t("chat:tools.android.installedApp", { target: on }),
+      };
     case "push_file": {
       const name = basename(local || remote);
-      return { kind: "file", icon: FileUp, title: name ? `Copied ${name} to ${on}` : `Copied a file to ${on}`, detail: remote || undefined };
+      return {
+        kind: "file",
+        icon: FileUp,
+        title: name ? t("chat:tools.android.copiedTo", { name, target: on }) : t("chat:tools.android.copiedAFileTo", { target: on }),
+        detail: remote || undefined,
+      };
     }
     case "pull_file": {
       const name = basename(remote || local);
-      return { kind: "file", icon: FileDown, title: name ? `Copied ${name} from ${on}` : `Copied a file from ${on}`, detail: local || undefined };
+      return {
+        kind: "file",
+        icon: FileDown,
+        title: name ? t("chat:tools.android.copiedFrom", { name, target: on }) : t("chat:tools.android.copiedAFileFrom", { target: on }),
+        detail: local || undefined,
+      };
     }
     case "fill_login": {
       const credId = str(input.credentialId);
       const label = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
-      const field = str(input.field) === "username" ? "username" : "password";
-      return { kind: "vault", icon: KeyRound, title: `Entered ${field}${label ? ` for ${label}` : ""}`, detail: "from vault · never shown to the AI" };
+      const title =
+        str(input.field) === "username"
+          ? label ? t("chat:tools.android.enteredUsernameFor", { label }) : t("chat:tools.android.enteredUsername")
+          : label ? t("chat:tools.android.enteredPasswordFor", { label }) : t("chat:tools.android.enteredPassword");
+      return { kind: "vault", icon: KeyRound, title, detail: t("chat:tools.common.fromVaultHidden") };
     }
     case "fill_totp": {
       const credId = str(input.credentialId);
       const label = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
-      return { kind: "vault", icon: ShieldCheck, title: label ? `Entered 2FA code for ${label}` : "Entered 2FA code", detail: "from vault" };
+      return { kind: "vault", icon: ShieldCheck, title: label ? t("chat:tools.common.entered2faFor", { label }) : t("chat:tools.common.entered2fa"), detail: t("chat:tools.common.fromVault") };
     }
     default:
       return { kind: "other", icon: Smartphone, title: humanize(tool), detail: named };
@@ -366,14 +452,18 @@ function androidMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
 /** The `cua` server: Cua Driver controlling the apps and windows inside the VM. */
 function cuaMeta(tool: string, input: Input): Omit<ToolMeta, "kind" | "server" | "tool"> {
   const app = str(input.app_name ?? input.app ?? input.name ?? input.bundle_id);
-  if (/launch|open_app/.test(tool)) return { icon: AppWindow, title: app ? `Opened ${app}` : "Opened an app" };
-  if (/list_(windows|apps)/.test(tool)) return { icon: AppWindow, title: tool === "list_apps" ? "Listed apps" : "Listed windows" };
-  if (/window_state|desktop_state|accessibility|tree/.test(tool)) return { icon: ListTree, title: "Read the window's controls" };
-  if (/screenshot/.test(tool)) return { icon: Camera, title: "Looked at the screen" };
-  if (/click/.test(tool)) return { icon: MousePointerClick, title: /double/.test(tool) ? "Double-clicked" : /right/.test(tool) ? "Right-clicked" : "Clicked" };
-  if (/type|set_value/.test(tool)) return { icon: Type, title: "Typed text", detail: truncate(str(input.text ?? input.value), 80) || undefined };
-  if (/key/.test(tool)) return { icon: Keyboard, title: `Pressed ${truncate(str(input.key ?? input.keys ?? input.text), 40) || "keys"}` };
-  if (/scroll/.test(tool)) return { icon: ScrollText, title: "Scrolled" };
+  if (/launch|open_app/.test(tool)) return { icon: AppWindow, title: app ? t("chat:tools.common.opened", { name: app }) : t("chat:tools.common.openedApp") };
+  if (/list_(windows|apps)/.test(tool)) return { icon: AppWindow, title: tool === "list_apps" ? t("chat:tools.common.listedApps") : t("chat:tools.common.listedWindows") };
+  if (/window_state|desktop_state|accessibility|tree/.test(tool)) return { icon: ListTree, title: t("chat:tools.common.readControls") };
+  if (/screenshot/.test(tool)) return { icon: Camera, title: t("chat:tools.common.lookedAtScreen") };
+  if (/click/.test(tool))
+    return {
+      icon: MousePointerClick,
+      title: /double/.test(tool) ? t("chat:tools.computer.doubleClicked") : /right/.test(tool) ? t("chat:tools.computer.rightClicked") : t("chat:tools.computer.clicked"),
+    };
+  if (/type|set_value/.test(tool)) return { icon: Type, title: t("chat:tools.common.typedText"), detail: truncate(str(input.text ?? input.value), 80) || undefined };
+  if (/key/.test(tool)) return { icon: Keyboard, title: pressed(truncate(str(input.key ?? input.keys ?? input.text), 40)) };
+  if (/scroll/.test(tool)) return { icon: ScrollText, title: t("chat:tools.common.scrolled") };
   if (/drag|move/.test(tool)) return { icon: Move, title: humanize(tool) };
   return { icon: MonitorUp, title: humanize(tool) };
 }
@@ -433,32 +523,36 @@ const GODMODE_TOOLS = new Set([
   "artifact_list",
 ]);
 
-/** "task #12" for a task reference ("#12", "12" or an id). */
-function taskRef(input: Input): string {
-  const ref = str(input.taskId);
-  const n = /^#?(\d+)$/.exec(ref)?.[1];
-  return n ? `task #${n}` : "the task";
+/** The number of a task reference ("#12", "12"), "" for an id. */
+function taskNumber(input: Input): string {
+  return /^#?(\d+)$/.exec(str(input.taskId))?.[1] ?? "";
 }
 
 /** "in 90 min" or the `at` time of a followup_schedule call. */
 function followupTime(input: Input): string {
   if (typeof input.inMinutes === "number") {
     const m = input.inMinutes;
-    return m < 90 ? `in ${m} min` : m < 48 * 60 ? `in ${Math.round(m / 60)} h` : `in ${Math.round(m / 1440)} days`;
+    return m < 90
+      ? t("chat:tools.followup.inMinutes", { count: m })
+      : m < 48 * 60
+        ? t("chat:tools.followup.inHours", { count: Math.round(m / 60) })
+        : t("chat:tools.followup.inDays", { count: Math.round(m / 1440) });
   }
   const at = new Date(str(input.at).replace(" ", "T"));
-  if (Number.isNaN(at.getTime())) return "later";
-  return `on ${at.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+  if (Number.isNaN(at.getTime())) return t("chat:tools.followup.later");
+  return t("chat:tools.followup.on", {
+    date: at.toLocaleString(intlLocale(), { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }),
+  });
 }
 
 /** What starts an automation, for routine_create / routine_update: the app event, the condition or the cron. */
 function automationDetail(input: Input): string | undefined {
   const trigger = input.trigger;
   if (trigger && typeof trigger === "object" && !Array.isArray(trigger)) {
-    const t = trigger as Input;
-    if (t.type === "app") return str(t.triggerName) || "On an app event";
-    if (t.type === "condition") return truncate(`When ${str(t.condition)}`, 120);
-    if (t.type === "webhook") return "When its webhook is called";
+    const trg = trigger as Input;
+    if (trg.type === "app") return str(trg.triggerName) || t("chat:tools.godmode.onAppEvent");
+    if (trg.type === "condition") return truncate(t("chat:tools.godmode.whenCondition", { condition: str(trg.condition) }), 120);
+    if (trg.type === "webhook") return t("chat:tools.godmode.onWebhook");
   }
   return str(input.cron) || undefined;
 }
@@ -468,139 +562,214 @@ function godmodeMeta(tool: string, input: Input, ctx: ToolContext): Omit<ToolMet
   const credLabel = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
   const agentId = str(input.agentId ?? input.id);
   const agentName = agentId ? (ctx.agentName?.(agentId) ?? "") : "";
+  const taskN = taskNumber(input);
+  const name = str(input.name);
   switch (tool) {
     case "vault_list_logins":
-      return { kind: "vault", icon: KeyRound, title: input.domain ? `Looked up logins for ${hostOf(input.domain)}` : "Looked up saved logins" };
+      return {
+        kind: "vault",
+        icon: KeyRound,
+        title: input.domain ? t("chat:tools.godmode.lookedUpLoginsFor", { host: hostOf(input.domain) }) : t("chat:tools.godmode.lookedUpLogins"),
+      };
     case "vault_fill_login": {
       const field = str(input.field) || "password";
-      const target = credLabel ? ` for ${credLabel}` : "";
-      return { kind: "vault", icon: KeyRound, title: `Filled ${field}${target}`, detail: "from vault · never shown to the AI" };
+      const title =
+        field === "username"
+          ? credLabel ? t("chat:tools.godmode.filledUsernameFor", { label: credLabel }) : t("chat:tools.godmode.filledUsername")
+          : field === "password"
+            ? credLabel ? t("chat:tools.godmode.filledPasswordFor", { label: credLabel }) : t("chat:tools.godmode.filledPassword")
+            : credLabel ? t("chat:tools.godmode.filledFieldFor", { field, label: credLabel }) : t("chat:tools.godmode.filledField", { field });
+      return { kind: "vault", icon: KeyRound, title, detail: t("chat:tools.common.fromVaultHidden") };
     }
     case "vault_fill_totp":
-      return { kind: "vault", icon: ShieldCheck, title: credLabel ? `Entered 2FA code for ${credLabel}` : "Entered 2FA code", detail: "from vault" };
+      return {
+        kind: "vault",
+        icon: ShieldCheck,
+        title: credLabel ? t("chat:tools.common.entered2faFor", { label: credLabel }) : t("chat:tools.common.entered2fa"),
+        detail: t("chat:tools.common.fromVault"),
+      };
     case "vault_save_login": {
       const site = hostOf(input.url);
       const user = str(input.username);
       return {
         kind: "vault",
         icon: KeyRound,
-        title: site ? `Saved login for ${site}` : "Saved a login",
-        detail: [user, input.generatePassword ? "new password, never shown to the AI" : "password stored encrypted"].filter(Boolean).join(" · "),
+        title: site ? t("chat:tools.godmode.savedLoginFor", { site }) : t("chat:tools.godmode.savedLogin"),
+        detail: [user, input.generatePassword ? t("chat:tools.godmode.newPasswordHidden") : t("chat:tools.godmode.passwordEncrypted")].filter(Boolean).join(" · "),
       };
     }
     case "vault_get_login":
-      return { kind: "vault", icon: Eye, title: credLabel ? `Revealed login for ${credLabel}` : "Revealed a login", detail: "audited" };
+      return {
+        kind: "vault",
+        icon: Eye,
+        title: credLabel ? t("chat:tools.godmode.revealedLoginFor", { label: credLabel }) : t("chat:tools.godmode.revealedLogin"),
+        detail: t("chat:tools.godmode.audited"),
+      };
     case "vault_get_totp":
-      return { kind: "vault", icon: Eye, title: "Read a 2FA code", detail: "audited" };
+      return { kind: "vault", icon: Eye, title: t("chat:tools.godmode.read2fa"), detail: t("chat:tools.godmode.audited") };
     case "vault_list_cards":
-      return { kind: "vault", icon: CreditCard, title: "Looked up saved cards" };
+      return { kind: "vault", icon: CreditCard, title: t("chat:tools.godmode.lookedUpCards") };
     case "vault_card_purchase": {
       const amount = typeof input.amount === "number" ? `${str(input.currency).toUpperCase()} ${input.amount.toFixed(2)}`.trim() : "";
       const merchant = str(input.merchant);
-      return { kind: "vault", icon: CreditCard, title: `Asked to pay${amount ? ` ${amount}` : ""}${merchant ? ` · ${truncate(merchant, 60)}` : ""}`, detail: str(input.description) || undefined };
+      const ask = amount ? t("chat:tools.godmode.askedToPayAmount", { amount }) : t("chat:tools.godmode.askedToPay");
+      return { kind: "vault", icon: CreditCard, title: `${ask}${merchant ? ` · ${truncate(merchant, 60)}` : ""}`, detail: str(input.description) || undefined };
     }
-    case "vault_fill_card":
-      return { kind: "vault", icon: CreditCard, title: `Entered card ${str(input.field).replace(/_/g, " ") || "details"}`, detail: "from vault · never shown to the AI" };
+    case "vault_fill_card": {
+      const field = str(input.field).replace(/_/g, " ");
+      return {
+        kind: "vault",
+        icon: CreditCard,
+        title: field ? t("chat:tools.godmode.enteredCardField", { field }) : t("chat:tools.godmode.enteredCardDetails"),
+        detail: t("chat:tools.common.fromVaultHidden"),
+      };
+    }
     case "vault_card_purchase_result":
-      return { kind: "vault", icon: CreditCard, title: str(input.outcome) === "failed" ? "Payment failed" : "Payment done", detail: str(input.note) || undefined };
+      return {
+        kind: "vault",
+        icon: CreditCard,
+        title: str(input.outcome) === "failed" ? t("chat:tools.godmode.paymentFailed") : t("chat:tools.godmode.paymentDone"),
+        detail: str(input.note) || undefined,
+      };
     case "report_missing_login": {
-      const service = str(input.service) || hostOf(input.url) || "a service";
-      return { kind: "missing-login", icon: ShieldAlert, title: `Needs a login for ${service}`, detail: str(input.reason) || undefined };
+      const service = str(input.service) || hostOf(input.url);
+      return {
+        kind: "missing-login",
+        icon: ShieldAlert,
+        title: service ? t("chat:tools.godmode.needsLoginFor", { service }) : t("chat:tools.godmode.needsLogin"),
+        detail: str(input.reason) || undefined,
+      };
     }
     case "agents_list":
-      return { kind: "agents", icon: Bot, title: "Looked up agents" };
+      return { kind: "agents", icon: Bot, title: t("chat:tools.godmode.lookedUpAgents") };
     case "agent_get":
-      return { kind: "agents", icon: Bot, title: agentName ? `Looked up ${agentName}` : "Looked up an agent" };
+      return { kind: "agents", icon: Bot, title: agentName ? t("chat:tools.godmode.lookedUpNamed", { name: agentName }) : t("chat:tools.godmode.lookedUpAgent") };
     case "agent_delegate":
       return {
         kind: "delegate",
         icon: BotMessageSquare,
-        title: `Delegated to ${agentName || "an agent"}`,
+        title: agentName ? t("chat:tools.godmode.delegatedTo", { name: agentName }) : t("chat:tools.godmode.delegatedToAgent"),
         detail: truncate(str(input.task), 120) || undefined,
       };
     case "agent_create":
-      return { kind: "agents", icon: UserCog, title: `Created agent ${str(input.name)}`.trim(), detail: str(input.template) ? `From the ${humanize(str(input.template))} template` : undefined };
+      return {
+        kind: "agents",
+        icon: UserCog,
+        title: name ? t("chat:tools.godmode.createdAgentNamed", { name }) : t("chat:tools.godmode.createdAgent"),
+        detail: str(input.template) ? t("chat:tools.godmode.fromTemplate", { template: humanize(str(input.template)) }) : undefined,
+      };
     case "templates_list":
-      return { kind: "agents", icon: Bot, title: "Looked at ready-made roles and teams" };
+      return { kind: "agents", icon: Bot, title: t("chat:tools.godmode.lookedAtTemplates") };
     case "team_install": {
       const workspace = str((input.newWorkspace as Input | undefined)?.name);
-      return { kind: "agents", icon: UserCog, title: `Hired ${humanize(str(input.template)) || "a team"}`, detail: workspace ? `In the new workspace ${workspace}` : undefined };
+      const team = humanize(str(input.template));
+      return {
+        kind: "agents",
+        icon: UserCog,
+        title: team ? t("chat:tools.godmode.hired", { name: team }) : t("chat:tools.godmode.hiredTeam"),
+        detail: workspace ? t("chat:tools.godmode.inNewWorkspace", { name: workspace }) : undefined,
+      };
     }
     case "agent_update":
-      return { kind: "agents", icon: UserCog, title: agentName ? `Updated ${agentName}` : "Updated an agent" };
+      return { kind: "agents", icon: UserCog, title: agentName ? t("chat:tools.godmode.updatedNamed", { name: agentName }) : t("chat:tools.godmode.updatedAgent") };
     case "agent_delete":
-      return { kind: "agents", icon: Trash2, title: agentName ? `Deleted ${agentName}` : "Deleted an agent" };
+      return { kind: "agents", icon: Trash2, title: agentName ? t("chat:tools.godmode.deletedNamed", { name: agentName }) : t("chat:tools.godmode.deletedAgent") };
     case "routine_create":
-      return { kind: "agents", icon: Workflow, title: `Created automation ${str(input.name)}`.trim(), detail: automationDetail(input) };
+      return {
+        kind: "agents",
+        icon: Workflow,
+        title: name ? t("chat:tools.godmode.createdAutomationNamed", { name }) : t("chat:tools.godmode.createdAutomation"),
+        detail: automationDetail(input),
+      };
     case "routine_update":
-      return { kind: "agents", icon: Workflow, title: "Updated an automation", detail: automationDetail(input) };
+      return { kind: "agents", icon: Workflow, title: t("chat:tools.godmode.updatedAutomation"), detail: automationDetail(input) };
     case "routine_delete":
-      return { kind: "agents", icon: Trash2, title: "Deleted an automation" };
+      return { kind: "agents", icon: Trash2, title: t("chat:tools.godmode.deletedAutomation") };
     case "my_routines":
-      return { kind: "agents", icon: Workflow, title: "Looked at its automations" };
+      return { kind: "agents", icon: Workflow, title: t("chat:tools.godmode.lookedAtAutomations") };
     case "my_routine_set_enabled":
-      return { kind: "agents", icon: Workflow, title: input.enabled === false ? "Paused one of its automations" : "Switched one of its automations on", detail: truncate(str(input.reason), 120) || undefined };
+      return {
+        kind: "agents",
+        icon: Workflow,
+        title: input.enabled === false ? t("chat:tools.godmode.pausedAutomation") : t("chat:tools.godmode.enabledAutomation"),
+        detail: truncate(str(input.reason), 120) || undefined,
+      };
     case "automation_triggers_list":
-      return { kind: "agents", icon: Workflow, title: "Looked up app events it can react to" };
+      return { kind: "agents", icon: Workflow, title: t("chat:tools.godmode.lookedUpTriggers") };
     case "automation_events_list":
-      return { kind: "agents", icon: History, title: "Checked recent automation events" };
+      return { kind: "agents", icon: History, title: t("chat:tools.godmode.checkedAutomationEvents") };
     case "automation_check_result":
       return {
         kind: "agents",
         icon: ScanText,
-        title: input.met === true ? "Condition met" : "Condition not met yet",
+        title: input.met === true ? t("chat:tools.godmode.conditionMet") : t("chat:tools.godmode.conditionNotMet"),
         detail: truncate(str(input.summary ?? input.observation), 120) || undefined,
       };
     case "runs_list":
-      return { kind: "agents", icon: History, title: "Checked recent runs" };
+      return { kind: "agents", icon: History, title: t("chat:tools.godmode.checkedRuns") };
     case "run_continue":
-      return { kind: "agents", icon: Play, title: "Continued work a restart cut off" };
+      return { kind: "agents", icon: Play, title: t("chat:tools.godmode.continuedRun") };
     case "run_cancel":
-      return { kind: "agents", icon: CircleStop, title: "Stopped a run", detail: truncate(str(input.reason), 120) || undefined };
+      return { kind: "agents", icon: CircleStop, title: t("chat:tools.godmode.stoppedRun"), detail: truncate(str(input.reason), 120) || undefined };
     case "workspaces_list":
-      return { kind: "agents", icon: Layers, title: "Listed workspaces" };
+      return { kind: "agents", icon: Layers, title: t("chat:tools.godmode.listedWorkspaces") };
     case "workspace_create":
-      return { kind: "agents", icon: Layers, title: `Created workspace ${str(input.name)}`.trim(), detail: truncate(str(input.description), 120) || undefined };
+      return {
+        kind: "agents",
+        icon: Layers,
+        title: name ? t("chat:tools.godmode.createdWorkspaceNamed", { name }) : t("chat:tools.godmode.createdWorkspace"),
+        detail: truncate(str(input.description), 120) || undefined,
+      };
     case "workspace_update":
-      return { kind: "agents", icon: Layers, title: "Updated a workspace" };
+      return { kind: "agents", icon: Layers, title: t("chat:tools.godmode.updatedWorkspace") };
     case "project_create":
-      return { kind: "agents", icon: FolderKanban, title: `Created project ${str(input.name)}`.trim(), detail: truncate(str(input.description), 120) || undefined };
+      return {
+        kind: "agents",
+        icon: FolderKanban,
+        title: name ? t("chat:tools.godmode.createdProjectNamed", { name }) : t("chat:tools.godmode.createdProject"),
+        detail: truncate(str(input.description), 120) || undefined,
+      };
     case "project_update":
-      return { kind: "agents", icon: FolderKanban, title: "Updated a project" };
+      return { kind: "agents", icon: FolderKanban, title: t("chat:tools.godmode.updatedProject") };
     case "notify_user":
-      return { kind: "notify", icon: Bell, title: "Sent you a notification", detail: str(input.title) || undefined };
+      return { kind: "notify", icon: Bell, title: t("chat:tools.godmode.sentNotification"), detail: str(input.title) || undefined };
     case "followup_schedule":
-      return { kind: "notify", icon: AlarmClock, title: `Will continue ${followupTime(input)}`, detail: truncate(str(input.note), 120) || undefined };
+      return { kind: "notify", icon: AlarmClock, title: t("chat:tools.godmode.willContinue", { when: followupTime(input) }), detail: truncate(str(input.note), 120) || undefined };
     case "followup_cancel":
-      return { kind: "notify", icon: AlarmClockOff, title: "Cancelled its follow-up" };
+      return { kind: "notify", icon: AlarmClockOff, title: t("chat:tools.godmode.cancelledFollowup") };
     case "goal_clear":
-      return { kind: "notify", icon: FlagOff, title: "Ended the goal", detail: truncate(str(input.reason), 120) || undefined };
+      return { kind: "notify", icon: FlagOff, title: t("chat:tools.godmode.endedGoal"), detail: truncate(str(input.reason), 120) || undefined };
     case "ask_human":
-      return { kind: "agents", icon: MessageCircleQuestion, title: "Asked you", detail: truncate(str(input.question), 120) || undefined };
+      return { kind: "agents", icon: MessageCircleQuestion, title: t("chat:tools.godmode.askedYou"), detail: truncate(str(input.question), 120) || undefined };
     case "request_approval":
-      return { kind: "agents", icon: ShieldCheck, title: "Asked for your OK", detail: truncate(str(input.action), 120) || undefined };
+      return { kind: "agents", icon: ShieldCheck, title: t("chat:tools.godmode.askedOk"), detail: truncate(str(input.action), 120) || undefined };
     case "tasks_list":
-      return { kind: "agents", icon: SquareKanban, title: "Looked at the board" };
+      return { kind: "agents", icon: SquareKanban, title: t("chat:tools.godmode.lookedAtBoard") };
     case "task_get":
-      return { kind: "agents", icon: SquareKanban, title: `Read ${taskRef(input)}` };
+      return { kind: "agents", icon: SquareKanban, title: taskN ? t("chat:tools.godmode.readTaskN", { n: taskN }) : t("chat:tools.godmode.readTask") };
     case "task_create":
-      return { kind: "agents", icon: SquareKanban, title: "Filed a task", detail: truncate(str(input.title), 120) || undefined };
+      return { kind: "agents", icon: SquareKanban, title: t("chat:tools.godmode.filedTask"), detail: truncate(str(input.title), 120) || undefined };
     case "task_update":
-      return { kind: "agents", icon: SquareKanban, title: `Changed ${taskRef(input)}` };
+      return { kind: "agents", icon: SquareKanban, title: taskN ? t("chat:tools.godmode.changedTaskN", { n: taskN }) : t("chat:tools.godmode.changedTask") };
     case "task_message":
-      return { kind: "agents", icon: MessageSquareReply, title: `Sent a message into ${taskRef(input)}`, detail: truncate(str(input.content), 120) || undefined };
+      return {
+        kind: "agents",
+        icon: MessageSquareReply,
+        title: taskN ? t("chat:tools.godmode.messagedTaskN", { n: taskN }) : t("chat:tools.godmode.messagedTask"),
+        detail: truncate(str(input.content), 120) || undefined,
+      };
     case "task_note":
-      return { kind: "agents", icon: NotebookPen, title: "Left a note on the task", detail: truncate(str(input.text), 120) || undefined };
+      return { kind: "agents", icon: NotebookPen, title: t("chat:tools.godmode.leftNote"), detail: truncate(str(input.text), 120) || undefined };
     case "artifact_create":
-      return { kind: "other", icon: AppWindow, title: `Built ${str(input.title) || "an artifact"}` };
+      return { kind: "other", icon: AppWindow, title: str(input.title) ? t("chat:tools.godmode.built", { title: str(input.title) }) : t("chat:tools.godmode.builtArtifact") };
     case "artifact_update":
-      return { kind: "other", icon: AppWindow, title: "Changed an artifact", detail: truncate(str(input.note), 120) || undefined };
+      return { kind: "other", icon: AppWindow, title: t("chat:tools.godmode.changedArtifact"), detail: truncate(str(input.note), 120) || undefined };
     case "artifact_get":
-      return { kind: "other", icon: AppWindow, title: "Read an artifact" };
+      return { kind: "other", icon: AppWindow, title: t("chat:tools.godmode.readArtifact") };
     case "artifact_list":
-      return { kind: "other", icon: AppWindow, title: "Looked at its artifacts" };
+      return { kind: "other", icon: AppWindow, title: t("chat:tools.godmode.lookedAtArtifacts") };
     case "task_report_blocked":
-      return { kind: "agents", icon: OctagonAlert, title: "Reported what it needs", detail: truncate(str(input.reason), 120) || undefined };
+      return { kind: "agents", icon: OctagonAlert, title: t("chat:tools.godmode.reportedBlocked"), detail: truncate(str(input.reason), 120) || undefined };
     default:
       // A Godmode tool without its own card: the shared past-tense title, never its raw name.
       return GATEWAY_DONE[tool] ? { kind: "other", icon: Zap, title: GATEWAY_DONE[tool]! } : null;
@@ -614,48 +783,48 @@ function builtinMeta(tool: string, input: Input): Omit<ToolMeta, "server" | "too
       return {
         kind: "shell",
         icon: Terminal,
-        title: str(input.description) || "Ran a command",
+        title: str(input.description) || t("chat:tools.builtin.ranCommand"),
         detail: truncate(str(input.command), 120) || undefined,
       };
     case "BashOutput":
     case "Monitor":
-      return { kind: "shell", icon: Terminal, title: "Checked command output" };
+      return { kind: "shell", icon: Terminal, title: t("chat:tools.builtin.checkedOutput") };
     case "Read":
-      return { kind: "file", icon: FileText, title: path ? `Read ${basename(path)}` : "Read a file", detail: path || undefined };
+      return { kind: "file", icon: FileText, title: path ? t("chat:tools.builtin.read", { name: basename(path) }) : t("chat:tools.common.readAFile"), detail: path || undefined };
     case "Write":
-      return { kind: "file", icon: FilePlus2, title: path ? `Wrote ${basename(path)}` : "Wrote a file", detail: path || undefined };
+      return { kind: "file", icon: FilePlus2, title: path ? t("chat:tools.builtin.wrote", { name: basename(path) }) : t("chat:tools.builtin.wroteAFile"), detail: path || undefined };
     case "Edit":
     case "MultiEdit":
     case "NotebookEdit":
-      return { kind: "file", icon: FilePen, title: path ? `Edited ${basename(path)}` : "Edited a file", detail: path || undefined };
+      return { kind: "file", icon: FilePen, title: path ? t("chat:tools.builtin.edited", { name: basename(path) }) : t("chat:tools.builtin.editedAFile"), detail: path || undefined };
     case "Glob":
-      return { kind: "file", icon: FolderSearch, title: "Searched files", detail: str(input.pattern) || undefined };
+      return { kind: "file", icon: FolderSearch, title: t("chat:tools.builtin.searchedFiles"), detail: str(input.pattern) || undefined };
     case "Grep":
-      return { kind: "file", icon: Search, title: `Searched for “${truncate(str(input.pattern), 40)}”` };
+      return { kind: "file", icon: Search, title: t("chat:tools.builtin.searchedFor", { pattern: truncate(str(input.pattern), 40) }) };
     case "LS":
-      return { kind: "file", icon: ListTree, title: path ? `Listed ${basename(path)}` : "Listed files" };
+      return { kind: "file", icon: ListTree, title: path ? t("chat:tools.builtin.listed", { name: basename(path) }) : t("chat:tools.builtin.listedFiles") };
     case "WebFetch": {
       const host = hostOf(input.url);
-      return { kind: "web", icon: Link2, title: host ? `Fetched ${host}` : "Fetched a page", detail: str(input.url) || undefined };
+      return { kind: "web", icon: Link2, title: host ? t("chat:tools.builtin.fetched", { host }) : t("chat:tools.builtin.fetchedPage"), detail: str(input.url) || undefined };
     }
     case "WebSearch":
-      return { kind: "web", icon: Search, title: `Searched the web for “${truncate(str(input.query), 60)}”` };
+      return { kind: "web", icon: Search, title: t("chat:tools.builtin.searchedWebFor", { query: truncate(str(input.query), 60) }) };
     case "Task":
     case "Agent": {
       const who = str(input.subagent_type);
       return {
         kind: "subagent",
         icon: Bot,
-        title: str(input.description) || (who ? `Asked ${who}` : "Ran a subagent"),
+        title: str(input.description) || (who ? t("chat:tools.builtin.asked", { name: who }) : t("chat:tools.builtin.ranSubagent")),
         detail: who && who !== "general-purpose" ? who : undefined,
       };
     }
     case "Workflow":
-      return { kind: "subagent", icon: Workflow, title: str(input.name) ? `Ran the workflow ${str(input.name)}` : "Ran a workflow" };
+      return { kind: "subagent", icon: Workflow, title: str(input.name) ? t("chat:tools.builtin.ranWorkflowNamed", { name: str(input.name) }) : t("chat:tools.builtin.ranWorkflow") };
     case "TodoWrite":
     case "TaskCreate":
     case "TaskUpdate":
-      return { kind: "plan", icon: ListChecks, title: "Updated the plan" };
+      return { kind: "plan", icon: ListChecks, title: t("chat:tools.builtin.updatedPlan") };
     default:
       return null;
   }
@@ -700,99 +869,104 @@ function easyMeta(meta: ToolMeta, input: Input, ctx: ToolContext): { title: stri
   const memory = MEMORY_FILE.test(path);
   const credId = str(input.credentialId);
   const credLabel = credId ? (ctx.credentialLabel?.(credId) ?? "") : "";
-  const forSite = credLabel ? ` for ${credLabel}` : "";
-
+  
   if (kind === "browser") {
     switch (tool.replace(/^browser_/, "")) {
       case "click":
-        return { title: "Clicked on the page" };
+        return { title: t("chat:tools.common.clickedPage") };
       case "type":
       case "input_text":
-        return { title: "Typed text" };
+        return { title: t("chat:tools.common.typedText") };
       case "get_state":
       case "state":
       case "get_html":
-        return { title: "Looked at the page" };
+        return { title: t("chat:tools.easy.lookedAtPage") };
       case "extract_content":
       case "extract":
-        return { title: "Read the page", detail: meta.detail };
+        return { title: t("chat:tools.easy.readPage"), detail: meta.detail };
       case "scroll":
-        return { title: "Scrolled the page" };
+        return { title: t("chat:tools.easy.scrolledPage") };
       case "send_keys":
-        return { title: "Pressed a key" };
+        return { title: t("chat:tools.common.pressedAKey") };
       case "list_tabs":
-        return { title: "Checked the open tabs" };
+        return { title: t("chat:tools.easy.checkedTabs") };
       case "switch_tab":
-        return { title: "Switched tabs" };
+        return { title: t("chat:tools.common.switchedTab") };
       case "close_tab":
-        return { title: "Closed a tab" };
+        return { title: t("chat:tools.common.closedTab") };
       case "retry_with_browser_use_agent":
-        return { title: "Asked a browser helper", detail: meta.detail };
+        return { title: t("chat:tools.easy.askedBrowserHelper"), detail: meta.detail };
       default:
         return null;
     }
   }
   if (kind === "computer") {
     const action = str(input.action) || tool;
-    if (/screenshot/.test(action)) return { title: "Looked at the screen" };
-    if (/drag|mouse_move|move_(cursor|mouse|pointer)/.test(action)) return { title: "Moved the pointer" };
-    if (/click/.test(action)) return { title: /double/.test(action) ? "Double-clicked on the screen" : /right/.test(action) ? "Right-clicked on the screen" : "Clicked on the screen" };
-    if (/key/.test(action)) return { title: "Pressed a key" };
-    if (/type|set_value/.test(action)) return { title: "Typed text" };
-    if (/scroll/.test(action)) return { title: "Scrolled" };
+    if (/screenshot/.test(action)) return { title: t("chat:tools.common.lookedAtScreen") };
+    if (/drag|mouse_move|move_(cursor|mouse|pointer)/.test(action)) return { title: t("chat:tools.common.movedPointer") };
+    if (/click/.test(action)) return {
+        title: /double/.test(action)
+          ? t("chat:tools.easy.doubleClickedScreen")
+          : /right/.test(action)
+            ? t("chat:tools.easy.rightClickedScreen")
+            : t("chat:tools.easy.clickedScreen"),
+      };
+    if (/key/.test(action)) return { title: t("chat:tools.common.pressedAKey") };
+    if (/type|set_value/.test(action)) return { title: t("chat:tools.common.typedText") };
+    if (/scroll/.test(action)) return { title: t("chat:tools.common.scrolled") };
     return null;
   }
-  if (kind === "shell") return { title: tool === "BashOutput" || tool === "Monitor" ? "Checked on a command" : "Ran a command" };
+  if (kind === "shell") return { title: tool === "BashOutput" || tool === "Monitor" ? t("chat:tools.easy.checkedCommand") : t("chat:tools.builtin.ranCommand") };
   if (kind === "file") {
-    if (/^(Read|read_file)$/.test(tool)) return { title: memory ? "Checked its memory" : "Read a file" };
-    if (/^(Write|write_file)$/.test(tool)) return { title: memory ? "Updated its memory" : "Saved a file" };
-    if (/^(Edit|MultiEdit|NotebookEdit|edit_file)$/.test(tool)) return { title: memory ? "Updated its memory" : "Changed a file" };
-    if (tool === "Glob") return { title: "Looked for files" };
-    if (tool === "Grep") return { title: "Searched through files" };
-    if (tool === "LS") return { title: "Looked through a folder" };
-    if (tool === "upload") return { title: "Uploaded a file" };
-    if (tool === "download") return { title: "Downloaded a file" };
-    if (tool === "push_file") return { title: "Copied a file to the phone" };
-    if (tool === "pull_file") return { title: "Copied a file from the phone" };
-    return { title: "Worked with a file" };
+    if (/^(Read|read_file)$/.test(tool)) return { title: memory ? t("chat:tools.easy.checkedMemory") : t("chat:tools.common.readAFile") };
+    if (/^(Write|write_file)$/.test(tool)) return { title: memory ? t("chat:tools.easy.updatedMemory") : t("chat:tools.easy.savedFile") };
+    if (/^(Edit|MultiEdit|NotebookEdit|edit_file)$/.test(tool)) return { title: memory ? t("chat:tools.easy.updatedMemory") : t("chat:tools.easy.changedFile") };
+    if (tool === "Glob") return { title: t("chat:tools.easy.lookedForFiles") };
+    if (tool === "Grep") return { title: t("chat:tools.easy.searchedFiles") };
+    if (tool === "LS") return { title: t("chat:tools.easy.lookedThroughFolder") };
+    if (tool === "upload") return { title: t("chat:tools.easy.uploadedFile") };
+    if (tool === "download") return { title: t("chat:tools.easy.downloadedFile") };
+    if (tool === "push_file") return { title: t("chat:tools.easy.copiedToPhone") };
+    if (tool === "pull_file") return { title: t("chat:tools.easy.copiedFromPhone") };
+    return { title: t("chat:tools.easy.workedWithFile") };
   }
   if (tool === "WebFetch") {
     const host = hostOf(input.url);
-    return { title: host ? `Looked at ${host}` : "Looked at a web page" };
+    return { title: host ? t("chat:tools.easy.lookedAtHost", { host }) : t("chat:tools.easy.lookedAtWebPage") };
   }
-  if (tool === "WebSearch") return { title: "Searched the web", detail: truncate(str(input.query), 80) || undefined };
-  if (kind === "plan") return { title: "Updated its to-do list" };
-  if (tool === "Task" || tool === "Agent") return { title: str(input.description) || "Asked a helper" };
-  if (tool === "Workflow") return { title: "Started a team task" };
+  if (tool === "WebSearch") return { title: t("chat:tools.easy.searchedWeb"), detail: truncate(str(input.query), 80) || undefined };
+  if (kind === "plan") return { title: t("chat:tools.easy.updatedTodos") };
+  if (tool === "Task" || tool === "Agent") return { title: str(input.description) || t("chat:tools.easy.askedHelper") };
+  if (tool === "Workflow") return { title: t("chat:tools.easy.startedTeamTask") };
   if (server === "android") {
-    if (tool === "tap") return { title: "Tapped the screen" };
-    if (tool === "long_press") return { title: "Pressed and held on the screen" };
-    if (tool === "open_app" && str(input.package)) return { title: "Opened an app" };
+    if (tool === "tap") return { title: t("chat:tools.easy.tappedScreen") };
+    if (tool === "long_press") return { title: t("chat:tools.easy.heldScreen") };
+    if (tool === "open_app" && str(input.package)) return { title: t("chat:tools.common.openedApp") };
   }
   switch (tool) {
     case "vault_fill_login":
     case "fill_login":
-      return { title: `Filled in your login${forSite}`, detail: meta.detail };
+      return { title: credLabel ? t("chat:tools.easy.filledLoginFor", { label: credLabel }) : t("chat:tools.easy.filledLogin"), detail: meta.detail };
     case "vault_fill_totp":
     case "fill_totp":
-      return { title: `Entered your sign-in code${forSite}`, detail: meta.detail };
+      return { title: credLabel ? t("chat:tools.easy.enteredCodeFor", { label: credLabel }) : t("chat:tools.easy.enteredCode"), detail: meta.detail };
     case "vault_get_login":
-      return { title: `Looked up a saved login${forSite}` };
+      return { title: credLabel ? t("chat:tools.easy.lookedUpLoginFor", { label: credLabel }) : t("chat:tools.easy.lookedUpLogin") };
     case "vault_get_totp":
-      return { title: "Looked up a sign-in code" };
+      return { title: t("chat:tools.easy.lookedUpCode") };
     case "agents_list":
-      return { title: "Looked up its teammates" };
+      return { title: t("chat:tools.easy.lookedUpTeammates") };
     case "agent_delegate": {
       const agentId = str(input.agentId);
       const name = agentId ? (ctx.agentName?.(agentId) ?? "") : "";
-      return { title: name ? `Asked ${name} for help` : "Asked a teammate", detail: meta.detail };
+      return { title: name ? t("chat:tools.easy.askedForHelp", { name }) : t("chat:tools.easy.askedTeammate"), detail: meta.detail };
     }
     case "runs_list":
-      return { title: "Checked recent work" };
+      return { title: t("chat:tools.easy.checkedRecentWork") };
     case "run_continue":
-      return { title: "Picked up where it left off" };
+      return { title: t("chat:tools.easy.pickedUp") };
     case "run_cancel":
-      return { title: "Stopped a teammate's run" };
+      return { title: t("chat:tools.easy.stoppedTeammateRun") };
     case "routine_create":
     case "routine_update":
       // The detail is the cron line or the trigger's name.

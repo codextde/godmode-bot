@@ -1,1 +1,64 @@
-{}
+{
+  "meta": {
+    "folders_one": "{{count}} Ordner",
+    "folders_other": "{{count}} Ordner",
+    "repos_one": "{{count}} Repo",
+    "repos_other": "{{count}} Repos",
+    "none": "Noch keine Details"
+  },
+  "chip": {
+    "tooltipOwn": "Dieser Chat arbeitet an {{name}}",
+    "tooltipInherited": "Arbeitet an {{name}} – dem Projekt von {{agent}}",
+    "tooltipNone": "An einem Projekt arbeiten",
+    "label": "Projekt: {{name}}",
+    "labelDefault": "Projekt: {{name}} (Standard)",
+    "project": "Projekt",
+    "hint": "Läufe in diesem Chat bekommen Kontext, Ordner und Repositories des Projekts und surfen mit seinem Browserprofil.",
+    "find": "Projekt suchen…",
+    "empty": "Kein Projekt mit diesem Namen.",
+    "default": "Standard – {{name}}",
+    "noProject": "Kein Projekt",
+    "setIn": "In den Einstellungen von {{agent}} festgelegt",
+    "onlyWorkspace": "Nur Kontext und Ordner des Workspaces",
+    "selected": "Ausgewählt",
+    "workOn": "Arbeiten an"
+  },
+  "dialog": {
+    "newTitle": "Neues Projekt",
+    "grantReason": "Bestätige, damit Läufe in {{name}}, dessen Kontext ein Agent geschrieben hat, wieder Geheimnisse lesen dürfen.",
+    "updated": "Projekt aktualisiert",
+    "created": "{{icon}} {{name}} erstellt",
+    "createdDescription": "Ein Projekt in {{workspace}}. Chats und Aufgaben darin bekommen seinen Kontext und seine Ordner.",
+    "switchTo": "Dorthin wechseln",
+    "updateFailed": "Projekt konnte nicht aktualisiert werden",
+    "createFailed": "Projekt konnte nicht erstellt werden",
+    "deleted": "{{name}} gelöscht",
+    "deletedDescription": "Seine Chats, Aufgaben und Agenten bleiben in {{workspace}}.",
+    "deleteFailed": "Projekt konnte nicht gelöscht werden",
+    "editTitle": "Projekt bearbeiten",
+    "description": "Projekte sind optional. Jedes bringt eigenen Kontext, Ordner, Repositories und Browser zusätzlich zu denen von {{workspace}} mit.",
+    "untitled": "Unbenanntes Projekt",
+    "clickIcon": "Klick auf das Icon, um es zu ändern",
+    "namePlaceholder": "z. B. Shop-Relaunch, Telefonsupport, Website",
+    "color": "Farbe",
+    "optional": "(optional)",
+    "descriptionPlaceholder": "Worum geht es in diesem Projekt? Agenten sehen das als Kontext.",
+    "agentContext": "Kontext für Agenten",
+    "agentContextHint": "Geht bei jedem Lauf in diesem Projekt mit, nach dem Kontext des Workspaces.",
+    "contextExample": "Migration von Shopware 6 zu Shopify Plus für ACME.\nStaging-Shop: acme-staging.myshopify.com\nVeröffentliche niemals das Live-Theme.",
+    "sources": "Ordner & Repositories",
+    "sourcesHint": "Kommen bei jedem Lauf in diesem Projekt dazu, neben denen des Workspaces. Der Worktree einer Aufgabe stammt aus dem ersten Repository des Projekts.",
+    "saveChanges": "Änderungen speichern",
+    "create": "Projekt erstellen",
+    "deleteTitle": "{{name}} löschen?",
+    "deleteDescription": "Seine Chats, Aufgaben und Agenten bleiben ohne Projekt in {{workspace}}. Geklonte Repositories wandern in den Papierkorb; deine eigenen Ordner bleiben unberührt.",
+    "deleteConfirm": "Projekt löschen"
+  },
+  "profile": {
+    "label": "Browserprofil",
+    "manage": "Profile verwalten",
+    "workspaceDefault": "Workspace-Standard",
+    "global": "Global",
+    "hint": "Läufe in diesem Projekt surfen mit diesem Profil, sofern Chat oder Agent kein eigenes wählen."
+  }
+}

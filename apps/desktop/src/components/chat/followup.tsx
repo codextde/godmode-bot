@@ -10,24 +10,27 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNow } from "@/components/vault/use-now";
+import { Trans, useTranslation } from "react-i18next";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { dateLocale, t } from "@/i18n";
 
 /** "today at 16:00", "tomorrow at 09:00", "Thu, Oct 1 at 09:00" */
 export function followupWhen(iso: string): string {
   const d = new Date(iso);
   const time = format(d, "HH:mm");
-  if (isToday(d)) return `today at ${time}`;
-  if (isTomorrow(d)) return `tomorrow at ${time}`;
-  if (isYesterday(d)) return `yesterday at ${time}`;
-  return `${format(d, d.getFullYear() === new Date().getFullYear() ? "EEE, MMM d" : "EEE, MMM d yyyy")} at ${time}`;
+  if (isToday(d)) return t("chat:followup.when.today", { time });
+  if (isTomorrow(d)) return t("chat:followup.when.tomorrow", { time });
+  if (isYesterday(d)) return t("chat:followup.when.yesterday", { time });
+  const pattern = d.getFullYear() === new Date().getFullYear() ? t("chat:followup.when.dateFormat") : t("chat:followup.when.dateFormatYear");
+  return t("chat:followup.when.date", { date: format(d, pattern, { locale: dateLocale() }), time });
 }
 
 /** "in 3 hours", "in 12 minutes", "any moment" */
 export function followupIn(iso: string, now: number): string {
   const ms = new Date(iso).getTime() - now;
-  if (ms < 60_000) return "any moment";
-  return `in ${formatDistanceStrict(new Date(iso), now, { roundingMethod: "floor" })}`;
+  if (ms < 60_000) return t("chat:followup.anyMoment");
+  return formatDistanceStrict(new Date(iso), now, { roundingMethod: "floor", addSuffix: true, locale: dateLocale() });
 }
 
 export function useFollowupActions() {
@@ -41,35 +44,45 @@ export function useFollowupActions() {
     mutationFn: ({ conversationId, dueAt }: { conversationId: string; dueAt: Date }) => api.followups.move(conversationId, { dueAt: dueAt.toISOString() }),
     onSuccess: (f) => {
       refresh(f.conversationId);
-      toast.success(`Continues ${followupWhen(f.dueAt)}`);
+      toast.success(t("chat:followup.continuesWhen", { when: followupWhen(f.dueAt) }));
     },
-    onError: (err) => toast.error("Couldn't move the follow-up", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("chat:followup.moveError"), { description: errorMessage(err) }),
   });
   const cancel = useMutation({
     mutationFn: (conversationId: string) => api.followups.cancel(conversationId),
     onSuccess: (_res, conversationId) => {
       refresh(conversationId);
-      toast("Follow-up cancelled", { description: "The agent won't come back to this chat on its own." });
+      toast(t("chat:followup.cancelled"), { description: t("chat:followup.cancelledDescription") });
     },
-    onError: (err) => toast.error("Couldn't cancel the follow-up", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("chat:followup.cancelError"), { description: errorMessage(err) }),
   });
   const runNow = useMutation({
     mutationFn: (conversationId: string) => api.followups.runNow(conversationId),
     onSuccess: (run) => refresh(run.conversationId),
-    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't continue now", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error(t("chat:followup.runNowError"), { description: errorMessage(err) }),
   });
   return { move, cancel, runNow };
 }
 
-function presets(now: Date): { label: string; at: Date }[] {
+const PRESET_KEY = {
+  hour: "followup.presets.inHour",
+  threeHours: "followup.presets.inThreeHours",
+  evening: "followup.presets.thisEvening",
+  twelveHours: "followup.presets.inTwelveHours",
+  tomorrow: "followup.presets.tomorrowMorning",
+  monday: "followup.presets.nextMonday",
+  week: "followup.presets.inWeek",
+} as const;
+
+function presets(now: Date): { label: (typeof PRESET_KEY)[keyof typeof PRESET_KEY]; at: Date }[] {
   const morning = (d: Date) => setHours(startOfHour(d), 9);
   return [
-    { label: "In 1 hour", at: addHours(now, 1) },
-    { label: "In 3 hours", at: addHours(now, 3) },
-    now.getHours() < 17 ? { label: "This evening", at: setHours(startOfHour(now), 18) } : { label: "In 12 hours", at: addHours(now, 12) },
-    { label: "Tomorrow morning", at: morning(addDays(now, 1)) },
-    { label: "Next Monday", at: morning(nextMonday(now)) },
-    { label: "In a week", at: morning(addDays(now, 7)) },
+    { label: PRESET_KEY.hour, at: addHours(now, 1) },
+    { label: PRESET_KEY.threeHours, at: addHours(now, 3) },
+    now.getHours() < 17 ? { label: PRESET_KEY.evening, at: setHours(startOfHour(now), 18) } : { label: PRESET_KEY.twelveHours, at: addHours(now, 12) },
+    { label: PRESET_KEY.tomorrow, at: morning(addDays(now, 1)) },
+    { label: PRESET_KEY.monday, at: morning(nextMonday(now)) },
+    { label: PRESET_KEY.week, at: morning(addDays(now, 7)) },
   ];
 }
 
@@ -87,6 +100,7 @@ export function FollowupTimePicker({
   children: ReactNode;
   align?: "start" | "center" | "end";
 }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   const [busy, setBusy] = useState(false);
@@ -116,7 +130,7 @@ export function FollowupTimePicker({
     >
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent align={align} className="w-80 rounded-xl p-2">
-        <div className="eyebrow px-1.5 pt-1 pb-2 text-[10.5px]">Continue at</div>
+        <div className="eyebrow px-1.5 pt-1 pb-2 text-[10.5px]">{t("followup.continueAt")}</div>
         <div className="grid grid-cols-2 gap-1">
           {presets(now).map((p) => (
             <button
@@ -126,8 +140,8 @@ export function FollowupTimePicker({
               onClick={() => void pick(p.at)}
               className="rounded-lg border border-transparent px-2.5 py-2 text-left transition hover:border-border hover:bg-accent/60 focus-visible:border-border focus-visible:bg-accent/60 focus-visible:outline-none disabled:opacity-50"
             >
-              <span className="block text-[13px] font-medium">{p.label}</span>
-              <span className="block text-[11px] text-muted-foreground tabular-nums">{format(p.at, isToday(p.at) ? "'Today' HH:mm" : "EEE HH:mm")}</span>
+              <span className="block text-[13px] font-medium">{t(p.label)}</span>
+              <span className="block text-[11px] text-muted-foreground tabular-nums">{format(p.at, isToday(p.at) ? t("followup.todayTimeFormat") : "EEE HH:mm", { locale: dateLocale() })}</span>
             </button>
           ))}
         </div>
@@ -140,14 +154,14 @@ export function FollowupTimePicker({
         >
           <Input
             type="datetime-local"
-            aria-label="Date and time"
+            aria-label={t("followup.dateAndTime")}
             value={custom}
             min={format(now, LOCAL_INPUT)}
             onChange={(e) => setCustom(e.target.value)}
             className="h-8 flex-1 text-[13px] tabular-nums"
           />
           <Button type="submit" size="sm" disabled={!customOk || busy}>
-            {busy ? <Spinner /> : null} Set
+            {busy ? <Spinner /> : null} {t("followup.set")}
           </Button>
         </form>
       </PopoverContent>
@@ -167,6 +181,7 @@ export function FollowupBar({
   agentName: string;
   running: boolean;
 }) {
+  const { t } = useTranslation("chat");
   const now = useNow(30_000);
   const { move, cancel, runNow } = useFollowupActions();
   return (
@@ -177,7 +192,7 @@ export function FollowupBar({
       <div className="min-w-0 flex-1 leading-snug">
         <div className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
           <span className="truncate">
-            <span className="font-medium">{agentName}</span> continues {followupWhen(followup.dueAt)}
+            <Trans t={t} i18nKey="followup.barContinues" values={{ name: agentName, when: followupWhen(followup.dueAt) }} components={{ b: <span className="font-medium" /> }} />
           </span>
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{followupIn(followup.dueAt, now)}</span>
         </div>
@@ -191,25 +206,25 @@ export function FollowupBar({
             <span tabIndex={running ? 0 : -1}>
               <Button size="xs" variant="ghost" disabled={running || runNow.isPending} onClick={() => runNow.mutate(conversationId)}>
                 {runNow.isPending ? <Spinner /> : <Play />}
-                <span className="hidden @lg:inline">Continue now</span>
+                <span className="hidden @lg:inline">{t("followup.continueNow")}</span>
               </Button>
             </span>
           </TooltipTrigger>
-          <TooltipContent side="top">{running ? `${agentName} is working in this chat` : "Continue now instead of waiting"}</TooltipContent>
+          <TooltipContent side="top">{running ? t("followup.workingHere", { name: agentName }) : t("followup.continueNowHint")}</TooltipContent>
         </Tooltip>
         <FollowupTimePicker dueAt={followup.dueAt} onPick={(dueAt) => move.mutateAsync({ conversationId, dueAt })}>
-          <Button size="xs" variant="ghost" aria-label="Change the time">
+          <Button size="xs" variant="ghost" aria-label={t("followup.changeTime")}>
             <CalendarClock />
-            <span className="hidden @lg:inline">Change</span>
+            <span className="hidden @lg:inline">{t("followup.change")}</span>
           </Button>
         </FollowupTimePicker>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon-xs" variant="ghost" aria-label="Cancel the follow-up" disabled={cancel.isPending} onClick={() => cancel.mutate(conversationId)}>
+            <Button size="icon-xs" variant="ghost" aria-label={t("followup.cancel")} disabled={cancel.isPending} onClick={() => cancel.mutate(conversationId)}>
               {cancel.isPending ? <Spinner /> : <X />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">Cancel the follow-up</TooltipContent>
+          <TooltipContent side="top">{t("followup.cancel")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -223,20 +238,21 @@ export function followupBlock(message: Message): FollowupBlock | null {
 }
 
 const REASON: Record<FollowupReason, (dueAt: string) => string> = {
-  due: (dueAt) => `as planned · ${format(new Date(dueAt), "HH:mm")}`,
-  late: (dueAt) => `was due ${followupWhen(dueAt)} · Godmode was off`,
-  now: () => "continued early",
+  due: (dueAt) => t("chat:followup.reason.due", { time: format(new Date(dueAt), "HH:mm") }),
+  late: (dueAt) => t("chat:followup.reason.late", { when: followupWhen(dueAt) }),
+  now: () => t("chat:followup.reason.now"),
 };
 
 /** Where the agent picked a chat up again on its own. */
 export function FollowupMarker({ block }: { block: FollowupBlock }) {
+  const { t } = useTranslation("chat");
   return (
     <div role="note" className="flex flex-col items-center gap-1.5 text-center">
       <div className="flex w-full items-center gap-3 text-[11px] text-muted-foreground">
         <span className="h-px flex-1 bg-border" />
         <span className="inline-flex items-center gap-1.5">
           <AlarmClock className="size-3.5 text-brand-strong" aria-hidden />
-          <span className="font-medium text-foreground">Follow-up</span>
+          <span className="font-medium text-foreground">{t("followup.label")}</span>
           <span className="tabular-nums">{REASON[block.reason](block.dueAt)}</span>
         </span>
         <span className="h-px flex-1 bg-border" />

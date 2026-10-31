@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   Archive,
@@ -107,17 +108,18 @@ export function StructureIcon({ icon, className }: { icon: string; className?: s
  * org chart in one go instead of hiring one agent at a time.
  */
 export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTemplate["kind"][] }) {
+  const { t } = useTranslation("agents");
   const teams = useTeamTemplates();
   const { data: agents = [] } = useAgentTemplates();
   const [kind, setKind] = useState<TeamTemplate["kind"]>(kinds[0]!);
   const [picked, setPicked] = useState<TeamTemplate | null>(null);
   const byId = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
   if (teams.isError) return null;
-  const shown = (teams.data ?? []).filter((t) => t.kind === kind);
+  const shown = (teams.data ?? []).filter((tpl) => tpl.kind === kind);
   return (
     <>
       {kinds.length > 1 && (
-        <div role="tablist" aria-label="Kind of structure" className="mb-4 inline-flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+        <div role="tablist" aria-label={t("teamTemplates.kindLabel")} className="mb-4 inline-flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
           {kinds.map((k) => (
             <button
               key={k}
@@ -131,7 +133,7 @@ export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTem
               )}
             >
               {kind === k && <motion.span layoutId="structure-kind" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />}
-              <span className="relative">{k === "company" ? "Companies" : "Teams"}</span>
+              <span className="relative">{k === "company" ? t("teamTemplates.companies") : t("teamTemplates.teams")}</span>
             </button>
           ))}
         </div>
@@ -159,6 +161,7 @@ export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTem
 }
 
 function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root: Seat; index: number; onPick: () => void }) {
+  const { t } = useTranslation("agents");
   const total = flat(root).length;
   return (
     <motion.button
@@ -176,14 +179,14 @@ function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 font-medium tracking-[-0.01em]">
             {team.name}
-            <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground tabular-nums">{total} agents</span>
+            <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground tabular-nums">{t("teamTemplates.agentCount", { count: total })}</span>
           </span>
           <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{team.description}</span>
         </span>
       </span>
       <MiniChart root={root} />
       <span className="mt-3 flex items-center gap-1 border-t pt-3 text-xs text-muted-foreground transition group-hover:text-foreground">
-        {root.template.name} with {root.reports.map((r) => r.template.name).slice(0, 3).join(", ")}
+        {t("teamTemplates.leadWith", { lead: root.template.name, names: root.reports.map((r) => r.template.name).slice(0, 3).join(", ") })}
         {root.reports.length > 3 && ` +${root.reports.length - 3}`}
         <ArrowRight className="ml-auto size-3.5 shrink-0 transition group-hover:translate-x-0.5" aria-hidden />
       </span>
@@ -242,6 +245,7 @@ function InstallDialog({ team, root, onClose }: { team: TeamTemplate | null; roo
 }
 
 function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; onClose: () => void }) {
+  const { t } = useTranslation(["agents", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const scoped = useScopeWorkspace();
@@ -278,9 +282,11 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       if (res.workspace) qc.invalidateQueries({ queryKey: qk.workspaces });
-      const place = res.workspace ? ` in ${res.workspace.name}` : "";
-      toast.success(`${team.name} is ready`, {
-        description: `${res.lead.name} leads ${res.members.length} agent${res.members.length === 1 ? "" : "s"}${place}.${res.automations ? ` ${res.automations} automation${res.automations === 1 ? "" : "s"} set up.` : ""}`,
+      const leads = res.workspace
+        ? t("teamTemplates.ready.leadsIn", { lead: res.lead.name, count: res.members.length, workspace: res.workspace.name })
+        : t("teamTemplates.ready.leads", { lead: res.lead.name, count: res.members.length });
+      toast.success(t("teamTemplates.ready.title", { name: team.name }), {
+        description: res.automations ? `${leads} ${t("teamTemplates.ready.automations", { count: res.automations })}` : leads,
       });
       onClose();
       setAgentsView("chart");
@@ -288,7 +294,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       if (scope !== "all") setWorkspace(res.workspace?.id ?? (where === GLOBAL ? "global" : where));
       navigate("/agents");
     },
-    onError: (err) => toast.error(`Couldn't set up ${team.name}`, { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("teamTemplates.installError", { name: team.name }), { description: errorMessage(err) }),
   });
 
   const toggle = (path: string) =>
@@ -315,7 +321,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2.5">
           <StructureIcon icon={team.icon} className="size-8" /> {team.name}
-          <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[11px] font-medium text-muted-foreground">{team.kind === "company" ? "Company" : "Team"}</span>
+          <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[11px] font-medium text-muted-foreground">{team.kind === "company" ? t("teamTemplates.company") : t("teamTemplates.team")}</span>
         </DialogTitle>
         <DialogDescription>{team.description}</DialogDescription>
       </DialogHeader>
@@ -324,38 +330,38 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
         {seats.length > BIG_CHART && (
           <div className="sticky top-0 z-10 flex items-center gap-1 border-b bg-paper-2/95 px-3 py-1.5 text-xs text-muted-foreground backdrop-blur">
             <span className="mr-auto tabular-nums">
-              {kept.length} of {seats.length} agents
+              {t("teamTemplates.keptOf", { kept: kept.length, count: seats.length })}
             </span>
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set())} disabled={skip.size === 0}>
-              Everyone
+              {t("teamTemplates.everyone")}
             </Button>
             {leads.length > 1 && (
               <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set(seats.filter((s) => s.depth > 0 && !s.reports.length).map((s) => s.path)))}>
-                Leads only
+                {t("teamTemplates.leadsOnly")}
               </Button>
             )}
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSkip(new Set(seats.slice(1).map((s) => s.path)))} disabled={kept.length === 1}>
-              Clear
+              {t("teamTemplates.clear")}
             </Button>
           </div>
         )}
-        <ul aria-label="Org chart" className="p-2">
+        <ul aria-label={t("teamTemplates.orgChart")} className="p-2">
           <SeatRow seat={root} skip={skip} onToggle={toggle} onToggleTeam={toggleTeam} leadName={leadName} />
         </ul>
       </div>
 
       <div className="grid gap-3 @container">
         <div className="grid gap-1.5">
-          <Label htmlFor="structure-where">Where they work</Label>
+          <Label htmlFor="structure-where">{t("teamTemplates.where")}</Label>
           <div className="flex flex-wrap gap-2">
             <Select value={where} onValueChange={setWhere}>
               <SelectTrigger id="structure-where" className="w-56">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NEW}>A new workspace</SelectItem>
+                <SelectItem value={NEW}>{t("teamTemplates.newWorkspace")}</SelectItem>
                 <SelectSeparator />
-                <SelectItem value={GLOBAL}>Global (every workspace)</SelectItem>
+                <SelectItem value={GLOBAL}>{t("teamTemplates.globalEvery")}</SelectItem>
                 {workspaces.map((w) => (
                   <SelectItem key={w.id} value={w.id}>
                     {w.name}
@@ -363,20 +369,18 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
                 ))}
               </SelectContent>
             </Select>
-            {where === NEW && <Input value={wsName} onChange={(e) => setWsName(e.target.value)} aria-label="Name of the new workspace" placeholder="Workspace name" className="min-w-40 flex-1" maxLength={80} />}
+            {where === NEW && <Input value={wsName} onChange={(e) => setWsName(e.target.value)} aria-label={t("teamTemplates.newWorkspaceName")} placeholder={t("teamTemplates.workspaceNamePlaceholder")} className="min-w-40 flex-1" maxLength={80} />}
           </div>
         </div>
         {scheduled.length > 0 && (
           <label className="flex items-start gap-2.5 text-sm">
             <Checkbox checked={automations} onCheckedChange={(v) => setAutomations(v === true)} className="mt-0.5" />
             <span>
-              Set up their {scheduled.length} schedule{scheduled.length === 1 ? "" : "s"} too
+              {t("teamTemplates.schedules", { count: scheduled.length })}
               <span className="block text-xs text-muted-foreground">
-                {scheduled
-                  .map((s) => s.template.routine!.name)
-                  .slice(0, 4)
-                  .join(", ")}
-                {scheduled.length > 4 && ` and ${scheduled.length - 4} more`} — change or pause them under Automations.
+                {scheduled.length > 4
+                  ? t("teamTemplates.scheduleListMore", { names: scheduled.map((s) => s.template.routine!.name).slice(0, 4).join(", "), n: scheduled.length - 4 })
+                  : t("teamTemplates.scheduleList", { names: scheduled.map((s) => s.template.routine!.name).join(", ") })}
               </span>
             </span>
           </label>
@@ -384,12 +388,12 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       </div>
 
       <DialogFooter className="items-center">
-        <p className="mr-auto text-xs text-muted-foreground">Leads can hand work to their reports. Every agent is yours to adjust.</p>
+        <p className="mr-auto text-xs text-muted-foreground">{t("teamTemplates.footerHint")}</p>
         <Button variant="ghost" onClick={onClose} disabled={install.isPending}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
         <Button onClick={() => install.mutate()} disabled={!canInstall}>
-          {install.isPending && <Spinner />} Hire {kept.length} agents
+          {install.isPending && <Spinner />} {t("teamTemplates.hire", { count: kept.length })}
         </Button>
       </DialogFooter>
     </>
@@ -411,6 +415,7 @@ function SeatRow({
   leadName: (path: string) => string;
   last?: boolean;
 }) {
+  const { t } = useTranslation("agents");
   const off = skip.has(seat.path);
   const top = seat.depth === 0;
   const id = `seat-${seat.path}`;
@@ -428,14 +433,14 @@ function SeatRow({
         {top ? (
           <span className="size-4 shrink-0" />
         ) : (
-          <Checkbox id={id} checked={!off} onCheckedChange={() => onToggle(seat.path)} aria-label={`Hire ${seat.template.name}`} />
+          <Checkbox id={id} checked={!off} onCheckedChange={() => onToggle(seat.path)} aria-label={t("teamTemplates.seat.hire", { name: seat.template.name })} />
         )}
         <AgentAvatar agent={face(seat.template)} size="sm" still className={cn("size-6 rounded-md transition-opacity", off && "opacity-35 grayscale")} />
         <label htmlFor={top ? undefined : id} className={cn("min-w-0 flex-1 truncate text-sm", !top && "cursor-pointer", off && "text-muted-foreground line-through decoration-muted-foreground/50")}>
           <span className="font-medium">{seat.template.name}</span> <span className="text-muted-foreground">· {seat.template.role}</span>
-          {off && seat.reports.length > 0 && <span className="ml-1.5 inline-block text-xs">(its team reports to {leadName(seat.path)})</span>}
+          {off && seat.reports.length > 0 && <span className="ml-1.5 inline-block text-xs">{t("teamTemplates.seat.teamReportsTo", { name: leadName(seat.path) })}</span>}
         </label>
-        {top && <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-px text-[10px] font-medium text-muted-foreground">Reports to Godmode</span>}
+        {top && <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("teamTemplates.seat.reportsToGodmode")}</span>}
         {team.length > 0 && (
           <button
             type="button"
@@ -445,10 +450,10 @@ function SeatRow({
               !teamOut && "opacity-0 group-hover/seat:opacity-100",
             )}
           >
-            {teamOut ? `Add its team (${team.length})` : `Leave out its team (${team.length})`}
+            {teamOut ? t("teamTemplates.seat.addTeam", { n: team.length }) : t("teamTemplates.seat.leaveOutTeam", { n: team.length })}
           </button>
         )}
-        {seat.template.routine && !off && <CalendarClock className="size-3.5 shrink-0 text-muted-foreground" aria-label="Comes with a schedule" />}
+        {seat.template.routine && !off && <CalendarClock className="size-3.5 shrink-0 text-muted-foreground" aria-label={t("teamTemplates.seat.withSchedule")} />}
       </div>
       {seat.reports.length > 0 && (
         <ul className="relative ml-[1.375rem] pl-3">

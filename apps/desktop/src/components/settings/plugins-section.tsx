@@ -1,26 +1,28 @@
 import { GitBranch, Puzzle, ShieldCheck, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Settings } from "@godmode/shared";
 import { useEasyMode } from "@/lib/mode";
 import { FeaturePageLink, FeatureSection } from "./feature-section";
 
 export function PluginsSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const easy = useEasyMode();
-  const title = easy ? "Add-ons" : "Plugins";
+  const title = easy ? t("plugins.titleEasy") : t("plugins.title");
   return (
     <FeatureSection
       feature="plugins"
       settings={settings}
       title={title}
-      summary="Claude Code plugins for your agents: skills, subagents, slash commands, hooks and MCP servers, installed from GitHub or written for you."
+      summary={t("plugins.summary")}
       icon={<Puzzle />}
-      offNote="Runs load no plugins while it's off. Your plugins and their settings stay as they are."
+      offNote={t("plugins.offNote")}
       points={[
-        { icon: <GitBranch />, text: "Install any plugin from a git repository" },
-        { icon: <Sparkles />, text: "Small hooks your agents write for you" },
-        { icon: <ShieldCheck />, text: "Each one checked, switched off until you allow it" },
+        { icon: <GitBranch />, text: t("plugins.pointGit") },
+        { icon: <Sparkles />, text: t("plugins.pointHooks") },
+        { icon: <ShieldCheck />, text: t("plugins.pointChecked") },
       ]}
     >
-      <FeaturePageLink to="/plugins" icon={<Puzzle />} title={`Open ${title}`} description="Install, switch on and pick the agents each plugin is for." />
+      <FeaturePageLink to="/plugins" icon={<Puzzle />} title={t("feature.open", { title })} description={t("plugins.linkDescription")} />
     </FeatureSection>
   );
 }

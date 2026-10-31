@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,8 +19,8 @@ export function MultiSelect({
   options,
   value,
   onChange,
-  placeholder = "Select…",
-  emptyText = "Nothing found.",
+  placeholder,
+  emptyText,
   disabled,
   className,
 }: {
@@ -32,6 +33,7 @@ export function MultiSelect({
   disabled?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const [open, setOpen] = useState(false);
   const selected = value.map((v) => options.find((o) => o.value === v) ?? { value: v, label: v });
   const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
@@ -50,16 +52,16 @@ export function MultiSelect({
             className="w-full justify-between font-normal"
           >
             <span className={cn("truncate", !value.length && "text-muted-foreground")}>
-              {value.length ? `${value.length} selected` : placeholder}
+              {value.length ? t("multiSelect.selected", { count: value.length }) : (placeholder ?? t("multiSelect.placeholder"))}
             </span>
             <ChevronsUpDown className="size-4 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-(--radix-popover-trigger-width) min-w-64 p-0" align="start">
           <Command>
-            <CommandInput placeholder="Search…" />
+            <CommandInput placeholder={t("multiSelect.search")} />
             <CommandList className="max-h-64">
-              <CommandEmpty>{emptyText}</CommandEmpty>
+              <CommandEmpty>{emptyText ?? t("multiSelect.empty")}</CommandEmpty>
               <CommandGroup>
                 {options.map((o) => {
                   const on = value.includes(o.value);
@@ -94,7 +96,7 @@ export function MultiSelect({
                 type="button"
                 onClick={() => toggle(o.value)}
                 disabled={disabled}
-                aria-label={`Remove ${o.label}`}
+                aria-label={t("multiSelect.remove", { label: o.label })}
                 className="grid size-4 place-items-center rounded-[4px] text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <X className="size-3" />

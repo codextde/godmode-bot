@@ -1,1 +1,54 @@
-{}
+{
+  "checkAgain": "Erneut prüfen",
+  "divider": "Schon einen Schlüssel?",
+  "gate": {
+    "nothingChanged": "Noch keine Änderung",
+    "checkFailed": "Lizenz konnte nicht geprüft werden",
+    "freeWeekOver": "Deine Gratiswoche ist vorbei",
+    "activateTitle": "Godmode aktivieren",
+    "subtitle": "Starte deine kostenlose Testphase oder gib deinen Lizenzschlüssel ein, damit deine Agenten weiterarbeiten.",
+    "keyEndingIn": "Schlüssel endet auf <key>{{hint}}</key>",
+    "dataSafe": "Deine Agenten, Chats und Logins bleiben sicher auf diesem Computer."
+  },
+  "banner": {
+    "trialEnds": {
+      "today": "Deine Testphase endet heute und wird nicht verlängert.",
+      "tomorrow": "Deine Testphase endet morgen und wird nicht verlängert.",
+      "inDays_one": "Deine Testphase endet in {{count}} Tag und wird nicht verlängert.",
+      "inDays_other": "Deine Testphase endet in {{count}} Tagen und wird nicht verlängert."
+    },
+    "trialRenews": {
+      "today": "Deine Testphase endet heute. Danach läuft dein Plan automatisch weiter.",
+      "tomorrow": "Deine Testphase endet morgen. Danach läuft dein Plan automatisch weiter.",
+      "inDays_one": "Deine Testphase endet in {{count}} Tag. Danach läuft dein Plan automatisch weiter.",
+      "inDays_other": "Deine Testphase endet in {{count}} Tagen. Danach läuft dein Plan automatisch weiter."
+    },
+    "dateFormat": "d. MMMM",
+    "keepGodmode": "Godmode behalten",
+    "managePlan": "Plan verwalten",
+    "viewLicence": "Lizenz ansehen",
+    "pastDue": "Die letzte Zahlung ist fehlgeschlagen. Aktualisiere deine Zahlungsmethode, damit Godmode weiterläuft.",
+    "updatePayment": "Zahlung aktualisieren",
+    "grace": "Kostenlos bis {{date}}. Danach füge deinen Lizenzschlüssel hinzu oder starte die 14-tägige Testphase.",
+    "startTrial": "Testphase starten",
+    "addKey": "Schlüssel hinzufügen",
+    "unverified": "Dein Lizenzschlüssel konnte noch nicht geprüft werden. Godmode akzeptiert ihn bis {{date}}.",
+    "dismiss": "Für heute ausblenden"
+  },
+  "keyForm": {
+    "label": "Lizenzschlüssel",
+    "activate": "Aktivieren",
+    "invalid": "Das sieht nicht nach einem Lizenzschlüssel aus. Er hat die Form {{format}}.",
+    "cantUse": "Diese Lizenz kann gerade nicht verwendet werden.",
+    "trialActive": "Deine Testphase läuft",
+    "activated": "Godmode ist aktiviert"
+  },
+  "panel": {
+    "startTrial": "14 Tage kostenlos testen",
+    "seePlans": "Pläne ansehen",
+    "finishCheckout": "Schließe den Kauf im Browser ab und füge dann unten deinen Lizenzschlüssel ein.",
+    "pricing": "14 Tage kostenlos, danach 39 $ im Monat. Jederzeit kündbar.",
+    "lostKey": "Schlüssel verloren?",
+    "lostKeyHint": "Er steht auf der Seite nach dem Kauf und auf deinen Rechnungen."
+  }
+}

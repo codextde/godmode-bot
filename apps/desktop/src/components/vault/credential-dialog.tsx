@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } f
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Eye, Inbox, Lock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Credential, CredentialInput } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -105,6 +106,7 @@ function CredentialForm({
   onDone: (c: Credential) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const uid = useId();
   const isEdit = !!credential;
@@ -161,7 +163,7 @@ function CredentialForm({
       setNotes(res.notes ?? "");
       setNotesEditable(true);
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not reveal notes", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("credential.revealNotesFailed"), qc),
   });
 
   const save = useMutation({
@@ -189,7 +191,7 @@ function CredentialForm({
       }
       if (prefill?.missingLoginId) {
         await api.missingLogins.update(prefill.missingLoginId, { status: "resolved", credentialId: saved.id }).catch((e) => {
-          toastApiError(e, "Saved, but the inbox item could not be resolved", qc);
+          toastApiError(e, t("credential.inboxResolveFailed"), qc);
         });
       }
       return saved;
@@ -199,15 +201,15 @@ function CredentialForm({
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       if (prefill?.missingLoginId) void qc.invalidateQueries({ queryKey: qk.missingLogins });
-      toast.success(isEdit ? "Login updated" : "Login saved", {
-        description: prefill?.missingLoginId ? "The agent can retry now — the inbox item was resolved." : "Encrypted in your vault.",
+      toast.success(isEdit ? t("credential.updated") : t("credential.saved"), {
+        description: prefill?.missingLoginId ? t("credential.savedResolved") : t("credential.savedEncrypted"),
       });
       onDone(saved);
     },
-    onError: (e) => toastApiError(e, isEdit ? "Could not update login" : "Could not save login", qc),
+    onError: (e) => toastApiError(e, isEdit ? t("credential.updateFailed") : t("credential.saveFailed"), qc),
   });
 
-  const nameError = submitted && !name.trim() ? "Give this login a name." : null;
+  const nameError = submitted && !name.trim() ? t("credential.nameMissing") : null;
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -232,9 +234,9 @@ function CredentialForm({
           <Favicon domain={primaryDomain} name={name || "?"} size="lg" />
         </motion.div>
         <div className="min-w-0 pr-8">
-          <DialogTitle className="text-lg">{isEdit ? `Edit ${credential!.name}` : "Add login"}</DialogTitle>
+          <DialogTitle className="text-lg">{isEdit ? t("credential.editTitle", { name: credential!.name }) : t("credential.addTitle")}</DialogTitle>
           <DialogDescription className="mt-1">
-            {isEdit ? "Changes apply to every agent that can use this login." : "Save a website login so your agents can sign in on their own."}
+            {isEdit ? t("credential.editDescription") : t("credential.addDescription")}
           </DialogDescription>
         </div>
       </div>
@@ -246,8 +248,11 @@ function CredentialForm({
             {missingAgent ? <AgentAvatar agent={missingAgent} size="sm" className="mt-0.5" /> : <Inbox className="mt-0.5 size-4 text-warning" />}
             <div className="min-w-0">
               <p className="font-medium">
-                {missingAgent ? `${missingAgent.name} needs this login` : "An agent needs this login"}
-                {missingItem?.service ? ` for ${missingItem.service}` : prefill.service ? ` for ${prefill.service}` : ""}
+                {(() => {
+                  const service = missingItem?.service || prefill.service;
+                  if (missingAgent) return service ? t("credential.agentNeedsFor", { agent: missingAgent.name, service }) : t("credential.agentNeeds", { agent: missingAgent.name });
+                  return service ? t("credential.someAgentNeedsFor", { service }) : t("credential.someAgentNeeds");
+                })()}
               </p>
               {missingItem?.reason && <p className="mt-0.5 text-xs text-muted-foreground">“{missingItem.reason}”</p>}
             </div>
@@ -255,7 +260,7 @@ function CredentialForm({
         )}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Name" htmlFor={id("name")} error={nameError}>
+          <FormField label={t("common:words.name")} htmlFor={id("name")} error={nameError}>
             <Input
               id={id("name")}
               value={name}
@@ -268,12 +273,12 @@ function CredentialForm({
               }}
             />
           </FormField>
-          <FormField label="Website" htmlFor={id("url")}>
+          <FormField label={t("credential.website")} htmlFor={id("url")}>
             <Input id={id("url")} value={url} placeholder="https://github.com/login" inputMode="url" autoComplete="off" onChange={(e) => onUrlChange(e.target.value)} />
           </FormField>
         </div>
 
-        <FormField label="Domains" htmlFor={id("domains")} hint="Agents use this login on these sites. Derived from the website — add more if the login works elsewhere.">
+        <FormField label={t("credential.domains")} htmlFor={id("domains")} hint={t("credential.domainsHint")}>
           <ChipInput
             id={id("domains")}
             value={domains}
@@ -288,19 +293,19 @@ function CredentialForm({
         </FormField>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Username or email" htmlFor={id("username")}>
-            <Input id={id("username")} value={username} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder="you@example.com" onChange={(e) => setUsername(e.target.value)} />
+          <FormField label={t("credential.username")} htmlFor={id("username")}>
+            <Input id={id("username")} value={username} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder={t("totpManual.accountPlaceholder")} onChange={(e) => setUsername(e.target.value)} />
           </FormField>
           <FormField
-            label="Password"
+            label={t("credential.password")}
             htmlFor={id("password")}
-            hint={isEdit ? (credential!.hasPassword ? "A password is stored. Leave empty to keep it." : "No password stored yet.") : undefined}
+            hint={isEdit ? (credential!.hasPassword ? t("credential.passwordStored") : t("credential.noPasswordYet")) : undefined}
           >
             <PasswordInput
               id={id("password")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder={isEdit && credential!.hasPassword ? "Unchanged — type to replace" : "••••••••••••"}
+              placeholder={isEdit && credential!.hasPassword ? t("credential.passwordUnchanged") : "••••••••••••"}
               groupClassName="h-9"
               trailing={<PasswordGeneratorButton onUse={setPassword} />}
             />
@@ -309,7 +314,7 @@ function CredentialForm({
         {password && <StrengthMeter password={password} userInputs={[name, username, primaryDomain]} className="-mt-2" />}
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label="Available to" htmlFor={id("workspace")} hint="Global logins can be used by agents in every workspace.">
+          <FormField label={t("availableTo")} htmlFor={id("workspace")} hint={t("credential.scopeHint")}>
             <WorkspaceSelect
               id={id("workspace")}
               value={workspaceId}
@@ -319,36 +324,36 @@ function CredentialForm({
               }}
             />
           </FormField>
-          <FormField label="Two-factor code" htmlFor={id("totp")} hint="Linked codes are typed in automatically after the password.">
+          <FormField label={t("credential.totp")} htmlFor={id("totp")} hint={t("credential.totpHint")}>
             <LinkPicker
               id={id("totp")}
               value={totpId}
               onChange={setTotpId}
               items={totpItems}
               loading={totpQuery.isLoading}
-              noneLabel="No 2FA linked"
-              searchPlaceholder="Search 2FA codes…"
-              noun="2FA code"
+              noneLabel={t("credential.noTotp")}
+              searchPlaceholder={t("credential.searchTotp")}
+              noun="code"
             />
           </FormField>
         </div>
 
-        <FormField label="Tags" htmlFor={id("tags")}>
-          <ChipInput id={id("tags")} value={tags} onChange={setTags} normalize={(s) => s.trim().toLowerCase()} placeholder="work, billing…" />
+        <FormField label={t("credential.tags")} htmlFor={id("tags")}>
+          <ChipInput id={id("tags")} value={tags} onChange={setTags} normalize={(s) => s.trim().toLowerCase()} placeholder={t("credential.tagsPlaceholder")} />
         </FormField>
 
-        <FormField label="Notes" htmlFor={id("notes")} hint="Encrypted like the password — e.g. security questions or recovery hints.">
+        <FormField label={t("credential.notes")} htmlFor={id("notes")} hint={t("credential.notesHint")}>
           {notesEditable ? (
-            <Textarea id={id("notes")} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="min-h-20" placeholder="Optional" />
+            <Textarea id={id("notes")} value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} className="min-h-20" placeholder={t("optional")} />
           ) : (
             <div className="flex min-h-20 flex-wrap items-center justify-center gap-2 rounded-md border border-dashed bg-paper-2 p-3 text-sm text-muted-foreground">
               <Lock className="size-4 text-brand-strong" />
-              <span>Notes are hidden.</span>
+              <span>{t("credential.notesHidden")}</span>
               <Button type="button" size="xs" variant="outline" onClick={() => revealNotes.mutate()} disabled={revealNotes.isPending}>
-                {revealNotes.isPending ? <Spinner className="size-3" /> : <Eye />} Show notes
+                {revealNotes.isPending ? <Spinner className="size-3" /> : <Eye />} {t("credential.showNotes")}
               </Button>
               <Button type="button" size="xs" variant="ghost" onClick={() => setNotesEditable(true)}>
-                Replace
+                {t("replace")}
               </Button>
             </div>
           )}
@@ -357,15 +362,15 @@ function CredentialForm({
 
       <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="size-3.5 shrink-0 text-brand-strong" /> Encrypted on this device · agents fill it without seeing it
+          <Lock className="size-3.5 shrink-0 text-brand-strong" /> {t("credential.footer")}
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={save.isPending}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="submit" disabled={save.isPending} className="min-w-24">
             {save.isPending && <Spinner />}
-            {isEdit ? "Save changes" : "Save login"}
+            {isEdit ? t("saveChanges") : t("credential.saveLogin")}
           </Button>
         </div>
       </div>

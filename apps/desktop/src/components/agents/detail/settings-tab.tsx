@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 import type { Agent, AgentInput } from "@godmode/shared";
@@ -14,6 +15,7 @@ import { AgentForm } from "../agent-form";
 import { DeleteAgentDialog } from "../agent-actions";
 
 export function SettingsTab({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [formKey, setFormKey] = useState(0);
@@ -29,9 +31,9 @@ export function SettingsTab({ agent }: { agent: Agent }) {
       qc.invalidateQueries({ queryKey: qk.agentFile(agent.id, "CLAUDE.md") });
       // Re-seed the form from the saved agent
       setFormKey((k) => k + 1);
-      toast.success("Settings saved", { description: "CLAUDE.md was regenerated." });
+      toast.success(t("settingsTab.saved"), { description: t("settingsTab.savedDescription") });
     },
-    onError: (err) => !isGrantCancelled(err) && toast.error("Couldn't save settings", { description: errorMessage(err) }),
+    onError: (err) => !isGrantCancelled(err) && toast.error(t("settingsTab.saveError"), { description: errorMessage(err) }),
   });
 
   return (
@@ -43,18 +45,18 @@ export function SettingsTab({ agent }: { agent: Agent }) {
         agentId={agent.id}
         draftKey={draftKey}
         isDefault={agent.isDefault}
-        submitLabel="Save changes"
+        submitLabel={t("settingsTab.saveChanges")}
         pending={save.isPending}
         onSubmit={(input) => save.mutate(input)}
       />
       {!agent.isDefault && (
         <Section
-          title="Danger zone"
-          description="Deleting removes the agent, its automations, conversations and memory repository."
+          title={t("settingsTab.dangerZone")}
+          description={t("settingsTab.dangerZoneDescription")}
           className="border-destructive/30"
         >
           <Button variant="outline" className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => setConfirmDelete(true)}>
-            <Trash2 /> Delete {agent.name}
+            <Trash2 /> {t("settingsTab.deleteAgent", { name: agent.name })}
           </Button>
         </Section>
       )}

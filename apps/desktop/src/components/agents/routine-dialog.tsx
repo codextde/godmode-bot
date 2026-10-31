@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ChevronRight, CircleCheck } from "lucide-react";
 import type { ComposioConnection, GroupDevice, Routine, RoutineInput, RoutineTrigger, RoutineTriggerType, RoutineNotify } from "@godmode/shared";
@@ -43,17 +44,10 @@ import { TimezoneSelect } from "./timezone-select";
 /** Conditions are checked hourly unless the human picks otherwise. */
 const DEFAULT_CHECK_CRON = "0 * * * *";
 
-const NAME_PLACEHOLDERS: Record<RoutineTriggerType, string> = {
-  schedule: "Weekly numbers report",
-  app: "Invoice emails to Drive",
-  condition: "Competitor pricing watch",
-  webhook: "Abandoned checkout recovery",
-};
-
-const FILTER_PLACEHOLDERS: Partial<Record<RoutineTriggerType, string>> = {
-  app: "the sender is a customer, or the subject mentions an invoice",
-  webhook: "the order total is over $100",
-};
+const FILTER_PLACEHOLDER_KEYS = {
+  app: "routineDialog.filterPlaceholder.app",
+  webhook: "routineDialog.filterPlaceholder.webhook",
+} as const;
 
 export interface RoutineDraft {
   agentId: string;
@@ -131,6 +125,7 @@ export function RoutineDialog({
   agentId?: string;
   initial?: Partial<RoutineDraft>;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const qc = useQueryClient();
   const { data: agents = [] } = useAllAgents();
   const { catalog } = useModelCatalog();
@@ -191,10 +186,10 @@ export function RoutineDialog({
   /** The event's settings can't be checked until its schema is known: no saving meanwhile (the fields say why). */
   const schemaBlocked = !!appProblems?.schema;
   const problems = {
-    agentId: !draft.agentId ? "Pick an agent" : null,
-    name: !draft.name.trim() ? "Name your automation" : null,
-    condition: type === "condition" && !draft.condition.trim() ? "Describe what to watch for" : null,
-    prompt: !draft.prompt.trim() ? (eventTrigger ? "Tell the agent what to do with each event" : "Tell the agent what to do each time") : null,
+    agentId: !draft.agentId ? t("routineDialog.problems.agent") : null,
+    name: !draft.name.trim() ? t("routineDialog.problems.name") : null,
+    condition: type === "condition" && !draft.condition.trim() ? t("routineDialog.problems.condition") : null,
+    prompt: !draft.prompt.trim() ? (eventTrigger ? t("routineDialog.problems.promptEvent") : t("routineDialog.problems.prompt")) : null,
   };
   const appInvalid =
     !!appProblems && (!!appProblems.connection || !!appProblems.trigger || schemaBlocked || Object.keys(appProblems.config).length > 0);
@@ -242,20 +237,20 @@ export function RoutineDialog({
       };
       if (!routine) return api.routines.create(input);
       if (!routine.fillOnly || !reveal) return api.routines.update(routine.id, input);
-      return withGrant((grant) => api.routines.update(routine.id, { ...input, fillOnly: false }, grant), "Confirm to let this automation read secrets");
+      return withGrant((grant) => api.routines.update(routine.id, { ...input, fillOnly: false }, grant), t("routineDialog.revealGrant"));
     },
     onSuccess: (r) => {
       clearDraft(draftKey);
       qc.invalidateQueries({ queryKey: qk.routines });
-      if (editing) toast.success("Automation updated", { description: r.name });
-      else if (r.trigger.type === "schedule") toast.success("Automation scheduled", { description: r.name });
-      else toast.success("Automation created", { description: r.name });
+      if (editing) toast.success(t("routineDialog.toast.updated"), { description: r.name });
+      else if (r.trigger.type === "schedule") toast.success(t("routineDialog.toast.scheduled"), { description: r.name });
+      else toast.success(t("routineDialog.toast.created"), { description: r.name });
       // A new webhook (created, or switched to from another trigger): show its URL before closing.
       if (r.trigger.type === "webhook" && routine?.trigger.type !== "webhook") setCreated(r);
       else onOpenChange(false);
     },
     onError: (err) => {
-      if (!isGrantCancelled(err)) toast.error(editing ? "Couldn't update automation" : "Couldn't create automation", { description: errorMessage(err) });
+      if (!isGrantCancelled(err)) toast.error(editing ? t("routineDialog.toast.updateError") : t("routineDialog.toast.createError"), { description: errorMessage(err) });
     },
   });
 
@@ -268,7 +263,7 @@ export function RoutineDialog({
   const checkModelField = (
     <div className="space-y-1.5">
       <Label htmlFor="routine-check-model" className="text-xs text-muted-foreground">
-        Model for checks
+        {t("routineDialog.checkModel")}
       </Label>
       <Select
         value={findModel(catalog.models, draft.checkModel)?.id ?? (draft.checkModel || "__agent")}
@@ -278,14 +273,14 @@ export function RoutineDialog({
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper">
-          <SelectItem value="__agent">Agent's model</SelectItem>
+          <SelectItem value="__agent">{t("routineDialog.agentModel")}</SelectItem>
           <SelectSeparator />
           <ModelOptions models={catalog.models} current={draft.checkModel ?? undefined} />
         </SelectContent>
       </Select>
     </div>
   );
-  const checkModelHint = <p className="text-xs text-muted-foreground">A smaller, faster model keeps frequent checks cheap; the work itself uses the agent's model.</p>;
+  const checkModelHint = <p className="text-xs text-muted-foreground">{t("routineDialog.checkModelHint")}</p>;
   const startWindowField = (
     <StartWindowField cron={draft.cron} timezone={draft.timezone} value={draft.startWindow} onChange={(m) => setDraft((d) => ({ ...d, startWindow: m, runs: 1 }))} />
   );
@@ -296,10 +291,10 @@ export function RoutineDialog({
   const advancedSummary =
     type === "schedule"
       ? draft.runs <= 1
-        ? "random start, cron expression"
-        : "cron expression"
+        ? t("routineDialog.advancedSummary.scheduleWindow")
+        : t("routineDialog.advancedSummary.schedule")
       : type === "condition"
-        ? "model for checks, cron expression"
+        ? t("routineDialog.advancedSummary.condition")
         : null;
 
   const selectableAgents = agents.filter((a) => a.enabled || a.id === draft.agentId);
@@ -325,13 +320,13 @@ export function RoutineDialog({
               </AnimatePresence>
             </div>
             <div className="min-w-0">
-              <DialogTitle>{created ? (easy ? "Your link is ready" : "Your webhook is ready") : editing ? "Edit automation" : "New automation"}</DialogTitle>
+              <DialogTitle>{created ? (easy ? t("routineDialog.title.linkReady") : t("routineDialog.title.webhookReady")) : editing ? t("routineDialog.title.edit") : t("routineDialog.title.new")}</DialogTitle>
               <DialogDescription>
                 {created
                   ? easy
-                    ? `Send a request to this link and “${created.name}” gets to work.`
-                    : `POST to this URL and “${created.name}” gets to work.`
-                  : "When it happens, the agent gets to work — even while you're away."}
+                    ? t("routineDialog.description.linkReady", { name: created.name })
+                    : t("routineDialog.description.webhookReady", { name: created.name })
+                  : t("routineDialog.description.default")}
               </DialogDescription>
             </div>
           </div>
@@ -342,7 +337,7 @@ export function RoutineDialog({
             <WebhookPanel routine={created} />
             <DialogFooter>
               <Button type="button" onClick={() => onOpenChange(false)}>
-                Done
+                {t("common:actions.done")}
               </Button>
             </DialogFooter>
           </div>
@@ -364,7 +359,7 @@ export function RoutineDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               {!agentId && (
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="routine-agent">Agent</Label>
+                  <Label htmlFor="routine-agent">{t("common:words.agent")}</Label>
                   <Select value={draft.agentId} onValueChange={setAgent} disabled={editing}>
                     <SelectTrigger
                       id="routine-agent"
@@ -372,7 +367,7 @@ export function RoutineDialog({
                       aria-invalid={touched && !!problems.agentId}
                       aria-describedby={touched && problems.agentId ? "routine-agent-error" : undefined}
                     >
-                      <SelectValue placeholder="Choose who does the work" />
+                      <SelectValue placeholder={t("routineDialog.agentPlaceholder")} />
                     </SelectTrigger>
                     <SelectContent position="popper">
                       {selectableAgents.map((a) => (
@@ -390,12 +385,12 @@ export function RoutineDialog({
                 </div>
               )}
               <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="routine-name">Name</Label>
+                <Label htmlFor="routine-name">{t("common:words.name")}</Label>
                 <Input
                   id="routine-name"
                   value={draft.name}
                   onChange={(e) => set("name", e.target.value)}
-                  placeholder={NAME_PLACEHOLDERS[type]}
+                  placeholder={t(`routineDialog.namePlaceholder.${type}`)}
                   aria-invalid={touched && !!problems.name}
                   aria-describedby={touched && problems.name ? "routine-name-error" : undefined}
                   autoFocus
@@ -409,7 +404,7 @@ export function RoutineDialog({
             </div>
 
             <div className="space-y-2">
-              <div className="eyebrow">When should it run?</div>
+              <div className="eyebrow">{t("routineDialog.whenToRun")}</div>
               <TriggerPicker value={type} onChange={setTriggerType} />
             </div>
 
@@ -449,13 +444,13 @@ export function RoutineDialog({
                   <>
                     <div className="space-y-1.5">
                       <Label htmlFor="routine-condition" className="text-xs text-muted-foreground">
-                        When…
+                        {t("routineDialog.conditionLabel")}
                       </Label>
                       <Textarea
                         id="routine-condition"
                         value={draft.condition}
                         onChange={(e) => set("condition", e.target.value)}
-                        placeholder="a competitor changes the price of their Pro plan (acme.com/pricing)"
+                        placeholder={t("routineDialog.conditionPlaceholder")}
                         aria-invalid={touched && !!problems.condition}
                         aria-describedby={touched && problems.condition ? "routine-condition-error routine-condition-hint" : "routine-condition-hint"}
                         className="min-h-16 text-sm leading-relaxed"
@@ -466,11 +461,11 @@ export function RoutineDialog({
                         </p>
                       )}
                       <p id="routine-condition-hint" className="text-xs text-muted-foreground">
-                        In plain language. The agent checks it on the schedule below and gets to work once it's true.
+                        {t("routineDialog.conditionHint")}
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <div className="text-xs font-medium">How often to check</div>
+                      <div className="text-xs font-medium">{t("routineDialog.checkFrequency")}</div>
                       <CronBuilder
                         key={cronKey}
                         value={draft.checkCron}
@@ -492,14 +487,20 @@ export function RoutineDialog({
                   <>
                     <p className="text-sm text-muted-foreground">
                       {easy
-                        ? "Godmode gives this automation a secret link. Whenever another tool calls it, like a shop checkout, a form or Zapier, the agent gets to work with what was sent."
-                        : "Godmode gives this automation a secret URL. Whenever a service calls it — a shop checkout, a form, a CI job, Zapier — the agent runs with the request body."}
+                        ? t("routineDialog.webhookIntroEasy")
+                        : t("routineDialog.webhookIntroPro")}
                     </p>
                     {routine?.trigger.type === "webhook" ? (
                       <WebhookPanel routine={routine} />
                     ) : (
                       <p className="rounded-lg border border-dashed bg-card/60 px-3 py-2.5 text-xs text-muted-foreground">
-                        You'll get the {easy ? "link" : "URL"} right after {editing ? "saving" : "creating it"}.
+                        {easy
+                          ? editing
+                            ? t("routineDialog.webhookAfter.linkSave")
+                            : t("routineDialog.webhookAfter.linkCreate")
+                          : editing
+                            ? t("routineDialog.webhookAfter.urlSave")
+                            : t("routineDialog.webhookAfter.urlCreate")}
                       </p>
                     )}
                   </>
@@ -508,17 +509,17 @@ export function RoutineDialog({
                 {eventTrigger && (
                   <div className="space-y-1.5">
                     <Label htmlFor="routine-filter" className="text-xs text-muted-foreground">
-                      Only when… <span className="font-normal">optional</span>
+                      {t("routineDialog.filterLabel")} <span className="font-normal">{t("common:words.optional")}</span>
                     </Label>
                     <Input
                       id="routine-filter"
                       value={draft.filter}
                       onChange={(e) => set("filter", e.target.value)}
-                      placeholder={FILTER_PLACEHOLDERS[type]}
+                      placeholder={type === "app" || type === "webhook" ? t(FILTER_PLACEHOLDER_KEYS[type]) : undefined}
                       aria-describedby="routine-filter-hint"
                     />
                     <p id="routine-filter-hint" className="text-xs text-muted-foreground">
-                      In plain language. Events that don't match are skipped; leave empty to act on every event.
+                      {t("routineDialog.filterHint")}
                     </p>
                   </div>
                 )}
@@ -526,7 +527,7 @@ export function RoutineDialog({
                 {easy && advancedSummary && (
                   <Collapsible open={advanced} onOpenChange={setAdvanced}>
                     <CollapsibleTrigger className="group flex w-full min-w-0 items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-                      <ChevronRight className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" /> Advanced
+                      <ChevronRight className="size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90" /> {t("routineDialog.advanced")}
                       <span className="truncate font-normal text-muted-foreground/80">· {advancedSummary}</span>
                     </CollapsibleTrigger>
                     <CollapsibleContent className="-mx-1 overflow-hidden px-1 pb-1 data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down">
@@ -534,7 +535,7 @@ export function RoutineDialog({
                         {type === "schedule" && draft.runs <= 1 && startWindowField}
                         <RawCronField
                           id="routine-cron-raw"
-                          label={type === "condition" ? "Check schedule as a cron expression" : "Schedule as a cron expression"}
+                          label={type === "condition" ? t("routineDialog.rawCron.check") : t("routineDialog.rawCron.schedule")}
                           value={type === "condition" ? draft.checkCron : draft.cron}
                           onChange={typeCron}
                         />
@@ -552,7 +553,7 @@ export function RoutineDialog({
             </fieldset>
 
             <div className="space-y-1.5">
-              <Label htmlFor="routine-prompt">What should it do?</Label>
+              <Label htmlFor="routine-prompt">{t("routineDialog.promptLabel")}</Label>
               <Textarea
                 id="routine-prompt"
                 value={draft.prompt}
@@ -572,19 +573,15 @@ export function RoutineDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               <SwitchCard
                 id="routine-reuse"
-                title="Keep one conversation"
-                description={
-                  eventTrigger
-                    ? "Every event continues the same thread. Off: each event gets its own conversation, named after it."
-                    : "Every run continues the same thread, so it remembers previous runs."
-                }
+                title={t("routineDialog.reuse.title")}
+                description={eventTrigger ? t("routineDialog.reuse.event") : t("routineDialog.reuse.schedule")}
                 checked={draft.reuseConversation}
                 onChange={setReuse}
               />
               <SwitchCard
                 id="routine-enabled"
-                title="Enabled"
-                description={eventTrigger ? "Paused automations keep their settings and ignore new events." : "Paused automations keep their settings but don't run."}
+                title={t("routineDialog.enabled.title")}
+                description={eventTrigger ? t("routineDialog.enabled.event") : t("routineDialog.enabled.schedule")}
                 checked={draft.enabled}
                 onChange={(v) => set("enabled", v)}
               />
@@ -592,8 +589,8 @@ export function RoutineDialog({
                 <div className="sm:col-span-2">
                   <SwitchCard
                     id="routine-reveal"
-                    title="Reveal secrets to AI"
-                    description="An agent set this automation up, so its runs fill logins into pages but can't read passwords or 2FA codes. Switch on only if you trust the prompt above: its runs then read them like the agent's own."
+                    title={t("routineDialog.reveal.title")}
+                    description={t("routineDialog.reveal.description")}
                     checked={reveal}
                     onChange={setReveal}
                   />
@@ -603,24 +600,24 @@ export function RoutineDialog({
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <Label htmlFor="routine-notify" className="shrink-0">
-                Tell me
+                {t("routineDialog.notify.label")}
               </Label>
               <Select value={draft.notify} onValueChange={(v) => set("notify", v as RoutineNotify)}>
                 <SelectTrigger id="routine-notify" className="w-56" aria-describedby="routine-notify-hint">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="failures">When a run fails</SelectItem>
-                  <SelectItem value="always">After every run</SelectItem>
-                  <SelectItem value="never">Never</SelectItem>
+                  <SelectItem value="failures">{t("routineDialog.notify.failures")}</SelectItem>
+                  <SelectItem value="always">{t("routineDialog.notify.always")}</SelectItem>
+                  <SelectItem value="never">{t("common:words.never")}</SelectItem>
                 </SelectContent>
               </Select>
               <p id="routine-notify-hint" className="basis-full text-xs text-muted-foreground">
                 {draft.notify === "never"
-                  ? "No notifications. A failing automation still shows under Needs you."
+                  ? t("routineDialog.notify.neverHint")
                   : draft.notify === "always"
-                    ? "A notification after every run, with what it did."
-                    : "A failure is told once, until a run works again."}
+                    ? t("routineDialog.notify.alwaysHint")
+                    : t("routineDialog.notify.failuresHint")}
               </p>
             </div>
 
@@ -638,16 +635,16 @@ export function RoutineDialog({
               ) : (
                 <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
                   <Kbd>{modKey}</Kbd>
-                  <Kbd>↵</Kbd> to save
+                  <Kbd>↵</Kbd> {t("routineDialog.toSave")}
                 </span>
               )}
               <div className="flex gap-2">
                 <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button type="submit" disabled={save.isPending || schemaBlocked || (touched && invalid)}>
                   {save.isPending && <Spinner />}
-                  {editing ? "Save changes" : "Create automation"}
+                  {editing ? t("routineDialog.saveChanges") : t("routineDialog.create")}
                 </Button>
               </div>
             </DialogFooter>
@@ -663,24 +660,25 @@ const ANY_DEVICE = "__any";
 
 /** Device groups: the one computer that runs a schedule or check (one with its files and browser profiles). */
 function RunOnField({ devices: list, value, onChange }: { devices: GroupDevice[]; value: string | null; onChange: (runOn: string | null) => void }) {
+  const { t } = useTranslation("agents");
   const devices = list.map((d) => ({
     value: d.id ?? "primary",
     name: d.name,
-    tag: [d.role === "primary" ? "primary" : null, d.self ? "this computer" : null].filter(Boolean).join(", "),
+    tag: [d.role === "primary" ? t("routineDialog.runOn.primary") : null, d.self ? t("routineDialog.runOn.thisComputer") : null].filter(Boolean).join(", "),
     online: d.state === "online",
   }));
   const picked = value ? devices.find((d) => d.value === value) : null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <Label htmlFor="routine-run-on" className="shrink-0">
-        Run on
+        {t("routineDialog.runOn.label")}
       </Label>
       <Select value={value ?? ANY_DEVICE} onValueChange={(v) => onChange(v === ANY_DEVICE ? null : v)}>
         <SelectTrigger id="routine-run-on" className="w-56" aria-describedby="routine-run-on-hint">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper">
-          <SelectItem value={ANY_DEVICE}>Any device</SelectItem>
+          <SelectItem value={ANY_DEVICE}>{t("routineDialog.runOn.any")}</SelectItem>
           <SelectSeparator />
           {devices.map((d) => (
             <SelectItem key={d.value} value={d.value}>
@@ -688,26 +686,29 @@ function RunOnField({ devices: list, value, onChange }: { devices: GroupDevice[]
               {d.tag && <span className="ml-1.5 text-xs text-muted-foreground">{d.tag}</span>}
             </SelectItem>
           ))}
-          {value && !picked && <SelectItem value={value}>Another computer</SelectItem>}
+          {value && !picked && <SelectItem value={value}>{t("routineDialog.runOn.another")}</SelectItem>}
         </SelectContent>
       </Select>
       <p id="routine-run-on-hint" className="basis-full text-xs text-muted-foreground">
         {!value
-          ? "Runs where your schedules run: the primary, or another computer while it stands in."
+          ? t("routineDialog.runOn.anyHint")
           : picked
-            ? `Only ${picked.name} runs it, also while another computer stands in. A time it misses while away runs when it's back${picked.online ? "" : " (it's offline now)"}.`
-            : "Pinned to a computer that isn't listed: one that left the group (the primary runs it then), or one this computer can't see while the primary is away."}
+            ? picked.online
+              ? t("routineDialog.runOn.pickedHint", { name: picked.name })
+              : t("routineDialog.runOn.pickedOfflineHint", { name: picked.name })
+            : t("routineDialog.runOn.unlistedHint")}
       </p>
     </div>
   );
 }
 
 function RawCronField({ id, label, value, onChange }: { id: string; label: string; value: string; onChange: (cron: string) => void }) {
+  const { t } = useTranslation("agents");
   const problem = validateCron(value);
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id} className="text-xs text-muted-foreground">
-        {label} <span className="font-normal">(minute hour day month weekday)</span>
+        {label} <span className="font-normal">{t("cronBuilder.cronFields")}</span>
       </Label>
       <Input
         id={id}
@@ -729,10 +730,11 @@ function RawCronField({ id, label, value, onChange }: { id: string; label: strin
 }
 
 function TimezoneField({ value, onChange }: { value: string; onChange: (tz: string) => void }) {
+  const { t } = useTranslation("agents");
   return (
     <div className="space-y-1.5">
       <Label htmlFor="routine-tz" className="text-xs text-muted-foreground">
-        Timezone
+        {t("routineDialog.timezone")}
       </Label>
       <TimezoneSelect id="routine-tz" value={value} onChange={onChange} />
     </div>

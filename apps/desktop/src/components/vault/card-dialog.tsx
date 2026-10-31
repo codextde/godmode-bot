@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronRight, Eye, Lock, Trash2, Undo2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   CARD_BRAND_LABELS,
   CARD_CURRENCIES,
@@ -26,6 +27,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AgentAvatar } from "@/components/common";
 import { MultiSelect, type MultiSelectOption } from "@/components/agents/multi-select";
+import { t as tg } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -35,7 +37,7 @@ import { ChipInput } from "./chip-input";
 import { PasswordInput } from "./password-input";
 import { PaymentCardFace } from "./payment-card-face";
 import { WorkspaceSelect } from "./workspace-select";
-import { BILLING_COUNTRIES, countryName, defaultCardName, toMajorInput, toMinor } from "./card-utils";
+import { BILLING_COUNTRIES, countryName, defaultCardName, isBillingCountry, toMajorInput, toMinor } from "./card-utils";
 import { domainFromUrl, toastApiError } from "./vault-utils";
 import { isGrantCancelled, withGrant } from "./grant";
 
@@ -44,7 +46,6 @@ type Approval = "always" | "above" | "never";
 const EMPTY_BILLING: CardBilling = { line1: "", line2: "", postalCode: "", city: "", state: "", country: "" };
 const NO_COUNTRY = "__none__";
 const TOGGLE_ON = "data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset";
-const AMOUNT_ERROR = "Enter an amount like 50 or 49.99.";
 
 function isDomain(s: string) {
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(s);
@@ -120,6 +121,7 @@ function CardForm({
   onDone: (card: PaymentCard) => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const uid = useId();
   const formRef = useRef<HTMLFormElement>(null);
@@ -179,20 +181,27 @@ function CardForm({
       value: a.id,
       label: a.name,
       icon: <AgentAvatar agent={a} size="sm" />,
-      hint: inScope(a) ? a.role || undefined : "Can't see this card",
+      hint: inScope(a) ? a.role || undefined : t("cardDialog.cantSee"),
     }));
-    for (const id of agentIds) if (!agents.some((a) => a.id === id)) options.push({ value: id, label: "Deleted agent" });
+    for (const id of agentIds) if (!agents.some((a) => a.id === id)) options.push({ value: id, label: t("deletedAgent") });
     return options;
-  }, [agents, workspaceId, agentIds]);
+  }, [agents, workspaceId, agentIds, t]);
 
+  const amountError = t("cardDialog.errors.amount");
   const errors = {
-    number: replacing && !numberValid ? "Check the card number." : null,
-    expiry: !expiryChanged ? null : !expiryParsed ? "Enter the expiry as MM / YY." : cardExpired({ expMonth: expiryParsed.month, expYear: expiryParsed.year }) ? "This card has expired." : null,
-    cvc: (replacing || cvcMode === "edit") && cvc && !/^\d{3,4}$/.test(cvc) ? "The security code has 3 or 4 digits." : null,
-    perPurchase: Number.isNaN(limitPer) ? AMOUNT_ERROR : null,
-    monthly: Number.isNaN(limitMon) ? AMOUNT_ERROR : null,
-    askAbove: approval === "above" && (askAboveMinor === null || Number.isNaN(askAboveMinor)) ? AMOUNT_ERROR : null,
-    agents: agentsMode === "some" && agentIds.length === 0 ? "Pick at least one agent." : null,
+    number: replacing && !numberValid ? t("cardDialog.errors.number") : null,
+    expiry: !expiryChanged
+      ? null
+      : !expiryParsed
+        ? t("cardDialog.errors.expiryFormat")
+        : cardExpired({ expMonth: expiryParsed.month, expYear: expiryParsed.year })
+          ? t("cardDialog.errors.expired")
+          : null,
+    cvc: (replacing || cvcMode === "edit") && cvc && !/^\d{3,4}$/.test(cvc) ? t("cardDialog.errors.cvc") : null,
+    perPurchase: Number.isNaN(limitPer) ? amountError : null,
+    monthly: Number.isNaN(limitMon) ? amountError : null,
+    askAbove: approval === "above" && (askAboveMinor === null || Number.isNaN(askAboveMinor)) ? amountError : null,
+    agents: agentsMode === "some" && agentIds.length === 0 ? t("cardDialog.errors.agents") : null,
   };
   const err = (k: keyof typeof errors) => (submitted ? errors[k] : null);
 
@@ -200,12 +209,12 @@ function CardForm({
     if (!card) return;
     setRevealingBilling(true);
     try {
-      const res = await withGrant((grant) => api.cards.reveal(card.id, grant), "Confirm with your vault passphrase to show the billing address.");
+      const res = await withGrant((grant) => api.cards.reveal(card.id, grant), tg("vault:cardDialog.grantBilling"));
       setBilling(res.billing ?? EMPTY_BILLING);
       setBillingOriginal(res.billing);
       setBillingMode("edit");
     } catch (e) {
-      if (!isGrantCancelled(e)) toastApiError(e, "Could not show the billing address", qc);
+      if (!isGrantCancelled(e)) toastApiError(e, t("cardDialog.showBillingFailed"), qc);
     } finally {
       setRevealingBilling(false);
     }
@@ -275,15 +284,15 @@ function CardForm({
       const input = buildInput();
       if (!card) return api.cards.create(input as PaymentCardInput);
       if (Object.keys(input).length === 0) return null;
-      return withGrant((grant) => api.cards.update(card.id, input, grant), "Confirm with your vault passphrase to loosen this card's rules.");
+      return withGrant((grant) => api.cards.update(card.id, input, grant), tg("vault:cardDialog.grantLoosen"));
     },
     onSuccess: (saved) => {
       if (!saved) return onDone(card!);
       void qc.invalidateQueries({ queryKey: qk.cards });
-      toast.success(isEdit ? "Card updated" : "Card saved", { description: "Encrypted in your vault." });
+      toast.success(isEdit ? t("cardDialog.updated") : t("cardDialog.saved"), { description: t("credential.savedEncrypted") });
       onDone(saved);
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, isEdit ? "Could not update card" : "Could not save card", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, isEdit ? t("cardDialog.updateFailed") : t("cardDialog.saveFailed"), qc),
   });
 
   const onSubmit = (e: FormEvent) => {
@@ -315,20 +324,22 @@ function CardForm({
   const previewExpiry = expiryParsed ?? (!replacing && card ? { month: card.expMonth, year: card.expYear } : null);
   const approvalHint =
     approval === "always"
-      ? "Agents ask you before every purchase."
+      ? t("cardDialog.approvalHint.always")
       : approval === "never"
-        ? "Agents pay on their own as long as a purchase fits the limits."
+        ? t("cardDialog.approvalHint.never")
         : askAboveMinor !== null && !Number.isNaN(askAboveMinor)
-          ? `Agents pay up to ${formatMoney(askAboveMinor, currency)} on their own and ask you above that.`
-          : "Agents pay up to this amount on their own and ask you above it.";
+          ? t("cardDialog.approvalHint.aboveAmount", { amount: formatMoney(askAboveMinor, currency) })
+          : t("cardDialog.approvalHint.above");
   const billingSummary =
     billingMode === "remove"
-      ? "Removed when you save"
+      ? t("cardDialog.removedOnSave")
       : billingMode === "hidden"
-        ? `Saved${card?.billingCountry ? ` · ${countryName(card.billingCountry)}` : ""}`
+        ? card?.billingCountry
+          ? t("cardDialog.savedIn", { country: countryName(card.billingCountry) })
+          : t("common:status.saved")
         : Object.values(trimBilling(billing)).some(Boolean)
-          ? [billing.city.trim(), billing.country && countryName(billing.country)].filter(Boolean).join(", ") || "Added"
-          : "None";
+          ? [billing.city.trim(), billing.country && countryName(billing.country)].filter(Boolean).join(", ") || t("cardDialog.added")
+          : t("common:status.none");
 
   return (
     <form ref={formRef} onSubmit={onSubmit} noValidate className="flex max-h-[min(90vh,820px)] flex-col">
@@ -337,7 +348,7 @@ function CardForm({
           <PaymentCardFace
             brand={brand}
             last4={last4}
-            label={name.trim() || fallbackName || (isEdit ? card!.name : "New card")}
+            label={name.trim() || fallbackName || (isEdit ? card!.name : t("cardDialog.newCard"))}
             holderName={holderName.trim()}
             expMonth={previewExpiry?.month ?? null}
             expYear={previewExpiry?.year ?? null}
@@ -346,18 +357,18 @@ function CardForm({
           />
         </motion.div>
         <div className="min-w-0 pt-1 pr-8">
-          <DialogTitle className="text-lg">{isEdit ? `Edit ${card!.name}` : "Add card"}</DialogTitle>
+          <DialogTitle className="text-lg">{isEdit ? t("credential.editTitle", { name: card!.name }) : t("cardDialog.addTitle")}</DialogTitle>
           <DialogDescription className="mt-1">
-            {isEdit ? "Changes apply to every agent that can use this card." : "Agents can pay with it within the limits you set. They never see the card itself."}
+            {isEdit ? t("cardDialog.editDescription") : t("cardDialog.addDescription")}
           </DialogDescription>
         </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-7 overflow-y-auto px-6 pt-1 pb-6">
         {/* Card */}
-        <FormSection title="Card">
+        <FormSection title={t("cardDialog.sections.card")}>
           <FormField
-            label="Card number"
+            label={t("card.number")}
             htmlFor={id("number")}
             error={err("number")}
             hint={isEdit && replacing ? <ReplaceHint onKeep={cancelReplace} /> : undefined}
@@ -371,39 +382,39 @@ function CardForm({
                 </span>
                 <span className="text-xs text-muted-foreground">{CARD_BRAND_LABELS[card!.brand]}</span>
                 <Button type="button" size="xs" variant="outline" className="ml-auto" onClick={startReplace}>
-                  Replace card
+                  {t("cardDialog.replaceCard")}
                 </Button>
               </div>
             )}
           </FormField>
 
           <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-            <FormField label="Expiry" htmlFor={id("expiry")} error={err("expiry")}>
+            <FormField label={t("cardDialog.expiry")} htmlFor={id("expiry")} error={err("expiry")}>
               <Input
                 id={id("expiry")}
                 value={expiry}
                 onChange={(e) => setExpiry(formatExpiryInput(e.target.value, expiry))}
-                placeholder="MM / YY"
+                placeholder={t("cardDialog.expiryPlaceholder")}
                 inputMode="numeric"
                 autoComplete="off"
                 className="font-mono tabular-nums placeholder:font-sans"
                 aria-invalid={!!err("expiry")}
               />
             </FormField>
-            <FormField label="Security code" htmlFor={id("cvc")} error={err("cvc")} hint={cvcMode === "edit" ? "Optional. 3 or 4 digits." : undefined}>
+            <FormField label={t("card.cvc")} htmlFor={id("cvc")} error={err("cvc")} hint={cvcMode === "edit" ? t("cardDialog.cvcHint") : undefined}>
               {cvcMode === "keep" ? (
-                <SealedBox icon={<Lock />} text="Security code saved">
+                <SealedBox icon={<Lock />} text={t("cardDialog.cvcSaved")}>
                   <Button type="button" size="xs" variant="outline" onClick={() => setCvcMode("edit")}>
-                    Replace
+                    {t("replace")}
                   </Button>
                   <Button type="button" size="xs" variant="ghost" onClick={() => setCvcMode("remove")}>
-                    Remove
+                    {t("common:actions.remove")}
                   </Button>
                 </SealedBox>
               ) : cvcMode === "remove" ? (
-                <SealedBox icon={<Trash2 />} text="Removed when you save">
+                <SealedBox icon={<Trash2 />} text={t("cardDialog.removedOnSave")}>
                   <Button type="button" size="xs" variant="ghost" onClick={() => setCvcMode("keep")}>
-                    <Undo2 /> Undo
+                    <Undo2 /> {t("common:actions.undo")}
                   </Button>
                 </SealedBox>
               ) : (
@@ -430,7 +441,7 @@ function CardForm({
                         setCvcMode("keep");
                       }}
                     >
-                      Keep saved
+                      {t("cardDialog.keepSaved")}
                     </Button>
                   )}
                 </div>
@@ -439,11 +450,11 @@ function CardForm({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Name on card" htmlFor={id("holder")}>
-              <Input id={id("holder")} value={holderName} onChange={(e) => setHolderName(e.target.value)} placeholder="Jane Doe" autoComplete="off" spellCheck={false} />
+            <FormField label={t("card.holder")} htmlFor={id("holder")}>
+              <Input id={id("holder")} value={holderName} onChange={(e) => setHolderName(e.target.value)} placeholder={t("cardDialog.holderPlaceholder")} autoComplete="off" spellCheck={false} />
             </FormField>
-            <FormField label="Label" htmlFor={id("name")} hint="How the card shows up for you and your agents.">
-              <Input id={id("name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={fallbackName || "Company Visa"} autoComplete="off" maxLength={100} />
+            <FormField label={t("cardDialog.label")} htmlFor={id("name")} hint={t("cardDialog.labelHint")}>
+              <Input id={id("name")} value={name} onChange={(e) => setName(e.target.value)} placeholder={fallbackName || t("cardDialog.labelPlaceholder")} autoComplete="off" maxLength={100} />
             </FormField>
           </div>
         </FormSection>
@@ -453,9 +464,9 @@ function CardForm({
           <CollapsibleTrigger className="group flex w-full items-start justify-between gap-3 rounded-md text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             <span className="min-w-0">
               <span className="eyebrow flex items-center gap-1">
-                <ChevronRight className="-ml-0.5 size-3.5 transition-transform group-data-[state=open]:rotate-90" /> Billing address
+                <ChevronRight className="-ml-0.5 size-3.5 transition-transform group-data-[state=open]:rotate-90" /> {t("card.billing")}
               </span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">Optional. Typed in when a checkout asks for it.</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{t("cardDialog.billingHint")}</span>
             </span>
             <span className="mt-0.5 shrink-0 text-xs text-muted-foreground">{billingSummary}</span>
           </CollapsibleTrigger>
@@ -464,20 +475,20 @@ function CardForm({
               {billingMode === "hidden" ? (
                 <div className="flex min-h-20 flex-wrap items-center justify-center gap-2 rounded-md border border-dashed bg-paper-2 p-3 text-sm text-muted-foreground">
                   <Lock className="size-4 text-brand-strong" />
-                  <span>The billing address is hidden.</span>
+                  <span>{t("cardDialog.billingHidden")}</span>
                   <Button type="button" size="xs" variant="outline" onClick={() => void showBilling()} disabled={revealingBilling}>
-                    {revealingBilling ? <Spinner className="size-3" /> : <Eye />} Show and edit
+                    {revealingBilling ? <Spinner className="size-3" /> : <Eye />} {t("cardDialog.showAndEdit")}
                   </Button>
                   <Button type="button" size="xs" variant="ghost" onClick={() => setBillingMode("remove")}>
-                    Remove
+                    {t("common:actions.remove")}
                   </Button>
                 </div>
               ) : billingMode === "remove" ? (
                 <div className="flex min-h-20 flex-wrap items-center justify-center gap-2 rounded-md border border-dashed bg-paper-2 p-3 text-sm text-muted-foreground">
                   <Trash2 className="size-4" />
-                  <span>The billing address is removed when you save.</span>
+                  <span>{t("cardDialog.billingRemoved")}</span>
                   <Button type="button" size="xs" variant="ghost" onClick={() => setBillingMode(billingOriginal ? "edit" : "hidden")}>
-                    <Undo2 /> Undo
+                    <Undo2 /> {t("common:actions.undo")}
                   </Button>
                 </div>
               ) : (
@@ -494,11 +505,11 @@ function CardForm({
 
         {/* Spending rules */}
         <FormSection
-          title="Spending rules"
+          title={t("cardDialog.sections.spending")}
           aside={
             <div className="flex items-center gap-2">
               <Label htmlFor={id("currency")} className="text-xs font-normal text-muted-foreground">
-                Currency
+                {t("cardDialog.currency")}
               </Label>
               <Select value={currency} onValueChange={setCurrency}>
                 <SelectTrigger id={id("currency")} size="sm" className="w-24 tabular-nums">
@@ -517,17 +528,17 @@ function CardForm({
           }
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Limit per purchase" htmlFor={id("per")} error={err("perPurchase")} hint="Leave empty for no limit.">
+            <FormField label={t("cardDialog.limitPerPurchase")} htmlFor={id("per")} error={err("perPurchase")} hint={t("cardDialog.limitEmptyHint")}>
               <MoneyInput id={id("per")} currency={currency} value={perPurchase} onChange={setPerPurchase} invalid={!!err("perPurchase")} clearable />
             </FormField>
-            <FormField label="Monthly limit" htmlFor={id("monthly")} error={err("monthly")} hint="Subscriptions count again every month they renew.">
+            <FormField label={t("cardDialog.monthlyLimit")} htmlFor={id("monthly")} error={err("monthly")} hint={t("cardDialog.monthlyHint")}>
               <MoneyInput id={id("monthly")} currency={currency} value={monthly} onChange={setMonthly} invalid={!!err("monthly")} clearable />
             </FormField>
           </div>
 
           <div className="space-y-2">
             <span id={id("approval-label")} className="block text-sm leading-none font-medium">
-              Ask before paying
+              {t("cardDialog.askBeforePaying")}
             </span>
             <ToggleGroup
               type="single"
@@ -542,13 +553,13 @@ function CardForm({
               className="w-full"
             >
               <ToggleGroupItem value="always" className={cn("flex-1", TOGGLE_ON)}>
-                Ask every time
+                {t("cardDialog.askAlways")}
               </ToggleGroupItem>
               <ToggleGroupItem value="above" className={cn("flex-1", TOGGLE_ON)}>
-                Ask above
+                {t("cardDialog.askAbove")}
               </ToggleGroupItem>
               <ToggleGroupItem value="never" className={cn("flex-1", TOGGLE_ON)}>
-                Don't ask
+                {t("cardDialog.askNever")}
               </ToggleGroupItem>
             </ToggleGroup>
             <AnimatePresence initial={false}>
@@ -556,7 +567,7 @@ function CardForm({
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                   <div className="space-y-2 pt-1.5">
                     <Label htmlFor={id("ask-above")} className="sr-only">
-                      Ask above this amount
+                      {t("cardDialog.askAboveLabel")}
                     </Label>
                     <MoneyInput id={id("ask-above")} currency={currency} value={askAbove} onChange={setAskAbove} invalid={!!err("askAbove")} placeholder="20.00" className="sm:max-w-[calc(50%-0.5rem)]" />
                     {err("askAbove") && <p className="text-xs text-destructive">{err("askAbove")}</p>}
@@ -569,14 +580,14 @@ function CardForm({
         </FormSection>
 
         {/* Access */}
-        <FormSection title="Access">
-          <FormField label="Available to" htmlFor={id("workspace")} hint="Global cards can be used by agents in every workspace.">
+        <FormSection title={t("cardDialog.sections.access")}>
+          <FormField label={t("availableTo")} htmlFor={id("workspace")} hint={t("cardDialog.scopeHint")}>
             <WorkspaceSelect id={id("workspace")} value={workspaceId} onChange={setWorkspaceId} />
           </FormField>
 
           <div className="space-y-2">
             <span id={id("agents-label")} className="block text-sm leading-none font-medium">
-              Agents
+              {t("common:words.agents")}
             </span>
             <ToggleGroup
               type="single"
@@ -587,10 +598,10 @@ function CardForm({
               className="w-full"
             >
               <ToggleGroupItem value="all" className={cn("flex-1", TOGGLE_ON)}>
-                All agents that see this card
+                {t("cardDialog.agentsAll")}
               </ToggleGroupItem>
               <ToggleGroupItem value="some" className={cn("flex-1", TOGGLE_ON)}>
-                Only these agents
+                {t("cardDialog.agentsSome")}
               </ToggleGroupItem>
             </ToggleGroup>
             {agentsMode === "some" && (
@@ -600,8 +611,8 @@ function CardForm({
                   options={agentOptions}
                   value={agentIds}
                   onChange={setAgentIds}
-                  placeholder="Pick agents"
-                  emptyText="No agent matches."
+                  placeholder={t("cardDialog.pickAgents")}
+                  emptyText={t("cardDialog.noAgentMatches")}
                   className={cn(err("agents") && "[&_[role=combobox]]:border-destructive")}
                 />
                 {err("agents") && <p className="text-xs text-destructive">{err("agents")}</p>}
@@ -609,17 +620,17 @@ function CardForm({
             )}
           </div>
 
-          <FormField label="Allowed sites" htmlFor={id("sites")} hint="Leave empty for any site. Add the payment page's domain too, e.g. checkout.stripe.com.">
+          <FormField label={t("cardDialog.allowedSites")} htmlFor={id("sites")} hint={t("cardDialog.allowedSitesHint")}>
             <ChipInput id={id("sites")} value={sites} onChange={setSites} normalize={(s) => domainFromUrl(s.replace(/^\*\./, ""))} validate={isDomain} placeholder="openai.com" />
           </FormField>
 
           {isEdit && (
             <label className="flex cursor-pointer items-start justify-between gap-4 rounded-lg border bg-paper-2 p-3.5">
               <span>
-                <span className="block text-sm font-medium">Freeze card</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">Agents can't use a frozen card.</span>
+                <span className="block text-sm font-medium">{t("cardDialog.freeze")}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{t("cardDialog.freezeHint")}</span>
               </span>
-              <Switch checked={frozen} onCheckedChange={setFrozen} aria-label="Freeze card" />
+              <Switch checked={frozen} onCheckedChange={setFrozen} aria-label={t("cardDialog.freeze")} />
             </label>
           )}
         </FormSection>
@@ -627,15 +638,15 @@ function CardForm({
 
       <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Lock className="size-3.5 shrink-0 text-brand-strong" /> Encrypted on this device · agents never see the card
+          <Lock className="size-3.5 shrink-0 text-brand-strong" /> {t("cardDialog.footer")}
         </p>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={save.isPending}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="submit" disabled={save.isPending} className="min-w-24">
             {save.isPending && <Spinner />}
-            {isEdit ? "Save changes" : "Save card"}
+            {isEdit ? t("saveChanges") : t("cardDialog.saveCard")}
           </Button>
         </div>
       </div>
@@ -672,6 +683,7 @@ function CardNumberInput({
   invalid: boolean;
   autoFocus?: boolean;
 }) {
+  const { t } = useTranslation("vault");
   const ref = useRef<HTMLInputElement>(null);
   const caret = useRef<number | null>(null);
   const digits = value.replace(/\D/g, "");
@@ -721,7 +733,7 @@ function CardNumberInput({
         {digits.length > 0 && (
           <span className="flex items-center gap-1 text-xs font-medium text-foreground/75">
             {brand !== "other" && CARD_BRAND_LABELS[brand]}
-            {valid && <Check className="size-3.5 text-success" aria-label="Valid number" />}
+            {valid && <Check className="size-3.5 text-success" aria-label={t("cardDialog.validNumber")} />}
           </span>
         )}
       </InputGroupAddon>
@@ -735,7 +747,7 @@ function MoneyInput({
   value,
   onChange,
   invalid,
-  placeholder = "No limit",
+  placeholder,
   clearable,
   className,
 }: {
@@ -748,6 +760,7 @@ function MoneyInput({
   clearable?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation("vault");
   return (
     <InputGroup className={cn("h-9", className)}>
       <InputGroupAddon>
@@ -761,7 +774,7 @@ function MoneyInput({
           const minor = toMinor(value);
           if (minor !== null && !Number.isNaN(minor)) onChange(toMajorInput(minor));
         }}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("cardDialog.noLimit")}
         inputMode="decimal"
         autoComplete="off"
         aria-invalid={invalid}
@@ -769,7 +782,7 @@ function MoneyInput({
       />
       {clearable && value && (
         <InputGroupAddon align="inline-end">
-          <InputGroupButton size="icon-xs" aria-label="No limit" title="No limit" onClick={() => onChange("")}>
+          <InputGroupButton size="icon-xs" aria-label={t("cardDialog.noLimit")} title={t("cardDialog.noLimit")} onClick={() => onChange("")}>
             <X />
           </InputGroupButton>
         </InputGroupAddon>
@@ -790,42 +803,43 @@ function BillingFields({
   onRemove?: () => void;
 }) {
   const set = (k: keyof CardBilling) => (e: ChangeEvent<HTMLInputElement>) => onChange({ ...value, [k]: e.target.value });
-  const known = BILLING_COUNTRIES.some((c) => c.code === value.country);
+  const { t } = useTranslation("vault");
+  const known = isBillingCountry(value.country);
   return (
     <div className="space-y-4">
-      <FormField label="Street and number" htmlFor={id("line1")}>
+      <FormField label={t("billing.line1")} htmlFor={id("line1")}>
         <Input id={id("line1")} value={value.line1} onChange={set("line1")} autoComplete="off" maxLength={200} />
       </FormField>
-      <FormField label="Address line 2" htmlFor={id("line2")}>
-        <Input id={id("line2")} value={value.line2} onChange={set("line2")} placeholder="Optional" autoComplete="off" maxLength={200} />
+      <FormField label={t("billing.line2")} htmlFor={id("line2")}>
+        <Input id={id("line2")} value={value.line2} onChange={set("line2")} placeholder={t("optional")} autoComplete="off" maxLength={200} />
       </FormField>
       <div className="grid gap-4 sm:grid-cols-[9rem_minmax(0,1fr)]">
-        <FormField label="Postal code" htmlFor={id("postal")}>
+        <FormField label={t("billing.postalCode")} htmlFor={id("postal")}>
           <Input id={id("postal")} value={value.postalCode} onChange={set("postalCode")} autoComplete="off" maxLength={20} />
         </FormField>
-        <FormField label="City" htmlFor={id("city")}>
+        <FormField label={t("billing.city")} htmlFor={id("city")}>
           <Input id={id("city")} value={value.city} onChange={set("city")} autoComplete="off" maxLength={100} />
         </FormField>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="State or region" htmlFor={id("state")}>
-          <Input id={id("state")} value={value.state} onChange={set("state")} placeholder="Optional" autoComplete="off" maxLength={100} />
+        <FormField label={t("billing.state")} htmlFor={id("state")}>
+          <Input id={id("state")} value={value.state} onChange={set("state")} placeholder={t("optional")} autoComplete="off" maxLength={100} />
         </FormField>
-        <FormField label="Country" htmlFor={id("country")}>
+        <FormField label={t("billing.country")} htmlFor={id("country")}>
           <Select value={value.country || NO_COUNTRY} onValueChange={(v) => onChange({ ...value, country: v === NO_COUNTRY ? "" : v })}>
             <SelectTrigger id={id("country")} className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NO_COUNTRY}>
-                <span className="text-muted-foreground">No country</span>
+                <span className="text-muted-foreground">{t("billing.noCountry")}</span>
               </SelectItem>
               <SelectSeparator />
               {!known && value.country && <SelectItem value={value.country}>{value.country}</SelectItem>}
-              {BILLING_COUNTRIES.map((c) => (
-                <SelectItem key={c.code} value={c.code}>
-                  {c.name}
-                  <span className="text-muted-foreground">{c.code}</span>
+              {BILLING_COUNTRIES.map((code) => (
+                <SelectItem key={code} value={code}>
+                  {countryName(code)}
+                  <span className="text-muted-foreground">{code}</span>
                 </SelectItem>
               ))}
             </SelectContent>
@@ -834,7 +848,7 @@ function BillingFields({
       </div>
       {onRemove && (
         <Button type="button" size="xs" variant="ghost" className="text-muted-foreground" onClick={onRemove}>
-          <Trash2 /> Remove billing address
+          <Trash2 /> {t("billing.remove")}
         </Button>
       )}
     </div>
@@ -842,11 +856,12 @@ function BillingFields({
 }
 
 function ReplaceHint({ onKeep }: { onKeep: () => void }) {
+  const { t } = useTranslation("vault");
   return (
     <span>
-      Type the full number of the new card.{" "}
+      {t("cardDialog.replaceHint")}{" "}
       <button type="button" onClick={onKeep} className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground">
-        Keep the current card
+        {t("cardDialog.keepCurrent")}
       </button>
     </span>
   );

@@ -1,1 +1,24 @@
-{}
+{
+  "global": "Global",
+  "hint": {
+    "global": "Jeder Agent",
+    "workspace": "Workspace",
+    "project": "Projekt",
+    "agent": "Agent"
+  },
+  "chip": {
+    "thisChat": "dieser Chat",
+    "everyAgent": "jeder Agent",
+    "ariaSet": "Anweisungen für diesen Chat (gesetzt)",
+    "title": "Anweisungen für diesen Chat",
+    "label": "Anweisungen",
+    "tooltip": "Anweisungen: {{summary}}",
+    "add": "Anweisungen für diesen Chat hinzufügen",
+    "description": "Gelten für jede Nachricht hier. Widersprechen sie den Anweisungen des Agenten, des Workspace oder den globalen, gewinnen diese.",
+    "placeholder": "z. B. Antworte auf Englisch.\nArbeite im Branch feature/checkout und öffne einen Draft-Pull-Request.",
+    "alsoApplies": "Gilt außerdem",
+    "rulesLiveIn": "Regeln für jeden Agenten oder einen ganzen Workspace findest du unter <link>Einstellungen → Anweisungen</link>.",
+    "clear": "Leeren",
+    "escDiscards": "Esc verwirft Änderungen"
+  }
+}

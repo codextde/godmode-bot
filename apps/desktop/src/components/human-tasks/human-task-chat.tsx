@@ -1,5 +1,6 @@
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Check, CircleCheck, CircleSlash, ListTodo, MessageCircleQuestion, X } from "lucide-react";
 import type { HumanTask, Message, MessageBlock } from "@godmode/shared";
 import { humanTaskRef } from "@godmode/shared";
@@ -18,6 +19,7 @@ export function humanTaskBlock(message: Message): HumanTaskBlock | null {
 
 /** Where the human closed a task the agent gave them, and the chat went on. */
 export function HumanTaskMarker({ block }: { block: HumanTaskBlock }) {
+  const { t } = useTranslation("humanTasks");
   const done = block.outcome === "done";
   const Icon = done ? CircleCheck : CircleSlash;
   return (
@@ -26,7 +28,7 @@ export function HumanTaskMarker({ block }: { block: HumanTaskBlock }) {
         <span className="h-px flex-1 bg-border" />
         <span className="inline-flex min-w-0 items-center gap-1.5">
           <Icon className={done ? "size-3.5 text-emerald-600 dark:text-emerald-400" : "size-3.5 text-rose-600 dark:text-rose-400"} aria-hidden />
-          <span className="font-medium text-foreground">{block.kind === "decision" ? "You answered" : done ? "You did" : "You couldn't do"}</span>
+          <span className="font-medium text-foreground">{block.kind === "decision" ? t("chat.youAnswered") : done ? t("chat.youDid") : t("chat.youCouldnt")}</span>
           <span className="truncate">
             {humanTaskRef(block)} · {block.title}
           </span>
@@ -40,6 +42,7 @@ export function HumanTaskMarker({ block }: { block: HumanTaskBlock }) {
 
 /** Above the composer while the agent waits for the human to do something. */
 export function HumanTaskBar({ conversationId, agentName }: { conversationId: string; agentName: string }) {
+  const { t } = useTranslation("humanTasks");
   const { data = [] } = useQuery({
     queryKey: [...qk.humanTasks, "chat", conversationId],
     queryFn: () => api.humanTasks.list({ status: "active", conversationId }),
@@ -54,7 +57,7 @@ export function HumanTaskBar({ conversationId, agentName }: { conversationId: st
       ))}
       {tasks.length > 3 && (
         <Link to="/inbox?view=board" className="block px-1 text-xs text-muted-foreground hover:text-foreground">
-          +{tasks.length - 3} more in Needs you
+          {t("chat.moreInNeedsYou", { count: tasks.length - 3 })}
         </Link>
       )}
     </div>
@@ -62,6 +65,7 @@ export function HumanTaskBar({ conversationId, agentName }: { conversationId: st
 }
 
 function Row({ task, agentName }: { task: HumanTask; agentName: string }) {
+  const { t } = useTranslation(["humanTasks", "common"]);
   const { close } = useHumanTaskActions();
   const decision = task.kind === "decision";
   const Icon = decision ? MessageCircleQuestion : ListTodo;
@@ -72,11 +76,11 @@ function Row({ task, agentName }: { task: HumanTask; agentName: string }) {
       </span>
       <div className="min-w-0 flex-1 leading-snug">
         <p className="truncate text-[13px]">
-          <span className="font-medium">{decision ? "Waiting for your answer" : "Waiting for you"}</span>
+          <span className="font-medium">{decision ? t("chat.waitingAnswer") : t("chat.waitingYou")}</span>
           <span className="text-muted-foreground">
             {" "}
             · {humanTaskRef(task)}
-            {decision && " · reply here to answer"}
+            {decision && ` · ${t("chat.replyHere")}`}
           </span>
         </p>
         <p className="truncate text-xs text-muted-foreground" title={task.title}>
@@ -85,25 +89,25 @@ function Row({ task, agentName }: { task: HumanTask; agentName: string }) {
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
         <Button size="xs" variant="ghost" asChild>
-          <Link to={`/inbox?task=${task.id}`}>Open</Link>
+          <Link to={`/inbox?task=${task.id}`}>{t("common:actions.open")}</Link>
         </Button>
         {decision ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="xs" variant="outline" disabled={close.isPending} onClick={() => close.mutate({ id: task.id, outcome: "declined", note: "", files: [] })}>
-                {close.isPending ? <Spinner /> : <X />} Dismiss
+                {close.isPending ? <Spinner /> : <X />} {t("words.decision.declined")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Nothing to decide — {agentName} isn't woken</TooltipContent>
+            <TooltipContent side="top">{t("chat.dismissHint", { name: agentName })}</TooltipContent>
           </Tooltip>
         ) : (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button size="xs" variant="outline" disabled={close.isPending} onClick={() => close.mutate({ id: task.id, outcome: "done", note: "", files: [] })}>
-                {close.isPending ? <Spinner /> : <Check />} Done
+                {close.isPending ? <Spinner /> : <Check />} {t("chat.done")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Mark it done — {agentName} continues</TooltipContent>
+            <TooltipContent side="top">{t("chat.doneHint", { name: agentName })}</TooltipContent>
           </Tooltip>
         )}
       </div>

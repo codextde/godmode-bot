@@ -71,9 +71,9 @@ if (args.includes("--scan")) {
   const ignoreText = /^(Godmode( Bot)?|Claude( Code)?|GitHub|Google|macOS|Windows|Linux|OpenAI|ElevenLabs|Tauri|Chrome|Telegram|Slack|WhatsApp|Discord|Composio|Anthropic|iPhone|Android|SSH|VNC|API|URL|JSON|MCP|OK)$/;
   const patterns = [
     [/>\s*([^<>{}\n]*[A-Za-z]{3,}[^<>{}\n]*?)\s*</g, 1],
-    [/\s(?:title|label|placeholder|description|aria-label|summary|hint|tooltip|alt)="([^"]{3,})"/g, 1],
+    [/\s(?:title|label|placeholder|description|aria-label|accessibilityLabel|summary|hint|tooltip|alt|detail|footer|subtitle|message)="([^"]{3,})"/g, 1],
     [/\btoast(?:\.\w+)?\(\s*["'`]([^"'`]{3,})["'`]/g, 1],
-    [/\b(?:title|label|description|placeholder|summary|hint|message|blurb|empty|text):\s*["'`]([^"'`]*[a-z]{3,}[^"'`]*)["'`]/g, 1],
+    [/\b(?:title|label|description|placeholder|summary|hint|message|blurb|empty|text|detail|footer|subtitle):\s*["'`]([^"'`]*[a-z]{3,}[^"'`]*)["'`]/g, 1],
   ];
   const report = [];
   for (const file of files) {

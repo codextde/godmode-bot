@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ChatMove, ConversationWithMessages, MoveChatInput } from "@godmode/shared";
 import { ArrowRightLeft, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t as translate } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -35,13 +37,14 @@ function useRate(move: ChatMove | undefined): number | null {
 function useElapsed(since: number): number {
   const [at, setAt] = useState(Date.now());
   useEffect(() => {
-    const t = setInterval(() => setAt(Date.now()), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => setAt(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
   return (at - since) / 1000;
 }
 
 function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: string; conversationId: string; dest: string; agentName: string }) {
+  const { t } = useTranslation("runners");
   const move = useChatMoves((s) => s.moves[conversationId]);
   const started = useRef(Date.now());
   const seen = useRef(false);
@@ -54,13 +57,14 @@ function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: 
   const left = move?.stage === "copying" && move.total && rate ? (move.total - move.bytes) / rate : null;
 
   let detail: string;
-  if (finishing) detail = "Almost there";
-  else if (!move) detail = "Starting";
-  else if (move.stage === "checking") detail = `Checking the chat on ${move.from}`;
-  else if (move.stage === "copying") detail = move.total ? `Copying the conversation · ${size(move.bytes)} of ${size(move.total)}` : `Copying the conversation · ${size(move.bytes)}`;
-  else if (move.stage === "sending") detail = `Sending it to ${move.to}`;
-  else if (move.stage === "saving") detail = `Saving it on ${dest}`;
-  else detail = `${agentName} picks up where it stopped`;
+  if (finishing) detail = t("move.almost");
+  else if (!move) detail = t("move.starting");
+  else if (move.stage === "checking") detail = t("move.checking", { from: move.from });
+  else if (move.stage === "copying")
+    detail = move.total ? t("move.copyingOf", { done: size(move.bytes), total: size(move.total) }) : t("move.copying", { done: size(move.bytes) });
+  else if (move.stage === "sending") detail = t("move.sending", { to: move.to });
+  else if (move.stage === "saving") detail = t("move.saving", { dest });
+  else detail = t("move.continuing", { name: agentName });
 
   return (
     <div className="w-[356px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lg" role="status" aria-live="polite">
@@ -70,7 +74,7 @@ function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: 
         </span>
         <div className="min-w-0 flex-1">
           <p className="flex items-baseline gap-2 text-[13px] font-medium">
-            <span className="truncate text-shimmer">Moving chat to {dest}</span>
+            <span className="truncate text-shimmer">{t("move.title", { dest })}</span>
             {move?.stage === "copying" && percent !== null && <span className="ml-auto shrink-0 font-mono text-[11px] font-normal text-muted-foreground tabular-nums">{Math.floor(percent)}%</span>}
           </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground tabular-nums">{detail}</p>
@@ -78,7 +82,7 @@ function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: 
         <button
           type="button"
           onClick={() => toast.dismiss(toastId)}
-          aria-label="Hide"
+          aria-label={t("move.hide")}
           className="-mt-0.5 -mr-1 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <X className="size-3.5" />
@@ -92,8 +96,8 @@ function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: 
           />
         </div>
         <p className="mt-2 flex justify-between gap-3 text-[11px] text-muted-foreground tabular-nums">
-          <span className="truncate">Keep working, you'll see when it's there.</span>
-          <span className="shrink-0">{left !== null ? `${clock(left)} left · ${size(rate!)}/s` : clock(elapsed)}</span>
+          <span className="truncate">{t("move.keepWorking")}</span>
+          <span className="shrink-0">{left !== null ? t("move.left", { time: clock(left), rate: size(rate!) }) : clock(elapsed)}</span>
         </p>
       </div>
     </div>
@@ -120,15 +124,15 @@ export function startChatMove(
       void qc.invalidateQueries({ queryKey: qk.conversationsAll });
       void qc.invalidateQueries({ queryKey: qk.runners });
       toast.dismiss(id);
-      toast.success(`Moved to ${dest}`, {
+      toast.success(translate("runners:move.moved", { dest }), {
         id: `${id}:done`,
-        description: working ? `${agentName} continues there where it stopped.` : `${agentName} continues this chat there, with the whole conversation.`,
+        description: working ? translate("runners:move.movedWorking", { name: agentName }) : translate("runners:move.movedIdle", { name: agentName }),
       });
     },
     (err) => {
       setChatMove(conversationId, null);
       toast.dismiss(id);
-      toastApiError(err, "Couldn't move the chat", qc);
+      toastApiError(err, translate("runners:move.failed"), qc);
     },
   );
 }

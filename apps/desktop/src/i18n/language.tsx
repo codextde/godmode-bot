@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { useTranslation } from "react-i18next";
 import type { AppLanguage } from "@godmode/shared";
 import { useSharedChoice } from "@/components/theme-provider";
+import { isTauri } from "@/lib/core";
 import i18n, { LANGUAGE_KEY, dateLocale, intlLocale, isAppLanguage, resolveLanguage, storedLanguage, type UiLanguage } from "./index";
 
 type LanguageState = { language: AppLanguage; resolved: UiLanguage; setLanguage: (l: AppLanguage) => void };
@@ -30,6 +31,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (i18n.language !== resolved) void i18n.changeLanguage(resolved);
+    if (!isTauri) return;
+    const tr = i18n.getFixedT(resolved, "common");
+    void import("@tauri-apps/api/core")
+      .then(({ invoke }) => invoke("set_tray_labels", { open: tr("tray.open"), newChat: tr("tray.newChat"), quit: tr("tray.quit") }))
+      .catch(() => {});
   }, [resolved]);
 
   return <LanguageContext.Provider value={{ language, resolved, setLanguage }}>{children}</LanguageContext.Provider>;

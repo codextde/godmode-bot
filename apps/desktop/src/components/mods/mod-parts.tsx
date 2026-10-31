@@ -18,6 +18,7 @@ import {
   WandSparkles,
   type LucideIcon,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   MOD_HOOKS_PATH,
   MOD_MANIFEST_PATH,
@@ -35,6 +36,7 @@ import {
 } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { intlLocale, t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export const MOD_TABS = ["overview", "options", "code", "contents"] as const;
@@ -63,24 +65,24 @@ export const MOD_ICON: Record<ModIcon, LucideIcon> = {
   bot: Bot,
 };
 
-export const MOD_ICON_LABEL: Record<ModIcon, string> = {
-  puzzle: "Puzzle piece",
-  shield: "Shield",
-  "file-lock": "Locked file",
-  terminal: "Terminal",
-  "eye-off": "Hidden",
-  gauge: "Gauge",
-  timer: "Timer",
-  "git-branch": "Git branch",
-  scroll: "Scroll",
-  bell: "Bell",
-  filter: "Filter",
-  wand: "Wand",
-  video: "Video",
-  layers: "Layers",
-  sparkles: "Sparkles",
-  bot: "Robot",
-};
+export const MOD_ICON_LABEL = {
+  puzzle: "icons.puzzle",
+  shield: "icons.shield",
+  "file-lock": "icons.fileLock",
+  terminal: "icons.terminal",
+  "eye-off": "icons.eyeOff",
+  gauge: "icons.gauge",
+  timer: "icons.timer",
+  "git-branch": "icons.gitBranch",
+  scroll: "icons.scroll",
+  bell: "icons.bell",
+  filter: "icons.filter",
+  wand: "icons.wand",
+  video: "icons.video",
+  layers: "icons.layers",
+  sparkles: "icons.sparkles",
+  bot: "icons.bot",
+} as const satisfies Record<ModIcon, string>;
 
 export function ModGlyph({ icon, className }: { icon: ModIcon; className?: string }) {
   const Icon = MOD_ICON[icon] ?? Puzzle;
@@ -128,12 +130,12 @@ export function ModIconTile({
   );
 }
 
-export const MOD_STATE_LABEL: Record<ModState, string> = {
-  on: "On",
-  off: "Off",
-  review: "Needs review",
-  broken: "Needs fixing",
-};
+export const MOD_STATE_LABEL = {
+  on: "state.on",
+  off: "state.off",
+  review: "state.review",
+  broken: "state.broken",
+} as const satisfies Record<ModState, string>;
 
 const STATE_BADGE: Record<ModState, string> = {
   on: "border-brand/25 bg-brand-soft text-brand-strong",
@@ -143,6 +145,7 @@ const STATE_BADGE: Record<ModState, string> = {
 };
 
 export function ModStateBadge({ state, className }: { state: ModState; className?: string }) {
+  const { t } = useTranslation("mods");
   return (
     <span
       className={cn(
@@ -158,7 +161,7 @@ export function ModStateBadge({ state, className }: { state: ModState; className
       ) : (
         <TriangleAlert aria-hidden />
       )}
-      {MOD_STATE_LABEL[state]}
+      {t(MOD_STATE_LABEL[state])}
     </span>
   );
 }
@@ -171,27 +174,51 @@ export function modAuthor(mod: Pick<Mod, "createdBy">, agents: Agent[]): Agent |
 
 export function modOriginLabel(mod: Pick<Mod, "origin" | "createdBy" | "source">, agents: Agent[]): string {
   if (mod.origin === "git") {
-    if (mod.createdBy.startsWith("agent:")) return `Installed by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
-    return mod.source?.web?.startsWith("https://github.com/") ? "Installed from GitHub" : "Installed from its repository";
+    if (mod.createdBy.startsWith("agent:")) {
+      const author = modAuthor(mod, agents);
+      return author ? t("mods:origin.installedBy", { name: author.name }) : t("mods:origin.installedByAgent");
+    }
+    return mod.source?.web?.startsWith("https://github.com/") ? t("mods:origin.installedFromGitHub") : t("mods:origin.installedFromRepo");
   }
-  if (mod.origin === "template") return "Made by Godmode";
-  if (mod.origin === "import") return "Imported";
-  if (mod.origin === "agent") return `Drafted by ${modAuthor(mod, agents)?.name ?? "an agent"}`;
-  return "Written by you";
+  if (mod.origin === "template") return t("mods:origin.template");
+  if (mod.origin === "import") return t("mods:origin.imported");
+  if (mod.origin === "agent") {
+    const author = modAuthor(mod, agents);
+    return author ? t("mods:origin.draftedBy", { name: author.name }) : t("mods:origin.draftedByAgent");
+  }
+  return t("mods:origin.yours");
+}
+
+/** A hook's event in words, in the app language. */
+export function hookLabel(hook: ModHook): string {
+  if (hook.event === "tool.call") {
+    const tool = hook.matcher ? /(?:^|,\s*)tool=([^,]+)/.exec(hook.matcher)?.[1] : null;
+    if (tool) return t("mods:hook.toolCalls", { tool });
+  }
+  return t(`mods:hook.${hook.event.replace(/\./g, "_")}` as never, { defaultValue: modHookLabel(hook) });
 }
 
 /** What a mod hooks into, in words, each named once. */
 export function hookLabels(hooks: ModHook[]): string[] {
-  return [...new Set(hooks.map(modHookLabel))];
+  return [...new Set(hooks.map(hookLabel))];
+}
+
+/** What a checked mod can do, in the app language. */
+export function abilitiesOf(check: Pick<ModCheck, "hooks" | "calls" | "startsPrograms">): ModAbility[] {
+  return modAbilities(check).map((a) => {
+    const key = a.id.replace(/-/g, "_");
+    return { ...a, label: t(`mods:ability.${key}.label` as never, { defaultValue: a.label }), detail: t(`mods:ability.${key}.detail` as never, { defaultValue: a.detail }) };
+  });
 }
 
 export function sensitiveAbilities(check: ModCheck | null): ModAbility[] {
-  return check ? modAbilities(check).filter((a) => a.level === "sensitive") : [];
+  return check ? abilitiesOf(check).filter((a) => a.level === "sensitive") : [];
 }
 
 export const CHIP = "inline-flex h-5 max-w-full min-w-0 items-center gap-1 rounded-[5px] border px-1.5 text-[11px] whitespace-nowrap";
 
 export function HookChips({ hooks, max = 4 }: { hooks: ModHook[]; max?: number }) {
+  const { t } = useTranslation("mods");
   const labels = hookLabels(hooks);
   const rest = labels.slice(max);
   return (
@@ -206,7 +233,7 @@ export function HookChips({ hooks, max = 4 }: { hooks: ModHook[]; max?: number }
           <TooltipTrigger asChild>
             <span
               tabIndex={0}
-              aria-label={`${rest.length} more: ${rest.join(", ")}`}
+              aria-label={t("hookChips.more", { n: rest.length, list: rest.join(", ") })}
               className={cn(CHIP, "bg-paper-2 text-muted-foreground tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50")}
             >
               +{rest.length}
@@ -281,6 +308,7 @@ export function ModProblems({
   onOpenFile?: (path: string, line: number | null) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("mods");
   if (!problems.length) return null;
   const color = tone === "error" ? "text-destructive" : "text-warning";
   return (
@@ -291,7 +319,7 @@ export function ModProblems({
           <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
             <TriangleAlert className={cn("mt-[3px] size-3.5 shrink-0", color)} aria-hidden />
             <p className="min-w-0 break-words">
-              <span className="sr-only">{tone === "error" ? "Error" : "Warning"} in </span>
+              <span className="sr-only">{tone === "error" ? t("problems.errorIn") : t("problems.warningIn")}</span>
               {target ? (
                 <button
                   type="button"
@@ -330,28 +358,27 @@ export function shortCommit(commit: string): string {
 
 /** "~4.3k tokens", "~130 tokens". */
 export function formatTokens(tokens: number): string {
-  return tokens >= 1000 ? `~${(tokens / 1000).toFixed(tokens >= 10_000 ? 0 : 1)}k tokens` : `~${tokens} tokens`;
+  if (tokens < 1000) return t("mods:format.tokens", { value: tokens.toLocaleString(intlLocale()) });
+  const digits = tokens >= 10_000 ? 0 : 1;
+  return t("mods:format.tokensK", { value: (tokens / 1000).toLocaleString(intlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits }) });
 }
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 ** 2).toFixed(bytes < 10 * 1024 ** 2 ? 1 : 0)} MB`;
-}
-
-function count(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024).toLocaleString(intlLocale())} KB`;
+  const digits = bytes < 10 * 1024 ** 2 ? 1 : 0;
+  return `${(bytes / 1024 ** 2).toLocaleString(intlLocale(), { minimumFractionDigits: digits, maximumFractionDigits: digits })} MB`;
 }
 
 /** What a plugin from a repository brings, in words: "47 skills", "19 subagents", … */
 export function contentsSummary(contents: ModContents | null): string[] {
   if (!contents) return [];
   return [
-    contents.skills.length ? count(contents.skills.length, "skill") : null,
-    contents.agents.length ? count(contents.agents.length, "subagent") : null,
-    contents.commands.length ? count(contents.commands.length, "command") : null,
-    contents.hooks.length ? count(contents.hooks.length, "hook") : null,
-    contents.mcpServers.length ? count(contents.mcpServers.length, "MCP server") : null,
+    contents.skills.length ? t("mods:summary.skills", { count: contents.skills.length }) : null,
+    contents.agents.length ? t("mods:summary.subagents", { count: contents.agents.length }) : null,
+    contents.commands.length ? t("mods:summary.commands", { count: contents.commands.length }) : null,
+    contents.hooks.length ? t("mods:summary.hooks", { count: contents.hooks.length }) : null,
+    contents.mcpServers.length ? t("mods:summary.mcpServers", { count: contents.mcpServers.length }) : null,
   ].filter((x): x is string => !!x);
 }
 
@@ -359,14 +386,20 @@ export function contentsSummary(contents: ModContents | null): string[] {
 export function contentsAbilities(contents: ModContents | null): ModAbility[] {
   if (!contents) return [];
   const out: ModAbility[] = [];
-  if (contents.skills.length) out.push({ id: "skills", label: `Adds ${count(contents.skills.length, "skill")}`, detail: "Instructions the agent loads when a task needs them, or when you name them.", level: "normal" });
-  if (contents.agents.length) out.push({ id: "agents", label: `Adds ${count(contents.agents.length, "subagent")}`, detail: "Specialists the agent can hand parts of its work to.", level: "normal" });
-  if (contents.commands.length) out.push({ id: "commands", label: `Adds ${count(contents.commands.length, "slash command")}`, detail: "Prompts you or the agent start with a /name.", level: "normal" });
+  if (contents.skills.length) out.push({ id: "skills", label: t("mods:abilities.skills", { count: contents.skills.length }), detail: t("mods:abilities.skillsDetail"), level: "normal" });
+  if (contents.agents.length) out.push({ id: "agents", label: t("mods:abilities.subagents", { count: contents.agents.length }), detail: t("mods:abilities.subagentsDetail"), level: "normal" });
+  if (contents.commands.length) out.push({ id: "commands", label: t("mods:abilities.commands", { count: contents.commands.length }), detail: t("mods:abilities.commandsDetail"), level: "normal" });
   if (contents.hooks.length) {
-    out.push({ id: "hooks", label: `Runs commands on ${count(contents.hooks.length, "event")}`, detail: `Shell commands on this computer on ${contents.hooks.slice(0, 4).join(", ")}${contents.hooks.length > 4 ? " and more" : ""}.`, level: "sensitive" });
+    const events = contents.hooks.slice(0, 4).join(", ");
+    out.push({
+      id: "hooks",
+      label: t("mods:abilities.hooks", { count: contents.hooks.length }),
+      detail: contents.hooks.length > 4 ? t("mods:abilities.hooksDetailMore", { events }) : t("mods:abilities.hooksDetail", { events }),
+      level: "sensitive",
+    });
   }
   if (contents.mcpServers.length) {
-    out.push({ id: "mcp", label: `Starts ${count(contents.mcpServers.length, "MCP server")}`, detail: "Programs on this computer that give the agent tools of their own.", level: "sensitive" });
+    out.push({ id: "mcp", label: t("mods:abilities.mcpServers", { count: contents.mcpServers.length }), detail: t("mods:abilities.mcpServersDetail"), level: "sensitive" });
   }
   return out;
 }

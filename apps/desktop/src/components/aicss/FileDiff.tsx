@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import styles from "./FileDiff.module.css";
 
 /*
@@ -100,18 +101,19 @@ export function diffLines(before: string, after: string, context = 3): DiffRow[]
   let hidden = 0;
   rows.forEach((r, k) => {
     if (keep[k] || near[k]) {
-      if (hidden) out.push({ old: null, cur: null, type: "fold", text: `${hidden} unchanged line${hidden === 1 ? "" : "s"}` });
+      if (hidden) out.push({ old: null, cur: null, type: "fold", text: String(hidden) });
       hidden = 0;
       out.push(r);
     } else hidden++;
   });
-  if (hidden) out.push({ old: null, cur: null, type: "fold", text: `${hidden} unchanged line${hidden === 1 ? "" : "s"}` });
+  if (hidden) out.push({ old: null, cur: null, type: "fold", text: String(hidden) });
   return out;
 }
 
 const PREVIEW_ROWS = 40;
 
 export function FileDiff({ file, before, after, rows: given }: { file: string; before?: string; after?: string; rows?: DiffRow[] }) {
+  const { t } = useTranslation(["aicss", "common"]);
   const rows = useMemo(() => given ?? diffLines(before ?? "", after ?? ""), [given, before, after]);
   const [all, setAll] = useState(false);
   const added = rows.filter((r) => r.type === "add").length;
@@ -138,7 +140,7 @@ export function FileDiff({ file, before, after, rows: given }: { file: string; b
           {shown.map((r, i) =>
             r.type === "fold" ? (
               <div key={i} className={styles.diffFold}>
-                {r.text}
+                {t("fileDiff.unchanged", { count: Number(r.text) })}
               </div>
             ) : (
               <div key={i} className={[styles.diffRow, styles[r.type]].filter(Boolean).join(" ")} style={{ animationDelay: `${Math.min(i, 24) * 14}ms` }}>
@@ -160,7 +162,7 @@ export function FileDiff({ file, before, after, rows: given }: { file: string; b
       </div>
       {rows.length > PREVIEW_ROWS && (
         <button type="button" className={styles.diffMore} onClick={() => setAll((v) => !v)}>
-          {all ? "Show less" : `Show ${rows.length - PREVIEW_ROWS} more lines`}
+          {all ? t("common:actions.showLess") : t("fileDiff.showMore", { count: rows.length - PREVIEW_ROWS })}
         </button>
       )}
     </div>

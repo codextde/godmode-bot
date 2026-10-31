@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArchiveRestore, CircleCheckBig, Download, FileArchive, HardDriveDownload, Upload, X } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +34,7 @@ function formatBytes(n: number): string {
 }
 
 function ExportCard() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [pass, setPass] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -55,16 +57,16 @@ function ExportCard() {
       setDone(`${name} · ${formatBytes(size)}`);
       setPass("");
       setConfirm("");
-      toast.success("Backup saved", { description: "Store it somewhere safe — and remember its passphrase." });
+      toast.success(t("backup.export.savedToast"), { description: t("backup.export.savedToastDescription") });
     },
-    onError: (e) => toastApiError(e, "Backup failed", qc),
+    onError: (e) => toastApiError(e, t("backup.export.failed"), qc),
   });
 
   return (
     <SettingsGroup
-      title="Export backup"
+      title={t("backup.export.title")}
       icon={<HardDriveDownload />}
-      description="A single encrypted file with your settings, agents, automations, vault (logins + 2FA) and integrations."
+      description={t("backup.export.description")}
     >
       <form
         className="space-y-4 py-4"
@@ -75,32 +77,31 @@ function ExportCard() {
       >
         <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="bk-pass">Backup passphrase</Label>
-            <PasswordInput id="bk-pass" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="At least 8 characters" />
+            <Label htmlFor="bk-pass">{t("backup.passphrase")}</Label>
+            <PasswordInput id="bk-pass" value={pass} onChange={(e) => setPass(e.target.value)} placeholder={t("backup.export.minLength")} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="bk-confirm">Confirm passphrase</Label>
+            <Label htmlFor="bk-confirm">{t("backup.export.confirm")}</Label>
             <PasswordInput id="bk-confirm" value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-invalid={mismatch} />
             {mismatch && (
               <p role="alert" className="text-xs text-destructive">
-                Passphrases don't match.
+                {t("passwords.passphraseMismatch")}
               </p>
             )}
           </div>
         </div>
         <StrengthMeter password={pass} />
         <p className="text-xs leading-relaxed text-muted-foreground">
-          The file is encrypted with this passphrase (it can differ from your vault passphrase). Without it the backup can't be restored — nobody,
-          including us, can recover it.
+          {t("backup.export.note")}
         </p>
         <div className="divide-y rounded-lg border bg-paper-2 px-4">
-          <SettingRow label="Include agent repositories" htmlFor="bk-repos" description="Memory, transcripts and files agents produced.">
+          <SettingRow label={t("backup.export.repos")} htmlFor="bk-repos" description={t("backup.export.reposDescription")}>
             <Switch id="bk-repos" checked={repos} onCheckedChange={setRepos} />
           </SettingRow>
           <SettingRow
-            label="Include browser profiles"
+            label={t("backup.export.browser")}
             htmlFor="bk-browser"
-            description="Logged-in sessions and cookies. Makes the file much larger and more sensitive."
+            description={t("backup.export.browserDescription")}
           >
             <Switch id="bk-browser" checked={browser} onCheckedChange={setBrowser} />
           </SettingRow>
@@ -114,13 +115,13 @@ function ExportCard() {
                 exit={{ opacity: 0 }}
                 className="flex min-w-0 items-center gap-1.5 text-xs text-success"
               >
-                <CircleCheckBig className="size-3.5 shrink-0" /> <span className="truncate">Saved {done}</span>
+                <CircleCheckBig className="size-3.5 shrink-0" /> <span className="truncate">{t("backup.export.saved", { file: done })}</span>
               </motion.p>
             )}
           </AnimatePresence>
           <Button type="submit" className="ml-auto" disabled={!valid || exportMut.isPending}>
             {exportMut.isPending ? <Spinner /> : <Download />}
-            {exportMut.isPending ? "Encrypting…" : "Export backup"}
+            {exportMut.isPending ? t("backup.export.encrypting") : t("backup.export.title")}
           </Button>
         </div>
       </form>
@@ -129,6 +130,7 @@ function ExportCard() {
 }
 
 function ImportCard() {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -144,16 +146,16 @@ function ImportCard() {
       setResult(res.counts ?? {});
       setFile(null);
       setPass("");
-      toast.success("Backup restored", {
-        description: "Vault restored and locked — unlock with the vault passphrase of the backup.",
+      toast.success(t("backup.restore.restoredToast"), {
+        description: t("backup.restore.restoredToastDescription"),
         duration: 12_000,
       });
       for (const warning of res.warnings ?? []) toast.warning(warning, { duration: 20_000 });
       void qc.invalidateQueries();
     },
     onError: (e) => {
-      if (e instanceof ApiRequestError && (e.status === 400 || e.status === 401 || e.status === 422)) setError(e.message || "Wrong passphrase or damaged file.");
-      else toastApiError(e, "Restore failed", qc);
+      if (e instanceof ApiRequestError && (e.status === 400 || e.status === 401 || e.status === 422)) setError(e.message || t("backup.restore.wrong"));
+      else toastApiError(e, t("backup.restore.failed"), qc);
     },
   });
 
@@ -171,13 +173,13 @@ function ImportCard() {
   };
 
   return (
-    <SettingsGroup title="Restore from backup" icon={<ArchiveRestore />} description="Replace everything in this Godmode with the contents of a backup file.">
+    <SettingsGroup title={t("backup.restore.title")} icon={<ArchiveRestore />} description={t("backup.restore.description")}>
       <div className="space-y-4 py-4">
         <AnimatePresence mode="wait">
           {result ? (
             <motion.div key="done" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
-              <Callout tone="info" icon={<CircleCheckBig className="text-success" />} title="Vault restored and locked">
-                Unlock with the vault passphrase of the backup.
+              <Callout tone="info" icon={<CircleCheckBig className="text-success" />} title={t("backup.restore.doneTitle")}>
+                {t("backup.restore.doneBody")}
                 {Object.keys(result).length > 0 && (
                   <span className="mt-2 flex flex-wrap gap-1.5">
                     {Object.entries(result).map(([k, v]) => (
@@ -194,7 +196,7 @@ function ImportCard() {
               <div
                 role="button"
                 tabIndex={0}
-                aria-label="Choose a backup file"
+                aria-label={t("backup.restore.choose")}
                 onClick={() => inputRef.current?.click()}
                 onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && inputRef.current?.click()}
                 onDragOver={(e) => {
@@ -231,7 +233,7 @@ function ImportCard() {
                       type="button"
                       size="icon-sm"
                       variant="ghost"
-                      aria-label="Remove file"
+                      aria-label={t("backup.restore.removeFile")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setFile(null);
@@ -243,13 +245,13 @@ function ImportCard() {
                 ) : (
                   <>
                     <Upload className="size-6 text-muted-foreground" />
-                    <p className="text-sm font-medium">Drop a .godmode-backup file here</p>
-                    <p className="text-xs text-muted-foreground">or click to choose</p>
+                    <p className="text-sm font-medium">{t("backup.restore.drop")}</p>
+                    <p className="text-xs text-muted-foreground">{t("backup.restore.click")}</p>
                   </>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rs-pass">Backup passphrase</Label>
+                <Label htmlFor="rs-pass">{t("backup.passphrase")}</Label>
                 <PasswordInput
                   id="rs-pass"
                   value={pass}
@@ -268,7 +270,7 @@ function ImportCard() {
               <div className="flex justify-end">
                 <Button variant="destructive" disabled={!file || !pass || importMut.isPending} onClick={() => setConfirmOpen(true)}>
                   {importMut.isPending ? <Spinner /> : <ArchiveRestore />}
-                  {importMut.isPending ? "Restoring…" : "Restore backup"}
+                  {importMut.isPending ? t("backup.restore.restoring") : t("backup.restore.button")}
                 </Button>
               </div>
             </motion.div>
@@ -279,16 +281,15 @@ function ImportCard() {
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Replace your current data?</AlertDialogTitle>
+            <AlertDialogTitle>{t("backup.restore.confirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This replaces your current data — agents, automations, logins, 2FA codes, integrations and settings — with the contents of{" "}
-              <span className="font-medium text-foreground">{file?.name}</span>. Running tasks are stopped. Consider exporting a backup first.
+              <Trans t={t} i18nKey="backup.restore.confirmDescription" values={{ file: file?.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => importMut.mutate()}>
-              Replace and restore
+              {t("backup.restore.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -298,12 +299,10 @@ function ImportCard() {
 }
 
 export function BackupSection() {
+  const { t } = useTranslation("settings");
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Backup & restore"
-        description="Move Godmode to a new machine or keep a safety net. Every backup is encrypted with a passphrase you choose."
-      />
+      <SectionHeading title={t("backup.title")} description={t("backup.description")} />
       <ExportCard />
       <ImportCard />
     </div>

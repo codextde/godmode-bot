@@ -4,6 +4,7 @@ import { ArrowRight } from "lucide-react";
 import { Backdrop, Logo } from "@/components/brand";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { t } from "@/i18n";
 import { ApiRequestError, errorMessage } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -107,10 +108,10 @@ export function SubmitButton({
 /** Friendly message for a failed vault unlock. */
 export function unlockError(err: unknown): string {
   if (err instanceof ApiRequestError) {
-    if (err.status === 429) return "Too many attempts — wait a minute and try again.";
+    if (err.status === 429) return t("onboarding:unlock.tooMany");
     // Through Godmode Cloud the computer may refuse unlocking at all; its sentence says why.
     if (err.code === "cloud_forbidden") return err.message;
-    if (err.status === 400 || err.status === 401 || err.status === 403) return "That passphrase isn't right.";
+    if (err.status === 400 || err.status === 401 || err.status === 403) return t("onboarding:unlock.wrong");
   }
   return errorMessage(err);
 }

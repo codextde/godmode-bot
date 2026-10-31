@@ -70,5 +70,10 @@
     "system": "System",
     "en": "English",
     "de": "Deutsch"
+  },
+  "tray": {
+    "open": "Open Godmode",
+    "newChat": "New chat",
+    "quit": "Quit Godmode"
   }
 }

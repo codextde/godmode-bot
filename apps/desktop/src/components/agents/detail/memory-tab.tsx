@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronRight, Folder, FolderOpen, FolderSearch } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent, AgentFileEntry } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -49,6 +50,7 @@ function childrenOf(entries: AgentFileEntry[], dir: string): AgentFileEntry[] {
 }
 
 export function MemoryTab({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("agents");
   const [selected, setSelected] = useState<{ path: string; size: number } | null>({ path: "MEMORY.md", size: 0 });
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["memory"]));
   const [dirty, setDirty] = useState(false);
@@ -80,23 +82,25 @@ export function MemoryTab({ agent }: { agent: Agent }) {
         <aside className="flex max-h-[70vh] min-h-0 flex-col rounded-xl border bg-card shadow-card">
           <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-[-0.01em]">Files</h2>
-              <p className="text-xs text-muted-foreground">Agent repository</p>
+              <h2 className="text-sm font-medium tracking-[-0.01em]">{t("memoryTab.files")}</h2>
+              <p className="text-xs text-muted-foreground">{t("memoryTab.repository")}</p>
             </div>
-            <Button asChild variant="ghost" size="xs" title="Sizes, cleanup suggestions, moves and deletes">
+            <Button asChild variant="ghost" size="xs" title={t("memoryTab.tidyUpHint")}>
               <Link
                 to={`/files/${agent.id}`}
                 onClick={(e) => {
                   if (!dirty) return;
                   e.preventDefault();
-                  toast.warning("Save or revert your edits first", { description: `${selected?.path ?? "The file"} has unsaved changes.` });
+                  toast.warning(t("memoryTab.saveFirst"), {
+                    description: selected?.path ? t("memoryTab.unsavedChanges", { path: selected.path }) : t("memoryTab.unsavedChangesFile"),
+                  });
                 }}
               >
-                <FolderSearch /> Tidy up
+                <FolderSearch /> {t("memoryTab.tidyUp")}
               </Link>
             </Button>
           </div>
-          <nav aria-label="Agent files" className="min-h-0 flex-1 overflow-y-auto p-2">
+          <nav aria-label={t("memoryTab.filesLabel")} className="min-h-0 flex-1 overflow-y-auto p-2">
             <Tree agentId={agent.id} dir="" depth={0} expanded={expanded} onToggle={toggleDir} selected={selected?.path ?? null} onSelect={select} />
           </nav>
         </aside>
@@ -114,18 +118,18 @@ export function MemoryTab({ agent }: { agent: Agent }) {
               onOpenFile={openFile}
             />
           ) : (
-            <div className="grid flex-1 place-items-center p-10 text-sm text-muted-foreground">Select a file to view it.</div>
+            <div className="grid flex-1 place-items-center p-10 text-sm text-muted-foreground">{t("memoryTab.selectFile")}</div>
           )}
         </section>
 
         <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-              <AlertDialogDescription>Your edits to {selected?.path} haven't been saved.</AlertDialogDescription>
+              <AlertDialogTitle>{t("memoryTab.discardTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>{t("memoryTab.discardDescription", { path: selected?.path })}</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Keep editing</AlertDialogCancel>
+              <AlertDialogCancel>{t("memoryTab.keepEditing")}</AlertDialogCancel>
               <AlertDialogAction
                 variant="destructive"
                 onClick={() => {
@@ -134,7 +138,7 @@ export function MemoryTab({ agent }: { agent: Agent }) {
                   setPending(null);
                 }}
               >
-                Discard
+                {t("memoryTab.discard")}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -161,6 +165,7 @@ function Tree({
   selected: string | null;
   onSelect: (entry: { path: string; size: number }) => void;
 }) {
+  const { t } = useTranslation("agents");
   const q = useQuery({ queryKey: qk.agentFiles(agentId, dir), queryFn: () => api.agents.files(agentId, dir) });
   const entries = useMemo(() => childrenOf(q.data ?? [], dir), [q.data, dir]);
   const pad = { paddingLeft: `${depth * 14 + 8}px` };
@@ -184,7 +189,7 @@ function Tree({
   if (!entries.length) {
     return (
       <p className="py-1 text-xs text-muted-foreground" style={pad}>
-        Empty
+        {t("memoryTab.empty")}
       </p>
     );
   }

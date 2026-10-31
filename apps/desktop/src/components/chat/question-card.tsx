@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceStrict } from "date-fns";
 import type { AgentQuestion, AnswerQuestionInput, AnswerVia, MessageBlock, QuestionAnswer, QuestionKind, QuestionOption, QuestionStatus } from "@godmode/shared";
 import { Check, CircleCheck, CircleSlash, MessageCircleQuestion, SendHorizontal, ShieldCheck, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,6 +12,7 @@ import { useNow } from "@/components/vault/use-now";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
 
 type QuestionBlock = Extract<MessageBlock, { type: "question" }>;
@@ -55,6 +57,7 @@ export function QuestionScopeProvider({ value, children }: { value: QuestionScop
 }
 
 export function useAnswerQuestion(conversationId?: string) {
+  const { t } = useTranslation("chat");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: AnswerQuestionInput }) => api.questions.answer(id, input),
@@ -68,27 +71,25 @@ export function useAnswerQuestion(conversationId?: string) {
       qc.invalidateQueries({ queryKey: qk.questions });
       if (conversationId) qc.invalidateQueries({ queryKey: qk.conversation(conversationId) });
       const closed = err instanceof ApiRequestError && err.code === "question_closed";
-      toast.error(closed ? "Already settled" : "Couldn't send your answer", { description: errorMessage(err) });
+      toast.error(closed ? t("question.alreadySettled") : t("question.sendError"), { description: errorMessage(err) });
     },
   });
 }
 
 const PLATFORM: Partial<Record<AnswerVia, string>> = { slack: "Slack", telegram: "Telegram", teams: "Teams" };
 
-function answeredLine(a: QuestionAnswer, status: QuestionStatus, choice: string | null): ReactNode {
-  const where = a.via === "phone" ? " from your phone" : PLATFORM[a.via] ? ` in ${PLATFORM[a.via]}` : "";
-  const time = <time dateTime={a.at}>{format(new Date(a.at), "HH:mm")}</time>;
-  if (status === "approved") return <>You approved{where} · {time}</>;
-  if (status === "declined") return <>You declined{where} · {time}</>;
-  if (choice) {
-    return (
-      <>
-        You chose <span className="font-medium text-foreground">{choice}</span>
-        {where} · {time}
-      </>
-    );
-  }
-  return <>You answered{where} · {time}</>;
+function AnsweredLine({ answer: a, status, choice }: { answer: QuestionAnswer; status: QuestionStatus; choice: string | null }) {
+  const { t } = useTranslation("chat");
+  const where = a.via === "phone" ? "phone" : PLATFORM[a.via] ? "platform" : "here";
+  const kind = status === "approved" ? "approved" : status === "declined" ? "declined" : choice ? "chose" : "answered";
+  return (
+    <Trans
+      t={t}
+      i18nKey={`question.answered.${kind}.${where}`}
+      values={{ platform: PLATFORM[a.via], choice, time: format(new Date(a.at), "HH:mm") }}
+      components={{ time: <time dateTime={a.at} />, b: <span className="font-medium text-foreground" /> }}
+    />
+  );
 }
 
 /**
@@ -118,8 +119,10 @@ export function QuestionCard({
   conversationId?: string;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
+  const { dateLocale } = useLocale();
   const scope = useContext(QuestionScope);
-  const agentName = agentNameProp ?? scope?.agentName ?? "The agent";
+  const agentName = agentNameProp ?? scope?.agentName ?? t("turnEnd.theAgent");
   const conversationId = conversationIdProp ?? scope?.conversationId;
   const answer = useAnswerQuestion(conversationId);
   const now = useNow(30_000);
@@ -152,19 +155,21 @@ export function QuestionCard({
   };
 
   const asked =
-    now - new Date(q.askedAt).getTime() < 60_000 ? "just now" : formatDistanceStrict(new Date(q.askedAt), now, { addSuffix: true, roundingMethod: "floor" });
+    now - new Date(q.askedAt).getTime() < 60_000
+      ? t("pause.justNow")
+      : formatDistanceStrict(new Date(q.askedAt), now, { addSuffix: true, roundingMethod: "floor", locale: dateLocale });
 
   if (q.status === "withdrawn" || lost) {
     return (
       <div className={cn("rounded-xl border border-dashed bg-muted/30 px-3.5 py-3 text-muted-foreground", className)} role="group" aria-labelledby={titleId}>
         <div className="flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase">
           <CircleSlash className="size-3.5" aria-hidden />
-          {approval ? "Approval withdrawn" : "Question withdrawn"}
+          {approval ? t("question.approvalWithdrawn") : t("question.questionWithdrawn")}
         </div>
         <p id={titleId} className="mt-1 text-[13px] text-foreground/70 line-through decoration-muted-foreground/40">
           {q.title}
         </p>
-        <p className="mt-1 text-xs">{q.closedReason ? q.closedReason : "The run was stopped before this was answered."}</p>
+        <p className="mt-1 text-xs">{q.closedReason ? q.closedReason : t("question.stoppedBefore")}</p>
       </div>
     );
   }
@@ -186,19 +191,19 @@ export function QuestionCard({
     >
       <div className={cn("flex items-center gap-1.5 text-[11px] font-medium tracking-wide uppercase", open ? "text-warning" : "text-muted-foreground")}>
         {approval ? <ShieldCheck className="size-3.5" aria-hidden /> : <MessageCircleQuestion className="size-3.5" aria-hidden />}
-        <span>{approval ? (open ? "Needs your OK" : "Approval") : "Question"}</span>
-        <span className="font-normal tracking-normal normal-case text-muted-foreground">· asked {asked}</span>
+        <span>{approval ? (open ? t("status.needsOk") : t("question.approval")) : t("question.question")}</span>
+        <span className="font-normal tracking-normal normal-case text-muted-foreground">· {t("question.askedAgo", { when: asked })}</span>
       </div>
 
       {approval ? (
         <dl className="mt-1.5 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[13px]">
-          <dt className="text-muted-foreground">What</dt>
+          <dt className="text-muted-foreground">{t("question.what")}</dt>
           <dd id={titleId} className="min-w-0 font-medium break-words">
             {q.title}
           </dd>
           {q.body && (
             <>
-              <dt className="text-muted-foreground">Why</dt>
+              <dt className="text-muted-foreground">{t("question.why")}</dt>
               <dd className="min-w-0">
                 <Markdown className="text-[13px]">{q.body}</Markdown>
               </dd>
@@ -206,7 +211,7 @@ export function QuestionCard({
           )}
           {q.affects && (
             <>
-              <dt className="text-muted-foreground">Affects</dt>
+              <dt className="text-muted-foreground">{t("question.affects")}</dt>
               <dd className="min-w-0 break-words">{q.affects}</dd>
             </>
           )}
@@ -247,7 +252,7 @@ export function QuestionCard({
                 </span>
                 {o.recommended && (
                   <span className={cn("shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium", open ? "bg-primary-foreground/15" : "bg-muted text-muted-foreground")}>
-                    Recommended
+                    {t("question.recommended")}
                   </span>
                 )}
               </Button>
@@ -263,22 +268,22 @@ export function QuestionCard({
               autoFocus
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder={`Note for ${agentName} (optional)`}
-              aria-label={`Note for ${agentName}`}
+              placeholder={t("question.notePlaceholder", { name: agentName })}
+              aria-label={t("question.noteLabel", { name: agentName })}
               className="min-h-16 text-[13px]"
               maxLength={2000}
             />
           )}
           <div className="flex flex-wrap items-center gap-1.5">
             <Button size="sm" disabled={!answerable || busy} onClick={() => send("approve", { decision: "approve", ...(note.trim() ? { note: note.trim() } : {}) })}>
-              {pressed === "approve" ? <Spinner /> : <Check />} Approve
+              {pressed === "approve" ? <Spinner /> : <Check />} {t("question.approve")}
             </Button>
             <Button size="sm" variant="outline" disabled={!answerable || busy} onClick={() => send("decline", { decision: "decline", ...(note.trim() ? { note: note.trim() } : {}) })}>
-              {pressed === "decline" ? <Spinner /> : <X />} Decline
+              {pressed === "decline" ? <Spinner /> : <X />} {t("question.decline")}
             </Button>
             {!noting && (
               <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={!answerable || busy} onClick={() => setNoting(true)}>
-                Add a note
+                {t("question.addNote")}
               </Button>
             )}
           </div>
@@ -302,14 +307,14 @@ export function QuestionCard({
                 if (text.trim() && answerable && !busy) send("text", { text: text.trim() });
               }
             }}
-            placeholder={approval ? `Or tell ${agentName} what to do instead…` : q.options.length ? "Or answer in your own words…" : `Answer ${agentName}…`}
-            aria-label={`Answer ${agentName}`}
+            placeholder={approval ? t("question.tellInstead", { name: agentName }) : q.options.length ? t("question.ownWords") : t("question.answerPlaceholder", { name: agentName })}
+            aria-label={t("question.answerLabel", { name: agentName })}
             disabled={!answerable || busy}
             className="min-h-9 flex-1 resize-none py-2 text-[13px]"
             rows={1}
             maxLength={20_000}
           />
-          <Button type="submit" size="icon" aria-label="Send answer" disabled={!answerable || busy || !text.trim()}>
+          <Button type="submit" size="icon" aria-label={t("question.sendAnswer")} disabled={!answerable || busy || !text.trim()}>
             {pressed === "text" ? <Spinner /> : <SendHorizontal />}
           </Button>
         </form>
@@ -318,10 +323,10 @@ export function QuestionCard({
       {open && !inline && (
         <p className="mt-2 text-xs text-muted-foreground">
           {streaming
-            ? `${agentName} is finishing the step it was in…`
+            ? t("question.finishing", { name: agentName })
             : approval
-              ? "Or reply below — your message counts as the answer."
-              : `Or type your answer below — sending it answers ${agentName}.`}
+              ? t("question.replyBelow")
+              : t("question.typeBelow", { name: agentName })}
         </p>
       )}
 
@@ -329,7 +334,9 @@ export function QuestionCard({
         <div className="mt-2.5 border-t pt-2 text-xs text-muted-foreground">
           <p className={cn("flex items-center gap-1.5", q.status === "approved" && "text-success")}>
             {q.status === "declined" ? <X className="size-3.5" aria-hidden /> : <CircleCheck className="size-3.5" aria-hidden />}
-            <span>{answeredLine(q.answer!, q.status, chosen?.label ?? null)}</span>
+            <span>
+              <AnsweredLine answer={q.answer!} status={q.status} choice={chosen?.label ?? null} />
+            </span>
           </p>
           {!chosen && q.answer!.text && <p className="mt-1.5 rounded-lg bg-muted/60 px-2.5 py-1.5 text-[13px] whitespace-pre-wrap text-foreground">{q.answer!.text}</p>}
         </div>

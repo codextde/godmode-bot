@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { browserView, type Agent, type BrowserProfile, type Project } from "@godmode/shared";
 import { ArrowUpRight, Globe, Hand, Layers, Maximize2, PanelRightClose, PanelRightOpen, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -96,6 +97,7 @@ export function BrowserPanel({
   onHide: () => void;
   onFocus: (mode: BrowserFocusMode) => void;
 }) {
+  const { t } = useTranslation("chat");
   const { frame, live: streaming } = useFrame(profile, conversationId);
   const hasFrame = !!frame;
   const chat = useChatTab(profile, conversationId);
@@ -111,8 +113,8 @@ export function BrowserPanel({
   useEffect(() => {
     setWaitedLong(false);
     if (hasFrame) return;
-    const t = setTimeout(() => setWaitedLong(true), 5000);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setWaitedLong(true), 5000);
+    return () => clearTimeout(timer);
   }, [hasFrame, profile.id, conversationId]);
 
   const url = frame?.url ?? chat?.url;
@@ -122,7 +124,7 @@ export function BrowserPanel({
 
   return (
     <motion.aside
-      aria-label="Browser"
+      aria-label={t("browser.title")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -131,7 +133,7 @@ export function BrowserPanel({
     >
       <div className="flex h-full w-80 flex-col">
         <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
-          <span className="text-sm font-medium">Browser</span>
+          <span className="text-sm font-medium">{t("browser.title")}</span>
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 text-[11px] font-medium",
@@ -139,15 +141,15 @@ export function BrowserPanel({
             )}
           >
             <LiveDot live={streaming} />
-            {streaming ? "Live" : profile.running ? "Idle" : "Closed"}
+            {streaming ? t("browser.live") : profile.running ? t("browser.idle") : t("browser.closed")}
           </span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label="Hide browser">
+              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label={t("browser.hide")}>
                 <PanelRightClose />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Hide browser</TooltipContent>
+            <TooltipContent>{t("browser.hide")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -160,15 +162,15 @@ export function BrowserPanel({
                     <Globe className="size-4" />
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {profile.running ? "No page open in this chat yet" : "Closed — opens when it's needed"}
+                    {profile.running ? t("browser.noPage") : t("browser.closedHint")}
                   </span>
                   {profile.running ? (
                     <Button size="xs" variant="outline" onClick={() => onFocus("watch")}>
-                      <Maximize2 /> Open a page
+                      <Maximize2 /> {t("browser.openPage")}
                     </Button>
                   ) : (
                     <Button size="xs" variant="outline" onClick={() => actions.launch.mutate(profile)} disabled={actions.launch.isPending}>
-                      {actions.launch.isPending ? <Spinner className="size-3" /> : <Play />} Launch now
+                      {actions.launch.isPending ? <Spinner className="size-3" /> : <Play />} {t("browser.launchNow")}
                     </Button>
                   )}
                 </span>
@@ -179,14 +181,14 @@ export function BrowserPanel({
               <button
                 type="button"
                 onClick={() => onFocus("watch")}
-                aria-label="Open the browser full size"
+                aria-label={t("browser.openFullSize")}
                 className="group/preview relative block max-h-[45vh] w-full overflow-hidden rounded-xl border bg-card shadow-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 style={{ aspectRatio: frame ? `${frame.width} / ${frame.height}` : "16 / 10" }}
               >
                 {frame ? (
                   <img
                     src={`data:image/jpeg;base64,${frame.data}`}
-                    alt={frame.title ? `Live view: ${frame.title}` : "Live view"}
+                    alt={frame.title ? t("browser.liveViewOf", { title: frame.title }) : t("browser.liveView")}
                     draggable={false}
                     className="absolute inset-0 size-full object-cover object-top select-none"
                   />
@@ -194,11 +196,11 @@ export function BrowserPanel({
                   <span className="absolute inset-0 grid place-items-center bg-paper-2 px-6 text-center">
                     <span className="flex flex-col items-center gap-2.5">
                       {liveViewOff ? (
-                        <span className="text-xs text-muted-foreground">Live view is off</span>
+                        <span className="text-xs text-muted-foreground">{t("browser.liveViewOff")}</span>
                       ) : (
                         <>
-                          <Orb variant="C3" size={24} label="Connecting to the screen" />
-                          <span className="text-shimmer text-xs font-medium">{waitedLong ? "No picture yet" : "Connecting…"}</span>
+                          <Orb variant="C3" size={24} label={t("browser.connectingScreen")} />
+                          <span className="text-shimmer text-xs font-medium">{waitedLong ? t("browser.noPicture") : t("browser.connecting")}</span>
                         </>
                       )}
                     </span>
@@ -206,7 +208,7 @@ export function BrowserPanel({
                 )}
                 <span className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/preview:bg-black/30 group-hover/preview:opacity-100 group-focus-visible/preview:bg-black/30 group-focus-visible/preview:opacity-100">
                   <span className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground">
-                    <Maximize2 className="size-3.5" /> Watch full size
+                    <Maximize2 className="size-3.5" /> {t("browser.watchFullSize")}
                   </span>
                 </span>
               </button>
@@ -223,11 +225,11 @@ export function BrowserPanel({
                 </span>
               )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] leading-5 font-medium">{pageTitle || domain || "New tab"}</p>
+                <p className="truncate text-[13px] leading-5 font-medium">{pageTitle || domain || t("browser.newTab")}</p>
                 <p className="truncate font-mono text-[11px] leading-4 text-muted-foreground">{domain || "about:blank"}</p>
               </div>
               {chat && chat.tabs > 1 && (
-                <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">{chat.tabs} tabs</span>
+                <span className="shrink-0 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground tabular-nums">{t("browser.tabs", { count: chat.tabs })}</span>
               )}
             </div>
           )}
@@ -252,21 +254,21 @@ export function BrowserPanel({
           {hasTab && (
             <div className="flex gap-2">
               <Button size="sm" className="flex-1" onClick={() => onFocus("control")} disabled={!frame}>
-                <Hand /> Take control
+                <Hand /> {t("browser.takeControl")}
               </Button>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="outline" size="icon-sm" onClick={() => onFocus("watch")} aria-label="Watch full size">
+                  <Button variant="outline" size="icon-sm" onClick={() => onFocus("watch")} aria-label={t("browser.watchFullSize")}>
                     <Maximize2 />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Watch full size</TooltipContent>
+                <TooltipContent>{t("browser.watchFullSize")}</TooltipContent>
               </Tooltip>
             </div>
           )}
           {hasTab && !frame && (liveViewOff || waitedLong) && (
             <p className="text-xs text-muted-foreground">
-              {liveViewOff ? "Turn on live view in Settings → Browser to watch and take control here." : "Still nothing? The page may still be loading."}
+              {liveViewOff ? t("browser.liveViewOffHint") : t("browser.stillLoading")}
             </p>
           )}
         </div>
@@ -290,14 +292,17 @@ function ProfileFooter({
   pinned: boolean;
   parallel: number;
 }) {
+  const { t } = useTranslation("chat");
   const workspace = useWorkspaceName(profile.workspaceId);
   const detail = parallel
-    ? `Own tab · ${parallel} more ${parallel === 1 ? "chat" : "chats"} browsing alongside`
+    ? t("browser.footer.parallel", { count: parallel })
     : forChat
-      ? "Own tab · profile picked for this chat"
+      ? t("browser.footer.forChat")
       : pinned
-        ? "Own tab · profile pinned in this agent's settings"
-        : `Own tab · logins shared with every chat${profile.workspaceId ? ` in ${workspace}` : ""}`;
+        ? t("browser.footer.pinned")
+        : profile.workspaceId
+          ? t("browser.footer.sharedIn", { workspace })
+          : t("browser.footer.shared");
   return (
     <Link
       to={`/browser?profile=${profile.id}&chat=${conversationId}`}
@@ -307,7 +312,7 @@ function ProfileFooter({
         <Layers className="size-4" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium">{profile.name} profile</span>
+        <span className="block truncate text-xs font-medium">{t("browser.footer.profile", { name: profile.name })}</span>
         <span className="block truncate text-[11px] text-muted-foreground">{detail}</span>
       </span>
       <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
@@ -348,15 +353,16 @@ export function BrowserFocus({
 
 /** Header button that brings the browser back once the panel is hidden (or opens it full size on narrow windows). */
 export function BrowserToggle({ working, onClick }: { working: boolean; onClick: () => void }) {
+  const { t } = useTranslation("chat");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Show browser" onClick={onClick} className="relative text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" aria-label={t("browser.show")} onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
           {working && <LiveDot className="absolute top-1.5 right-1.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Show browser</TooltipContent>
+      <TooltipContent>{t("browser.show")}</TooltipContent>
     </Tooltip>
   );
 }

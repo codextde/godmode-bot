@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, FolderOpen, Moon } from "lucide-react";
 import type { Agent, FileReviewItem } from "@godmode/shared";
 import { api } from "@/lib/api";
@@ -36,9 +37,8 @@ import { useRefreshFiles, useReveal } from "@/components/files/use-files";
 type Tab = "browse" | "notes" | "review" | "bin";
 const TABS: Tab[] = ["browse", "notes", "review", "bin"];
 
-const DESCRIPTION = "Look through what your agents keep — their workspace, notes and memory — and clean it up. Deleted files wait 30 days in a bin.";
-
 export default function FilesPage() {
+  const { t } = useTranslation("files");
   const { agentId } = useParams();
   const scoped = useAgents();
   const everyone = useAllAgents();
@@ -48,7 +48,7 @@ export default function FilesPage() {
   if (everyone.isLoading) {
     return (
       <>
-        <PageHeader title="Files" icon={<FolderOpen />} />
+        <PageHeader title={t("page.title")} icon={<FolderOpen />} />
         <PageBody>
           <Skeleton className="h-[28rem] rounded-xl" />
         </PageBody>
@@ -58,9 +58,9 @@ export default function FilesPage() {
   if (!agent) {
     return (
       <>
-        <PageHeader title="Files" icon={<FolderOpen />} />
+        <PageHeader title={t("page.title")} icon={<FolderOpen />} />
         <PageBody>
-          <EmptyState icon={<FolderOpen />} title="This agent doesn't exist anymore" action={<Button asChild variant="outline"><Link to="/settings/files">All agents</Link></Button>} />
+          <EmptyState icon={<FolderOpen />} title={t("page.notFound")} action={<Button asChild variant="outline"><Link to="/settings/files">{t("page.allAgents")}</Link></Button>} />
         </PageBody>
       </>
     );
@@ -69,10 +69,11 @@ export default function FilesPage() {
 }
 
 function AgentPicker({ agent, agents, onPick }: { agent: Agent; agents: Agent[]; onPick: (id: string) => void }) {
+  const { t } = useTranslation(["files", "common"]);
   const sorted = useMemo(() => [...agents].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name)), [agents]);
   return (
     <Select value={agent.id} onValueChange={onPick}>
-      <SelectTrigger className="h-9 w-64 bg-card" aria-label="Agent">
+      <SelectTrigger className="h-9 w-64 bg-card" aria-label={t("common:words.agent")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="max-h-80">
@@ -90,9 +91,10 @@ function AgentPicker({ agent, agents, onPick }: { agent: Agent; agents: Agent[];
 }
 
 function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
+  const { t } = useTranslation("files");
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tab = (TABS.find((t) => t === params.get("tab")) ?? "browse") as Tab;
+  const tab = (TABS.find((x) => x === params.get("tab")) ?? "browse") as Tab;
   const dir = params.get("dir") ?? "workspace";
   const filePath = params.get("file");
   const [fileSize, setFileSize] = useState(0);
@@ -187,13 +189,13 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
   return (
     <>
       <PageHeader
-        title="Files"
-        description={DESCRIPTION}
+        title={t("page.title")}
+        description={t("page.description")}
         icon={<FolderOpen />}
         actions={
           <>
             <Button variant="ghost" size="sm" onClick={() => guard(() => navigate("/settings/files"))}>
-              <ArrowLeft /> All agents
+              <ArrowLeft /> {t("page.allAgents")}
             </Button>
             <AgentPicker agent={agent} agents={agents} onPick={(id) => guard(() => navigate(`/files/${id}`))} />
           </>
@@ -204,28 +206,28 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
           <Tabs value={tab} onValueChange={(v) => guard(() => setTab(v as Tab))}>
             <TabsList>
               <TabsTrigger value="browse" className="px-3">
-                Browse
+                {t("page.tabs.browse")}
               </TabsTrigger>
               <TabsTrigger value="notes" className="px-3">
-                Notes
+                {t("page.tabs.notes")}
               </TabsTrigger>
               <TabsTrigger value="review" className="gap-1.5 px-3">
-                Review
+                {t("page.tabs.review")}
                 {reviewCount > 0 && <span className="rounded-[4px] bg-warning/12 px-1.5 font-mono text-[10px] font-medium text-warning tabular-nums">{reviewCount}</span>}
               </TabsTrigger>
               <TabsTrigger value="bin" className="gap-1.5 px-3">
-                Bin
+                {t("page.tabs.bin")}
                 {binCount > 0 && <span className="rounded-[4px] bg-foreground/[0.06] px-1.5 font-mono text-[10px] text-muted-foreground tabular-nums">{binCount}</span>}
               </TabsTrigger>
             </TabsList>
           </Tabs>
           {dreaming ? (
             <p className="flex items-center gap-1.5 rounded-md bg-dream-soft px-2.5 py-1 text-xs text-muted-foreground" role="status">
-              <Moon className="size-3.5 text-dream" /> {agent.name} is dreaming — moves and deletes wait until the dream has ended.
+              <Moon className="size-3.5 text-dream" /> {t("page.dreaming", { name: agent.name })}
             </p>
           ) : working ? (
             <p className="flex items-center gap-1.5 rounded-md bg-warning/[0.08] px-2.5 py-1 text-xs text-muted-foreground" role="status">
-              <span className="size-1.5 animate-pulse rounded-full bg-warning" /> {agent.name} is working right now and may still use files here.
+              <span className="size-1.5 animate-pulse rounded-full bg-warning" /> {t("page.working", { name: agent.name })}
             </p>
           ) : null}
         </div>
@@ -251,7 +253,7 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
             <section className={cn("flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border bg-card shadow-card", !file && "@max-4xl:hidden")}>
               {file && (
                 <button type="button" onClick={() => guard(() => update({ file: null }))} className="flex items-center gap-1.5 border-b px-3 py-2 text-xs text-muted-foreground hover:text-foreground @4xl:hidden">
-                  <ArrowLeft className="size-3.5" /> Back to the list
+                  <ArrowLeft className="size-3.5" /> {t("page.back")}
                 </button>
               )}
               <div className="min-h-0 flex-1">
@@ -286,11 +288,11 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
       <AlertDialog open={!!pending} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-            <AlertDialogDescription>Your edits to {filePath} haven't been saved.</AlertDialogDescription>
+            <AlertDialogTitle>{t("page.discardTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("page.discardDescription", { path: filePath })}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t("page.keepEditing")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -299,7 +301,7 @@ function AgentFiles({ agent, agents }: { agent: Agent; agents: Agent[] }) {
                 setPending(null);
               }}
             >
-              Discard
+              {t("page.discard")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

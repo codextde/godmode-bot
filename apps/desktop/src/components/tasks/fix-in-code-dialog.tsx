@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { GitMerge, GitPullRequestArrow, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import { hostedRepo, type LogIssue } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +31,7 @@ function repoName(url: string): string {
  * merges the fix into the base branch by itself.
  */
 export function FixInCodeDialog({ source, onClose }: { source: FixSource | null; onClose: () => void }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const settings = useSettings().data?.selfRepair;
@@ -52,21 +54,20 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
       void qc.invalidateQueries({ queryKey: qk.tasks });
       onClose();
       if (!task) return;
-      toast.success(`Ticket #${task.number} filed`, {
-        description: merge ? `The fix goes into ${task.baseBranch || "main"} once it's done.` : "You review the pull request when it's done.",
-        action: { label: "Open", onClick: () => navigate(`/tasks?task=${task.id}`) },
+      toast.success(t("fix.filed", { number: task.number }), {
+        description: merge ? t("fix.filedMerge", { branch: task.baseBranch || "main" }) : t("fix.filedReview"),
+        action: { label: t("common:actions.open"), onClick: () => navigate(`/tasks?task=${task.id}`) },
       });
     },
-    onError: (e) => toastApiError(e, "Couldn't file the fix", qc),
+    onError: (e) => toastApiError(e, t("fix.fileError"), qc),
   });
 
   if (!source) return null;
   const agent = agents.find((a) => a.id === settings?.agentId) ?? agents.find((a) => a.isDefault);
-  const who = agent?.name ?? "An agent";
+  const who = agent?.name ?? t("fix.anAgent");
   const base = settings?.baseBranch || "main";
   const noRepo = !!settings && !settings.repoUrl;
   const issues = source.issues ?? [];
-  const where = "this computer's log";
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!file.isPending) file.mutate();
@@ -77,16 +78,16 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-5">
           <DialogHeader>
-            <DialogTitle>Fix in code</DialogTitle>
+            <DialogTitle>{t("fix.title")}</DialogTitle>
             <DialogDescription>
-              {who} gets {where} as a ticket, finds the causes in Godmode's code and fixes them, with tests.
+              {t("fix.description", { who })}
             </DialogDescription>
           </DialogHeader>
 
           {noRepo && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5 text-xs">
               <p className="min-w-0 flex-1 basis-56 leading-relaxed text-muted-foreground">
-                <span className="font-medium text-foreground">Which repository?</span> Add Godmode's source repository (or your fork) under Self-repair first.
+                <Trans t={t} i18nKey="fix.noRepo" components={{ b: <span className="font-medium text-foreground" /> }} />
               </p>
               <Button
                 type="button"
@@ -97,7 +98,7 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
                   navigate("/settings/logs");
                 }}
               >
-                Open settings
+                {t("fix.openSettings")}
               </Button>
             </div>
           )}
@@ -113,12 +114,12 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
                   <span className="shrink-0 text-muted-foreground tabular-nums">{i.count}×</span>
                 </li>
               ))}
-              {issues.length > PREVIEW && <li className="px-3 py-2 text-muted-foreground">and {issues.length - PREVIEW} more in the log</li>}
+              {issues.length > PREVIEW && <li className="px-3 py-2 text-muted-foreground">{t("fix.moreInLog", { count: issues.length - PREVIEW })}</li>}
             </ul>
           )}
 
           <div className="space-y-1.5">
-            <Label htmlFor="fix-note">What did you notice?</Label>
+            <Label htmlFor="fix-note">{t("fix.noteLabel")}</Label>
             <Textarea
               id="fix-note"
               value={note}
@@ -126,7 +127,7 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
               maxLength={MAX_NOTE}
               rows={3}
               autoFocus
-              placeholder="Optional, e.g. “Chats stop after a few minutes”"
+              placeholder={t("fix.notePlaceholder")}
               className="resize-none"
             />
           </div>
@@ -134,9 +135,9 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
           <label htmlFor="fix-merge" className="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-2.5 transition hover:bg-paper-2/60">
             <span className="mt-0.5 text-muted-foreground [&_svg]:size-4">{merge ? <GitMerge /> : <GitPullRequestArrow />}</span>
             <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">Merge into {base} when done</span>
+              <span className="block text-sm font-medium">{t("fix.mergeLabel", { branch: base })}</span>
               <span className="block text-xs leading-relaxed text-muted-foreground">
-                {merge ? "No review step: the pull request is merged as soon as the fix is delivered." : "The pull request waits for your review."}
+                {merge ? t("fix.mergeOn") : t("fix.mergeOff")}
               </span>
             </span>
             <Switch id="fix-merge" checked={merge} onCheckedChange={setPicked} className="mt-0.5" />
@@ -148,11 +149,11 @@ export function FixInCodeDialog({ source, onClose }: { source: FixSource | null;
             </span>
             <div className="flex gap-2">
               <Button type="button" variant="ghost" onClick={onClose} disabled={file.isPending}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={file.isPending || !settings || noRepo}>
                 {file.isPending ? <Spinner /> : <Wrench />}
-                {file.isPending ? "Filing…" : "File the fix"}
+                {file.isPending ? t("fix.filing") : t("fix.submit")}
               </Button>
             </div>
           </DialogFooter>

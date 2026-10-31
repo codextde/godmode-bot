@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BookOpen, Check, Code2, Copy, FileText, FileX2, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ChatFile } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,6 +11,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { fetchBlob } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
 
 type View = "read" | "source";
@@ -113,6 +115,8 @@ export function MarkdownReader({
   onOpenChange: (open: boolean) => void;
   folderAction: { label: string; icon: LucideIcon; show: () => void };
 }) {
+  const { t } = useTranslation(["chat", "common"]);
+  const { intlLocale } = useLocale();
   const [view, setView] = useState<View>("read");
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
   const [copied, setCopied] = useState(false);
@@ -166,21 +170,21 @@ export function MarkdownReader({
                 </span>
                 {text !== undefined && (
                   <span className="shrink-0 tabular-nums">
-                    · {words.toLocaleString()} {words === 1 ? "word" : "words"} · {minutes} min read
+                    · {t("reader.words", { count: words, formatted: words.toLocaleString(intlLocale) })} · {t("reader.minRead", { minutes })}
                   </span>
                 )}
               </DialogDescription>
             </div>
-            <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as View)} aria-label="View" className="shrink-0">
+            <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as View)} aria-label={t("reader.view")} className="shrink-0">
               <ToggleGroupItem value="read" className="gap-1.5 px-2.5 text-xs">
-                <BookOpen className="size-3.5" /> Read
+                <BookOpen className="size-3.5" /> {t("reader.read")}
               </ToggleGroupItem>
               <ToggleGroupItem value="source" className="gap-1.5 px-2.5 text-xs">
-                <Code2 className="size-3.5" /> Source
+                <Code2 className="size-3.5" /> {t("reader.source")}
               </ToggleGroupItem>
             </ToggleGroup>
             <div className="flex shrink-0 items-center gap-0.5">
-              <HeaderAction label={copied ? "Copied" : "Copy Markdown"} onClick={copy}>
+              <HeaderAction label={copied ? t("common:actions.copied") : t("reader.copyMarkdown")} onClick={copy}>
                 {copied ? <Check className="text-success" /> : <Copy />}
               </HeaderAction>
               <HeaderAction label={folderAction.label} onClick={folderAction.show}>
@@ -188,7 +192,7 @@ export function MarkdownReader({
               </HeaderAction>
               <span className="mx-1 h-5 w-px bg-border" aria-hidden />
               <DialogClose asChild>
-                <Button type="button" variant="ghost" size="icon-sm" aria-label="Close" className="text-muted-foreground hover:text-foreground">
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={t("common:actions.close")} className="text-muted-foreground hover:text-foreground">
                   <X />
                 </Button>
               </DialogClose>
@@ -197,8 +201,8 @@ export function MarkdownReader({
 
           <div className="flex min-h-0 flex-1">
             {view === "read" && headings.length >= 3 && (
-              <nav aria-label="Outline" className="hidden w-56 shrink-0 overflow-y-auto border-r bg-paper-2/50 px-3 py-6 lg:block">
-                <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">On this page</p>
+              <nav aria-label={t("reader.outline")} className="hidden w-56 shrink-0 overflow-y-auto border-r bg-paper-2/50 px-3 py-6 lg:block">
+                <p className="mb-2 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{t("reader.onThisPage")}</p>
                 <ul className="space-y-px">
                   {headings.map((h, i) => (
                     <li key={i}>
@@ -227,8 +231,8 @@ export function MarkdownReader({
                     <div className="mx-auto mb-3 grid size-11 place-items-center rounded-xl border bg-card shadow-card">
                       <FileX2 className="size-5 text-muted-foreground" />
                     </div>
-                    <p className="text-sm font-medium">{file.name} can't be opened</p>
-                    <p className="mt-1 text-xs text-muted-foreground">It was moved, deleted, or is too large to read here.</p>
+                    <p className="text-sm font-medium">{t("reader.cantOpen", { name: file.name })}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{t("reader.cantOpenHint")}</p>
                   </div>
                 </div>
               ) : text === undefined ? (
@@ -245,7 +249,7 @@ export function MarkdownReader({
                   <Markdown className="prose-reader">{text}</Markdown>
                 </article>
               ) : (
-                <p className="p-10 text-center text-sm text-muted-foreground italic">This file is empty.</p>
+                <p className="p-10 text-center text-sm text-muted-foreground italic">{t("reader.empty")}</p>
               )}
             </div>
           </div>

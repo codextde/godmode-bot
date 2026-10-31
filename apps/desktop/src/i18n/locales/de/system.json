@@ -1,1 +1,129 @@
-{}
+{
+  "mode": {
+    "label": {
+      "easy": "Einfach",
+      "pro": "Profi"
+    },
+    "blurb": {
+      "easy": "Klare Worte und nur, was du im Alltag brauchst. Alles andere ist einen Klick entfernt.",
+      "pro": "Jedes Tool, jede Einstellung und jedes Detail im Blick: Modelle, Läufe, Maschinen, Logs."
+    },
+    "switchError": "Der Modus konnte nicht gewechselt werden",
+    "switched": {
+      "easy": "Modus Einfach",
+      "pro": "Modus Profi"
+    },
+    "switchBackHint": "Du kannst jederzeit unter Einstellungen → Allgemein zurückwechseln."
+  },
+  "easyPages": {
+    "automations": {
+      "description": "Lass deine Agenten von selbst loslegen: nach Zeitplan oder wenn in deinen Apps etwas passiert."
+    },
+    "files": {
+      "description": "Was deine Agenten aufbewahren: ihre Dateien, Notizen und ihr Gedächtnis. Sieh es durch, räum auf und hol Gelöschtes zurück."
+    },
+    "activity": {
+      "title": "Verlauf",
+      "description": "Alles, was deine Agenten gemacht haben."
+    },
+    "calls": {
+      "title": "Anrufe"
+    },
+    "plugins": {
+      "title": "Erweiterungen",
+      "description": "Zusätzliche Fähigkeiten für deine Agenten. Jederzeit hinzufügen, ausschalten oder entfernen."
+    },
+    "cards": {
+      "title": "Zahlungskarten"
+    },
+    "computer": {
+      "title": "Computersteuerung"
+    },
+    "ssh": {
+      "title": "Server"
+    }
+  },
+  "palettes": {
+    "paper": { "label": "Papier", "blurb": "Warmes Papier am Tag, Anthrazit in der Nacht" },
+    "graphite": { "label": "Graphit", "blurb": "Kühle neutrale Grautöne mit blauem Akzent" },
+    "nord": { "blurb": "Arktische Blaugrautöne und Frost" },
+    "solarized": { "blurb": "Ethan Schoonovers klassisches Creme und Petrol" },
+    "rose": { "label": "Rosé", "blurb": "Zartes Rosa mit Himbeer-Akzent" },
+    "forest": { "label": "Wald", "blurb": "Moos, Farn und Rinde" },
+    "ocean": { "label": "Ozean", "blurb": "Meerglas und tiefes Wasser" },
+    "dracula": { "blurb": "Violette Nacht und ein heller Tag dazu" }
+  },
+  "password": {
+    "strength": {
+      "tooWeak": "Zu schwach",
+      "weak": "Schwach",
+      "fair": "Mittel",
+      "strong": "Stark",
+      "excellent": "Ausgezeichnet"
+    },
+    "duration": {
+      "instantly": "sofort",
+      "centuries": "Jahrhunderte",
+      "century_one": "{{count}} Jahrhundert",
+      "century_other": "{{count}} Jahrhunderte",
+      "year_one": "{{count}} Jahr",
+      "year_other": "{{count}} Jahre",
+      "month_one": "{{count}} Monat",
+      "month_other": "{{count}} Monate",
+      "day_one": "{{count}} Tag",
+      "day_other": "{{count}} Tage",
+      "hour_one": "{{count}} Stunde",
+      "hour_other": "{{count}} Stunden",
+      "minute_one": "{{count}} Minute",
+      "minute_other": "{{count}} Minuten",
+      "second_one": "{{count}} Sekunde",
+      "second_other": "{{count}} Sekunden"
+    },
+    "feedback": {
+      "variety": "Verwende mehr unterschiedliche Zeichen.",
+      "common": "Das ist eines der häufigsten Passwörter.",
+      "commonWord": "Vermeide gängige Wörter wie „{{word}}“.",
+      "personal": "Verwende nicht deinen Namen oder den Namen der Website.",
+      "dates": "Jahreszahlen und Daten sind leicht zu erraten.",
+      "patterns": "Vermeide Folgen, Wiederholungen und Tastaturmuster.",
+      "length": "Nimm mindestens 12 Zeichen – die Länge zählt am meisten.",
+      "mix": "Misch Zahlen, Sonderzeichen oder Großbuchstaben dazu."
+    }
+  },
+  "places": {
+    "primary": "Hauptgerät"
+  },
+  "core": {
+    "didNotStart": "Der Godmode-Kern ist nicht gestartet. Sieh dir die Logs in ~/.godmode/logs an."
+  },
+  "api": {
+    "fileGone": "Die Datei existiert nicht mehr"
+  },
+  "qr": {
+    "notAnImage": "Diese Datei konnte nicht als Bild gelesen werden.",
+    "noCanvas": "Canvas ist nicht verfügbar.",
+    "migrationNoData": "Der Migrationscode enthält keine Daten",
+    "migrationUnreadable": "Der Migrationscode konnte nicht gelesen werden",
+    "notTwoFactor": "Kein 2FA-QR-Code"
+  },
+  "voice": {
+    "codeOmitted": "(Code ausgelassen)",
+    "noWebAudio": "Web Audio ist nicht verfügbar",
+    "inputUnsupported": "Spracheingabe wird hier nicht unterstützt.",
+    "micDenied": "Der Zugriff aufs Mikrofon wurde verweigert. Erlaube ihn in deinen Systemeinstellungen.",
+    "noMic": "Kein Mikrofon gefunden.",
+    "recognitionDenied": "Der Zugriff auf Mikrofon oder Spracherkennung wurde verweigert.",
+    "recognitionFailed": "Spracherkennung fehlgeschlagen ({{error}}).",
+    "noAudio": "Der Sprachdienst hat kein Audio geliefert.",
+    "playFailed": "Die Antwort konnte nicht abgespielt werden.",
+    "synthesisUnavailable": "Sprachausgabe ist hier nicht verfügbar.",
+    "readAloudFailed": "Das konnte nicht vorgelesen werden."
+  },
+  "sharedChoice": {
+    "saveError": {
+      "theme": "Das Design konnte nicht gespeichert werden",
+      "palette": "Die Farbpalette konnte nicht gespeichert werden",
+      "language": "Die Sprache konnte nicht gespeichert werden"
+    }
+  }
+}

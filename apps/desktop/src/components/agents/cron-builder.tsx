@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CalendarClock, TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -7,7 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import {
   buildCron,
-  CRON_KIND_LABELS,
+  cronKindLabel,
   formatTime,
   ordinal,
   parseCron,
@@ -19,7 +20,8 @@ import {
   severalStarts,
   severalWindow,
   validateCron,
-  WEEKDAYS,
+  weekdayName,
+  weekdayShort,
   type CronDraft,
   type CronKind,
   type SeveralMode,
@@ -30,11 +32,11 @@ const KINDS: CronKind[] = ["hourly", "several", "daily", "weekdays", "weekly", "
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
 const CUSTOM_EXAMPLES = [
-  { cron: "*/15 * * * *", label: "every 15 min" },
-  { cron: "0 */2 * * *", label: "every 2 hours" },
-  { cron: "0 9,17 * * 1-5", label: "9:00 & 17:00 weekdays" },
-  { cron: "0 8 1,15 * *", label: "1st & 15th" },
-];
+  { cron: "*/15 * * * *", labelKey: "cronBuilder.examples.every15Min" },
+  { cron: "0 */2 * * *", labelKey: "cronBuilder.examples.every2Hours" },
+  { cron: "0 9,17 * * 1-5", labelKey: "cronBuilder.examples.twiceWeekdays" },
+  { cron: "0 8 1,15 * *", labelKey: "cronBuilder.examples.firstAndFifteenth" },
+] as const;
 
 const TOGGLE_ON = "data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset";
 
@@ -47,6 +49,7 @@ const pct = (minutes: number) => `${(Math.min(Math.max(minutes, 0), DAY) / DAY) 
 
 /** 24 h strip: the time range, and where the runs fall in it (random: one part per run, interval: a tick per run). */
 function DayTimeline({ draft }: { draft: CronDraft }) {
+  const { t } = useTranslation("agents");
   const starts = severalStarts(draft);
   if (!starts.length) return null;
   const from = draft.hour * 60 + draft.minute;
@@ -79,11 +82,15 @@ function DayTimeline({ draft }: { draft: CronDraft }) {
       </div>
       <p className="text-xs text-muted-foreground">
         {random
-          ? `One run at a random moment in each of the ${draft.times} blocks — a new moment every day.`
-          : `${starts.length} runs a day: ${starts
-              .slice(0, 8)
-              .map((s) => formatTime(Math.floor(s / 60), s % 60))
-              .join(", ")}${starts.length > 8 ? ` and ${starts.length - 8} more` : ""}`}
+          ? t("cronBuilder.timeline.random", { count: draft.times })
+          : t(starts.length > 8 ? "cronBuilder.timeline.intervalMore" : "cronBuilder.timeline.interval", {
+              count: starts.length,
+              times: starts
+                .slice(0, 8)
+                .map((s) => formatTime(Math.floor(s / 60), s % 60))
+                .join(", "),
+              more: starts.length - 8,
+            })}
       </p>
     </div>
   );
@@ -121,6 +128,7 @@ export function CronBuilder({
   simple?: boolean;
   children?: ReactNode;
 }) {
+  const { t } = useTranslation("agents");
   const [draft, setDraft] = useState<CronDraft>(() => parseCron(value, startWindowMinutes, runsPerWindow));
   const cron = buildCron(draft);
   const invalid = useMemo(() => validateCron(cron), [cron]);
@@ -157,7 +165,7 @@ export function CronBuilder({
       <div className="flex flex-wrap items-start gap-3">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-kind`} className="text-xs text-muted-foreground">
-            Repeat
+            {t("cronBuilder.repeat")}
           </Label>
           <Select value={draft.kind} onValueChange={(v) => update({ kind: v as CronKind })}>
             <SelectTrigger id={`${idPrefix}-kind`} className="w-44">
@@ -166,7 +174,7 @@ export function CronBuilder({
             <SelectContent position="popper">
               {KINDS.filter((k) => !simple || k !== "custom" || draft.kind === "custom").map((k) => (
                 <SelectItem key={k} value={k}>
-                  {simple && k === "custom" ? "Custom schedule" : CRON_KIND_LABELS[k]}
+                  {simple && k === "custom" ? t("cronBuilder.customSchedule") : cronKindLabel(k)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -176,7 +184,7 @@ export function CronBuilder({
         {draft.kind === "hourly" && (
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-minute`} className="text-xs text-muted-foreground">
-              At minute
+              {t("cronBuilder.atMinute")}
             </Label>
             <Input
               id={`${idPrefix}-minute`}
@@ -193,7 +201,7 @@ export function CronBuilder({
         {draft.kind === "several" && onWindowChange && (
           <div className="space-y-1.5">
             <Label id={`${idPrefix}-mode-label`} className="text-xs text-muted-foreground">
-              Timing
+              {t("cronBuilder.timing")}
             </Label>
             <ToggleGroup
               type="single"
@@ -205,10 +213,10 @@ export function CronBuilder({
               className="h-9"
             >
               <ToggleGroupItem value="random" className={cn("h-9 px-3", TOGGLE_ON)}>
-                Random times
+                {t("cronBuilder.randomTimes")}
               </ToggleGroupItem>
               <ToggleGroupItem value="interval" className={cn("h-9 px-3", TOGGLE_ON)}>
-                Fixed interval
+                {t("cronBuilder.fixedInterval")}
               </ToggleGroupItem>
             </ToggleGroup>
           </div>
@@ -217,7 +225,7 @@ export function CronBuilder({
         {draft.kind === "monthly" && (
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-dom`} className="text-xs text-muted-foreground">
-              On day
+              {t("cronBuilder.onDay")}
             </Label>
             <Select value={String(draft.monthDay)} onValueChange={(v) => update({ monthDay: Number(v) })}>
               <SelectTrigger id={`${idPrefix}-dom`} className="w-28">
@@ -237,7 +245,7 @@ export function CronBuilder({
         {(draft.kind === "daily" || draft.kind === "weekdays" || draft.kind === "weekly" || draft.kind === "monthly") && (
           <div className="space-y-1.5">
             <Label htmlFor={`${idPrefix}-time`} className="text-xs text-muted-foreground">
-              At
+              {t("cronBuilder.at")}
             </Label>
             <Input id={`${idPrefix}-time`} type="time" value={time} onChange={(e) => onTime(e.target.value)} className="w-32" />
           </div>
@@ -250,7 +258,7 @@ export function CronBuilder({
             {randomRuns ? (
               <div className="space-y-1.5">
                 <Label htmlFor={`${idPrefix}-times`} className="text-xs text-muted-foreground">
-                  Runs per day
+                  {t("cronBuilder.runsPerDay")}
                 </Label>
                 <Select value={String(draft.times)} onValueChange={(v) => v && update({ times: Number(v) })}>
                   <SelectTrigger id={`${idPrefix}-times`} className="w-28 tabular-nums">
@@ -259,7 +267,7 @@ export function CronBuilder({
                   <SelectContent position="popper">
                     {[...new Set([...SEVERAL_TIMES, draft.times])].sort((a, b) => a - b).map((n) => (
                       <SelectItem key={n} value={String(n)}>
-                        {n} times
+                        {t("cronBuilder.times", { count: n })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -268,7 +276,7 @@ export function CronBuilder({
             ) : (
               <div className="space-y-1.5">
                 <Label htmlFor={`${idPrefix}-every`} className="text-xs text-muted-foreground">
-                  Every
+                  {t("cronBuilder.every")}
                 </Label>
                 <Select value={String(draft.every)} onValueChange={(v) => v && update({ every: Number(v) })}>
                   <SelectTrigger id={`${idPrefix}-every`} className="w-28 tabular-nums">
@@ -277,7 +285,7 @@ export function CronBuilder({
                   <SelectContent position="popper">
                     {[...new Set([...SEVERAL_EVERY, draft.every])].sort((a, b) => a - b).map((n) => (
                       <SelectItem key={n} value={String(n)}>
-                        {n === 1 ? "1 hour" : `${n} hours`}
+                        {t("cronBuilder.hours", { count: n })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -286,13 +294,13 @@ export function CronBuilder({
             )}
             <div className="space-y-1.5">
               <Label htmlFor={`${idPrefix}-from`} className="text-xs text-muted-foreground">
-                {randomRuns ? "Between" : "From"}
+                {randomRuns ? t("cronBuilder.between") : t("cronBuilder.from")}
               </Label>
               <Input id={`${idPrefix}-from`} type="time" value={time} onChange={(e) => onTime(e.target.value)} className="w-32" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor={`${idPrefix}-until`} className="text-xs text-muted-foreground">
-                {randomRuns ? "and" : "Until"}
+                {randomRuns ? t("cronBuilder.and") : t("cronBuilder.until")}
               </Label>
               <Input
                 id={`${idPrefix}-until`}
@@ -306,7 +314,7 @@ export function CronBuilder({
 
           <div className="space-y-1.5">
             <Label id={`${idPrefix}-days-label`} className="text-xs text-muted-foreground">
-              On
+              {t("cronBuilder.on")}
             </Label>
             <ToggleGroup
               type="multiple"
@@ -318,8 +326,8 @@ export function CronBuilder({
               className="flex-wrap"
             >
               {WEEK_ORDER.map((d) => (
-                <ToggleGroupItem key={d} value={String(d)} aria-label={WEEKDAYS[d]} className={cn("px-2.5", TOGGLE_ON)}>
-                  {WEEKDAYS[d].slice(0, 3)}
+                <ToggleGroupItem key={d} value={String(d)} aria-label={weekdayName(d)} className={cn("px-2.5", TOGGLE_ON)}>
+                  {weekdayShort(d)}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -331,19 +339,19 @@ export function CronBuilder({
 
       {draft.kind === "weekly" && (
         <div className="space-y-1.5">
-          <span className="text-xs text-muted-foreground">On</span>
+          <span className="text-xs text-muted-foreground">{t("cronBuilder.on")}</span>
           <ToggleGroup
             type="single"
             variant="outline"
             size="sm"
             value={String(draft.weekday)}
             onValueChange={(v) => v && update({ weekday: Number(v) })}
-            aria-label="Day of week"
+            aria-label={t("cronBuilder.dayOfWeek")}
             className="flex-wrap"
           >
             {WEEK_ORDER.map((d) => (
-              <ToggleGroupItem key={d} value={String(d)} aria-label={WEEKDAYS[d]} className="px-2.5 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                {WEEKDAYS[d].slice(0, 3)}
+              <ToggleGroupItem key={d} value={String(d)} aria-label={weekdayName(d)} className="px-2.5 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
+                {weekdayShort(d)}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
@@ -353,7 +361,7 @@ export function CronBuilder({
       {draft.kind === "custom" && !simple && (
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-custom`} className="text-xs text-muted-foreground">
-            Cron expression <span className="font-normal">(minute hour day month weekday)</span>
+            {t("cronBuilder.cronExpression")} <span className="font-normal">{t("cronBuilder.cronFields")}</span>
           </Label>
           <Input
             id={`${idPrefix}-custom`}
@@ -372,7 +380,7 @@ export function CronBuilder({
                 onClick={() => update({ custom: ex.cron })}
                 className="rounded-[5px] border bg-card px-2 py-0.5 text-[11px] text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <span className="font-mono">{ex.cron}</span> · {ex.label}
+                <span className="font-mono">{ex.cron}</span> · {t(ex.labelKey)}
               </button>
             ))}
           </div>

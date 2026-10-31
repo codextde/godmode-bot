@@ -1,8 +1,10 @@
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Globe, Globe2 } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLocale } from "@/i18n/language";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
@@ -21,6 +23,7 @@ export function WorkspaceProfileField({
   value: string | null;
   onChange: (profileId: string | null) => void;
 }) {
+  const { t } = useTranslation("browser");
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, retry: false });
   if (!profiles) return null;
 
@@ -33,9 +36,9 @@ export function WorkspaceProfileField({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={id}>Browser profile</Label>
+        <Label htmlFor={id}>{t("workspaceField.label")}</Label>
         <Link to="/browser" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          Manage profiles <ArrowRight className="size-3" />
+          {t("workspaceField.manage")} <ArrowRight className="size-3" />
         </Link>
       </div>
       <Select value={value ?? GLOBAL_DEFAULT} onValueChange={(v) => onChange(v === GLOBAL_DEFAULT ? null : v)}>
@@ -45,14 +48,14 @@ export function WorkspaceProfileField({
         <SelectContent position="popper">
           <SelectItem value={GLOBAL_DEFAULT}>
             <Globe2 className="size-4" />
-            Global default
+            {t("workspaceField.globalDefault")}
             {globalDefault && <span className="text-xs text-muted-foreground">{globalDefault.name}</span>}
           </SelectItem>
           {own.length > 0 && (
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel>This workspace</SelectLabel>
+                <SelectLabel>{t("workspaceField.thisWorkspace")}</SelectLabel>
                 {own.map((p) => (
                   <ProfileItem key={p.id} id={p.id} name={p.name} cookies={p.cookieCount} />
                 ))}
@@ -63,7 +66,7 @@ export function WorkspaceProfileField({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel>Global — moves into this workspace</SelectLabel>
+                <SelectLabel>{t("workspaceField.movable")}</SelectLabel>
                 {movable.map((p) => (
                   <ProfileItem key={p.id} id={p.id} name={p.name} cookies={p.cookieCount} />
                 ))}
@@ -74,19 +77,21 @@ export function WorkspaceProfileField({
       </Select>
       <p className="text-xs text-muted-foreground">
         {moving
-          ? `${selected.name} moves into this workspace. Agents elsewhere that picked it keep using it.`
-          : "The workspace's agents browse with this profile, unless an agent picks its own."}
+          ? t("workspaceField.moving", { name: selected.name })
+          : t("workspaceField.hint")}
       </p>
     </div>
   );
 }
 
 function ProfileItem({ id, name, cookies }: { id: string; name: string; cookies: number }) {
+  const { t } = useTranslation("browser");
+  const { intlLocale } = useLocale();
   return (
     <SelectItem value={id}>
       <Globe className="size-4" />
       {name}
-      {cookies > 0 && <span className="text-xs text-muted-foreground">{cookies.toLocaleString()} cookies</span>}
+      {cookies > 0 && <span className="text-xs text-muted-foreground">{t("cookies", { count: cookies, n: cookies.toLocaleString(intlLocale) })}</span>}
     </SelectItem>
   );
 }

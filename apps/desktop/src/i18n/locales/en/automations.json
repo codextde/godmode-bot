@@ -1,1 +1,235 @@
-{}
+{
+  "trigger": {
+    "schedule": {
+      "label": "Schedule",
+      "plural": "Schedule",
+      "title": "On a schedule",
+      "hint": "Every morning, each Monday, on the 1st…",
+      "runLabel": "Run now",
+      "promptPlaceholder": "Collect last week's numbers from Stripe and Google Analytics, write a short report and send it to me."
+    },
+    "app": {
+      "label": "App event",
+      "plural": "App events",
+      "title": "When something happens in an app",
+      "hint": "A new email, Slack message, calendar event…",
+      "runLabel": "Send test event",
+      "promptPlaceholder": "Save the invoice PDF to Drive and log sender, amount and due date in my Invoices sheet. The event details are passed along."
+    },
+    "condition": {
+      "label": "Condition",
+      "plural": "Conditions",
+      "title": "When a condition is met",
+      "hint": "Checked regularly, in plain language",
+      "runLabel": "Check now",
+      "promptPlaceholder": "Compare their new plans with ours and update the pricing battlecard in Notion. What the check found is passed along."
+    },
+    "webhook": {
+      "label": "Webhook",
+      "plural": "Webhooks",
+      "title": "When a webhook is called",
+      "hint": "Any service that can send an HTTP POST",
+      "runLabel": "Send test event",
+      "promptPlaceholder": "Check whether the order qualifies for a recovery offer and draft a friendly email. The request body is passed along."
+    },
+    "easy": {
+      "schedule": {
+        "title": "On a schedule",
+        "hint": "Every morning, each Monday, on the 1st…"
+      },
+      "app": {
+        "title": "When something happens in an app",
+        "hint": "A new email, Slack message, calendar event…"
+      },
+      "condition": {
+        "title": "When a condition is true",
+        "hint": "Checked regularly, described in your own words"
+      },
+      "webhook": {
+        "title": "When another tool calls a link",
+        "hint": "A shop, a form or Zapier opens a secret link"
+      }
+    },
+    "conditionText": "When {{condition}} · checked {{schedule}}",
+    "when": "When {{condition}}",
+    "checked": "checked {{schedule}}",
+    "webhookRuns": "runs when its URL is called",
+    "pickerLabel": "What starts this automation"
+  },
+  "eventSource": {
+    "schedule": "Schedule",
+    "app": "App event",
+    "webhook": "Webhook",
+    "condition": "Condition met",
+    "manual": "Manual"
+  },
+  "eventStatus": {
+    "pending": "Waiting",
+    "running": "Running",
+    "done": "Done",
+    "failed": "Failed",
+    "skipped": "Skipped"
+  },
+  "followups": {
+    "title": "Follow-ups",
+    "subtitle": "Chats your agents will pick up again on their own",
+    "continueNamed": "Continue “{{title}}” now",
+    "working": "Working in this chat right now",
+    "continueNow": "Continue now",
+    "changeWhen": "Change when “{{title}}” continues",
+    "cancelNamed": "Cancel the follow-up of “{{title}}”"
+  },
+  "testEvent": {
+    "invalidJson": "That looks like JSON but doesn't parse. Fix it, or send plain text.",
+    "descriptionApp": "Runs “{{name}}” as if {{app}} sent this. The filter is checked just as for a real event.",
+    "descriptionWebhook": "Runs “{{name}}” as if its URL was called with this. The filter is checked just as for a real event.",
+    "sent": "Test event sent",
+    "viewEvents": "View events",
+    "sendFailed": "Couldn't send the test event",
+    "title": "Send a test event",
+    "dataLabel": "Event data",
+    "hint": "JSON or plain text. Leave it empty to send a small example.",
+    "toSend": "to send",
+    "submit": "Send test event"
+  },
+  "webhook": {
+    "rotated": "New webhook URL issued",
+    "rotatedDescription": "The old URL no longer works — update the services that call it.",
+    "rotateFailed": "Couldn't rotate the webhook URL",
+    "rotateTitle": "Rotate the URL of “{{name}}”?",
+    "rotateDescription": "Godmode issues a new secret URL. Anything still calling the old one gets an error until you update it.",
+    "rotate": "Rotate URL",
+    "locked": "Unlock the vault to see the URL.",
+    "lockedHint": "The secret part is stored encrypted.",
+    "secretPathLabel": "Secret path — POST anything (JSON or text, up to 256 KB)",
+    "secretUrlLabel": "Secret URL — POST anything (JSON or text, up to 256 KB)",
+    "copyUrl": "Copy webhook URL",
+    "remoteHint": "Webhooks are received by the computer itself; copy the full address in Godmode on that computer.",
+    "tryIt": "Try it",
+    "copyCurl": "Copy curl command",
+    "localOnly": "This address only works on this computer. To receive calls from other services, reach Godmode through a tunnel or reverse proxy and use the same path.",
+    "warning": "Anyone with this URL can start the automation. Rotate it if it leaks."
+  },
+  "events": {
+    "openConversation": "Open conversation",
+    "viewRun": "View run",
+    "triggerError": "The trigger isn't working.",
+    "triggerPending": "Setting up the trigger…",
+    "lastCheck": "Last check",
+    "nothingNoted": "Nothing noted yet.",
+    "recent": "Recent events",
+    "loadFailed": "Couldn't load events",
+    "showingLatest_one": "Showing the latest event.",
+    "showingLatest_other": "Showing the latest {{count}} events.",
+    "copyData": "Copy event data",
+    "empty": {
+      "scheduleTitle": "No runs yet",
+      "scheduleNext": "The first run is {{when}}.",
+      "scheduleBody": "Runs show up here when the schedule fires.",
+      "appTitle": "Waiting for the first event",
+      "appBody": "Godmode is listening for “{{trigger}}” in {{app}}.",
+      "conditionTitle": "Not met yet",
+      "conditionNext": "The next check is {{when}}.",
+      "conditionBody": "Once a check finds the condition true, it shows up here.",
+      "webhookTitle": "No calls yet",
+      "webhookBody": "Call the webhook URL — or send a test event — and it shows up here."
+    }
+  },
+  "onePrompt": {
+    "unreachable": "Couldn't reach Godmode",
+    "title": "Describe what to automate",
+    "setsItUp": "— Godmode sets it up",
+    "heading": "When it happens, Godmode gets to work.",
+    "body": "One sentence is enough — Godmode picks the trigger, the agent and the steps, and asks if anything is unclear.",
+    "placeholder": "When a new email with an invoice arrives, save the PDF to Drive and log it in my sheet",
+    "submit": "Set it up",
+    "examplesLabel": "Examples",
+    "examples": {
+      "weeklyReport": "Every Monday at 9:00, collect last week's numbers and write a report",
+      "inbox": "Every weekday, start sometime between 8:00 and 9:30 and work through my inbox",
+      "customerEmail": "When I get an email from a customer, draft a reply",
+      "meetingBrief": "When a meeting is about to start, brief me on the attendees",
+      "slackSupport": "When someone posts in #support on Slack, draft an answer",
+      "competitorPricing": "When competitor pricing changes, compare it with ours and update the battlecard"
+    }
+  },
+  "schemaForm": {
+    "example": "e.g. {{example}}",
+    "required": "Required",
+    "invalidJson": "Enter valid JSON",
+    "wholeNumber": "Enter a whole number",
+    "number": "Enter a number",
+    "notSet": "Not set"
+  },
+  "appTrigger": {
+    "pickAccount": "Pick a connected account",
+    "pickEvent": "Pick the event to react to",
+    "loadingSettings": "Loading the event's settings…",
+    "settingsFailed": "Couldn't load the event's settings",
+    "settingsFailedHint": "{{problem}} — check Composio, then try again.",
+    "composioFailed": "Couldn't reach Composio settings",
+    "connectFirstTitle": "Connect your apps first",
+    "connectFirstDescription": "App events come from Composio. Add your Composio API key and connect Gmail, Slack, Calendar or any other app — then pick what should start this automation.",
+    "setUpComposio": "Set up Composio",
+    "accountsFailed": "Couldn't load connected accounts",
+    "chooseAgentFirst": "Choose the agent first — it can only watch accounts it has access to.",
+    "noUsableTitle": "No account {{name}} can use",
+    "noUsableDescription": "The connected accounts belong to other agents or workspaces. Connect one for {{name}}, its workspace or globally, then pick the event that starts this automation.",
+    "connectApp": "Connect an app",
+    "noAppsTitle": "No connected apps yet",
+    "noAppsDescription": "Connect an app like Gmail, Slack or Google Calendar on the Integrations page, then come back to pick the event that starts this automation.",
+    "account": "Account",
+    "connectAnother": "Connect another app",
+    "accountPlaceholder": "Choose which account to watch",
+    "scope": {
+      "oneAgent": "One agent",
+      "workspace": "Workspace",
+      "global": "Global"
+    },
+    "instant": "Instant",
+    "everyFewMin": "Every few min",
+    "event": "Event",
+    "keep": "Keep {{name}}",
+    "currentEvent": "current event",
+    "changeEvent": "Change the event",
+    "change": "Change",
+    "pollHint": "Composio checks {{app}} for this every few minutes, so new events can take a few minutes to arrive.",
+    "needsSetup": "Needs a one-time setup in {{app}} before events arrive.",
+    "eventsFailed": "Couldn't load {{app}} events",
+    "noEvents": "{{app}} doesn't offer any events to react to. Try a condition instead — the agent checks it regularly.",
+    "searchPlaceholder": "Search {{app}} events…",
+    "searchLabel": "Search {{app}} events",
+    "noMatch": "No {{app}} events match “{{query}}”."
+  },
+  "page": {
+    "title": "Automations",
+    "description": "Your agents get to work on a schedule, when something happens in your apps, when a condition is met, or when a webhook is called.",
+    "new": "New automation",
+    "filter": {
+      "active": "Active",
+      "paused": "Paused",
+      "failing": "Failing"
+    },
+    "pausedCount_one": "{{count}} paused",
+    "pausedCount_other": "{{count}} paused",
+    "nonePaused": "None paused",
+    "nextUp": "Next up",
+    "nothingScheduled": "Nothing scheduled",
+    "lastEvent": "Last event",
+    "noEvents": "No events yet",
+    "failingHint": "A run or trigger failed — have a look",
+    "noFailures": "No failures",
+    "searchPlaceholder": "Search automations…",
+    "searchLabel": "Search automations",
+    "filterByStatus": "Filter by status",
+    "filterByAgent": "Filter by agent",
+    "allAgents": "All agents",
+    "filterByTrigger": "Filter by trigger",
+    "allTriggers": "All triggers",
+    "loadFailed": "Couldn't load automations",
+    "emptyTitle": "No automations yet",
+    "emptyDescription": "Describe one above, or set it up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing.",
+    "noMatch": "No automations match",
+    "clearFilters": "Clear filters"
+  }
+}

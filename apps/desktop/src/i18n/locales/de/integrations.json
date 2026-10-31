@@ -1,1 +1,434 @@
-{}
+{
+  "queryError": {
+    "title": "Konnte nicht geladen werden",
+    "lockedTitle": "Der Tresor ist gesperrt",
+    "lockedDescription": "Entsperre den Tresor, um Integrationen zu verwalten."
+  },
+  "explainer": {
+    "title": "Reagiere, sobald etwas ankommt",
+    "description": "Optional. Verbinde ein Konto, wenn eine Automation bei einer neuen E-Mail oder Slack-Nachricht starten oder ein Agent die API der App direkt aufrufen soll.",
+    "apps": {
+      "title": "Hunderte Apps",
+      "body": "Gmail, Slack, GitHub, Notion, CRMs, Kalender – jede wird zu einer Reihe von Tools, die deine Agenten aufrufen können."
+    },
+    "oauth": {
+      "title": "Anmelden per OAuth",
+      "body": "Du meldest dich auf der Seite der App an. Tokens liegen bei Composio; Godmode speichert nur deinen API-Schlüssel, verschlüsselt."
+    },
+    "scoped": {
+      "title": "Konten mit Geltungsbereich",
+      "body": "Verbinde ein Konto für alle, einen Workspace oder einen einzelnen Agenten – z. B. berufliches und privates Gmail."
+    }
+  },
+  "composio": {
+    "statusError": "Composio-Einstellungen nicht erreichbar",
+    "connectionsError": "Verbundene Konten konnten nicht geladen werden"
+  },
+  "tabs": {
+    "tools": "Tools",
+    "mcp": "MCP-Server"
+  },
+  "noConnectors": {
+    "title": "Deine Apps brauchen keinen Connector",
+    "description": "Godmode meldet sich auf Websites so an wie du: mit Benutzername, Passwort und 2FA-Code aus deinem Tresor. Es tippt sie selbst in die Login-Seite, die KI sieht sie also nie. Dein CRM, ein Lieferantenportal, dein Shop-Backend: Die meisten Seiten, die sich im Browser öffnen, funktionieren sofort, ganz ohne MCP-Connector.",
+    "hint": "Verbinde hier nur dann eine App, wenn eine Automation sofort starten soll, sobald etwas ankommt, etwa eine neue E-Mail, oder für eine API ohne Website.",
+    "saveLogin": "Login speichern",
+    "gotIt": "Verstanden",
+    "steps": {
+      "open": "Öffnet die Seite",
+      "fill": "Füllt deinen Login aus",
+      "twoFactor": "Gibt den 2FA-Code ein",
+      "signedIn": "Als du angemeldet"
+    }
+  },
+  "mcpTest": {
+    "title": "{{name}} testen",
+    "description": "Godmode startet den Server, listet seine Tools auf und fährt ihn wieder herunter.",
+    "connectingLabel": "Verbinden",
+    "connecting": "Wird verbunden…",
+    "failed": "Der Server hat nicht richtig geantwortet",
+    "unknownError": "Unbekannter Fehler",
+    "failedHint": "Prüf Befehl, Argumente, URL sowie benötigte Umgebungsvariablen oder Header.",
+    "connected_one": "Verbunden · {{count}} Tool",
+    "connected_other": "Verbunden · {{count}} Tools",
+    "noTools": "Der Server ist gestartet, hat aber keine Tools gemeldet.",
+    "runAgain": "Erneut ausführen"
+  },
+  "scope": {
+    "label": "Geltungsbereich",
+    "global": "Global",
+    "globalHint": "Jeder Agent, jeder Workspace",
+    "workspace": "Workspace",
+    "workspaceHint": "Agenten in einem Workspace",
+    "noWorkspaces": "Noch keine Workspaces",
+    "agent": "Ein Agent",
+    "agentHint": "Nur ein bestimmter Agent",
+    "noAgents": "Noch keine Agenten",
+    "chooseWorkspace": "Workspace auswählen",
+    "agentLabel": "Agent",
+    "chooseAgent": "Agent auswählen"
+  },
+  "transports": {
+    "stdio": {
+      "label": "Lokaler Befehl",
+      "hint": "Startet ein Programm auf diesem Rechner (npx, uvx, docker…)"
+    },
+    "http": {
+      "label": "HTTP",
+      "hint": "Streamable-HTTP-Endpunkt"
+    },
+    "sse": {
+      "label": "SSE",
+      "hint": "Älterer Server-Sent-Events-Endpunkt"
+    }
+  },
+  "presets": {
+    "filesystem": {
+      "description": "Dateien in freigegebenen Ordnern lesen und schreiben",
+      "note": "Ersetze das letzte Argument durch den absoluten Pfad der Ordner, auf die Agenten zugreifen dürfen."
+    },
+    "github": {
+      "description": "Offizieller Remote-MCP-Server von GitHub",
+      "note": "Setz den Authorization-Header auf „Bearer <persönliches Zugriffstoken>“."
+    },
+    "playwright": {
+      "description": "Browser-Automatisierung mit Microsoft Playwright"
+    },
+    "fetch": {
+      "description": "Webseiten abrufen und in Markdown umwandeln"
+    },
+    "context7": {
+      "description": "Aktuelle Bibliotheksdokus für Coding-Agenten"
+    }
+  },
+  "keyValue": {
+    "envNeedsName": "Jede Umgebungsvariable braucht einen Namen.",
+    "headerNeedsName": "Jeder Header braucht einen Namen.",
+    "envInvalid": "„{{key}}“ ist kein gültiger Name für eine Umgebungsvariable.",
+    "headerInvalid": "„{{key}}“ ist kein gültiger Header-Name.",
+    "duplicate": "„{{key}}“ steht doppelt in der Liste.",
+    "nameAria": "{{label}} Name {{n}}",
+    "valueAria": "{{label}} Wert {{n}}",
+    "storedEncrypted": "verschlüsselt gespeichert",
+    "newValue": "Neuer Wert",
+    "value": "Wert",
+    "keepStored": "Gespeicherten Wert behalten",
+    "replaceAria": "{{key}} ersetzen",
+    "replaceValue": "Wert ersetzen",
+    "removeAria": "{{key}} entfernen",
+    "removeRow": "Zeile entfernen",
+    "remove": "Entfernen"
+  },
+  "composioKey": {
+    "removed": "Composio-Schlüssel entfernt",
+    "rejected": "Composio hat diesen Schlüssel abgelehnt",
+    "rejectedHint": "Prüf ihn noch einmal in deinem Composio-Dashboard.",
+    "connected": "Composio verbunden",
+    "connectedHint": "Stöbere unten in den Apps und verbinde deine Konten.",
+    "saveFailed": "Composio-Schlüssel konnte nicht gespeichert werden",
+    "valid": "Schlüssel ist gültig",
+    "checkFailed": "Schlüssel konnte nicht geprüft werden",
+    "label": "Composio-API-Schlüssel",
+    "connectTitle": "Verbinde dein Composio-Konto",
+    "invalidTitle": "Composio-Schlüssel funktioniert nicht",
+    "connectedTitle": "Composio ist verbunden",
+    "pasteHint": "Füg einen API-Schlüssel aus deinem Composio-Dashboard ein (Settings → API keys). Er wird verschlüsselt in deinem Tresor gespeichert.",
+    "rejectedReplace": "Der Schlüssel wurde abgelehnt. Ersetze ihn durch einen gültigen.",
+    "pending": "Schlüssel gespeichert – Prüfung läuft.",
+    "stored": "API-Schlüssel verschlüsselt im Tresor gespeichert · wird nie wieder angezeigt",
+    "recheckAria": "Composio-Schlüssel erneut prüfen",
+    "recheck": "Erneut prüfen",
+    "replace": "Ersetzen",
+    "removeAria": "Composio-Schlüssel entfernen",
+    "checking": "Wird geprüft…",
+    "save": "Schlüssel speichern",
+    "getKey": "Kostenlosen Schlüssel auf app.composio.dev holen",
+    "removeTitle": "Composio-Schlüssel entfernen?",
+    "removeDescription": "Agenten verlieren den Zugriff auf alle Composio-Apps, bis du wieder einen Schlüssel hinzufügst. Deine verbundenen Konten bleiben bei Composio.",
+    "removeConfirm": "Schlüssel entfernen"
+  },
+  "mcpDialog": {
+    "errors": {
+      "nameMissing": "Gib dem Server einen Namen.",
+      "nameInvalid": "Nutze Buchstaben, Ziffern, „-“, „_“ oder „.“ (keine Leerzeichen).",
+      "commandMissing": "Welches Programm soll Godmode starten?",
+      "urlProtocol": "Nutze eine http(s)-URL.",
+      "urlInvalid": "Gib eine vollständige URL ein, z. B. https://example.com/mcp"
+    },
+    "saved": "{{name}} gespeichert",
+    "added": "{{name}} hinzugefügt",
+    "savedEnabled": "Agenten im Geltungsbereich bekommen seine Tools beim nächsten Lauf.",
+    "savedDisabled": "Er ist deaktiviert – leg den Schalter um, um ihn zu nutzen.",
+    "saveFailed": "MCP-Server konnte nicht gespeichert werden",
+    "editTitle": "{{name}} bearbeiten",
+    "addNamed": "{{name}} hinzufügen",
+    "addTitle": "MCP-Server hinzufügen",
+    "description": "MCP-Server geben Agenten zusätzliche Tools. Sie starten mit jedem Agentenlauf, für den dieser Server gilt.",
+    "namePlaceholder": "z. B. linear",
+    "toolsAppearAs": "Tools erscheinen als {{prefix}}",
+    "descriptionPlaceholder": "Wofür er da ist (optional)",
+    "transport": "Transport",
+    "command": "Befehl",
+    "arguments": "Argumente",
+    "argumentsHint": "Trenne mit Leerzeichen oder Zeilenumbrüchen; setz Argumente mit Leerzeichen in Anführungszeichen.",
+    "argumentCount_one": "{{count}} Argument.",
+    "argumentCount_other": "{{count}} Argumente.",
+    "envVars": "Umgebungsvariablen",
+    "envVar": "Umgebungsvariable",
+    "addVariable": "Variable hinzufügen",
+    "headers": "Header",
+    "header": "Header",
+    "headerValuePlaceholder": "z. B. Bearer <token>",
+    "addHeader": "Header hinzufügen",
+    "secretsHint": "Geheime Werte werden verschlüsselt im Tresor gespeichert und nie wieder angezeigt – du kannst sie nur ersetzen.",
+    "availableTo": "Verfügbar für",
+    "enabled": "Aktiviert",
+    "enabledHint": "Deaktivierte Server bleiben erhalten, werden aber nicht für Agenten gestartet.",
+    "saveAndTest": "Speichern & testen",
+    "saveChanges": "Änderungen speichern",
+    "addServer": "Server hinzufügen"
+  },
+  "mcp": {
+    "updateFailed": "Server konnte nicht aktualisiert werden",
+    "enabledToast": "{{name}} aktiviert",
+    "disabledToast": "{{name}} deaktiviert",
+    "deleteFailed": "Server konnte nicht gelöscht werden",
+    "removed": "Server entfernt",
+    "description": "Jeder Model-Context-Protocol-Server – lokale Befehle oder Remote-Endpunkte. Gib sie global, für einen Workspace oder für einen Agenten frei.",
+    "quickAdd": "Schnell hinzufügen",
+    "popular": "Beliebte Server",
+    "customServer": "Eigener Server…",
+    "loadError": "MCP-Server konnten nicht geladen werden",
+    "emptyTitle": "Noch keine MCP-Server",
+    "emptyDescription": "Füg einen Server hinzu, um Agenten neue Fähigkeiten zu geben – eine Datenbank, dein Dateisystem, eine interne API. Starte mit einem davon:",
+    "managedByComposio": "Von Composio verwaltet",
+    "removeTitle": "{{name}} entfernen?",
+    "removeServerTitle": "Server entfernen?",
+    "removeDescription": "Agenten verlieren diese Tools ab ihrem nächsten Lauf. Gespeicherte Umgebungsvariablen und Header werden aus dem Tresor gelöscht.",
+    "envCount": "{{n}} Env",
+    "headerCount_one": "{{count}} Header",
+    "headerCount_other": "{{count}} Header",
+    "disableAria": "{{name}} deaktivieren",
+    "enableAria": "{{name}} aktivieren",
+    "disabled": "Deaktiviert",
+    "test": "Testen",
+    "moreActionsAria": "Weitere Aktionen für {{name}}"
+  },
+  "connections": {
+    "status": {
+      "active": "Aktiv",
+      "pending": "Wartet auf Anmeldung",
+      "deleted": "Beim Anbieter gelöscht"
+    },
+    "globalGroup": "Global – jeder Agent",
+    "disconnectFailed": "Verbindung konnte nicht getrennt werden",
+    "disconnected": "Getrennt",
+    "isActive": "Verbindung ist aktiv",
+    "statusToast": "Status: {{status}}",
+    "refreshFailed": "Verbindung konnte nicht aktualisiert werden",
+    "title": "Verbundene Konten",
+    "connectedAgo": "Verbunden {{ago}}",
+    "accountInfo": "Composio-Nutzer <code>{{user}}</code> · Konto <code>{{account}}</code>",
+    "refreshAria": "Status von {{name}} aktualisieren",
+    "checkStatus": "Status prüfen",
+    "disconnectAria": "{{name}} trennen",
+    "disconnect": "Trennen",
+    "disconnectTitle": "{{name}} trennen?",
+    "disconnectDescription": "Agenten in diesem Geltungsbereich verlieren sofort den Zugriff auf dieses Konto. Du kannst es jederzeit neu verbinden."
+  },
+  "connect": {
+    "connectedToast": "{{name}} verbunden",
+    "appConnectedToast": "App verbunden",
+    "connectedToastHint": "Deine Agenten können sie sofort nutzen.",
+    "notCompleted": "Die Verbindung wurde nicht abgeschlossen.",
+    "reportedAs": "Composio meldet die Verbindung als {{status}}.",
+    "vaultLocked": "Der Tresor wurde gesperrt.",
+    "timedOut": "Zeitüberschreitung beim Warten auf die Anmeldung. Du kannst es erneut versuchen.",
+    "title": "{{name}} verbinden",
+    "defaultDescription": "Gib deinen Agenten über Composio Zugriff.",
+    "whoCanUse": "Wer darf dieses Konto nutzen?",
+    "noAuth": "Diese App braucht keine Anmeldung – sie ist sofort aktiv.",
+    "signInHint": "Du meldest dich auf der Seite von {{name}} in deinem Browser an. Godmode sieht dieses Passwort nie; Composio speichert das erhaltene Token.",
+    "signInHintApp": "Du meldest dich auf der Seite der App in deinem Browser an. Godmode sieht dieses Passwort nie; Composio speichert das erhaltene Token.",
+    "waiting": "Warte, bis du im Browser fertig bist…",
+    "waitingHint": "Melde dich bei {{name}} an und erlaube den Zugriff. Dieses Fenster aktualisiert sich automatisch, sobald Composio die Verbindung bestätigt.",
+    "reopen": "Browser nicht geöffnet? Anmeldeseite erneut öffnen",
+    "isConnected": "{{name}} ist verbunden",
+    "failed": "{{name}} konnte nicht verbunden werden",
+    "starting": "Wird gestartet…",
+    "continueTo": "Weiter zu {{name}}",
+    "continueToSignIn": "Weiter zur Anmeldung",
+    "availableTo": "Verfügbar für <b>{{who}}</b> ab dem nächsten Lauf.",
+    "scopeTheAgent": "den Agenten",
+    "scopeWorkspace": "Agenten in {{name}}",
+    "scopeTheWorkspace": "Agenten im Workspace",
+    "scopeEveryAgent": "jeden Agenten"
+  },
+  "gallery": {
+    "label": "App-Galerie",
+    "title": "App hinzufügen",
+    "description": "Verbinde ein Konto und deine Agenten bekommen seine Aktionen als Tools.",
+    "searchPlaceholder": "Apps suchen…",
+    "searchAria": "Apps suchen",
+    "clearSearch": "Suche löschen",
+    "categories": "Kategorien",
+    "loadError": "Composio-Apps konnten nicht geladen werden",
+    "noMatch": "Keine Apps passen zu „{{search}}“",
+    "noneInCategory": "Keine Apps in dieser Kategorie",
+    "tryAnother": "Probier eine andere Suche oder Kategorie.",
+    "resetFilters": "Filter zurücksetzen",
+    "loadingMore": "Lädt weitere…",
+    "loadMore": "Weitere Apps laden",
+    "everything": "Das ist alles – {{n}} Apps.",
+    "accounts": "{{n}} Konten",
+    "connected": "Verbunden",
+    "noDescription": "Keine Beschreibung.",
+    "noSignIn": "Ohne Anmeldung",
+    "addAccount": "Konto hinzufügen",
+    "connect": "Verbinden"
+  },
+  "toolPresets": {
+    "gemini": {
+      "tagline": "Bilder mit Google Gemini",
+      "description": "Bilder erstellen und bearbeiten mit Nano Banana (Googles Gemini-Bildmodelle): Illustrationen, Produktfotos, Fotobearbeitung, Bilder mit Text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, Sprache",
+      "description": "Bilder mit GPT Image (erstellen und bearbeiten), dazu OpenAIs GPT-Modelle für Text und Bildverständnis, Sprachausgabe und Transkription."
+    },
+    "elevenlabs": {
+      "tagline": "Stimmen und Soundeffekte",
+      "description": "Natürlich klingende Sprache in vielen Stimmen und Sprachen, Soundeffekte aus einer Beschreibung und Spracherkennung."
+    },
+    "replicate": {
+      "tagline": "Tausende offene Modelle",
+      "description": "Offene Modelle für Bilder (FLUX), Video, Audio, Hochskalieren und Hintergrundentfernung."
+    },
+    "perplexity": {
+      "tagline": "Websuche mit Quellen",
+      "description": "Aktuelle Antworten aus dem Web mit Quellenangaben – Recherche, News, Faktenchecks."
+    }
+  },
+  "apiKeys": {
+    "keyLabel": "{{name}}-API-Schlüssel",
+    "descriptions": {
+      "anthropic": "Optional – sonst wird dein Claude-Code-Login genutzt. Setz ihn, um Läufe über ein API-Konto abzurechnen.",
+      "zai": "Optional – für GLM-5.3, nur bei Aufgaben, die Claude ablehnt oder nicht schafft. Claude bleibt Standard für jeden Agenten.",
+      "openai": "Stimme: Spracherkennung und natürliche Sprachausgabe, wenn OpenAI als Sprachanbieter gewählt ist.",
+      "elevenlabs": "Stimme: Premium-Stimmen für die Sprachausgabe, wenn ElevenLabs gewählt ist.",
+      "browserUse": "Damit kann profile-use deine Chrome-Cookies mit einem browser-use-Cloud-Profil synchronisieren.",
+      "captcha": "CAPTCHA-Lösung für Agenten. Mit einem gespeicherten Schlüssel wird dieser Dienst aktiviert, falls noch keiner gewählt ist (Einstellungen → Browser).",
+      "composio": "Verbindet Hunderte Apps über Composio."
+    },
+    "encryptedTitle": "Verschlüsselt, nur schreibbar",
+    "encryptedDescription": "Schlüssel werden mit AES-256-GCM in deinem Tresor versiegelt und nie wieder angezeigt. Godmode setzt sie dort ein, wo sie gebraucht werden – Agenten sehen sie nicht.",
+    "agentApiTitle": "Soll ein Agent eine API nutzen?",
+    "agentApiDescription": "Diese Schlüssel betreiben Godmode selbst. Schlüssel für Agenten – Nano Banana, OpenAI, alles Mögliche – gehören unter Tools.",
+    "loadError": "API-Schlüssel konnten nicht geladen werden",
+    "customSecret": "Eigenes Geheimnis",
+    "saved": "{{label}} gespeichert",
+    "solverSelected": "Agenten schicken CAPTCHAs jetzt an {{solver}} (Einstellungen → Browser).",
+    "saveFailed": "{{label}} konnte nicht gespeichert werden",
+    "removed": "{{label}} entfernt",
+    "removeFailed": "{{label}} konnte nicht entfernt werden",
+    "set": "Gesetzt",
+    "setUpdated": "Gesetzt · aktualisiert {{ago}}",
+    "notSet": "Nicht gesetzt",
+    "getKeyAt": "Schlüssel auf {{site}} holen",
+    "manageInComposio": "Im Composio-Tab verwalten",
+    "setKey": "Schlüssel setzen",
+    "pasteKey": "Schlüssel einfügen",
+    "removeDescription": "Funktionen, die diesen Schlüssel brauchen, funktionieren erst wieder, wenn du ihn erneut hinzufügst."
+  },
+  "tools": {
+    "updateFailed": "Tool konnte nicht aktualisiert werden",
+    "isOn": "{{name}} ist an",
+    "isOff": "{{name}} ist aus",
+    "isOnHint": "Agenten im Geltungsbereich können es wieder nutzen.",
+    "isOffHint": "Agenten sehen es erst wieder, wenn du es einschaltest.",
+    "removeFailed": "Tool konnte nicht entfernt werden",
+    "removed": "Tool entfernt",
+    "description": "Gib Agenten jede API mit deinem Schlüssel – Bildgenerierung, Stimmen, Suche, deine eigenen Dienste. Sag, wofür sie da ist; die Aufrufe finden sie selbst heraus.",
+    "readyToGo": "Startklar – füg nur deinen Schlüssel hinzu",
+    "anyOtherMenu": "Andere API…",
+    "anyOther": "Andere API",
+    "anyOtherTagline": "Dein Schlüssel, ihre Adresse und Doku",
+    "addTool": "Tool hinzufügen",
+    "keyHiddenTitle": "Agenten nutzen den Schlüssel, sehen ihn aber nie",
+    "keyHiddenDescription": "Schlüssel sind in deinem Tresor versiegelt. Godmode fügt sie jeder Anfrage hinzu und schickt sie nur an die Adresse des Tools; jeder Aufruf steht im Audit-Log.",
+    "loadError": "Tools konnten nicht geladen werden",
+    "removeToolTitle": "Tool entfernen?",
+    "removeDescription": "Agenten verlieren es ab ihrer nächsten Nachricht, und sein Schlüssel wird aus dem Tresor gelöscht.",
+    "emptyTitle": "Noch keine Tools",
+    "emptyDescription": "Starte mit einem davon – Adresse und Doku sind schon ausgefüllt, du fügst nur den Schlüssel hinzu.",
+    "testFailedToast": "{{name}} konnte nicht getestet werden",
+    "keySaved": "Schlüssel gespeichert",
+    "noKey": "Kein Schlüssel",
+    "envVarHint": "Läufe bekommen den Schlüssel auch in dieser Umgebungsvariable",
+    "onlySentTo": "Der Schlüssel wird nur an {{url}} geschickt",
+    "docs": "Doku",
+    "docsLink": "Doku-Link",
+    "noDocs": "Keine Doku",
+    "usedAgo": "Genutzt {{ago}}",
+    "notUsed": "Noch nicht genutzt",
+    "turnOffAria": "{{name}} ausschalten",
+    "turnOnAria": "{{name}} einschalten",
+    "onHint": "An – Agenten können es nutzen",
+    "keyWorks": "Der Schlüssel funktioniert",
+    "testFailed": "Test fehlgeschlagen"
+  },
+  "apiToolDialog": {
+    "errors": {
+      "name": "Gib dem Tool einen Namen.",
+      "apiKey": "Das sieht nicht nach einem vollständigen Schlüssel aus – prüf, was du eingefügt hast.",
+      "baseUrlProtocol": "Nutze eine https://-Adresse.",
+      "baseUrlQuery": "Lass ?query und #fragment weg.",
+      "baseUrlInvalid": "Gib die vollständige Adresse ein, z. B. https://api.example.com",
+      "baseUrlMissing": "Wohin gehen die Anfragen? z. B. https://api.example.com",
+      "headerName": "Header-Namen haben keine Leerzeichen, z. B. x-api-key.",
+      "queryName": "z. B. key oder api_key",
+      "envVar": "Buchstaben, Ziffern und _, endet auf _KEY, _TOKEN oder _SECRET – z. B. GEMINI_API_KEY.",
+      "docsUrl": "Gib einen vollständigen Link ein, z. B. https://docs.example.com",
+      "testPath": "Braucht die API-Adresse."
+    },
+    "grantReason": "Bestätige, dass der gespeicherte Schlüssel an eine neue Adresse gehen darf.",
+    "keyWorks": "Schlüssel funktioniert – {{message}}",
+    "availableNext": "Agenten im Geltungsbereich können es ab ihrer nächsten Nachricht nutzen.",
+    "savedTestFailed": "{{name}} wurde gespeichert, aber der Test ist fehlgeschlagen",
+    "saveFailed": "Tool konnte nicht gespeichert werden",
+    "addTitle": "API-Tool hinzufügen",
+    "description": "Gib Agenten eine API mit deinem Schlüssel. Sag, wofür sie da ist – die Aufrufe finden sie selbst heraus.",
+    "whatItIs": "Was es ist",
+    "namePlaceholder": "z. B. Nano Banana",
+    "useFor": "Wofür Agenten es nutzen können",
+    "useForPlaceholder": "z. B. Produktfotos, Social-Media-Bilder und Illustrationen erstellen; Fotos bearbeiten.",
+    "useForHint": "Agenten greifen zum Tool, wenn eine Aufgabe dazu passt – sei also konkret.",
+    "apiKey": "API-Schlüssel",
+    "key": "Schlüssel",
+    "keySavedPlaceholder": "Gespeichert – füg einen neuen Schlüssel ein, um ihn zu ersetzen",
+    "keyPlaceholder": "API-Schlüssel einfügen",
+    "encrypted": "Verschlüsselt im Tresor und wird nie wieder angezeigt.",
+    "keyWillBeRemoved": "Schlüssel wird entfernt – rückgängig",
+    "whereKeyGoes": "Wohin der Schlüssel geht",
+    "apiAddress": "API-Adresse",
+    "insecure": "Über http:// wird der Schlüssel unverschlüsselt übertragen – nur für einen lokalen Server okay.",
+    "addressHint": "Godmode schickt den Schlüssel nur an URLs unter dieser Adresse.",
+    "sendAs": "Schlüssel senden als",
+    "bearer": "Bearer-Token",
+    "queryParam": "Query-Parameter",
+    "headerName": "Header-Name",
+    "prefix": "Präfix (optional)",
+    "paramName": "Parametername",
+    "howToUse": "So wird es genutzt",
+    "documentation": "Dokumentation",
+    "docsPlaceholder": "Füg ein, was Agenten brauchen: Endpunkte, eine Beispielanfrage, Modellnamen, Limits.",
+    "docsHint": "Agenten lesen das vor ihrem ersten Aufruf. Markdown funktioniert. Ein Link allein reicht auch – sie schlagen die API dann nach.",
+    "docsLink": "Link zur Dokumentation",
+    "advanced": "Erweitert",
+    "envTitle": "Läufen den Schlüssel auch als Umgebungsvariable geben",
+    "envHint": "Für Skripte, SDKs und Kommandozeilen-Tools. Agenten können den Schlüssel dann lesen; in Chats und Logs bleibt er maskiert.",
+    "variableName": "Variablenname",
+    "testRequest": "Testanfrage",
+    "testHint": "Eine günstige Anfrage, die nur mit gültigem Schlüssel funktioniert. Steckt hinter dem Test-Button."
+  }
+}

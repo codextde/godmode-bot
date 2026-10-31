@@ -220,6 +220,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   ImportMemoryInput,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
+import { t } from "@/i18n";
 import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
 
 export class ApiRequestError extends Error {
@@ -335,7 +336,7 @@ export async function fetchBlob(path: string): Promise<Blob> {
   const res = await fetch(`${baseUrl}${path}`, { headers, credentials: "same-origin" });
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
-    throw new ApiRequestError(res.status, res.status === 404 ? "The file doesn't exist anymore" : res.statusText || `HTTP ${res.status}`);
+    throw new ApiRequestError(res.status, res.status === 404 ? t("system:api.fileGone") : res.statusText || `HTTP ${res.status}`);
   }
   return res.blob();
 }

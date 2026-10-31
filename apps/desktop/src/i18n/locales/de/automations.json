@@ -1,1 +1,235 @@
-{}
+{
+  "trigger": {
+    "schedule": {
+      "label": "Zeitplan",
+      "plural": "Zeitplan",
+      "title": "Nach Zeitplan",
+      "hint": "Jeden Morgen, jeden Montag, am 1. …",
+      "runLabel": "Jetzt ausführen",
+      "promptPlaceholder": "Hol die Zahlen der letzten Woche aus Stripe und Google Analytics, schreib einen kurzen Bericht und schick ihn mir."
+    },
+    "app": {
+      "label": "App-Ereignis",
+      "plural": "App-Ereignisse",
+      "title": "Wenn in einer App etwas passiert",
+      "hint": "Eine neue E-Mail, Slack-Nachricht, ein Termin…",
+      "runLabel": "Testereignis senden",
+      "promptPlaceholder": "Speichere die Rechnungs-PDF in Drive und trag Absender, Betrag und Fälligkeit in meine Rechnungstabelle ein. Die Details des Ereignisses werden mitgegeben."
+    },
+    "condition": {
+      "label": "Bedingung",
+      "plural": "Bedingungen",
+      "title": "Wenn eine Bedingung erfüllt ist",
+      "hint": "Regelmäßig geprüft, in normaler Sprache",
+      "runLabel": "Jetzt prüfen",
+      "promptPlaceholder": "Vergleiche ihre neuen Tarife mit unseren und aktualisiere die Preis-Battlecard in Notion. Was die Prüfung gefunden hat, wird mitgegeben."
+    },
+    "webhook": {
+      "label": "Webhook",
+      "plural": "Webhooks",
+      "title": "Wenn ein Webhook aufgerufen wird",
+      "hint": "Jeder Dienst, der einen HTTP-POST senden kann",
+      "runLabel": "Testereignis senden",
+      "promptPlaceholder": "Prüf, ob die Bestellung für ein Rückgewinnungsangebot infrage kommt, und entwirf eine freundliche E-Mail. Der Request-Body wird mitgegeben."
+    },
+    "easy": {
+      "schedule": {
+        "title": "Nach Zeitplan",
+        "hint": "Jeden Morgen, jeden Montag, am 1. …"
+      },
+      "app": {
+        "title": "Wenn in einer App etwas passiert",
+        "hint": "Eine neue E-Mail, Slack-Nachricht, ein Termin…"
+      },
+      "condition": {
+        "title": "Wenn etwas zutrifft",
+        "hint": "Regelmäßig geprüft, in deinen eigenen Worten beschrieben"
+      },
+      "webhook": {
+        "title": "Wenn ein anderes Tool einen Link aufruft",
+        "hint": "Ein Shop, ein Formular oder Zapier öffnet einen geheimen Link"
+      }
+    },
+    "conditionText": "Wenn {{condition}} · geprüft {{schedule}}",
+    "when": "Wenn {{condition}}",
+    "checked": "geprüft {{schedule}}",
+    "webhookRuns": "läuft, wenn die URL aufgerufen wird",
+    "pickerLabel": "Was startet diese Automation"
+  },
+  "eventSource": {
+    "schedule": "Zeitplan",
+    "app": "App-Ereignis",
+    "webhook": "Webhook",
+    "condition": "Bedingung erfüllt",
+    "manual": "Manuell"
+  },
+  "eventStatus": {
+    "pending": "Wartet",
+    "running": "Läuft",
+    "done": "Fertig",
+    "failed": "Fehlgeschlagen",
+    "skipped": "Übersprungen"
+  },
+  "followups": {
+    "title": "Follow-ups",
+    "subtitle": "Chats, die deine Agenten von selbst wieder aufnehmen",
+    "continueNamed": "„{{title}}“ jetzt fortsetzen",
+    "working": "Arbeitet gerade in diesem Chat",
+    "continueNow": "Jetzt fortsetzen",
+    "changeWhen": "Ändern, wann „{{title}}“ weitergeht",
+    "cancelNamed": "Follow-up von „{{title}}“ abbrechen"
+  },
+  "testEvent": {
+    "invalidJson": "Das sieht nach JSON aus, lässt sich aber nicht lesen. Korrigier es oder sende einfachen Text.",
+    "descriptionApp": "Führt „{{name}}“ aus, als hätte {{app}} das gesendet. Der Filter wird wie bei einem echten Ereignis geprüft.",
+    "descriptionWebhook": "Führt „{{name}}“ aus, als wäre die URL damit aufgerufen worden. Der Filter wird wie bei einem echten Ereignis geprüft.",
+    "sent": "Testereignis gesendet",
+    "viewEvents": "Ereignisse ansehen",
+    "sendFailed": "Testereignis konnte nicht gesendet werden",
+    "title": "Testereignis senden",
+    "dataLabel": "Ereignisdaten",
+    "hint": "JSON oder einfacher Text. Leer lassen, um ein kleines Beispiel zu senden.",
+    "toSend": "zum Senden",
+    "submit": "Testereignis senden"
+  },
+  "webhook": {
+    "rotated": "Neue Webhook-URL erstellt",
+    "rotatedDescription": "Die alte URL funktioniert nicht mehr – aktualisiere die Dienste, die sie aufrufen.",
+    "rotateFailed": "Webhook-URL konnte nicht erneuert werden",
+    "rotateTitle": "URL von „{{name}}“ erneuern?",
+    "rotateDescription": "Godmode erstellt eine neue geheime URL. Was noch die alte aufruft, bekommt einen Fehler, bis du es aktualisierst.",
+    "rotate": "URL erneuern",
+    "locked": "Entsperr den Tresor, um die URL zu sehen.",
+    "lockedHint": "Der geheime Teil ist verschlüsselt gespeichert.",
+    "secretPathLabel": "Geheimer Pfad – POST mit beliebigem Inhalt (JSON oder Text, bis 256 KB)",
+    "secretUrlLabel": "Geheime URL – POST mit beliebigem Inhalt (JSON oder Text, bis 256 KB)",
+    "copyUrl": "Webhook-URL kopieren",
+    "remoteHint": "Webhooks empfängt der Computer selbst; kopier die vollständige Adresse in Godmode auf diesem Computer.",
+    "tryIt": "Ausprobieren",
+    "copyCurl": "curl-Befehl kopieren",
+    "localOnly": "Diese Adresse funktioniert nur auf diesem Computer. Um Aufrufe von anderen Diensten zu empfangen, mach Godmode über einen Tunnel oder Reverse Proxy erreichbar und nutze denselben Pfad.",
+    "warning": "Jeder mit dieser URL kann die Automation starten. Erneuere sie, falls sie bekannt wird."
+  },
+  "events": {
+    "openConversation": "Unterhaltung öffnen",
+    "viewRun": "Lauf ansehen",
+    "triggerError": "Der Auslöser funktioniert nicht.",
+    "triggerPending": "Auslöser wird eingerichtet…",
+    "lastCheck": "Letzte Prüfung",
+    "nothingNoted": "Noch nichts notiert.",
+    "recent": "Letzte Ereignisse",
+    "loadFailed": "Ereignisse konnten nicht geladen werden",
+    "showingLatest_one": "Zeigt das neueste Ereignis.",
+    "showingLatest_other": "Zeigt die neuesten {{count}} Ereignisse.",
+    "copyData": "Ereignisdaten kopieren",
+    "empty": {
+      "scheduleTitle": "Noch keine Läufe",
+      "scheduleNext": "Der erste Lauf ist {{when}}.",
+      "scheduleBody": "Läufe erscheinen hier, sobald der Zeitplan auslöst.",
+      "appTitle": "Warte auf das erste Ereignis",
+      "appBody": "Godmode wartet auf „{{trigger}}“ in {{app}}.",
+      "conditionTitle": "Noch nicht erfüllt",
+      "conditionNext": "Die nächste Prüfung ist {{when}}.",
+      "conditionBody": "Sobald eine Prüfung die Bedingung erfüllt findet, erscheint sie hier.",
+      "webhookTitle": "Noch keine Aufrufe",
+      "webhookBody": "Ruf die Webhook-URL auf – oder sende ein Testereignis – und es erscheint hier."
+    }
+  },
+  "onePrompt": {
+    "unreachable": "Godmode ist nicht erreichbar",
+    "title": "Beschreib, was automatisiert werden soll",
+    "setsItUp": "– Godmode richtet es ein",
+    "heading": "Wenn es passiert, legt Godmode los.",
+    "body": "Ein Satz reicht – Godmode wählt Auslöser, Agent und Schritte und fragt nach, wenn etwas unklar ist.",
+    "placeholder": "Wenn eine neue E-Mail mit Rechnung kommt, speichere die PDF in Drive und trag sie in meine Tabelle ein",
+    "submit": "Einrichten",
+    "examplesLabel": "Beispiele",
+    "examples": {
+      "weeklyReport": "Jeden Montag um 9:00 die Zahlen der letzten Woche sammeln und einen Bericht schreiben",
+      "inbox": "Werktags irgendwann zwischen 8:00 und 9:30 starten und mein Postfach abarbeiten",
+      "customerEmail": "Wenn ich eine E-Mail von einem Kunden bekomme, eine Antwort entwerfen",
+      "meetingBrief": "Wenn ein Meeting gleich beginnt, mich über die Teilnehmenden briefen",
+      "slackSupport": "Wenn jemand in #support auf Slack schreibt, eine Antwort entwerfen",
+      "competitorPricing": "Wenn sich die Preise der Konkurrenz ändern, mit unseren vergleichen und die Battlecard aktualisieren"
+    }
+  },
+  "schemaForm": {
+    "example": "z. B. {{example}}",
+    "required": "Pflichtfeld",
+    "invalidJson": "Gib gültiges JSON ein",
+    "wholeNumber": "Gib eine ganze Zahl ein",
+    "number": "Gib eine Zahl ein",
+    "notSet": "Nicht gesetzt"
+  },
+  "appTrigger": {
+    "pickAccount": "Wähl ein verbundenes Konto",
+    "pickEvent": "Wähl das Ereignis, auf das reagiert werden soll",
+    "loadingSettings": "Einstellungen des Ereignisses werden geladen…",
+    "settingsFailed": "Einstellungen des Ereignisses konnten nicht geladen werden",
+    "settingsFailedHint": "{{problem}} – prüf Composio und versuch es dann erneut.",
+    "composioFailed": "Composio-Einstellungen nicht erreichbar",
+    "connectFirstTitle": "Verbinde zuerst deine Apps",
+    "connectFirstDescription": "App-Ereignisse kommen von Composio. Hinterleg deinen Composio-API-Key und verbinde Gmail, Slack, Kalender oder eine andere App – dann wähl, was diese Automation starten soll.",
+    "setUpComposio": "Composio einrichten",
+    "accountsFailed": "Verbundene Konten konnten nicht geladen werden",
+    "chooseAgentFirst": "Wähl zuerst den Agenten – er kann nur Konten beobachten, auf die er Zugriff hat.",
+    "noUsableTitle": "Kein Konto, das {{name}} nutzen kann",
+    "noUsableDescription": "Die verbundenen Konten gehören anderen Agenten oder Workspaces. Verbinde eines für {{name}}, seinen Workspace oder global und wähl dann das Ereignis, das diese Automation startet.",
+    "connectApp": "App verbinden",
+    "noAppsTitle": "Noch keine Apps verbunden",
+    "noAppsDescription": "Verbinde auf der Seite „Integrationen“ eine App wie Gmail, Slack oder Google Kalender und wähl dann hier das Ereignis, das diese Automation startet.",
+    "account": "Konto",
+    "connectAnother": "Weitere App verbinden",
+    "accountPlaceholder": "Wähl das Konto, das beobachtet werden soll",
+    "scope": {
+      "oneAgent": "Ein Agent",
+      "workspace": "Workspace",
+      "global": "Global"
+    },
+    "instant": "Sofort",
+    "everyFewMin": "Alle paar Min.",
+    "event": "Ereignis",
+    "keep": "{{name}} behalten",
+    "currentEvent": "Aktuelles Ereignis",
+    "changeEvent": "Ereignis ändern",
+    "change": "Ändern",
+    "pollHint": "Composio prüft {{app}} alle paar Minuten darauf, neue Ereignisse können also ein paar Minuten brauchen.",
+    "needsSetup": "Braucht eine einmalige Einrichtung in {{app}}, bevor Ereignisse ankommen.",
+    "eventsFailed": "{{app}}-Ereignisse konnten nicht geladen werden",
+    "noEvents": "{{app}} bietet keine Ereignisse, auf die reagiert werden kann. Versuch es stattdessen mit einer Bedingung – der Agent prüft sie regelmäßig.",
+    "searchPlaceholder": "{{app}}-Ereignisse suchen…",
+    "searchLabel": "{{app}}-Ereignisse suchen",
+    "noMatch": "Keine {{app}}-Ereignisse passen zu „{{query}}“."
+  },
+  "page": {
+    "title": "Automationen",
+    "description": "Deine Agenten legen los – nach Zeitplan, wenn in deinen Apps etwas passiert, wenn eine Bedingung erfüllt ist oder wenn ein Webhook aufgerufen wird.",
+    "new": "Neue Automation",
+    "filter": {
+      "active": "Aktiv",
+      "paused": "Pausiert",
+      "failing": "Fehlerhaft"
+    },
+    "pausedCount_one": "{{count}} pausiert",
+    "pausedCount_other": "{{count}} pausiert",
+    "nonePaused": "Keine pausiert",
+    "nextUp": "Als Nächstes",
+    "nothingScheduled": "Nichts geplant",
+    "lastEvent": "Letztes Ereignis",
+    "noEvents": "Noch keine Ereignisse",
+    "failingHint": "Ein Lauf oder Auslöser ist fehlgeschlagen – schau mal rein",
+    "noFailures": "Keine Fehler",
+    "searchPlaceholder": "Automationen suchen…",
+    "searchLabel": "Automationen suchen",
+    "filterByStatus": "Nach Status filtern",
+    "filterByAgent": "Nach Agent filtern",
+    "allAgents": "Alle Agenten",
+    "filterByTrigger": "Nach Auslöser filtern",
+    "allTriggers": "Alle Auslöser",
+    "loadFailed": "Automationen konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Automationen",
+    "emptyDescription": "Beschreib oben eine oder richte sie selbst ein – eine morgendliche Postfach-Zusammenfassung, ein Antwortentwurf für jede Kunden-E-Mail, ein Blick auf die Preise der Konkurrenz.",
+    "noMatch": "Keine passenden Automationen",
+    "clearFilters": "Filter zurücksetzen"
+  }
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { ExternalLink, RefreshCw, Smartphone } from "lucide-react";
 import type { MobileDevice, MobilePairingOffer } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ export function PairPhoneDialog({
   /** This computer is linked to Godmode Cloud and lets phones through its gateway. */
   gateway: boolean;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [offer, setOffer] = useState<MobilePairingOffer | null>(null);
   const [paired, setPaired] = useState<MobileDevice | null>(null);
@@ -71,8 +73,8 @@ export function PairPhoneDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[640px]">
         <DialogHeader className="border-b px-6 pt-6 pb-5 text-left">
-          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Connect your phone</DialogTitle>
-          <DialogDescription>Scan the code with the Godmode app. It works once and only for a few minutes.</DialogDescription>
+          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{t("pairPhone.title")}</DialogTitle>
+          <DialogDescription>{t("pairPhone.description")}</DialogDescription>
         </DialogHeader>
 
         <AnimatePresence mode="wait" initial={false}>
@@ -86,12 +88,10 @@ export function PairPhoneDialog({
               <div className="grid size-14 place-items-center rounded-full bg-brand-soft text-brand-strong">
                 <DrawCheck className="size-7" />
               </div>
-              <h3 className="mt-5 text-lg font-medium tracking-[-0.02em]">{paired.name} is connected</h3>
-              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-                Chats, agents and live screens are on your phone now. You can remove it anytime in this list.
-              </p>
+              <h3 className="mt-5 text-lg font-medium tracking-[-0.02em]">{t("pairPhone.connected", { name: paired.name })}</h3>
+              <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">{t("pairPhone.connectedBody")}</p>
               <Button className="mt-7" onClick={() => onOpenChange(false)}>
-                Done
+                {t("common:actions.done")}
               </Button>
             </motion.div>
           ) : (
@@ -99,10 +99,10 @@ export function PairPhoneDialog({
               <div className="flex flex-col items-center gap-3">
                 <div className="relative grid size-64 place-items-center rounded-2xl border bg-white p-3 shadow-card">
                   {offer && !create.isError ? (
-                    <QrCode value={offer.link} label="Pairing code for the Godmode app" className={cn("size-full transition-opacity", create.isPending && "opacity-30")} />
+                    <QrCode value={offer.link} label={t("pairPhone.qrLabel")} className={cn("size-full transition-opacity", create.isPending && "opacity-30")} />
                   ) : create.isError ? (
                     <div className="px-4 text-center">
-                      <p className="text-sm font-medium text-[#1c1c1c]">No code yet</p>
+                      <p className="text-sm font-medium text-[#1c1c1c]">{t("pairPhone.noCode")}</p>
                       <p className="mt-1 text-xs leading-relaxed text-[#75716a]">{errorMessage(create.error)}</p>
                     </div>
                   ) : (
@@ -112,53 +112,47 @@ export function PairPhoneDialog({
                 {offer && !create.isError ? (
                   <div className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
                     <ExpiryRing seconds={remaining} total={300} />
-                    Expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
+                    {t("pairPhone.expires", { time: `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` })}
                     <Button variant="ghost" size="xs" className="-mr-2 text-muted-foreground" onClick={() => create.mutate()} disabled={create.isPending}>
-                      <RefreshCw /> New code
+                      <RefreshCw /> {t("pairPhone.newCode")}
                     </Button>
                   </div>
                 ) : create.isError ? (
                   <Button variant="outline" size="sm" onClick={() => create.mutate()}>
-                    <RefreshCw /> Try again
+                    <RefreshCw /> {t("common:actions.tryAgain")}
                   </Button>
                 ) : null}
               </div>
 
               <div className="flex min-w-0 flex-col">
                 <ol className="space-y-4">
-                  <Step n={1} title={gateway ? "Get Tailscale, or use Godmode Cloud" : "Get Tailscale on your phone"}>
-                    {gateway ? (
-                      <>
-                        With Tailscale signed in to the same account as this computer{tailnet ? <> ({tailnet})</> : null}, your phone reaches Godmode
-                        directly. Without it, the phone goes through Godmode Cloud, which this computer is linked to.{" "}
-                      </>
-                    ) : (
-                      <>
-                        Sign in with the same account as this computer{tailnet ? <> ({tailnet})</> : null}. Your phone reaches Godmode through it, never
-                        over the internet.{" "}
-                      </>
-                    )}
+                  <Step n={1} title={gateway ? t("pairPhone.step1Gateway") : t("pairPhone.step1")}>
+                    {gateway
+                      ? tailnet
+                        ? t("pairPhone.step1GatewayBodyTailnet", { tailnet })
+                        : t("pairPhone.step1GatewayBody")
+                      : tailnet
+                        ? t("pairPhone.step1BodyTailnet", { tailnet })
+                        : t("pairPhone.step1Body")}{" "}
                     <button type="button" className="inline-flex items-center gap-0.5 font-medium text-foreground underline-offset-2 hover:underline" onClick={() => void openExternal(TAILSCALE_DOWNLOAD)}>
-                      Download <ExternalLink className="size-3" />
+                      {t("pairPhone.download")} <ExternalLink className="size-3" />
                     </button>
                   </Step>
-                  <Step n={2} title="Open the Godmode app">
-                    Tap <span className="font-medium text-foreground">Scan QR code</span>, or point your camera app at the code.
+                  <Step n={2} title={t("pairPhone.step2")}>
+                    <Trans t={t} i18nKey="pairPhone.step2Body" components={{ b: <span className="font-medium text-foreground" /> }} />
                   </Step>
-                  <Step n={3} title="Scan this code">
-                    The phone gets its own key. This code can't be used again.
+                  <Step n={3} title={t("pairPhone.step3")}>
+                    {t("pairPhone.step3Body")}
                   </Step>
                 </ol>
                 <div className="mt-auto flex items-center gap-2.5 rounded-lg border bg-paper-2 px-3 py-2.5 text-xs text-muted-foreground">
                   <Smartphone className="size-4 shrink-0 text-foreground" />
                   <span className="min-w-0">
-                    Waiting for your phone
                     {address ? (
-                      <>
-                        {" "}
-                        on <span className="font-mono text-[11px] text-foreground">{address}</span>
-                      </>
-                    ) : null}
+                      <Trans t={t} i18nKey="pairPhone.waitingOn" values={{ address }} components={{ code: <span className="font-mono text-[11px] text-foreground" /> }} />
+                    ) : (
+                      t("pairPhone.waiting")
+                    )}
                   </span>
                   <span className="ml-auto flex gap-1" aria-hidden>
                     {[0, 1, 2].map((i) => (

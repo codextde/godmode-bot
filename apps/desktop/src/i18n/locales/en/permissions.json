@@ -1,1 +1,90 @@
-{}
+{
+  "title": "Mac permissions",
+  "copy": {
+    "accessibility": {
+      "label": "Device control",
+      "title": "Let agents click and type",
+      "purpose": "Agents move the pointer, type and press buttons in the windows you share. macOS calls this Accessibility."
+    },
+    "screenRecording": {
+      "label": "Screen Recording",
+      "title": "Let agents see your screen",
+      "purpose": "Agents see the windows and screens you share in a chat — nothing else, and only while it is shared."
+    },
+    "fullDiskAccess": {
+      "label": "Full Disk Access",
+      "title": "Let agents open protected folders",
+      "purpose": "Imports sign-ins from your browser profiles and lets agents read Mail, Messages and other folders macOS locks away, when a task needs it."
+    }
+  },
+  "steps": {
+    "fullDisk1": "Click Open System Settings. Godmode also shows its app in the Finder.",
+    "fullDisk2": "Drag {{app}} from the Finder into the list, or click + and pick it from Applications.",
+    "fullDisk3": "Switch {{app}} on, then restart Godmode once.",
+    "allow1": "Click Allow. If macOS shows a dialog, choose Open System Settings.",
+    "allow2": "Switch {{app}} on under {{pane}}. macOS asks for your Mac password.",
+    "allow3": "Done. This page notices on its own.",
+    "screenRecording3": "If macOS offers Quit & Reopen, choose Later — Godmode picks it up by itself."
+  },
+  "guide": {
+    "allowedCount": "{{done}} of {{total}} allowed",
+    "checking": "Checking…",
+    "checksAgain": "Checks again every few seconds",
+    "nothingToSetUp": "Nothing to set up on this computer."
+  },
+  "pill": {
+    "restart": "Restart",
+    "allowed": "Allowed",
+    "needed": "Needed",
+    "off": "Off"
+  },
+  "toast": {
+    "settingsDidntOpen": "System Settings didn't open",
+    "askError": "Couldn't ask for {{name}}",
+    "resetError": "Couldn't reset {{name}}"
+  },
+  "pane": {
+    "step": "Step {{step}} of {{total}} · {{pane}}",
+    "restartToGo": "Allowed — one restart to go",
+    "isAllowed": "{{label}} is allowed",
+    "runsFrom": "Godmode runs from {{app}} right now, so macOS asks about {{app}}. Switch that on, or start the Godmode app instead.",
+    "openSettings": "Open System Settings",
+    "allow": "Allow",
+    "showInFinder": "Show {{app}} in Finder",
+    "openPane": "Open the pane",
+    "waiting": "Waiting for the switch…",
+    "helpToggle": "Switched on, but still not allowed?",
+    "helpReset": "After an update macOS can keep an old entry: the switch shows on, but no longer counts. Reset it and switch it on again.",
+    "helpManual": "After an update macOS can keep an old entry: the switch shows on, but no longer counts. Remove {{app}} with −, add it again with +, and switch it on.",
+    "resetAndAsk": "Reset and ask again",
+    "skipForNow": "Skip for now"
+  },
+  "restart": {
+    "error": "Couldn't restart Godmode",
+    "button": "Restart Godmode",
+    "confirmTitle": "Restart Godmode?",
+    "confirmDescription_one": "1 agent is still working. Restarting stops it — you can pick up where you left off once Godmode is back.",
+    "confirmDescription_other": "{{count}} agents are still working. Restarting stops them — you can pick up where you left off once Godmode is back.",
+    "confirm": "Restart now"
+  },
+  "mock": {
+    "systemSettings": "System Settings",
+    "wifi": "Wi-Fi",
+    "bluetooth": "Bluetooth",
+    "notifications": "Notifications",
+    "privacy": "Privacy & Security",
+    "desktop": "Desktop & Dock"
+  },
+  "button": {
+    "restartToFinish": "Restart Godmode to finish",
+    "toAllowList": "{{count}} to allow · {{list}}",
+    "setUpLabel": "Set up Mac permissions",
+    "tooltip": "Mac permissions: {{count}} to allow"
+  },
+  "summary": {
+    "partial": "{{done}} of {{total}} allowed — a short guide shows where to switch them on.",
+    "all": "Everything is allowed.",
+    "setUp": "Set up",
+    "review": "Review"
+  }
+}

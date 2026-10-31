@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Box, CircleCheck, CircleDashed, EyeOff, Globe, KeyRound, Moon, Power, PowerOff, RectangleEllipsis, ScrollText, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { Settings, VmSettings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,6 +36,7 @@ function State({ ok, children }: { ok: boolean | null; children: React.ReactNode
 }
 
 export function VmSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { patch, patchAsync } = useSettingsPatch();
   const v = settings.vm;
   const qc = useQueryClient();
@@ -44,19 +46,19 @@ export function VmSection({ settings }: { settings: Settings }) {
   const install = useMutation({
     mutationFn: api.vms.install,
     onSuccess: (res) => {
-      if (res.ok) toast.success("Tart is ready");
-      else toast.error("Tart couldn't be installed", { description: res.output || undefined });
+      if (res.ok) toast.success(t("vms.tartReady"));
+      else toast.error(t("vms.tartInstallError"), { description: res.output || undefined });
       void qc.invalidateQueries({ queryKey: qk.vms });
     },
-    onError: (e) => toastApiError(e, "Tart couldn't be installed", qc),
+    onError: (e) => toastApiError(e, t("vms.tartInstallError"), qc),
   });
   const removeImage = useMutation({
     mutationFn: (image: string) => api.vms.removeImage(image),
     onSuccess: () => {
-      toast.success("Image removed");
+      toast.success(t("vms.imageRemoved"));
       void qc.invalidateQueries({ queryKey: qk.vms });
     },
-    onError: (e) => toastApiError(e, "The image couldn't be removed", qc),
+    onError: (e) => toastApiError(e, t("vms.imageRemoveError"), qc),
   });
   const downloaded = s?.images.filter((i) => i.downloaded) ?? [];
   const set = (p: Partial<VmSettings>) => patch({ vm: p });
@@ -64,7 +66,7 @@ export function VmSection({ settings }: { settings: Settings }) {
   const setVaultFill = async (vaultFill: boolean) => {
     if (vaultFill) {
       try {
-        await ensureGrant("Enter your vault passphrase to let agents type your logins and 2FA codes into their VMs.");
+        await ensureGrant(t("vms.grantReason"));
       } catch {
         return;
       }
@@ -81,52 +83,52 @@ export function VmSection({ settings }: { settings: Settings }) {
     <FeatureSection
       feature="vm"
       settings={settings}
-      title="Virtual machines"
-      summary="Give agents their own macOS: they install tools, run builds and use apps in an isolated VM on this Mac instead of on your computer. A run uses its chat's VM, else its agent's, else its workspace's."
+      title={t("vms.title")}
+      summary={t("vms.summary")}
       icon={<Box />}
-      offNote="Every run works on this Mac while it's off, and VM controls leave chats and agent settings. Your VMs stay as they are."
+      offNote={t("vms.offNote")}
       points={[
-        { icon: <Box />, text: "A macOS of their own for each agent or chat" },
-        { icon: <Wrench />, text: "Installs and builds stay off your computer" },
-        { icon: <Moon />, text: "Idle VMs stop by themselves" },
+        { icon: <Box />, text: t("vms.pointOwn") },
+        { icon: <Wrench />, text: t("vms.pointIsolated") },
+        { icon: <Moon />, text: t("vms.pointIdle") },
       ]}
     >
       <div className="space-y-5">
         {s && !s.supported && (
-          <Callout tone="warning" title="Virtual machines aren't available on this machine">
-            {s.reason ?? "macOS VMs need a Mac with Apple silicon."}
+          <Callout tone="warning" title={t("vms.unsupported")}>
+            {s.reason ?? t("vms.unsupportedReason")}
           </Callout>
         )}
 
         <SettingsGroup
-          title="Virtual machines"
+          title={t("vms.title")}
           icon={<Box />}
           actions={
             <Button variant="outline" size="sm" asChild>
               <Link to="/vms">
-                Manage VMs <ArrowRight />
+                {t("vms.manage")} <ArrowRight />
               </Link>
             </Button>
           }
         >
           <SettingRow
-            label="Keep agents with a VM off this Mac"
+            label={t("vms.isolate")}
             htmlFor="vm-isolate"
             disabled={!v.enabled}
-            description="Claude Code's own Bash tool — which runs on this Mac — is turned off for their runs and permissions aren't bypassed, so commands can't touch your computer and file tools only reach the agent's repository, the chat's folder and the VM's shared folder."
+            description={t("vms.isolateDescription")}
           >
             <Switch id="vm-isolate" checked={v.isolateHostShell} disabled={!v.enabled} onCheckedChange={(isolateHostShell) => set({ isolateHostShell })} />
           </SettingRow>
           <SettingRow
-            label="Stop idle VMs after"
+            label={t("vms.idle")}
             htmlFor="vm-idle"
-            description="Frees memory and CPU when no run used a VM for this long. 0 = keep them running."
+            description={t("vms.idleDescription")}
           >
             <NumberField
               id="vm-idle"
               min={0}
               max={1440}
-              suffix="min"
+              suffix={t("ai.limits.minutes")}
               value={v.idleStopMinutes}
               onCommit={(n) => n !== null && set({ idleStopMinutes: n })}
             />
@@ -134,32 +136,32 @@ export function VmSection({ settings }: { settings: Settings }) {
         </SettingsGroup>
 
         <SettingsGroup
-          title="Logins and 2FA codes"
+          title={t("vms.fill.title")}
           icon={<KeyRound />}
-          description="Let agents sign in to websites and apps inside their VM with the logins and 2FA codes from your vault."
+          description={t("vms.fill.description")}
         >
           <SettingRow
-            label="Type logins and 2FA codes into VMs"
+            label={t("vms.fill.label")}
             htmlFor="vm-vault-fill"
             disabled={!v.enabled}
-            description="In the VM's Chrome, logins are filled like on your Mac — only on the login's own website. In other apps, Godmode types into the field the agent clicked. Either way the value never passes through the AI, but the agent controls the VM, so a determined agent could capture what's filled there. Turning this on asks for your vault passphrase."
+            description={t("vms.fill.labelDescription")}
           >
             <Switch id="vm-vault-fill" checked={v.vaultFill} disabled={!v.enabled} onCheckedChange={(on) => void setVaultFill(on)} />
           </SettingRow>
-          <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
-            <Fact icon={<EyeOff />}>Typed by Godmode, not the AI</Fact>
-            <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
-            <Fact icon={<ScrollText />}>Every fill audited</Fact>
+          <ul aria-label={t("vms.fill.howItWorks")} className="flex flex-wrap gap-2 py-3.5">
+            <Fact icon={<EyeOff />}>{t("vms.fill.factTyped")}</Fact>
+            <Fact icon={<RectangleEllipsis />}>{t("vms.fill.factPasswords")}</Fact>
+            <Fact icon={<ScrollText />}>{t("vms.fill.factAudited")}</Fact>
             <Fact icon={<Globe />} caution>
-              In apps, not bound to a website
+              {t("vms.fill.factApps")}
             </Fact>
           </ul>
         </SettingsGroup>
 
         <SettingsGroup
-          title="When Godmode quits"
+          title={t("vms.quit.title")}
           icon={<Power />}
-          description="What happens to running VMs. Their disks are always kept."
+          description={t("vms.quit.description")}
           bodyClassName="py-4"
         >
           <ChoiceCards<VmSettings["onQuit"]>
@@ -170,13 +172,13 @@ export function VmSection({ settings }: { settings: Settings }) {
             options={[
               {
                 value: "suspend",
-                title: "Suspend",
+                title: t("vms.quit.suspend"),
                 icon: <Moon />,
-                badge: <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">Default</span>,
-                description: "Their memory is saved to disk — they resume where they left off.",
+                badge: <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">{t("modePicker.default")}</span>,
+                description: t("vms.quit.suspendDescription"),
               },
-              { value: "stop", title: "Stop", icon: <PowerOff />, description: "macOS shuts down in each VM; the next start boots fresh." },
-              { value: "keep", title: "Keep running", icon: <Power />, description: "They stay up; Godmode picks them up again when it starts." },
+              { value: "stop", title: t("common:actions.stop"), icon: <PowerOff />, description: t("vms.quit.stopDescription") },
+              { value: "keep", title: t("vms.quit.keep"), icon: <Power />, description: t("vms.quit.keepDescription") },
             ]}
           />
         </SettingsGroup>
@@ -185,49 +187,43 @@ export function VmSection({ settings }: { settings: Settings }) {
           title="Tart"
           icon={<Wrench />}
           description={
-            <>
-              Runs the VMs with Apple's Virtualization framework —{" "}
-              <a href="https://tart.run" target="_blank" rel="noreferrer" className="underline underline-offset-2">
-                tart.run
-              </a>
-              , free for personal use.
-            </>
+            <Trans t={t} i18nKey="vms.tart.description" components={{ link: <a href="https://tart.run" target="_blank" rel="noreferrer" className="underline underline-offset-2" /> }} />
           }
           actions={
             s?.supported && !s.tart.installed ? (
               <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
-                {install.isPending && <Spinner />} {install.isPending ? "Installing…" : "Install"}
+                {install.isPending && <Spinner />} {install.isPending ? t("computer.cua.installing") : t("computer.cua.install")}
               </Button>
             ) : undefined
           }
         >
-          <InfoRow label="Status">
+          <InfoRow label={t("computer.cua.status")}>
             {s ? (
               <State ok={s.tart.installed}>
                 {s.tart.installed
-                  ? [s.tart.version ? `Tart ${s.tart.version}` : "Installed", s.tart.managed ? "Godmode's own copy" : "from this Mac"].join(" · ")
+                  ? [s.tart.version ? `Tart ${s.tart.version}` : t("vms.tart.installed"), s.tart.managed ? t("vms.tart.ownCopy") : t("vms.tart.fromMac")].join(" · ")
                   : s.supported
-                    ? `Not installed — Godmode installs Tart ${s.tart.bundledVersion} when you set up or create a VM`
-                    : "Not available"}
+                    ? t("vms.tart.notInstalled", { version: s.tart.bundledVersion })
+                    : t("vms.tart.notAvailable")}
               </State>
             ) : (
-              <State ok={null}>Checking…</State>
+              <State ok={null}>{t("vms.tart.checking")}</State>
             )}
           </InfoRow>
           {s?.tart.path && (
-            <InfoRow label="Binary" mono>
+            <InfoRow label={t("vms.tart.binary")} mono>
               <span className="break-all">{short(s.tart.path)}</span>
             </InfoRow>
           )}
-          <InfoRow label="VMs and shared folders" mono>
+          <InfoRow label={t("vms.tart.storage")} mono>
             <span className="break-all">{s ? short(s.storageDir) : "…"}</span>
           </InfoRow>
-          {s?.host.freeDiskGb != null && <InfoRow label="Free space">{s.host.freeDiskGb} GB</InfoRow>}
+          {s?.host.freeDiskGb != null && <InfoRow label={t("vms.tart.freeSpace")}>{t("vms.tart.gb", { size: s.host.freeDiskGb })}</InfoRow>}
           {downloaded.map((img) => (
             <SettingRow
               key={img.id}
               label={img.name}
-              description={`Downloaded image${img.sizeBytes ? ` · ${(img.sizeBytes / 1e9).toFixed(1)} GB` : ""} — new VMs from it are ready in seconds. Removing it frees the space; existing VMs keep working.`}
+              description={img.sizeBytes ? t("vms.tart.imageWithSize", { size: (img.sizeBytes / 1e9).toFixed(1) }) : t("vms.tart.image")}
             >
               <Button
                 size="sm"
@@ -235,19 +231,19 @@ export function VmSection({ settings }: { settings: Settings }) {
                 disabled={removeImage.isPending && removeImage.variables === img.id}
                 onClick={() => removeImage.mutate(img.id)}
               >
-                {removeImage.isPending && removeImage.variables === img.id && <Spinner />} Remove
+                {removeImage.isPending && removeImage.variables === img.id && <Spinner />} {t("common:actions.remove")}
               </Button>
             </SettingRow>
           ))}
           <SettingRow
-            label="Custom tart binary"
+            label={t("vms.tart.custom")}
             htmlFor="vm-tart-path"
-            description="Leave empty to use Godmode's own copy (installed on demand) or one on your PATH."
+            description={t("vms.tart.customDescription")}
           >
             <CommitInput
               id="vm-tart-path"
               className="w-72 font-mono text-[13px]"
-              placeholder="Godmode's own copy"
+              placeholder={t("vms.tart.ownCopy")}
               value={v.tartPath}
               onCommit={saveTartPath}
             />

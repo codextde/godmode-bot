@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Agent, Conversation, ConversationWithMessages } from "@godmode/shared";
-import { EFFORT_LABELS } from "@godmode/shared";
 import { Archive, ArchiveRestore, AudioLines, ChevronRight, Cpu, Ellipsis, HeartPulse, Laptop, Moon, Pencil, Pin, PinOff, Share2, SquareKanban, Trash2, Plug, Workflow, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +18,6 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { AgentAvatar } from "@/components/common";
 import type { AgentMood } from "@/components/chat/conversation-mood";
 import { PLATFORMS } from "@/components/messaging/platform";
-import { THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
 import { DeleteChatDialog, useArchiveChat } from "@/components/chat/chat-actions";
 import { PrivateChatBadge } from "@/components/chat/private-chat";
 import { useEffectiveModel } from "@/components/chat/model-picker";
@@ -31,15 +30,15 @@ import { isMac } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 const ORIGIN_META = {
-  routine: { label: "Automation", icon: Workflow },
-  delegation: { label: "Handed over", icon: Share2 },
-  api: { label: "Chat", icon: Plug },
-  dream: { label: "Dreams", icon: Moon },
-  slack: { label: "Slack", icon: PLATFORMS.slack.glyph },
-  telegram: { label: "Telegram", icon: PLATFORMS.telegram.glyph },
-  teams: { label: "Teams", icon: PLATFORMS.teams.glyph },
-  task: { label: "Task", icon: SquareKanban },
-  heartbeat: { label: "Heartbeat", icon: HeartPulse },
+  routine: { label: "header.origin.routine", icon: Workflow },
+  delegation: { label: "header.origin.delegation", icon: Share2 },
+  api: { label: "header.origin.api", icon: Plug },
+  dream: { label: "header.origin.dream", icon: Moon },
+  slack: { name: "Slack", icon: PLATFORMS.slack.glyph },
+  telegram: { name: "Telegram", icon: PLATFORMS.telegram.glyph },
+  teams: { name: "Teams", icon: PLATFORMS.teams.glyph },
+  task: { label: "header.origin.task", icon: SquareKanban },
+  heartbeat: { label: "header.origin.heartbeat", icon: HeartPulse },
 } as const;
 
 export function ConversationHeader({
@@ -59,6 +58,7 @@ export function ConversationHeader({
   /** A runner's chat: move it to this computer, unless `blocked` says why not now. */
   move?: { onSelect: () => void; blocked: string | null; label?: string };
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const modelLabel = useModelLabel();
@@ -77,7 +77,7 @@ export function ConversationHeader({
     },
     onError: (err, _input, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.conversation(id), ctx.prev);
-      toast.error("Couldn't update the chat", { description: errorMessage(err) });
+      toast.error(t("header.updateError"), { description: errorMessage(err) });
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
@@ -87,6 +87,7 @@ export function ConversationHeader({
   const { setArchived } = useArchiveChat();
 
   const origin = conversation.origin !== "chat" && conversation.origin !== "api" ? ORIGIN_META[conversation.origin] : null;
+  const originLabel = origin ? ("name" in origin ? origin.name : t(origin.label)) : "";
   const { data: allAgents = [] } = useAllAgents();
   const from = conversation.delegatedFrom ? allAgents.find((a) => a.id === conversation.delegatedFrom!.agentId) : undefined;
 
@@ -94,8 +95,8 @@ export function ConversationHeader({
   const { current } = useEffectiveModel(agent, { model: conversation.model ?? null, effort: conversation.effort ?? null, ultracode: conversation.ultracode ?? null });
   const overrides = [
     conversation.model && modelLabel(conversation.model),
-    conversation.effort && EFFORT_LABELS[conversation.effort],
-    conversation.ultracode != null && (conversation.ultracode ? current.ultracode && "Ultracode" : "Ultracode off"),
+    conversation.effort && t(`effort.${conversation.effort}`),
+    conversation.ultracode != null && (conversation.ultracode ? current.ultracode && "Ultracode" : t("header.ultracodeOff")),
   ]
     .filter(Boolean)
     .join(" · ");
@@ -114,7 +115,7 @@ export function ConversationHeader({
           <Link
             to={`/agents/${agent.id}`}
             className="flex shrink-0 items-center gap-2 rounded-lg py-1 pr-1.5 pl-1 text-sm font-medium transition hover:bg-accent/50"
-            aria-label={`Open ${agent.name}`}
+            aria-label={t("header.openAgent", { name: agent.name })}
           >
             <AgentAvatar agent={agent} size="sm" mood={mood?.mood} className="size-7" />
             <span className="hidden min-w-0 flex-col leading-tight @2xl:flex">
@@ -152,26 +153,30 @@ export function ConversationHeader({
             <TooltipTrigger asChild>
               <Link
                 to={conversation.delegatedFrom.conversationId ? `/chat/${conversation.delegatedFrom.conversationId}` : `/agents/${from.id}`}
-                aria-label={`Handed over by ${from.name} — open ${conversation.delegatedFrom.conversationId ? "that chat" : from.name}`}
+                aria-label={
+                  conversation.delegatedFrom.conversationId
+                    ? t("header.handedOverByOpenChat", { name: from.name })
+                    : t("header.handedOverByOpenAgent", { name: from.name })
+                }
                 className="inline-flex max-w-[11rem] shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-foreground/25 hover:text-foreground"
               >
                 <AgentAvatar agent={from} size="sm" still className="size-3.5 rounded-[3px] text-[8px]" />
-                <span className="truncate">From {from.name}</span>
+                <span className="truncate">{t("header.from", { name: from.name })}</span>
               </Link>
             </TooltipTrigger>
-            <TooltipContent>{conversation.delegatedFrom.conversationId ? `${from.name} handed this over — open the chat it came from` : "The chat this came from was deleted"}</TooltipContent>
+            <TooltipContent>{conversation.delegatedFrom.conversationId ? t("header.handedOverHint", { name: from.name }) : t("header.sourceDeleted")}</TooltipContent>
           </Tooltip>
         ) : origin && (conversation.origin === "routine" || conversation.origin === "heartbeat") && agent ? (
           <Link
             to={`/agents/${agent.id}/${conversation.origin === "heartbeat" ? "heartbeat" : "routines"}`}
             className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-foreground/25 hover:text-foreground @xl:inline-flex"
           >
-            <origin.icon className="size-3" /> {origin.label}
+            <origin.icon className="size-3" /> {originLabel}
           </Link>
         ) : (
           origin && (
             <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground @xl:inline-flex">
-              <origin.icon className="size-3" /> {origin.label}
+              <origin.icon className="size-3" /> {originLabel}
             </span>
           )
         )}
@@ -183,7 +188,7 @@ export function ConversationHeader({
                 {overrides}
               </span>
             </TooltipTrigger>
-            <TooltipContent>Model, effort and Ultracode set for this chat — in the model picker or with /model and /effort</TooltipContent>
+            <TooltipContent>{t("header.overridesHint")}</TooltipContent>
           </Tooltip>
         )}
         {conversation.private && <PrivateChatBadge />}
@@ -192,7 +197,7 @@ export function ConversationHeader({
             to="/archived"
             className="inline-flex shrink-0 items-center gap-1 rounded-[5px] border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:text-foreground"
           >
-            <Archive className="size-3" /> Archived
+            <Archive className="size-3" /> {t("header.archived")}
           </Link>
         )}
       </div>
@@ -205,7 +210,7 @@ export function ConversationHeader({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                aria-label={conversation.pinned ? "Unpin chat" : "Pin chat"}
+                aria-label={conversation.pinned ? t("header.unpinChat") : t("header.pinChat")}
                 aria-pressed={conversation.pinned}
                 onClick={() => update.mutate({ pinned: !conversation.pinned })}
                 className={cn("text-muted-foreground", conversation.pinned && "text-foreground")}
@@ -213,53 +218,53 @@ export function ConversationHeader({
                 <Pin className={cn(conversation.pinned && "fill-current")} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{conversation.pinned ? "Unpin" : "Pin to sidebar"}</TooltipContent>
+            <TooltipContent>{conversation.pinned ? t("header.unpin") : t("header.pinToSidebar")}</TooltipContent>
           </Tooltip>
         )}
         {onVoiceMode && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Voice mode" onClick={onVoiceMode} className="text-muted-foreground">
+              <Button variant="ghost" size="icon-sm" aria-label={t("header.voiceMode")} onClick={onVoiceMode} className="text-muted-foreground">
                 <AudioLines />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Voice mode</TooltipContent>
+            <TooltipContent>{t("header.voiceMode")}</TooltipContent>
           </Tooltip>
         )}
         {conversation.private ? (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" aria-label="End private chat" className="gap-1 text-muted-foreground" onClick={() => navigate("/")}>
-                <X /> End
+              <Button variant="ghost" size="sm" aria-label={t("header.endPrivate")} className="gap-1 text-muted-foreground" onClick={() => navigate("/")}>
+                <X /> {t("header.end")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>End and wipe this chat</TooltipContent>
+            <TooltipContent>{t("header.endHint")}</TooltipContent>
           </Tooltip>
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="More actions" className="text-muted-foreground">
+              <Button variant="ghost" size="icon-sm" aria-label={t("header.moreActions")} className="text-muted-foreground">
                 <Ellipsis />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={() => setEditing(true)}>
-                <Pencil /> Rename
+                <Pencil /> {t("common:actions.rename")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => update.mutate({ pinned: !conversation.pinned })}>
-                {conversation.pinned ? <PinOff /> : <Pin />} {conversation.pinned ? "Unpin" : "Pin"}
+                {conversation.pinned ? <PinOff /> : <Pin />} {conversation.pinned ? t("header.unpin") : t("header.pin")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setArchived(conversation, !conversation.archived)}>
-                {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? "Unarchive" : "Archive"}
+                {conversation.archived ? <ArchiveRestore /> : <Archive />} {conversation.archived ? t("header.unarchive") : t("header.archive")}
               </DropdownMenuItem>
               {move && (
                 <DropdownMenuItem disabled={!!move.blocked} title={move.blocked ?? undefined} onClick={move.onSelect}>
-                  <Laptop /> {move.label ?? `Move to ${THIS_COMPUTER_INLINE}`}
+                  <Laptop /> {move.label ?? (isMac ? t("header.moveToMac") : t("header.moveToComputer"))}
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                <Trash2 /> Delete
+                <Trash2 /> {t("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -287,6 +292,7 @@ function EditableTitle({
   setEditing: (v: boolean) => void;
   onSave: (title: string) => void;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [draft, setDraft] = useState(value);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -302,25 +308,25 @@ function EditableTitle({
       <button
         type="button"
         onClick={() => setEditing(true)}
-        title="Rename"
+        title={t("common:actions.rename")}
         className="min-w-0 truncate rounded-md px-1.5 py-1 text-left text-sm font-medium transition hover:bg-accent/50"
       >
-        {value || "New chat"}
+        {value || t("header.newChat")}
       </button>
     );
   }
 
   const commit = () => {
-    const t = draft.trim();
+    const title = draft.trim();
     setEditing(false);
-    if (t) onSave(t);
+    if (title) onSave(title);
   };
 
   return (
     <input
       ref={inputRef}
       value={draft}
-      aria-label="Chat title"
+      aria-label={t("header.chatTitle")}
       maxLength={120}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}

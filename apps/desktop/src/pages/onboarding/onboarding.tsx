@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Globe2, LockKeyhole, PartyPopper, Sparkles } from "lucide-react";
 import type { Bootstrap, InterfaceMode } from "@godmode/shared";
 import { Backdrop, Wordmark } from "@/components/brand";
@@ -18,11 +19,11 @@ import { cn } from "@/lib/utils";
 
 type StepId = "setup" | "vault" | "remote" | "done";
 
-const STEP_META: Record<StepId, Omit<StepMeta, "id">> = {
-  setup: { title: "Set up", hint: "Installs and signs in by itself", icon: <Sparkles /> },
-  vault: { title: "Vault", hint: "Keeps your logins safe", icon: <LockKeyhole /> },
-  remote: { title: "Remote dashboard", hint: "Password for web access", icon: <Globe2 /> },
-  done: { title: "Done", hint: "Start working", icon: <PartyPopper /> },
+const STEP_ICONS: Record<StepId, ReactNode> = {
+  setup: <Sparkles />,
+  vault: <LockKeyhole />,
+  remote: <Globe2 />,
+  done: <PartyPopper />,
 };
 
 const SESSION_KEY = storageKey("godmode-onboarding");
@@ -50,6 +51,7 @@ const variants = {
 };
 
 export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
+  const { t } = useTranslation("onboarding");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const serverMode = bootstrap.mode === "server";
@@ -102,7 +104,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
   };
 
   const stepId = steps[index];
-  const meta: StepMeta[] = steps.map((id) => ({ id, ...STEP_META[id] }));
+  const meta: StepMeta[] = steps.map((id) => ({ id, title: t(`steps.${id}.title`), hint: t(`steps.${id}.hint`), icon: STEP_ICONS[id] }));
 
   let content: ReactNode;
   switch (stepId) {
@@ -161,7 +163,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
       >
         <Wordmark />
         <p className="font-mono text-[11px] text-muted-foreground tabular-nums" aria-live="polite">
-          Step {index + 1} of {steps.length}
+          {t("kit.stepOf", { current: index + 1, total: steps.length })}
         </p>
       </header>
 
@@ -169,7 +171,7 @@ export function OnboardingPage({ bootstrap }: { bootstrap: Bootstrap }) {
         <aside className="hidden w-60 shrink-0 pt-10 lg:block">
           <StepRail steps={meta} current={index} />
           <p className="mt-8 border-t border-dashed pt-5 text-xs leading-relaxed text-muted-foreground">
-            Everything stays on this machine. You can change any of this later in Settings.
+            {t("staysHere")}
           </p>
         </aside>
         <main ref={scroller} className="min-h-0 flex-1 overflow-y-auto">

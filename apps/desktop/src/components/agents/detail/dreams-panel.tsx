@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Ban,
   ChevronDown,
@@ -37,6 +38,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useLocale } from "@/i18n/language";
 import { DreamReviewDialog } from "./dream-review";
 import {
   ACTIVE_DREAM,
@@ -47,7 +49,6 @@ import {
   DreamStatusBadge,
   UndoDreamDialog,
   dreamWhen,
-  plural,
   reviewedLabel,
   shortChars,
   upcomingWhen,
@@ -92,6 +93,7 @@ export function useDreamingNow(agentId: string): boolean {
 
 /** Dreaming status, "Dream now" and the dream journal of one agent (Memory tab). */
 export function DreamsPanel({ agent }: { agent: Agent }) {
+  const { t } = useTranslation(["agents", "common"]);
   const qc = useQueryClient();
   const q = useDreamOverview(agent.id);
   const memorySettings = useSettings().data?.memory;
@@ -109,10 +111,10 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
         old ? { ...old, active: dream, dreams: [dream, ...old.dreams.filter((d) => d.id !== dream.id)] } : old,
       );
       qc.invalidateQueries({ queryKey: qk.agentDreams(agent.id) });
-      toast.success(`${agent.name} is dreaming…`, { description: `${reviewedLabel(dream)}.` });
+      toast.success(t("dreamsPanel.toast.started", { name: agent.name }), { description: t("dreamsPanel.toast.startedDescription", { reviewed: reviewedLabel(dream) }) });
     },
     onError: (err) => {
-      if (!isLicenseRequired(err)) toast.error("Couldn't start a dream", { description: errorMessage(err) });
+      if (!isLicenseRequired(err)) toast.error(t("dreamsPanel.toast.startError"), { description: errorMessage(err) });
       qc.invalidateQueries({ queryKey: qk.agentDreams(agent.id) });
     },
   });
@@ -123,11 +125,11 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.agentDreams(agent.id) });
       qc.invalidateQueries({ queryKey: qk.runs });
-      toast.success("Stopping the dream…", { description: "Whatever it changed so far is rolled back." });
+      toast.success(t("dreamsPanel.toast.stopping"), { description: t("dreamsPanel.toast.stoppingDescription") });
     },
     onError: (err) => {
       setStoppingRun(null);
-      toast.error("Couldn't stop the dream", { description: errorMessage(err) });
+      toast.error(t("dreamsPanel.toast.stopError"), { description: errorMessage(err) });
     },
   });
 
@@ -145,10 +147,10 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
           <div className="min-w-0 flex-1 basis-64">
             <div className="flex items-center gap-2">
               <h2 id={titleId} className="text-sm font-medium tracking-[-0.01em]">
-                Dreaming
+                {t("dreamsPanel.title")}
               </h2>
               {o && !o.enabled && (
-                <span className="rounded-[5px] border bg-secondary px-1.5 text-[10.5px] font-medium text-muted-foreground">Off</span>
+                <span className="rounded-[5px] border bg-secondary px-1.5 text-[10.5px] font-medium text-muted-foreground">{t("common:status.off")}</span>
               )}
             </div>
             {q.isLoading ? (
@@ -157,7 +159,7 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
                 <Skeleton className="h-3.5 w-48 max-w-full" />
               </div>
             ) : q.isError ? (
-              <p className="mt-0.5 text-xs text-destructive">Couldn't load dreams: {errorMessage(q.error)}</p>
+              <p className="mt-0.5 text-xs text-destructive">{t("dreamsPanel.loadError", { error: errorMessage(q.error) })}</p>
             ) : o ? (
               <StatusLines overview={o} agent={agent} minExchanges={dreaming?.minNewExchanges} refreshDays={dreaming?.refreshDays} />
             ) : null}
@@ -169,21 +171,21 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
                 size="sm"
                 disabled={!active.runId || stopping}
                 onClick={() => active.runId && cancel.mutate(active.runId)}
-                aria-label={stopping ? `Stopping ${agent.name}'s dream` : `Stop ${agent.name}'s dream`}
+                aria-label={stopping ? t("dreamsPanel.stoppingLabel", { name: agent.name }) : t("dreamsPanel.stopLabel", { name: agent.name })}
               >
                 {stopping ? (
                   <>
-                    <Spinner /> Stopping…
+                    <Spinner /> {t("dreamsPanel.stopping")}
                   </>
                 ) : (
                   <>
-                    <CircleStop /> Cancel
+                    <CircleStop /> {t("common:actions.cancel")}
                   </>
                 )}
               </Button>
             )}
             <Button size="sm" disabled={!o || !!active || start.isPending || !agent.enabled} onClick={() => start.mutate()}>
-              {start.isPending ? <Spinner /> : <Sparkles />} Dream now
+              {start.isPending ? <Spinner /> : <Sparkles />} {t("dreamsPanel.dreamNow")}
             </Button>
           </div>
         </div>
@@ -218,11 +220,11 @@ export function DreamsPanel({ agent }: { agent: Agent }) {
   );
 }
 
-const LAST_DREAM: Partial<Record<DreamStatus, string>> = {
-  failed: "Last dream failed",
-  cancelled: "Last dream was cancelled",
-  paused: "Last dream paused",
-};
+const LAST_DREAM = {
+  failed: "dreamsPanel.last.failed",
+  cancelled: "dreamsPanel.last.cancelled",
+  paused: "dreamsPanel.last.paused",
+} as const;
 
 function StatusLines({
   overview: o,
@@ -235,6 +237,8 @@ function StatusLines({
   minExchanges?: number;
   refreshDays?: number;
 }) {
+  const { t } = useTranslation("agents");
+  const { dateLocale } = useLocale();
   const active = o.active;
   const now = useNow(!!active);
 
@@ -245,7 +249,7 @@ function StatusLines({
         <p className="flex flex-wrap items-baseline gap-x-2">
           {/* Only the status is announced; the ticking timer sits outside the live region. */}
           <span aria-live="polite" className="inline-flex flex-wrap items-baseline gap-x-2">
-            <span className="text-shimmer text-[13px] font-medium">{queued ? "Waiting to dream…" : "Dreaming…"}</span>
+            <span className="text-shimmer text-[13px] font-medium">{queued ? t("dreamsPanel.waitingToDream") : t("dreamsPanel.dreaming")}</span>
             <span>{reviewedLabel(active)}</span>
           </span>
           {!queued && (
@@ -254,7 +258,7 @@ function StatusLines({
             </span>
           )}
         </p>
-        {queued && <p>Starts as soon as {agent.name} has finished what it's doing.</p>}
+        {queued && <p>{t("dreamsPanel.startsSoon", { name: agent.name })}</p>}
       </div>
     );
   }
@@ -269,65 +273,68 @@ function StatusLines({
       <p className="flex flex-wrap items-center gap-x-1.5">
         {last && lastAt ? (
           <span>
-            {LAST_DREAM[last.status] ?? "Last dream"}{" "}
-            <time dateTime={lastAt.toISOString()} title={format(lastAt, "PPpp")}>
-              {formatDistanceToNowStrict(lastAt, { addSuffix: true })}
-            </time>
-            {last.status === "paused" && (last.reason === "size" ? " — the next scheduled dream takes over" : ` — it continues when ${agent.name} is idle`)}
-            {last.status === "reverted" && " (undone)"}
+            <Trans
+              t={t}
+              i18nKey={last.status in LAST_DREAM ? LAST_DREAM[last.status as keyof typeof LAST_DREAM] : "dreamsPanel.last.default"}
+              values={{ ago: formatDistanceToNowStrict(lastAt, { addSuffix: true, locale: dateLocale }) }}
+              components={{ time: <time dateTime={lastAt.toISOString()} title={format(lastAt, "PPpp", { locale: dateLocale })} /> }}
+            />
+            {last.status === "paused" && (last.reason === "size" ? t("dreamsPanel.last.pausedSize") : t("dreamsPanel.last.pausedIdle", { name: agent.name }))}
+            {last.status === "reverted" && t("dreamsPanel.last.undone")}
           </span>
         ) : (
-          <span>Hasn't dreamt yet</span>
+          <span>{t("dreamsPanel.neverDreamt")}</span>
         )}
         <span aria-hidden className="text-muted-foreground/50">
           ·
         </span>
         {!o.enabled ? (
           <span>
-            Dreaming is off — turn it on in{" "}
-            <Link
-              to="/settings/memory"
-              className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground"
-            >
-              Settings → Memory
-            </Link>
+            <Trans t={t} i18nKey="dreamsPanel.off" components={{ link: <Link to="/settings/memory" className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground" /> }} />
           </span>
         ) : o.nextDreamAt ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <span tabIndex={0} className="cursor-default rounded-sm underline decoration-dotted decoration-muted-foreground/40 underline-offset-[3px] outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-                Next dream {upcomingWhen(o.nextDreamAt)}
+                {t("dreamsPanel.nextDream", { when: upcomingWhen(o.nextDreamAt) })}
               </span>
             </TooltipTrigger>
             <TooltipContent className="max-w-64 text-center">
-              On schedule, {agent.name} dreams once it has had {plural(threshold, "new exchange")} since its last dream
-              {refreshDays ? ` — or after ${plural(refreshDays, "day")} to bring dates in its memory up to date` : ""}.
+              {refreshDays
+                ? t("dreamsPanel.scheduleHintRefresh", {
+                    name: agent.name,
+                    exchanges: t("dreamsPanel.newExchanges", { count: threshold }),
+                    days: t("dreamsPanel.days", { count: refreshDays }),
+                  })
+                : t("dreamsPanel.scheduleHint", { name: agent.name, exchanges: t("dreamsPanel.newExchanges", { count: threshold }) })}
             </TooltipContent>
           </Tooltip>
         ) : (
           <span>
-            No upcoming dream — check the schedule in{" "}
-            <Link
-              to="/settings/memory"
-              className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground"
-            >
-              Settings → Memory
-            </Link>
+            <Trans t={t} i18nKey="dreamsPanel.noUpcoming" components={{ link: <Link to="/settings/memory" className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground" /> }} />
           </span>
         )}
       </p>
       {!agent.enabled ? (
-        <p>{agent.name} is switched off — switch it on to let it dream.</p>
+        <p>{t("dreamsPanel.switchedOff", { name: agent.name })}</p>
       ) : exchanges > 0 ? (
         <p className="flex items-center gap-1.5">
           <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-dream" />
           <span>
-            <span className="font-medium text-foreground tabular-nums">{plural(exchanges, "new exchange")}</span> in {plural(conversations, "chat")} waiting
-            {o.enabled && exchanges < threshold ? ` — the next scheduled dream needs ${threshold}` : ""}
+            <Trans
+              t={t}
+              i18nKey={o.enabled && exchanges < threshold ? "dreamsPanel.pendingBelow" : "dreamsPanel.pending"}
+              values={{
+                exchanges: t("dreamsPanel.newExchanges", { count: exchanges }),
+                chats: t("dreamParts.chats", { count: conversations }),
+                threshold,
+              }}
+              components={{ b: <span className="font-medium text-foreground tabular-nums" /> }}
+            />
           </span>
         </p>
       ) : (
-        <p>{last ? "Nothing new since the last dream." : "Nothing to dream about yet — chat with the agent first."}</p>
+        <p>{last ? t("dreamsPanel.nothingNew") : t("dreamsPanel.nothingYet")}</p>
       )}
     </div>
   );
@@ -349,25 +356,34 @@ function MemoryMeter({
   dreamsByItself: boolean;
   dreaming: boolean;
 }) {
+  const { t } = useTranslation("agents");
+  const { intlLocale } = useLocale();
   const cut = loaded && chars > limit;
   const over = chars > target;
-  const next = dreaming ? "This dream is shortening it." : dreamsByItself ? "Its next dream shortens it — or dream now." : "Dream now to shorten it.";
+  const next = dreaming ? t("dreamsPanel.meter.shortening") : dreamsByItself ? t("dreamsPanel.meter.nextShortens") : t("dreamsPanel.meter.dreamToShorten");
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t px-4 py-3 @xl:px-5">
       <div className="flex items-baseline gap-2">
         <span className="font-mono text-[11.5px] text-muted-foreground">MEMORY.md</span>
         <span className="text-xs tabular-nums">
-          <span className={cn("font-medium", cut ? "text-destructive" : over ? "text-warning" : "text-foreground")}>{chars.toLocaleString()}</span>
-          <span className="text-muted-foreground"> of {target.toLocaleString()} characters</span>
+          <Trans
+            t={t}
+            i18nKey="dreamsPanel.meter.size"
+            values={{ chars: chars.toLocaleString(intlLocale), target: target.toLocaleString(intlLocale) }}
+            components={{
+              b: <span className={cn("font-medium", cut ? "text-destructive" : over ? "text-warning" : "text-foreground")} />,
+              muted: <span className="text-muted-foreground" />,
+            }}
+          />
         </span>
       </div>
       <div
         role="meter"
-        aria-label="Size of MEMORY.md"
+        aria-label={t("memoryEditorParts.sizeLabel")}
         aria-valuemin={0}
         aria-valuemax={limit}
         aria-valuenow={Math.min(chars, limit)}
-        aria-valuetext={`${chars.toLocaleString()} of ${target.toLocaleString()} characters`}
+        aria-valuetext={t("memoryEditorParts.sizeValue", { chars: chars.toLocaleString(intlLocale), target: target.toLocaleString(intlLocale) })}
         className="relative h-1.5 min-w-32 flex-1 basis-40 rounded-full bg-secondary"
       >
         <div
@@ -377,19 +393,13 @@ function MemoryMeter({
         <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-foreground/35" style={{ left: `${(target / limit) * 100}%` }} />
       </div>
       <p className="basis-full text-xs text-muted-foreground @3xl:basis-auto @3xl:max-w-[26rem] @3xl:text-right">
-        {cut ? (
-          <>
-            Chats load only the first {limit.toLocaleString()} — the end is missing. {next}
-          </>
-        ) : over ? (
-          <>
-            {(chars - target).toLocaleString()} over its limit. {next}
-          </>
-        ) : loaded ? (
-          "Loaded in full into every chat."
-        ) : (
-          "Within its size limit."
-        )}
+        {cut
+          ? t("dreamsPanel.meter.cut", { limit: limit.toLocaleString(intlLocale), next })
+          : over
+            ? t("dreamsPanel.meter.over", { over: (chars - target).toLocaleString(intlLocale), next })
+            : loaded
+              ? t("memoryEditorParts.budgetOk")
+              : t("dreamsPanel.meter.within")}
       </p>
     </div>
   );
@@ -413,10 +423,11 @@ function Journal({
   onReview: (dream: Dream) => void;
   onUndo: (dream: Dream) => void;
 }) {
+  const { t } = useTranslation("agents");
   if (!dreams.length) {
     return (
       <p className="border-t px-4 py-4 text-xs leading-relaxed text-muted-foreground @xl:px-5">
-        Every dream lands here: what {agentName} reviewed, what it changed in its memory and why — with a line-by-line diff and a way to undo it.
+        {t("dreamsPanel.journal.empty", { name: agentName })}
       </p>
     );
   }
@@ -424,7 +435,7 @@ function Journal({
   const older = dreams.length - JOURNAL_PREVIEW;
   return (
     <div className="border-t">
-      <h3 className="eyebrow px-4 pt-3.5 @xl:px-5">Dream journal</h3>
+      <h3 className="eyebrow px-4 pt-3.5 @xl:px-5">{t("dreamsPanel.journal.title")}</h3>
       <ol className="px-4 pt-3 pb-1 @xl:px-5">
         <AnimatePresence initial={false}>
           {shown.map((d, i) => (
@@ -448,7 +459,7 @@ function Journal({
           className="flex w-full items-center gap-1.5 border-t px-4 py-2.5 text-left text-xs font-medium text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none @xl:px-5"
         >
           <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} aria-hidden />
-          {showAll ? "Show fewer" : `Show ${plural(older, "older dream")}`}
+          {showAll ? t("dreamsPanel.showFewer") : t("dreamsPanel.journal.showOlder", { count: older })}
         </button>
       )}
     </div>
@@ -480,6 +491,8 @@ function JournalEntry({
   onReview: (dream: Dream) => void;
   onUndo: (dream: Dream) => void;
 }) {
+  const { t } = useTranslation("agents");
+  const { dateLocale, intlLocale } = useLocale();
   const [open, setOpen] = useState(defaultOpen);
   const [allChanges, setAllChanges] = useState(false);
   const active = ACTIVE_DREAM.includes(d.status);
@@ -512,14 +525,14 @@ function JournalEntry({
       </span>
 
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <time dateTime={d.createdAt} title={format(new Date(d.createdAt), "PPpp")} className="text-[13px] font-medium">
+        <time dateTime={d.createdAt} title={format(new Date(d.createdAt), "PPpp", { locale: dateLocale })} className="text-[13px] font-medium">
           {dreamWhen(d.createdAt)}
         </time>
         <DreamReasonBadge reason={d.reason} />
         <DreamStatusBadge status={d.status} />
         {!active && (
-          <span className="ml-auto text-[11px] text-muted-foreground tabular-nums" title={format(at, "PPpp")}>
-            {formatDistanceToNowStrict(at, { addSuffix: true })}
+          <span className="ml-auto text-[11px] text-muted-foreground tabular-nums" title={format(at, "PPpp", { locale: dateLocale })}>
+            {formatDistanceToNowStrict(at, { addSuffix: true, locale: dateLocale })}
           </span>
         )}
       </div>
@@ -532,10 +545,10 @@ function JournalEntry({
             </span>
             <span
               className="tabular-nums"
-              title={`MEMORY.md: ${d.memoryChars.before.toLocaleString()} → ${d.memoryChars.after.toLocaleString()} characters`}
+              title={t("dreamsPanel.entry.memoryTitle", { before: d.memoryChars.before.toLocaleString(intlLocale), after: d.memoryChars.after.toLocaleString(intlLocale) })}
             >
               MEMORY.md {shortChars(d.memoryChars.before)} <span aria-hidden>→</span>
-              <span className="sr-only">to</span>{" "}
+              <span className="sr-only">{t("dreamsPanel.entry.to")}</span>{" "}
               <span className={cn("font-medium", d.memoryChars.after < d.memoryChars.before && "text-success")}>{shortChars(d.memoryChars.after)}</span>
             </span>
           </>
@@ -545,13 +558,13 @@ function JournalEntry({
       {d.summary ? (
         <p className={cn("mt-2 max-w-3xl text-sm leading-relaxed text-pretty", rolledBack && "text-muted-foreground")}>{d.summary}</p>
       ) : active ? (
-        <p className="text-shimmer mt-2 text-sm">Consolidating memory…</p>
+        <p className="text-shimmer mt-2 text-sm">{t("dreamsPanel.entry.consolidating")}</p>
       ) : null}
 
       {rolledBack && d.changes.length > 0 && (
         <p className="mt-2.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
           <RotateCcw className="size-3 shrink-0" aria-hidden />
-          {d.files.length ? "Attempted — rolled back where possible" : "Attempted — rolled back, nothing was kept"}
+          {d.files.length ? t("dreamsPanel.entry.attemptedPartly") : t("dreamsPanel.entry.attemptedAll")}
         </p>
       )}
       {d.changes.length > 0 &&
@@ -578,7 +591,7 @@ function JournalEntry({
                   onClick={() => setAllChanges((v) => !v)}
                   className="text-xs font-medium text-muted-foreground underline decoration-muted-foreground/30 underline-offset-[3px] transition hover:text-foreground"
                 >
-                  {allChanges ? "Show fewer changes" : `Show ${plural(d.changes.length - CHANGES_PREVIEW, "more change")}`}
+                  {allChanges ? t("dreamsPanel.entry.showFewerChanges") : t("dreamsPanel.entry.showMoreChanges", { count: d.changes.length - CHANGES_PREVIEW })}
                 </button>
               </li>
             )}
@@ -611,7 +624,7 @@ function JournalEntry({
         </p>
       )}
       {d.status === "succeeded" && !d.files.length && (
-        <p className="mt-2 text-xs text-muted-foreground">Memory was already in good shape — nothing to rewrite.</p>
+        <p className="mt-2 text-xs text-muted-foreground">{t("dreamsPanel.entry.goodShape")}</p>
       )}
 
       {(d.changes.length > 0 || d.files.length > 0 || d.workspace.length > 0) && (
@@ -625,7 +638,7 @@ function JournalEntry({
               className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-xs font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
-              {open ? "Hide changes" : plural(d.changes.length, rolledBack ? "attempted change" : "change")}
+              {open ? t("dreamsPanel.entry.hideChanges") : rolledBack ? t("dreamsPanel.entry.attemptedChanges", { count: d.changes.length }) : t("dreamsPanel.entry.changes", { count: d.changes.length })}
             </button>
           )}
           {d.files.length > 0 && (
@@ -650,23 +663,23 @@ function JournalEntry({
           <span className="ml-auto flex items-center gap-1">
             {(d.files.length > 0 || d.workspace.some((m) => m.action === "rewrite")) && (
               <Button variant="outline" size="xs" onClick={() => onReview(d)}>
-                <Eye /> Review changes
+                <Eye /> {t("dreamsPanel.entry.review")}
               </Button>
             )}
             {d.canRevert && undoBlocked ? (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span tabIndex={0} className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
-                    <Button variant="ghost" size="xs" disabled aria-label={`Undo the dream of ${dreamWhen(d.createdAt)}`}>
-                      <Undo2 /> Undo
+                    <Button variant="ghost" size="xs" disabled aria-label={t("dreamsPanel.entry.undoLabel", { when: dreamWhen(d.createdAt) })}>
+                      <Undo2 /> {t("dreamsPanel.entry.undo")}
                     </Button>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>Available once the current dream has ended</TooltipContent>
+                <TooltipContent>{t("dreamsPanel.entry.undoBlocked")}</TooltipContent>
               </Tooltip>
             ) : d.canRevert ? (
-              <Button variant="ghost" size="xs" onClick={() => onUndo(d)} aria-label={`Undo the dream of ${dreamWhen(d.createdAt)}`}>
-                <Undo2 /> Undo
+              <Button variant="ghost" size="xs" onClick={() => onUndo(d)} aria-label={t("dreamsPanel.entry.undoLabel", { when: dreamWhen(d.createdAt) })}>
+                <Undo2 /> {t("dreamsPanel.entry.undo")}
               </Button>
             ) : (d.files.length > 0 || d.workspace.length > 0) && !active && d.status !== "reverted" ? (
               <Tooltip>
@@ -675,13 +688,13 @@ function JournalEntry({
                     tabIndex={0}
                     className="cursor-default rounded-sm px-1 text-[11px] text-muted-foreground/80 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
-                    Edited since — can't undo
+                    {t("dreamsPanel.entry.editedSince")}
                   </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-60 text-center">
                   {d.files.length > 0
-                    ? "Its memory files or what it sorted changed after the dream, so it can't be undone automatically. Edit the files below instead."
-                    : "What it sorted was moved or removed since (discarded files wait a week), so it can't be undone automatically."}
+                    ? t("dreamsPanel.entry.editedSinceFiles")
+                    : t("dreamsPanel.entry.editedSinceWorkspace")}
                 </TooltipContent>
               </Tooltip>
             ) : null}
@@ -693,13 +706,14 @@ function JournalEntry({
 }
 
 const MOVE_META = {
-  move: { label: "sorted", icon: FolderInput, className: "text-sky-700 dark:text-sky-300" },
-  rewrite: { label: "rewritten", icon: FilePen, className: "text-violet-700 dark:text-violet-300" },
-  discard: { label: "discarded", icon: Trash2, className: "text-rose-700 dark:text-rose-300" },
+  move: { icon: FolderInput, className: "text-sky-700 dark:text-sky-300" },
+  rewrite: { icon: FilePen, className: "text-violet-700 dark:text-violet-300" },
+  discard: { icon: Trash2, className: "text-rose-700 dark:text-rose-300" },
 } as const;
 
 /** How the dream tidied the workspace; after a rollback, what couldn't be moved back. */
 function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck: boolean }) {
+  const { t } = useTranslation("agents");
   const [all, setAll] = useState(false);
   const counts = (["move", "rewrite", "discard"] as const).map((action) => ({ action, n: moves.filter((m) => m.action === action).length })).filter((c) => c.n > 0);
   const out = moves.filter((m) => m.action === "discard").reduce((n, m) => n + m.bytes, 0);
@@ -708,24 +722,24 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
     <div className="mt-2.5 max-w-3xl overflow-hidden rounded-lg border bg-paper-2/60">
       <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2 text-xs">
         <FolderTree className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="font-medium">{stuck ? "Couldn't be put back" : "Workspace"}</span>
+        <span className="font-medium">{stuck ? t("dreamsPanel.moves.stuck") : t("dreamsPanel.moves.workspace")}</span>
         {counts.map(({ action, n }) => {
           const meta = MOVE_META[action];
           return (
             <span key={action} className={cn("inline-flex items-center gap-1 tabular-nums", meta.className)}>
               <meta.icon className="size-3" aria-hidden />
-              {n} {meta.label}
+              {t(`dreamsPanel.moves.count.${action}`, { count: n })}
             </span>
           );
         })}
-        {out > 0 && !stuck && <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">{formatBytes(out)} out of the way</span>}
+        {out > 0 && !stuck && <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">{t("dreamsPanel.moves.outOfWay", { size: formatBytes(out) })}</span>}
       </div>
       <ul className="divide-y border-t">
         {shown.map((m, i) => {
           const meta = MOVE_META[m.action];
           return (
             <li key={`${m.from}-${i}`} className="flex min-w-0 items-center gap-2 px-3 py-1.5 text-[11.5px]">
-              <meta.icon className={cn("size-3 shrink-0", meta.className)} aria-label={meta.label} />
+              <meta.icon className={cn("size-3 shrink-0", meta.className)} aria-label={t(`dreamsPanel.moves.label.${m.action}`)} />
               <span className="min-w-0 truncate font-mono text-foreground" title={`workspace/${m.from}`}>
                 {m.from}
               </span>
@@ -739,9 +753,9 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
                   </span>
                 </>
               ) : m.action === "rewrite" ? (
-                <span className="shrink-0 text-muted-foreground">{formatBytes(m.bytes)} now</span>
+                <span className="shrink-0 text-muted-foreground">{t("dreamsPanel.moves.sizeNow", { size: formatBytes(m.bytes) })}</span>
               ) : (
-                <span className="shrink-0 text-muted-foreground">removed after a week</span>
+                <span className="shrink-0 text-muted-foreground">{t("dreamsPanel.moves.removedAfterWeek")}</span>
               )}
             </li>
           );
@@ -755,7 +769,7 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
           className="flex w-full items-center gap-1.5 border-t px-3 py-1.5 text-left text-xs font-medium text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           <ChevronDown className={cn("size-3.5 transition-transform", all && "rotate-180")} aria-hidden />
-          {all ? "Show fewer" : `Show ${moves.length - MOVES_PREVIEW} more`}
+          {all ? t("dreamsPanel.showFewer") : t("dreamsPanel.moves.showMore", { count: moves.length - MOVES_PREVIEW })}
         </button>
       )}
     </div>

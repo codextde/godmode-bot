@@ -3,9 +3,11 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { ArrowUpRight, Check, CircleDashed, CircleSlash, EllipsisVertical, Flag, MessagesSquare, Paperclip, Play, SendHorizontal, SquareKanban, Trash2, Undo2, X } from "lucide-react";
 import type { Agent, HumanTask, HumanTaskCloseResult, HumanTaskPatch } from "@godmode/shared";
-import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef, isHumanTaskActive } from "@godmode/shared";
+import { humanTaskAnswer, humanTaskRef, isHumanTaskActive } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { Markdown } from "@/components/chat/markdown";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "@/components/chat/attachments";
@@ -20,19 +22,22 @@ import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { KindBadge, hostOf, outcomeOf } from "./human-task-card";
+import { t as tr } from "@/i18n";
+import { useLocale } from "@/i18n/language";
+import { KindBadge, hostOf, humanTaskWords, outcomeOf } from "./human-task-card";
 
 /** Tell the human what happened with the agent once they closed a task. */
 export function toastClosed(result: HumanTaskCloseResult, agentName: string | null) {
   const task = result.task;
-  const words = HUMAN_TASK_WORDS[task.kind];
-  const title = `${humanTaskRef(task)} ${(task.status === "done" ? words.wasDone : task.kind === "task" ? "closed" : words.wasDeclined).toLowerCase()}`;
-  if (result.continued) toast.success(title, { description: `${agentName ?? "The agent"} picks it up from here.` });
+  const ref = humanTaskRef(task);
+  const title = task.status === "done" ? tr(`humanTasks:closedToast.${task.kind}Done`, { ref }) : tr(`humanTasks:closedToast.${task.kind}Declined`, { ref });
+  if (result.continued) toast.success(title, { description: tr("humanTasks:closedToast.continued", { name: agentName ?? tr("humanTasks:detail.theAgentCap") }) });
   else if (result.notContinued) toast.warning(title, { description: result.notContinued });
   else toast.success(title);
 }
 
 export function useHumanTaskActions() {
+  const { t } = useTranslation("humanTasks");
   const qc = useQueryClient();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: qk.humanTasks });
@@ -46,7 +51,7 @@ export function useHumanTaskActions() {
       qc.setQueryData<HumanTask[]>(qk.humanTasks, (list) => list?.map((t) => (t.id === id ? { ...t, ...(patch.status ? { status: patch.status } : {}), ...(patch.priority ? { priority: patch.priority } : {}) } : t)));
     },
     onSettled: refresh,
-    onError: (e) => toastApiError(e, "Couldn't update the task", qc),
+    onError: (e) => toastApiError(e, t("actions.updateError"), qc),
   });
   const close = useMutation({
     mutationFn: ({ id, outcome, note, files, optionId }: { id: string; outcome: "done" | "declined"; note: string; files: PendingAttachment[]; optionId?: string }) =>
@@ -65,13 +70,13 @@ export function useHumanTaskActions() {
       }
     },
     onSettled: refresh,
-    onError: (e) => toastApiError(e, "Couldn't close the task", qc),
+    onError: (e) => toastApiError(e, t("actions.closeError"), qc),
   });
   const remove = useMutation({
     mutationFn: (id: string) => api.humanTasks.delete(id),
-    onSuccess: () => toast.success("Task deleted"),
+    onSuccess: () => toast.success(t("actions.deleted")),
     onSettled: refresh,
-    onError: (e) => toastApiError(e, "Couldn't delete the task", qc),
+    onError: (e) => toastApiError(e, t("actions.deleteError"), qc),
   });
   return { update, close, remove };
 }
@@ -107,6 +112,8 @@ export function HumanTaskSheet({
 }
 
 function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: Agent; focusNote?: boolean; onClose: () => void }) {
+  const { t } = useTranslation(["humanTasks", "common"]);
+  const { dateLocale } = useLocale();
   const { update, close, remove } = useHumanTaskActions();
   const active = isHumanTaskActive(task);
   const outcome = outcomeOf(task);
@@ -121,13 +128,13 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
         {active && <KindBadge task={task} className="rounded-full px-2 py-0.5 text-[11.5px]" />}
         {active && task.priority === "high" && (
           <span className="flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[11.5px] font-medium text-rose-600 dark:text-rose-400">
-            <Flag className="size-3 fill-current" /> Urgent
+            <Flag className="size-3 fill-current" /> {t("card.urgent")}
           </span>
         )}
         <div className="ml-auto flex items-center gap-1">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="size-8" aria-label="More">
+              <Button variant="ghost" size="icon" className="size-8" aria-label={t("detail.more")}>
                 <EllipsisVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -135,25 +142,25 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
               {task.conversationId && (
                 <DropdownMenuItem asChild>
                   <Link to={`/chat/${task.conversationId}`}>
-                    <MessagesSquare /> Open chat
+                    <MessagesSquare /> {t("detail.openChat")}
                   </Link>
                 </DropdownMenuItem>
               )}
               {task.taskId && (
                 <DropdownMenuItem asChild>
                   <Link to={`/tasks?task=${task.taskId}`}>
-                    <SquareKanban /> Open task #{task.taskNumber}
+                    <SquareKanban /> {t("detail.openTask", { number: task.taskNumber })}
                   </Link>
                 </DropdownMenuItem>
               )}
               {active && (
                 <DropdownMenuItem onClick={() => update.mutate({ id: task.id, patch: { status: task.status === "backlog" ? "open" : "backlog" } })}>
-                  {task.status === "backlog" ? <Undo2 /> : <CircleDashed />} {task.status === "backlog" ? "Move to To do" : "Move to backlog"}
+                  {task.status === "backlog" ? <Undo2 /> : <CircleDashed />} {task.status === "backlog" ? t("detail.moveToOpen") : t("detail.moveToBacklog")}
                 </DropdownMenuItem>
               )}
               {active && (
                 <DropdownMenuItem onClick={() => update.mutate({ id: task.id, patch: { priority: task.priority === "high" ? "normal" : "high" } })}>
-                  <Flag /> {task.priority === "high" ? "Not urgent" : "Mark urgent"}
+                  <Flag /> {task.priority === "high" ? t("detail.notUrgent") : t("detail.markUrgent")}
                 </DropdownMenuItem>
               )}
               {(own || !active) && (
@@ -166,14 +173,14 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
                       onClose();
                     }}
                   >
-                    <Trash2 /> Delete
+                    <Trash2 /> {t("common:actions.delete")}
                   </DropdownMenuItem>
                 </>
               )}
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="sm" className="h-8 text-muted-foreground" onClick={onClose}>
-            Close <kbd className="ml-1 font-mono text-[10px] opacity-60">Esc</kbd>
+            {t("common:actions.close")} <kbd className="ml-1 font-mono text-[10px] opacity-60">Esc</kbd>
           </Button>
         </div>
       </header>
@@ -185,22 +192,22 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
             <SheetDescription asChild>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
                 {own ? (
-                  <span>Your own task</span>
+                  <span>{t("detail.yourOwnTask")}</span>
                 ) : (
                   <span className="flex items-center gap-1.5 text-foreground/80">
                     {agent && <AgentAvatar agent={agent} size="sm" still className="size-5 rounded-[5px] text-[11px]" />}
-                    {name ?? "An agent that was removed"}
+                    {name ?? t("detail.removedAgent")}
                   </span>
                 )}
                 <span className="text-muted-foreground/50">·</span>
-                <time dateTime={task.createdAt} title={format(new Date(task.createdAt), "PPpp")}>
-                  {formatDistanceToNowStrict(new Date(task.createdAt), { addSuffix: true })}
+                <time dateTime={task.createdAt} title={format(new Date(task.createdAt), "PPpp", { locale: dateLocale })}>
+                  {formatDistanceToNowStrict(new Date(task.createdAt), { addSuffix: true, locale: dateLocale })}
                 </time>
                 {task.taskNumber != null ? (
                   <>
                     <span className="text-muted-foreground/50">·</span>
                     <Link to={`/tasks?task=${task.taskId}`} className="hover:text-foreground hover:underline">
-                      for task #{task.taskNumber}
+                      {t("detail.forTask", { number: task.taskNumber })}
                     </Link>
                   </>
                 ) : task.conversationId && task.conversationTitle ? (
@@ -225,7 +232,7 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
                 <ArrowUpRight className="size-4 transition group-hover:translate-x-px group-hover:-translate-y-px" />
               </span>
               <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium">Open {hostOf(task.url)}</span>
+                <span className="block text-[13.5px] font-medium">{t("detail.openHost", { host: hostOf(task.url) })}</span>
                 <span className="block truncate font-mono text-[11.5px] text-muted-foreground">{task.url}</span>
               </span>
             </button>
@@ -233,17 +240,19 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
 
           {task.body ? (
             <section className="space-y-2">
-              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{own ? "Notes" : BODY_HEADING[task.kind]}</h3>
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{own ? t("detail.notes") : t(`detail.bodyHeading.${task.kind}`)}</h3>
               <Markdown className="text-[14px]">{task.body}</Markdown>
             </section>
           ) : null}
 
           {task.fromAnswer && task.conversationId && (
             <p className="text-[13px] text-muted-foreground">
-              {name ?? "The agent"} left this open in the answer it finished with.{" "}
-              <Link to={`/chat/${task.conversationId}`} className="text-foreground underline-offset-2 hover:underline">
-                Read the whole answer
-              </Link>
+              <Trans
+                t={t}
+                i18nKey="detail.fromAnswer"
+                values={{ name: name ?? t("detail.theAgentCap") }}
+                components={{ link: <Link to={`/chat/${task.conversationId}`} className="text-foreground underline-offset-2 hover:underline" /> }}
+              />
             </p>
           )}
 
@@ -251,8 +260,8 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
             <section className="space-y-2 rounded-xl border bg-foreground/[0.025] p-4">
               <p className={cn("flex items-center gap-1.5 text-[13px] font-medium", outcome.tone)}>
                 <outcome.icon className="size-4" />
-                {task.status === "withdrawn" ? `${name ?? "The agent"} took it back` : outcome.label}
-                {task.closedAt && <span className="font-normal text-muted-foreground">· {formatDistanceToNowStrict(new Date(task.closedAt), { addSuffix: true })}</span>}
+                {task.status === "withdrawn" ? t("detail.tookBack", { name: name ?? t("detail.theAgentCap") }) : outcome.label}
+                {task.closedAt && <span className="font-normal text-muted-foreground">· {formatDistanceToNowStrict(new Date(task.closedAt), { addSuffix: true, locale: dateLocale })}</span>}
               </p>
               {(humanTaskAnswer(task) || task.closedReason) && <p className="text-sm whitespace-pre-wrap text-foreground/80">{humanTaskAnswer(task) || task.closedReason}</p>}
               {!!task.response?.attachments.length && (
@@ -265,36 +274,35 @@ function Detail({ task, agent, focusNote, onClose }: { task: HumanTask; agent?: 
         </div>
       </div>
 
-      {active && <CloseBox task={task} agentName={own ? null : (name ?? "the agent")} focus={focusNote} pending={close.isPending} onStart={() => update.mutate({ id: task.id, patch: { status: "doing" } })} onBack={() => update.mutate({ id: task.id, patch: { status: "open" } })} onClose={(outcome, note, files, optionId) => close.mutate({ id: task.id, outcome, note, files, optionId }, { onSuccess: onClose })} />}
+      {active && <CloseBox task={task} agentName={own ? null : (name ?? t("detail.theAgent"))} focus={focusNote} pending={close.isPending} onStart={() => update.mutate({ id: task.id, patch: { status: "doing" } })} onBack={() => update.mutate({ id: task.id, patch: { status: "open" } })} onClose={(outcome, note, files, optionId) => close.mutate({ id: task.id, outcome, note, files, optionId }, { onSuccess: onClose })} />}
     </div>
   );
 }
 
-const BODY_HEADING: Record<HumanTask["kind"], string> = { task: "What to do", decision: "What it's about", approval: "Why" };
-
 function StatusPill({ task }: { task: HumanTask }) {
-  const words = HUMAN_TASK_WORDS[task.kind];
+  const { t } = useTranslation("humanTasks");
+  const words = humanTaskWords(task.kind);
   const meta: Record<HumanTask["status"], { label: string; className: string }> = {
-    backlog: { label: "Backlog", className: "bg-foreground/[0.04] text-muted-foreground" },
-    open: { label: "To do", className: "bg-foreground/[0.06] text-foreground/80" },
-    doing: { label: "Doing", className: "bg-brand-soft text-brand-strong" },
+    backlog: { label: t("status.backlog"), className: "bg-foreground/[0.04] text-muted-foreground" },
+    open: { label: t("status.open"), className: "bg-foreground/[0.06] text-foreground/80" },
+    doing: { label: t("status.doing"), className: "bg-brand-soft text-brand-strong" },
     done: { label: words.wasDone, className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" },
     declined: {
       label: words.wasDeclined,
       className: task.kind === "decision" ? "bg-foreground/[0.06] text-muted-foreground" : "bg-rose-500/10 text-rose-700 dark:text-rose-300",
     },
-    withdrawn: { label: "Taken back", className: "bg-foreground/[0.06] text-muted-foreground" },
+    withdrawn: { label: t("status.withdrawn"), className: "bg-foreground/[0.06] text-muted-foreground" },
   };
   const m = meta[task.status];
   return <span className={cn("rounded-full px-2 py-0.5 text-[11.5px] font-medium", m.className)}>{m.label}</span>;
 }
 
 /** What the agent does once the task is closed, in a line above the box. */
-function closeHint(task: HumanTask, agentName: string | null): string | null {
+function closeHint(t: TFunction<["humanTasks", "common"]>, task: HumanTask, agentName: string | null): string | null {
   if (!agentName) return null;
-  if (task.questionId) return `${agentName} stands still until you ${task.kind === "approval" ? "decide" : "answer"}, and goes on right after.`;
-  if (task.kind === "decision") return `${agentName} goes on with your answer. Replying in its chat works too.`;
-  return `${agentName} continues by itself once you close this. Anything it should know goes in the note.`;
+  if (task.questionId) return task.kind === "approval" ? t("closeHint.waitsForDecision", { name: agentName }) : t("closeHint.waitsForAnswer", { name: agentName });
+  if (task.kind === "decision") return t("closeHint.decision", { name: agentName });
+  return t("closeHint.task", { name: agentName });
 }
 
 function CloseBox({
@@ -315,6 +323,7 @@ function CloseBox({
   onBack: () => void;
   onClose: (outcome: "done" | "declined", note: string, files: PendingAttachment[], optionId?: string) => void;
 }) {
+  const { t } = useTranslation(["humanTasks", "common"]);
   const [note, setNote] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [files, setFiles] = useState<PendingAttachment[]>([]);
@@ -331,7 +340,7 @@ function CloseBox({
     if (f.previewUrl) URL.revokeObjectURL(f.previewUrl);
     setFiles((list) => list.filter((x) => x.id !== f.id));
   };
-  const words = HUMAN_TASK_WORDS[task.kind];
+  const words = humanTaskWords(task.kind);
   const decision = task.kind === "decision";
   const approval = task.kind === "approval";
   // An answer needs words, a pick or a file.
@@ -340,20 +349,20 @@ function CloseBox({
     if (pending || (outcome === "done" && !ready)) return;
     onClose(outcome, note.trim(), files, outcome === "done" && decision ? (picked ?? undefined) : undefined);
   };
-  const hint = closeHint(task, agentName);
+  const hint = closeHint(t, task, agentName);
   const placeholder = !agentName
-    ? "Note (optional)"
+    ? t("closeBox.note")
     : decision
       ? task.options.length
-        ? "Or answer in your own words"
-        : `Your answer for ${agentName}`
-      : `Note for ${agentName} (optional)`;
+        ? t("closeBox.ownWords")
+        : t("closeBox.answerFor", { name: agentName })
+      : t("closeBox.noteFor", { name: agentName });
 
   return (
     <div className="shrink-0 border-t bg-paper-2 p-3">
       {hint && <p className="mb-2 px-1 text-xs text-muted-foreground">{hint}</p>}
       {decision && task.options.length > 0 && (
-        <div className="mb-2 grid gap-1.5" role="radiogroup" aria-label="Suggested answers">
+        <div className="mb-2 grid gap-1.5" role="radiogroup" aria-label={t("closeBox.suggested")}>
           {task.options.map((o, i) => {
             const on = picked === o.id;
             return (
@@ -376,7 +385,7 @@ function CloseBox({
                   <span className="block text-[13px] font-medium">{o.label}</span>
                   {o.description && <span className="block text-xs text-muted-foreground">{o.description}</span>}
                 </span>
-                {o.recommended && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">Recommended</span>}
+                {o.recommended && <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{t("closeBox.recommended")}</span>}
               </button>
             );
           })}
@@ -396,7 +405,7 @@ function CloseBox({
         <div className="flex items-end gap-1">
           {agentName && !approval && (
             <>
-              <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label="Attach files" onClick={() => input.current?.click()}>
+              <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground" aria-label={t("closeBox.attach")} onClick={() => input.current?.click()}>
                 <Paperclip className="size-4" />
               </Button>
               <input
@@ -438,11 +447,11 @@ function CloseBox({
       <div className="mt-2.5 flex items-center gap-2">
         {task.status === "open" ? (
           <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={pending} onClick={onStart}>
-            <Play className="fill-current" /> {decision || approval ? "Thinking about it" : "I'm on it"}
+            <Play className="fill-current" /> {decision || approval ? t("closeBox.thinking") : t("closeBox.onIt")}
           </Button>
         ) : (
           <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={pending} onClick={onBack}>
-            <Undo2 /> Back to To do
+            <Undo2 /> {t("closeBox.backToOpen")}
           </Button>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -454,7 +463,7 @@ function CloseBox({
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="top">
-                {task.questionId ? `No answer needed anymore. ${agentName ?? "The agent"} goes on without it.` : `Nothing to decide here. ${agentName ?? "The agent"} isn't woken.`}
+                {task.questionId ? t("closeBox.noAnswerNeeded", { name: agentName ?? t("detail.theAgentCap") }) : t("closeBox.nothingToDecide", { name: agentName ?? t("detail.theAgentCap") })}
               </TooltipContent>
             </Tooltip>
           ) : (

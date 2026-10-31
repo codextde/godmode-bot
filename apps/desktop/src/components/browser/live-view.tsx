@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Globe, Hand, Lock, Maximize2, Minimize2, MousePointerClick, Play, RotateCw } from "lucide-react";
 import { browserView, type BrowserChat, type BrowserProfile } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ export function LiveView({
   onExpandedChange?: (expanded: boolean) => void;
   defaultTakeover?: boolean;
 }) {
+  const { t } = useTranslation("browser");
   const qc = useQueryClient();
   const running = profile.running;
   const view = browserView(profile.id, conversationId);
@@ -162,11 +164,11 @@ export function LiveView({
         .catch((e) => {
           if (Date.now() - lastErrorAt.current > 3000) {
             lastErrorAt.current = Date.now();
-            toastApiError(e, "Input could not be delivered", qc);
+            toastApiError(e, t("live.inputFailed"), qc);
           }
         });
     },
-    [profile.id, conversationId, qc],
+    [profile.id, conversationId, qc, t],
   );
 
   const textBuf = useRef("");
@@ -262,7 +264,7 @@ export function LiveView({
 
   const navigate = useMutation({
     mutationFn: (url: string) => api.browser.navigate(profile.id, url, conversationId),
-    onError: (e) => toastApiError(e, "Navigation failed", qc),
+    onError: (e) => toastApiError(e, t("live.navFailed"), qc),
   });
 
   const submitUrl = (e: FormEvent) => {
@@ -301,7 +303,7 @@ export function LiveView({
         layout
         role={expanded ? "dialog" : undefined}
         aria-modal={expanded || undefined}
-        aria-label={expanded ? `${profile.name} browser` : undefined}
+        aria-label={expanded ? t("live.aria", { name: profile.name }) : undefined}
         tabIndex={-1}
         initial={controlled ? { opacity: 0, scale: 0.98 } : false}
         animate={{ opacity: 1, scale: 1 }}
@@ -328,7 +330,7 @@ export function LiveView({
             ) : (
               <div className="-mb-px flex min-w-0 max-w-72 items-center gap-2 rounded-t-md border border-b-0 bg-card px-3 py-1.5 text-xs">
                 {domain ? <Favicon domain={domain} name={frame?.title || domain} size="sm" className="size-4 rounded-sm" /> : <Globe className="size-3.5 text-muted-foreground" />}
-                <span className="truncate font-medium">{running ? frame?.title || chat?.pageTitle || domain || "New tab" : profile.name}</span>
+                <span className="truncate font-medium">{running ? frame?.title || chat?.pageTitle || domain || t("live.newTab") : profile.name}</span>
               </div>
             )}
             <div className="ml-auto flex items-center gap-2 pb-2">
@@ -341,16 +343,16 @@ export function LiveView({
                   title={frame ? `${frame.width}×${frame.height}` : undefined}
                 >
                   <LiveDot live={live} />
-                  {live ? "Live" : "Idle"}
+                  {live ? t("live.live") : t("live.idle")}
                 </span>
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Exit focus view" : "Expand"}>
+                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(!expanded)} aria-label={expanded ? t("live.exitFocus") : t("live.expand")}>
                     {expanded ? <Minimize2 /> : <Maximize2 />}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{expanded ? "Exit focus view" : "Focus view"}</TooltipContent>
+                <TooltipContent>{expanded ? t("live.exitFocus") : t("live.focusView")}</TooltipContent>
               </Tooltip>
             </div>
           </div>
@@ -362,24 +364,24 @@ export function LiveView({
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  aria-label="Reload"
+                  aria-label={t("live.reload")}
                   disabled={!running || !frame?.url || navigate.isPending}
                   onClick={() => frame?.url && navigate.mutate(frame.url)}
                 >
                   <RotateCw className={cn(navigate.isPending && "animate-spin")} />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Reload</TooltipContent>
+              <TooltipContent>{t("live.reload")}</TooltipContent>
             </Tooltip>
             <form onSubmit={submitUrl} className="relative min-w-0 flex-1">
               <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
                 {navigate.isPending ? <Spinner className="size-3.5" /> : secure ? <Lock className="size-3.5 text-brand-strong" /> : <Globe className="size-3.5" />}
               </span>
               <input
-                aria-label="Address"
+                aria-label={t("live.address")}
                 value={displayUrl}
                 disabled={!running}
-                placeholder={running ? "Search or enter address" : "Browser is not running"}
+                placeholder={running ? t("live.addressPlaceholder") : t("live.notRunningPlaceholder")}
                 onFocus={(e) => {
                   setUrlDraft(frame?.url ?? "");
                   setEditingUrl(true);
@@ -407,8 +409,8 @@ export function LiveView({
               )}
             >
               <Hand className="size-3.5" />
-              <span className="hidden sm:inline">Take over</span>
-              <Switch checked={takeover} onCheckedChange={setTakeover} disabled={!running || !frame} size="sm" aria-label="Take over the browser" />
+              <span className="hidden sm:inline">{t("live.takeOver")}</span>
+              <Switch checked={takeover} onCheckedChange={setTakeover} disabled={!running || !frame} size="sm" aria-label={t("live.takeOverAria")} />
             </label>
           </div>
 
@@ -429,10 +431,10 @@ export function LiveView({
               )}
               <span className="min-w-0 flex-1">
                 {takeover
-                  ? "You're in control — clicks, scrolling and typing go to the page. Turn off Take over when you're done."
+                  ? t("live.inControl")
                   : conversationId
-                    ? "This chat's own tab — other chats browse in theirs. Take over to solve CAPTCHAs or log in manually."
-                    : "Agents keep working in this browser — take over to solve CAPTCHAs or log in manually."}
+                    ? t("live.chatTab")
+                    : t("live.agentsWorking")}
               </span>
             </div>
           )}
@@ -442,7 +444,7 @@ export function LiveView({
             ref={viewportRef}
             tabIndex={takeover ? 0 : -1}
             role={takeover ? "application" : undefined}
-            aria-label={takeover ? "Remote browser — keyboard and mouse input is forwarded" : "Browser live view"}
+            aria-label={takeover ? t("live.viewportControl") : t("live.viewportWatch")}
             onClick={onViewportClick}
             onKeyDown={onViewportKeyDown}
             onPaste={(e) => {
@@ -475,7 +477,7 @@ export function LiveView({
                 <img
                   ref={imgRef}
                   src={`data:image/jpeg;base64,${frame.data}`}
-                  alt={frame.title ? `Live view: ${frame.title}` : "Live view"}
+                  alt={frame.title ? t("live.imageAlt", { title: frame.title }) : t("live.imageAltPlain")}
                   draggable={false}
                   className="absolute inset-0 size-full object-contain select-none"
                 />
@@ -489,13 +491,13 @@ export function LiveView({
                         setTakeover(true);
                       }}
                     >
-                      <Hand /> Take over
+                      <Hand /> {t("live.takeOver")}
                     </Button>
                   </div>
                 )}
                 {takeover && !focused && (
                   <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                    <span className="glass rounded-md px-3 py-1 text-[11px] text-muted-foreground">Click the page to send keyboard input</span>
+                    <span className="glass rounded-md px-3 py-1 text-[11px] text-muted-foreground">{t("live.clickForKeyboard")}</span>
                   </div>
                 )}
                 <AnimatePresence>
@@ -524,6 +526,7 @@ export function LiveView({
 }
 
 function NotRunning({ profileName, onLaunch, launching }: { profileName: string; onLaunch: () => void; launching: boolean }) {
+  const { t } = useTranslation("browser");
   return (
     <div className="absolute inset-0 grid place-items-center overflow-hidden bg-background">
       <div className="bg-dots absolute inset-0 opacity-70 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]" aria-hidden />
@@ -531,12 +534,12 @@ function NotRunning({ profileName, onLaunch, launching }: { profileName: string;
         <div className="mb-4 grid size-12 place-items-center rounded-lg border bg-card text-foreground shadow-card">
           <Globe className="size-6" />
         </div>
-        <h3 className="text-base font-medium tracking-[-0.01em]">{profileName} isn't running</h3>
+        <h3 className="text-base font-medium tracking-[-0.01em]">{t("live.notRunningTitle", { name: profileName })}</h3>
         <p className="mt-1.5 text-sm text-muted-foreground">
-          Agents start it automatically when they need the web. Launch it now to watch, log in manually or check your imported sessions.
+          {t("live.notRunningBody")}
         </p>
         <Button className="mt-5" onClick={onLaunch} disabled={launching}>
-          {launching ? <Spinner /> : <Play />} Launch browser
+          {launching ? <Spinner /> : <Play />} {t("list.launchBrowser")}
         </Button>
       </motion.div>
     </div>
@@ -545,16 +548,17 @@ function NotRunning({ profileName, onLaunch, launching }: { profileName: string;
 
 /** One tab per chat browsing in the profile, a dot while its agent is at work. */
 function ChatTabs({ chats, selected, onSelect }: { chats: BrowserChat[]; selected: string | null; onSelect: (conversationId: string) => void }) {
+  const { t } = useTranslation("browser");
   return (
     <div
       role="tablist"
-      aria-label="Chats in this browser"
+      aria-label={t("live.chatsAria")}
       className="-mb-px flex min-w-0 flex-1 items-end gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] pr-8 [scrollbar-width:none]"
     >
       {chats.map((chat) => {
         const active = chat.conversationId === selected;
         const domain = domainFromUrl(chat.url);
-        const title = chat.title || "Untitled chat";
+        const title = chat.title || t("live.untitledChat");
         return (
           <Tooltip key={chat.conversationId}>
             <TooltipTrigger asChild>
@@ -576,8 +580,8 @@ function ChatTabs({ chats, selected, onSelect }: { chats: BrowserChat[]; selecte
             <TooltipContent className="max-w-72">
               <p className="font-medium">{title}</p>
               <p className="truncate text-muted-foreground">
-                {chat.pageTitle || domain || "New tab"}
-                {chat.tabs > 1 ? ` · ${chat.tabs} tabs` : ""}
+                {chat.pageTitle || domain || t("live.newTab")}
+                {chat.tabs > 1 ? ` · ${t("live.tabs", { n: chat.tabs })}` : ""}
               </p>
             </TooltipContent>
           </Tooltip>
@@ -588,28 +592,30 @@ function ChatTabs({ chats, selected, onSelect }: { chats: BrowserChat[]; selecte
 }
 
 function NoTabYet() {
+  const { t } = useTranslation("browser");
   return (
     <div className="absolute inset-0 grid place-items-center bg-paper-2">
       <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
         <span className="grid size-10 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card">
           <Globe className="size-5" />
         </span>
-        <p className="text-sm font-medium">No page open in this chat</p>
-        <p className="text-xs text-muted-foreground">The agent opens its own tab when it needs the web. Enter an address above to open one yourself.</p>
+        <p className="text-sm font-medium">{t("live.noTabTitle")}</p>
+        <p className="text-xs text-muted-foreground">{t("live.noTabBody")}</p>
       </div>
     </div>
   );
 }
 
 function WaitingForFrame({ waitedLong }: { waitedLong: boolean }) {
+  const { t } = useTranslation("browser");
   return (
     <div className="absolute inset-0 grid place-items-center bg-paper-2 text-muted-foreground">
       <div className="flex max-w-xs flex-col items-center gap-3 px-6 text-center">
-        <Orb variant="C3" size={32} label="Waiting for the first frame" />
-        <p className="text-shimmer text-sm font-medium">Waiting for the first frame…</p>
+        <Orb variant="C3" size={32} label={t("live.waitingLabel")} />
+        <p className="text-shimmer text-sm font-medium">{t("live.waiting")}</p>
         {waitedLong && (
           <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-xs text-muted-foreground">
-            Still nothing? Live view may be turned off in Settings → Browser, or the browser runs without a visible page yet.
+            {t("live.stillNothing")}
           </motion.p>
         )}
       </div>

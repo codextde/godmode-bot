@@ -1,6 +1,7 @@
 import { useEffect, useRef, type Ref } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { Loader2, SquareSlash } from "lucide-react";
@@ -70,6 +71,7 @@ export function SlashMenu({
   onPick: (command: SlashCommand) => void;
   ref?: Ref<HTMLDivElement>;
 }) {
+  const { t } = useTranslation("chat");
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
@@ -88,12 +90,12 @@ export function SlashMenu({
       )}
       onMouseDown={(e) => e.preventDefault()}
     >
-      <div ref={listRef} id={id} role="listbox" aria-label="Slash commands" style={{ maxHeight }} className="overflow-y-auto p-1.5">
+      <div ref={listRef} id={id} role="listbox" aria-label={t("composer.slashCommands")} style={{ maxHeight }} className="overflow-y-auto p-1.5">
         {items.map((c, i) => {
           const header = grouped && (i === 0 || items[i - 1]!.builtin !== c.builtin);
           return (
             <div key={c.name}>
-              {header && <div className="eyebrow px-2.5 pt-2 pb-1 text-[10px]">{c.builtin ? "Claude Code" : "This agent"}</div>}
+              {header && <div className="eyebrow px-2.5 pt-2 pb-1 text-[10px]">{c.builtin ? "Claude Code" : t("slash.thisAgent")}</div>}
               <div
                 id={slashOptionId(id, c.name)}
                 role="option"
@@ -119,12 +121,12 @@ export function SlashMenu({
           <div className="flex h-9 items-center gap-2 px-2.5 text-[13px] text-muted-foreground">
             {loading ? (
               <>
-                <Loader2 className="size-3.5 animate-spin" /> Loading Claude Code commands…
+                <Loader2 className="size-3.5 animate-spin" /> {t("slash.loading")}
               </>
             ) : error ? (
-              <span className="truncate">Couldn't load commands — {errorMessage(error)}</span>
+              <span className="truncate">{t("slash.loadError", { error: errorMessage(error) })}</span>
             ) : (
-              "No matching command — it will be sent as a message."
+              t("slash.noMatch")
             )}
           </div>
         )}
@@ -132,13 +134,13 @@ export function SlashMenu({
       <div className="flex items-center gap-3 border-t px-3 py-1.5 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Kbd>↑</Kbd>
-          <Kbd>↓</Kbd> navigate
+          <Kbd>↓</Kbd> {t("slash.navigate")}
         </span>
         <span className="flex items-center gap-1">
-          <Kbd>tab</Kbd> complete
+          <Kbd>tab</Kbd> {t("slash.complete")}
         </span>
         <span className="ml-auto flex items-center gap-1">
-          <Kbd>esc</Kbd> close
+          <Kbd>esc</Kbd> {t("slash.close")}
         </span>
       </div>
     </motion.div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { AppWindow, Globe, Layers, Monitor, MonitorUp, RefreshCw, Search, TriangleAlert } from "lucide-react";
 import type { ComputerDisplay, ComputerSources, ComputerTab, ComputerTarget, ComputerWindow } from "@godmode/shared";
 import { computerView, sameComputerTarget } from "@godmode/shared";
@@ -118,29 +119,30 @@ function WindowsGrid({
   query: string;
   showHidden: boolean;
 }) {
+  const { t } = useTranslation("computer");
   const q = query.trim().toLowerCase();
   const list = windows
     .filter((w) => showHidden || w.onScreen)
     .filter((w) => !q || w.app.toLowerCase().includes(q) || w.title.toLowerCase().includes(q))
     .sort((a, b) => Number(b.onScreen) - Number(a.onScreen) || a.app.localeCompare(b.app));
   if (!list.length) {
-    return <p className="py-12 text-center text-sm text-muted-foreground">{q ? `No window matches "${query}".` : "No windows are open."}</p>;
+    return <p className="py-12 text-center text-sm text-muted-foreground">{q ? t("share.noWindowMatch", { query }) : t("share.noWindows")}</p>;
   }
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
       {list.map((w) => {
-        const t = windowTarget(w);
+        const target = windowTarget(w);
         return (
           <SourceCard
             key={`${w.pid}:${w.id}`}
-            selected={sameComputerTarget(selected, t)}
-            onSelect={() => onSelect(t)}
-            onConfirm={() => onConfirm(t)}
-            thumbnail={<Thumbnail view={computerView(t)} aspect={w.width / Math.max(1, w.height)} fallback={<AppWindow className="size-6" />} />}
+            selected={sameComputerTarget(selected, target)}
+            onSelect={() => onSelect(target)}
+            onConfirm={() => onConfirm(target)}
+            thumbnail={<Thumbnail view={computerView(target)} aspect={w.width / Math.max(1, w.height)} fallback={<AppWindow className="size-6" />} />}
             icon={appInitials(w.app)}
             title={w.app}
             subtitle={w.title || undefined}
-            badge={!w.onScreen ? "Hidden" : undefined}
+            badge={!w.onScreen ? t("share.hidden") : undefined}
             muted={!w.onScreen}
           />
         );
@@ -160,7 +162,8 @@ function ScreensGrid({
   onSelect: (t: ComputerTarget) => void;
   onConfirm: (t: ComputerTarget) => void;
 }) {
-  if (!displays.length) return <p className="py-12 text-center text-sm text-muted-foreground">No displays found.</p>;
+  const { t } = useTranslation("computer");
+  if (!displays.length) return <p className="py-12 text-center text-sm text-muted-foreground">{t("share.noDisplays")}</p>;
   const sorted = [...displays].sort((a, b) => Number(b.primary) - Number(a.primary));
   const desktop: ComputerTarget = { kind: "desktop" };
   return (
@@ -178,22 +181,22 @@ function ScreensGrid({
             </div>
           }
           icon={<Layers />}
-          title="Entire desktop"
-          subtitle={`All ${displays.length} displays`}
+          title={t("page.entireDesktop")}
+          subtitle={t("share.allDisplays", { n: displays.length })}
         />
       )}
       {sorted.map((d) => {
-        const t = displayTarget(d);
+        const target = displayTarget(d);
         return (
           <SourceCard
             key={d.id}
-            selected={sameComputerTarget(selected, t)}
-            onSelect={() => onSelect(displays.length > 1 ? t : desktop)}
-            onConfirm={() => onConfirm(displays.length > 1 ? t : desktop)}
+            selected={sameComputerTarget(selected, target)}
+            onSelect={() => onSelect(displays.length > 1 ? target : desktop)}
+            onConfirm={() => onConfirm(displays.length > 1 ? target : desktop)}
             thumbnail={<Thumbnail view={`display:${d.id}`} aspect={d.width / d.height} fallback={<Monitor className="size-6" />} />}
             icon={<Monitor />}
             title={d.name}
-            subtitle={`${Math.round(d.width)} × ${Math.round(d.height)}${d.primary ? " · primary" : ""}`}
+            subtitle={`${Math.round(d.width)} × ${Math.round(d.height)}${d.primary ? ` · ${t("page.primary")}` : ""}`}
           />
         );
       })}
@@ -214,30 +217,31 @@ function TabsList_({
   onConfirm: (t: ComputerTarget) => void;
   query: string;
 }) {
+  const { t } = useTranslation("computer");
   const q = query.trim().toLowerCase();
-  const list = tabs.filter((t) => !q || t.title.toLowerCase().includes(q) || t.url.toLowerCase().includes(q));
+  const list = tabs.filter((tab) => !q || tab.title.toLowerCase().includes(q) || tab.url.toLowerCase().includes(q));
   if (!tabs.length) {
     return (
       <p className="py-12 text-center text-sm text-muted-foreground">
-        No Godmode browser is open. Open one on the Browser page — or share a window of your own browser instead.
+        {t("share.noBrowser")}
       </p>
     );
   }
-  if (!list.length) return <p className="py-12 text-center text-sm text-muted-foreground">No tab matches "{query}".</p>;
+  if (!list.length) return <p className="py-12 text-center text-sm text-muted-foreground">{t("share.noTabMatch", { query })}</p>;
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
       {list.map((tab) => {
-        const t = tabTarget(tab);
+        const target = tabTarget(tab);
         const domain = domainFromUrl(tab.url);
         return (
           <SourceCard
             key={`${tab.profileId}:${tab.targetId}`}
-            selected={sameComputerTarget(selected, t)}
-            onSelect={() => onSelect(t)}
-            onConfirm={() => onConfirm(t)}
-            thumbnail={<Thumbnail view={computerView(t)} aspect={16 / 10} fallback={<Globe className="size-6" />} />}
+            selected={sameComputerTarget(selected, target)}
+            onSelect={() => onSelect(target)}
+            onConfirm={() => onConfirm(target)}
+            thumbnail={<Thumbnail view={computerView(target)} aspect={16 / 10} fallback={<Globe className="size-6" />} />}
             icon={domain ? <Favicon domain={domain} name={tab.title || domain} size="sm" className="size-3.5 rounded-[3px]" /> : <Globe />}
-            title={tab.title || domain || "New tab"}
+            title={tab.title || domain || t("page.newTab")}
             subtitle={`${tab.profileName} · ${domain || tab.url}`}
           />
         );
@@ -265,6 +269,7 @@ export function ComputerShareDialog({
   onShare: (target: ComputerTarget) => void | Promise<unknown>;
   sharing?: boolean;
 }) {
+  const { t } = useTranslation(["computer", "common"]);
   const status = useComputerStatus(open);
   const sources = useQuery<ComputerSources>({
     queryKey: qk.computerSources,
@@ -290,8 +295,8 @@ export function ComputerShareDialog({
 
   const data = sources.data;
   const hiddenCount = useMemo(() => data?.windows.filter((w) => !w.onScreen).length ?? 0, [data]);
-  const confirm = (t: ComputerTarget | null) => {
-    if (t) void onShare(t);
+  const confirm = (next: ComputerTarget | null) => {
+    if (next) void onShare(next);
   };
 
   const body = sources.isLoading ? (
@@ -305,7 +310,7 @@ export function ComputerShareDialog({
       <TriangleAlert className="size-5" />
       {errorMessage(sources.error)}
       <Button variant="outline" size="sm" onClick={() => sources.refetch()}>
-        <RefreshCw /> Try again
+        <RefreshCw /> {t("common:actions.tryAgain")}
       </Button>
     </div>
   ) : data ? (
@@ -324,37 +329,37 @@ export function ComputerShareDialog({
 
   const note =
     selected?.kind === "window" || (kind === "window" && !selected)
-      ? "The agent controls only this window, in the background — your mouse and keyboard stay yours."
+      ? t("share.noteWindow")
       : selected?.kind === "tab" || (kind === "tab" && !selected)
-        ? "The agent controls only this tab of Godmode's browser, in the background."
-        : "The agent uses your real mouse and keyboard on the shared screen. You can stop it any time.";
+        ? t("share.noteTab")
+        : t("share.noteScreen");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[min(88vh,760px)] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
         <DialogHeader className="border-b px-6 pt-5 pb-4">
           <DialogTitle className="flex items-center gap-2">
-            <MonitorUp className="size-4" /> Share with {agentName ?? "the agent"}
+            <MonitorUp className="size-4" /> {t("share.title", { name: agentName ?? t("chip.theAgent") })}
           </DialogTitle>
-          <DialogDescription>Choose what the agent may see and control in this chat. Stop sharing whenever you like.</DialogDescription>
+          <DialogDescription>{t("share.description")}</DialogDescription>
         </DialogHeader>
         <Tabs value={kind} onValueChange={(v) => setKind(v as Kind)} className="flex min-h-0 flex-1 flex-col gap-0">
           <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
             <TabsList>
               <TabsTrigger value="window">
-                <AppWindow /> Window
+                <AppWindow /> {t("share.tabWindow")}
               </TabsTrigger>
               <TabsTrigger value="screen">
-                <Monitor /> Entire screen
+                <Monitor /> {t("share.tabScreen")}
               </TabsTrigger>
               <TabsTrigger value="tab">
-                <Globe /> Browser tab
+                <Globe /> {t("share.tabBrowser")}
               </TabsTrigger>
             </TabsList>
             {kind !== "screen" && (
               <div className="relative ml-auto w-full max-w-60 min-w-40 flex-1">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "tab" ? "Search tabs" : "Search windows"} className="h-8 pl-8 text-[13px]" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={kind === "tab" ? t("share.searchTabs") : t("share.searchWindows")} className="h-8 pl-8 text-[13px]" />
               </div>
             )}
           </div>
@@ -372,17 +377,17 @@ export function ComputerShareDialog({
           <div className="flex min-w-0 items-center gap-3">
             {kind === "window" && hiddenCount > 0 && (
               <label className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
-                <Switch size="sm" checked={showHidden} onCheckedChange={setShowHidden} /> Hidden windows ({hiddenCount})
+                <Switch size="sm" checked={showHidden} onCheckedChange={setShowHidden} /> {t("share.hiddenWindows", { n: hiddenCount })}
               </label>
             )}
             <p className="hidden min-w-0 text-xs text-muted-foreground md:block">{note}</p>
           </div>
           <div className="flex shrink-0 gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button onClick={() => confirm(selected)} disabled={!selected || sharing || sameComputerTarget(selected, current)}>
-              {sharing ? <Spinner /> : <MonitorUp />} Share
+              {sharing ? <Spinner /> : <MonitorUp />} {t("share.share")}
             </Button>
           </div>
         </DialogFooter>

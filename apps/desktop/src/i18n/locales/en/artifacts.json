@@ -1,1 +1,121 @@
-{}
+{
+  "theAgent": "the agent",
+  "theAgentStart": "The agent",
+  "version": "Version {{version}}",
+  "more": "More",
+  "unpin": "Unpin",
+  "pinToTop": "Pin to the top",
+  "openChat": "Open its chat",
+  "frame": {
+    "cloudTitle": "Open it on your computer",
+    "cloudDescription": "Artifacts run in the Godmode app or the dashboard on your computer, not through Godmode Cloud."
+  },
+  "page": {
+    "back": "Artifacts",
+    "busyPlaceholder": "{{agent}} is working on it — you can add more",
+    "placeholder": "Ask {{agent}} to change something…",
+    "askForChange": "Ask for a change",
+    "chat": "Chat"
+  },
+  "card": {
+    "artifact": "Artifact",
+    "built": "Built it",
+    "changedCode": "Changed the code",
+    "updatedData": "Updated the data",
+    "updated": "Updated it",
+    "failed": "It didn't work",
+    "building": "Building…",
+    "changing": "Changing it…",
+    "showing": "Showing"
+  },
+  "toggle": {
+    "showOne": "Show the artifact",
+    "showMany": "Show the artifacts ({{count}})"
+  },
+  "starters": {
+    "sales": { "title": "Sales dashboard", "blurb": "Revenue, orders and top products at a glance" },
+    "kpi": { "title": "KPI tracker", "blurb": "A handful of numbers you check every morning" },
+    "pipeline": { "title": "Deal pipeline", "blurb": "Drag deals through your sales stages" },
+    "budget": { "title": "Budget planner", "blurb": "Income, costs and what's left each month" },
+    "content": { "title": "Content calendar", "blurb": "Plan posts across your channels" },
+    "calculator": { "title": "Price calculator", "blurb": "A quote or margin calculator for your offers" }
+  },
+  "overview": {
+    "emptyTitle": "Nothing built yet",
+    "emptyDescription": "Describe a dashboard or a tool above, or pick a starting point. Agents also build artifacts when you ask for one in any chat.",
+    "yourArtifacts": "Your artifacts",
+    "noMatch": "Nothing matches “{{query}}”.",
+    "startError": "Couldn't start it",
+    "composerPlaceholder": "Describe a dashboard or app — e.g. “A sales dashboard with this month's Shopify revenue, orders and top products”",
+    "buildIt": "Build it"
+  },
+  "tile": {
+    "updating": "Updating"
+  },
+  "toast": {
+    "queued": "{{agent}} gets it right after the current step",
+    "onIt": "{{agent}} is on it",
+    "updatesItself": "It updates here by itself.",
+    "sendError": "Couldn't send it",
+    "refreshing": "{{agent}} is getting fresh data",
+    "refreshError": "Couldn't refresh",
+    "sameVersion": "Version {{version}} is the same as the current one",
+    "restored": "Restored as version {{version}}",
+    "restoreError": "Couldn't restore it",
+    "deleted": "Deleted {{title}}",
+    "deletedFallback": "Deleted the artifact",
+    "deleteError": "Couldn't delete it",
+    "saveError": "Couldn't save it"
+  },
+  "view": {
+    "goneTitle": "This artifact is gone",
+    "goneDescription": "It was deleted, or it lives on another computer.",
+    "working": "{{agent}} is working on it",
+    "updated": "Updated {{time}}",
+    "updatedWithData": "Updated {{time}} · data {{data}}",
+    "refreshData": "Refresh the data",
+    "askFreshData": "Ask for fresh data",
+    "narrower": "Narrower",
+    "wider": "Wider",
+    "openFullScreen": "Open full screen",
+    "howItRefreshesMenu": "How it refreshes…",
+    "downloadHtml": "Download as HTML",
+    "backToLatest": "Back to latest",
+    "restore": "Restore",
+    "appAsksRefresh": "The app asks {{agent}} for fresh data.",
+    "appWantsToSend": "The app wants to send {{agent}}: <q>“{{text}}”</q>",
+    "notNow": "Not now",
+    "somethingBroke": "Something broke: {{failure}}",
+    "dismiss": "Dismiss",
+    "askToFix": "Ask {{agent}} to fix it"
+  },
+  "refreshDialog": {
+    "title": "How it refreshes",
+    "description": "What {{agent}} does when you press Refresh: where the data comes from and what to update.",
+    "placeholder": "e.g. Read the orders of the last 60 days from the Shopify admin and update revenue, orders and top products."
+  },
+  "deleteDialog": {
+    "title": "Delete {{title}}?",
+    "description": "Its code, every version and the data saved in it are gone for good. The chat stays.",
+    "keep": "Keep it"
+  },
+  "tabs": {
+    "label": "View",
+    "preview": "Preview",
+    "code": "Code",
+    "data": "Data"
+  },
+  "versions": {
+    "label": "Versions",
+    "first": "First version",
+    "changed": "Changed"
+  },
+  "source": {
+    "copyHtml": "Copy HTML",
+    "copyData": "Copy data",
+    "saved": "Saved {{time}}",
+    "noData": "No data saved yet",
+    "lines_one": "{{formatted}} line",
+    "lines_other": "{{formatted}} lines"
+  }
+}

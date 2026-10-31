@@ -1,1 +1,49 @@
-{}
+{
+  "thisMac": "Dieser Mac",
+  "thisComputer": "Dieser Computer",
+  "chats_one": "{{count}} Chat",
+  "chats_other": "{{count}} Chats",
+  "workingChats": "{{working}} aktiv · {{chats}}",
+  "working_one": "{{count}} aktiv",
+  "working_other": "{{count}} aktiv",
+  "slowConnection": "Langsame Verbindung",
+  "clock": {
+    "today": "HH:mm",
+    "earlier": "d. MMM, HH:mm"
+  },
+  "state": {
+    "standsInSince": "Springt ein seit {{time}}",
+    "standsIn": "Springt ein",
+    "takesOverIn": "Übernimmt in {{time}}",
+    "takingOver": "Übernimmt…",
+    "online": "Online",
+    "onlineSlow": "Online · langsame Verbindung",
+    "awaySince": "Weg seit {{time}}",
+    "away": "Weg",
+    "connecting": "Verbindet…",
+    "updateRequired": "Update nötig"
+  },
+  "handoff": {
+    "nothing": "Nichts zu übergeben",
+    "nothingDescription": "Auf diesem Computer arbeitet gerade kein Chat.",
+    "nothingDescriptionMac": "Auf diesem Mac arbeitet gerade kein Chat.",
+    "moved_one": "1 Chat an {{name}} übergeben",
+    "moved_other": "{{count}} Chats an {{name}} übergeben",
+    "movedDescription": "Sie machen dort mit allem weiter, was sie bisher getan haben.",
+    "moveError_one": "Chat konnte nicht an {{name}} übergeben werden",
+    "moveError_other": "Chats konnten nicht an {{name}} übergeben werden",
+    "movedPartly": "{{moved}} von {{total}} Chats an {{name}} übergeben",
+    "error": "Übergabe an {{name}} fehlgeschlagen",
+    "label": "Übergeben an",
+    "primaryAway": "{{name}} ist weg",
+    "primaryAwayFallback": "Der Hauptcomputer ist weg",
+    "noneOnline": "Kein anderer Computer ist online",
+    "handingOff": "Wird übergeben…",
+    "handOffChats_one": "Laufenden Chat übergeben",
+    "handOffChats_other": "{{count}} laufende Chats übergeben",
+    "handOffWork": "Laufende Arbeit übergeben",
+    "toName": "an {{name}}",
+    "pick": "Computer wählen",
+    "continueOn": "Laufende Arbeit fortsetzen auf"
+  }
+}

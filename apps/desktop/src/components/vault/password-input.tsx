@@ -1,5 +1,6 @@
 import { forwardRef, useState, type ComponentProps, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -9,6 +10,7 @@ export const PasswordInput = forwardRef<
   HTMLInputElement,
   Omit<ComponentProps<"input">, "type"> & { trailing?: ReactNode; groupClassName?: string; leading?: ReactNode }
 >(function PasswordInput({ trailing, leading, groupClassName, className, ...props }, ref) {
+  const { t } = useTranslation("vault");
   const [visible, setVisible] = useState(false);
   return (
     <InputGroup className={cn("h-10", groupClassName)}>
@@ -29,14 +31,14 @@ export const PasswordInput = forwardRef<
           <TooltipTrigger asChild>
             <InputGroupButton
               size="icon-xs"
-              aria-label={visible ? "Hide" : "Show"}
+              aria-label={visible ? t("passwordInput.hide") : t("passwordInput.show")}
               aria-pressed={visible}
               onClick={() => setVisible((v) => !v)}
             >
               {visible ? <EyeOff /> : <Eye />}
             </InputGroupButton>
           </TooltipTrigger>
-          <TooltipContent>{visible ? "Hide" : "Show"}</TooltipContent>
+          <TooltipContent>{visible ? t("passwordInput.hide") : t("passwordInput.show")}</TooltipContent>
         </Tooltip>
       </InputGroupAddon>
     </InputGroup>

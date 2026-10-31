@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { AppWindow, Globe, Hand, Layers, Maximize2, Minimize2, Monitor, MousePointerClick, TriangleAlert } from "lucide-react";
 import type { ComputerInputEvent, ComputerTarget } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
@@ -16,6 +17,7 @@ import { subscribeComputer } from "@/lib/realtime";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { controlNote } from "./computer-utils";
+import { currentLanguage } from "@/i18n";
 
 const KEYS_WITHOUT_TEXT = new Set([
   "Enter",
@@ -80,6 +82,7 @@ export function ComputerLiveView({
   notes?: { watching: string; control: string };
   className?: string;
 }) {
+  const { t } = useTranslation("computer");
   const qc = useQueryClient();
   const [viewIndex, setViewIndex] = useState(0);
   const view = views[Math.min(viewIndex, views.length - 1)]?.view ?? views[0]!.view;
@@ -175,11 +178,11 @@ export function ComputerLiveView({
         .catch((e) => {
           if (Date.now() - lastErrorAt.current > 3000) {
             lastErrorAt.current = Date.now();
-            toastApiError(e, "Input could not be delivered", qc);
+            toastApiError(e, t("live.inputFailed"), qc);
           }
         });
     },
-    [view, qc],
+    [view, qc, t],
   );
 
   const textBuf = useRef("");
@@ -319,7 +322,7 @@ export function ComputerLiveView({
   }, [takeover, mapPoint, send]);
 
   const live = !!frame?.data && !frame.error && now - frame.at < 4000;
-  const label = frame?.label || views[Math.min(viewIndex, views.length - 1)]?.label || computerTargetLabel(target);
+  const label = frame?.label || views[Math.min(viewIndex, views.length - 1)]?.label || computerTargetLabel(target, currentLanguage());
   const hasPicture = !!frame?.data;
 
   return (
@@ -341,7 +344,7 @@ export function ComputerLiveView({
         layout
         role={expanded ? "dialog" : undefined}
         aria-modal={expanded || undefined}
-        aria-label={expanded ? `Shared: ${label}` : undefined}
+        aria-label={expanded ? t("live.sharedAria", { label }) : undefined}
         tabIndex={-1}
         initial={controlled ? { opacity: 0, scale: 0.98 } : false}
         animate={{ opacity: 1, scale: 1 }}
@@ -356,7 +359,7 @@ export function ComputerLiveView({
               <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground">{targetIcon(target, "size-3.5")}</span>
               <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{label}</span>
               {views.length > 1 && (
-                <div className="flex items-center gap-1 rounded-md border bg-card p-0.5" role="tablist" aria-label="Displays">
+                <div className="flex items-center gap-1 rounded-md border bg-card p-0.5" role="tablist" aria-label={t("live.displays")}>
                   {views.map((v, i) => (
                     <button
                       key={v.view}
@@ -369,7 +372,7 @@ export function ComputerLiveView({
                         i === viewIndex ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {v.label || `Display ${i + 1}`}
+                      {v.label || t("live.display", { n: i + 1 })}
                     </button>
                   ))}
                 </div>
@@ -382,7 +385,7 @@ export function ComputerLiveView({
                 title={frame?.width ? `${frame.width}×${frame.height}` : undefined}
               >
                 <LiveDot live={live} />
-                {live ? "Live" : "Idle"}
+                {live ? t("panel.live") : t("panel.idle")}
               </span>
               <label
                 className={cn(
@@ -392,16 +395,16 @@ export function ComputerLiveView({
                 )}
               >
                 <Hand className="size-3.5" />
-                <span className="hidden sm:inline">Take over</span>
-                <Switch checked={takeover} onCheckedChange={setTakeover} disabled={!hasPicture} size="sm" aria-label="Take over" />
+                <span className="hidden sm:inline">{t("live.takeOver")}</span>
+                <Switch checked={takeover} onCheckedChange={setTakeover} disabled={!hasPicture} size="sm" aria-label={t("live.takeOver")} />
               </label>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(!expanded)} aria-label={expanded ? "Exit focus view" : "Expand"}>
+                  <Button variant="ghost" size="icon-xs" onClick={() => setExpanded(!expanded)} aria-label={expanded ? t("live.exitFocus") : t("live.expand")}>
                     {expanded ? <Minimize2 /> : <Maximize2 />}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>{expanded ? "Exit focus view" : "Focus view"}</TooltipContent>
+                <TooltipContent>{expanded ? t("live.exitFocus") : t("live.focusView")}</TooltipContent>
               </Tooltip>
             </div>
 
@@ -412,8 +415,8 @@ export function ComputerLiveView({
                 {takeover
                   ? (notes?.control ??
                     (target.kind === "window" || target.kind === "tab"
-                      ? "You're in control — clicks, scrolling and typing go to the shared window, in the background."
-                      : "You're in control — clicks and typing move your real mouse and keyboard."))
+                      ? t("live.controlBackground")
+                      : t("live.controlReal")))
                   : (notes?.watching ?? controlNote(target))}
               </span>
             </div>
@@ -423,7 +426,7 @@ export function ComputerLiveView({
               ref={viewportRef}
               tabIndex={takeover ? 0 : -1}
               role={takeover ? "application" : undefined}
-              aria-label={takeover ? "Shared screen — keyboard and mouse input is forwarded" : "Shared screen live view"}
+              aria-label={takeover ? t("live.viewportControl") : t("live.viewportWatch")}
               onMouseDown={onMouseDown}
               onMouseUp={onMouseUp}
               onContextMenu={onContextMenu}
@@ -454,7 +457,7 @@ export function ComputerLiveView({
                   <img
                     ref={imgRef}
                     src={`data:${frame!.mime};base64,${frame!.data}`}
-                    alt={`Live view: ${label}`}
+                    alt={t("live.imageAlt", { label })}
                     draggable={false}
                     className="absolute inset-0 size-full object-contain select-none"
                   />
@@ -468,13 +471,13 @@ export function ComputerLiveView({
                           setTakeover(true);
                         }}
                       >
-                        <Hand /> Take over
+                        <Hand /> {t("live.takeOver")}
                       </Button>
                     </div>
                   )}
                   {takeover && !focused && (
                     <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-                      <span className="glass rounded-md px-3 py-1 text-[11px] text-muted-foreground">Click the picture to send keyboard input</span>
+                      <span className="glass rounded-md px-3 py-1 text-[11px] text-muted-foreground">{t("live.clickForKeyboard")}</span>
                     </div>
                   )}
                   {frame?.error && (
@@ -541,6 +544,7 @@ function AgentPointer() {
 }
 
 function Waiting({ error }: { error?: string }) {
+  const { t } = useTranslation("computer");
   return (
     <div className="absolute inset-0 grid place-items-center bg-paper-2 text-muted-foreground">
       <div className="flex max-w-sm flex-col items-center gap-3 px-6 text-center">
@@ -551,8 +555,8 @@ function Waiting({ error }: { error?: string }) {
           </>
         ) : (
           <>
-            <Orb variant="C3" size={32} label="Waiting for the first picture" />
-            <p className="text-shimmer text-sm font-medium">Connecting to the screen…</p>
+            <Orb variant="C3" size={32} label={t("live.waitingLabel")} />
+            <p className="text-shimmer text-sm font-medium">{t("live.connecting")}</p>
           </>
         )}
       </div>

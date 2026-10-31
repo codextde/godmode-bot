@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Bot, Globe2, Layers } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent } from "@godmode/shared";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,6 +34,7 @@ export function useDefaultScope(): IntegrationScope {
  * Agent scope also carries the agent's workspace id so scoped lists stay consistent.
  */
 export function ScopePicker({ value, onChange, className, disabled }: { value: IntegrationScope; onChange: (v: IntegrationScope) => void; className?: string; disabled?: boolean }) {
+  const { t } = useTranslation("integrations");
   const { data: workspaces = [] } = useWorkspaces();
   const { data: agents = [] } = useAllAgents();
   // Workspace/agent modes always carry an id (the options are disabled when none exist), so the value alone defines the mode.
@@ -48,14 +50,14 @@ export function ScopePicker({ value, onChange, className, disabled }: { value: I
   };
 
   const options: { id: Mode; icon: typeof Globe2; title: string; hint: string; disabled?: boolean }[] = [
-    { id: "global", icon: Globe2, title: "Global", hint: "Every agent, every workspace" },
-    { id: "workspace", icon: Layers, title: "Workspace", hint: workspaces.length ? "Agents in one workspace" : "No workspaces yet", disabled: !workspaces.length },
-    { id: "agent", icon: Bot, title: "One agent", hint: agents.length ? "Only a specific agent" : "No agents yet", disabled: !agents.length },
+    { id: "global", icon: Globe2, title: t("scope.global"), hint: t("scope.globalHint") },
+    { id: "workspace", icon: Layers, title: t("scope.workspace"), hint: workspaces.length ? t("scope.workspaceHint") : t("scope.noWorkspaces"), disabled: !workspaces.length },
+    { id: "agent", icon: Bot, title: t("scope.agent"), hint: agents.length ? t("scope.agentHint") : t("scope.noAgents"), disabled: !agents.length },
   ];
 
   return (
     <div className={cn("space-y-3", className)}>
-      <RadioGroup value={mode} onValueChange={(v) => pick(v as Mode)} className="grid gap-2 sm:grid-cols-3" disabled={disabled} aria-label="Scope">
+      <RadioGroup value={mode} onValueChange={(v) => pick(v as Mode)} className="grid gap-2 sm:grid-cols-3" disabled={disabled} aria-label={t("scope.label")}>
         {options.map((o) => (
           <Label
             key={o.id}
@@ -78,8 +80,8 @@ export function ScopePicker({ value, onChange, className, disabled }: { value: I
         {mode === "workspace" && workspaces.length > 0 && (
           <motion.div key="ws" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
             <Select value={value.workspaceId ?? undefined} onValueChange={(id) => onChange({ workspaceId: id, agentId: null })} disabled={disabled}>
-              <SelectTrigger className="w-full" aria-label="Workspace">
-                <SelectValue placeholder="Choose a workspace" />
+              <SelectTrigger className="w-full" aria-label={t("scope.workspace")}>
+                <SelectValue placeholder={t("scope.chooseWorkspace")} />
               </SelectTrigger>
               <SelectContent>
                 {workspaces.map((w) => (
@@ -101,8 +103,8 @@ export function ScopePicker({ value, onChange, className, disabled }: { value: I
               }}
               disabled={disabled}
             >
-              <SelectTrigger className="h-10 w-full" aria-label="Agent">
-                <SelectValue placeholder="Choose an agent" />
+              <SelectTrigger className="h-10 w-full" aria-label={t("scope.agentLabel")}>
+                <SelectValue placeholder={t("scope.chooseAgent")} />
               </SelectTrigger>
               <SelectContent>
                 {agents.map((a) => (
@@ -121,13 +123,14 @@ export function ScopePicker({ value, onChange, className, disabled }: { value: I
 
 /** Compact display of an integration's scope (agent chip or workspace/global badge). */
 export function ScopeChip({ workspaceId, agentId, agents, className }: IntegrationScope & { agents?: Agent[]; className?: string }) {
+  const { t } = useTranslation("common");
   const { data: all = [] } = useAllAgents();
   const agent = agentId ? (agents ?? all).find((a) => a.id === agentId) : undefined;
   if (agentId)
     return (
       <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-[5px] border bg-secondary pr-2 pl-0.5 text-xs text-secondary-foreground", className)}>
         {agent ? <AgentAvatar agent={agent} size="sm" className="size-4 rounded-[4px] text-[9px]" /> : <Bot className="ml-1 size-3" />}
-        {agent?.name ?? "Agent"}
+        {agent?.name ?? t("words.agent")}
       </span>
     );
   return <ScopeBadge workspaceId={workspaceId} className={className} />;

@@ -1,1 +1,434 @@
-{}
+{
+  "queryError": {
+    "title": "Couldn't load this",
+    "lockedTitle": "The vault is locked",
+    "lockedDescription": "Unlock the vault to manage integrations."
+  },
+  "explainer": {
+    "title": "React the moment something arrives",
+    "description": "Optional. Connect an account when an automation should start on a new email or Slack message, or when an agent should call the app's API directly.",
+    "apps": {
+      "title": "Hundreds of apps",
+      "body": "Gmail, Slack, GitHub, Notion, CRMs, calendars — each becomes a set of tools your agents can call."
+    },
+    "oauth": {
+      "title": "OAuth sign-in",
+      "body": "You sign in on the app's own page. Tokens live in Composio; Godmode only keeps your API key, encrypted."
+    },
+    "scoped": {
+      "title": "Scoped accounts",
+      "body": "Connect an account for everyone, one workspace, or a single agent — e.g. work vs. personal Gmail."
+    }
+  },
+  "composio": {
+    "statusError": "Couldn't reach Composio settings",
+    "connectionsError": "Couldn't load connected accounts"
+  },
+  "tabs": {
+    "tools": "Tools",
+    "mcp": "MCP servers"
+  },
+  "noConnectors": {
+    "title": "Your apps don't need a connector",
+    "description": "Godmode signs in to websites the way you do: with the username, password and 2FA code saved in your Vault. It types them into the login page itself, so the AI never sees them. Your CRM, a supplier portal, your shop admin: most sites that open in a browser work right away, without an MCP connector.",
+    "hint": "Connect an app here only when an automation should start the moment something arrives, like a new email, or for an API without a website.",
+    "saveLogin": "Save a login",
+    "gotIt": "Got it",
+    "steps": {
+      "open": "Opens the site",
+      "fill": "Fills your login",
+      "twoFactor": "Adds the 2FA code",
+      "signedIn": "Signed in as you"
+    }
+  },
+  "mcpTest": {
+    "title": "Test {{name}}",
+    "description": "Godmode starts the server, lists its tools and shuts it down again.",
+    "connectingLabel": "Connecting",
+    "connecting": "Connecting…",
+    "failed": "The server didn't respond correctly",
+    "unknownError": "Unknown error",
+    "failedHint": "Check the command, arguments, URL and required environment variables or headers.",
+    "connected_one": "Connected · {{count}} tool",
+    "connected_other": "Connected · {{count}} tools",
+    "noTools": "The server started but didn't report any tools.",
+    "runAgain": "Run again"
+  },
+  "scope": {
+    "label": "Scope",
+    "global": "Global",
+    "globalHint": "Every agent, every workspace",
+    "workspace": "Workspace",
+    "workspaceHint": "Agents in one workspace",
+    "noWorkspaces": "No workspaces yet",
+    "agent": "One agent",
+    "agentHint": "Only a specific agent",
+    "noAgents": "No agents yet",
+    "chooseWorkspace": "Choose a workspace",
+    "agentLabel": "Agent",
+    "chooseAgent": "Choose an agent"
+  },
+  "transports": {
+    "stdio": {
+      "label": "Local command",
+      "hint": "Runs a program on this machine (npx, uvx, docker…)"
+    },
+    "http": {
+      "label": "HTTP",
+      "hint": "Streamable HTTP endpoint"
+    },
+    "sse": {
+      "label": "SSE",
+      "hint": "Legacy server-sent events endpoint"
+    }
+  },
+  "presets": {
+    "filesystem": {
+      "description": "Read and write files in folders you allow",
+      "note": "Replace the last argument with the absolute folder path(s) agents may access."
+    },
+    "github": {
+      "description": "GitHub's official remote MCP server",
+      "note": "Set the Authorization header to “Bearer <personal access token>”."
+    },
+    "playwright": {
+      "description": "Microsoft Playwright browser automation"
+    },
+    "fetch": {
+      "description": "Fetch web pages and convert them to markdown"
+    },
+    "context7": {
+      "description": "Up-to-date library docs for coding agents"
+    }
+  },
+  "keyValue": {
+    "envNeedsName": "Every environment variable value needs a name.",
+    "headerNeedsName": "Every header value needs a name.",
+    "envInvalid": "“{{key}}” is not a valid environment variable name.",
+    "headerInvalid": "“{{key}}” is not a valid header name.",
+    "duplicate": "“{{key}}” is listed twice.",
+    "nameAria": "{{label}} name {{n}}",
+    "valueAria": "{{label}} value {{n}}",
+    "storedEncrypted": "stored encrypted",
+    "newValue": "New value",
+    "value": "Value",
+    "keepStored": "Keep stored value",
+    "replaceAria": "Replace {{key}}",
+    "replaceValue": "Replace value",
+    "removeAria": "Remove {{key}}",
+    "removeRow": "Remove row",
+    "remove": "Remove"
+  },
+  "composioKey": {
+    "removed": "Composio key removed",
+    "rejected": "Composio rejected this key",
+    "rejectedHint": "Double-check it in your Composio dashboard.",
+    "connected": "Composio connected",
+    "connectedHint": "Browse apps below and connect your accounts.",
+    "saveFailed": "Couldn't save the Composio key",
+    "valid": "Key is valid",
+    "checkFailed": "Couldn't check the key",
+    "label": "Composio API key",
+    "connectTitle": "Connect your Composio account",
+    "invalidTitle": "Composio key isn't working",
+    "connectedTitle": "Composio is connected",
+    "pasteHint": "Paste an API key from your Composio dashboard (Settings → API keys). It's stored encrypted in your vault.",
+    "rejectedReplace": "The key was rejected. Replace it with a valid key.",
+    "pending": "Key saved — validation pending.",
+    "stored": "API key stored encrypted in your vault · never shown again",
+    "recheckAria": "Re-check Composio key",
+    "recheck": "Re-check",
+    "replace": "Replace",
+    "removeAria": "Remove Composio key",
+    "checking": "Checking…",
+    "save": "Save key",
+    "getKey": "Get a free key at app.composio.dev",
+    "removeTitle": "Remove the Composio key?",
+    "removeDescription": "Agents lose access to every Composio app until you add a key again. Your connected accounts stay in Composio.",
+    "removeConfirm": "Remove key"
+  },
+  "mcpDialog": {
+    "errors": {
+      "nameMissing": "Give the server a name.",
+      "nameInvalid": "Use letters, numbers, “-”, “_” or “.” (no spaces).",
+      "commandMissing": "Which program should Godmode start?",
+      "urlProtocol": "Use an http(s) URL.",
+      "urlInvalid": "Enter a full URL, e.g. https://example.com/mcp"
+    },
+    "saved": "Saved {{name}}",
+    "added": "Added {{name}}",
+    "savedEnabled": "Agents in scope get its tools on their next run.",
+    "savedDisabled": "It's disabled — flip the switch to use it.",
+    "saveFailed": "Couldn't save the MCP server",
+    "editTitle": "Edit {{name}}",
+    "addNamed": "Add {{name}}",
+    "addTitle": "Add an MCP server",
+    "description": "MCP servers give agents extra tools. They start with each agent run that has this server in scope.",
+    "namePlaceholder": "e.g. linear",
+    "toolsAppearAs": "Tools appear as {{prefix}}",
+    "descriptionPlaceholder": "What it's for (optional)",
+    "transport": "Transport",
+    "command": "Command",
+    "arguments": "Arguments",
+    "argumentsHint": "Separate with spaces or new lines; quote arguments that contain spaces.",
+    "argumentCount_one": "{{count}} argument.",
+    "argumentCount_other": "{{count}} arguments.",
+    "envVars": "Environment variables",
+    "envVar": "Environment variable",
+    "addVariable": "Add variable",
+    "headers": "Headers",
+    "header": "Header",
+    "headerValuePlaceholder": "e.g. Bearer <token>",
+    "addHeader": "Add header",
+    "secretsHint": "Secret values are encrypted in your vault and never shown again — you can only replace them.",
+    "availableTo": "Available to",
+    "enabled": "Enabled",
+    "enabledHint": "Disabled servers are kept but not started for agents.",
+    "saveAndTest": "Save & test",
+    "saveChanges": "Save changes",
+    "addServer": "Add server"
+  },
+  "mcp": {
+    "updateFailed": "Couldn't update the server",
+    "enabledToast": "{{name}} enabled",
+    "disabledToast": "{{name}} disabled",
+    "deleteFailed": "Couldn't delete the server",
+    "removed": "Server removed",
+    "description": "Any Model Context Protocol server — local commands or remote endpoints. Scope them globally, to a workspace, or to one agent.",
+    "quickAdd": "Quick add",
+    "popular": "Popular servers",
+    "customServer": "Custom server…",
+    "loadError": "Couldn't load MCP servers",
+    "emptyTitle": "No MCP servers yet",
+    "emptyDescription": "Add a server to give agents new abilities — a database, your file system, an internal API. Start with one of these:",
+    "managedByComposio": "Managed by Composio",
+    "removeTitle": "Remove {{name}}?",
+    "removeServerTitle": "Remove server?",
+    "removeDescription": "Agents lose these tools from their next run. Stored environment variables and headers are deleted from the vault.",
+    "envCount": "{{n}} env",
+    "headerCount_one": "{{count}} header",
+    "headerCount_other": "{{count}} headers",
+    "disableAria": "Disable {{name}}",
+    "enableAria": "Enable {{name}}",
+    "disabled": "Disabled",
+    "test": "Test",
+    "moreActionsAria": "More actions for {{name}}"
+  },
+  "connections": {
+    "status": {
+      "active": "Active",
+      "pending": "Waiting for sign-in",
+      "deleted": "Deleted upstream"
+    },
+    "globalGroup": "Global — every agent",
+    "disconnectFailed": "Couldn't disconnect",
+    "disconnected": "Disconnected",
+    "isActive": "Connection is active",
+    "statusToast": "Status: {{status}}",
+    "refreshFailed": "Couldn't refresh the connection",
+    "title": "Connected accounts",
+    "connectedAgo": "Connected {{ago}}",
+    "accountInfo": "Composio user <code>{{user}}</code> · account <code>{{account}}</code>",
+    "refreshAria": "Refresh {{name}} status",
+    "checkStatus": "Check status",
+    "disconnectAria": "Disconnect {{name}}",
+    "disconnect": "Disconnect",
+    "disconnectTitle": "Disconnect {{name}}?",
+    "disconnectDescription": "Agents in this scope immediately lose access to this account. You can reconnect it any time."
+  },
+  "connect": {
+    "connectedToast": "{{name}} connected",
+    "appConnectedToast": "App connected",
+    "connectedToastHint": "Your agents can use it right away.",
+    "notCompleted": "The connection did not complete.",
+    "reportedAs": "Composio reports the connection as {{status}}.",
+    "vaultLocked": "The vault was locked.",
+    "timedOut": "Timed out waiting for the sign-in to finish. You can try again.",
+    "title": "Connect {{name}}",
+    "defaultDescription": "Give your agents access through Composio.",
+    "whoCanUse": "Who can use this account?",
+    "noAuth": "This app doesn't need a sign-in — it's enabled right away.",
+    "signInHint": "You'll sign in on {{name}}'s own page in your browser. Godmode never sees that password; Composio stores the resulting token.",
+    "signInHintApp": "You'll sign in on the app's own page in your browser. Godmode never sees that password; Composio stores the resulting token.",
+    "waiting": "Waiting for you to finish in the browser…",
+    "waitingHint": "Sign in to {{name}} and approve access. This window updates automatically once Composio confirms the connection.",
+    "reopen": "Browser didn't open? Open the sign-in page again",
+    "isConnected": "{{name}} is connected",
+    "failed": "Couldn't connect {{name}}",
+    "starting": "Starting…",
+    "continueTo": "Continue to {{name}}",
+    "continueToSignIn": "Continue to sign-in",
+    "availableTo": "Available to <b>{{who}}</b> from their next run.",
+    "scopeTheAgent": "the agent",
+    "scopeWorkspace": "agents in {{name}}",
+    "scopeTheWorkspace": "agents in the workspace",
+    "scopeEveryAgent": "every agent"
+  },
+  "gallery": {
+    "label": "App gallery",
+    "title": "Add an app",
+    "description": "Connect an account and your agents get its actions as tools.",
+    "searchPlaceholder": "Search apps…",
+    "searchAria": "Search apps",
+    "clearSearch": "Clear search",
+    "categories": "Categories",
+    "loadError": "Couldn't load Composio apps",
+    "noMatch": "No apps match “{{search}}”",
+    "noneInCategory": "No apps in this category",
+    "tryAnother": "Try another search or category.",
+    "resetFilters": "Reset filters",
+    "loadingMore": "Loading more…",
+    "loadMore": "Load more apps",
+    "everything": "That's everything — {{n}} apps.",
+    "accounts": "{{n}} accounts",
+    "connected": "Connected",
+    "noDescription": "No description.",
+    "noSignIn": "No sign-in",
+    "addAccount": "Add account",
+    "connect": "Connect"
+  },
+  "toolPresets": {
+    "gemini": {
+      "tagline": "Images with Google Gemini",
+      "description": "Generate and edit images with Nano Banana (Google's Gemini image models): illustrations, product shots, photo edits, images with text."
+    },
+    "openai": {
+      "tagline": "GPT Image, GPT, speech",
+      "description": "Images with GPT Image (generate and edit), plus OpenAI's GPT models for text and vision, text-to-speech and transcription."
+    },
+    "elevenlabs": {
+      "tagline": "Voices and sound effects",
+      "description": "Lifelike speech in many voices and languages, sound effects from a description, and speech-to-text."
+    },
+    "replicate": {
+      "tagline": "Thousands of open models",
+      "description": "Run open models for images (FLUX), video, audio, upscaling and background removal."
+    },
+    "perplexity": {
+      "tagline": "Web search with sources",
+      "description": "Up-to-date answers from the web with cited sources — research, news, fact checks."
+    }
+  },
+  "apiKeys": {
+    "keyLabel": "{{name}} API key",
+    "descriptions": {
+      "anthropic": "Optional — otherwise your Claude Code login is used. Set it to bill runs to an API account instead.",
+      "zai": "Optional — for GLM-5.3, only on tasks Claude declines or can't do. Claude stays the default for every agent.",
+      "openai": "Voice: speech-to-text and natural text-to-speech when the OpenAI voice provider is selected.",
+      "elevenlabs": "Voice: premium text-to-speech voices when ElevenLabs is selected.",
+      "browserUse": "Lets profile-use sync your Chrome cookies to a browser-use Cloud profile.",
+      "captcha": "CAPTCHA solving for agents. Saving a key turns it on with this service if none is picked (Settings → Browser).",
+      "composio": "Connects hundreds of apps through Composio."
+    },
+    "encryptedTitle": "Encrypted, write-only",
+    "encryptedDescription": "Keys are sealed in your vault with AES-256-GCM and are never displayed again. Godmode injects them where they're needed — agents don't see them.",
+    "agentApiTitle": "Want an agent to use an API?",
+    "agentApiDescription": "These keys power Godmode itself. Keys for agents — Nano Banana, OpenAI, anything — go under Tools.",
+    "loadError": "Couldn't load API keys",
+    "customSecret": "Custom secret",
+    "saved": "{{label}} saved",
+    "solverSelected": "Agents now send CAPTCHAs to {{solver}} (Settings → Browser).",
+    "saveFailed": "Couldn't save {{label}}",
+    "removed": "{{label}} removed",
+    "removeFailed": "Couldn't remove {{label}}",
+    "set": "Set",
+    "setUpdated": "Set · updated {{ago}}",
+    "notSet": "Not set",
+    "getKeyAt": "Get a key at {{site}}",
+    "manageInComposio": "Manage in Composio tab",
+    "setKey": "Set key",
+    "pasteKey": "Paste the key",
+    "removeDescription": "Features that depend on this key stop working until you add it again."
+  },
+  "tools": {
+    "updateFailed": "Couldn't update the tool",
+    "isOn": "{{name}} is on",
+    "isOff": "{{name}} is off",
+    "isOnHint": "Agents in scope can use it again.",
+    "isOffHint": "Agents won't see it until you turn it back on.",
+    "removeFailed": "Couldn't remove the tool",
+    "removed": "Tool removed",
+    "description": "Give agents any API with your key — image generation, voices, search, your own services. Say what it's for; they work out the calls.",
+    "readyToGo": "Ready to go — just add your key",
+    "anyOtherMenu": "Any other API…",
+    "anyOther": "Any other API",
+    "anyOtherTagline": "Your key, its address and docs",
+    "addTool": "Add tool",
+    "keyHiddenTitle": "Agents use the key, they never see it",
+    "keyHiddenDescription": "Keys are sealed in your vault. Godmode adds them to each request and only sends them to the tool's own address; every call is in the audit log.",
+    "loadError": "Couldn't load tools",
+    "removeToolTitle": "Remove tool?",
+    "removeDescription": "Agents lose it from their next message, and its key is deleted from the vault.",
+    "emptyTitle": "No tools yet",
+    "emptyDescription": "Start with one of these — they come with the address and docs filled in, so all you add is the key.",
+    "testFailedToast": "Couldn't test {{name}}",
+    "keySaved": "Key saved",
+    "noKey": "No key",
+    "envVarHint": "Runs also get the key in this environment variable",
+    "onlySentTo": "The key is only sent to {{url}}",
+    "docs": "Docs",
+    "docsLink": "Docs link",
+    "noDocs": "No docs",
+    "usedAgo": "Used {{ago}}",
+    "notUsed": "Not used yet",
+    "turnOffAria": "Turn off {{name}}",
+    "turnOnAria": "Turn on {{name}}",
+    "onHint": "On — agents can use it",
+    "keyWorks": "The key works",
+    "testFailed": "Test failed"
+  },
+  "apiToolDialog": {
+    "errors": {
+      "name": "Give the tool a name.",
+      "apiKey": "That doesn't look like a whole key — check what you pasted.",
+      "baseUrlProtocol": "Use an https:// address.",
+      "baseUrlQuery": "Leave out ?query and #fragment.",
+      "baseUrlInvalid": "Enter the full address, e.g. https://api.example.com",
+      "baseUrlMissing": "Where do requests go? e.g. https://api.example.com",
+      "headerName": "Header names have no spaces, e.g. x-api-key.",
+      "queryName": "e.g. key or api_key",
+      "envVar": "Letters, digits and _, ending in _KEY, _TOKEN or _SECRET — e.g. GEMINI_API_KEY.",
+      "docsUrl": "Enter a full link, e.g. https://docs.example.com",
+      "testPath": "Needs the API address."
+    },
+    "grantReason": "Confirm to let the saved key go somewhere new.",
+    "keyWorks": "Key works — {{message}}",
+    "availableNext": "Agents in scope can use it from their next message.",
+    "savedTestFailed": "{{name}} was saved, but the test failed",
+    "saveFailed": "Couldn't save the tool",
+    "addTitle": "Add an API tool",
+    "description": "Hand agents an API with your key. Say what it's for — they work out the calls.",
+    "whatItIs": "What it is",
+    "namePlaceholder": "e.g. Nano Banana",
+    "useFor": "What agents can use it for",
+    "useForPlaceholder": "e.g. Generate product photos, social media images and illustrations; edit photos.",
+    "useForHint": "Agents reach for the tool when a task matches this, so be specific.",
+    "apiKey": "API key",
+    "key": "Key",
+    "keySavedPlaceholder": "Saved — paste a new key to replace it",
+    "keyPlaceholder": "Paste the API key",
+    "encrypted": "Encrypted in your vault and never shown again.",
+    "keyWillBeRemoved": "Key will be removed — undo",
+    "whereKeyGoes": "Where the key goes",
+    "apiAddress": "API address",
+    "insecure": "Over http:// the key travels unencrypted — fine for a local server only.",
+    "addressHint": "Godmode only ever sends the key to URLs under this address.",
+    "sendAs": "Send the key as",
+    "bearer": "Bearer token",
+    "queryParam": "Query parameter",
+    "headerName": "Header name",
+    "prefix": "Prefix (optional)",
+    "paramName": "Parameter name",
+    "howToUse": "How to use it",
+    "documentation": "Documentation",
+    "docsPlaceholder": "Paste what agents need: endpoints, a sample request, model names, limits.",
+    "docsHint": "Agents read this before their first call. Markdown works. A link alone is fine too — they'll look the API up.",
+    "docsLink": "Documentation link",
+    "advanced": "Advanced",
+    "envTitle": "Also give runs the key as an environment variable",
+    "envHint": "For scripts, SDKs and command-line tools. Agents can read the key then; it's still masked in chats and logs.",
+    "variableName": "Variable name",
+    "testRequest": "Test request",
+    "testHint": "A cheap request that only works with a valid key. Powers the Test button."
+  }
+}

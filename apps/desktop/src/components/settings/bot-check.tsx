@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { CircleCheck, CircleX, Radar, RotateCw, ShieldAlert, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { BotCheckReport, BotCheckStatus, BrowserSettings } from "@godmode/shared";
@@ -9,27 +10,29 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
+import { dateLocale, t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { SettingRow } from "./settings-kit";
 
-const STATUS: Record<BotCheckStatus, { icon: typeof CircleCheck; text: string; bar: string; label: string }> = {
-  pass: { icon: CircleCheck, text: "text-success", bar: "bg-success", label: "Passed" },
-  warn: { icon: TriangleAlert, text: "text-warning", bar: "bg-warning", label: "Minor difference" },
-  fail: { icon: CircleX, text: "text-destructive", bar: "bg-destructive", label: "Gives it away" },
-};
+const STATUS = {
+  pass: { icon: CircleCheck, text: "text-success", bar: "bg-success", labelKey: "botCheck.status.pass" },
+  warn: { icon: TriangleAlert, text: "text-warning", bar: "bg-warning", labelKey: "botCheck.status.warn" },
+  fail: { icon: CircleX, text: "text-destructive", bar: "bg-destructive", labelKey: "botCheck.status.fail" },
+} as const satisfies Record<BotCheckStatus, { icon: typeof CircleCheck; text: string; bar: string; labelKey: string }>;
 
 function verdict(report: BotCheckReport) {
   const fails = report.checks.filter((c) => c.status === "fail").length;
   const warns = report.checks.filter((c) => c.status === "warn").length;
   const passed = report.checks.length - fails - warns;
-  if (fails) return { tone: "fail" as const, title: fails === 1 ? "1 signal gives the browser away" : `${fails} signals give the browser away`, passed };
-  if (warns) return { tone: "pass" as const, title: "Passes common bot checks", passed };
-  return { tone: "pass" as const, title: "Looks like a regular Chrome", passed };
+  if (fails) return { tone: "fail" as const, title: translate("settings:botCheck.verdictFail", { count: fails }), passed };
+  if (warns) return { tone: "pass" as const, title: translate("settings:botCheck.verdictWarn"), passed };
+  return { tone: "pass" as const, title: translate("settings:botCheck.verdictPass"), passed };
 }
 
 /** Bot check of the global default profile's browser, shown inline in Settings → Browser. */
 export function BotCheck({ browser }: { browser: BrowserSettings }) {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const { data: profiles } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles });
   const profile = profiles?.find((p) => p.isDefault && !p.workspaceId) ?? null;
@@ -38,7 +41,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
 
   const run = useMutation({
     mutationFn: async (restart: boolean) => {
-      if (!profile) throw new Error("The default browser profile isn't ready yet.");
+      if (!profile) throw new Error(t("botCheck.profileNotReady"));
       if (restart) {
         await api.browser.stop(profile.id);
         await api.browser.launch(profile.id, profile.headless ?? undefined);
@@ -49,7 +52,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
       qc.setQueryData([...qk.botCheck, r.profileId], r);
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
     },
-    onError: (e) => toastApiError(e, "Bot check failed", qc),
+    onError: (e) => toastApiError(e, t("botCheck.failed"), qc),
   });
 
   const r = report.data;
@@ -60,12 +63,12 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
   if (!r && !run.isPending) {
     return (
       <SettingRow
-        label="Bot check"
+        label={t("botCheck.label")}
         disabled={!browser.enabled}
-        description="Opens a test page in the default profile's browser and shows what bot detection sees there — the same checks sites run before a CAPTCHA."
+        description={t("botCheck.description")}
       >
         <Button variant="outline" size="sm" onClick={() => run.mutate(false)} disabled={disabled}>
-          <Radar /> Run check
+          <Radar /> {t("botCheck.run")}
         </Button>
       </SettingRow>
     );
@@ -87,14 +90,14 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
             {!v ? <Spinner /> : v.tone === "pass" ? <ShieldCheck /> : <ShieldAlert />}
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-medium tracking-[-0.01em]">{v ? v.title : "Checking how sites see the browser…"}</div>
+            <div className="text-sm font-medium tracking-[-0.01em]">{v ? v.title : t("botCheck.checking")}</div>
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {r ? (
                 <>
-                  {r.browser.replace("/", " ")} · {r.headless ? "Headless" : "Visible window"} · Stealth {r.stealth ? "on" : "off"} · {format(new Date(r.checkedAt), "HH:mm")}
+                  {r.browser.replace("/", " ")} · {r.headless ? t("botCheck.headless") : t("botCheck.visible")} · {r.stealth ? t("botCheck.stealthOn") : t("botCheck.stealthOff")} · {format(new Date(r.checkedAt), "HH:mm", { locale: dateLocale() })}
                 </>
               ) : (
-                "Opening a test page in the default profile's browser"
+                t("botCheck.opening")
               )}
             </div>
           </div>
@@ -103,7 +106,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
           <div className="flex items-center gap-3">
             <Meter report={r} />
             <Button variant="ghost" size="sm" onClick={() => run.mutate(false)} disabled={run.isPending || disabled}>
-              {run.isPending ? <Spinner /> : <RotateCw />} Check again
+              {run.isPending ? <Spinner /> : <RotateCw />} {t("botCheck.again")}
             </Button>
           </div>
         )}
@@ -126,12 +129,16 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
             >
               <span className="min-w-0 flex-1 text-foreground/85">
                 {restartNeeded
-                  ? `The browser is still running with stealth ${profile?.stealth ? "on" : "off"}. Restart it to apply the new setting — agents using it lose their open tabs.`
-                  : `Stealth is ${browser.stealth ? "on" : "off"} now — check again to see what changes.`}
+                  ? profile?.stealth
+                    ? t("botCheck.restartNeededOn")
+                    : t("botCheck.restartNeededOff")
+                  : browser.stealth
+                    ? t("botCheck.staleOn")
+                    : t("botCheck.staleOff")}
               </span>
               {restartNeeded && (
                 <Button size="xs" variant="outline" onClick={() => run.mutate(true)} disabled={disabled}>
-                  <RotateCw /> Restart & check
+                  <RotateCw /> {t("botCheck.restart")}
                 </Button>
               )}
             </div>
@@ -151,7 +158,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
                   transition={{ delay: i * 0.025 }}
                   className="grid grid-cols-[auto_1fr] items-start gap-x-3 border-b px-3.5 py-2.5 last:border-b-0 @lg:grid-cols-[auto_9rem_1fr]"
                 >
-                  <s.icon role="img" className={cn("mt-px size-4", s.text)} aria-label={s.label} />
+                  <s.icon role="img" className={cn("mt-px size-4", s.text)} aria-label={t(s.labelKey)} />
                   <span className="text-[13px] font-medium">{c.label}</span>
                   <span className="col-start-2 text-xs leading-relaxed break-words text-muted-foreground @lg:col-start-3 @lg:pt-px">{c.detail}</span>
                 </motion.li>
@@ -170,6 +177,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
 }
 
 function Meter({ report }: { report: BotCheckReport }) {
+  const { t } = useTranslation("settings");
   const v = verdict(report);
   return (
     <Tooltip>
@@ -178,7 +186,7 @@ function Meter({ report }: { report: BotCheckReport }) {
           tabIndex={0}
           role="img"
           className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          aria-label={`${v.passed} of ${report.checks.length} checks passed`}
+          aria-label={t("botCheck.passedOf", { passed: v.passed, total: report.checks.length })}
         >
           <div className="flex gap-[3px]">
             {report.checks.map((c) => (
@@ -191,7 +199,7 @@ function Meter({ report }: { report: BotCheckReport }) {
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        {v.passed} of {report.checks.length} checks passed
+        {t("botCheck.passedOf", { passed: v.passed, total: report.checks.length })}
       </TooltipContent>
     </Tooltip>
   );

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type DragEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { CircleAlert, CircleCheck, ClipboardPaste, ImagePlus, QrCode, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { t as tg } from "@/i18n";
 import { decodeQrCodes, isOtpUri } from "@/lib/qr";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -39,12 +41,12 @@ export function useQrImages() {
       const id = `qr-${++seq}`;
       const url = URL.createObjectURL(file);
       urls.current.add(url);
-      setItems((prev) => [...prev, { id, name: file.name || "Pasted image", url, status: "decoding", found: [] }]);
+      setItems((prev) => [...prev, { id, name: file.name || tg("vault:qrDrop.pastedImage"), url, status: "decoding", found: [] }]);
       decodeQrCodes(file)
         .then((found) => setItems((prev) => prev.map((it) => (it.id === id ? { ...it, status: "done", found } : it))))
         .catch((e: unknown) =>
           setItems((prev) =>
-            prev.map((it) => (it.id === id ? { ...it, status: "error", error: e instanceof Error ? e.message : "Could not read image" } : it)),
+            prev.map((it) => (it.id === id ? { ...it, status: "error", error: e instanceof Error ? e.message : tg("vault:qrDrop.readFailed") } : it)),
           ),
         );
     }
@@ -72,6 +74,7 @@ export function useQrImages() {
 }
 
 export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onFiles: (files: FileList | File[]) => void; onRemove: (id: string) => void }) {
+  const { t } = useTranslation("vault");
   const [dragging, setDragging] = useState(false);
   const depth = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +91,7 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
       <div
         role="button"
         tabIndex={0}
-        aria-label="Add QR code screenshots"
+        aria-label={t("qrDrop.label")}
         onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -120,10 +123,17 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
           <ImagePlus className="size-5" />
         </motion.div>
         <div className="relative">
-          <p className="text-sm font-medium">{dragging ? "Drop to scan" : "Drop QR code screenshots here"}</p>
+          <p className="text-sm font-medium">{dragging ? t("qrDrop.dropToScan") : t("qrDrop.title")}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Several at once is fine · or <span className="font-medium text-foreground underline-offset-2 group-hover:underline">browse files</span> · or paste with{" "}
-            <kbd className="rounded-[4px] border bg-card px-1 font-mono text-[10px]">{modKey}V</kbd>
+            <Trans
+              t={t}
+              i18nKey="qrDrop.hint"
+              values={{ shortcut: `${modKey}V` }}
+              components={{
+                browse: <span className="font-medium text-foreground underline-offset-2 group-hover:underline" />,
+                kbd: <kbd className="rounded-[4px] border bg-card px-1 font-mono text-[10px]" />,
+              }}
+            />
           </p>
         </div>
         <input
@@ -169,7 +179,7 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
                 <Button
                   size="icon-xs"
                   variant="ghost"
-                  aria-label={`Remove ${it.name}`}
+                  aria-label={t("chipInput.remove", { value: it.name })}
                   className="absolute -top-1.5 -right-1.5 rounded-md border bg-card opacity-0 shadow-card group-hover/img:opacity-100 focus-visible:opacity-100"
                   onClick={() => onRemove(it.id)}
                 >
@@ -185,11 +195,12 @@ export function QrDropZone({ items, onFiles, onRemove }: { items: QrImage[]; onF
 }
 
 function ImageStatus({ item }: { item: QrImage }) {
-  if (item.status === "decoding") return <p className="text-[11px] text-muted-foreground">Scanning…</p>;
+  const { t } = useTranslation("vault");
+  if (item.status === "decoding") return <p className="text-[11px] text-muted-foreground">{t("qrDrop.scanning")}</p>;
   if (item.status === "error")
     return (
       <p className="flex items-center gap-1 text-[11px] text-destructive">
-        <CircleAlert className="size-3" /> {item.error ?? "Unreadable"}
+        <CircleAlert className="size-3" /> {item.error ?? t("qrDrop.unreadable")}
       </p>
     );
   const otp = item.found.filter(isOtpUri).length;
@@ -197,27 +208,28 @@ function ImageStatus({ item }: { item: QrImage }) {
   if (otp > 0)
     return (
       <p className="flex items-center gap-1 text-[11px] text-success">
-        <CircleCheck className="size-3" /> {otp === 1 ? "1 code found" : `${otp} codes found`}
+        <CircleCheck className="size-3" /> {t("qrDrop.found", { count: otp })}
       </p>
     );
   if (other > 0)
     return (
       <p className="flex items-center gap-1 text-[11px] text-warning">
-        <QrCode className="size-3" /> Not a 2FA QR code
+        <QrCode className="size-3" /> {t("qrDrop.notOtp")}
       </p>
     );
   return (
     <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
-      <CircleAlert className="size-3" /> No QR code found
+      <CircleAlert className="size-3" /> {t("qrDrop.noQr")}
     </p>
   );
 }
 
 /** Tiny hint row shown under the drop zone. */
 export function PasteHint() {
+  const { t } = useTranslation("vault");
   return (
     <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-      <ClipboardPaste className="size-3.5" /> Tip: take a screenshot to the clipboard and press {modKey}V right here.
+      <ClipboardPaste className="size-3.5" /> {t("qrDrop.pasteTip", { shortcut: `${modKey}V` })}
     </p>
   );
 }

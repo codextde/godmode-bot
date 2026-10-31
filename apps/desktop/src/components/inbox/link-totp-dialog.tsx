@@ -2,6 +2,8 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { ArrowRight, Check, Link2, ScanLine, Search, ShieldCheck } from "lucide-react";
 import type { Credential, MissingLogin, MissingLoginTotpChoices, TotpEntry } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -30,6 +32,7 @@ export function LinkTotpDialog({ item, open, onOpenChange }: { item: MissingLogi
 }
 
 function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void }) {
+  const { t } = useTranslation(["inbox", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -72,12 +75,12 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
       void qc.invalidateQueries({ queryKey: qk.missingLogins });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       const name = credById.get(res.credentialId)?.name ?? login?.name ?? host;
-      toast.success(res.outcome === "domain_added" ? `2FA ready for ${host}` : `2FA linked to ${name}`, {
-        description: "Agents type this code in on their next sign-in.",
+      toast.success(res.outcome === "domain_added" ? t("linkTotp.readyFor", { host }) : t("linkTotp.linkedTo", { name }), {
+        description: t("linkTotp.readyDescription"),
       });
       onDone();
     },
-    onError: (e) => toastApiError(e, "Could not link the 2FA code", qc),
+    onError: (e) => toastApiError(e, t("linkTotp.linkError"), qc),
   });
 
   const importNew = () => {
@@ -87,17 +90,16 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
 
   const loading = choices.isLoading || totp.isLoading;
   const noLogin = choices.isSuccess && logins.length === 0;
-  const preview = selectedTotp && login ? outcomeText(selectedTotp, login, host, credById) : null;
+  const preview = selectedTotp && login ? outcomeText(t, selectedTotp, login, host, credById) : null;
 
   return (
     <div className="flex min-w-0 max-h-[min(88vh,760px)] flex-col">
       <div className="flex items-start gap-3.5 px-6 pt-6 pb-4">
         <Favicon domain={host} name={item.service || host} size="lg" />
         <div className="min-w-0 pr-8">
-          <DialogTitle className="text-lg">Use a saved 2FA code</DialogTitle>
+          <DialogTitle className="text-lg">{t("linkTotp.title")}</DialogTitle>
           <DialogDescription className="mt-1">
-            Pick the code for <span className="font-medium text-foreground">{host || item.service}</span>. Godmode links it to the right login, so agents fill it in by
-            themselves next time.
+            <Trans t={t} i18nKey="linkTotp.description" values={{ host: host || item.service }} components={{ b: <span className="font-medium text-foreground" /> }} />
           </DialogDescription>
         </div>
       </div>
@@ -105,8 +107,8 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5">
         {logins.length > 1 && (
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">Login for {host}</p>
-            <div role="radiogroup" aria-label={`Login for ${host}`} className="flex flex-wrap gap-1.5">
+            <p className="text-xs font-medium text-muted-foreground">{t("linkTotp.loginFor", { host })}</p>
+            <div role="radiogroup" aria-label={t("linkTotp.loginFor", { host })} className="flex flex-wrap gap-1.5">
               {logins.map((l) => (
                 <button
                   key={l.id}
@@ -129,7 +131,7 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
 
         {noLogin && (
           <p className="rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-xs text-foreground/85">
-            No login is saved for {host} yet. Add the login first, then link its 2FA here.
+            {t("linkTotp.noLogin", { host })}
           </p>
         )}
 
@@ -139,29 +141,29 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search 2FA codes by service, account or login…"
+              placeholder={t("linkTotp.searchPlaceholder")}
               className="h-full w-full bg-transparent text-sm outline-hidden placeholder:text-muted-foreground"
               autoFocus
             />
           </label>
-          <div role="listbox" aria-label="2FA codes" className="max-h-[min(22rem,46vh)] overflow-y-auto p-1.5">
+          <div role="listbox" aria-label={t("linkTotp.codes")} className="max-h-[min(22rem,46vh)] overflow-y-auto p-1.5">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                <Spinner /> Loading 2FA codes…
+                <Spinner /> {t("linkTotp.loading")}
               </div>
             ) : top.length + rest.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">{query ? `No 2FA code matches “${query}”.` : "Your vault has no 2FA codes yet."}</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{query ? t("linkTotp.noMatch", { query }) : t("linkTotp.noCodes")}</p>
             ) : (
               <>
-                {top.length > 0 && <Heading>Suggested for {host}</Heading>}
+                {top.length > 0 && <Heading>{t("linkTotp.suggestedFor", { host })}</Heading>}
                 {top.map((t) => (
                   <TotpRow key={t.id} entry={t} linked={t.credentialId ? credById.get(t.credentialId) : undefined} selected={t.id === selected} onSelect={setTotpId} />
                 ))}
-                {rest.length > 0 && <Heading>{top.length ? "All 2FA codes" : query ? "Matches" : "All 2FA codes"}</Heading>}
+                {rest.length > 0 && <Heading>{top.length ? t("linkTotp.allCodes") : query ? t("linkTotp.matches") : t("linkTotp.allCodes")}</Heading>}
                 {rest.map((t) => (
                   <TotpRow key={t.id} entry={t} linked={t.credentialId ? credById.get(t.credentialId) : undefined} selected={t.id === selected} onSelect={setTotpId} />
                 ))}
-                {hidden > 0 && <p className="px-2.5 pt-1 pb-2 text-xs text-muted-foreground">{hidden} more. Keep typing to narrow it down.</p>}
+                {hidden > 0 && <p className="px-2.5 pt-1 pb-2 text-xs text-muted-foreground">{t("linkTotp.hiddenMore", { count: hidden })}</p>}
               </>
             )}
           </div>
@@ -177,14 +179,14 @@ function LinkTotpForm({ item, onDone }: { item: MissingLogin; onDone: () => void
 
       <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
         <Button type="button" variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={importNew}>
-          <ScanLine /> Not there? Import a new code
+          <ScanLine /> {t("linkTotp.importNew")}
         </Button>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onDone} disabled={link.isPending}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button type="button" onClick={() => link.mutate()} disabled={!selected || !login || link.isPending}>
-            {link.isPending ? <Spinner /> : <Link2 />} Link 2FA
+            {link.isPending ? <Spinner /> : <Link2 />} {t("linkTotp.link")}
           </Button>
         </div>
       </div>
@@ -198,19 +200,19 @@ function pickLogin(logins: SiteLogin[], entry: TotpEntry | null, chosen: string 
   return (entry && (logins.find((l) => l.totpId === entry.id) ?? logins.find((l) => same(l.username, entry.accountName)))) || logins[0] || null;
 }
 
-function outcomeText(entry: TotpEntry, login: SiteLogin, host: string, credById: Map<string, Credential>): string {
+function outcomeText(t: TFunction<["inbox", "common"]>, entry: TotpEntry, login: SiteLogin, host: string, credById: Map<string, Credential>): string {
   const owner = entry.credentialId && entry.credentialId !== login.id ? credById.get(entry.credentialId) : undefined;
   const who = login.username ? `${login.name} · ${login.username}` : login.name;
-  if (entry.credentialId === login.id) return `Already linked to ${who}. This closes the request.`;
-  if (!owner) return `Links it to ${who}.`;
+  if (entry.credentialId === login.id) return t("linkTotp.outcome.alreadyLinked", { who });
+  if (!owner) return t("linkTotp.outcome.links", { who });
   const sameAccount = !!owner.username.trim() && owner.username.trim().toLowerCase() === login.username.trim().toLowerCase();
   const ownerCovers = [...owner.domains, domainFromUrl(owner.url)].some((d) => d && (host === d || host.endsWith(`.${d}`) || d.endsWith(`.${host}`)));
   if (sameAccount || ownerCovers) {
     return ownerCovers
-      ? `It stays with ${owner.name}, which already covers ${host}.`
-      : `Same account: it stays with ${owner.name} (${owner.domains[0] ?? domainFromUrl(owner.url)}) and ${host} is added to that login, so both sign-ins get the code.`;
+      ? t("linkTotp.outcome.staysCovered", { owner: owner.name, host })
+      : t("linkTotp.outcome.sameAccount", { owner: owner.name, domain: owner.domains[0] ?? domainFromUrl(owner.url), host });
   }
-  return `Moves it from ${owner.name}${owner.username ? ` · ${owner.username}` : ""} to ${who}.`;
+  return t("linkTotp.outcome.moves", { from: owner.username ? `${owner.name} · ${owner.username}` : owner.name, who });
 }
 
 function Heading({ children }: { children: ReactNode }) {
@@ -218,6 +220,7 @@ function Heading({ children }: { children: ReactNode }) {
 }
 
 function TotpRow({ entry, linked, selected, onSelect }: { entry: TotpEntry; linked: Credential | undefined; selected: boolean; onSelect: (id: string) => void }) {
+  const { t } = useTranslation("inbox");
   const linkedDomain = linked ? (linked.domains[0] ?? domainFromUrl(linked.url)) : "";
   return (
     <button
@@ -241,7 +244,7 @@ function TotpRow({ entry, linked, selected, onSelect }: { entry: TotpEntry; link
               {linkedDomain ? ` (${linkedDomain})` : ""}
             </>
           ) : (
-            "Not linked"
+            t("linkTotp.notLinked")
           )}
         </span>
       </span>

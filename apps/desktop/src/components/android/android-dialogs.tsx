@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Wifi } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { AndroidDevice } from "@godmode/shared";
 import {
@@ -33,6 +34,7 @@ function splitAddress(text: string): { host: string; port?: number } {
 
 /** Wireless debugging: pair once with the six-digit code (Android 11+), then connect to the address shown. */
 export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation(["android", "common"]);
   const qc = useQueryClient();
   const [mode, setMode] = useState<"pair" | "connect">("pair");
   const [address, setAddress] = useState("");
@@ -62,10 +64,10 @@ export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpe
         setError(res.message);
         return;
       }
-      toast.success("Phone connected over Wi-Fi", { description: res.message });
+      toast.success(t("wifi.connected"), { description: res.message });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Couldn't connect", qc),
+    onError: (e) => toastApiError(e, t("wifi.connectFailed"), qc),
   });
 
   const pairReady = mode === "connect" || (/^\d{6}$/.test(code.trim()) && !!splitAddress(pairing).port);
@@ -81,32 +83,30 @@ export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpe
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="contents">
           <DialogHeader>
-            <DialogTitle>Connect a phone over Wi-Fi</DialogTitle>
-            <DialogDescription>
-              On the phone: Settings → Developer options → Wireless debugging. The phone and this computer must be on the same network.
-            </DialogDescription>
+            <DialogTitle>{t("wifi.title")}</DialogTitle>
+            <DialogDescription>{t("wifi.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4">
             <ToggleGroup type="single" variant="outline" value={mode} onValueChange={(v) => v && setMode(v as "pair" | "connect")} className="w-full">
               <ToggleGroupItem value="pair" className="flex-1">
-                First time
+                {t("wifi.firstTime")}
               </ToggleGroupItem>
               <ToggleGroupItem value="connect" className="flex-1">
-                Paired before
+                {t("wifi.pairedBefore")}
               </ToggleGroupItem>
             </ToggleGroup>
 
             {mode === "pair" && (
               <div className="grid gap-3 rounded-lg border bg-paper-2 p-3">
-                <p className="text-xs text-muted-foreground">Tap “Pair device with pairing code” on the phone and enter what it shows.</p>
+                <p className="text-xs text-muted-foreground">{t("wifi.pairHint")}</p>
                 <div className="grid grid-cols-[1fr_8rem] gap-2">
                   <div className="grid gap-1.5">
-                    <Label htmlFor="adb-pair-address">IP address &amp; port</Label>
+                    <Label htmlFor="adb-pair-address">{t("wifi.address")}</Label>
                     <Input id="adb-pair-address" value={pairing} onChange={(e) => setPairing(e.target.value)} placeholder="192.168.1.20:37099" autoComplete="off" spellCheck={false} />
                   </div>
                   <div className="grid gap-1.5">
-                    <Label htmlFor="adb-pair-code">Pairing code</Label>
+                    <Label htmlFor="adb-pair-code">{t("wifi.pairingCode")}</Label>
                     <Input
                       id="adb-pair-code"
                       value={code}
@@ -122,9 +122,9 @@ export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpe
             )}
 
             <div className="grid gap-1.5">
-              <Label htmlFor="adb-address">IP address &amp; port</Label>
+              <Label htmlFor="adb-address">{t("wifi.address")}</Label>
               <Input id="adb-address" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="192.168.1.20:41235" autoComplete="off" spellCheck={false} />
-              <p className="text-xs text-muted-foreground">The one at the top of the Wireless debugging screen (not the pairing port).</p>
+              <p className="text-xs text-muted-foreground">{t("wifi.addressHint")}</p>
             </div>
 
             {error && <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">{error}</p>}
@@ -132,10 +132,10 @@ export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpe
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!ready || connect.isPending}>
-              {connect.isPending ? <Spinner className="size-3.5" /> : <Wifi />} {mode === "pair" ? "Pair and connect" : "Connect"}
+              {connect.isPending ? <Spinner className="size-3.5" /> : <Wifi />} {mode === "pair" ? t("wifi.pairAndConnect") : t("wifi.connect")}
             </Button>
           </DialogFooter>
         </form>
@@ -146,6 +146,7 @@ export function ConnectWifiDialog({ open, onOpenChange }: { open: boolean; onOpe
 
 /** Name and description: what agents read about the phone. */
 export function EditPhoneDialog({ device, onClose }: { device: AndroidDevice | null; onClose: () => void }) {
+  const { t } = useTranslation(["android", "common"]);
   const qc = useQueryClient();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -161,7 +162,7 @@ export function EditPhoneDialog({ device, onClose }: { device: AndroidDevice | n
       void qc.invalidateQueries({ queryKey: qk.android });
       onClose();
     },
-    onError: (e) => toastApiError(e, "Couldn't save the phone", qc),
+    onError: (e) => toastApiError(e, t("edit.saveFailed"), qc),
   });
 
   return (
@@ -175,32 +176,32 @@ export function EditPhoneDialog({ device, onClose }: { device: AndroidDevice | n
           }}
         >
           <DialogHeader>
-            <DialogTitle>Edit phone</DialogTitle>
-            <DialogDescription>Agents see the name and the description when they work with this phone.</DialogDescription>
+            <DialogTitle>{t("edit.title")}</DialogTitle>
+            <DialogDescription>{t("edit.description")}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">
             <div className="grid gap-1.5">
-              <Label htmlFor="phone-name">Name</Label>
+              <Label htmlFor="phone-name">{t("common:words.name")}</Label>
               <Input id="phone-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="phone-description">What it's for</Label>
+              <Label htmlFor="phone-description">{t("edit.whatFor")}</Label>
               <Textarea
                 id="phone-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={4000}
                 rows={3}
-                placeholder="Test phone, signed in to the shop's TikTok account. Don't change system settings."
+                placeholder={t("edit.placeholder")}
               />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || save.isPending}>
-              {save.isPending && <Spinner className="size-3.5" />} Save
+              {save.isPending && <Spinner className="size-3.5" />} {t("common:actions.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -210,29 +211,31 @@ export function EditPhoneDialog({ device, onClose }: { device: AndroidDevice | n
 }
 
 export function ForgetPhoneDialog({ device, onClose }: { device: AndroidDevice | null; onClose: () => void }) {
+  const { t } = useTranslation(["android", "common"]);
   const qc = useQueryClient();
   const users = device?.assignments.length ?? 0;
   const forget = useMutation({
     mutationFn: (d: AndroidDevice) => api.android.forget(d.id),
     onSuccess: (_r, d) => {
       void qc.invalidateQueries({ queryKey: qk.android });
-      toast.success(`Forgot ${d.name}`);
+      toast.success(t("forget.toast", { name: d.name }));
     },
-    onError: (e) => toastApiError(e, "Couldn't forget the phone", qc),
+    onError: (e) => toastApiError(e, t("forget.failed"), qc),
   });
   return (
     <AlertDialog open={!!device} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Forget “{device?.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("forget.title", { name: device?.name })}</AlertDialogTitle>
           <AlertDialogDescription>
-            Godmode forgets the phone's name and description.
-            {users === 1 && ` ${device?.assignments[0]?.name || "The agent or chat using it"} loses it.`}
-            {users > 1 && ` The ${users} agents and chats using it lose it.`} When you plug it in again it shows up as a new phone. Nothing on the phone changes.
+            {t("forget.body")}
+            {users === 1 &&
+              ` ${device?.assignments[0]?.name ? t("forget.oneUser", { name: device.assignments[0].name }) : t("forget.oneUserFallback")}`}
+            {users > 1 && ` ${t("forget.manyUsers", { n: users })}`} {t("forget.rest")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -240,7 +243,7 @@ export function ForgetPhoneDialog({ device, onClose }: { device: AndroidDevice |
               onClose();
             }}
           >
-            <Trash2 /> Forget phone
+            <Trash2 /> {t("forget.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,5 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -73,6 +74,7 @@ export function VmCard({
   onReset: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation("vms");
   const [commandOpen, setCommandOpen] = useState(false);
   const busy = vmBusy(vm.state);
   const working = vm.state === "creating" || vm.state === "starting";
@@ -80,7 +82,7 @@ export function VmCard({
   const preset = presetOf(vm.image, presets);
   const progress =
     vm.progress ??
-    (busy ? { phase: "boot" as const, label: vm.state === "stopping" ? "Shutting macOS down…" : vm.state === "starting" ? "Starting macOS…" : "Preparing…", percent: null } : null);
+    (busy ? { phase: "boot" as const, label: vm.state === "stopping" ? t("card.shuttingDown") : vm.state === "starting" ? t("card.startingMacos") : t("card.preparing"), percent: null } : null);
   const resetting = actions.reset.isPending && actions.reset.variables?.vm.id === vm.id;
 
   return (
@@ -110,24 +112,24 @@ export function VmCard({
           </div>
           <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground tabular-nums [&_svg]:size-3 [&_svg]:shrink-0">
             <span className="text-foreground/80">{imageName(vm.image, presets)}</span>
-            <span className="inline-flex items-center gap-1" title="CPU cores">
-              <Cpu aria-hidden /> {vm.cpu} {vm.cpu === 1 ? "core" : "cores"}
+            <span className="inline-flex items-center gap-1" title={t("card.cpuCores")}>
+              <Cpu aria-hidden /> {t("cores", { count: vm.cpu })}
             </span>
-            <span className="inline-flex items-center gap-1" title="Memory">
+            <span className="inline-flex items-center gap-1" title={t("card.memory")}>
               <MemoryStick aria-hidden /> {formatMemory(vm.memoryMb)}
             </span>
-            <span className="inline-flex items-center gap-1" title={vm.diskUsageBytes !== null ? `${formatGb(vm.diskUsageBytes)} used on this Mac` : "Disk size"}>
+            <span className="inline-flex items-center gap-1" title={vm.diskUsageBytes !== null ? t("card.diskUsedTitle", { size: formatGb(vm.diskUsageBytes) }) : t("card.diskSize")}>
               <HardDrive aria-hidden /> {vm.diskGb} GB
-              {vm.diskUsageBytes !== null && <span className="text-muted-foreground/80">({formatGb(vm.diskUsageBytes)} used)</span>}
+              {vm.diskUsageBytes !== null && <span className="text-muted-foreground/80">{t("card.diskUsed", { size: formatGb(vm.diskUsageBytes) })}</span>}
             </span>
-            <span className="inline-flex items-center gap-1" title="Display">
+            <span className="inline-flex items-center gap-1" title={t("card.display")}>
               <Monitor aria-hidden /> {formatDisplay(vm.display)}
             </span>
           </p>
           {running && vm.ip && (
             <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
               IP <span className="font-mono text-foreground/80">{vm.ip}</span>
-              <CopyButton text={vm.ip} label="Copy IP address" className="size-5" />
+              <CopyButton text={vm.ip} label={t("card.copyIp")} className="size-5" />
             </p>
           )}
         </div>
@@ -158,10 +160,10 @@ export function VmCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="xs" variant="outline" disabled={resetting} onClick={() => actions.reset.mutate({ vm })}>
-                  {resetting ? <Spinner className="size-3" /> : <RotateCcw />} Reset
+                  {resetting ? <Spinner className="size-3" /> : <RotateCcw />} {t("card.reset")}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Recreate it from its image — the shared folder is kept</TooltipContent>
+              <TooltipContent>{t("card.resetTooltip")}</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -172,9 +174,9 @@ export function VmCard({
       </div>
 
       <div className="flex flex-wrap items-center gap-0.5 rounded-b-xl border-t bg-paper-2/70 px-2 py-1.5">
-        <OpenButton vm={vm} what="screen" actions={actions} icon={<Monitor />} label="Screen" />
-        <OpenButton vm={vm} what="terminal" actions={actions} icon={<SquareTerminal />} label="Terminal" />
-        <OpenButton vm={vm} what="folder" actions={actions} icon={<FolderOpen />} label="Shared folder" />
+        <OpenButton vm={vm} what="screen" actions={actions} icon={<Monitor />} label={t("card.screen")} />
+        <OpenButton vm={vm} what="terminal" actions={actions} icon={<SquareTerminal />} label={t("card.terminal")} />
+        <OpenButton vm={vm} what="folder" actions={actions} icon={<FolderOpen />} label={t("card.sharedFolder")} />
         {running && (
           <Button
             variant="ghost"
@@ -184,7 +186,7 @@ export function VmCard({
             aria-controls={`vm-command-${vm.id}`}
             onClick={() => setCommandOpen((o) => !o)}
           >
-            <Terminal className="size-3.5" /> Run command
+            <Terminal className="size-3.5" /> {t("card.runCommand")}
             <ChevronDown className={cn("size-3.5 opacity-60 transition-transform", commandOpen && "rotate-180")} />
           </Button>
         )}
@@ -212,6 +214,7 @@ export function VmCard({
 
 /** What's on the running VM's screen right now (refreshed every few seconds); click to open it in Screen Sharing. */
 function VmScreenPreview({ vm, actions }: { vm: Vm; actions: VmActions }) {
+  const { t } = useTranslation("vms");
   const [w, h] = vm.display.split("x").map(Number);
   const aspect = w && h ? w / h : 16 / 10;
   const { data, isError } = useQuery({
@@ -226,7 +229,7 @@ function VmScreenPreview({ vm, actions }: { vm: Vm; actions: VmActions }) {
     <button
       type="button"
       onClick={() => actions.open.mutate({ vm, what: "screen" })}
-      aria-label={`Open the screen of ${vm.name} in Screen Sharing`}
+      aria-label={t("card.openScreenAria", { name: vm.name })}
       className="group relative block w-full overflow-hidden rounded-lg border bg-paper-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       style={{ aspectRatio: String(aspect) }}
     >
@@ -234,17 +237,18 @@ function VmScreenPreview({ vm, actions }: { vm: Vm; actions: VmActions }) {
         <img src={`data:${data.mime};base64,${data.data}`} alt="" draggable={false} className="absolute inset-0 size-full object-contain select-none" />
       ) : (
         <span className="absolute inset-0 grid place-items-center text-xs text-muted-foreground">
-          {isError ? "The screen isn't available right now" : <Spinner className="size-4" />}
+          {isError ? t("panel.screenUnavailable") : <Spinner className="size-4" />}
         </span>
       )}
       <span className="absolute right-2 bottom-2 inline-flex items-center gap-1 rounded-md bg-background/85 px-2 py-1 text-[11.5px] text-foreground opacity-0 shadow-card backdrop-blur transition group-hover:opacity-100 group-focus-visible:opacity-100">
-        {opening ? <Spinner className="size-3" /> : <Monitor className="size-3" />} Open in Screen Sharing
+        {opening ? <Spinner className="size-3" /> : <Monitor className="size-3" />} {t("card.openInScreenSharing")}
       </span>
     </button>
   );
 }
 
 function PrimaryAction({ vm, actions }: { vm: Vm; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const starting = actions.start.isPending && actions.start.variables?.id === vm.id;
   const stopping = actions.stop.isPending && actions.stop.variables?.id === vm.id;
   switch (vm.state) {
@@ -252,25 +256,25 @@ function PrimaryAction({ vm, actions }: { vm: Vm; actions: VmActions }) {
     case "suspended":
       return (
         <Button size="sm" onClick={() => actions.start.mutate(vm)} disabled={starting}>
-          {starting ? <Spinner /> : <Play />} {vm.state === "suspended" ? "Resume" : "Start"}
+          {starting ? <Spinner /> : <Play />} {vm.state === "suspended" ? t("card.resume") : t("card.start")}
         </Button>
       );
     case "running":
       return (
         <Button size="sm" variant="outline" onClick={() => actions.stop.mutate(vm)} disabled={stopping}>
-          {stopping ? <Spinner /> : <Square />} Stop
+          {stopping ? <Spinner /> : <Square />} {t("common:actions.stop")}
         </Button>
       );
     case "starting":
       return (
         <Button size="sm" variant="outline" disabled>
-          <Spinner /> Starting…
+          <Spinner /> {t("card.starting")}
         </Button>
       );
     case "stopping":
       return (
         <Button size="sm" variant="outline" disabled>
-          <Spinner /> Stopping…
+          <Spinner /> {t("card.stopping")}
         </Button>
       );
     default:
@@ -279,6 +283,7 @@ function PrimaryAction({ vm, actions }: { vm: Vm; actions: VmActions }) {
 }
 
 function VmMenu({ vm, actions, onEdit, onReset, onDelete }: { vm: Vm; actions: VmActions; onEdit: () => void; onReset: () => void; onDelete: () => void }) {
+  const { t } = useTranslation(["vms", "common"]);
   const s = vm.state;
   // Starting, shutting down or being created: other changes wait until that's done.
   const busy = s === "creating" || s === "starting" || s === "stopping";
@@ -290,37 +295,37 @@ function VmMenu({ vm, actions, onEdit, onReset, onDelete }: { vm: Vm; actions: V
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`More actions for ${vm.name}`}>
+        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={t("card.moreActions", { name: vm.name })}>
           {pending ? <Spinner /> : <Ellipsis />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem disabled={s !== "stopped" && s !== "suspended"} onClick={() => actions.start.mutate(vm)}>
-          <Play /> {s === "suspended" ? "Resume" : "Start"}
+          <Play /> {s === "suspended" ? t("card.resume") : t("card.start")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={s !== "running"} onClick={() => actions.suspend.mutate(vm)}>
-          <Moon /> Suspend
+          <Moon /> {t("card.suspend")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={s !== "running"} onClick={() => actions.restart.mutate(vm)}>
-          <RotateCw /> Restart
+          <RotateCw /> {t("card.restart")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={s !== "running" && s !== "starting" && s !== "suspended"} onClick={() => actions.stop.mutate(vm)}>
-          <Power /> {s === "suspended" ? "Shut down" : "Stop"}
+          <Power /> {s === "suspended" ? t("card.shutDown") : t("common:actions.stop")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={busy} onClick={onEdit}>
-          <Pencil /> Edit…
+          <Pencil /> {t("card.edit")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled={s !== "stopped"} onClick={() => actions.duplicate.mutate({ vm })}>
-          <CopyPlus /> Duplicate
-          {s !== "stopped" && s !== "creating" && s !== "error" && <span className="ml-auto text-[11px] text-muted-foreground">Stop first</span>}
+          <CopyPlus /> {t("card.duplicate")}
+          {s !== "stopped" && s !== "creating" && s !== "error" && <span className="ml-auto text-[11px] text-muted-foreground">{t("card.stopFirst")}</span>}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={busy} onClick={onReset}>
-          <RotateCcw /> Reset…
+          <RotateCcw /> {t("card.resetMenu")}
         </DropdownMenuItem>
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <Trash2 /> Delete…
+          <Trash2 /> {t("card.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -328,21 +333,24 @@ function VmMenu({ vm, actions, onEdit, onReset, onDelete }: { vm: Vm; actions: V
 }
 
 function OpenButton({ vm, what, actions, icon, label }: { vm: Vm; what: VmOpenTarget; actions: VmActions; icon: ReactNode; label: string }) {
+  const { t } = useTranslation("vms");
   const pending = actions.open.isPending && actions.open.variables?.vm.id === vm.id && actions.open.variables.what === what;
   const needsVm = what !== "folder";
   const disabled = needsVm && (vm.state === "creating" || vm.state === "stopping" || vm.state === "error");
   const hint =
     what === "folder"
-      ? `Open in Finder — the VM sees it as ${guestFolderLabel(vm)}`
+      ? t("card.hint.folder", { path: guestFolderLabel(vm) })
       : disabled
         ? vm.state === "error"
-          ? "Reset the VM first"
-          : "Available when the VM is ready"
+          ? t("card.hint.resetFirst")
+          : t("card.hint.availableWhenReady")
         : vm.state === "running"
           ? what === "screen"
-            ? "Show its screen in Screen Sharing"
-            : `Open Terminal, signed in as ${vm.guestUser}`
-          : `Starts the VM, then ${what === "screen" ? "shows its screen" : "opens Terminal"}`;
+            ? t("card.hint.showScreen")
+            : t("card.hint.openTerminal", { user: vm.guestUser })
+          : what === "screen"
+            ? t("card.hint.startsThenScreen")
+            : t("card.hint.startsThenTerminal");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -376,6 +384,7 @@ function assignmentHref(a: VmAssignment): string {
 }
 
 function UsedBy({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const { data: agents = [] } = useAllAgents();
   const { data: workspaces = [] } = useWorkspaces();
   const removing = (a: VmAssignment) =>
@@ -383,17 +392,17 @@ function UsedBy({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmActions })
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="eyebrow mr-1 text-[10.5px]">Used by</span>
-      {vm.assignments.length === 0 && <span className="mr-1 text-xs text-muted-foreground">No one yet</span>}
+      <span className="eyebrow mr-1 text-[10.5px]">{t("card.usedBy")}</span>
+      {vm.assignments.length === 0 && <span className="mr-1 text-xs text-muted-foreground">{t("card.noOneYet")}</span>}
       {vm.assignments.map((a) => {
         const agent = a.kind === "agent" ? agents.find((x) => x.id === a.id) : undefined;
         const ws = a.kind === "workspace" ? workspaces.find((x) => x.id === a.id) : undefined;
-        const kind = a.kind === "conversation" ? "Chat" : a.kind === "agent" ? "Agent" : "Workspace";
+        const kind = a.kind === "conversation" ? t("card.chat") : a.kind === "agent" ? t("common:words.agent") : t("card.workspace");
         return (
           <span key={`${a.kind}:${a.id}`} className="inline-flex h-6 max-w-[14rem] min-w-0 items-center rounded-md border bg-card text-xs shadow-xs">
             <Link
               to={assignmentHref(a)}
-              title={`${kind}: ${a.name}`}
+              title={t("card.assignmentTitle", { kind, label: a.name })}
               className="flex h-full min-w-0 items-center gap-1.5 rounded-l-md pr-1 pl-1.5 transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               {agent ? (
@@ -407,11 +416,11 @@ function UsedBy({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmActions })
               ) : (
                 <MessageSquare className="size-3.5 text-muted-foreground" />
               )}
-              <span className="truncate">{a.name || (a.kind === "conversation" ? "Untitled chat" : kind)}</span>
+              <span className="truncate">{a.name || (a.kind === "conversation" ? t("card.untitledChat") : kind)}</span>
             </Link>
             <button
               type="button"
-              aria-label={`Stop using ${vm.name} for ${a.name || kind.toLowerCase()}`}
+              aria-label={t("card.stopUsing", { vm: vm.name, label: a.name || kind })}
               disabled={removing(a)}
               onClick={() => actions.assign.mutate({ vm, kind: a.kind, id: a.id, name: a.name || kind, assigned: false })}
               className="grid h-full w-5 shrink-0 place-items-center rounded-r-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -427,6 +436,7 @@ function UsedBy({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmActions })
 }
 
 function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const [open, setOpen] = useState(false);
   const { data: agents = [] } = useAllAgents();
   const { data: workspaces = [] } = useWorkspaces();
@@ -441,17 +451,17 @@ function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmAct
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-6 text-muted-foreground hover:text-foreground" aria-label={`Assign ${vm.name} to an agent or workspace`}>
-          <Plus /> Assign
+        <Button variant="ghost" size="xs" className="h-6 text-muted-foreground hover:text-foreground" aria-label={t("card.assignAria", { name: vm.name })}>
+          <Plus /> {t("card.assign")}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 overflow-hidden p-0">
         <Command>
-          <CommandInput placeholder="Search agents and workspaces…" />
+          <CommandInput placeholder={t("card.searchPlaceholder")} />
           <CommandList className="max-h-72">
-            <CommandEmpty>Nothing found.</CommandEmpty>
+            <CommandEmpty>{t("card.nothingFound")}</CommandEmpty>
             {sortedAgents.length > 0 && (
-              <CommandGroup heading="Agents">
+              <CommandGroup heading={t("common:words.agents")}>
                 {sortedAgents.map((a) => {
                   const other = a.vmId && a.vmId !== vm.id ? nameOf(a.vmId) : null;
                   return (
@@ -459,16 +469,16 @@ function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmAct
                       <AgentAvatar agent={a} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{a.name}</span>
-                        {other && <span className="block truncate text-[11px] text-muted-foreground">Uses {other} — switches to this one</span>}
+                        {other && <span className="block truncate text-[11px] text-muted-foreground">{t("card.usesOther", { name: other })}</span>}
                       </span>
-                      {a.vmId === vm.id && <Check className="size-4" aria-label="Assigned" />}
+                      {a.vmId === vm.id && <Check className="size-4" aria-label={t("card.assigned")} />}
                     </CommandItem>
                   );
                 })}
               </CommandGroup>
             )}
             {workspaces.length > 0 && (
-              <CommandGroup heading="Workspaces">
+              <CommandGroup heading={t("card.workspaces")}>
                 {workspaces.map((w) => {
                   const other = w.vmId && w.vmId !== vm.id ? nameOf(w.vmId) : null;
                   return (
@@ -476,9 +486,9 @@ function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmAct
                       <WorkspaceTile icon={w.icon} color={w.color} size="sm" />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{w.name}</span>
-                        <span className="block truncate text-[11px] text-muted-foreground">{other ? `Uses ${other} — switches to this one` : "Every agent in it, unless it has its own"}</span>
+                        <span className="block truncate text-[11px] text-muted-foreground">{other ? t("card.usesOther", { name: other }) : t("card.everyAgent")}</span>
                       </span>
-                      {w.vmId === vm.id && <Check className="size-4" aria-label="Assigned" />}
+                      {w.vmId === vm.id && <Check className="size-4" aria-label={t("card.assigned")} />}
                     </CommandItem>
                   );
                 })}
@@ -487,7 +497,7 @@ function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmAct
           </CommandList>
         </Command>
         <p className="border-t bg-paper-2 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          For a single chat, pick the VM with the <span className="font-medium text-foreground">VM</span> button in its message box.
+          <Trans t={t} i18nKey="card.singleChatHint" components={{ b: <span className="font-medium text-foreground" /> }} />
         </p>
       </PopoverContent>
     </Popover>
@@ -499,6 +509,7 @@ function AssignPopover({ vm, vms, actions }: { vm: Vm; vms: Vm[]; actions: VmAct
 /* ------------------------------------------------------------------ */
 
 function CommandPanel({ vm }: { vm: Vm }) {
+  const { t } = useTranslation("vms");
   const [command, setCommand] = useState("");
   const exec = useMutation({
     mutationFn: (cmd: string) => api.vms.exec(vm.id, { command: cmd, timeoutSeconds: 120 }),
@@ -522,18 +533,18 @@ function CommandPanel({ vm }: { vm: Vm }) {
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             placeholder="sw_vers && brew --version"
-            aria-label={`Command to run in ${vm.name}`}
+            aria-label={t("card.commandAria", { name: vm.name })}
             autoComplete="off"
             spellCheck={false}
             className="h-8 pl-7 font-mono text-[12.5px]"
           />
         </div>
         <Button type="submit" size="sm" variant="outline" disabled={!command.trim() || exec.isPending}>
-          {exec.isPending ? <Spinner /> : <Play />} Run
+          {exec.isPending ? <Spinner /> : <Play />} {t("card.run")}
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Runs in the VM as <span className="font-mono">{vm.guestUser}</span> — stops after 2 minutes. Agents use the same shell.
+        <Trans t={t} i18nKey="card.runsAs" values={{ user: vm.guestUser }} components={{ mono: <span className="font-mono" /> }} />
       </p>
       {exec.isError && (
         <p className="rounded-lg border border-destructive/25 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive" role="alert">
@@ -551,13 +562,13 @@ function CommandPanel({ vm }: { vm: Vm }) {
             >
               exit {result.exitCode ?? "–"}
             </span>
-            {result.timedOut && <span className="font-medium text-warning">Timed out</span>}
+            {result.timedOut && <span className="font-medium text-warning">{t("card.timedOut")}</span>}
             <span className="ml-auto truncate font-mono">{exec.variables}</span>
           </div>
           <pre className="max-h-64 overflow-auto p-3 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground">
             {result.stdout}
             {result.stderr && <span className="text-destructive">{result.stderr}</span>}
-            {!result.stdout && !result.stderr && <span className="text-muted-foreground">(no output)</span>}
+            {!result.stdout && !result.stderr && <span className="text-muted-foreground">{t("card.noOutput")}</span>}
           </pre>
         </div>
       )}
