@@ -11,6 +11,7 @@ import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAppearance } from "@/lib/appearance";
+import { useSuggestions } from "@/lib/suggestions";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -49,6 +50,8 @@ export default function Settings() {
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
   const palette = useAppearance((s) => s.palette);
+  const hideSuggestions = useSuggestions((s) => s.hidden);
+  const setHideSuggestions = useSuggestions((s) => s.setHidden);
   const status = useLive((s) => s.status);
   const linked = useLive((s) => s.computer);
   const preferredAway = useLive((s) => s.preferredAway);
@@ -211,6 +214,13 @@ export default function Settings() {
       </Group>
 
       <Group title="App" footer="Remove this phone on your computer anytime in Settings → Phone.">
+        <SwitchRow
+          icon="sparkles"
+          title="Show suggestions"
+          detail="Ideas like “Summarize my unread emails” on Home and in a new chat."
+          value={!hideSuggestions}
+          onChange={(on) => setHideSuggestions(!on)}
+        />
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
         <Info icon="phone" label="This phone" value={me.data?.device.name ?? connection.deviceName} />
       </Group>
