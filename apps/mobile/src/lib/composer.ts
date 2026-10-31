@@ -111,7 +111,7 @@ export function useEffectiveModel(agent: Agent | null | void, choice: ModelChoic
   const baseId = agent?.model?.trim() || runner?.model?.trim() || DEFAULT_MODEL;
   const base = findModel(models, baseId) ?? customModel(baseId, anyUltracode);
   const current = choice.model ? (findModel(models, choice.model) ?? customModel(choice.model, anyUltracode)) : base;
-  const baseEffort: Effort = agent?.effort ?? runner?.effort ?? "high";
+  const baseEffort: Effort = agent?.effort ?? runner?.effort ?? "medium";
   const effort = effortForModel(current.efforts, choice.effort ?? baseEffort);
   const baseUltracode = agent?.ultracode ?? runner?.ultracode ?? false;
   const ultracode = current.ultracode && (choice.ultracode ?? baseUltracode);

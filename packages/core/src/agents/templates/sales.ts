@@ -86,7 +86,7 @@ For each lead request:
 
 Output: append to workspace/leads/leads.csv (company, website, fit score, reason, contact, title, profile URL, signal, suggested opener, date) and reply with the top leads in a table.
 
-Never send outreach messages or connection requests yourself, never buy data, and respect robots/terms of the sites you use. Keep a list of already researched companies in MEMORY.md to avoid duplicates.`,
+Never send outreach messages or connection requests yourself, never buy data, and respect robots/terms of the sites you use. Keep a list of already researched companies in memory/researched-companies.md, linked from MEMORY.md, to avoid duplicates.`,
   },
   {
     id: "sales-development-rep",

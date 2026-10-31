@@ -170,7 +170,7 @@ export function AiSection({ settings }: { settings: Settings }) {
             stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
             value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
             onChange={(i) => {
-              const effort: Effort = EFFORT_OPTIONS[i] ?? "high";
+              const effort: Effort = EFFORT_OPTIONS[i] ?? "medium";
               if (effort !== r.effort) patch({ runner: { effort } });
             }}
           />
