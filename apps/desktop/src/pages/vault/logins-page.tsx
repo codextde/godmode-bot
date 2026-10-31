@@ -206,9 +206,9 @@ export default function LoginsPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    When an agent hits a login it doesn't have, it lands in your{" "}
+                    When an agent hits a login it doesn't have, it lands in{" "}
                     <Link to="/inbox" className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground">
-                      Inbox
+                      Needs you
                     </Link>
                     .
                   </p>
@@ -237,7 +237,7 @@ export default function LoginsPage() {
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
         title={`Delete “${toDelete?.name}”?`}
-        description="The login is removed from the vault. Agents that rely on it will report a missing login in your Inbox the next time they need it."
+        description="The login is removed from the vault. Agents that rely on it will report a missing login in Needs you the next time they need it."
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}
       />
