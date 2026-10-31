@@ -109,6 +109,7 @@
     },
     "menu": {
       "markRead": "Mark as read",
+      "markUnread": "Mark as unread",
       "pin": "Pin",
       "unpin": "Unpin",
       "archive": "Archive"

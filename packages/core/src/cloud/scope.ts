@@ -183,6 +183,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
   ["POST", "/api/conversations/read", A],
+  ["POST", "/api/conversations/unread", A],
   ["POST", "/api/conversations/:id/retry", A],
   ["POST", "/api/conversations/:id/move-here", A],
   ["POST", "/api/conversations/:id/move", A],
