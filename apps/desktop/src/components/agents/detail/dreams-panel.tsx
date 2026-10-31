@@ -824,9 +824,9 @@ function DreamScan() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px overflow-hidden">
       <motion.span
-        className="absolute inset-y-0 w-1/3 bg-linear-to-r from-transparent via-dream to-transparent"
-        initial={{ left: "-33%" }}
-        animate={{ left: "100%" }}
+        className="absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-dream to-transparent"
+        initial={{ transform: "translateX(-99%)" }}
+        animate={{ transform: "translateX(300%)" }}
         transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
       />
     </div>

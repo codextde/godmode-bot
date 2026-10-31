@@ -671,7 +671,6 @@
   margin: -1px 0 0 -1px;
   border-radius: 50%;
   background: currentColor;
-  will-change: transform, opacity;
 }
 
 .helix[data-variant="G1"] .helixDot {

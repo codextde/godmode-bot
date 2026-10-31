@@ -193,7 +193,7 @@ function GroupGlyph() {
       <div className="relative mx-2 mb-[22px] w-14 border-t-[1.5px] border-dashed border-foreground/20">
         <motion.span
           className="absolute -top-[4px] left-0 size-1.5 rounded-full bg-brand"
-          animate={still ? undefined : { x: [0, 50, 50, 0, 0] }}
+          animate={still ? undefined : { transform: ["translateX(0px)", "translateX(50px)", "translateX(50px)", "translateX(0px)", "translateX(0px)"] }}
           transition={{ duration: 4.8, times: [0, 0.35, 0.5, 0.85, 1], ease: "easeInOut", repeat: Infinity }}
         />
       </div>

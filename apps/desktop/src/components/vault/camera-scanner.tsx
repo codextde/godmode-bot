@@ -178,11 +178,13 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
             ))}
             {state === "live" && (
               <motion.div
-                className="absolute inset-x-4 h-0.5 bg-brand"
-                initial={{ top: "8%" }}
-                animate={{ top: ["8%", "92%", "8%"] }}
+                className="pointer-events-none absolute inset-x-4 top-[8%] h-[84%]"
+                initial={{ transform: "translateY(0%)" }}
+                animate={{ transform: ["translateY(0%)", "translateY(100%)", "translateY(0%)"] }}
                 transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-              />
+              >
+                <div className="h-0.5 bg-brand" />
+              </motion.div>
             )}
           </div>
         </div>
