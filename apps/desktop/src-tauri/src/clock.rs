@@ -40,8 +40,10 @@ fn read_default(key: &str) -> Option<String> {
 fn bcp47(apple: &str) -> Option<String> {
     let (base, keywords) = apple.split_once('@').unwrap_or((apple, ""));
     let mut parts = base.split(['_', '-']);
-    let language = parts.next().filter(|l| l.len() >= 2 && l.chars().all(|c| c.is_ascii_alphabetic()))?.to_ascii_lowercase();
-    let mut region = parts.find(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_alphabetic())).map(|r| r.to_ascii_uppercase());
+    let language =
+        parts.next().filter(|l| l.len() >= 2 && l.chars().all(|c| c.is_ascii_alphabetic()))?.to_ascii_lowercase();
+    let mut region =
+        parts.find(|p| p.len() == 2 && p.chars().all(|c| c.is_ascii_alphabetic())).map(|r| r.to_ascii_uppercase());
     for keyword in keywords.split(';') {
         if let Some(rg) = keyword.strip_prefix("rg=") {
             if rg.len() >= 2 && rg[..2].chars().all(|c| c.is_ascii_alphabetic()) {
