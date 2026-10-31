@@ -259,7 +259,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
       <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood="idle" still className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent} />
-        <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} />
+        <MessageBlocks blocks={blocks} runId={message.runId ?? undefined} agent={agent} />
         <div className="mt-1.5 flex h-7 items-center gap-0.5 text-[11px] text-muted-foreground opacity-0 transition group-focus-within/msg:opacity-100 group-hover/msg:opacity-100 [@media(hover:none)]:opacity-100">
           {text && <CopyButton text={text} label={t("messages.copyReply")} />}
           {text && speaker.supported && (
@@ -423,7 +423,7 @@ export function LiveAssistantMessage({
             </span>
           )}
         </AgentHeader>
-        <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} />
+        <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} agent={agent} />
       </div>
     </motion.div>
   );

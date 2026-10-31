@@ -288,6 +288,7 @@ export class StreamAccumulator {
   private messages = new Map<string, BlockRef[]>();
   /** Background work this stretch of the run started, by Claude Code's task id (the same objects as on the blocks). */
   private tasks = new Map<string, ToolTask>();
+  private subagentModels = new Map<string, string>();
   /** The events `cutOffBackgroundWork` reads. */
   private taskEvents: Json[] = [];
   private modStatus = new Map<string, string>();
@@ -489,6 +490,9 @@ export class StreamAccumulator {
         startedAt: Date.now(),
         ...(e.is_backgrounded === true ? { background: true } : {}),
       };
+      const toolUseId = (this.blocks[idx] as ToolUseBlock).id;
+      const model = this.subagentModels.get(toolUseId);
+      if (model) task.model = model;
       (this.blocks[idx] as ToolUseBlock).task = task;
       this.tasks.set(id, task);
       return true;
@@ -514,6 +518,16 @@ export class StreamAccumulator {
     task.toolUses = num(usage.tool_uses) ?? task.toolUses;
     task.durationMs = num(usage.duration_ms) ?? task.durationMs;
     return JSON.stringify(task) !== before;
+  }
+
+  private noteSubagentModel(parent: string, model: string | null | undefined): boolean {
+    if (!model || model === "<synthetic>") return false;
+    this.subagentModels.set(parent, model);
+    const idx = this.findToolUse(parent);
+    const task = idx >= 0 ? (this.blocks[idx] as ToolUseBlock).task : undefined;
+    if (!task || task.kind !== "local_agent" || task.model === model) return false;
+    task.model = model;
+    return true;
   }
 
   /** What runs in the background (a workflow, subagents) while no top-level tool call waits for its result. */
@@ -583,7 +597,7 @@ export class StreamAccumulator {
         s.indexMap.clear();
         s.jsonBuf.clear();
         if (msg && str(msg.model)) this.model = str(msg.model);
-        return false;
+        return !!parent && !!msg && this.noteSubagentModel(parent, str(msg.model));
       }
       case "content_block_start": {
         const cb = isObj(ev.content_block) ? ev.content_block : null;
@@ -681,7 +695,7 @@ export class StreamAccumulator {
       const tokens = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens + u.outputTokens;
       if (tokens > 0) this.contextTokens = tokens;
     }
-    let changed = false;
+    let changed = !!parent && !synthetic && this.noteSubagentModel(parent, str(msg.model));
 
     for (const c of msg.content) {
       if (!isObj(c)) continue;

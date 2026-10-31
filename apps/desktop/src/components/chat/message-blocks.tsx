@@ -16,8 +16,7 @@ import { FileDiff, diffLines, type DiffRow } from "@/components/aicss/FileDiff";
 import { CompactedDivider } from "./context-meter";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
-import { formatDuration, formatElapsed, formatTokens } from "@/components/runs/run-status";
-import { useNow } from "@/components/vault/use-now";
+import { formatDuration, formatTokens } from "@/components/runs/run-status";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useMods } from "@/lib/hooks";
@@ -33,6 +32,7 @@ import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
 import { ArtifactCard } from "@/components/artifacts/artifact-panel";
 import { describeTool, describeToolEasy, formatToolInput, hostOf, todoItems, type ToolContext, type ToolKind, type ToolMeta } from "./tool-meta";
+import { SUBAGENT_TOOLS, SubagentCard, SubagentGroup, type ParentAgent, type SubagentEntry } from "./subagents";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 type ThinkingBlock = Extract<MessageBlock, { type: "thinking" }>;
@@ -56,9 +56,8 @@ type Item =
   | { kind: "delegate"; key: string; block: ToolUseBlock }
   | { kind: "workflow"; key: string; block: ToolUseBlock }
   | { kind: "artifact"; key: string; block: ToolUseBlock }
-  | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] };
-
-const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
+  | { kind: "subagent"; key: string; block: ToolUseBlock; children: MessageBlock[] }
+  | { kind: "subagents"; key: string; entries: SubagentEntry[] };
 
 function parentOf(b: MessageBlock): string | null {
   return "parentToolUseId" in b ? (b.parentToolUseId ?? null) : null;
@@ -105,8 +104,13 @@ function buildItems(blocks: MessageBlock[]): Item[] {
       const standalone = isStandaloneTool(b.name);
       if (standalone) {
         group = null;
-        if (standalone === "subagent") items.push({ kind: "subagent", key: b.id || key, block: b, children: children.get(b.id) ?? [] });
-        else items.push({ kind: standalone, key: b.id || key, block: b });
+        if (standalone === "subagent") {
+          const entry = { block: b, children: children.get(b.id) ?? [] };
+          const last = items[items.length - 1];
+          if (last?.kind === "subagents") last.entries.push(entry);
+          else if (last?.kind === "subagent") items[items.length - 1] = { kind: "subagents", key: `subagents-${last.key}`, entries: [{ block: last.block, children: last.children }, entry] };
+          else items.push({ kind: "subagent", key: b.id || key, ...entry });
+        } else items.push({ kind: standalone, key: b.id || key, block: b });
         return;
       }
       if (!group) {
@@ -172,31 +176,18 @@ export function MessageBlocks({
   streaming = false,
   compact = false,
   runId,
+  agent,
 }: {
   blocks: MessageBlock[];
   streaming?: boolean;
   compact?: boolean;
   /** The run that wrote these blocks: handoff cards find the runs it handed over through it. */
   runId?: string;
+  agent?: ParentAgent;
 }) {
   const items = useMemo(() => buildItems(blocks), [blocks]);
   const ctx = useToolContext(blocks);
   const lastBlock = blocks[blocks.length - 1];
-  const background = useMemo(
-    () =>
-      streaming && !compact
-        ? items.flatMap((i) => {
-            if (i.kind !== "subagent") return [];
-            const state = subagentState(i.block, true);
-            return state.background && state.running ? [i.block] : [];
-          })
-        : [],
-    [items, streaming, compact],
-  );
-  const lastItem = items[items.length - 1];
-  // A lone card at the very end shows its work itself.
-  const showBackground = background.length > 0 && !(background.length === 1 && lastItem?.kind === "subagent" && lastItem.block === background[0]);
-
   return (
     <div className={cn("flex min-w-0 flex-col", compact ? "gap-2" : "gap-3")}>
       {items.map((item, idx) => {
@@ -245,10 +236,11 @@ export function MessageBlocks({
           case "artifact":
             return <ArtifactCard key={item.key} block={item.block} streaming={streaming} />;
           case "subagent":
-            return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming} />;
+            return <SubagentCard key={item.key} block={item.block} ctx={ctx} childBlocks={item.children} streaming={streaming} agent={agent} />;
+          case "subagents":
+            return <SubagentGroup key={item.key} entries={item.entries} ctx={ctx} streaming={streaming} agent={agent} />;
         }
       })}
-      {showBackground && <BackgroundAgents blocks={background} ctx={ctx} />}
       {streaming && items.length === 0 && (
         <div className="py-1">
           <ThinkingState />
@@ -383,7 +375,7 @@ function CommandOutput({ name, args, output }: { name: string; args: string; out
   );
 }
 
-function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
   return (
     <AnimatePresence initial={false}>
       {open && (
@@ -1024,151 +1016,6 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Where a subagent stands. One in the background returns its tool call at once ("launched"): its task says when it
- * works and when it is done, and its report comes with the task's end.
- */
-function subagentState(block: ToolUseBlock, streaming: boolean) {
-  const task = block.task;
-  const background = task?.background ?? block.result?.startsWith("Async agent launched") ?? false;
-  // Still running on a turn that has ended: it was cut off with its run.
-  const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
-  const running = status ? status === "running" : !background && stepRunning(block, streaming);
-  const failed = status === "failed" || !!block.isError;
-  const result = background ? task?.summary : block.result;
-  return { task, background, status, running, failed, result };
-}
-
-function subagentAnchor(id: string) {
-  return `subagent-${id}`;
-}
-
-function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBlock; ctx: ToolContext; childBlocks: MessageBlock[]; streaming: boolean }) {
-  const { t } = useTranslation(["chat", "common"]);
-  const easy = useEasyMode();
-  const meta = (easy ? describeToolEasy : describeTool)(block.name, block.input, ctx);
-  const { task, background, status, running, failed, result } = subagentState(block, streaming);
-  const [open, setOpen] = useState<boolean | null>(null);
-  // One the run waits for unfolds while it works; one in the background stays small, the run goes on below it.
-  const expanded = open ?? (running && !background);
-  const Icon = meta.icon;
-  const steps = Math.max(childBlocks.filter((b) => b.type === "tool_use").length, task?.toolUses ?? 0);
-  const kind = easy
-    ? background
-      ? t("blocks.subagent.helperBackground")
-      : t("blocks.subagent.helper")
-    : background
-      ? t("blocks.subagent.backgroundSubagent")
-      : t("blocks.subagent.subagent");
-  const state = running
-    ? task?.activity || t("blocks.starting")
-    : failed
-      ? t("common:status.failed")
-      : status === "stopped"
-        ? t("blocks.stopped")
-        : "";
-  const stats = [steps > 0 && t("blocks.steps", { count: steps }), !running && !!task?.durationMs && formatDuration(task.durationMs)].filter(Boolean);
-
-  return (
-    <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
-      <button
-        type="button"
-        onClick={() => setOpen(!expanded)}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40"
-      >
-        <span
-          className={cn(
-            "grid size-[27px] shrink-0 place-items-center rounded-full border",
-            failed ? "border-destructive/30 bg-destructive/10 text-destructive" : toneFor("subagent"),
-          )}
-        >
-          {running ? <Orb variant="B5" size={15} label={meta.title} /> : <Icon className="size-3.5" />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className={cn("block truncate text-sm font-medium", running && "text-shimmer")}>{meta.title}</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {kind}
-            {state && <span className={cn(failed && "text-destructive", running && "text-foreground/80")}> · {state}</span>}
-            {stats.length > 0 && <span className="tabular-nums"> · {stats.join(" · ")}</span>}
-          </span>
-        </span>
-        {running && task?.startedAt && <Elapsed since={task.startedAt} />}
-        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
-      </button>
-      <Collapse open={expanded}>
-        <div className="space-y-3 border-t px-3.5 py-3">
-          {childBlocks.length > 0 ? (
-            <div className="border-l border-border pl-3">
-              <MessageBlocks blocks={childBlocks} streaming={running} compact />
-            </div>
-          ) : running ? (
-            <ThinkingState />
-          ) : null}
-          {result && (
-            <div className="rounded-lg border bg-paper-2 p-3">
-              <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{background ? t("blocks.subagent.report") : t("blocks.detail.result")}</div>
-              <Markdown className="text-[0.85rem]">{result}</Markdown>
-            </div>
-          )}
-        </div>
-      </Collapse>
-    </div>
-  );
-}
-
-function Elapsed({ since, className }: { since: number; className?: string }) {
-  const now = useNow(1000);
-  return <span className={cn("shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums", className)}>{formatElapsed(now - since)}</span>;
-}
-
-/**
- * Subagents still at work in the background, at the foot of the turn: the run said its piece and waits for them, and
- * without this the chat looks idle. Each row jumps to its card.
- */
-function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolContext }) {
-  const easy = useEasyMode();
-  const { t } = useTranslation("chat");
-  const count = blocks.length;
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
-      aria-live="polite"
-      className="rounded-xl border border-dashed bg-card/60 px-3 py-2.5"
-    >
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Orb variant="B5" size={14} label={easy ? t("blocks.background.helpersWorking") : t("blocks.background.subagentsWorking")} />
-        <span className="font-medium text-foreground/80">{easy ? t("blocks.background.helpersInBackground", { count }) : t("blocks.background.subagentsInBackground", { count })}</span>
-        <span className="ml-auto hidden @md:inline">{t("blocks.background.continuesWhen")}</span>
-      </div>
-      <ul className="mt-2 space-y-0.5">
-        {blocks.map((b) => {
-          const title = (easy ? describeToolEasy : describeTool)(b.name, b.input, ctx).title;
-          const task = b.task;
-          return (
-            <li key={b.id}>
-              <button
-                type="button"
-                onClick={() => document.getElementById(subagentAnchor(b.id))?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                className="group flex w-full items-center gap-2.5 rounded-lg px-1.5 py-1 text-left text-[13px] transition hover:bg-accent/50"
-              >
-                <CircleDot aria-hidden className="size-3.5 shrink-0 animate-pulse text-foreground/70" />
-                <span className="min-w-0 shrink truncate font-medium">{title}</span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{task?.activity || t("blocks.starting")}</span>
-                {!!task?.toolUses && <span className="hidden shrink-0 text-[11px] text-muted-foreground tabular-nums @sm:inline">{t("blocks.steps", { count: task.toolUses })}</span>}
-                {task?.startedAt && <Elapsed since={task.startedAt} />}
-                <ArrowUpRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-    </motion.div>
   );
 }
 

@@ -179,6 +179,12 @@ export function defaultCharacter(seed: string): AgentCharacter {
   return randomCharacter(`gm-character:${seed}`);
 }
 
+export function babyCharacter(parent: AgentCharacter): AgentCharacter {
+  return { body: parent.body, eyes: "wide", mouth: parent.mouth === "none" || parent.mouth === "flat" ? "smile" : parent.mouth, top: "sprout", face: "blush", neck: "none" };
+}
+
+export const BABY_FACE_SCALE = 1.4;
+
 /** Coerce anything (stored JSON, API input) into a valid character; missing or unknown parts fall back to `base`. */
 export function normalizeCharacter(value: unknown, base: AgentCharacter = MASCOT_CHARACTER): AgentCharacter {
   const v = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;

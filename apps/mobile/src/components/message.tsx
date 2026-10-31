@@ -6,8 +6,9 @@ import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Attachment, CompactInfo, Message, MessageBlock } from "@godmode/shared";
-import { isPlaceholderReply, tokensLabel, toolActivity } from "@godmode/shared";
+import type { Agent, Attachment, CharacterMood, CompactInfo, Message, MessageBlock } from "@godmode/shared";
+import { BABY_FACE_SCALE, babyCharacter, defaultCharacter, isPlaceholderReply, readableModelId, reportPreview, shortenPaths, tokensLabel, toolActivity } from "@godmode/shared";
+import { Character } from "./character";
 import { FileChip } from "./attachments";
 import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
@@ -22,7 +23,9 @@ import { radius, space, useColors } from "@/lib/theme";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
-type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | { kind: "subagent"; block: ToolUse; children: MessageBlock[] };
+type SubagentEntry = { block: ToolUse; children: MessageBlock[] };
+type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | ({ kind: "subagent" } & SubagentEntry) | { kind: "subagents"; entries: SubagentEntry[] };
+type ParentAgent = Pick<Agent, "id" | "color" | "character">;
 
 const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 
@@ -42,7 +45,13 @@ function group(blocks: MessageBlock[]): Part[] {
     if ("parentToolUseId" in block && block.parentToolUseId) continue;
     if (block.type === "text" && isPlaceholderReply(block.text)) continue;
     if (isAsk(block)) continue;
-    if (block.type === "tool_use" && isSubagent(block)) parts.push({ kind: "subagent", block, children: children.get(block.id) ?? [] });
+    if (block.type === "tool_use" && isSubagent(block)) {
+      const entry = { block, children: children.get(block.id) ?? [] };
+      const last = parts[parts.length - 1];
+      if (last?.kind === "subagents") last.entries.push(entry);
+      else if (last?.kind === "subagent") parts[parts.length - 1] = { kind: "subagents", entries: [{ block: last.block, children: last.children }, entry] };
+      else parts.push({ kind: "subagent", ...entry });
+    }
     else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
       if (last?.kind === "steps") last.steps.push(block);
@@ -63,8 +72,13 @@ function subagentState(block: ToolUse, streaming: boolean) {
   const running = status ? status === "running" : !background && streaming && block.result === undefined;
   const failed = status === "failed" || !!block.isError;
   const result = background ? task?.summary : block.result;
-  return { task, background, status, running, failed, result };
+  const phase: Phase = running ? "running" : failed ? "failed" : status === "stopped" ? "stopped" : "done";
+  return { task, background, status, running, failed, result, phase };
 }
+
+type Phase = "running" | "done" | "failed" | "stopped";
+
+const PHASE_MOOD: Record<Phase, CharacterMood> = { running: "working", done: "happy", failed: "error", stopped: "sleeping" };
 
 /** The compression divider already says what /compact did. */
 function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
@@ -99,7 +113,7 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
   );
 });
 
-export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content }: { blocks: MessageBlock[]; streaming?: boolean; content?: string }) {
+export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content, agent }: { blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
   // A reply stored without blocks is its text.
   const parts = useMemo(() => group(blocks.length || !content ? withoutCompactCard(blocks) : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
@@ -110,12 +124,14 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
         p.kind === "steps" ? (
           <Steps key={i} steps={p.steps} live={streaming && p === last} />
         ) : p.kind === "subagent" ? (
-          <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} />
+          <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} agent={agent} />
+        ) : p.kind === "subagents" ? (
+          <SubagentGroup key={p.entries[0]!.block.id} entries={p.entries} streaming={!!streaming} agent={agent} />
         ) : (
           <Block key={i} block={p.block} streaming={!!streaming} />
         ),
       )}
-      {streaming ? <BackgroundAgents parts={parts} /> : null}
+      {streaming ? <BackgroundAgents parts={parts} agent={agent} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
       {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <CopyReply text={content} /> : null}
     </View>
@@ -343,24 +359,72 @@ function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: str
   );
 }
 
-const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean }) {
-  const c = useColors();
+function SubagentAvatar({ agent, phase, size, seed }: { agent?: ParentAgent; phase: Phase; size: number; seed: string }) {
+  const base = agent?.id ?? "agent";
+  const character = useMemo(() => babyCharacter(agent?.character ?? defaultCharacter(base)), [agent?.character, base]);
+  return <Character character={character} color={agent?.color ?? "violet"} mood={PHASE_MOOD[phase]} size={size} seed={seed} faceScale={BABY_FACE_SCALE} />;
+}
+
+function useSubagentView(block: ToolUse, childBlocks: MessageBlock[], streaming: boolean) {
   const { t } = useTranslation("components");
-  const { task, background, status, running, failed, result } = subagentState(block, streaming);
-  const [open, setOpen] = useRecyclingState<boolean | null>(null, [block.id]);
-  const expanded = open ?? false;
-  const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown };
+  const state = subagentState(block, streaming);
+  const { task, phase, result } = state;
+  const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown; model?: unknown };
   const title = (typeof input.description === "string" && input.description) || task?.description || t("message.helper.helper");
+  const type = typeof input.subagent_type === "string" && input.subagent_type !== "general-purpose" ? input.subagent_type : null;
+  const model = task?.model ?? (typeof input.model === "string" ? input.model : null);
   const tools = childBlocks.filter((b): b is ToolUse => b.type === "tool_use");
   const steps = Math.max(tools.length, task?.toolUses ?? 0);
-  const state = running
-    ? task?.activity || t("message.helper.working")
-    : failed
-      ? t("message.helper.failed")
-      : status === "stopped"
-        ? t("message.helper.stopped")
-        : t("message.helper.done");
-  const meta = [background ? t("message.helper.background") : t("message.helper.helper"), state, steps > 0 ? t("message.steps", { count: steps }) : null, !running && task?.durationMs ? duration(task.durationMs) : null]
+  const preview = result ? reportPreview(result) : "";
+  const status =
+    phase === "running"
+      ? shortenPaths(task?.activity ?? "") || t("message.helper.working")
+      : phase === "failed"
+        ? preview || t("message.helper.failed")
+        : phase === "stopped"
+          ? t("message.helper.stopped")
+          : preview || t("message.helper.done");
+  const stats = [steps > 0 ? t("message.steps", { count: steps }) : null, task?.totalTokens ? tokensLabel(task.totalTokens) : null, model ? readableModelId(model) : null].filter(
+    (x): x is string => !!x,
+  );
+  return { ...state, title, type, tools, status, stats };
+}
+
+function SubagentDetail({ tools, result, background, running }: { tools: ToolUse[]; result?: string; background: boolean; running: boolean }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  return (
+    <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
+      {tools.slice(-12).map((step, i) => (
+        <ToolStep key={step.id ?? i} step={step} />
+      ))}
+      {tools.length > 12 ? (
+        <T variant="caption" muted>
+          {t("message.earlierSteps", { count: tools.length - 12 })}
+        </T>
+      ) : null}
+      {result ? (
+        <View style={[styles.report, { backgroundColor: c.sunken }]}>
+          <T variant="eyebrow" muted>
+            {background ? t("message.helper.report") : t("message.helper.result")}
+          </T>
+          <Markdown text={result.length > 6000 ? `${result.slice(0, 6000)}…` : result} />
+        </View>
+      ) : running && !tools.length ? (
+        <Thinking />
+      ) : null}
+    </Animated.View>
+  );
+}
+
+const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming, agent }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean; agent?: ParentAgent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const view = useSubagentView(block, childBlocks, streaming);
+  const { task, background, running, failed, phase } = view;
+  const [open, setOpen] = useRecyclingState<boolean | null>(null, [block.id]);
+  const expanded = open ?? false;
+  const meta = [background ? t("message.helper.background") : t("message.helper.helper"), view.type, view.status, ...view.stats, !running && task?.durationMs ? duration(task.durationMs) : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -375,56 +439,129 @@ const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming 
         }}
         style={styles.stepsHeader}
       >
-        <View style={[styles.stepIcon, { backgroundColor: failed ? c.dangerSoft : running ? c.brandSoft : c.sunken }]}>
-          <Icon name="subagent" size={13} color={failed ? c.danger : running ? c.brandStrong : c.textMuted} />
-        </View>
+        <SubagentAvatar agent={agent} phase={phase} size={30} seed={block.id} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="subhead" numberOfLines={1} style={{ fontWeight: "500" }}>
-            {title}
+            {view.title}
           </T>
           <T variant="caption" muted numberOfLines={1} color={failed ? c.danger : undefined}>
             {meta}
           </T>
         </View>
         {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
-        {running ? <Spinner /> : <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />}
+        <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />
       </Pressable>
-      {expanded && (
-        <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
-          {tools.slice(-12).map((t, i) => (
-            <ToolStep key={t.id ?? i} step={t} />
-          ))}
-          {tools.length > 12 ? (
-            <T variant="caption" muted>
-              {t("message.earlierSteps", { count: tools.length - 12 })}
-            </T>
-          ) : null}
-          {result ? (
-            <View style={[styles.report, { backgroundColor: c.sunken }]}>
-              <T variant="eyebrow" muted>
-                {background ? t("message.helper.report") : t("message.helper.result")}
-              </T>
-              <Markdown text={result.length > 6000 ? `${result.slice(0, 6000)}…` : result} />
-            </View>
-          ) : running && !tools.length ? (
-            <Thinking />
-          ) : null}
-        </Animated.View>
-      )}
+      {expanded && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
     </View>
   );
 });
 
-/** Helpers still at work in the background, at the foot of the turn: without this the chat would look idle. */
-function BackgroundAgents({ parts }: { parts: Part[] }) {
+function SubagentRow({ entry, streaming, agent }: { entry: SubagentEntry; streaming: boolean; agent?: ParentAgent }) {
+  const c = useColors();
+  const { block, children } = entry;
+  const view = useSubagentView(block, children, streaming);
+  const { task, background, running, failed, phase } = view;
+  const [open, setOpen] = useRecyclingState(false, [block.id]);
+  const meta = [view.type, view.status].filter(Boolean).join(" · ");
+
+  return (
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setOpen(!open);
+        }}
+        style={styles.subagentRow}
+      >
+        <SubagentAvatar agent={agent} phase={phase} size={24} seed={block.id} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="footnote" numberOfLines={1} style={{ fontWeight: "500" }}>
+            {view.title}
+          </T>
+          <T variant="caption" muted numberOfLines={1} color={failed ? c.danger : undefined}>
+            {meta}
+          </T>
+        </View>
+        <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+          {running && task?.startedAt ? null : task?.durationMs ? duration(task.durationMs) : null}
+        </T>
+        {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
+        <Icon name="down" size={10} color={c.textFaint} style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />
+      </Pressable>
+      {open && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
+    </View>
+  );
+}
+
+function AvatarStack({ blocks, agent, size, streaming }: { blocks: ToolUse[]; agent?: ParentAgent; size: number; streaming: boolean }) {
+  const c = useColors();
+  const shown = blocks.slice(0, 4);
+  return (
+    <View style={{ flexDirection: "row" }}>
+      {shown.map((b, i) => (
+        <View key={b.id} style={{ marginLeft: i > 0 ? -size / 3 : 0, zIndex: shown.length - i, borderRadius: size, backgroundColor: c.surface }}>
+          <SubagentAvatar agent={agent} phase={subagentState(b, streaming).phase} size={size} seed={b.id} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const SubagentGroup = memo(function SubagentGroup({ entries, streaming, agent }: { entries: SubagentEntry[]; streaming: boolean; agent?: ParentAgent }) {
   const c = useColors();
   const { t } = useTranslation("components");
-  const working = parts.flatMap((p) => (p.kind === "subagent" && subagentState(p.block, true).background && subagentState(p.block, true).running ? [p.block] : []));
+  const states = entries.map((e) => subagentState(e.block, streaming));
+  const count = (phase: Phase) => states.filter((s) => s.phase === phase).length;
+  const working = count("running");
+  const anyFailed = count("failed") > 0;
+  const summary = (["running", "done", "failed", "stopped"] as const)
+    .filter((phase) => count(phase) > 0)
+    .map((phase) => t(`message.subagents.${phase}`, { count: count(phase) }))
+    .join(" · ");
+
+  return (
+    <View style={[styles.steps, { borderColor: working > 0 ? c.brand : anyFailed ? c.danger : c.border }]}>
+      <View style={styles.stepsHeader}>
+        <AvatarStack blocks={entries.map((e) => e.block)} agent={agent} size={26} streaming={streaming} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="subhead" numberOfLines={1} style={{ fontWeight: "500" }}>
+            {t("message.subagents.helpers", { count: entries.length })}
+          </T>
+          <T variant="caption" muted numberOfLines={1}>
+            {summary}
+          </T>
+        </View>
+      </View>
+      {working > 0 ? (
+        <View style={[styles.progressTrack, { backgroundColor: c.border }]}>
+          <View style={[styles.progressFill, { backgroundColor: c.brand, width: `${((entries.length - working) / entries.length) * 100}%` }]} />
+        </View>
+      ) : null}
+      <View style={{ paddingVertical: 4 }}>
+        {entries.map((e) => (
+          <SubagentRow key={e.block.id} entry={e} streaming={streaming} agent={agent} />
+        ))}
+      </View>
+    </View>
+  );
+});
+
+function BackgroundAgents({ parts, agent }: { parts: Part[]; agent?: ParentAgent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const entries = parts.flatMap((p) => (p.kind === "subagent" ? [p.block] : p.kind === "subagents" ? p.entries.map((e) => e.block) : []));
+  const working = entries.filter((b) => {
+    const s = subagentState(b, true);
+    return s.background && s.running;
+  });
   const last = parts[parts.length - 1];
-  if (!working.length || (working.length === 1 && last?.kind === "subagent" && last.block === working[0])) return null;
+  const inLast = last?.kind === "subagent" ? [last.block] : last?.kind === "subagents" ? last.entries.map((e) => e.block) : [];
+  if (!working.length || working.every((b) => inLast.includes(b))) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)} style={[styles.background, { borderColor: c.border }]}>
-      <Spinner />
+      <AvatarStack blocks={working} agent={agent} size={20} streaming />
       <T variant="footnote" muted style={{ flex: 1 }}>
         {t("message.helpersInBackground", { count: working.length })}
       </T>
@@ -730,6 +867,23 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  subagentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+  },
+  progressTrack: {
+    height: 2,
+    marginHorizontal: space.md,
+    borderRadius: 1,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 1,
   },
   report: {
     gap: 6,
