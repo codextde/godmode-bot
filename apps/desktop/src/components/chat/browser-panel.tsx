@@ -23,6 +23,7 @@ import { qk } from "@/lib/queryKeys";
 import { subscribeBrowser } from "@/lib/realtime";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
+import { PANEL } from "@/lib/motion";
 
 export type BrowserFocusMode = "watch" | "control";
 
@@ -126,7 +127,7 @@ export function BrowserPanel({
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="flex h-full w-80 flex-col">

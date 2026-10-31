@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { openExternal } from "@/lib/desktop";
+import { EASE_OUT } from "@/lib/motion";
 import { checkForUpdates, setCanaryUpdates, useUpdater } from "@/stores/updater";
 
 export const SITE = LICENSE_SITE;
@@ -34,7 +35,7 @@ export function AboutSection({ version }: { version: string | undefined }) {
       >
         <Backdrop className="opacity-70" />
         <div className="relative flex flex-col items-center">
-          <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}>
+          <motion.div initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4, ease: EASE_OUT }}>
             <Logo className="size-16" />
           </motion.div>
           <p className="eyebrow mt-6">Godmode Pro · Codext GmbH</p>

@@ -8,6 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 
 export { tokensLabel, type ContextGauge };
 
@@ -38,7 +39,7 @@ function Ring({ share, tone, busy }: { share: number; tone: ContextGauge["tone"]
         strokeDasharray={c}
         initial={false}
         animate={{ strokeDashoffset: c * (1 - (busy ? 0.25 : Math.max(0.04, share))) }}
-        transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
       />
     </svg>
   );
@@ -95,7 +96,7 @@ export function ContextMeter({
                 className={cn("h-full rounded-full", tone.bar)}
                 initial={false}
                 animate={{ width: `${Math.max(1.5, gauge.share * 100)}%` }}
-                transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: 0.25, ease: EASE_OUT }}
               />
               {gauge.autoAt !== null && (
                 <span className="absolute -top-1 h-3.5 w-px bg-foreground/40" style={{ left: `${gauge.autoAt * 100}%` }} title={`Compresses by itself at ${Math.round(gauge.autoAt * 100)}%`} />

@@ -26,7 +26,7 @@ import { useAgent, useQuestions } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
-import { DrawCheck, WorkingTicks } from "@/components/aicss/Motion";
+import { DrawCheck } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Button } from "@/components/ui/button";
@@ -194,14 +194,13 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
         {agent?.failedRunId === run.id && <FailureNotice agentId={agent.id} agentName={agent.name} />}
         {running && (
           <div
-            className="glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
+            className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
           >
             <Orb variant="S3" size={28} label="Working" />
             <div className="min-w-0 flex-1">
               <div className="text-shimmer truncate text-sm font-medium">{live?.activity ?? "Working…"}</div>
               <div className="font-mono text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
             </div>
-            <WorkingTicks count={8} className="shrink-0 text-brand-strong" />
           </div>
         )}
 

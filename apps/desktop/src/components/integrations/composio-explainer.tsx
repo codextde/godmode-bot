@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import { Boxes, Layers, ShieldCheck } from "lucide-react";
 import { ToolkitLogo, toolkitLogoUrl } from "./toolkit-logo";
+import { EASE_OUT } from "@/lib/motion";
 
 const SHOWCASE = ["gmail", "slack", "github", "notion", "googlecalendar", "linear", "hubspot", "jira", "googledrive", "stripe"];
 const NAMES: Record<string, string> = {
@@ -56,7 +57,7 @@ export function ComposioExplainer() {
               key={slug}
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 + i * 0.04, duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+              transition={{ delay: 0.15 + i * 0.04, duration: 0.35, ease: EASE_OUT }}
               title={NAMES[slug]}
             >
               <ToolkitLogo src={toolkitLogoUrl(slug)} name={NAMES[slug]} size="md" />

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
-import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
+import { LiveDot } from "@/components/aicss/Motion";
 import { Orb } from "@/components/aicss/Orb";
 import { AgentPicker } from "@/components/chat/agent-picker";
 import { ModelPicker, type ModelChoice } from "@/components/chat/model-picker";
@@ -46,6 +46,7 @@ import { OffersCard } from "@/components/attention/offers-card";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 
 const SUGGESTIONS = [
   { icon: Mail, text: "Summarize my unread emails" },
@@ -331,7 +332,7 @@ export default function ChatHome() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: 0.2, ease: EASE_OUT }}
                 className="overflow-hidden"
               >
                 <RunnerNote place={target} />
@@ -520,7 +521,6 @@ function RunningCard({ run, agent }: { run: LiveRun; agent?: Agent }) {
           <span className="text-shimmer block truncate text-xs font-medium">{liveActivityLabel(run)}</span>
         </span>
         <span className="flex flex-col items-end gap-1">
-          <WorkingTicks count={6} className="h-3 text-brand-strong" />
           <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>
         </span>
       </Link>

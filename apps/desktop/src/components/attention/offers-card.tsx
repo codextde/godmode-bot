@@ -12,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 
 /**
  * What the main agent offers to take off the human's plate, spotted while it dreamt. "Do it" starts the chat that does
@@ -97,7 +98,7 @@ function OfferRow({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+      transition={{ duration: 0.2, ease: EASE_OUT }}
       className="px-3.5 py-3"
     >
       <div className="flex flex-col gap-2.5 @xl:flex-row @xl:items-start @xl:gap-4">

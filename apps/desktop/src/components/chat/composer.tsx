@@ -28,6 +28,7 @@ import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -377,6 +378,7 @@ export function Composer({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             <AttachmentTray
@@ -494,7 +496,7 @@ export function Composer({
                 onClick={() => void submit()}
                 disabled={!canSend}
                 aria-label={blocked ?? sendHint ?? (running ? "Queue message" : "Send message")}
-                className="ml-0.5 size-8 rounded-lg transition-[background-color,transform] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
+                className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
               </Button>

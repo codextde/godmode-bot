@@ -10,7 +10,7 @@ import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
-import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
+import { LiveDot } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -275,7 +275,7 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
     <button
       type="button"
       onClick={onOpen}
-      className="glow-border flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       {agent ? <AgentAvatar agent={agent} size="md" /> : <Orb variant="S3" size={24} />}
       <div className="min-w-0 flex-1">
@@ -286,7 +286,6 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
         <div className="text-shimmer truncate text-xs font-medium">{live.activity ?? "Thinking…"}</div>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <WorkingTicks count={6} className="h-3 text-brand-strong" />
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
       </div>
     </button>
