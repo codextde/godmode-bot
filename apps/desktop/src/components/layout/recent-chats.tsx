@@ -1,7 +1,7 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
-import type { Agent, Conversation } from "@godmode/shared";
+import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { Fragment, useEffect, useState } from "react";
 import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LiveDot } from "@/components/aicss/Motion";
 import { NavSectionHeader } from "@/components/layout/nav-section-header";
-import { AgentAvatar } from "@/components/common";
+import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
 import { AnimatedTitle } from "@/components/chat/animated-title";
@@ -191,7 +191,7 @@ export function RecentChats() {
       </div>
       {open && (
         <SidebarGroupContent id="recent-chats-panel">
-          <SidebarMenu className="gap-0.5">
+          <SidebarMenu>
             {matching.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
             {rows.map(({ c, heading, folded }, i) => {
               const headingNode = heading && (
@@ -229,32 +229,38 @@ export function RecentChats() {
                     <SidebarMenuButton
                       asChild
                       isActive={conversationId === c.id}
-                      className="h-auto min-h-9 py-2 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                      className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                     >
                       <Link to={`/chat/${c.id}`} title={hover} className="flex items-start gap-2">
-                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-my-0.5 size-5" />
+                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                         <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1">
                             <span className={cn("min-w-0 flex-1 truncate text-[13px]", unread && "font-semibold text-foreground")}>
                               <AnimatedTitle text={c.title || "New chat"} />
                             </span>
+                            {unread ? (
+                              <span
+                                className={cn("size-1.5 shrink-0 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
+                                role="img"
+                                aria-label={c.unread!.failed ? "Something went wrong here" : "New reply"}
+                              />
+                            ) : null}
                             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                            <span className="flex shrink-0 items-center gap-1.5 group-focus-within/menu-item:hidden group-hover/menu-item:hidden max-md:hidden">
-                              {unread ? (
-                                <span
-                                  className={cn("size-1.5 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
-                                  role="img"
-                                  aria-label={c.unread!.failed ? "Something went wrong here" : "New reply"}
-                                />
-                              ) : null}
-                              {running && !c.paused ? (
-                                <LiveDot className="bg-brand-strong" />
-                              ) : (
-                                <span className="text-[11px] text-muted-foreground/80 tabular-nums">{shortAgo(when)}</span>
+                            {running && !c.paused && (
+                              <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                            )}
+                          </span>
+                          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {workspace && <WorkspaceChip workspace={workspace} />}
+                            {project && <WorkspaceChip workspace={project} kind="Project" />}
+                            <span className="block min-w-0 flex-1 truncate">
+                              {detail ?? (
+                                <>
+                                  {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(when), { addSuffix: false })}
+                                </>
                               )}
                             </span>
                           </span>
-                          {detail && <span className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted-foreground [&>span]:truncate">{detail}</span>}
                         </span>
                       </Link>
                     </SidebarMenuButton>
@@ -376,16 +382,6 @@ function GroupHeading({
   );
 }
 
-function shortAgo(iso: string): string {
-  const seconds = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
-  if (seconds < 60) return "now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-  if (seconds < 7 * 86400) return `${Math.floor(seconds / 86400)}d`;
-  const date = new Date(iso);
-  return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "2-digit" });
-}
-
 /** Where a chat came from when it wasn't the human's own: "From Lena" (handed over), "Automation". */
 function originLine(c: Conversation, agents: Agent[]): string | null {
   if (c.origin === "delegation") {
@@ -395,6 +391,24 @@ function originLine(c: Conversation, agents: Agent[]): string | null {
   if (c.origin === "routine") return "Automation";
   if (c.origin === "heartbeat") return "Heartbeat";
   return null;
+}
+
+/** Which workspace a chat belongs to, in the workspace's colour. Global chats go without. */
+function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Workspace, "name" | "icon" | "color">; kind?: string }) {
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(workspace.color);
+  return (
+    <span
+      title={`${kind}: ${workspace.name}`}
+      className={cn(
+        "inline-flex h-4 max-w-22 shrink-0 items-center gap-1 rounded-[5px] px-1 text-[10px] font-medium text-foreground/75 ring-1 ring-inset",
+        hex ? "ring-foreground/10" : colorGradient(workspace.color),
+      )}
+      style={hex ? { backgroundColor: `color-mix(in oklab, ${workspace.color} 14%, transparent)` } : undefined}
+    >
+      {workspace.icon && <span className="text-[9px] leading-none" aria-hidden>{workspace.icon}</span>}
+      <span className="truncate">{workspace.name}</span>
+    </span>
+  );
 }
 
 type ChatSource = Exclude<RecentSource, "all">;
