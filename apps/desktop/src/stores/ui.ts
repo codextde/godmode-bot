@@ -54,8 +54,6 @@ interface UiState {
   expandedNav: string[];
   /** The "Try something like" suggestions on Home were closed. */
   hideSuggestions: boolean;
-  /** Single suggestions on Home the human closed with their x. */
-  hiddenSuggestions: string[];
   sidebarWidth: number | null;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
@@ -90,7 +88,6 @@ interface UiState {
   setWorkspacesSort: (v: WorkspacesSort) => void;
   setAway: (away: { since: string; until: string } | null) => void;
   setHideSuggestions: (v: boolean) => void;
-  setSuggestionHidden: (key: string, hidden: boolean) => void;
   setSidebarWidth: (width: number | null) => void;
 }
 
@@ -123,7 +120,6 @@ export const useUi = create<UiState>()(
       workspacesSort: "name",
       away: null,
       hideSuggestions: false,
-      hiddenSuggestions: [],
       sidebarWidth: null,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
@@ -162,8 +158,6 @@ export const useUi = create<UiState>()(
       hideHint: (key) => set((s) => ({ hiddenHints: s.hiddenHints.includes(key) ? s.hiddenHints : [...s.hiddenHints, key] })),
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
-      setSuggestionHidden: (key, hidden) =>
-        set((s) => ({ hiddenSuggestions: hidden ? [...s.hiddenSuggestions.filter((k) => k !== key), key] : s.hiddenSuggestions.filter((k) => k !== key) })),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
     }),
     {
@@ -193,7 +187,6 @@ export const useUi = create<UiState>()(
         workspacesView: s.workspacesView,
         workspacesSort: s.workspacesSort,
         hideSuggestions: s.hideSuggestions,
-        hiddenSuggestions: s.hiddenSuggestions,
         sidebarWidth: s.sidebarWidth,
       }),
     },
