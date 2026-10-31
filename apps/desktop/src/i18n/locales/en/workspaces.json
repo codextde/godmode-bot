@@ -33,7 +33,14 @@
     "vmNone": "None — agents work on this Mac",
     "vmHint": "The workspace's agents work in this macOS VM, unless an agent or a chat has its own.",
     "saveChanges": "Save changes",
-    "create": "Create workspace"
+    "create": "Create workspace",
+    "claudeAccounts": "Claude accounts",
+    "claudeAccountsHint": "Uses Godmode's default ({{email}}) and switches like everywhere else. Turn on to pick accounts for this workspace.",
+    "claudeAccountsOwnHint": "Runs here use only the checked accounts, starting with the default, and switch between them.",
+    "claudeAccountsThisComputer": "This computer's Claude login",
+    "claudeAccountsSystem": "Claude Code login on this computer",
+    "claudeAccountsMakeDefault": "Make default",
+    "claudeAccountsFooter": "Add or remove accounts in Settings → Claude accounts."
   },
   "sources": {
     "openFinderFailed": "Couldn't open Finder",

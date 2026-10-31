@@ -114,11 +114,18 @@ export function useClaudeLogin({ onSignedIn }: { onSignedIn?: () => void } = {})
 
 export type ClaudeLogin = ReturnType<typeof useClaudeLogin>;
 
+/** What the sign-in steps need: the link, sending the page's code, cancelling. Adding a Claude account uses them too. */
+export interface SignInFlow {
+  link: { url: string | null; copied: boolean | null; copy: () => Promise<void> | void };
+  submit: { mutate: (code: string, options?: { onSuccess?: () => void }) => void; isPending: boolean };
+  cancel: { mutate: () => void; isPending: boolean };
+}
+
 /**
  * While the sign-in runs: approve it in the browser that opened. The link is on the clipboard for when no window
  * opened (or on a phone): that page shows a code to paste back here.
  */
-export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; className?: string }) {
+export function ClaudeSignInSteps({ login, className }: { login: SignInFlow; className?: string }) {
   const { t } = useTranslation(["onboarding", "common"]);
   const id = useId();
   const [code, setCode] = useState("");

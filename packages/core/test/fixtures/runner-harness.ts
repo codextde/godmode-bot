@@ -170,6 +170,7 @@ export interface Invocation {
     ANTHROPIC_DEFAULT_HAIKU_MODEL: string | null;
     ENABLE_TOOL_SEARCH: string | null;
     CLAUDE_CONFIG_DIR: string | null;
+    CLAUDE_CODE_OAUTH_TOKEN: string | null;
   };
 }
 

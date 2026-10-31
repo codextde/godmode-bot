@@ -28,6 +28,8 @@ export const DEFAULT_SETTINGS: Settings = {
     maxConcurrentRuns: 3,
     runTimeoutMinutes: 60,
     autoContinueOnLimit: true,
+    accountAutoSwitch: true,
+    accountSwitchPercent: 90,
     resumeAfterRestart: true,
     watchdog: true,
     stallMinutes: DEFAULT_STALL_MINUTES,
