@@ -1346,6 +1346,10 @@ export const PALETTES: readonly Palette[] = ["paper", "graphite", "nord", "solar
 export type AppLanguage = "system" | "en" | "de";
 export const APP_LANGUAGES: readonly AppLanguage[] = ["system", "en", "de"];
 
+/** How clock times read: "system" follows each device's region (24-hour in Germany, 12-hour in the US). */
+export type TimeFormat = "system" | "24h" | "12h";
+export const TIME_FORMATS: readonly TimeFormat[] = ["system", "24h", "12h"];
+
 export interface GeneralSettings {
   theme: Theme;
   palette: Palette;
@@ -1358,6 +1362,7 @@ export interface GeneralSettings {
   minimizeToTray: boolean;
   desktopNotifications: boolean;
   language: AppLanguage;
+  timeFormat: TimeFormat;
 }
 
 /** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */

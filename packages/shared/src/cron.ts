@@ -249,9 +249,11 @@ const weekdayName = (i: number, lang: CronLang) => (lang === "de" ? WEEKDAYS_DE 
 const shortWeekday = (i: number, lang: CronLang) => (lang === "de" ? WEEKDAYS_DE[i]?.slice(0, 2) : WEEKDAYS[i]?.slice(0, 3)) ?? String(i);
 const monthName = (i: number, lang: CronLang) => (lang === "de" ? MONTHS_DE : MONTHS)[i] ?? String(i + 1);
 
-export function formatTime(hour: number, minute: number, lang: CronLang = "en"): string {
-  const d = new Date(2000, 0, 1, hour, minute);
-  return lang === "de" ? d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+/** "08:30" or "8:30 AM"; without `hour12` English reads 12-hour and German 24-hour. */
+export function formatTime(hour: number, minute: number, lang: CronLang = "en", hour12 = lang !== "de"): string {
+  const mm = String(minute).padStart(2, "0");
+  if (!hour12) return `${String(hour).padStart(2, "0")}:${mm}`;
+  return `${hour % 12 || 12}:${mm} ${hour < 12 ? "AM" : "PM"}`;
 }
 
 export function ordinal(n: number, lang: CronLang = "en"): string {
@@ -375,9 +377,9 @@ function describeMonth(mon: string, lang: CronLang = "en"): string | null {
 }
 
 /** "Every day at 09:00", "Weekdays at 08:30", "Every 15 minutes", … (German with lang "de"). */
-export function cronToHuman(cron: string, lang: CronLang = "en"): string {
+export function cronToHuman(cron: string, lang: CronLang = "en", hour12 = lang !== "de"): string {
   const P = phrases(lang);
-  const time12 = (h: number, m: number) => formatTime(h, m, lang);
+  const time12 = (h: number, m: number) => formatTime(h, m, lang, hour12);
   const expr = cron.trim().replace(/\s+/g, " ");
   if (!expr) return P.noSchedule;
   if (validateCron(expr)) return expr;
@@ -429,9 +431,9 @@ export function cronToHuman(cron: string, lang: CronLang = "en"): string {
 /* ------------------------------------------------------------------ */
 
 /** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM", "5 times a day at random times between …". */
-export function scheduleToHuman(cron: string, startWindowMinutes = 0, runsPerWindow = 1, lang: CronLang = "en"): string {
+export function scheduleToHuman(cron: string, startWindowMinutes = 0, runsPerWindow = 1, lang: CronLang = "en", hour12 = lang !== "de"): string {
   const P = phrases(lang);
-  const base = cronToHuman(cron, lang);
+  const base = cronToHuman(cron, lang, hour12);
   if (!startWindowMinutes || validateCron(cron)) return base;
   const expr = cron.trim().replace(/\s+/g, " ");
   if (runsPerWindow > 1) {
@@ -439,7 +441,7 @@ export function scheduleToHuman(cron: string, startWindowMinutes = 0, runsPerWin
     if (d.kind === "several") {
       const days = describeDow(buildDays(d.days), lang);
       const end = d.hour * 60 + d.minute + startWindowMinutes;
-      const range = P.between(formatTime(d.hour, d.minute, lang), formatTime(Math.floor(end / 60) % 24, end % 60, lang));
+      const range = P.between(formatTime(d.hour, d.minute, lang, hour12), formatTime(Math.floor(end / 60) % 24, end % 60, lang, hour12));
       return `${P.timesRandom(runsPerWindow, range)}${days ? ` ${days}` : ""}`;
     }
     return P.runsRandomWithin(base, runsPerWindow, formatMinutes(startWindowMinutes, lang));
@@ -448,7 +450,7 @@ export function scheduleToHuman(cron: string, startWindowMinutes = 0, runsPerWin
   if (d.kind === "hourly" && startWindowMinutes === 60) return P.hourRandomMinute;
   if (d.kind !== "custom" && d.kind !== "hourly" && d.kind !== "several") {
     const end = d.hour * 60 + d.minute + startWindowMinutes;
-    const range = P.between(formatTime(d.hour, d.minute, lang), formatTime(Math.floor(end / 60) % 24, end % 60, lang));
+    const range = P.between(formatTime(d.hour, d.minute, lang, hour12), formatTime(Math.floor(end / 60) % 24, end % 60, lang, hour12));
     switch (d.kind) {
       case "daily":
         return P.everyDayRange(range);

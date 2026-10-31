@@ -270,7 +270,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
           <T variant="caption" muted style={{ marginTop: 4, marginRight: 4 }}>
             {Number.isNaN(new Date(block.sentAt).getTime())
               ? t("message.pickedUpMidTask")
-              : t("message.pickedUpMidTaskSent", { time: format(new Date(block.sentAt), "HH:mm") })}
+              : t("message.pickedUpMidTaskSent", { time: format(new Date(block.sentAt), "p", { locale: dateLocale() }) })}
           </T>
         </View>
       );

@@ -123,7 +123,8 @@
     "saveError": {
       "theme": "Das Design konnte nicht gespeichert werden",
       "palette": "Die Farbpalette konnte nicht gespeichert werden",
-      "language": "Die Sprache konnte nicht gespeichert werden"
+      "language": "Die Sprache konnte nicht gespeichert werden",
+      "timeFormat": "Das Uhrzeitformat konnte nicht gespeichert werden"
     }
   }
 }

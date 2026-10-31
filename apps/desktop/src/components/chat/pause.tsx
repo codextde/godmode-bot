@@ -208,7 +208,7 @@ export function PauseMarker({ block }: { block: PauseBlock }) {
   const { t } = useTranslation("chat");
   const limit = block.reason === "limit";
   const Icon = limit ? Hourglass : Pause;
-  const time = (iso: string) => format(new Date(iso), "HH:mm");
+  const time = (iso: string) => format(new Date(iso), "p", { locale: dateLocale() });
   return (
     <div role="note" className="flex items-center gap-3 py-0.5 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />

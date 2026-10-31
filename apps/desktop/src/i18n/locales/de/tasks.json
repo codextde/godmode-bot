@@ -566,7 +566,7 @@
     "previousResult": "Vorheriges Ergebnis",
     "report": "Bericht",
     "result": "Ergebnis",
-    "dateFormat": "d. MMM yyyy, HH:mm",
+    "dateFormat": "d. MMM yyyy, p",
     "filedByYou": "Von dir angelegt am {{date}}",
     "filedBy": "Von {{name}} angelegt am {{date}}",
     "worked_one": "{{name}} hat {{time}} in {{count}} Lauf gearbeitet",

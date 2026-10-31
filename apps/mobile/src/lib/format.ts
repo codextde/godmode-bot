@@ -10,7 +10,7 @@ export function shortTime(iso: string | null | undefined): string {
   const seconds = (Date.now() - date.getTime()) / 1000;
   if (seconds < 60) return t("system:time.now");
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  if (isToday(date)) return format(date, "HH:mm", { locale: dateLocale() });
+  if (isToday(date)) return format(date, "p", { locale: dateLocale() });
   if (isYesterday(date)) return t("common:words.yesterday");
   return format(date, isThisYear(date) ? t("system:formats.dayMonth") : t("system:formats.dayMonthYear"), { locale: dateLocale() });
 }
@@ -18,7 +18,7 @@ export function shortTime(iso: string | null | undefined): string {
 /** "today at 16:00", "tomorrow at 09:00", "Thu, Oct 1 at 09:00" */
 export function whenText(iso: string): string {
   const date = new Date(iso);
-  const time = format(date, "HH:mm", { locale: dateLocale() });
+  const time = format(date, "p", { locale: dateLocale() });
   if (isToday(date)) return t("system:time.todayAt", { time });
   if (isTomorrow(date)) return t("system:time.tomorrowAt", { time });
   if (isYesterday(date)) return t("system:time.yesterdayAt", { time });

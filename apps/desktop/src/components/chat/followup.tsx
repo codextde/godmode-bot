@@ -18,7 +18,7 @@ import { dateLocale, t } from "@/i18n";
 /** "today at 16:00", "tomorrow at 09:00", "Thu, Oct 1 at 09:00" */
 export function followupWhen(iso: string): string {
   const d = new Date(iso);
-  const time = format(d, "HH:mm");
+  const time = format(d, "p", { locale: dateLocale() });
   if (isToday(d)) return t("chat:followup.when.today", { time });
   if (isTomorrow(d)) return t("chat:followup.when.tomorrow", { time });
   if (isYesterday(d)) return t("chat:followup.when.yesterday", { time });
@@ -141,7 +141,7 @@ export function FollowupTimePicker({
               className="rounded-lg border border-transparent px-2.5 py-2 text-left transition hover:border-border hover:bg-accent/60 focus-visible:border-border focus-visible:bg-accent/60 focus-visible:outline-none disabled:opacity-50"
             >
               <span className="block text-[13px] font-medium">{t(p.label)}</span>
-              <span className="block text-[11px] text-muted-foreground tabular-nums">{format(p.at, isToday(p.at) ? t("followup.todayTimeFormat") : "EEE HH:mm", { locale: dateLocale() })}</span>
+              <span className="block text-[11px] text-muted-foreground tabular-nums">{format(p.at, isToday(p.at) ? t("followup.todayTimeFormat") : "EEE p", { locale: dateLocale() })}</span>
             </button>
           ))}
         </div>
@@ -238,7 +238,7 @@ export function followupBlock(message: Message): FollowupBlock | null {
 }
 
 const REASON: Record<FollowupReason, (dueAt: string) => string> = {
-  due: (dueAt) => t("chat:followup.reason.due", { time: format(new Date(dueAt), "HH:mm") }),
+  due: (dueAt) => t("chat:followup.reason.due", { time: format(new Date(dueAt), "p", { locale: dateLocale() }) }),
   late: (dueAt) => t("chat:followup.reason.late", { when: followupWhen(dueAt) }),
   now: () => t("chat:followup.reason.now"),
 };

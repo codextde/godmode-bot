@@ -62,7 +62,7 @@ function formatBytes(n: number): string {
 
 function stamp(ts: string): string {
   const d = new Date(ts);
-  return isToday(d) ? format(d, "HH:mm:ss", { locale: dateLocale() }) : format(d, "MMM d HH:mm", { locale: dateLocale() });
+  return isToday(d) ? format(d, "pp", { locale: dateLocale() }) : format(d, "MMM d p", { locale: dateLocale() });
 }
 
 function formatMs(ms: number): string {
@@ -175,7 +175,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
                 ) : (
                   <>
                     {t("logs.summary", { count: o.entries, entries: o.entries.toLocaleString(intlLocale()), size: formatBytes(o.sizeBytes) })}
-                    {o.firstTs && ` · ${t("logs.since", { time: format(new Date(o.firstTs), "MMM d, HH:mm", { locale: dateLocale() }) })}`}
+                    {o.firstTs && ` · ${t("logs.since", { time: format(new Date(o.firstTs), "MMM d, p", { locale: dateLocale() }) })}`}
                   </>
                 )}
               </div>

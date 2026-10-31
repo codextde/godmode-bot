@@ -172,7 +172,7 @@ function RunDetail({ run }: { run: Run }) {
         {finished ? (
           <Fact
             label={t("facts.ended")}
-            value={format(finished, run.startedAt && isSameDay(finished, new Date(run.startedAt)) ? "HH:mm" : t("facts.dateTime"), { locale: dateLocale() })}
+            value={format(finished, run.startedAt && isSameDay(finished, new Date(run.startedAt)) ? "p" : t("facts.dateTime"), { locale: dateLocale() })}
             last
           />
         ) : null}
