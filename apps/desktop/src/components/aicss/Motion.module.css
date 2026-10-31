@@ -32,16 +32,30 @@
     flex: none;
   }
   .dotLive {
+    position: relative;
     background: var(--brand);
+  }
+  .dotLive::before,
+  .dotLive::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .dotLive::before {
+    background: color-mix(in oklab, var(--brand) 55%, transparent);
     animation: dot-pulse 2s ease-out infinite;
   }
+  .dotLive::after {
+    background: inherit;
+  }
   @keyframes dot-pulse {
-    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 55%, transparent); }
-    80%, 100% { box-shadow: 0 0 0 6px transparent; }
+    0% { transform: scale(1); opacity: 1; }
+    80%, 100% { transform: scale(2.7); opacity: 0; }
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ticks > span, .dotLive { animation: none; }
+  .ticks > span, .dotLive::before { animation: none; }
   .ticks > span { transform: scaleY(0.6); }
 }

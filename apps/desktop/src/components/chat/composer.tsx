@@ -351,8 +351,8 @@ export function Composer({
     <div
       ref={rootRef}
       className={cn(
-        "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
-        focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
+        "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200 before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:opacity-0 before:ring-4 before:ring-foreground/[0.035] before:transition-opacity before:duration-200 dark:before:ring-foreground/[0.05]",
+        focused && "border-foreground/20 before:opacity-100 dark:border-foreground/25",
         disabled && "shadow-card",
         className,
       )}
