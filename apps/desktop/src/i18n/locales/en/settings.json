@@ -31,7 +31,9 @@
       "modeDescription": "Every palette has a light and a dark side. System follows your OS. Switch any time with {{shortcut}}.",
       "light": "Light",
       "dark": "Dark",
-      "palette": "Palette"
+      "palette": "Palette",
+      "reduceAnimations": "Reduce animations",
+      "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
     },
     "desktop": {
       "title": "Desktop",

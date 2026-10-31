@@ -21,6 +21,7 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 
 const SUGGESTED_DOMAINS = ["google.com", "github.com", "linkedin.com", "notion.so", "slack.com"];
 
@@ -307,7 +308,7 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.3, ease: EASE_OUT }}
         className={cn(
           "grid size-14 place-items-center rounded-xl border",
           ok ? "border-brand/25 bg-brand-soft text-brand-strong" : "bg-paper-2 text-muted-foreground",
@@ -330,9 +331,9 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
           {shown.map((d, i) => (
             <motion.span
               key={d}
-              initial={{ opacity: 0, scale: 0.8 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: 0.15 + Math.min(i, 20) * 0.02 }}
+              transition={{ delay: Math.min(i, 8) * 0.03 }}
               className="inline-flex h-6 items-center rounded-[5px] border bg-card px-2 text-xs text-foreground"
             >
               {d}

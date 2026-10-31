@@ -156,7 +156,7 @@ export default function PasskeysPage() {
             }
           />
         ) : (
-          <div className="@container animate-in overflow-hidden rounded-xl border bg-card shadow-card fade-in-0">
+          <div className="@container full-motion:animate-in overflow-hidden rounded-xl border bg-card shadow-card full-motion:fade-in-0">
             <div className={cn(GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
               <span className="pl-12">{t("passkeysPage.columns.site")}</span>
               <span>{t("totpForm.account")}</span>

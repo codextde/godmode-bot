@@ -21,9 +21,6 @@ export function LiveDot({ live = true, className }: { live?: boolean; className?
   return <span aria-hidden className={cn(styles.dot, live && styles.dotLive, className)} />;
 }
 
-/**
- * Animated check — the stroke draws itself in when a step completes.
- */
 export function DrawCheck({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={cn(styles.check, className)} aria-hidden>

@@ -11,9 +11,11 @@ import { DeleteServerDialog, ServerDialog } from "@/components/ssh/server-dialog
 import { useSshActions } from "@/components/ssh/use-ssh-actions";
 import { errorMessage } from "@/lib/api";
 import { useSshServers } from "@/lib/hooks";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** SSH servers agents sign in to: add, test, run a command, assign them. */
 export default function SshPage() {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["ssh", "common"]);
   const [params, setParams] = useSearchParams();
   const list = useSshServers();
@@ -109,7 +111,7 @@ export default function SshPage() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97 }}
-                  transition={{ delay: Math.min(i, 8) * 0.03 }}
+                  transition={reduce ? undefined : { delay: Math.min(i, 8) * 0.03 }}
                   className="min-w-0"
                 >
                   <ServerCard server={server} actions={actions} onEdit={() => openEdit(server.id)} onDelete={() => setDeleteId(server.id)} />

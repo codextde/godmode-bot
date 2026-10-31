@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 import { useLocale } from "@/i18n/language";
 
 export function useMessagingConnections() {
@@ -26,6 +27,7 @@ export function useMessagingConnections() {
 
 /** The bots people use to talk to agents, and the platforms to add one on. */
 export function MessagingOverview() {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("messaging");
   const [params, setParams] = useSearchParams();
   const connections = useMessagingConnections();
@@ -62,7 +64,7 @@ export function MessagingOverview() {
               <h3 className="eyebrow">{t("overview.yourBots")}</h3>
               <ul className="space-y-2">
                 {list.map((c, i) => (
-                  <motion.li key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
+                  <motion.li key={c.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
                     <ConnectionCard connection={c} agents={agents.data ?? []} onOpen={() => setParam("connection", c.id)} />
                   </motion.li>
                 ))}

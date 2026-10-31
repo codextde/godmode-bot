@@ -45,6 +45,7 @@ import { CopyButton } from "@/components/chat/copy-button";
 import { api, errorMessage } from "@/lib/api";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { SshStatusBadge, keyTypeLabel, sshAddress, sshStatus } from "./ssh-parts";
 import type { SshActions } from "./use-ssh-actions";
 
@@ -162,7 +163,7 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             <CommandPanel server={server} />

@@ -160,7 +160,7 @@ export function DoneStep({
               <div className="mb-2.5 grid size-8 place-items-center rounded-md border bg-secondary text-foreground [&_svg]:size-4">{n.icon}</div>
               <p className="flex items-center gap-1 text-sm font-medium tracking-[-0.01em]">
                 {t(`done.next.${n.key}.title`)}
-                <ArrowRight className="size-3.5 opacity-0 transition-all group-hover:translate-x-0.5 group-hover:opacity-100" />
+                <ArrowRight className="size-3.5 opacity-0 transition-all calm-motion:transition-[opacity,transform] group-hover:translate-x-0.5 group-hover:opacity-100" />
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">{t(`done.next.${n.key}.body`)}</p>
             </motion.button>

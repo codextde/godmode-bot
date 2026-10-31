@@ -126,7 +126,7 @@ export function ConversationHeader({
                   aria-live="polite"
                   className={cn(
                     "max-w-[10rem] truncate text-[11px] font-normal text-muted-foreground",
-                    (mood.mood === "thinking" || mood.mood === "working") && "text-shimmer",
+                    (mood.mood === "thinking" || mood.mood === "working") && "full-motion:text-shimmer",
                     mood.mood === "attention" && "font-medium text-warning",
                     mood.mood === "error" && "text-destructive",
                   )}

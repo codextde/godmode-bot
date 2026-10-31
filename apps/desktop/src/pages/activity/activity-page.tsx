@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { RunRow, useNow } from "@/components/runs/run-row";
 import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
 import { formatElapsed, runStatusLabel } from "@/components/runs/run-status";
+import { useReduceAnimations } from "@/lib/motion";
 
 const STATUSES: ("all" | RunStatus)[] = ["all", "running", "paused", "succeeded", "failed", "cancelled", "queued"];
 
@@ -32,6 +33,7 @@ function dayLabel(d: Date) {
 }
 
 export default function ActivityPage() {
+  const reduce = useReduceAnimations();
   const { t, i18n } = useTranslation(["activity", "runs", "common"]);
   const [params, setParams] = useSearchParams();
   const agentFilter = params.get("agent") ?? "all";
@@ -103,7 +105,7 @@ export default function ActivityPage() {
         }
       />
       <PageBody className="space-y-6">
-        <AnimatePresence>
+        <AnimatePresence initial={!reduce}>
           {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && statusFilter !== "paused" && (
             <motion.section
               initial={{ opacity: 0, height: 0 }}
@@ -235,7 +237,7 @@ export default function ActivityPage() {
                 <h2 className="eyebrow mb-2 px-1">{g.label}</h2>
                 <div className="space-y-0.5 rounded-xl border bg-card p-1.5 shadow-card">
                   {g.runs.map((r, i) => (
-                    <motion.div key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 15) * 0.015 }}>
+                    <motion.div key={r.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 15) * 0.015 }}>
                       <RunRow run={r} agent={agentById.get(r.agentId)} selected={r.id === selectedId} onSelect={(run) => setParam("run", run.id)} />
                     </motion.div>
                   ))}
@@ -255,17 +257,18 @@ export default function ActivityPage() {
 }
 
 function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpen: () => void }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["activity", "common"]);
   const now = useNow(true);
   return (
     <motion.button
       type="button"
-      layout
-      initial={{ opacity: 0, scale: 0.97 }}
+      layout={!reduce}
+      initial={reduce ? false : { opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
+      exit={reduce ? undefined : { opacity: 0, scale: 0.97 }}
       onClick={onOpen}
-      className="glow-border flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      className="full-motion:glow-border flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
       {agent ? <AgentAvatar agent={agent} size="md" /> : <Orb variant="S3" size={24} />}
       <div className="min-w-0 flex-1">
@@ -276,7 +279,7 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
         <div className="text-shimmer truncate text-xs font-medium">{live.activity ?? t("thinking")}</div>
       </div>
       <div className="flex flex-col items-end gap-1">
-        <WorkingTicks count={6} className="h-3 text-brand-strong" />
+        {!reduce && <WorkingTicks count={6} className="h-3 text-brand-strong" />}
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
       </div>
     </motion.button>

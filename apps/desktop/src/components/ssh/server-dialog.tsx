@@ -32,6 +32,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { keyTypeLabel, parseSshTarget, shortFingerprint } from "./ssh-parts";
 import type { SshActions } from "./use-ssh-actions";
 
@@ -622,7 +623,7 @@ export function ServerDialog({
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                  transition={{ duration: 0.2, ease: EASE_OUT }}
                   onAnimationComplete={revealResult}
                   className="overflow-hidden"
                 >

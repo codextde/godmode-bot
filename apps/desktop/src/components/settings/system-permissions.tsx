@@ -15,6 +15,7 @@ import { api, errorMessage } from "@/lib/api";
 import { t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** After asking macOS, the answer is given in System Settings: look again for a while. */
 const WAIT_FOR_ANSWER_MS = 2 * 60_000;
@@ -37,6 +38,7 @@ export function toastFix(result: FixResult) {
  * for everything it can repair or ask for itself.
  */
 export function PermissionsChecklist({ className }: { className?: string }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   // The permission the human was just asked for in a system dialog.
@@ -80,7 +82,7 @@ export function PermissionsChecklist({ className }: { className?: string }) {
         </Button>
       </div>
       {data.permissions.map((permission, i) => (
-        <motion.div key={permission.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+        <motion.div key={permission.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
           <PermissionRow
             permission={permission}
             onFixed={(result) => {

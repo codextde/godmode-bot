@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { copyText } from "@/components/vault/clipboard";
 import { ApiRequestError, api, errorMessage, fetchBlob } from "@/lib/api";
 import { isMac } from "@/lib/desktop";
+import { PANEL } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { codeThemeCss, highlightCode, languageOf } from "./highlighter";
 
@@ -51,7 +52,7 @@ export default function FilePanel({ file, line, local, onHide }: { file: ChatFil
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <style>{codeThemeCss}</style>

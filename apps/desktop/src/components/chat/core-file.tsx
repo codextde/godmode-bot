@@ -76,7 +76,7 @@ export function CoreImage({ src, alt, className }: { src: string; alt?: string; 
         onClick={() => setZoom(true)}
         aria-label={t("files.enlarge", { name })}
         className={cn(
-          "group/img relative my-0.5 inline-block max-w-full cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 align-top shadow-card transition hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+          "group/img relative my-0.5 inline-block max-w-full cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 align-top shadow-card transition full-motion:hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
           className,
         )}
       >

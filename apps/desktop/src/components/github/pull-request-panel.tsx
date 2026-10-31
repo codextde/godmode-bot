@@ -28,6 +28,7 @@ import { Markdown } from "@/components/chat/markdown";
 import { api, ApiRequestError } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
+import { PANEL } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { intlLocale } from "@/i18n";
 import { SidePanelScopeProvider } from "@/components/side-panel/store";
@@ -98,7 +99,7 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="flex h-full flex-col" style={{ width }}>

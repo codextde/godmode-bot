@@ -42,6 +42,7 @@ import { HeartbeatTab } from "@/components/agents/detail/heartbeat-tab";
 import { MemoryTab } from "@/components/agents/detail/memory-tab";
 import { HistoryTab } from "@/components/agents/detail/history-tab";
 import { SettingsTab } from "@/components/agents/detail/settings-tab";
+import { useReduceAnimations } from "@/lib/motion";
 
 const TABS = [
   { id: "", labelKey: "agentDetail.tabs.overview", icon: LayoutGrid },
@@ -63,6 +64,7 @@ const EASY_LABELS: Partial<Record<TabId, "agentDetail.easyTabs.heartbeat" | "age
 };
 
 export default function AgentDetailPage() {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("agents");
   const params = useParams();
   const agentId = params.agentId!;
@@ -110,7 +112,7 @@ export default function AgentDetailPage() {
       <AgentHeader agent={agent} />
       <TabNav agentId={agent.id} active={tab} />
       <PageBody className="pt-6">
-        <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <motion.div key={tab} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {tab === "" && <OverviewTab agent={agent} />}
           {tab === "chats" && <ChatsTab agent={agent} />}
           {tab === "routines" && <RoutinesTab agent={agent} />}
@@ -282,6 +284,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
 }
 
 function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("agents");
   const { isMobile } = useSidebar();
   const easy = useEasyMode();
@@ -314,7 +317,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
             >
               {isActive && (
                 <motion.span
-                  layoutId="agent-tab"
+                  layoutId={reduce ? undefined : "agent-tab"}
                   className="absolute inset-0 rounded-md border bg-card shadow-card"
                   transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
                 />
@@ -335,7 +338,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
             >
               {activeMore && (
                 <motion.span
-                  layoutId="agent-tab"
+                  layoutId={reduce ? undefined : "agent-tab"}
                   className="absolute inset-0 rounded-md border bg-card shadow-card"
                   transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
                 />

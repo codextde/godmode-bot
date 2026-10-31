@@ -66,7 +66,7 @@ export function ShortcutsDialog() {
   const setOpen = useUi((s) => s.setShortcutsOpen);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto calm-motion:data-[state=closed]:animate-none calm-motion:data-[state=open]:animate-none sm:max-w-xl" overlayClassName="calm-motion:data-[state=closed]:animate-none calm-motion:data-[state=open]:animate-none">
         <DialogHeader>
           <DialogTitle>{t("shortcuts.title")}</DialogTitle>
           <DialogDescription>{t("shortcuts.description")}</DialogDescription>

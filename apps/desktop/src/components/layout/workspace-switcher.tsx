@@ -263,7 +263,7 @@ function ActivityLine({ activity, fallback }: { activity: Pick<WorkspaceActivity
       )}
       {activity.running > 0 && (
         <span className="flex shrink-0 items-center gap-1 text-brand-strong">
-          <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden />
+          <span className="size-1.5 full-motion:animate-pulse rounded-full bg-current" aria-hidden />
           {t("counts.working", { count: activity.running })}
         </span>
       )}
@@ -325,7 +325,7 @@ function RowBadges({ activity }: { activity?: WorkspaceActivity }) {
     <span className="flex shrink-0 items-center gap-1">
       {activity.running > 0 && (
         <span className="flex h-4.5 items-center gap-1 rounded-full bg-brand-strong/10 px-1.5 font-mono text-[10px] text-brand-strong tabular-nums" title={t("counts.working", { count: activity.running })}>
-          <span className="size-1 animate-pulse rounded-full bg-current" aria-hidden />
+          <span className="size-1 full-motion:animate-pulse rounded-full bg-current" aria-hidden />
           {activity.running}
         </span>
       )}

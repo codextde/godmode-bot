@@ -13,6 +13,7 @@ import { api, errorMessage } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useWorkspaces } from "@/lib/hooks";
+import { EASE_OUT } from "@/lib/motion";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
 import { toast } from "sonner";
 import { ScopePicker, useDefaultScope, type IntegrationScope } from "./scope-picker";
@@ -178,7 +179,7 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
               <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: 0.3, ease: EASE_OUT }}
                 className="grid size-16 place-items-center rounded-xl border border-brand/25 bg-brand-soft text-brand-strong"
               >
                 <DrawCheck className="size-8" />

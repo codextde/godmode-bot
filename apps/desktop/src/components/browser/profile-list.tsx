@@ -42,6 +42,7 @@ import { dateLocale, intlLocale } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { ProfileActions } from "./use-profile-actions";
 import { AssignWorkspaceDialog } from "./assign-workspace-dialog";
+import { useReduceAnimations } from "@/lib/motion";
 
 function relative(iso: string | null) {
   if (!iso) return null;
@@ -71,6 +72,7 @@ export function ProfileList({
   onSelect: (id: string) => void;
   actions: ProfileActions;
 }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["browser", "common"]);
   const [renameTarget, setRenameTarget] = useState<BrowserProfile | null>(null);
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export function ProfileList({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ delay: Math.min(i, 12) * 0.03 }}
+              transition={reduce ? undefined : { delay: Math.min(i, 12) * 0.03 }}
             >
               <ProfileCard
                 profile={p}

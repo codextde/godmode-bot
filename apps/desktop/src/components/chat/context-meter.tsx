@@ -9,6 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useSettings } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 export { tokensLabel, type ContextGauge };
 
@@ -23,6 +24,7 @@ const TONE = {
 } as const;
 
 function Ring({ share, tone, busy }: { share: number; tone: ContextGauge["tone"]; busy?: boolean }) {
+  const reduce = useReduceAnimations();
   const r = 7;
   const c = 2 * Math.PI * r;
   return (
@@ -39,7 +41,7 @@ function Ring({ share, tone, busy }: { share: number; tone: ContextGauge["tone"]
         strokeDasharray={c}
         initial={false}
         animate={{ strokeDashoffset: c * (1 - (busy ? 0.25 : Math.max(0.04, share))) }}
-        transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: reduce ? 0.25 : 0.6, ease: EASE_OUT }}
       />
     </svg>
   );
@@ -61,6 +63,7 @@ export function ContextMeter({
   onCompress: () => void;
   disabled?: boolean;
 }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("chat");
   const pct = gauge.share === null ? null : Math.round(gauge.share * 100);
   const tone = TONE[gauge.tone];
@@ -97,7 +100,7 @@ export function ContextMeter({
                 className={cn("h-full rounded-full", tone.bar)}
                 initial={false}
                 animate={{ width: `${Math.max(1.5, gauge.share * 100)}%` }}
-                transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: reduce ? 0.25 : 0.6, ease: EASE_OUT }}
               />
               {gauge.autoAt !== null && (
                 <span className="absolute -top-1 h-3.5 w-px bg-foreground/40" style={{ left: `${gauge.autoAt * 100}%` }} title={t("meter.autoAtTitle", { pct: Math.round(gauge.autoAt * 100) })} />
@@ -152,10 +155,11 @@ export function CompressBar({ gauge, agentName, running, onCompress, onDismiss }
 
 /** Where the conversation was summarized: a quiet divider, earlier messages stay readable above it. */
 export function CompactedDivider({ info }: { info: CompactInfo }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("chat");
   const saved = info.preTokens && info.postTokens !== null ? Math.max(0, Math.round((1 - info.postTokens / info.preTokens) * 100)) : null;
   return (
-    <motion.div initial={{ opacity: 0, scaleX: 0.9 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }} className="flex items-center gap-3 py-1.5" role="separator">
+    <motion.div initial={reduce ? false : { opacity: 0, scaleX: 0.9 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.35, ease: EASE_OUT }} className="flex items-center gap-3 py-1.5" role="separator">
       <span className="h-px flex-1 bg-gradient-to-r from-transparent to-border" />
       <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-[11.5px] text-muted-foreground shadow-card">
         <FoldVertical className="size-3.5 text-success" />

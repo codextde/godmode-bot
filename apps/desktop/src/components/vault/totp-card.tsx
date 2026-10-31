@@ -20,6 +20,7 @@ import { Favicon } from "./favicon";
 import { copySecret } from "./clipboard";
 import { formatCode, issuerDomain, type LiveCode } from "./use-totp-codes";
 import { domainFromUrl } from "./vault-utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function TotpCard({
   entry,
@@ -40,6 +41,7 @@ export function TotpCard({
   onEdit: (focusLink?: boolean) => void;
   onDelete: () => void;
 }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["vault", "common"]);
   const [copiedAt, setCopiedAt] = useState<number | null>(null);
   const [peek, setPeek] = useState(false);
@@ -66,7 +68,7 @@ export function TotpCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
+      transition={reduce ? undefined : { delay: Math.min(index, 12) * 0.03 }}
       onMouseEnter={() => setPeek(true)}
       onMouseLeave={() => setPeek(false)}
       onFocus={() => setPeek(true)}

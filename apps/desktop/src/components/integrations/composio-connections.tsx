@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./confirm-dialog";
 import { prettySlug, ToolkitLogo, toolkitLogoUrl } from "./toolkit-logo";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function connectionTone(status: string): "ok" | "pending" | "error" | "neutral" {
   const s = status.toUpperCase();
@@ -64,6 +65,7 @@ interface Group {
 
 /** Connected Composio accounts grouped by who can use them. */
 export function ComposioConnections({ connections, toolkits }: { connections: ComposioConnection[]; toolkits: Record<string, ComposioToolkit> }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["integrations", "common"]);
   const { dateLocale } = useLocale();
   const qc = useQueryClient();
@@ -151,7 +153,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                       key={c.id}
                       layout
                       initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                      animate={reduce ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
                       exit={{ opacity: 0, height: 0 }}
                       className="group flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent"
                     >

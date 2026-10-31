@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoutineDialog, type RoutineDraft } from "../routine-dialog";
 import { RoutineItem } from "../routine-item";
+import { useReduceAnimations } from "@/lib/motion";
 
 const QUICK_STARTS = [
   { icon: Sun, labelKey: "routinesTab.quickStarts.morning", nameKey: "routinesTab.quickStarts.morningName", draft: { triggerType: "schedule", cron: "0 8 * * *" } },
@@ -20,6 +21,7 @@ const QUICK_STARTS = [
 ] as const satisfies readonly { icon: typeof Sun; labelKey: string; nameKey: string | null; draft: Partial<RoutineDraft> }[];
 
 export function RoutinesTab({ agent }: { agent: Agent }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("agents");
   const q = useRoutines(agent.id);
   const easy = useEasyMode();
@@ -65,7 +67,7 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
       ) : (
         <div className="space-y-3">
           {routines.map((r, i) => (
-            <motion.div key={r.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
+            <motion.div key={r.id} layout={!reduce} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
               <RoutineItem routine={r} onEdit={(routine) => setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine })} />
             </motion.div>
           ))}

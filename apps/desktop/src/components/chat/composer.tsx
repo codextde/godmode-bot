@@ -29,6 +29,7 @@ import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -110,6 +111,7 @@ export function Composer({
   className,
   ref,
 }: ComposerProps) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("chat");
   const navigate = useNavigate();
   const easy = useEasyMode();
@@ -347,15 +349,18 @@ export function Composer({
 
   const listening = dictation.state === "listening" || dictation.state === "starting";
   const transcribing = dictation.state === "transcribing";
-  const working = !!running || !!busy;
+  const glow = (!!running || !!busy) && !disabled && !reduce;
 
   return (
     <div
       ref={rootRef}
       className={cn(
         "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
-        focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
-        working && !disabled && "glow-border",
+        glow
+          ? "glow-border"
+          : "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:opacity-0 before:ring-4 before:ring-foreground/[0.035] before:transition-opacity before:duration-200 dark:before:ring-foreground/[0.05]",
+        focused && "border-foreground/20 dark:border-foreground/25",
+        focused && (glow ? "ring-4 ring-foreground/[0.035] dark:ring-foreground/[0.05]" : "before:opacity-100"),
         disabled && "shadow-card",
         className,
       )}
@@ -383,6 +388,7 @@ export function Composer({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             <AttachmentTray
@@ -467,9 +473,10 @@ export function Composer({
           <AnimatePresence>
             {((running && !disabled) || transcribing) && (
               <motion.span
-                initial={{ opacity: 0, x: 6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 6 }}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                transition={reduce ? { duration: 0.15, ease: "easeOut" } : undefined}
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
@@ -478,9 +485,9 @@ export function Composer({
             )}
             {!running && !transcribing && focused && text.length > 0 && (
               <motion.span
-                initial={{ opacity: 0 }}
+                initial={reduce ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
+                exit={reduce ? undefined : { opacity: 0 }}
                 className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
               >
                 <Kbd>⇧</Kbd>
@@ -504,7 +511,7 @@ export function Composer({
                 onClick={() => void submit()}
                 disabled={!canSend}
                 aria-label={blocked ?? sendHint ?? (running ? t("composer.queueMessage") : t("composer.sendMessage"))}
-                className="ml-0.5 size-8 rounded-lg transition-[background-color,transform] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
+                className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
               </Button>

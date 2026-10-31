@@ -9,6 +9,7 @@ import { formatDuration, formatElapsed, formatTokens, useModelLabel } from "@/co
 import { ThinkingState } from "@/components/aicss/ThinkingState";
 import { useNow } from "@/components/vault/use-now";
 import { useEasyMode } from "@/lib/mode";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./markdown";
 import { Collapse, MessageBlocks } from "./message-blocks";
@@ -137,7 +138,7 @@ export function SubagentCard({ block, ctx, childBlocks, streaming, agent }: { bl
   const waiting = running && background && streaming;
 
   return (
-    <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
+    <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "full-motion:glow-border")}>
       <button
         type="button"
         onClick={() => setOpen(!expanded)}
@@ -229,7 +230,7 @@ export function SubagentGroup({ entries, ctx, streaming, agent }: { entries: Sub
     .map(([phase, n]) => t(`blocks.subagents.${phase}`, { count: n }));
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", working > 0 && "glow-border", anyFailed && working === 0 && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", working > 0 && "full-motion:glow-border", anyFailed && working === 0 && "border-destructive/30")}>
       <div className="flex items-center gap-3 px-3 pt-2.5 pb-1.5">
         <AvatarStack blocks={entries.map((e) => e.block)} agent={agent} size={26} streaming={streaming} />
         <span className="min-w-0 flex-1">
@@ -243,7 +244,7 @@ export function SubagentGroup({ entries, ctx, streaming, agent }: { entries: Sub
       </div>
       {working > 0 && (
         <div className="mx-3 h-0.5 overflow-hidden rounded-full bg-border" role="progressbar" aria-valuemin={0} aria-valuemax={entries.length} aria-valuenow={finished}>
-          <motion.div className="h-full rounded-full bg-foreground/50" initial={false} animate={{ width: `${(finished / entries.length) * 100}%` }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }} />
+          <motion.div className="h-full rounded-full bg-foreground/50" initial={false} animate={{ width: `${(finished / entries.length) * 100}%` }} transition={{ duration: 0.3, ease: EASE_OUT }} />
         </div>
       )}
       <ul className="space-y-0.5 px-1.5 pt-1.5 pb-1.5">
@@ -285,6 +286,7 @@ function useAllOffscreen(ids: string[], root: RefObject<HTMLElement | null>): bo
 
 export function BackgroundSubagentsPill({ blocks, agent, scrollRef }: { blocks: MessageBlock[]; agent?: ParentAgent; scrollRef: RefObject<HTMLElement | null> }) {
   const { t } = useTranslation("chat");
+  const reduce = useReduceAnimations();
   const easy = useEasyMode();
   const working = useMemo(() => runningBackgroundSubagents(blocks), [blocks]);
   const offscreen = useAllOffscreen(
@@ -299,10 +301,10 @@ export function BackgroundSubagentsPill({ blocks, agent, scrollRef }: { blocks: 
       {offscreen && (
         <motion.button
           type="button"
-          initial={{ opacity: 0, y: 8, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 8, scale: 0.96 }}
-          transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.96 }}
+          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+          exit={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.96 }}
+          transition={reduce ? { duration: 0.15, ease: "easeOut" } : { duration: 0.2, ease: EASE_OUT }}
           onClick={() => document.getElementById(subagentAnchor(working[0]!.id))?.scrollIntoView({ behavior: "smooth", block: "start" })}
           aria-live="polite"
           className="group absolute right-4 bottom-3 z-10 flex items-center gap-2 rounded-full glass py-1 pr-3 pl-1.5 text-xs font-medium transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"

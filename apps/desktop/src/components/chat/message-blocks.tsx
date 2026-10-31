@@ -22,6 +22,7 @@ import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useMods } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { useLive } from "@/stores/live";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
@@ -264,11 +265,12 @@ function ThinkingItem({ text, active }: { text: string; active: boolean }) {
 
 /** A message the human sent while the agent worked, where the agent picked it up. */
 function PickedUpMessage({ block }: { block: UserMessageBlock }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["chat", "common"]);
   const { dateLocale } = useLocale();
   const sent = new Date(block.sentAt);
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }} className="flex flex-col items-end py-1">
+    <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: EASE_OUT }} className="flex flex-col items-end py-1">
       <UserBubble content={block.text} attachments={block.attachments} />
       <span className="mt-1 inline-flex items-center gap-1 pr-1 text-[11px] text-muted-foreground">
         <CornerDownRight className="size-3" aria-hidden />
@@ -383,7 +385,7 @@ export function Collapse({ open, children }: { open: boolean; children: ReactNod
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: "auto", opacity: 1 }}
           exit={{ height: 0, opacity: 0 }}
-          transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.2, ease: EASE_OUT }}
           className="overflow-hidden"
         >
           {children}
@@ -468,7 +470,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   }
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", runningIdx >= 0 && "glow-border")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", runningIdx >= 0 && "full-motion:glow-border")}>
       <button
         type="button"
         onClick={() => setManual(!expanded)}
@@ -639,7 +641,7 @@ function ToolStep({
 
   if (standalone) {
     return (
-      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "glow-border")}>
+      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "full-motion:glow-border")}>
         {header}
         <div className={cn((block.image || open) && "px-3 pb-3")}>{body}</div>
       </div>
@@ -748,7 +750,7 @@ function TodoList({ todos }: { todos: { content: string; status: string }[] }) {
               <DrawCheck className="size-2.5" />
             </span>
           ) : t.status === "in_progress" ? (
-            <CircleDot className="mt-0.5 size-3.5 shrink-0 animate-pulse text-foreground" />
+            <CircleDot className="mt-0.5 size-3.5 shrink-0 full-motion:animate-pulse text-foreground" />
           ) : (
             <Circle className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
           )}
@@ -823,6 +825,7 @@ const MISSING_KIND_LABEL = {
 } as const;
 
 function MissingLoginCard({ block }: { block: ToolUseBlock }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["chat", "common"]);
   const input = (block.input ?? {}) as { service?: string; url?: string; kind?: string; reason?: string };
   const domain = hostOf(input.url) || (input.service ?? "");
@@ -831,7 +834,7 @@ function MissingLoginCard({ block }: { block: ToolUseBlock }) {
   const addLogin = `/vault/logins?new=1${domain ? `&domain=${encodeURIComponent(domain)}` : ""}`;
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      initial={reduce ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       className="relative overflow-hidden rounded-xl border border-warning/30 bg-card p-4 shadow-card"
     >
@@ -941,7 +944,7 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
                         ? { text: input.wait === false ? t("blocks.delegate.handedOver") : t("blocks.delegate.done"), tone: "text-success", check: true }
                         : null;
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "full-motion:glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
       <div className="flex items-start gap-3 p-3.5">
         {agent ? (
           <AgentAvatar agent={agent} size="md" />
@@ -1104,7 +1107,7 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
   const script = typeof input.script === "string" ? input.script : "";
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
+    <div className={cn("rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "full-motion:glow-border")}>
       <button
         type="button"
         onClick={() => setOpen(!expanded)}

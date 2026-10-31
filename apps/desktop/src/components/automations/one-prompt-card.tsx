@@ -12,6 +12,7 @@ import { useAllAgents, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { useDraft } from "@/lib/drafts";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { Backdrop } from "@/components/brand";
 import { Kbd } from "@/components/common";
 import { Button } from "@/components/ui/button";
@@ -137,7 +138,7 @@ export function OnePromptCard({ compact = false }: { compact?: boolean }) {
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+              transition={{ duration: 0.2, ease: EASE_OUT }}
               className="overflow-hidden"
             >
               <div className="flex flex-wrap gap-2 pt-3" aria-label={t("onePrompt.examplesLabel")}>

@@ -31,7 +31,9 @@
       "modeDescription": "Jede Palette hat eine helle und eine dunkle Seite. System folgt deinem Betriebssystem. Jederzeit umschalten mit {{shortcut}}.",
       "light": "Hell",
       "dark": "Dunkel",
-      "palette": "Palette"
+      "palette": "Palette",
+      "reduceAnimations": "Animationen reduzieren",
+      "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten."
     },
     "desktop": {
       "title": "Desktop",

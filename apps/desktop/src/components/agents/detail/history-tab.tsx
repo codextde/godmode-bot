@@ -10,6 +10,7 @@ import { qk } from "@/lib/queryKeys";
 import { EmptyState } from "@/components/common";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useReduceAnimations } from "@/lib/motion";
 import { dateLocale, t } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 
@@ -29,6 +30,7 @@ function dayLabel(d: Date) {
 }
 
 export function HistoryTab({ agent }: { agent: Agent }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation("agents");
   const { dateLocale } = useLocale();
   const q = useQuery({ queryKey: qk.agentCommits(agent.id), queryFn: () => api.agents.commits(agent.id) });
@@ -83,7 +85,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
               return (
                 <motion.li
                   key={c.oid}
-                  initial={{ opacity: 0, x: -4 }}
+                  initial={reduce ? false : { opacity: 0, x: -4 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: Math.min(i, 20) * 0.02 }}
                   className="group relative rounded-lg px-3 py-2.5 transition hover:bg-accent/50"

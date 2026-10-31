@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArtifact, useChatArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { PANEL, useReduceAnimations } from "@/lib/motion";
 import { ArtifactView, ago } from "./artifact-view";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
@@ -42,6 +43,7 @@ export function artifactIdOf(block: ToolUseBlock): string | null {
 }
 
 export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["artifacts", "common"]);
   const scope = useContext(ArtifactScope);
   const show = useArtifactPanel((s) => s.show);
@@ -64,7 +66,7 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 4 }}
+      initial={reduce ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
         "group flex items-center gap-3 rounded-xl border bg-card p-2.5 pr-3 shadow-card transition",
@@ -130,7 +132,7 @@ export function ArtifactPanel({ id, onHide }: { id: string; onHide: () => void }
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="h-full" style={{ width }}>

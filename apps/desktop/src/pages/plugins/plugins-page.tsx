@@ -18,6 +18,7 @@ import { ModSheet } from "@/components/mods/mod-sheet";
 import { useModActions } from "@/components/mods/use-mod-actions";
 import { errorMessage } from "@/lib/api";
 import { useMods } from "@/lib/hooks";
+import { useReduceAnimations } from "@/lib/motion";
 
 const STEPS = [
   { title: "page.steps.install.title", text: "page.steps.install.text" },
@@ -27,6 +28,7 @@ const STEPS = [
 
 /** Claude Code plugins: install from GitHub or the gallery, switch on and off, update, set options, choose who runs them. */
 export default function PluginsPage() {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["mods", "common"]);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -172,7 +174,7 @@ export default function PluginsPage() {
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ delay: Math.min(i, 8) * 0.03 }}
+                    transition={reduce ? undefined : { delay: Math.min(i, 8) * 0.03 }}
                     className="flex min-w-0"
                   >
                     <ModCard mod={mod} actions={actions} onOpen={(tab) => open(mod.id, tab)} onDelete={() => setDeleteId(mod.id)} />

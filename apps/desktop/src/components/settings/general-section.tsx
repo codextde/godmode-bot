@@ -12,6 +12,7 @@ import { paletteBlurb } from "@/lib/palettes";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
+import { useUi } from "@/stores/ui";
 import { useLanguage } from "@/i18n/language";
 import { ModePicker } from "./mode-picker";
 import { PalettePicker } from "./palette-picker";
@@ -27,6 +28,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const { theme, resolved, palette, setTheme, setPalette } = useTheme();
   const g = settings.general;
   const { setMode } = useSetInterfaceMode();
+  const reduceAnimations = useUi((s) => s.reduceAnimations);
+  const setReduceAnimations = useUi((s) => s.setReduceAnimations);
 
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [autostartBusy, setAutostartBusy] = useState(false);
@@ -128,6 +131,13 @@ export function GeneralSection({ settings }: { settings: Settings }) {
         </SettingRow>
         <SettingRow label={t("general.appearance.palette")} description={paletteBlurb(palette)} stacked>
           <PalettePicker value={palette} mode={resolved} onChange={setPalette} />
+        </SettingRow>
+        <SettingRow
+          label={t("general.appearance.reduceAnimations")}
+          htmlFor="reduce-animations"
+          description={t("general.appearance.reduceAnimationsDescription")}
+        >
+          <Switch id="reduce-animations" checked={reduceAnimations} onCheckedChange={setReduceAnimations} />
         </SettingRow>
       </SettingsGroup>
 

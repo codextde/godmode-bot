@@ -17,6 +17,7 @@ import { t as translate } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { SubmitButton } from "./auth-layout";
 import { ClaudeSignInSteps, maySignIn, useClaudeLogin } from "./claude-sign-in";
 import { InlineCode, useDoctor } from "./doctor-checklist";
@@ -170,7 +171,7 @@ export function SetupStep({
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.4, ease: EASE_OUT }}
           className="flex items-center gap-4"
         >
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={mood} follow title="Godmode" />

@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { isGrantCancelled, withGrant } from "./grant";
 import { toastApiError } from "./vault-utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 const ALL = "all";
 
@@ -63,6 +64,7 @@ function statusOf(p: CardPurchase): { label: string; tone: keyof typeof TONES; h
 
 /** The ledger: every purchase an agent made or asked to make with a card, newest first. */
 export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[]; cardById: Map<string, PaymentCard>; scoped: boolean }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const [cardFilter, setCardFilter] = useState(ALL);
@@ -168,7 +170,7 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
             const agent = p.agentId ? agentById.get(p.agentId) : undefined;
             const card = cardById.get(p.cardId);
             return (
-              <motion.li key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: Math.min(i, 10) * 0.02 } }}>
+              <motion.li key={p.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1, transition: { delay: Math.min(i, 10) * 0.02 } }}>
                 <PurchaseRow
                   purchase={p}
                   agentName={agent?.name ?? t("deletedAgent")}

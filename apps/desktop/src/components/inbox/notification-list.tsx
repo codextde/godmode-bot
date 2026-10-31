@@ -25,6 +25,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 import { useLocale } from "@/i18n/language";
 
 const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string }> = {
@@ -40,6 +41,7 @@ const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string
 const PAGE = 30;
 
 export function NotificationList({ className }: { className?: string }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["inbox", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -161,7 +163,7 @@ export function NotificationList({ className }: { className?: string }) {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ delay: Math.min(i, 12) * 0.03 }}
+                transition={reduce ? undefined : { delay: Math.min(i, 12) * 0.03 }}
               >
                 <NotificationRow n={n} onOpen={() => open(n)} />
               </motion.li>

@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
 import { PLATFORMS } from "@/components/messaging/platform";
+import { useReduceAnimations } from "@/lib/motion";
 import { useLocale } from "@/i18n/language";
 
 const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }> }> = {
@@ -142,6 +143,7 @@ function ConversationRow({
   onToggleArchive: () => void;
   onDelete: () => void;
 }) {
+  const reduce = useReduceAnimations();
   const { t } = useTranslation(["agents", "common"]);
   const { intlLocale, dateLocale } = useLocale();
   const originKey: ConversationOrigin = c.origin in ORIGIN ? c.origin : "chat";
@@ -149,7 +151,7 @@ function ConversationRow({
   const originLabel = t(`chatsTab.origin.${originKey}`);
   const when = c.lastMessageAt ?? c.createdAt;
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }} className="group relative">
+    <motion.div initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }} className="group relative">
       <Link
         to={`/chat/${c.id}`}
         className={cn(

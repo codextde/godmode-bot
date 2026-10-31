@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { isMac, modKey } from "@/lib/desktop";
 import { useLive } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
+import { useReduceAnimations } from "@/lib/motion";
 import { dateLocale, intlLocale, t as translate } from "@/i18n";
 
 const PAGE = 25;
@@ -475,6 +476,7 @@ function GroupHeading({
   count: number;
   onToggle: () => void;
 }) {
+  const reduce = useReduceAnimations();
   return (
     <li role="presentation" className={cn("px-0.5", first ? "pt-0.5" : "pt-2")}>
       <button
@@ -483,7 +485,7 @@ function GroupHeading({
         aria-expanded={!folded}
         className="group/heading flex h-5 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[10.5px] font-medium text-muted-foreground/80 outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       >
-        {live && <LiveDot className="size-1.5 bg-brand-strong" />}
+        {live && <LiveDot live={!reduce} className="size-1.5 bg-brand-strong" />}
         {label}
         {folded && <span className="font-normal text-muted-foreground/60 tabular-nums">{count}</span>}
         <ChevronDown
