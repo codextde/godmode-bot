@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parsePullRequestUrl } from "@godmode/shared";
-import { __setGithubForTests, checksOf, getPullRequest, reviewsOf } from "../src/github/pullRequests";
+import { __setGithubForTests, checksOf, getPullRequest, mergePullRequest, reviewsOf } from "../src/github/pullRequests";
 import { HttpError } from "../src/util";
 
 const ref = { owner: "acme", repo: "app", number: 7 };
@@ -59,6 +59,7 @@ function ok(url: string, extra: Record<string, string> = {}) {
   if (url.includes("/check-runs")) return json({ check_runs: [{ name: "ci", status: "completed", conclusion: "failure", html_url: "https://ci" }] }, headers);
   if (url.includes("/status")) return json({ statuses: [{ context: "deploy", state: "pending" }] }, headers);
   if (url.includes("/reviews")) return json([{ user: { login: "bo" }, state: "APPROVED" }], headers);
+  if (url.endsWith("/repos/acme/app")) return json({ allow_merge_commit: false, allow_squash_merge: true, allow_rebase_merge: true, permissions: { push: true } }, headers);
   if (url.includes("/files")) return json([{ filename: "src/a.ts", status: "modified", additions: 10, deletions: 2 }], headers);
   return json({}, headers, 404);
 }
@@ -98,7 +99,10 @@ describe("getPullRequest", () => {
     expect(view.files).toHaveLength(1);
     expect(view.stale).toBe(false);
     expect(view.signedIn).toBe(true);
-    expect(calls).toHaveLength(5);
+    expect(view.mergeMethods).toEqual(["squash", "rebase"]);
+    expect(view.canMerge).toBe(true);
+    expect(view.headSha).toBe("abc123");
+    expect(calls).toHaveLength(6);
     expect(calls[0]!.headers.authorization).toBe("Bearer ghp_testtokentesttokentesttoken");
   });
 
@@ -114,7 +118,7 @@ describe("getPullRequest", () => {
     });
     await getPullRequest(ref);
     await getPullRequest(ref);
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(6);
     clock.now += 61_000;
     const view = await getPullRequest(ref);
     expect(view.title).toBe("Make it fast");
@@ -125,7 +129,7 @@ describe("getPullRequest", () => {
     const clock = { now: 1_000_000 };
     const calls = answers(clock, (url) => ok(url));
     await Promise.all([getPullRequest(ref), getPullRequest(ref), getPullRequest(ref)]);
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(6);
   });
 
   test("a rate limit pauses GitHub until it resets and serves what it has, marked stale", async () => {
@@ -163,7 +167,7 @@ describe("getPullRequest", () => {
     clock.now += 61_000;
     const background = await getPullRequest(ref, { interactive: false });
     expect(background.stale).toBe(true);
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(6);
     const opened = await getPullRequest(ref, { interactive: true });
     expect(opened.stale).toBe(false);
   });
@@ -174,6 +178,47 @@ describe("getPullRequest", () => {
     const err = (await getPullRequest(ref).catch((e) => e)) as HttpError;
     expect(err.status).toBe(404);
     expect(err.code).toBe("github_not_found");
+  });
+});
+
+describe("mergePullRequest", () => {
+  const sha = "a".repeat(40);
+
+  test("merges with the chosen method, pinned to the head it showed, and reloads", async () => {
+    const clock = { now: 1_000_000 };
+    let merged = false;
+    const calls = answers(clock, (url) => {
+      if (url.endsWith("/merge")) {
+        merged = true;
+        return json({ merged: true });
+      }
+      if (merged && url.endsWith("/pulls/7")) return json({ ...pull("closed", true) });
+      return ok(url);
+    });
+    await getPullRequest(ref);
+    const view = await mergePullRequest(ref, "squash", sha);
+    const put = calls.find((c) => c.url.endsWith("/merge"))!;
+    expect(put.headers["content-type"]).toBe("application/json");
+    expect(view.state).toBe("merged");
+    expect(view.canMerge).toBe(false);
+  });
+
+  test("GitHub's reason for refusing comes through", async () => {
+    const clock = { now: 1_000_000 };
+    answers(clock, (url) => (url.endsWith("/merge") ? json({ message: "Required status check \"ci\" is failing." }, {}, 405) : ok(url)));
+    const err = (await mergePullRequest(ref, "squash", sha).catch((e) => e)) as HttpError;
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("github_merge_refused");
+    expect(err.message).toContain("ci");
+  });
+
+  test("never merges without a GitHub login", async () => {
+    const clock = { now: 1_000_000 };
+    const calls = answers(clock, (url) => ok(url));
+    __setGithubForTests({ now: () => clock.now, token: async () => null, fetch: async (url) => (calls.push({ url, headers: {} }), ok(url)) });
+    const err = (await mergePullRequest(ref, "merge", sha).catch((e) => e)) as HttpError;
+    expect(err.status).toBe(403);
+    expect(calls).toHaveLength(0);
   });
 });
 

@@ -876,7 +876,8 @@
     "save": "Save",
     "enlarge": "Enlarge {{name}}",
     "downloadError": "Could not download {{name}}",
-    "download": "Download {{name}}"
+    "download": "Download {{name}}",
+    "sideHint": "Show beside the chat · ⌘-click: {{action}} · {{path}}"
   },
   "question": {
     "alreadySettled": "Already settled",
@@ -1221,6 +1222,51 @@
       "skipped": "{{count}} skipped"
     },
     "moreOnGithub": "{{count}} more on GitHub",
-    "linkHint": "Show beside the chat · ⌘-click opens GitHub"
+    "linkHint": "Show beside the chat · ⌘-click opens GitHub",
+    "merge": {
+      "button": "Merge…",
+      "into": "Into {{base}}",
+      "blockedDraft": "It's still a draft. Mark it ready for review on GitHub first.",
+      "blockedConflicts": "Resolve the conflicts with the base branch first.",
+      "blockedNoMethod": "This repository allows no merge method.",
+      "warnFailing_one": "{{count}} check failed",
+      "warnFailing_other": "{{count}} checks failed",
+      "warnRunning_one": "{{count}} check is still running",
+      "warnRunning_other": "{{count}} checks are still running",
+      "warnChanges": "a reviewer asked for changes",
+      "warnBlocked": "GitHub reports a required review or check missing",
+      "headsUp": "Heads up: {{warnings}}.",
+      "refused": "GitHub didn't merge it: {{reason}}",
+      "confirmTitle": "Merge #{{number}} into {{base}}?",
+      "how": "How to merge",
+      "cancel": "Cancel",
+      "done": "Merged #{{number}} into {{base}}",
+      "methods": {
+        "merge": {
+          "label": "Merge",
+          "hint": "All commits, plus a merge commit"
+        },
+        "squash": {
+          "label": "Squash and merge",
+          "hint": "All changes as one commit"
+        },
+        "rebase": {
+          "label": "Rebase and merge",
+          "hint": "The commits, replayed on the base branch"
+        }
+      }
+    }
+  },
+  "filePanel": {
+    "lines_one": "{{count}} line",
+    "lines_other": "{{count}} lines",
+    "atLine": "line {{line}}",
+    "readOnly": "read-only",
+    "reload": "Reload",
+    "copy": "Copy the contents",
+    "copied": "Copied",
+    "close": "Close",
+    "gone": "{{name}} isn't there anymore, or can't be shown.",
+    "failed": "Couldn't read {{name}}: {{message}}"
   }
 }

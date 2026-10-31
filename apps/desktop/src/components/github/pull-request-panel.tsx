@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { GithubErrorCode, parsePullRequestUrl, type PullRequestCheck, type PullRequestReview, type PullRequestView, type PullRequestViewState } from "@godmode/shared";
+import { GithubErrorCode, parsePullRequestUrl, type PullRequestMergeMethod, type PullRequestCheck, type PullRequestReview, type PullRequestView, type PullRequestViewState } from "@godmode/shared";
 import {
   ArrowUpRight,
   Check,
@@ -30,7 +30,17 @@ import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { intlLocale } from "@/i18n";
-import { PullRequestScopeProvider } from "./pull-request-link";
+import { SidePanelScopeProvider } from "@/components/side-panel/store";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const STALE_MS = 30_000;
 const OPEN_REFRESH_MS = 60_000;
@@ -114,9 +124,9 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {data ? (
-            <PullRequestScopeProvider value={{ conversationId, openUrl: url }}>
-              <PullRequestBody pr={data} />
-            </PullRequestScopeProvider>
+            <SidePanelScopeProvider value={{ conversationId, current: { kind: "pull", url } }}>
+              <PullRequestBody pr={data} url={url} />
+            </SidePanelScopeProvider>
           ) : query.isError ? (
             <Failure error={query.error} url={url} onRetry={() => void refresh()} />
           ) : (
@@ -193,7 +203,7 @@ const STATES: Record<PullRequestViewState, { icon: typeof GitPullRequest; classN
   closed: { icon: GitPullRequestClosed, className: "bg-red-500/12 text-red-700 dark:text-red-400" },
 };
 
-function PullRequestBody({ pr }: { pr: PullRequestView }) {
+function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
   const { t } = useTranslation("chat");
   const state = STATES[pr.state];
   const StateIcon = state.icon;
@@ -267,6 +277,8 @@ function PullRequestBody({ pr }: { pr: PullRequestView }) {
           {pr.mergeable === "conflicting" ? t("pullRequest.conflicts") : t("pullRequest.blocked")}
         </p>
       )}
+
+      {(pr.state === "open" || pr.state === "draft") && pr.canMerge && <MergeBar pr={pr} url={url} />}
 
       {pr.reviews && pr.reviews.length > 0 && <Reviews reviews={pr.reviews} />}
       {pr.checks && pr.checks.length > 0 && <Checks checks={pr.checks} />}
@@ -428,5 +440,117 @@ function Files({ pr }: { pr: PullRequestView }) {
         </div>
       )}
     </Section>
+  );
+}
+
+const METHOD_KEY = "gm.github.mergeMethod";
+
+function preferredMethod(methods: PullRequestMergeMethod[]): PullRequestMergeMethod | null {
+  const saved = localStorage.getItem(METHOD_KEY) as PullRequestMergeMethod | null;
+  return saved && methods.includes(saved) ? saved : (methods[0] ?? null);
+}
+
+function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
+  const { t } = useTranslation("chat");
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<PullRequestMergeMethod | null>(() => preferredMethod(pr.mergeMethods));
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const blocker =
+    pr.state === "draft"
+      ? t("pullRequest.merge.blockedDraft")
+      : pr.mergeable === "conflicting"
+        ? t("pullRequest.merge.blockedConflicts")
+        : pr.mergeMethods.length === 0
+          ? t("pullRequest.merge.blockedNoMethod")
+          : null;
+  const failing = (pr.checks ?? []).filter((c) => c.state === "failure").length;
+  const running = (pr.checks ?? []).filter((c) => c.state === "pending").length;
+  const wantsChanges = (pr.reviews ?? []).some((r) => r.state === "changes_requested");
+  const warnings = [
+    failing > 0 && t("pullRequest.merge.warnFailing", { count: failing }),
+    running > 0 && t("pullRequest.merge.warnRunning", { count: running }),
+    wantsChanges && t("pullRequest.merge.warnChanges"),
+    pr.mergeable === "blocked" && t("pullRequest.merge.warnBlocked"),
+  ].filter((w): w is string => !!w);
+
+  const merge = async () => {
+    if (!method) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      localStorage.setItem(METHOD_KEY, method);
+      const view = await api.github.merge({ url, method, headSha: pr.headSha });
+      qc.setQueryData(qk.pullRequest(url), view);
+      setOpen(false);
+      toast.success(t("pullRequest.merge.done", { number: pr.ref.number, base: pr.baseBranch }));
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : String(err));
+      if (err instanceof ApiRequestError && err.code === GithubErrorCode.MergeRefused) void qc.invalidateQueries({ queryKey: qk.pullRequest(url) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+      <GitMerge className="size-4 shrink-0 text-muted-foreground" />
+      <p className="min-w-0 flex-1 text-xs text-muted-foreground">{blocker ?? t("pullRequest.merge.into", { base: pr.baseBranch })}</p>
+      <Button
+        size="sm"
+        disabled={!!blocker || !method}
+        onClick={() => {
+          setProblem(null);
+          setMethod(preferredMethod(pr.mergeMethods));
+          setOpen(true);
+        }}
+      >
+        <GitMerge /> {t("pullRequest.merge.button")}
+      </Button>
+      <AlertDialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("pullRequest.merge.confirmTitle", { number: pr.ref.number, base: pr.baseBranch })}</AlertDialogTitle>
+            <AlertDialogDescription className="break-words">{pr.title}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {pr.mergeMethods.length > 1 && (
+            <div className="grid gap-1.5" role="radiogroup" aria-label={t("pullRequest.merge.how")}>
+              {pr.mergeMethods.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={method === m}
+                  onClick={() => setMethod(m)}
+                  className={cn("rounded-lg border px-3 py-2 text-left transition", method === m ? "border-brand/50 bg-brand-soft/40 ring-2 ring-brand/15" : "hover:border-foreground/15")}
+                >
+                  <span className="block text-sm font-medium">{t(`pullRequest.merge.methods.${m}.label`)}</span>
+                  <span className="block text-xs text-muted-foreground">{t(`pullRequest.merge.methods.${m}.hint`)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+              <span>{t("pullRequest.merge.headsUp", { warnings: warnings.join(", ") })}</span>
+            </p>
+          )}
+          {problem && (
+            <p className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive" role="alert">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <span>{t("pullRequest.merge.refused", { reason: problem })}</span>
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>{t("pullRequest.merge.cancel")}</AlertDialogCancel>
+            <Button onClick={() => void merge()} disabled={busy || !method}>
+              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />} {method ? t(`pullRequest.merge.methods.${method}.label`) : t("pullRequest.merge.button")}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

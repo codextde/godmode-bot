@@ -15,6 +15,7 @@ export interface ChatFile {
   image: string | null;
   /** Where the core serves the file, when it is Markdown the chat can open in its reader. */
   markdown: string | null;
+  text?: string | null;
   /** It is on the chat's runner, not on the core's machine. */
   remote?: boolean;
 }
@@ -31,6 +32,16 @@ export const CHAT_MARKDOWN_PATH = "/api/files/markdown";
 /** Larger Markdown is data, not something to read. */
 export const MAX_CHAT_MARKDOWN_BYTES = 2 * 1024 * 1024;
 export const MARKDOWN_NAME = /\.(?:md|markdown|mdx|mdown|mkd)$/i;
+export const CHAT_TEXT_PATH = "/api/files/text";
+export const MAX_CHAT_TEXT_BYTES = 1024 * 1024;
+export const CODE_NAME =
+  /(?:\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|css|scss|less|html|htm|vue|svelte|py|rb|go|rs|java|kt|kts|swift|c|h|cc|cpp|hpp|cs|php|lua|sh|bash|zsh|fish|ps1|sql|graphql|gql|yml|yaml|toml|ini|cfg|conf|xml|svg|txt|log|csv|diff|patch|proto|dart|scala|ex|exs|erl|hs|clj|r|jl|nix|tf|gradle|properties|lock)|(?:^|[\\/])(?:Dockerfile|Makefile|Gemfile|Rakefile|Procfile|\.gitignore|\.dockerignore|\.editorconfig|\.npmrc|\.prettierrc|\.eslintrc))$/i;
+export const SECRET_NAME =
+  /(?:^|[\\/])(?:\.env(?:\.(?!example$|sample$|template$|dist$)[\w.-]+)?|[^\\/]*\.(?:pem|key|p12|pfx|keystore|jks)|id_(?:rsa|dsa|ecdsa|ed25519)(?:\.pub)?|credentials(?:\.json)?|\.netrc|\.npmrc|\.pypirc|secrets?\.[\w]+|[^\\/]*token[^\\/]*)$/i;
+
+export function isPreviewableText(path: string): boolean {
+  return CODE_NAME.test(path) && !SECRET_NAME.test(path);
+}
 
 /** File names as one short line: "a.png, b.png, c.png and 12 more". */
 export function fileNameSummary(names: string[], max = 3): string {
@@ -44,6 +55,10 @@ const MAX_TEXT = 200_000;
 /** `version` changes with the file, so a picture that was written again is fetched again. */
 export function chatImageUrl(path: string, version: number): string {
   return `${CHAT_IMAGE_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
+}
+
+export function chatTextUrl(path: string, version: number): string {
+  return `${CHAT_TEXT_PATH}?path=${encodeURIComponent(path)}&v=${Math.round(version)}`;
 }
 
 export function chatMarkdownUrl(path: string, version: number): string {
