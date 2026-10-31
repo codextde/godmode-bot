@@ -50,6 +50,7 @@ jobs:
       release_id: ${{ steps.release.outputs.id }}
       version: ${{ steps.version.outputs.version }}
       canary: ${{ steps.version.outputs.canary }}
+      app_version: ${{ steps.version.outputs.app_version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,7 +65,13 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if [[ "$version" == *-canary.* ]]; then echo "canary=true" >> "$GITHUB_OUTPUT"; else echo "canary=false" >> "$GITHUB_OUTPUT"; fi
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-canary\.([0-9]+)$ ]]; then
+            echo "canary=true" >> "$GITHUB_OUTPUT"
+            echo "app_version=${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "canary=false" >> "$GITHUB_OUTPUT"
+            echo "app_version=$version" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -202,7 +209,9 @@ jobs:
 
       - name: Set the version from the tag
         shell: bash
-        run: bun scripts/bump-version.ts "$TAG"
+        env:
+          APP_VERSION: ${{ needs.create-release.outputs.app_version }}
+        run: bun scripts/bump-version.ts "$APP_VERSION"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -272,7 +281,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
+          args: ${{ matrix.args }}${{ needs.create-release.outputs.canary == 'true' && runner.os == 'Linux' && ' --bundles deb,appimage' || '' }} --config src-tauri/tauri.updater.conf.json
           releaseId: ${{ needs.create-release.outputs.release_id }}
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
