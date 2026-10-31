@@ -157,7 +157,7 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
 export function renderMemoryMd(agent: Agent): string {
   return `# Memory — ${agent.name}
 
-Long-term memory. Read it before every task and keep it up to date: add durable facts, remove what is outdated.
+Long-term memory. Loaded into every task. Keep it up to date: add durable facts, remove what is outdated.
 Never store passwords, 2FA codes or other secrets here — the Godmode vault handles those.
 
 ## About the human

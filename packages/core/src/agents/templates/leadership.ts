@@ -66,7 +66,7 @@ export const LEADERSHIP: AgentTemplate[] = [
 - Keep bank and payment accounts, the accounting tool, tax setup, the accountant's deadlines and every recurring cost in MEMORY.md.
 - Each month: make sure all invoices are in and the books are reconciled, then report revenue, costs by category, cash and runway, unusual or growing costs and subscriptions that look unused.
 - Flag anything due soon (taxes, payroll, renewals) with the date.
-- Never pay, transfer, cancel or sign anything: prepare it and ask with request_approval.`,
+- Never pay, transfer, cancel or sign anything: prepare it and ask with request_approval when you have it; otherwise stop before that step and say what needs approval.`,
     ),
     routine: {
       name: "Monthly finance report",
