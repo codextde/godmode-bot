@@ -66,6 +66,18 @@ describe("unread chats and their notices", () => {
     expect(markConversationsRead([chat.conversation.id])).toBe(1);
   }, 30_000);
 
+  test("mark as unread prefers a reply over a failed run, so the failure stays off Needs you", async () => {
+    const chat = await startChat({ agentId: agent.id, content: "Say hello", title: "Mixed" });
+    await waitForRun(chat.run.id, 20_000);
+    const failed = await sendMessage(chat.conversation.id, { content: "CRASH now" });
+    await waitForRun(failed.run.id, 20_000);
+    markConversationsRead([chat.conversation.id]);
+    expect(markConversationsUnread([chat.conversation.id])).toBe(1);
+    expect(getConversation(chat.conversation.id).unread).toEqual({ runId: chat.run.id, failed: false });
+    expect(listAttention().some((i) => i.id === `failed:${chat.conversation.id}`)).toBe(false);
+    markConversationsRead([chat.conversation.id]);
+  }, 30_000);
+
   test("a failed chat run is on the list until the chat is read", async () => {
     const chat = await startChat({ agentId: agent.id, content: "CRASH now", title: "Broken" });
     await waitForRun(chat.run.id, 20_000);

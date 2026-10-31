@@ -324,7 +324,7 @@
     "running_one": "{{count}} running",
     "running_other": "{{count}} running",
     "markAllRead": "Mark all read",
-    "menu": { "markRead": "Mark as read", "markUnread": "Mark as unread", "pin": "Pin", "unpin": "Unpin", "failed": "Couldn't change the chat" },
+    "menu": { "markRead": "Mark as read", "markUnread": "Mark as unread", "pin": "Pin", "unpin": "Unpin", "failed": "Couldn't change the chat", "nothingNew": "This chat has no reply to mark unread yet" },
     "failedHere": "Something went wrong here",
     "newReply": "New reply",
     "archiveLabel": "Archive “{{title}}”",
