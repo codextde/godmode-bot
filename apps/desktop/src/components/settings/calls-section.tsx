@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, AudioLines, CircleCheck, Hash, PhoneCall, PhoneIncoming, Play, Plus, RefreshCw, Square, UserRound } from "lucide-react";
+import { ArrowRight, AudioLines, CircleCheck, Hash, Phone, PhoneCall, PhoneIncoming, PhoneOutgoing, Play, Plus, RefreshCw, Square, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import type { CallSetup, PhoneSettings, Settings } from "@godmode/shared";
 import { isClockTime, toE164 } from "@godmode/shared";
@@ -18,7 +18,8 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
-import { Callout, CommitInput, CommitTextarea, NumberField, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+import { FeaturePageLink, FeatureSection } from "./feature-section";
+import { Callout, CommitInput, CommitTextarea, NumberField, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 const FIRST_NUMBER = "__first";
 const DEFAULT_VOICE = "__default";
@@ -68,89 +69,90 @@ export function CallsSection({ settings }: { settings: Settings }) {
   };
 
   return (
-    <div className="space-y-5">
-      <SectionHeading
-        title="Phone calls"
-        description="Let agents phone people for you, call you when something can't wait, and answer calls to your number. The voice runs on ElevenLabs; every finished call continues the chat that placed it."
-      />
+    <FeatureSection
+      feature="phone"
+      settings={settings}
+      title="Phone calls"
+      summary="Let agents phone people for you, call you when something can't wait, and answer calls to your number. The voice runs on ElevenLabs; every finished call continues the chat that placed it."
+      icon={<Phone />}
+      offNote="Nothing is dialled and calls to your number aren't answered by Godmode while it's off."
+      points={[
+        { icon: <PhoneOutgoing />, text: "Book, ask and follow up by phone for you" },
+        { icon: <UserRound />, text: "Calls you when something can't wait" },
+        { icon: <PhoneIncoming />, text: "Answers calls to your number" },
+      ]}
+    >
+      <div className="space-y-5">
+        <SetupStatus setup={setup} />
 
-      <SetupStatus setup={setup} />
+        <FeaturePageLink to="/calls" icon={<Phone />} title="Open Calls" description="Every call with its transcript and outcome." />
 
-      <SettingsGroup title="Phone calls" icon={<PhoneCall />}>
-        <SettingRow
-          label="Let agents make and take calls"
-          htmlFor="calls-enabled"
-          description="Agents get a tool to place calls, and Godmode picks up incoming ones. Turned off, nothing is dialled and calls to your number aren't answered by Godmode."
-        >
-          <Switch id="calls-enabled" checked={p.enabled} onCheckedChange={(enabled) => set({ enabled })} />
-        </SettingRow>
-      </SettingsGroup>
+        <NumberGroup settings={settings} setup={s} loading={setup.isPending} />
 
-      <NumberGroup settings={settings} setup={s} loading={setup.isPending} />
-
-      <SettingsGroup
-        title="Calls to you"
-        icon={<UserRound />}
-        description="For questions that can't wait and news you should hear right away. Everything else stays in the app."
-        actions={
-          <Button size="sm" variant="outline" disabled={!p.enabled || !p.ownerNumber || test.isPending} onClick={() => test.mutate()}>
-            {test.isPending ? <Spinner /> : <PhoneCall />} Test call
-          </Button>
-        }
-      >
-        <SettingRow label="Your number" htmlFor="calls-owner" description="With the country code. Leave it empty and agents never call you.">
-          <CommitInput
-            id="calls-owner"
-            type="tel"
-            inputMode="tel"
-            autoComplete="tel"
-            className="w-56 font-mono text-[13px]"
-            placeholder="+49 151 12345678"
-            delay={null}
-            value={p.ownerNumber}
-            onCommit={saveOwnerNumber}
-          />
-        </SettingRow>
-        <SettingRow
-          label="Agents may call you"
-          htmlFor="calls-owner-on"
-          disabled={!p.ownerNumber}
-          description="For urgent questions and news. Your answer on the call goes straight back to the agent that asked."
-        >
-          <Switch id="calls-owner-on" checked={p.callOwner} disabled={!p.ownerNumber} onCheckedChange={(callOwner) => set({ callOwner })} />
-        </SettingRow>
-        <SettingRow
-          label="Quiet hours"
-          disabled={!p.ownerNumber || !p.callOwner}
-          description={
-            p.quietFrom && p.quietTo
-              ? `No calls to you from ${p.quietFrom} to ${p.quietTo}; questions wait in the app until then.`
-              : "Agents may call you at any time of day."
+        <SettingsGroup
+          title="Calls to you"
+          icon={<UserRound />}
+          description="For questions that can't wait and news you should hear right away. Everything else stays in the app."
+          actions={
+            <Button size="sm" variant="outline" disabled={!p.enabled || !p.ownerNumber || test.isPending} onClick={() => test.mutate()}>
+              {test.isPending ? <Spinner /> : <PhoneCall />} Test call
+            </Button>
           }
         >
-          <div className="flex items-center gap-2">
+          <SettingRow label="Your number" htmlFor="calls-owner" description="With the country code. Leave it empty and agents never call you.">
             <CommitInput
-              type="time"
-              aria-label="Quiet from"
-              className="w-28 tabular-nums"
-              value={p.quietFrom}
-              onCommit={(v) => saveQuiet("quietFrom", v)}
+              id="calls-owner"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              className="w-56 font-mono text-[13px]"
+              placeholder="+49 151 12345678"
+              delay={null}
+              value={p.ownerNumber}
+              onCommit={saveOwnerNumber}
             />
-            <span className="text-xs text-muted-foreground">to</span>
-            <CommitInput type="time" aria-label="Quiet until" className="w-28 tabular-nums" value={p.quietTo} onCommit={(v) => saveQuiet("quietTo", v)} />
-            {(p.quietFrom || p.quietTo) && (
-              <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => set({ quietFrom: "", quietTo: "" })}>
-                Clear
-              </Button>
-            )}
-          </div>
-        </SettingRow>
-      </SettingsGroup>
+          </SettingRow>
+          <SettingRow
+            label="Agents may call you"
+            htmlFor="calls-owner-on"
+            disabled={!p.ownerNumber}
+            description="For urgent questions and news. Your answer on the call goes straight back to the agent that asked."
+          >
+            <Switch id="calls-owner-on" checked={p.callOwner} disabled={!p.ownerNumber} onCheckedChange={(callOwner) => set({ callOwner })} />
+          </SettingRow>
+          <SettingRow
+            label="Quiet hours"
+            disabled={!p.ownerNumber || !p.callOwner}
+            description={
+              p.quietFrom && p.quietTo
+                ? `No calls to you from ${p.quietFrom} to ${p.quietTo}; questions wait in the app until then.`
+                : "Agents may call you at any time of day."
+            }
+          >
+            <div className="flex items-center gap-2">
+              <CommitInput
+                type="time"
+                aria-label="Quiet from"
+                className="w-28 tabular-nums"
+                value={p.quietFrom}
+                onCommit={(v) => saveQuiet("quietFrom", v)}
+              />
+              <span className="text-xs text-muted-foreground">to</span>
+              <CommitInput type="time" aria-label="Quiet until" className="w-28 tabular-nums" value={p.quietTo} onCommit={(v) => saveQuiet("quietTo", v)} />
+              {(p.quietFrom || p.quietTo) && (
+                <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => set({ quietFrom: "", quietTo: "" })}>
+                  Clear
+                </Button>
+              )}
+            </div>
+          </SettingRow>
+        </SettingsGroup>
 
-      <VoiceGroup settings={settings} setup={s} />
+        <VoiceGroup settings={settings} setup={s} />
 
-      <InboundGroup settings={settings} />
-    </div>
+        <InboundGroup settings={settings} />
+      </div>
+    </FeatureSection>
   );
 }
 
