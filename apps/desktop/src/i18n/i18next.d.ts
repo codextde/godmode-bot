@@ -40,6 +40,7 @@ declare module "i18next" {
       instructions: typeof import("./locales/en/instructions.json");
       devices: typeof import("./locales/en/devices.json");
       auth: typeof import("./locales/en/auth.json");
+      templates: typeof import("./locales/en/templates.json");
     };
   }
 }

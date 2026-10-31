@@ -47,6 +47,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import { useAgentTemplates, useScopeWorkspace, useTeamTemplates, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { teamText, templateText } from "@/lib/templates";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
@@ -108,12 +109,12 @@ export function StructureIcon({ icon, className }: { icon: string; className?: s
  * org chart in one go instead of hiring one agent at a time.
  */
 export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTemplate["kind"][] }) {
-  const { t } = useTranslation("agents");
+  const { t, i18n } = useTranslation("agents");
   const teams = useTeamTemplates();
   const { data: agents = [] } = useAgentTemplates();
   const [kind, setKind] = useState<TeamTemplate["kind"]>(kinds[0]!);
   const [picked, setPicked] = useState<TeamTemplate | null>(null);
-  const byId = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
+  const byId = useMemo(() => new Map(agents.map((a) => [a.id, templateText(a)])), [agents, i18n.language]);
   if (teams.isError) return null;
   const shown = (teams.data ?? []).filter((tpl) => tpl.kind === kind);
   return (
@@ -162,6 +163,7 @@ export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTem
 
 function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root: Seat; index: number; onPick: () => void }) {
   const { t } = useTranslation("agents");
+  const text = teamText(team);
   const total = flat(root).length;
   return (
     <motion.button
@@ -178,10 +180,10 @@ function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root
         <StructureIcon icon={team.icon} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2 font-medium tracking-[-0.01em]">
-            {team.name}
-            <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground tabular-nums">{t("teamTemplates.agentCount", { count: total })}</span>
+            {text.name}
+            <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] whitespace-nowrap font-medium text-muted-foreground tabular-nums">{t("teamTemplates.agentCount", { count: total })}</span>
           </span>
-          <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{team.description}</span>
+          <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{text.description}</span>
         </span>
       </span>
       <MiniChart root={root} />
@@ -246,6 +248,7 @@ function InstallDialog({ team, root, onClose }: { team: TeamTemplate | null; roo
 
 function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; onClose: () => void }) {
   const { t } = useTranslation(["agents", "common"]);
+  const text = teamText(team);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const scoped = useScopeWorkspace();
@@ -285,7 +288,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       const leads = res.workspace
         ? t("teamTemplates.ready.leadsIn", { lead: res.lead.name, count: res.members.length, workspace: res.workspace.name })
         : t("teamTemplates.ready.leads", { lead: res.lead.name, count: res.members.length });
-      toast.success(t("teamTemplates.ready.title", { name: team.name }), {
+      toast.success(t("teamTemplates.ready.title", { name: text.name }), {
         description: res.automations ? `${leads} ${t("teamTemplates.ready.automations", { count: res.automations })}` : leads,
       });
       onClose();
@@ -294,7 +297,7 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
       if (scope !== "all") setWorkspace(res.workspace?.id ?? (where === GLOBAL ? "global" : where));
       navigate("/agents");
     },
-    onError: (err) => toast.error(t("teamTemplates.installError", { name: team.name }), { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("teamTemplates.installError", { name: text.name }), { description: errorMessage(err) }),
   });
 
   const toggle = (path: string) =>
@@ -320,10 +323,10 @@ function InstallForm({ team, root, onClose }: { team: TeamTemplate; root: Seat; 
     <>
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2.5">
-          <StructureIcon icon={team.icon} className="size-8" /> {team.name}
+          <StructureIcon icon={team.icon} className="size-8" /> {text.name}
           <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[11px] font-medium text-muted-foreground">{team.kind === "company" ? t("teamTemplates.company") : t("teamTemplates.team")}</span>
         </DialogTitle>
-        <DialogDescription>{team.description}</DialogDescription>
+        <DialogDescription>{text.description}</DialogDescription>
       </DialogHeader>
 
       <div className="-mx-1 max-h-[42vh] overflow-y-auto rounded-xl border bg-paper-2">

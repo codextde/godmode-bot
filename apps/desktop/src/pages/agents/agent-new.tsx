@@ -11,6 +11,7 @@ import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
 import { clearDraft, draftKeys, loadDraft, useDraft } from "@/lib/drafts";
 import { useAgentTemplates, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
+import { templateText } from "@/lib/templates";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { useEasyMode } from "@/lib/mode";
@@ -61,6 +62,10 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     .map((key) => ({ key, templateId: key.slice(FORM_DRAFTS.length), values: loadDraft<Partial<AgentFormValues> | null>(key, null) }))
     .filter((d) => d.values !== null)
     .map((d) => ({ ...d, values: { ...agentToValues(undefined), ...d.values } }));
+  const draftTemplateName = (id: string) => {
+    const tpl = templates.data?.find((x) => x.id === id);
+    return tpl ? templateText(tpl).name : t("agentNew.drafts.aTemplate");
+  };
 
   const describe = useMutation({
     mutationFn: () =>
@@ -206,7 +211,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
                 <DraftCard
                   key={d.key}
                   values={d.values}
-                  source={d.templateId === "scratch" ? t("agentNew.drafts.fromScratch") : t("agentNew.drafts.fromTemplate", { name: templates.data?.find((tpl) => tpl.id === d.templateId)?.name ?? t("agentNew.drafts.aTemplate") })}
+                  source={d.templateId === "scratch" ? t("agentNew.drafts.fromScratch") : t("agentNew.drafts.fromTemplate", { name: draftTemplateName(d.templateId) })}
                   index={i}
                   onOpen={() => onPick(d.templateId)}
                   onDiscard={() => {
@@ -308,14 +313,14 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
     () =>
       template
         ? {
-            name: template.name,
+            name: templateText(template).name,
             avatar: template.avatar,
             color: template.color,
             character: template.character,
             personality: template.personality,
-            description: template.description,
+            description: templateText(template).description,
             instructions: template.instructions,
-            role: template.role,
+            role: templateText(template).role,
           }
         : isScratch
           ? { ...randomLook(), personality: "buddy" }
@@ -331,7 +336,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
         try {
           await api.routines.create({
             agentId: agent.id,
-            name: template.routine.name,
+            name: templateText(template).routine!.name,
             cron: template.routine.cron,
             prompt: template.routine.prompt,
             timezone: localTimezone(),
@@ -392,7 +397,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
             <Plus />
           )
         }
-        title={template ? t("agentNew.form.titleFromTemplate", { name: template.name }) : t("agentNew.form.titleScratch")}
+        title={template ? t("agentNew.form.titleFromTemplate", { name: templateText(template).name }) : t("agentNew.form.titleScratch")}
         description={t("agentNew.form.description")}
         actions={
           <Button variant="ghost" onClick={onBack}>
@@ -418,7 +423,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
                   <Trans
                     t={t}
                     i18nKey="agentNew.form.alsoRoutine"
-                    values={{ name: template.routine.name, schedule: cronToHuman(template.routine.cron) }}
+                    values={{ name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron) }}
                     components={{ b: <span className="font-medium" />, muted: <span className="text-muted-foreground" /> }}
                   />
                 </Label>

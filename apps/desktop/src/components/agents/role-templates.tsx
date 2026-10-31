@@ -4,11 +4,13 @@ import { CalendarClock, Layers, Plus, Search, SearchX, Sparkles, X } from "lucid
 import { useTranslation } from "react-i18next";
 import type { AgentTemplate, AgentTemplateCategory } from "@godmode/shared";
 import { AGENT_TEMPLATE_CATEGORIES, AGENT_TEMPLATE_CATEGORY_LABELS } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cronToHuman } from "@/components/agents/cron";
+import { templateText } from "@/lib/templates";
 import { cn } from "@/lib/utils";
 
 type Filter = AgentTemplateCategory | "all" | "all-in-one";
@@ -23,7 +25,10 @@ const wordStarts = (query: string) =>
     .filter(Boolean)
     .map((term) => new RegExp(`(^|[^\\p{L}\\p{N}])${escape(term)}`, "iu"));
 
-const searchText = (t: AgentTemplate) => [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? [])].join(" ");
+const searchText = (t: AgentTemplate) => {
+  const shown = templateText(t);
+  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`agents:roleTemplates.category.${t.category}`), ...(shown.covers ?? [])].join(" ");
+};
 
 /**
  * Every role a company has, by department: one agent per job, or one all-in-one agent per department that covers
@@ -46,11 +51,11 @@ export function RoleTemplates({
   description?: string;
   blankLabel?: string;
 }) {
-  const { t: tr } = useTranslation("agents");
+  const { t: tr, i18n } = useTranslation("agents");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => templates.filter((t) => terms.every((re) => re.test(searchText(t)))), [templates, terms]);
+  const found = useMemo(() => templates.filter((t) => terms.every((re) => re.test(searchText(t)))), [templates, terms, i18n.language]);
   const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers : t.category === f);
   const shown = found.filter((t) => inFilter(t, filter));
   const grouped = AGENT_TEMPLATE_CATEGORIES.map((c) => ({ category: c, items: shown.filter((t) => t.category === c) })).filter((g) => g.items.length > 0);
@@ -164,8 +169,9 @@ function TemplateGrid({ templates, onPick }: { templates: AgentTemplate[]; onPic
   );
 }
 
-function TemplateCard({ template, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
+function TemplateCard({ template: source, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
   const { t } = useTranslation("agents");
+  const template = templateText(source);
   const allInOne = !!template.covers?.length;
   return (
     <motion.button
