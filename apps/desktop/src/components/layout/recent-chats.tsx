@@ -244,7 +244,7 @@ export function RecentChats() {
               const project = projectId ? projectIndex.get(projectId)?.project : undefined;
               const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
               const queued = !running && queuedConversations.has(c.id);
-              const detail = running && !c.paused ? null : chatStatus(c, { running, queued });
+              const detail = chatStatus(c, { running, queued });
               const unread = c.unread && conversationId !== c.id;
               const when = c.lastMessageAt ?? c.createdAt;
               const hover = [
@@ -280,14 +280,11 @@ export function RecentChats() {
                                   />
                                 ) : null}
                                 {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                                {slot >= 0 ? (
+                                {slot >= 0 && (
                                   <kbd className="ml-0.5 shrink-0 rounded-[4px] bg-foreground/8 px-1 font-mono text-[10px] leading-4 text-foreground/80 tabular-nums">
                                     {modKey}
                                     {slot + 1}
                                   </kbd>
-                                ) : (
-                                  running &&
-                                  !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
                                 )}
                               </span>
                               <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
