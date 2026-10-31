@@ -37,6 +37,7 @@ fn read_default(key: &str) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn bcp47(apple: &str) -> Option<String> {
     let (base, keywords) = apple.split_once('@').unwrap_or((apple, ""));
     let mut parts = base.split(['_', '-']);
