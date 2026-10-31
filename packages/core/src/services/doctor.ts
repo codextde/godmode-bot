@@ -12,6 +12,7 @@ import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shar
 import { getSettings } from "./settings";
 import { hasAppSecret } from "../vault/vault";
 import { claudeSignedOut, recheckClaudeSignedOut } from "./claudeLogin";
+import { claudeConfigDir } from "./claudeUpdate";
 import { logger } from "../log";
 import { childEnv, which } from "../util";
 import { findChrome } from "../browser/chrome";
@@ -275,7 +276,7 @@ async function checkClaudeAuth(claudePath: string | null): Promise<Check> {
     }
   }
   if (apiKey) return { ...base, ok: true, detail: "Using an Anthropic API key" };
-  if (existsSync(join(homedir(), ".claude", ".credentials.json"))) return { ...base, ok: true, detail: "Claude Code credentials found" };
+  if (existsSync(join(claudeConfigDir(), ".credentials.json"))) return { ...base, ok: true, detail: "Claude Code credentials found" };
   if (await keychainHasClaudeCredentials()) return { ...base, ok: true, detail: "Claude Code credentials found in the macOS keychain" };
   return { ...base, ok: false, detail: "No Claude login or Anthropic API key found" };
 }

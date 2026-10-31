@@ -5,6 +5,7 @@ import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
 import { badRequest } from "../util";
 import { isValidDreamSchedule } from "../memory/dreaming";
+import { expandHome } from "./folders";
 import { DEFAULT_SETTINGS, getSettings } from "./settings";
 
 const CLOUD_SWITCHES = ["enabled", "browserAccess", "phoneAccess", "allowSecrets"];
@@ -28,6 +29,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
   }
   if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
+  const configDir = (runner as { claudeConfigDir?: unknown } | undefined)?.claudeConfigDir;
+  if (configDir !== undefined && (typeof configDir !== "string" || (configDir.trim() !== "" && !isAbsolute(expandHome(configDir.trim()))))) {
+    throw badRequest("runner.claudeConfigDir must be an absolute path, a path starting with ~, or empty");
+  }
   const { effort, model, fallbackModel } = (runner ?? {}) as { effort?: unknown; model?: unknown; fallbackModel?: unknown };
   if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
   for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {

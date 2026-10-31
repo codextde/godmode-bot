@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   runner: {
     claudePath: "",
+    claudeConfigDir: "",
     model: DEFAULT_MODEL,
     fallbackModel: DEFAULT_FALLBACK_MODEL,
     effort: "high",
