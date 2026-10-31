@@ -521,16 +521,18 @@ export function MacPermissionsButton() {
           <button
             type="button"
             onClick={() => show(first.id)}
-            className="flex w-full items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-2 pl-1.5 text-left shadow-card transition-colors hover:bg-paper-2 group-data-[collapsible=icon]:hidden"
+            title={first.privacy.restartNeeded && attention.length === 1 ? "Restart Godmode to finish" : attention.map((p) => COPY[p.id].label).join(", ")}
+            className="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[12.5px] text-sidebar-foreground/85 transition-colors hover:bg-sidebar-accent hover:text-foreground group-data-[collapsible=icon]:hidden"
           >
-            <span className="relative grid size-7 shrink-0 place-items-center rounded-md border bg-paper-2 text-foreground/80">
-              <ShieldCheck className="size-3.5" />
+            <span className="relative grid size-4 shrink-0 place-items-center text-muted-foreground">
+              <ShieldCheck className="size-4" />
               <LiveDot className="absolute -top-0.5 -right-0.5 size-1.5" />
             </span>
-            <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-[12.5px] font-medium">Mac permissions</span>
-              <span className="block truncate text-[11px] text-muted-foreground">
-                {first.privacy.restartNeeded && attention.length === 1 ? "Restart Godmode to finish" : `${attention.length} to allow · ${attention.map((p) => COPY[p.id].label).join(", ")}`}
+            <span className="min-w-0 flex-1 truncate">
+              Mac permissions
+              <span className="text-muted-foreground">
+                {" · "}
+                {first.privacy.restartNeeded && attention.length === 1 ? "restart to finish" : `${attention.length} to allow`}
               </span>
             </span>
             <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
