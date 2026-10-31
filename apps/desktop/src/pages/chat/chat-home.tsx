@@ -4,9 +4,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
+import { ArrowRight, BedDouble, Bell, CalendarClock, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { Backdrop } from "@/components/brand";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
@@ -112,6 +113,10 @@ export default function ChatHome() {
   const voiceMode = useUi((s) => s.voiceMode);
   const hideSuggestions = useUi((s) => s.hideSuggestions);
   const setHideSuggestions = useUi((s) => s.setHideSuggestions);
+  const hideSuggestionsWithUndo = () => {
+    setHideSuggestions(true);
+    toast("Suggestions hidden", { action: { label: "Undo", onClick: () => setHideSuggestions(false) } });
+  };
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -348,6 +353,8 @@ export default function ChatHome() {
 
         {privateChat ? null : easy ? (
           hideSuggestions ? null : (
+          <ContextMenu>
+          <ContextMenuTrigger asChild>
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="eyebrow">Try something like</h2>
@@ -355,10 +362,7 @@ export default function ChatHome() {
                 type="button"
                 aria-label="Hide suggestions"
                 title="Hide suggestions"
-                onClick={() => {
-                  setHideSuggestions(true);
-                  toast("Suggestions hidden", { action: { label: "Undo", onClick: () => setHideSuggestions(false) } });
-                }}
+                onClick={hideSuggestionsWithUndo}
                 className="-my-1 grid size-6 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <X className="size-3.5" />
@@ -380,6 +384,14 @@ export default function ChatHome() {
               ))}
             </div>
           </motion.div>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onSelect={hideSuggestionsWithUndo}>
+              <EyeOff />
+              Hide suggestions
+            </ContextMenuItem>
+          </ContextMenuContent>
+          </ContextMenu>
           )
         ) : (
           <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
