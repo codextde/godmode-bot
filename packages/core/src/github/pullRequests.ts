@@ -5,6 +5,7 @@ import {
   type PullRequestCheck,
   type PullRequestCheckState,
   type PullRequestFile,
+  type PullRequestMergeMethod,
   type PullRequestRef,
   type PullRequestReview,
   type PullRequestView,
@@ -31,6 +32,7 @@ const SETTLED_DETAIL_TTL_MS = 10 * 60_000;
 const CHECKS_TTL_MS = 15_000;
 const SETTLED_CHECKS_TTL_MS = 10 * 60_000;
 const FILES_PER_PAGE = 100;
+const REPO_TTL_MS = 10 * 60_000;
 
 type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -216,7 +218,7 @@ function remember(key: string, entry: CacheEntry) {
   while (cache.size > CACHE_CAPACITY) cache.delete(cache.keys().next().value!);
 }
 
-async function send(path: string, cred: Credential, etag: string | null): Promise<Response> {
+async function send(path: string, cred: Credential, etag: string | null, write?: { method: string; body: unknown }): Promise<Response> {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "x-github-api-version": "2022-11-28",
@@ -224,8 +226,13 @@ async function send(path: string, cred: Credential, etag: string | null): Promis
   };
   if (cred.token) headers.authorization = `Bearer ${cred.token}`;
   if (etag) headers["if-none-match"] = etag;
+  if (write) headers["content-type"] = "application/json";
   try {
-    return await fetchImpl(`${API}${path}`, { headers, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+    return await fetchImpl(`${API}${path}`, {
+      headers,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      ...(write ? { method: write.method, body: JSON.stringify(write.body) } : {}),
+    });
   } catch (err) {
     throw new GithubFailure("unreachable", `Couldn't reach GitHub: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -422,12 +429,16 @@ async function load(ref: PullRequestRef, opts: { interactive: boolean; force: bo
   const sha = str(head.sha);
   const checksTtl = settled ? SETTLED_CHECKS_TTL_MS : CHECKS_TTL_MS;
   const sub = { interactive: opts.interactive, force: opts.force };
-  const [runs, statuses, reviews, files] = await Promise.all([
+  const [runs, statuses, reviews, files, repo] = await Promise.all([
     sha ? readOptional(`${base}/commits/${sha}/check-runs?per_page=100`, { ttlMs: checksTtl, ...sub }) : null,
     sha ? readOptional(`${base}/commits/${sha}/status?per_page=100`, { ttlMs: checksTtl, ...sub }) : null,
     readOptional(`${base}/pulls/${ref.number}/reviews?per_page=100`, { ttlMs: settled ? SETTLED_DETAIL_TTL_MS : DETAIL_TTL_MS, ...sub }),
     readOptional(`${base}/pulls/${ref.number}/files?per_page=${FILES_PER_PAGE}`, { ttlMs: settled ? SETTLED_DETAIL_TTL_MS : DETAIL_TTL_MS, ...sub }),
+    settled ? null : readOptional(base, { ttlMs: REPO_TTL_MS, ...sub }),
   ]);
+  const repository = obj(repo?.body);
+  const mergeMethods = (["merge", "squash", "rebase"] as const).filter((m) => repository[m === "merge" ? "allow_merge_commit" : `allow_${m}_merge`] !== false);
+  const signedIn = !!(await credential()).token;
   const reads = [pullRead, runs, statuses, reviews, files].filter((r): r is Read => !!r);
   const stale = reads.some((r) => r.stale);
   const retryAtMs = Math.max(0, ...reads.map((r) => r.retryAtMs ?? 0));
@@ -459,7 +470,10 @@ async function load(ref: PullRequestRef, opts: { interactive: boolean; force: bo
     fetchedAt: new Date(clock()).toISOString(),
     stale,
     retryAt: retryAtMs ? new Date(retryAtMs).toISOString() : null,
-    signedIn: !!(await credential()).token,
+    signedIn,
+    headSha: sha,
+    mergeMethods: repo ? mergeMethods : [],
+    canMerge: signedIn && !settled && !!repo && obj(repository.permissions).push === true,
   };
 }
 
@@ -477,4 +491,48 @@ export async function getPullRequest(ref: PullRequestRef, opts: { interactive?: 
   } catch (err) {
     throw toHttpError(err);
   }
+}
+
+function forget(ref: PullRequestRef) {
+  const marker = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/`;
+  for (const key of [...cache.keys()]) if (key.includes(marker)) cache.delete(key);
+}
+
+export async function mergePullRequest(ref: PullRequestRef, method: PullRequestMergeMethod, headSha: string): Promise<PullRequestView> {
+  const cred = await credential();
+  if (!cred.token) throw new HttpError(403, "Sign this computer in to GitHub first: run “gh auth login” in Terminal", GithubErrorCode.Unauthorized);
+  const path = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/merge`;
+  try {
+    await withSlot(async () => {
+      admit(cred.scope, true);
+      const res = await send(path, cred, null, { method: "PUT", body: { merge_method: method, sha: headSha } });
+      observe(cred.scope, res.headers);
+      if (res.ok) {
+        recordSuccess(cred.scope);
+        return;
+      }
+      const text = await res.text().catch(() => "");
+      if (isRateLimited(res.status, res.headers, text)) throw new GithubFailure("rate_limited", "GitHub's rate limit is used up", recordRateLimit(cred.scope, res.headers));
+      if (res.status === 401) {
+        heldToken = null;
+        throw new GithubFailure("unauthorized", "GitHub refused this computer's GitHub login");
+      }
+      if (res.status === 404) throw new GithubFailure("not_found", "GitHub can't find this pull request");
+      let message = "";
+      try {
+        message = str(obj(JSON.parse(text)).message);
+      } catch {
+        message = "";
+      }
+      if (res.status === 409) message = "The pull request changed since it was loaded. Look at the new changes, then merge again.";
+      throw new HttpError(409, message || `GitHub refused the merge (HTTP ${res.status})`, GithubErrorCode.MergeRefused);
+    });
+  } catch (err) {
+    if (err instanceof GithubPaused) throw toHttpError(new GithubFailure("rate_limited", err.message, err.retryAtMs));
+    throw toHttpError(err);
+  } finally {
+    forget(ref);
+  }
+  log.info(`Merged ${ref.owner}/${ref.repo}#${ref.number} (${method})`);
+  return getPullRequest(ref, { force: true });
 }

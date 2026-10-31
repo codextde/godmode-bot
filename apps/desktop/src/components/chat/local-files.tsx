@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BookOpen, ChevronLeft, ChevronRight, Copy, Download, Folder, FolderOpen, ImageOff, Maximize2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -20,6 +20,7 @@ import { fileIcon } from "./attachments";
 import { downloadCoreFile, useCoreFileUrl } from "./core-file";
 import { Lightbox } from "./lightbox";
 import { MarkdownReader } from "./markdown-reader";
+import { SidePanelScope, lineOf, useChatSidePanel } from "@/components/side-panel/store";
 
 /* ------------------------------------------------------------------ */
 /* Which of the paths a message names exist                             */
@@ -104,7 +105,7 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
     if (!data?.files.length) return null;
     const files = runnerId
       ? data.files.map((f) =>
-          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null } : f,
+          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null, text: f.text ? onRunner(f.text, runnerId) : null } : f,
         )
       : data.files;
     const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
@@ -207,6 +208,10 @@ function MarkdownLink({ file, className, children }: { file: ChatFile; className
 /** A file or folder named in a message; `chip` when it was written as code or a bare path. */
 export function FileLink({ file, chip, children }: { file: ChatFile; chip?: boolean; children?: ReactNode }) {
   const { label, show } = useShowInFolder()(file);
+  const side = useContext(SidePanelScope);
+  const showSide = useChatSidePanel((s) => s.show);
+  const { t } = useTranslation("chat");
+  const { local } = useContext(MessageScope);
   const Icon = file.kind === "folder" ? Folder : fileIcon(file.image ? "image/" : "", file.name);
   // The icon stays with the first letter: a long path wraps as a whole, and must not leave its icon behind.
   const start = typeof children === "string" ? [...children][0] : undefined;
@@ -230,6 +235,28 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
       {children}
     </>
   );
+  if (file.text && side) {
+    const current = side.current;
+    const open = (e: MouseEvent | KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if ("metaKey" in e && (e.metaKey || e.ctrlKey)) return show();
+      showSide(side.conversationId, { kind: "file", file, line: lineOf(file.ref), local });
+    };
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        title={t("files.sideHint", { action: label, path: file.path })}
+        aria-current={current?.kind === "file" && current.file.path === file.path ? "true" : undefined}
+        className={className}
+        onClick={open}
+        onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
+      >
+        {content}
+      </span>
+    );
+  }
   if (file.markdown) {
     return (
       <MarkdownLink file={file} className={className}>
