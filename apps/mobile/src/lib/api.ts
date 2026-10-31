@@ -60,8 +60,6 @@ import type {
   GoalInput,
   HeartbeatBeat,
   RoutineInput,
-  SpendPeriod,
-  SpendReport,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
@@ -519,10 +517,6 @@ export const api = {
 
   /** What the team did between `since` and `until` (Home's "while you were away"). */
   away: (since: string, until?: string) => get<AwaySummary>("/api/away", until ? { since, until } : { since }),
-
-  spend: {
-    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", agentId ? { period, agentId } : { period }),
-  },
 
   goals: {
     /** A workspace's goals with the global ones, or every goal (null). */

@@ -78,7 +78,7 @@ import { EASY_PAGES, MODE_LABEL, useInterfaceMode, useSetInterfaceMode } from "@
 /** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
 const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[] = [
   { id: "general", label: "General", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple" },
-  { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode monthly budget team cost limit" },
+  { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode limit" },
   { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
   { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux" },

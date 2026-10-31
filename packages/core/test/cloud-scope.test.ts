@@ -228,14 +228,14 @@ describe("usage", () => {
     const res = await call<UsageSummary>("GET", "/api/usage?days=30");
     expect(res.status).toBe(200);
     const u = res.data;
-    expect(u).toMatchObject({ runs: 4, costUsd: 1.25, durationMs: 3500, turns: 6, tokens: { input: 200, output: 100, cacheRead: 20, cacheWrite: 10 } });
+    expect(u).toMatchObject({ runs: 4, durationMs: 3500, turns: 6, tokens: { input: 200, output: 100, cacheRead: 20, cacheWrite: 10 } });
     expect(u.byDay).toHaveLength(30);
-    expect(u.byDay.at(-1)).toEqual({ day: day(0).slice(0, 10), runs: 2, costUsd: 1 });
-    expect(u.byDay.at(-2)).toEqual({ day: day(1).slice(0, 10), runs: 1, costUsd: 0.25 });
+    expect(u.byDay.at(-1)).toEqual({ day: day(0).slice(0, 10), runs: 2 });
+    expect(u.byDay.at(-2)).toEqual({ day: day(1).slice(0, 10), runs: 1 });
     expect(u.byModel).toEqual([
-      { model: "claude-opus", runs: 2, costUsd: 1 },
-      { model: "unknown", runs: 1, costUsd: 0.25 },
-      { model: "claude-sonnet", runs: 1, costUsd: 0 },
+      { model: "claude-opus", runs: 2 },
+      { model: "claude-sonnet", runs: 1 },
+      { model: "unknown", runs: 1 },
     ]);
     expect(Date.parse(u.from)).toBeLessThan(Date.parse(u.to));
 

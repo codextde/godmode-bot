@@ -129,9 +129,7 @@ export function QueueTray({
         ? `${many ? "Go" : "Goes"} along with your answer`
         : paused === "limit"
           ? `${many ? "Go" : "Goes"} along when the limit resets`
-          : paused === "budget"
-            ? `${many ? "Go" : "Goes"} along when the run continues — Send now lets it run past the budget`
-            : `${many ? "Go" : "Goes"} along when you continue`
+          : `${many ? "Go" : "Goes"} along when you continue`
       : !running
         ? "Not sent yet"
         : first && parseSlashCommand(first.content)
@@ -171,9 +169,7 @@ export function QueueTray({
                   </TooltipTrigger>
                   <TooltipContent side="top">
                     {paused
-                      ? paused === "budget"
-                        ? `Let it run now with ${many ? "these messages" : "this message"} — past the used-up budget`
-                        : `Continue now with ${many ? "these messages" : "this message"}`
+                      ? `Continue now with ${many ? "these messages" : "this message"}`
                       : running
                         ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}`
                         : `Send ${many ? "these messages" : "this message"} to ${agentName}`}

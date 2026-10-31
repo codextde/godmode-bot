@@ -1,6 +1,6 @@
 /**
  * "While you were away": what the team did while the human was gone — from `since` until they came back — computed
- * from what is stored (runs that ended, the spend ledger, ticket events), so it is right however long they were gone.
+ * from what is stored (runs that ended, ticket events), so it is right however long they were gone.
  */
 import type { AwayHighlight, AwaySummary } from "@godmode/shared";
 import { all, get } from "../db";
@@ -86,32 +86,17 @@ export function awaySummary(since: string, until?: string): AwaySummary {
     highlights.push({ kind: "delivered", agentId: d.agent_id, text: `${who} delivered #${d.number} ${d.title}`, link: `/tasks?task=${d.task_id}`, at: d.created_at });
   }
 
-  // Who worked: the runs that ended (as counted above), and what each agent's work cost (checks included, as the total).
-  const byAgent = new Map<string, { name: string; runs: number; cost: number }>();
-  for (const row of all<{ agent_id: string; runs: number }>(`SELECT r.agent_id, COUNT(*) AS runs FROM runs r WHERE ${ENDED} GROUP BY r.agent_id`, from, to)) {
-    byAgent.set(row.agent_id, { name: nameOf(row.agent_id), runs: row.runs, cost: 0 });
-  }
-  for (const row of all<{ agent_id: string; agent_name: string; cost: number }>(
-    "SELECT agent_id, MAX(agent_name) AS agent_name, SUM(cost_usd) AS cost FROM spend WHERE at >= ? AND at <= ? GROUP BY agent_id",
-    from,
-    to,
-  )) {
-    const a = byAgent.get(row.agent_id) ?? { name: names.get(row.agent_id) ?? row.agent_name, runs: 0, cost: 0 };
-    a.cost = row.cost ?? 0;
-    byAgent.set(row.agent_id, a);
-  }
-  const cost = [...byAgent.values()].reduce((sum, a) => sum + a.cost, 0);
-  const round = (usd: number) => Math.round(usd * 10_000) / 10_000;
+  // Who worked: the runs that ended (as counted above).
+  const agents = all<{ agent_id: string; runs: number }>(`SELECT r.agent_id, COUNT(*) AS runs FROM runs r WHERE ${ENDED} GROUP BY r.agent_id`, from, to)
+    .map((row) => ({ agentId: row.agent_id, name: nameOf(row.agent_id), runs: row.runs }))
+    .sort((a, b) => b.runs - a.runs);
 
   return {
     since: from,
     finished: counts?.n ?? 0,
     failed: counts?.failed ?? 0,
     delivered: delivered.length,
-    costUsd: round(cost),
-    agents: [...byAgent]
-      .map(([agentId, a]) => ({ agentId, name: a.name, runs: a.runs, costUsd: round(a.cost) }))
-      .sort((a, b) => b.runs - a.runs || b.costUsd - a.costUsd),
+    agents,
     highlights: highlights.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.at.localeCompare(a.at)).slice(0, MAX_HIGHLIGHTS),
   };
 }

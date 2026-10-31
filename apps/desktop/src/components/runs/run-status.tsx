@@ -26,14 +26,6 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function formatCost(usd: number | null | undefined): string {
-  if (usd == null || !Number.isFinite(usd)) return "—";
-  if (usd === 0) return "$0";
-  if (usd < 0.01) return "<$0.01";
-  if (usd < 10) return `$${usd.toFixed(2)}`;
-  return `$${usd.toFixed(0)}`;
-}
-
 export function formatTokens(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n < 1000) return String(n);

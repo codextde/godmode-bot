@@ -11,7 +11,6 @@ import { registerVaultRoutes } from "./routes/vault";
 import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
 import { registerAgentRoutes } from "./routes/agents";
-import { registerSpendRoutes } from "./routes/spend";
 import { registerChatRoutes } from "./routes/chat";
 import { registerMissingLoginRoutes } from "./routes/missingLogins";
 import { registerMemoryRoutes } from "./routes/memory";
@@ -184,7 +183,6 @@ export function createApp() {
   registerCardRoutes(app);
   registerWorkspaceRoutes(app);
   registerAgentRoutes(app);
-  registerSpendRoutes(app);
   registerChatRoutes(app);
   registerMissingLoginRoutes(app);
   registerMemoryRoutes(app);

@@ -2,12 +2,10 @@ import { router } from "expo-router";
 import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
-import { formatUsd } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Badge, Row, T, tap, type Tone } from "./ui";
 import { activityText, shortTime } from "@/lib/format";
 import { useRunActivity } from "@/lib/live";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's labels and tones (run-status.tsx). */
@@ -100,14 +98,12 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
   const live = isLiveRun(run);
   // Only a row that is working listens for what its agent does right now.
   const activity = useRunActivity(live ? run.id : undefined);
-  const spendTracking = useSpendTracking();
   const finished = run.status === "succeeded" || run.status === "failed" || run.status === "cancelled";
   const meta = [
     agent?.name ?? "Agent",
     TRIGGER_LABEL[run.trigger] ?? "Manual",
     shortTime(run.createdAt),
     finished && run.durationMs != null ? formatDuration(run.durationMs) : null,
-    spendTracking && run.costUsd ? formatUsd(run.costUsd) : null,
   ].filter(Boolean);
   const error = run.status === "failed" ? firstLine(run.error, 200) : "";
 

@@ -7,9 +7,8 @@ export const RUN_SHUT_DOWN = "Cancelled (Godmode shut down)";
 export const RUN_STOPPED_BY_USER = "Cancelled by user";
 export const RUN_CLI_MISSING = "Claude Code CLI not found. Install it from Settings → System.";
 export const RUN_MAX_TURNS = "Stopped after reaching the maximum number of turns.";
-export const RUN_COST_LIMIT = "Stopped: the run reached its cost budget.";
 
-export type RunEndKind = "interrupted" | "stopped" | "timeout" | "stalled" | "turns" | "budget" | "auth" | "cli" | "folder" | "vm" | "model" | "context";
+export type RunEndKind = "interrupted" | "stopped" | "timeout" | "stalled" | "turns" | "auth" | "cli" | "folder" | "vm" | "model" | "context";
 
 export interface RunEnd {
   kind: RunEndKind;
@@ -29,7 +28,6 @@ export function runEndOf(text: string): RunEnd | null {
   if (t.startsWith(RUN_MAX_TURNS)) return { kind: "turns" };
   if (t.startsWith(RUN_WATCHDOG)) return { kind: "stalled" };
   if (/prompt is too long|context (?:length|window)|conversation is too long/i.test(t)) return { kind: "context" };
-  if (t.startsWith(RUN_COST_LIMIT)) return { kind: "budget" };
   if (/^Claude Code is not signed in/.test(t) || /^(?:failed to authenticate: )?(?:invalid api key|authentication_error|oauth (?:token|session) (?:has )?expired|credit balance is too low)/i.test(t)) return { kind: "auth" };
   if (t.startsWith(RUN_CLI_MISSING)) return { kind: "cli" };
   if (/Pick another folder for this chat\.|Change the default folder in /.test(t)) return { kind: "folder" };

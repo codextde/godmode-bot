@@ -791,7 +791,6 @@ ${
     files: attachments,
     trigger: ticket ? "task" : "chat",
     source: ticket ? "task" : undefined,
-    byHuman: true,
   });
   return null;
 }

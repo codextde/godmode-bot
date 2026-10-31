@@ -82,7 +82,6 @@ function makeAgent(workspaceId: string | null, permissions: Partial<AgentPermiss
       secretAccess: "fill",
       credentialIds: null,
       totpIds: null,
-      maxBudgetUsd: null,
       ...permissions,
     },
     browser: { profileId: null, enabled: true, headless: null },

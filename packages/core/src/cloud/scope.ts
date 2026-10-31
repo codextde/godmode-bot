@@ -439,10 +439,6 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/license", "owner"],
   ["POST", "/api/license/refresh", "owner"],
   ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
-  // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
-  ["GET", "/api/spend", A],
-  ["GET", "/api/budgets", A],
-  ["POST", "/api/budgets/release", A],
 ];
 
 /** Writes a viewer may make: resolving a chat's files and looking at an agent's before a delete change nothing. */
