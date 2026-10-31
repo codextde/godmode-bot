@@ -96,6 +96,7 @@ export const qk = {
   artifactList: (workspaceId: string) => ["artifacts", "list", workspaceId],
   chatArtifacts: (conversationId: string) => ["artifacts", "chat", conversationId],
   artifact: (id: string) => ["artifacts", "one", id],
+  pullRequest: (url: string) => ["github", "pull", url],
   artifactVersions: (id: string) => ["artifacts", "versions", id],
   artifactVersion: (id: string, version: number) => ["artifacts", "version", id, version],
   mcpServers: ["mcp-servers"] as unknown[],

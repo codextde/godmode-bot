@@ -47,6 +47,7 @@ export function installExternalLinks() {
     (e) => {
       const a = e.target instanceof Element ? e.target.closest<HTMLAnchorElement>("a[href]") : null;
       if (!a || a.isContentEditable || a.hasAttribute("download")) return;
+      if (a.hasAttribute("data-gm-panel") && e.button === 0 && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) return;
       const external = a.protocol === "mailto:" || (/^https?:$/.test(a.protocol) && a.origin !== location.origin);
       if (!external && a.target !== "_blank") return;
       e.preventDefault();
