@@ -11,6 +11,7 @@ import { Button, EmptyState, ErrorState, Hairline, SkeletonRows, tap } from "@/c
 import { api, errorText } from "@/lib/api";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { useAgents } from "@/lib/hooks";
+import { useSettings } from "@/lib/setup";
 import { useRunCounts } from "@/lib/live";
 import { qk } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -79,6 +80,8 @@ export default function Agents() {
     },
     [counts],
   );
+  // A computer from before the switch has no activity setting: Activity stays.
+  const activityOn = useSettings().data?.activity?.enabled !== false;
   const newAgent = () => router.push({ pathname: "/settings/new", params: { kind: "agent", workspaceId: workspaceId ?? "" } });
 
   return (
@@ -87,7 +90,7 @@ export default function Agents() {
       <HeaderActions
         actions={[
           { icon: "clock", label: "Automations", onPress: () => router.push("/automations") },
-          { icon: "pulse", label: "Activity", onPress: () => router.push("/activity") },
+          ...(activityOn ? [{ icon: "pulse" as const, label: "Activity", onPress: () => router.push("/activity") }] : []),
         ]}
       />
       <FlashList

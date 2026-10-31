@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { updateSettings } from "../src/services/settings";
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
@@ -66,6 +67,7 @@ function pluginDirs(args: string[]): string[] {
 
 beforeAll(async () => {
   env = await setupEnv("godmode-plugins-git-");
+  updateSettings({ plugins: { enabled: true } });
   agent = await makeAgent({ name: "Coder" });
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
 });

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { updateSettings } from "../src/services/settings";
 import type { Agent, CardPurchase, PaymentCard } from "@godmode/shared";
 import { fills, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
 import * as vault from "../src/vault/vault";
@@ -66,6 +67,7 @@ const purchaseIdOf = (text: string) => /(pur_[A-Za-z0-9]+)/.exec(text)![1]!;
 
 beforeAll(async () => {
   env = await setupEnv("godmode-cards-");
+  updateSettings({ cards: { enabled: true } });
   await vault.setup(PASSPHRASE, false);
   buyer = await makeAgent({ name: "Buyer", browser: { enabled: true } });
   other = await makeAgent({ name: "Other", browser: { enabled: true } });

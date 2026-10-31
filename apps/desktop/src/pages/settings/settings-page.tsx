@@ -19,12 +19,15 @@ import {
   KeyRound,
   KeySquare,
   Laptop,
+  Logs,
   MessageCircle,
   MonitorUp,
   Phone,
   Plug,
+  Puzzle,
   RefreshCw,
   ScrollText,
+  Server,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -34,6 +37,7 @@ import {
 } from "lucide-react";
 import { EmptyState, PageBody, PageHeader } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
+import { ActivitySection } from "@/components/settings/activity-section";
 import { AiSection } from "@/components/settings/ai-section";
 import { AndroidSection } from "@/components/settings/android-section";
 import { ApiKeysSection } from "@/components/settings/api-keys-section";
@@ -42,12 +46,13 @@ import { BackupSection } from "@/components/settings/backup-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { BrowserSection } from "@/components/settings/browser-section";
 import { CallsSection } from "@/components/settings/calls-section";
+import { CardsSection } from "@/components/settings/cards-section";
 import { CleanupSection } from "@/components/settings/cleanup-section";
 import { CloudSection } from "@/components/settings/cloud-section";
 import { ComputerSection } from "@/components/settings/computer-section";
 import { ConnectSection } from "@/components/settings/connect-section";
 import { DevicesSection } from "@/components/settings/devices-section";
-import { FEATURES, featureOn } from "@/components/settings/feature-section";
+import { FEATURE_SECTION, FEATURES, featureOn } from "@/components/settings/feature-section";
 import { FilesSection } from "@/components/settings/files-section";
 import { GeneralSection } from "@/components/settings/general-section";
 import { InstructionsSection } from "@/components/settings/instructions-section";
@@ -57,7 +62,9 @@ import { LogsSection } from "@/components/settings/logs-section";
 import { MemorySection } from "@/components/settings/memory-section";
 import { MessagingSection } from "@/components/settings/messaging-section";
 import { PhoneSection } from "@/components/settings/phone-section";
+import { PluginsSection } from "@/components/settings/plugins-section";
 import { SecuritySection } from "@/components/settings/security-section";
+import { SshSection } from "@/components/settings/ssh-section";
 import { SystemSection } from "@/components/settings/system-section";
 import { VmSection } from "@/components/settings/vm-section";
 import { VoiceSection } from "@/components/settings/voice-section";
@@ -74,13 +81,17 @@ const SECTIONS = [
   { id: "instructions", label: "Instructions", icon: <ScrollText />, group: "Preferences" },
   { id: "browser", label: "Browser", icon: <Globe />, group: "Preferences" },
   { id: "computer", label: "Computer", icon: <MonitorUp />, group: "Preferences" },
-  { id: "vms", label: "Virtual machines", icon: <Box />, group: "Preferences" },
   { id: "voice", label: "Voice", icon: <AudioLines />, group: "Preferences" },
-  { id: "calls", label: "Phone calls", icon: <Phone />, group: "Preferences" },
   { id: "memory", label: "Memory", icon: <BrainCircuit />, group: "Preferences" },
+  { id: "activity", label: "Activity", icon: <Activity />, group: "Features" },
   { id: "artifacts", label: "Artifacts", icon: <AppWindow />, group: "Features" },
   { id: "integrations", label: "Integrations", icon: <Plug />, group: "Features" },
+  { id: "plugins", label: "Plugins", icon: <Puzzle />, group: "Features" },
   { id: "messaging", label: "Messaging", icon: <MessageCircle />, group: "Features" },
+  { id: "calls", label: "Phone calls", icon: <Phone />, group: "Features" },
+  { id: "cards", label: "Cards", icon: <CreditCard />, group: "Features" },
+  { id: "vms", label: "Virtual machines", icon: <Box />, group: "Features" },
+  { id: "ssh", label: "SSH servers", icon: <Server />, group: "Features" },
   { id: "android", label: "Android phones", icon: <Smartphone />, group: "Features" },
   { id: "files", label: "Files", icon: <FolderOpen />, group: "Data & privacy" },
   { id: "api-keys", label: "API keys", icon: <KeyRound />, group: "Data & privacy" },
@@ -94,7 +105,7 @@ const SECTIONS = [
   { id: "billing", label: "Billing", icon: <CreditCard />, group: "App" },
   { id: "system", label: "System", icon: <HeartPulse />, group: "App" },
   { id: "cleanup", label: "Cleanup", icon: <BroomSparkles />, group: "App" },
-  { id: "logs", label: "Logs", icon: <Activity />, group: "App" },
+  { id: "logs", label: "Logs", icon: <Logs />, group: "App" },
   { id: "about", label: "About", icon: <Info />, group: "App" },
 ] as const satisfies readonly { id: string; label: string; icon: ReactNode; group: string }[];
 
@@ -109,9 +120,14 @@ const EASY: Partial<Record<SectionId, { label: string; group: string }>> = {
   voice: { label: "Voice", group: "Everyday" },
   calls: { label: "Phone calls", group: "Everyday" },
   phone: { label: "Phone app", group: "Everyday" },
+  activity: { label: "History", group: "Extras" },
   artifacts: { label: "Dashboards & apps", group: "Extras" },
   integrations: { label: "Connected apps", group: "Extras" },
+  plugins: { label: "Add-ons", group: "Extras" },
   messaging: { label: "Chat apps", group: "Extras" },
+  cards: { label: "Payment cards", group: "Extras" },
+  vms: { label: "Virtual machines", group: "Extras" },
+  ssh: { label: "Servers", group: "Extras" },
   android: { label: "Android phones", group: "Extras" },
   security: { label: "Security", group: "Account" },
   backup: { label: "Backup", group: "Account" },
@@ -162,6 +178,10 @@ export default function SettingsPage() {
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
       vms: () => <VmSection settings={s} />,
+      activity: () => <ActivitySection settings={s} />,
+      plugins: () => <PluginsSection settings={s} />,
+      cards: () => <CardsSection settings={s} />,
+      ssh: () => <SshSection settings={s} />,
       artifacts: () => <ArtifactsSection settings={s} />,
       integrations: () => <IntegrationsSection settings={s} />,
       messaging: () => <MessagingSection settings={s} />,
@@ -219,7 +239,7 @@ function useMarks(): Marks {
   const { data: boot } = useBootstrap();
   if (!boot) return {};
   const marks: Marks = {};
-  for (const feature of FEATURES) if (!featureOn(boot.settings, feature)) marks[feature] = <span className="text-[11px] text-muted-foreground/70">Off</span>;
+  for (const feature of FEATURES) if (!featureOn(boot.settings, feature)) marks[FEATURE_SECTION[feature] as SectionId] = <span className="text-[11px] text-muted-foreground/70">Off</span>;
   const requests = featureOn(boot.settings, "messaging") ? boot.counts.messagingRequests : 0;
   if (requests)
     marks.messaging = (

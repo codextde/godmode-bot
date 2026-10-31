@@ -652,7 +652,7 @@ const CARD_FILL: Record<CardField, { kind: CardFillKind; label: string }> = {
 };
 
 /** Paying with a card: the agent has one, and the run is real work (not a condition check or a dream). */
-const mayPay = (agent: Agent, ctx: RunContext) => !isCheckRun(ctx) && hasCardsForAgent(agent);
+const mayPay = (agent: Agent, ctx: RunContext) => getSettings().cards.enabled && !isCheckRun(ctx) && hasCardsForAgent(agent);
 
 /** Cards are typed only into Godmode's own browser on this computer, never into a VM (its shell could read the page). */
 function cardBrowser(agent: Agent, ctx: RunContext): { profileId: string; conversationId: string } {
@@ -926,6 +926,8 @@ const canArtifact = (_agent: Agent, ctx: RunContext) =>
   getSettings().artifacts.enabled && config().role !== "runner" && !!ctx.conversationId && !isCheckRun(ctx) && !isDreamRun(ctx);
 
 const androidOn = () => getSettings().android.enabled;
+const pluginsOn = () => getSettings().plugins.enabled;
+const vmsOn = () => getSettings().vm.enabled;
 
 /** Agents change their own artifacts; managers anyone's. */
 function artifactRefusal(agent: Agent, id: string): string | null {
@@ -3255,7 +3257,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     description:
       "List the Claude Code plugins installed in Godmode (the Plugins page): whole plugins installed from a git repository (skills, subagents, commands, hooks, MCP servers — with their repository, commit and whether an update waits) and small plugins of TypeScript hooks that run inside every turn (they block or rewrite tool calls, rewrite prompts, mask tool output, post notes). For each: whether it is switched on, whose runs load it, and what Claude Code's validator said. With `plugin` (an id or name) the answer includes its files (for one from a repository: its manifest and hooks).",
     schema: z.object({ plugin: z.string().max(100).optional().describe("A plugin's id or name: return it with its files") }),
-    when: isManager,
+    when: (agent) => isManager(agent) && pluginsOn(),
     run: ({ plugin }) => {
       if (plugin) {
         const found = findMod(plugin);
@@ -3274,7 +3276,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       ref: z.string().max(200).optional().describe("Branch or tag to follow; default: the repository's default branch"),
       plugin: z.string().max(100).optional().describe("The plugin's name when the repository holds several"),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && pluginsOn(),
     run: async ({ source, ref, plugin }, { agent }) => {
       let saved: Mod;
       try {
@@ -3303,7 +3305,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
         .optional()
         .describe('"all", or the ids or names of the agents whose runs load it'),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && pluginsOn(),
     run: async ({ plugin, enabled, runsFor }, { agent, ctx }) => {
       if (lockedVm(ctx)) return fail("This task runs in a virtual machine and is kept off the human's computer, and plugins load into every agent's runs there — only the human changes them.");
       if (enabled === undefined && runsFor === undefined) return fail("Say what to change: `enabled`, `runsFor` or both.");
@@ -3372,7 +3374,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       description: z.string().max(500).optional().describe("One sentence: what the plugin does"),
       files: z.record(z.string().max(200), z.string()).describe("Every file of the plugin, path → text"),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && pluginsOn(),
     run: async ({ plugin, title, description, files }, { agent }) => {
       const actor = `agent:${agent.id}`;
       const existing = plugin ? findMod(plugin) : null;
@@ -3470,7 +3472,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     description:
       "macOS virtual machines on this computer (isolated Macs agents can work in): id, name, state, image, resources and who uses them. Also whether VMs work here and which images are downloaded.",
     schema: z.object({}),
-    when: isManager,
+    when: (agent) => isManager(agent) && vmsOn(),
     run: async () => {
       const [status, vms] = await Promise.all([vmStatus(), listVms()]);
       if (!status.supported) return `Virtual machines are not available here: ${status.reason}`;
@@ -3494,7 +3496,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       memoryGb: z.number().int().min(2).max(1024).optional(),
       start: z.boolean().optional().describe("Start it once it's ready"),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && vmsOn(),
     run: async ({ memoryGb, ...input }, { agent }) => {
       const vm = await createVm({ ...input, memoryMb: memoryGb ? memoryGb * 1024 : undefined }, `agent:${agent.id}`);
       return json(vmSummary(vm));
@@ -3511,7 +3513,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
       target: z.enum(["agent", "workspace", "this_chat"]),
       id: z.string().optional().describe("Agent or workspace id (not needed for this_chat)"),
     }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && vmsOn(),
     run: async ({ vmId, target, id }, { agent, ctx }) => {
       if (target !== "this_chat" && !id) return fail(`Pass the ${target}'s id.`);
       if (target === "this_chat" && !ctx.conversationId) return fail("There is no chat here: assign the VM to an agent or a workspace.");
@@ -3573,7 +3575,7 @@ Make it look like a polished 2026 product: clean layout, real hierarchy, readabl
     name: "vm_power",
     description: "Start, stop or suspend a VM. Runs that use a VM start it on their own; starting takes about a minute. macOS runs at most two VMs at once.",
     schema: z.object({ vmId: z.string(), action: z.enum(["start", "stop", "suspend"]) }),
-    when: managesSetup,
+    when: (agent) => managesSetup(agent) && vmsOn(),
     run: async ({ vmId, action }, { agent }) => {
       if (action === "start") {
         await startVm(vmId);
