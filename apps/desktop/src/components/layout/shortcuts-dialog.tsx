@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/common";
-import { modKey } from "@/lib/desktop";
+import { altKey, modKey } from "@/lib/desktop";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { useUi } from "@/stores/ui";
 
@@ -26,8 +26,9 @@ const GROUPS: { title: string; rows: { keys: ReactNode[]; what: string }[] }[] =
       { keys: [`${modKey}N`], what: "New chat" },
       { keys: ["⇧", `${modKey}N`], what: "New private chat (nothing is saved)" },
       { keys: [`${modKey}B`], what: "Show or hide the sidebar" },
-      { keys: [`${modKey}1–9`], what: "Switch to a workspace (in A–Z order)" },
-      { keys: [`${modKey}0`], what: "All workspaces" },
+      { keys: [`${modKey}1–9`], what: `Open the 1st–9th chat in the sidebar (hold ${modKey} to see the numbers)` },
+      { keys: [`${altKey}${modKey}1–9`], what: "Switch to a workspace (in A–Z order)" },
+      { keys: [`${altKey}${modKey}0`], what: "All workspaces" },
       { keys: [`${modKey},`], what: "Settings" },
       { keys: [THEME_SHORTCUT], what: "Light or dark mode" },
       { keys: ["?"], what: "This list" },

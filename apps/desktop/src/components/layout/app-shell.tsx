@@ -14,7 +14,6 @@ import {
   KeyRound,
   Lock,
   MessageSquarePlus,
-  MessagesSquare,
   PanelLeft,
   PanelLeftClose,
   PanelLeftOpen,
@@ -42,12 +41,11 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Logo, Wordmark } from "@/components/brand";
+import { Logo } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
@@ -117,6 +115,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setCommandOpen = useUi((s) => s.setCommandOpen);
   const { toggle: toggleTheme } = useTheme();
   const collapsed = useUi((s) => s.sidebarCollapsed);
+  const sidebarWidth = useUi((s) => s.sidebarWidth);
+  const [resizing, setResizing] = useState(false);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useRunningCount();
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -190,7 +190,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Pages of features the human turned off leave the sidebar (Settings → Features turns them on again).
   const shown = (item: NavItem) => pageOn(boot?.settings, item.to);
-  const chatItem: NavItem = { to: "/", label: "Chat", icon: <MessagesSquare />, end: true };
   const workNav: NavItem[] = [
     { to: "/inbox", label: "Needs you", icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: "Agent tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
@@ -236,55 +235,59 @@ export function AppShell({ children }: { children: ReactNode }) {
     <SidebarProvider
       open={compact ? peek : !collapsed}
       onOpenChange={(open) => (compact ? setPeek(open) : setCollapsed(!open))}
-      className="h-svh min-h-0 overflow-hidden"
+      className={cn(
+        "h-svh min-h-0 overflow-hidden",
+        resizing && "cursor-col-resize select-none [&_[data-slot=sidebar-container]]:transition-none [&_[data-slot=sidebar-gap]]:transition-none",
+      )}
       // The macOS traffic lights reach 72px in; widen the icon rail so they never sit on top of a page.
-      style={isTauri && isMac ? ({ "--sidebar-width-icon": "5rem" } as CSSProperties) : undefined}
+      style={
+        {
+          ...(isTauri && isMac ? { "--sidebar-width-icon": "5rem" } : {}),
+          ...(sidebarWidth ? { "--sidebar-width": `${sidebarWidth}px` } : {}),
+        } as CSSProperties
+      }
     >
       <Sidebar collapsible="icon" variant="sidebar">
-        <SidebarHeader className={cn("gap-3 px-3 pt-3 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-10")} data-tauri-drag-region>
-          <div className="relative flex items-center justify-between px-1 group-data-[collapsible=icon]:justify-center" data-tauri-drag-region>
-            <Link to="/" className="no-drag">
-              <Wordmark className="group-data-[collapsible=icon]:[&>div:last-child]:hidden" />
+        <SidebarHeader
+          className={cn("gap-2 px-3 pt-2 pb-1 group-data-[collapsible=icon]:items-center", isTauri && isMac && "pt-[15px] group-data-[collapsible=icon]:pt-10")}
+          data-tauri-drag-region
+        >
+          <div
+            className={cn("relative flex h-7 items-center gap-0.5 group-data-[collapsible=icon]:justify-center", isTauri && isMac && "pl-16 group-data-[collapsible=icon]:pl-0")}
+            data-tauri-drag-region
+          >
+            <Link to="/" className={cn("no-drag rounded-md", isTauri && isMac && "hidden group-data-[collapsible=icon]:block")} aria-label="Godmode home">
+              <Logo className="size-6" />
             </Link>
+            <div className="flex-1 self-stretch group-data-[collapsible=icon]:hidden" data-tauri-drag-region />
+            <SearchButton className="group-data-[collapsible=icon]:hidden" />
             <SidebarToggle />
           </div>
-          <WorkspaceSwitcher />
-          <div className="flex gap-2 group-data-[collapsible=icon]:flex-col">
+          <div className="-mx-1 group-data-[collapsible=icon]:mx-0">
+            <WorkspaceSwitcher />
+          </div>
+          <div className="-mx-1 flex gap-1.5 group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:flex-col">
             <Button
               asChild
-              className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+              variant="ghost"
+              className="h-8 flex-1 justify-start gap-2.5 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-foreground has-[>svg]:px-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
             >
               <Link to="/">
-                <MessageSquarePlus className="size-4" />
+                <MessageSquarePlus className="size-4 text-muted-foreground" />
                 <span className="group-data-[collapsible=icon]:hidden">New chat</span>
-                <kbd className="ml-auto font-mono text-[10px] tracking-wide opacity-55 group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
+                <kbd className="ml-auto font-mono text-[10px] tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
               </Link>
             </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" size="icon" className="size-9 shrink-0 group-data-[collapsible=icon]:size-8" onClick={() => setCommandOpen(true)}>
-                  <Search className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Search & commands ({modKey}K)</TooltipContent>
-            </Tooltip>
+            <SearchButton className="hidden group-data-[collapsible=icon]:inline-flex" />
           </div>
         </SidebarHeader>
 
         <SidebarContent>
-          <NavSection
-            id="work"
-            label="Work"
-            items={[chatItem, ...workItems.filter((item) => !hiddenNav.includes(item.to))]}
-            action={<EditSidebarButton items={workItems} />}
-            defaultOpen
-          />
+          <NavSection id="work" label="Work" items={workItems.filter((item) => !hiddenNav.includes(item.to))} bare />
           {easy ? (
-            <NavSection id="more" label="More" items={easyMore} folded="list" />
+            <NavSection id="more" label="More" items={easyMore} folded="list" action={<EditSidebarButton items={workItems} />} />
           ) : (
-            <>
-              <NavSection id="machines" label="Machines" items={machineNav.filter(shown)} />
-            </>
+            <NavSection id="machines" label="Machines" items={machineNav.filter(shown)} action={<EditSidebarButton items={workItems} />} />
           )}
           <RecentChats />
         </SidebarContent>
@@ -297,7 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>
-        <SidebarRail />
+        <ResizeRail onResizing={setResizing} />
       </Sidebar>
 
       <SidebarInset className="group/inset relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
@@ -317,6 +320,90 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
+const SIDEBAR_MIN = 208;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 256;
+
+function ResizeRail({ onResizing }: { onResizing: (resizing: boolean) => void }) {
+  const { state, isMobile, toggleSidebar } = useSidebar();
+  const setWidth = useUi((s) => s.setSidebarWidth);
+  if (isMobile) return null;
+  const expanded = state === "expanded";
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const container = e.currentTarget.closest<HTMLElement>("[data-slot=sidebar-container]");
+    const startWidth = container?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
+    let dragged = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (!dragged && Math.abs(dx) < 4) return;
+      if (!dragged) {
+        dragged = true;
+        onResizing(true);
+      }
+      if (!expanded) {
+        if (dx > 24) {
+          toggleSidebar();
+          cleanup();
+        }
+        return;
+      }
+      const next = startWidth + dx;
+      if (next < SIDEBAR_MIN - 64) {
+        toggleSidebar();
+        cleanup();
+        return;
+      }
+      setWidth(Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next))));
+    };
+    const up = () => {
+      if (!dragged) toggleSidebar();
+      cleanup();
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onResizing(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <button
+      type="button"
+      data-sidebar="rail"
+      tabIndex={-1}
+      aria-label={expanded ? "Resize sidebar" : "Expand sidebar"}
+      title={expanded ? "Drag to resize · click to collapse" : "Click to expand"}
+      onPointerDown={onPointerDown}
+      className="absolute inset-y-0 -right-2 z-20 hidden w-4 cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:transition-colors hover:after:bg-sidebar-border sm:flex"
+    />
+  );
+}
+
+function SearchButton({ className }: { className?: string }) {
+  const setCommandOpen = useUi((s) => s.setCommandOpen);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className={cn("no-drag size-7 text-muted-foreground hover:text-foreground", className)}
+          aria-label="Search and commands"
+          aria-keyshortcuts={isMac ? "Meta+K" : "Control+K"}
+          onClick={() => setCommandOpen(true)}
+        >
+          <Search className="size-4" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">Search & commands ({modKey}K)</TooltipContent>
+    </Tooltip>
+  );
+}
+
 function SidebarToggle() {
   const { open, isMobile, toggleSidebar } = useSidebar();
   const expanded = isMobile || open;
@@ -327,7 +414,7 @@ function SidebarToggle() {
       variant="ghost"
       size="icon-sm"
       className={cn(
-        "size-7 text-muted-foreground hover:text-foreground",
+        "no-drag size-7 text-muted-foreground hover:text-foreground",
         // The rail has no room for another row: the button takes the logo's place while the rail is hovered or it has focus.
         !expanded &&
           "absolute top-1/2 left-1/2 -translate-1/2 bg-sidebar opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100",
@@ -413,6 +500,7 @@ function NavSection({
   folded = "icons",
   defaultOpen = false,
   action,
+  bare = false,
 }: {
   id: string;
   label: string;
@@ -420,6 +508,7 @@ function NavSection({
   folded?: "icons" | "list";
   defaultOpen?: boolean;
   action?: ReactNode;
+  bare?: boolean;
 }) {
   const expanded = useUi((s) => (defaultOpen ? !s.collapsedNav.includes(id) : s.expandedNav.includes(id)));
   const toggle = useUi((s) => (defaultOpen ? s.toggleNavCollapsed : s.toggleNavSection));
@@ -427,10 +516,10 @@ function NavSection({
   const railed = state === "collapsed" && !isMobile;
   const { pathname } = useLocation();
   const listId = `nav-section-${id}`;
-  const open = expanded || railed;
+  const open = bare || expanded || railed;
   const toggleButton = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
   const header = action ? (
-    <div className="group/section flex min-w-0 items-center justify-between gap-1 pr-1">
+    <div className="group/section flex min-w-0 flex-1 items-center justify-between gap-1 pr-1">
       {toggleButton}
       {action}
     </div>
@@ -439,8 +528,8 @@ function NavSection({
   );
   if (open)
     return (
-      <SidebarGroup className="py-1">
-        {header}
+      <SidebarGroup className={cn("py-1", bare && "pt-0")}>
+        {!bare && header}
         <SidebarGroupContent id={listId}>
           <SidebarMenu className="group-data-[collapsible=icon]:items-center">
             {items.map((item) => (
@@ -454,7 +543,7 @@ function NavSection({
     const current = items.find((item) => isActive(item, pathname));
     const waiting = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
     return (
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="py-0">
         <div className="flex items-center justify-between gap-1">
           {header}
           {waiting > 0 && <span className="mr-2 size-1.5 rounded-full bg-brand" aria-label={`${waiting} waiting`} />}
@@ -513,7 +602,7 @@ function NavMenuItem({ item }: { item: NavItem }) {
         asChild
         isActive={active}
         tooltip={item.label}
-        className="h-8 gap-2.5 text-[13.5px] text-sidebar-foreground/85 [&>svg]:size-4 [&>svg]:text-muted-foreground data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border data-[active=true]:[&>svg]:text-foreground"
+        className="h-7 gap-2.5 text-[13px] text-sidebar-foreground/85 [&>svg]:size-4 [&>svg]:text-muted-foreground data-[active=true]:bg-card data-[active=true]:font-medium data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border data-[active=true]:[&>svg]:text-foreground"
       >
         <NavLink to={item.to} end={item.end}>
           {item.icon}
