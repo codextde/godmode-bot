@@ -880,7 +880,11 @@
       "pickedUpAgain": "Wieder aufgenommen",
       "continuedWhereStopped": "Dort fortgesetzt, wo es aufgehört hat",
       "triedAgain": "Erneut versucht",
-      "secretsMasked": "Gespeicherte Geheimnisse bleiben maskiert"
+      "secretsMasked": "Gespeicherte Geheimnisse bleiben maskiert",
+      "unfinished": {
+        "continue": "Fortgesetzt: Der letzte Durchgang endete, bevor die Arbeit fertig war",
+        "again": "Erneut gesendet: Der letzte Durchgang endete, bevor die Arbeit fertig war"
+      }
     },
     "moved": "Von {{from}} nach {{to}} verschoben",
     "continuedThere": "Dort fortgesetzt",

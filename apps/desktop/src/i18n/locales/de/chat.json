@@ -601,6 +601,10 @@
       "background": {
         "continue": "Fortgesetzt, nachdem Hintergrundarbeit gestoppt wurde",
         "again": "Erneut gesendet, nachdem Hintergrundarbeit gestoppt wurde"
+      },
+      "unfinished": {
+        "continue": "Fortgesetzt: Der letzte Durchgang endete, bevor die Arbeit fertig war",
+        "again": "Erneut gesendet: Der letzte Durchgang endete, bevor die Arbeit fertig war"
       }
     },
     "continuedWhereStopped": "Dort fortgesetzt, wo es aufgehört hat",

@@ -1128,7 +1128,7 @@ interface Worktree {
 const TYPE_BRIEF: Record<TaskType, string> = {
   general: "Do the task and finish with a short summary of what you did and anything the human should check.",
   research:
-    "Research this thoroughly and answer with a well-structured report in Markdown: the key findings first, then details, sources (with links) and a recommendation where it helps.",
+    "Answer the question with a Markdown report sized to it: the key findings first, then only the detail needed to act on them, sources (with links) and a recommendation where it helps. Keep it to about one screen unless the task asks for depth.",
   coding: [
     "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
     "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
