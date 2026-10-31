@@ -6,12 +6,13 @@
  */
 import { readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { ClaudeReleaseChannel, ClaudeUpdateResult, ClaudeUpdateStatus } from "@godmode/shared";
 import { logger } from "../log";
 import { getModelCatalog } from "../runner/models";
 import { childEnv, now } from "../util";
 import { resetDoctorCache, resolveClaudeBinary, runCommand, stripAnsi, toolPath, versionFrom } from "./doctor";
+import { expandHome } from "./folders";
 
 const log = logger("claude-update");
 
@@ -37,6 +38,20 @@ export function compareVersions(a: string, b: string): number {
 /** Where Claude Code keeps its settings, sign-in and sessions. */
 export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+}
+
+let appliedConfigDir = "";
+let inheritedConfigDir: string | undefined;
+
+export function applyClaudeConfigDir(setting: string): boolean {
+  const custom = setting.trim();
+  if (custom === appliedConfigDir) return false;
+  if (!appliedConfigDir) inheritedConfigDir = process.env.CLAUDE_CONFIG_DIR;
+  appliedConfigDir = custom;
+  const next = custom ? resolve(expandHome(custom)) : inheritedConfigDir;
+  if (next) process.env.CLAUDE_CONFIG_DIR = next;
+  else delete process.env.CLAUDE_CONFIG_DIR;
+  return true;
 }
 
 function claudeSettings(): { autoUpdatesChannel?: unknown; env?: Record<string, unknown> } {

@@ -7,7 +7,6 @@
  * sign-in ran out, so the mark is what the doctor, the banner and the chats go by until a sign-in or a run that works.
  */
 import { statSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ClaudeLoginStatus } from "@godmode/shared";
 import { config } from "../config";
@@ -16,6 +15,7 @@ import { bus } from "../events/bus";
 import { logger } from "../log";
 import { computerName } from "../mobile/devices";
 import { childEnv, now, parseJson } from "../util";
+import { claudeConfigDir } from "./claudeUpdate";
 import { resetDoctorCache, resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
 import { notify } from "./notifications";
 
@@ -90,7 +90,7 @@ function setSignedOut(next: SignedOut | null) {
 async function credentialsStamp(): Promise<string> {
   const parts: string[] = [];
   try {
-    parts.push(String(statSync(join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), ".credentials.json")).mtimeMs));
+    parts.push(String(statSync(join(claudeConfigDir(), ".credentials.json")).mtimeMs));
   } catch {
     /* none on disk */
   }
