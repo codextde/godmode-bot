@@ -324,6 +324,7 @@
     "running_one": "{{count}} läuft",
     "running_other": "{{count}} laufen",
     "markAllRead": "Alle als gelesen markieren",
+    "menu": { "markRead": "Als gelesen markieren", "markUnread": "Als ungelesen markieren", "pin": "Anheften", "unpin": "Lösen", "failed": "Der Chat konnte nicht geändert werden" },
     "failedHere": "Hier ist etwas schiefgelaufen",
     "newReply": "Neue Antwort",
     "archiveLabel": "„{{title}}“ archivieren",

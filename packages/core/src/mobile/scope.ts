@@ -69,7 +69,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/models$/],
 
   ["GET", /^\/api\/conversations$/],
-  ["POST", /^\/api\/conversations\/read$/],
+  ["POST", /^\/api\/conversations\/(read|unread)$/],
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],

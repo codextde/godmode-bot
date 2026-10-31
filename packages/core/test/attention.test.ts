@@ -5,7 +5,7 @@ import { insert, run as sql } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { deviceMayCall } from "../src/mobile/scope";
 import { getRun, waitForRun } from "../src/runner/runner";
-import { getConversation, markConversationsRead, sendMessage, startChat } from "../src/services/conversations";
+import { getConversation, markConversationsRead, markConversationsUnread, sendMessage, startChat } from "../src/services/conversations";
 import { createRoutine } from "../src/services/routines";
 import { listNotifications } from "../src/services/notifications";
 import { listAttention } from "../src/services/attention";
@@ -47,6 +47,23 @@ describe("unread chats and their notices", () => {
       body: JSON.stringify({ ids: "all" }),
     });
     expect(await res.json()).toEqual({ read: 0 });
+  }, 30_000);
+
+  test("mark as unread brings back the latest run until the chat is read again", async () => {
+    const chat = await startChat({ agentId: agent.id, content: "Say hello", title: "Later" });
+    await waitForRun(chat.run.id, 20_000);
+    await until(() => !!getConversation(chat.conversation.id).unread, 5_000, "the chat to be unread");
+    markConversationsRead([chat.conversation.id]);
+    const res = await fetch(`${env.baseUrl}/api/conversations/unread`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${getAccessToken()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [chat.conversation.id, "cnv_missing"] }),
+    });
+    expect(await res.json()).toEqual({ unread: 1 });
+    expect(getConversation(chat.conversation.id).unread).toEqual({ runId: chat.run.id, failed: false });
+    expect(markConversationsUnread([chat.conversation.id])).toBe(0);
+    expect(deviceMayCall("POST", "/api/conversations/unread")).toBe(true);
+    expect(markConversationsRead([chat.conversation.id])).toBe(1);
   }, 30_000);
 
   test("a failed chat run is on the list until the chat is read", async () => {
