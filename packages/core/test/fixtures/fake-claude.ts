@@ -9,6 +9,7 @@
  *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
  *   BG_STOPPED  replay stream-background-stopped.jsonl → a subagent's background commands killed after the last result
  *              (so does Godmode's note about them, "Background work was stopped …")
+ *   NAME_CHAT   as the first message of a chat: the title request answers "Named by Haiku." (other title requests fail)
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   BIG_CONTEXT  one answer whose message fills 421.6k tokens of a 1M window
  *   LOGIN_FAIL  answer with a login-failure sentence
@@ -269,6 +270,11 @@ const prompt = await new Response(Bun.stdin.stream()).text();
 if (prompt.includes("Decide whether it stopped early")) {
   const verdict = /<final-message[^>]*>[\s\S]*NOT_DONE_YET/.test(prompt) ? "UNFINISHED" : "FINISHED";
   process.stdout.write(JSON.stringify([{ type: "result", subtype: "success", is_error: false, result: verdict }]) + "\n");
+  process.exit(0);
+}
+if (prompt.includes("Name the chat for a sidebar list")) {
+  const named = /<message[^>]*>[\s\S]*NAME_CHAT/.test(prompt);
+  process.stdout.write(JSON.stringify([{ type: "result", subtype: "success", is_error: !named, result: named ? '"Named by Haiku."' : "" }]) + "\n");
   process.exit(0);
 }
 const resume = argValue("--resume");
