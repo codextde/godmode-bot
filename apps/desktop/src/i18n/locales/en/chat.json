@@ -1058,8 +1058,6 @@
     "trySomething": "Try something like",
     "hideSuggestions": "Hide suggestions",
     "suggestionsHidden": "Suggestions hidden",
-    "hideSuggestion": "Hide this suggestion",
-    "suggestionHidden": "Suggestion hidden",
     "hint": {
       "send": "send",
       "dropAnywhere": "drop files anywhere",

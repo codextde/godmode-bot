@@ -4,7 +4,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { ArrowRight, BedDouble, Bell, CalendarClock, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -114,14 +115,10 @@ export default function ChatHome() {
   const voiceMode = useUi((s) => s.voiceMode);
   const hideSuggestions = useUi((s) => s.hideSuggestions);
   const setHideSuggestions = useUi((s) => s.setHideSuggestions);
-  const hiddenSuggestions = useUi((s) => s.hiddenSuggestions);
-  const setSuggestionHidden = useUi((s) => s.setSuggestionHidden);
-  const hideSuggestion = (key: string) => {
-    setSuggestionHidden(key, true);
-    toast(t("home.suggestionHidden"), { action: { label: t("common:actions.undo"), onClick: () => setSuggestionHidden(key, false) } });
+  const hideAllSuggestions = () => {
+    setHideSuggestions(true);
+    toast(t("home.suggestionsHidden"), { action: { label: t("common:actions.undo"), onClick: () => setHideSuggestions(false) } });
   };
-  const suggestions = SUGGESTIONS.filter((s) => !hiddenSuggestions.includes(s.text));
-  const easySuggestions = EASY_SUGGESTIONS.filter((s) => !hiddenSuggestions.includes(s.text));
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -355,66 +352,48 @@ export default function ChatHome() {
           </AnimatePresence>
         </motion.div>
 
-        {privateChat ? null : easy ? (
-          hideSuggestions || !easySuggestions.length ? null : (
+        {privateChat || hideSuggestions ? null : easy ? (
+          <SuggestionsMenu label={t("home.hideSuggestions")} onHide={hideAllSuggestions}>
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="eyebrow">{t("home.trySomething")}</h2>
-              <button
-                type="button"
-                aria-label={t("home.hideSuggestions")}
-                title={t("home.hideSuggestions")}
-                onClick={() => {
-                  setHideSuggestions(true);
-                  toast(t("home.suggestionsHidden"), { action: { label: t("common:actions.undo"), onClick: () => setHideSuggestions(false) } });
-                }}
-                className="-my-1 grid size-6 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-              >
-                <X className="size-3.5" />
-              </button>
+              <SuggestionsDismiss label={t("home.hideSuggestions")} onClick={hideAllSuggestions} />
             </div>
             <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
-              {easySuggestions.map(({ icon: Icon, text, prompt }) => (
-                <div
+              {EASY_SUGGESTIONS.map(({ icon: Icon, text, prompt }) => (
+                <button
                   key={text}
-                  className="group relative flex rounded-xl border bg-card text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float has-[button:focus-visible]:ring-[3px] has-[button:focus-visible]:ring-ring/50"
+                  type="button"
+                  onClick={() => composerRef.current?.setText(t(prompt ?? text))}
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
-                  <button
-                    type="button"
-                    onClick={() => composerRef.current?.setText(t(prompt ?? text))}
-                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl p-3 pr-8 text-left focus-visible:outline-none"
-                  >
-                    <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
-                      <Icon className="size-3.5" />
-                    </span>
-                    <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{t(text)}</span>
-                  </button>
-                  <SuggestionDismiss label={t("home.hideSuggestion")} onClick={() => hideSuggestion(text)} className="absolute top-2 right-2" />
-                </div>
+                  <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
+                    <Icon className="size-3.5" />
+                  </span>
+                  <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{t(text)}</span>
+                </button>
               ))}
             </div>
           </motion.div>
-          )
-        ) : suggestions.length ? (
-          <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
-            {suggestions.map(({ icon: Icon, text }) => (
-              <div
+          </SuggestionsMenu>
+        ) : (
+          <SuggestionsMenu label={t("home.hideSuggestions")} onHide={hideAllSuggestions}>
+          <motion.div {...fade(0.18)} className="group/suggestions relative mt-4 flex flex-wrap items-center justify-center gap-2">
+            {SUGGESTIONS.map(({ icon: Icon, text }) => (
+              <button
                 key={text}
-                className="group flex items-center rounded-md border bg-card text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground has-[button:focus-visible]:ring-[3px] has-[button:focus-visible]:ring-ring/50"
+                type="button"
+                onClick={() => composerRef.current?.setText(t(text))}
+                className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
-                <button
-                  type="button"
-                  onClick={() => composerRef.current?.setText(t(text))}
-                  className="flex items-center gap-2 rounded-md py-1.5 pr-1 pl-3 focus-visible:outline-none"
-                >
-                  <Icon className="size-3.5 transition group-hover:text-foreground" />
-                  {t(text)}
-                </button>
-                <SuggestionDismiss label={t("home.hideSuggestion")} onClick={() => hideSuggestion(text)} className="mr-1" />
-              </div>
+                <Icon className="size-3.5 transition group-hover:text-foreground" />
+                {t(text)}
+              </button>
             ))}
+            <SuggestionsDismiss label={t("home.hideSuggestions")} onClick={hideAllSuggestions} />
           </motion.div>
-        ) : null}
+          </SuggestionsMenu>
+        )}
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
@@ -465,19 +444,31 @@ export default function ChatHome() {
   );
 }
 
-function SuggestionDismiss({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
+/** Right-click on the suggestions: the same as their X. */
+function SuggestionsMenu({ label, onHide, children }: { label: string; onHide: () => void; children: React.ReactNode }) {
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onSelect={onHide}>
+          <EyeOff />
+          {label}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function SuggestionsDismiss({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={cn(
-        "grid size-5 shrink-0 place-items-center rounded text-muted-foreground/60 transition hover:bg-muted hover:text-foreground focus-visible:text-foreground focus-visible:outline-none",
-        className,
-      )}
+      className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground/60 transition hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
-      <X className="size-3" />
+      <X className="size-3.5" />
     </button>
   );
 }
