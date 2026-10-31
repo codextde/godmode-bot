@@ -3,9 +3,9 @@ import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { EFFORT_LABELS, findModel, type InterfaceMode, type Theme } from "@godmode/shared";
+import { EFFORT_LABELS, PALETTES, PALETTE_DEFS, findModel, type InterfaceMode, type Palette, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { ChoiceRow, FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, FieldRow, Group, LinkRow, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
@@ -31,6 +31,8 @@ const THEME_OPTIONS = [
   { value: "system", label: "System" },
 ] as const satisfies readonly { value: Theme; label: string }[];
 
+const PALETTE_OPTIONS = PALETTES.map((value) => ({ value, label: PALETTE_DEFS[value].label, detail: PALETTE_DEFS[value].blurb }));
+
 const MODE_OPTIONS = [
   { value: "easy", label: "Easy" },
   { value: "pro", label: "Professional" },
@@ -46,6 +48,7 @@ export default function Settings() {
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
+  const palette = useAppearance((s) => s.palette);
   const status = useLive((s) => s.status);
   const linked = useLive((s) => s.computer);
   const preferredAway = useLive((s) => s.preferredAway);
@@ -152,6 +155,18 @@ export default function Settings() {
             onChange={(next) => {
               useAppearance.getState().setTheme(next);
               void patchSettings({ general: { theme: next } });
+            }}
+          />
+        ) : null}
+        {s ? (
+          <PickerRow
+            title="Palette"
+            detail="Colours for both sides, light and dark."
+            options={PALETTE_OPTIONS}
+            value={palette}
+            onChange={(next: Palette) => {
+              useAppearance.getState().setPalette(next);
+              void patchSettings({ general: { palette: next } });
             }}
           />
         ) : null}
