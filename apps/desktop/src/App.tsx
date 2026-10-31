@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
+import { Navigate, Route, Routes, useLocation, useNavigate, type Location } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
 import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setLicenseRequiredHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
@@ -42,7 +42,9 @@ const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
 const AndroidDevicePage = lazy(() => import("@/pages/android/android-device-page"));
 const CallsPage = lazy(() => import("@/pages/calls/calls-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
-const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
+const SettingsDialog = lazy(() => import("@/pages/settings/settings-page"));
+
+const isSettingsPath = (pathname: string) => pathname === "/settings" || pathname.startsWith("/settings/");
 
 export function App() {
   const qc = useQueryClient();
@@ -51,6 +53,9 @@ export function App() {
   const location = useLocation();
   const onScreen = useRef("");
   onScreen.current = `${location.pathname}${location.search}`;
+  const settingsOpen = isSettingsPath(location.pathname);
+  const underSettings = useRef<Location | null>(null);
+  if (!settingsOpen) underSettings.current = location;
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
   const [cloudIssue, setCloudIssue] = useState<CloudIssue | null>(null);
@@ -192,7 +197,7 @@ export function App() {
   return (
     <AppShell>
       <Suspense fallback={<div className="p-8" />}>
-        <Routes>
+        <Routes location={settingsOpen ? (underSettings.current ?? "/") : location}>
           <Route path="/" element={<ChatHome />} />
           <Route path="/chat/:conversationId" element={<ChatConversation />} />
           <Route path="/archived" element={<ArchivedPage />} />
@@ -226,11 +231,14 @@ export function App() {
           <Route path="/android/:id" element={b.settings.android.enabled ? <AndroidDevicePage /> : <ToSettings section="android" />} />
           <Route path="/calls" element={<FeaturePage on={b.settings.phone.enabled} section="calls" keep="call"><CallsPage /></FeaturePage>} />
           <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          <Route path="/settings/:section" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundRedirect />} />
         </Routes>
       </Suspense>
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog closeTo={underSettings.current ?? "/"} />
+        </Suspense>
+      )}
     </AppShell>
   );
 }
