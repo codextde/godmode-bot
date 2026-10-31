@@ -333,6 +333,19 @@ export function AiSection({ settings }: { settings: Settings }) {
             onCommit={(claudePath) => patch({ runner: { claudePath: claudePath.trim() } })}
           />
         </SettingRow>
+        <SettingRow
+          label="Config folder"
+          htmlFor="claude-config-dir"
+          description={<InlineCode text="Where Claude Code keeps its login, settings and sessions (`CLAUDE_CONFIG_DIR`). Leave empty for `~/.claude`. Applies to new runs." />}
+        >
+          <CommitInput
+            id="claude-config-dir"
+            className="w-72 font-mono text-[13px]"
+            placeholder="~/.claude"
+            value={r.claudeConfigDir}
+            onCommit={(claudeConfigDir) => patch({ runner: { claudeConfigDir: claudeConfigDir.trim() } })}
+          />
+        </SettingRow>
       </SettingsGroup>
 
       <SettingsGroup title="Advanced" icon={<SlidersHorizontal />} description="For power users — mistakes here can break every run.">

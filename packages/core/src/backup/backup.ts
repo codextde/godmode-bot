@@ -140,7 +140,7 @@ export const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
 /** Settings that point at programs or endpoints; a backup must not be able to set them. */
 export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
-  runner: ["extraArgs", "claudePath"],
+  runner: ["extraArgs", "claudePath", "claudeConfigDir"],
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
   vm: ["tartPath"],
