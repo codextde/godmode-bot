@@ -60,7 +60,7 @@ export function UpdateButton() {
             transition={{ duration: 0.2, ease: "easeOut" }}
           >
             <div className="flex w-full items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 shadow-card group-data-[collapsible=icon]:hidden">
-              <LiveDot />
+              <LiveDot live={false} className="bg-brand" />
               <div className="min-w-0 flex-1 leading-tight">
                 <p className="text-[12.5px] font-medium">Update ready</p>
                 <p className="truncate font-mono text-[10.5px] text-muted-foreground">v{version}</p>
@@ -88,7 +88,7 @@ export function UpdateButton() {
                     aria-label={`Restart to update to v${version}`}
                   >
                     {installing ? <Spinner /> : <RotateCw />}
-                    <LiveDot className="absolute top-1 right-1" />
+                    <LiveDot live={false} className="absolute top-1 right-1 bg-brand" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="right">Restart to update to v{version}</TooltipContent>
