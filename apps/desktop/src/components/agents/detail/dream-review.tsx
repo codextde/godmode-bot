@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronsUpDown, CirclePause, CornerDownLeft, Eye, FileDiff as FileDiffIcon, FileMinus2, FilePlus2, FileText, Info, MoonStar, RotateCcw, TriangleAlert, Undo2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Dream, DreamFileChange } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -32,6 +33,7 @@ export function DreamReviewDialog({
   onOpenChange: (open: boolean) => void;
   onUndo: (dream: Dream) => void;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const open = !!dream;
   const shown = useLastDefined(dream);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -40,7 +42,7 @@ export function DreamReviewDialog({
   const current = q.data ?? shown;
   const [view, setView] = useState<View>("changes");
   const files = useMemo(() => (q.data?.fileChanges ?? []).map((f) => ({ file: f, diff: diffFile(f.before, f.after) })), [q.data]);
-  const totals = files.reduce((t, f) => ({ added: t.added + f.diff.added, removed: t.removed + f.diff.removed }), { added: 0, removed: 0 });
+  const totals = files.reduce((sum, f) => ({ added: sum.added + f.diff.added, removed: sum.removed + f.diff.removed }), { added: 0, removed: 0 });
   const rolledBack = !!current && ROLLED_BACK.includes(current.status);
 
   return (
@@ -58,9 +60,9 @@ export function DreamReviewDialog({
           <>
             <DialogHeader className="gap-1.5 border-b bg-paper-2 px-5 pt-4 pb-3.5 pr-12 text-left sm:text-left">
               <div className="eyebrow flex items-center gap-1.5">
-                <MoonStar className="size-3.5 text-dream" aria-hidden /> Dream · {dreamWhen(current.createdAt)}
+                <MoonStar className="size-3.5 text-dream" aria-hidden /> {t("dreamReview.eyebrow", { when: dreamWhen(current.createdAt) })}
               </div>
-              <DialogTitle className="text-[17px] font-medium tracking-[-0.015em]">What {agentName} changed</DialogTitle>
+              <DialogTitle className="text-[17px] font-medium tracking-[-0.015em]">{t("dreamReview.title", { name: agentName })}</DialogTitle>
               <DialogDescription className="max-w-3xl text-[13px] leading-relaxed">{current.summary || reviewedLabel(current)}</DialogDescription>
               <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
                 <DreamStatusBadge status={current.status} />
@@ -76,14 +78,14 @@ export function DreamReviewDialog({
                   variant="outline"
                   value={view}
                   onValueChange={(v) => v && setView(v as View)}
-                  aria-label="Show"
+                  aria-label={t("dreamReview.show")}
                   className="ml-auto bg-card"
                 >
-                  <ToggleGroupItem value="changes" aria-label="Changes" className="gap-1 px-2 text-xs">
-                    <FileDiffIcon className="size-3.5" /> Changes
+                  <ToggleGroupItem value="changes" aria-label={t("dreamReview.changes")} className="gap-1 px-2 text-xs">
+                    <FileDiffIcon className="size-3.5" /> {t("dreamReview.changes")}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="result" aria-label="Result" className="gap-1 px-2 text-xs">
-                    <Eye className="size-3.5" /> Result
+                  <ToggleGroupItem value="result" aria-label={t("dreamReview.result")} className="gap-1 px-2 text-xs">
+                    <Eye className="size-3.5" /> {t("dreamReview.result")}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
@@ -92,11 +94,11 @@ export function DreamReviewDialog({
             <div className="@container min-h-0 flex-1 overflow-y-auto">
               <div className="grid grid-cols-1 @3xl:grid-cols-[16rem_minmax(0,1fr)]">
                 <aside className="border-b p-4 @3xl:border-r @3xl:border-b-0">
-                  <h3 className="eyebrow mb-2.5">{rolledBack ? "What it attempted" : "The agent's notes"}</h3>
+                  <h3 className="eyebrow mb-2.5">{rolledBack ? t("dreamReview.attempted") : t("dreamReview.notes")}</h3>
                   {rolledBack && current.changes.length > 0 && (
                     <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                       <RotateCcw className="size-3 shrink-0" aria-hidden />
-                      {current.files.length ? "Rolled back where possible" : "Rolled back — nothing was kept"}
+                      {current.files.length ? t("dreamReview.rolledBackPartly") : t("dreamReview.rolledBackAll")}
                     </p>
                   )}
                   {current.changes.length ? (
@@ -110,7 +112,7 @@ export function DreamReviewDialog({
                     </ul>
                   ) : (
                     <p className="text-xs leading-relaxed text-muted-foreground">
-                      {agentName} didn't describe its changes — the diff shows exactly what it wrote.
+                      {t("dreamReview.noNotes", { name: agentName })}
                     </p>
                   )}
                   {current.status !== "succeeded" && current.error && (
@@ -141,12 +143,12 @@ export function DreamReviewDialog({
                       ))}
                     </div>
                   ) : q.isError ? (
-                    <p className="text-sm text-muted-foreground">Couldn't load the changes: {errorMessage(q.error)}</p>
+                    <p className="text-sm text-muted-foreground">{t("dreamReview.loadError", { error: errorMessage(q.error) })}</p>
                   ) : files.length ? (
                     files.map((f) => <FileChangeCard key={f.file.path} file={f.file} diff={f.diff} view={view} />)
                   ) : (
                     <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      {rolledBack ? "Nothing from this dream is left in the memory files." : "This dream didn't change any memory files."}
+                      {rolledBack ? t("dreamReview.nothingLeft") : t("dreamReview.noFileChanges")}
                     </p>
                   )}
                 </div>
@@ -156,24 +158,24 @@ export function DreamReviewDialog({
             <DialogFooter className="items-center gap-3 border-t px-5 py-3 sm:justify-between">
               <p className="text-xs text-muted-foreground">
                 {current.status === "reverted"
-                  ? "This dream was undone — the files are back the way they were before it."
+                  ? t("dreamReview.footer.reverted")
                   : current.canRevert
                     ? undoBlocked
-                      ? `Undo is available once ${agentName}'s current dream has ended.`
-                      : "Undo puts these files back exactly as they were before the dream."
+                      ? t("dreamReview.footer.blocked", { name: agentName })
+                      : t("dreamReview.footer.canRevert")
                     : current.files.length && !ACTIVE_DREAM.includes(current.status)
-                      ? "The memory changed after this dream, so it can't be undone automatically — edit the files in the Memory tab instead."
+                      ? t("dreamReview.footer.cannotRevert")
                       : null}
               </p>
               <div className="flex shrink-0 gap-2">
                 <DialogClose asChild>
                   <Button variant="outline" size="sm">
-                    Close
+                    {t("common:actions.close")}
                   </Button>
                 </DialogClose>
                 {current.canRevert && (
                   <Button size="sm" disabled={undoBlocked} onClick={() => onUndo(current)}>
-                    <Undo2 /> Undo this dream
+                    <Undo2 /> {t("dreamReview.undo")}
                   </Button>
                 )}
               </div>
@@ -186,16 +188,19 @@ export function DreamReviewDialog({
 }
 
 function FileChangeCard({ file, diff, view }: { file: DreamFileChange; diff: FileDiff; view: View }) {
+  const { t } = useTranslation("agents");
   const state = file.before === null ? "created" : file.after === null ? "deleted" : "edited";
   const Icon = state === "created" ? FilePlus2 : state === "deleted" ? FileMinus2 : FileText;
   const empty =
     state === "created"
-      ? "Created an empty file."
+      ? t("dreamReview.file.createdEmpty")
       : state === "deleted"
-        ? "Deleted an empty file."
-        : diff.finalNewline
-          ? `Only the newline at the end of the file was ${diff.finalNewline}.`
-          : "No line changes.";
+        ? t("dreamReview.file.deletedEmpty")
+        : diff.finalNewline === "added"
+          ? t("dreamReview.file.onlyNewlineAdded")
+          : diff.finalNewline === "removed"
+            ? t("dreamReview.file.onlyNewlineRemoved")
+            : t("dreamReview.file.noLineChanges");
   return (
     <section className="overflow-clip rounded-lg border bg-card" aria-label={file.path}>
       <header className="sticky top-0 z-10 flex items-center gap-2 border-b bg-card/95 px-3 py-2 backdrop-blur-sm">
@@ -210,7 +215,7 @@ function FileChangeCard({ file, diff, view }: { file: DreamFileChange; diff: Fil
               state === "created" ? "border-success/20 bg-success/[0.08] text-success" : "border-destructive/20 bg-destructive/[0.06] text-destructive",
             )}
           >
-            {state === "created" ? "New file" : "Deleted"}
+            {state === "created" ? t("dreamReview.file.newFile") : t("dreamReview.file.deleted")}
           </span>
         )}
         <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums">
@@ -224,10 +229,10 @@ function FileChangeCard({ file, diff, view }: { file: DreamFileChange; diff: Fil
           <p className="px-4 py-5 text-sm text-muted-foreground italic">{empty}</p>
         )
       ) : file.after === null ? (
-        <p className="px-4 py-6 text-sm text-muted-foreground italic">The dream deleted this file.</p>
+        <p className="px-4 py-6 text-sm text-muted-foreground italic">{t("dreamReview.file.dreamDeleted")}</p>
       ) : (
         <div className="px-5 py-4">
-          {file.after.trim() ? <Markdown>{file.after}</Markdown> : <p className="text-sm text-muted-foreground italic">Empty file.</p>}
+          {file.after.trim() ? <Markdown>{file.after}</Markdown> : <p className="text-sm text-muted-foreground italic">{t("dreamReview.file.emptyFile")}</p>}
         </div>
       )}
     </section>
@@ -237,6 +242,7 @@ function FileChangeCard({ file, diff, view }: { file: DreamFileChange; diff: Fil
 const NOTE_ROW = "flex w-full items-center gap-2 border-dashed bg-paper-2/70 px-3 py-1 text-left font-sans text-[11px] text-muted-foreground";
 
 function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: FileDiff["finalNewline"] }) {
+  const { t } = useTranslation("agents");
   const blocks = useMemo(() => foldContext(lines), [lines]);
   const [unfolded, setUnfolded] = useState<Set<number>>(() => new Set());
   const [everything, setEverything] = useState(false);
@@ -261,7 +267,7 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
             className={cn(NOTE_ROW, "border-y transition first:border-t-0 hover:bg-accent/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none")}
           >
             <ChevronsUpDown className="size-3" aria-hidden />
-            Show {b.lines.length} unchanged lines
+            {t("dreamReview.diff.showUnchanged", { count: b.lines.length })}
           </button>
         </div>,
       );
@@ -278,16 +284,16 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
       {rows}
       {notShown > 0 ? (
         <div role="listitem" className={cn(NOTE_ROW, "mt-1 justify-between border-t py-1.5")}>
-          <span>{notShown.toLocaleString()} more lines not shown</span>
+          <span>{t("dreamReview.diff.notShown", { count: notShown })}</span>
           <button type="button" onClick={() => setEverything(true)} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-            Show everything
+            {t("dreamReview.diff.showEverything")}
           </button>
         </div>
       ) : (
         finalNewline && (
           <div role="listitem" className={cn(NOTE_ROW, "mt-1 border-t")}>
             <CornerDownLeft className="size-3" aria-hidden />
-            {finalNewline === "added" ? "Newline added at end of file" : "No newline at end of file anymore"}
+            {finalNewline === "added" ? t("dreamReview.diff.newlineAdded") : t("dreamReview.diff.newlineRemoved")}
           </div>
         )
       )}
@@ -296,6 +302,7 @@ function DiffView({ lines, finalNewline }: { lines: DiffLine[]; finalNewline: Fi
 }
 
 function DiffRow({ line }: { line: DiffLine }) {
+  const { t } = useTranslation("agents");
   const add = line.kind === "add";
   const del = line.kind === "del";
   return (
@@ -317,7 +324,7 @@ function DiffRow({ line }: { line: DiffLine }) {
         {add ? "+" : del ? "−" : " "}
       </span>
       <span className={cn("pr-3 break-words whitespace-pre-wrap [overflow-wrap:anywhere]", line.kind === "same" && "text-muted-foreground")}>
-        {(add || del) && <span className="sr-only">{add ? "Added: " : "Removed: "}</span>}
+        {(add || del) && <span className="sr-only">{add ? t("dreamReview.diff.srAdded") : t("dreamReview.diff.srRemoved")}</span>}
         {line.parts
           ? line.parts.map((p, i) =>
               p.changed ? (

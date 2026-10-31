@@ -1,5 +1,6 @@
 import type { DeviceGroup, GroupDevice, RemoteRunner, RunnerState } from "@godmode/shared";
-import { THIS_COMPUTER } from "@/components/runners/runner-parts";
+import { thisComputer } from "@/components/runners/runner-parts";
+import { t } from "@/i18n";
 import { useDeviceGroup, useRunners } from "./hooks";
 
 /**
@@ -55,16 +56,16 @@ export function usePlaces(): Places {
   for (const d of group?.devices ?? []) if (d.runnerTwin) twins.set(d.runnerTwin, d);
   const twinName = (id: string) => {
     const d = twins.get(id);
-    return d ? (d.self ? THIS_COMPUTER : d.name) : null;
+    return d ? (d.self ? thisComputer() : d.name) : null;
   };
 
   const places: Place[] = [];
   if (forwarded) {
     const self = runners.find((r) => r.id === hereId) ?? null;
-    places.push({ runnerId: hereId, name: THIS_COMPUTER, here: true, kind: "device", state: "online", runner: self, twinOf: null });
+    places.push({ runnerId: hereId, name: thisComputer(), here: true, kind: "device", state: "online", runner: self, twinOf: null });
     places.push({
       runnerId: null,
-      name: group?.primaryName ?? "Primary",
+      name: group?.primaryName ?? t("system:places.primary"),
       here: false,
       kind: "primary",
       state: group?.primaryOnline ? "online" : "offline",
@@ -72,7 +73,7 @@ export function usePlaces(): Places {
       twinOf: null,
     });
   } else {
-    places.push({ runnerId: null, name: THIS_COMPUTER, here: true, kind: role === "primary" ? "primary" : "runner", state: "online", runner: null, twinOf: null });
+    places.push({ runnerId: null, name: thisComputer(), here: true, kind: role === "primary" ? "primary" : "runner", state: "online", runner: null, twinOf: null });
   }
   const later: Place[] = [];
   for (const r of runners) {

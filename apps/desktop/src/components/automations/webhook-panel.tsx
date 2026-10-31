@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Lock, RefreshCw, ShieldAlert } from "lucide-react";
 import type { Routine } from "@godmode/shared";
@@ -27,6 +28,7 @@ function isLocalUrl(url: string): boolean {
 
 /** Issue a new secret URL for a webhook automation; the old one stops working immediately. */
 export function useRotateWebhook() {
+  const { t } = useTranslation("automations");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (routine: Routine) => api.routines.rotateWebhook(routine.id),
@@ -35,9 +37,9 @@ export function useRotateWebhook() {
         Array.isArray(old) ? old.map((r) => (r.id === routine.id ? { ...r, webhookPath } : r)) : old,
       );
       qc.invalidateQueries({ queryKey: qk.routines });
-      toast.success("New webhook URL issued", { description: "The old URL no longer works — update the services that call it." });
+      toast.success(t("webhook.rotated"), { description: t("webhook.rotatedDescription") });
     },
-    onError: (err) => toastApiError(err, "Couldn't rotate the webhook URL", qc),
+    onError: (err) => toastApiError(err, t("webhook.rotateFailed"), qc),
   });
 }
 
@@ -53,13 +55,14 @@ export function RotateWebhookDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation("automations");
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Rotate the URL of “${routine.name}”?`}
-      description="Godmode issues a new secret URL. Anything still calling the old one gets an error until you update it."
-      confirmLabel="Rotate URL"
+      title={t("webhook.rotateTitle", { name: routine.name })}
+      description={t("webhook.rotateDescription")}
+      confirmLabel={t("webhook.rotate")}
       onConfirm={onConfirm}
     />
   );
@@ -67,6 +70,7 @@ export function RotateWebhookDialog({
 
 /** The secret URL of a webhook automation: copy it, see how to call it, rotate it. */
 export function WebhookPanel({ routine }: { routine: Routine }) {
+  const { t } = useTranslation("automations");
   const [confirm, setConfirm] = useState(false);
   // The dialog holds a snapshot of the routine; show a freshly rotated path right away.
   const [rotated, setRotated] = useState<string | null>(null);
@@ -78,7 +82,7 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
       <div className="flex items-start gap-3 rounded-lg border bg-card p-3 text-sm shadow-card">
         <Lock className="mt-0.5 size-4 shrink-0 text-warning" />
         <p className="text-muted-foreground">
-          <span className="font-medium text-foreground">Unlock the vault to see the URL.</span> The secret part is stored encrypted.
+          <span className="font-medium text-foreground">{t("webhook.locked")}</span> {t("webhook.lockedHint")}
         </p>
       </div>
     );
@@ -93,7 +97,7 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
     <div className="space-y-3">
       <div className="space-y-1.5">
         <Label htmlFor="webhook-url" className="text-xs font-normal text-muted-foreground">
-          {remote ? "Secret path" : "Secret URL"} — POST anything (JSON or text, up to 256 KB)
+          {remote ? t("webhook.secretPathLabel") : t("webhook.secretUrlLabel")}
         </Label>
         <div className="flex items-center gap-1.5">
           <Input
@@ -104,16 +108,16 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
             onFocus={(e) => e.currentTarget.select()}
             className="h-9 font-mono text-xs"
           />
-          {!remote && <CopyButton text={url} label="Copy webhook URL" size="icon-sm" className="shrink-0" />}
+          {!remote && <CopyButton text={url} label={t("webhook.copyUrl")} size="icon-sm" className="shrink-0" />}
         </div>
-        {remote && <p className="text-xs text-muted-foreground">Webhooks are received by the computer itself; copy the full address in Godmode on that computer.</p>}
+        {remote && <p className="text-xs text-muted-foreground">{t("webhook.remoteHint")}</p>}
       </div>
 
       {!remote && (
         <div className="rounded-lg border bg-card shadow-card">
           <div className="flex items-center justify-between border-b px-3 py-1.5">
-            <span className="eyebrow">Try it</span>
-            <CopyButton text={curl} label="Copy curl command" />
+            <span className="eyebrow">{t("webhook.tryIt")}</span>
+            <CopyButton text={curl} label={t("webhook.copyCurl")} />
           </div>
           <pre className="overflow-x-auto px-3 py-2.5 font-mono text-[11px] leading-relaxed text-foreground/85">{curl}</pre>
         </div>
@@ -121,16 +125,15 @@ export function WebhookPanel({ routine }: { routine: Routine }) {
 
       {!remote && isLocalUrl(url) && (
         <p className="text-xs text-muted-foreground">
-          This address only works on this computer. To receive calls from other services, reach Godmode through a tunnel or reverse proxy and
-          use the same path.
+          {t("webhook.localOnly")}
         </p>
       )}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2.5 text-xs">
         <ShieldAlert className="size-4 shrink-0 text-warning" />
-        <span className="min-w-0 flex-1 text-muted-foreground">Anyone with this URL can start the automation. Rotate it if it leaks.</span>
+        <span className="min-w-0 flex-1 text-muted-foreground">{t("webhook.warning")}</span>
         <Button type="button" size="xs" variant="outline" onClick={() => setConfirm(true)} disabled={rotate.isPending}>
-          {rotate.isPending ? <Spinner /> : <RefreshCw />} Rotate URL
+          {rotate.isPending ? <Spinner /> : <RefreshCw />} {t("webhook.rotate")}
         </Button>
       </div>
 

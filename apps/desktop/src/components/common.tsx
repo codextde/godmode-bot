@@ -1,6 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Globe2, Layers } from "lucide-react";
 import type { AgentCharacter, CharacterMood } from "@godmode/shared";
 import { defaultCharacter } from "@godmode/shared";
@@ -190,6 +191,7 @@ export function StatusDot({ status, className }: { status: "ok" | "warn" | "erro
 }
 
 export function DraftStatus({ onDiscard, className }: { onDiscard: () => void; className?: string }) {
+  const { t } = useTranslation("layout");
   return (
     <motion.span
       initial={{ opacity: 0, y: 2 }}
@@ -197,7 +199,7 @@ export function DraftStatus({ onDiscard, className }: { onDiscard: () => void; c
       className={cn("inline-flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground", className)}
     >
       <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
-      Draft saved
+      {t("draftStatus.saved")}
       <span aria-hidden className="opacity-40">
         ·
       </span>
@@ -206,7 +208,7 @@ export function DraftStatus({ onDiscard, className }: { onDiscard: () => void; c
         onClick={onDiscard}
         className="rounded-sm font-medium text-foreground/70 transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        Discard
+        {t("draftStatus.discard")}
       </button>
     </motion.span>
   );

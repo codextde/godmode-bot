@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VoiceSettings } from "@godmode/shared";
 import { toast } from "sonner";
+import { t } from "@/i18n";
 import { useBootstrap } from "@/lib/hooks";
 import {
   canSpeakInBrowser,
@@ -130,7 +131,7 @@ export function useSpeaker() {
           },
         });
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Could not read this aloud.");
+        toast.error(e instanceof Error ? e.message : t("system:voice.readAloudFailed"));
       }
     },
     [settings],

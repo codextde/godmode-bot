@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, CharacterMood, Message } from "@godmode/shared";
 import { Mic, MicOff, Square, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Backdrop } from "@/components/brand";
@@ -11,6 +12,7 @@ import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
 import { speak, stopSpeaking, useVoiceSession, voiceInputSupported } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { VoiceOrb, type VoiceOrbPhase } from "./voice-visuals";
 
 type Phase = VoiceOrbPhase | "waiting";
@@ -56,14 +58,14 @@ export function VoiceMode(props: VoiceModeProps) {
   return <AnimatePresence>{voiceMode && armed && <VoiceModeOverlay {...props} />}</AnimatePresence>;
 }
 
-const ORDINALS = ["one", "two", "three", "four"];
+const ORDINALS = ["chat:voice.ordinal.one", "chat:voice.ordinal.two", "chat:voice.ordinal.three", "chat:voice.ordinal.four"] as const;
 
 /** What the agent asks, said out loud: the question and its suggested answers, or the step it wants an OK for. */
 function spokenQuestion(m: Message): string {
   const q = m.blocks.findLast((b) => b.type === "question");
   if (!q || q.type !== "question" || q.status !== "open") return "";
-  if (q.kind === "approval") return `I need your OK to ${q.title.replace(/^[A-Z]/, (c) => c.toLowerCase())}. Say approve or decline.`;
-  const options = q.options.map((o, i) => `Option ${ORDINALS[i] ?? i + 1}: ${o.label}.`).join(" ");
+  if (q.kind === "approval") return t("chat:voice.approval", { action: q.title.replace(/^[A-Z]/, (c) => c.toLowerCase()) });
+  const options = q.options.map((o, i) => t("chat:voice.option", { n: ORDINALS[i] ? t(ORDINALS[i]) : i + 1, label: o.label })).join(" ");
   return `${q.title}${options ? ` ${options}` : ""}`;
 }
 
@@ -75,7 +77,7 @@ function replyText(m: Message): string {
     .map((b) => (b as { text: string }).text)
     .join("\n\n");
   if (text.trim() || asked) return [text.trim(), asked].filter(Boolean).join("\n\n");
-  if (m.blocks.some((b) => b.type === "error")) return "Sorry, something went wrong with that one.";
+  if (m.blocks.some((b) => b.type === "error")) return t("chat:voice.errorReply");
   return "";
 }
 
@@ -89,6 +91,7 @@ function replyKey(m: Message): string {
 }
 
 function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }: VoiceModeProps) {
+  const { t } = useTranslation("chat");
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const arm = useVoiceSession((s) => s.arm);
   const voiceRunIds = useVoiceSession((s) => s.voiceRunIds);
@@ -113,9 +116,9 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
   const dictation = useDictation({
     mode: "conversation",
     onInterim: (t) => setTranscript(t),
-    onFinal: async (t) => {
+    onFinal: async (heard) => {
       if (phaseRef.current !== "listening") return;
-      const text = t.trim();
+      const text = heard.trim();
       if (!text) {
         emptyStreak.current += 1;
         if (emptyStreak.current >= 3) {
@@ -134,7 +137,7 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
         await onSend(text);
         setPhase((p) => (p === "sending" ? "thinking" : p));
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Couldn't send your message.");
+        toast.error(e instanceof Error ? e.message : t("voice.sendError"));
         setPhase("paused");
       }
     },
@@ -154,10 +157,10 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
     if (phase !== "thinking" || busy) return;
     const m = lastMessage;
     if (!m || m.role !== "assistant" || handled.has(replyKey(m))) {
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         if (phaseRef.current === "thinking") setPhase("listening");
       }, 6000);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
     handled.add(replyKey(m));
     const text = replyText(m);
@@ -173,7 +176,7 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
         speakLevel.current = l;
       },
     })
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Couldn't play the reply."))
+      .catch((e) => toast.error(e instanceof Error ? e.message : t("voice.playError")))
       .finally(() => {
         speakLevel.current = 0;
         if (phaseRef.current === "speaking") setPhase("listening");
@@ -245,14 +248,14 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
     phase === "waiting" ? "listening" : phase === "listening" && dictation.state === "transcribing" ? "transcribing" : phase;
 
   const status = !supported
-    ? "Voice input isn't supported here"
+    ? t("voice.unsupported")
     : {
-        listening: dictation.state === "starting" ? "Starting microphone…" : "Listening…",
-        transcribing: "Transcribing…",
-        sending: "Sending…",
-        thinking: activity ? `${activity}` : "Thinking…",
-        speaking: "Speaking — tap to interrupt",
-        paused: "Paused — tap the orb to talk",
+        listening: dictation.state === "starting" ? t("voice.startingMic") : t("composer.listening"),
+        transcribing: t("composer.transcribing"),
+        sending: t("messages.sending"),
+        thinking: activity ? `${activity}` : t("mood.thinking"),
+        speaking: t("voice.speaking"),
+        paused: t("voice.paused"),
       }[shownPhase];
 
   const muted = phase === "paused";
@@ -261,7 +264,7 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
     <motion.div
       role="dialog"
       aria-modal="true"
-      aria-label="Voice mode"
+      aria-label={t("header.voiceMode")}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -276,15 +279,15 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
             <div className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? "Godmode"}</div>
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
               <LiveDot live={shownPhase === "listening"} />
-              Voice mode
+              {t("header.voiceMode")}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-            <Kbd>Esc</Kbd> to exit
+            <Kbd>Esc</Kbd> {t("voice.toExit")}
           </span>
-          <Button variant="ghost" size="icon" onClick={close} aria-label="Exit voice mode">
+          <Button variant="ghost" size="icon" onClick={close} aria-label={t("voice.exit")}>
             <X />
           </Button>
         </div>
@@ -336,23 +339,23 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
             size="icon-lg"
             onClick={toggleMute}
             disabled={!supported || !(phase === "paused" || phase === "listening" || phase === "waiting")}
-            aria-label={muted ? "Resume listening" : "Pause listening"}
+            aria-label={muted ? t("voice.resumeListening") : t("voice.pauseListening")}
             aria-pressed={muted}
             className={cn("size-12 rounded-xl shadow-card", muted && "border-destructive/30 bg-destructive/[0.06] text-destructive hover:bg-destructive/10 hover:text-destructive")}
           >
             {muted ? <MicOff className="size-5" /> : <Mic className="size-5" />}
           </Button>
           {busy && onStop && (
-            <Button variant="outline" size="icon-lg" onClick={onStop} aria-label="Stop the agent" className="size-12 rounded-xl shadow-card">
+            <Button variant="outline" size="icon-lg" onClick={onStop} aria-label={t("voice.stopAgent")} className="size-12 rounded-xl shadow-card">
               <Square className="size-4 fill-current" />
             </Button>
           )}
-          <Button variant="destructive" size="icon-lg" onClick={close} aria-label="End voice mode" className="size-12 rounded-xl">
+          <Button variant="destructive" size="icon-lg" onClick={close} aria-label={t("voice.end")} className="size-12 rounded-xl">
             <X className="size-5" />
           </Button>
         </div>
         <p className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-          <Kbd>Space</Kbd> talk / interrupt · <Kbd>Esc</Kbd> exit
+          <Kbd>Space</Kbd> {t("voice.talkInterrupt")} · <Kbd>Esc</Kbd> {t("voice.exitShort")}
         </p>
       </div>
     </motion.div>

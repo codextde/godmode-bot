@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { Eye, KeyRound, SquareTerminal, Wand2 } from "lucide-react";
 import type { ConnectorAccess, ConnectorCreated } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -17,13 +18,12 @@ import { Callout, ChoiceCards } from "./settings-kit";
 
 export type ConnectTab = "claude-code" | "other";
 
-const TRY_PROMPT = "Create a Godmode agent that checks our competitors' pricing every Monday morning and sends me a summary.";
-
 /**
  * Connect an app: Claude Code on this computer in one click (Godmode adds itself to it), or any other MCP client with a
  * key and the lines to paste. The key is on screen once, right after it was made.
  */
 export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab | null; onClose: () => void; claudeCode: boolean }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const nameId = useId();
   const [client, setClient] = useState<ConnectTab>("claude-code");
@@ -64,8 +64,8 @@ export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab
     <Dialog open={tab !== null} onOpenChange={(open) => !open && !create.isPending && onClose()}>
       <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
         <DialogHeader className="shrink-0 border-b px-6 pt-6 pb-5 text-left">
-          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Connect an app</DialogTitle>
-          <DialogDescription>It gets Godmode's management tools: agents, automations, tasks and what they did.</DialogDescription>
+          <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{t("connect.apps.connect")}</DialogTitle>
+          <DialogDescription>{t("connect.dialog.description")}</DialogDescription>
         </DialogHeader>
 
         <AnimatePresence mode="wait" initial={false}>
@@ -79,53 +79,50 @@ export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab
                 <Tabs value={client} onValueChange={(v) => setClient(v as ConnectTab)} className="gap-4">
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="claude-code">Claude Code</TabsTrigger>
-                    <TabsTrigger value="other">Another app</TabsTrigger>
+                    <TabsTrigger value="other">{t("connect.dialog.another")}</TabsTrigger>
                   </TabsList>
                   <TabsContent value="claude-code" className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Godmode adds itself to Claude Code on this computer as an MCP server, for every project. Nothing to copy: open a new session and
-                      it's there.
-                    </p>
+                    <p className="text-sm text-muted-foreground">{t("connect.dialog.claudeBody")}</p>
                     {!claudeCode && (
-                      <Callout tone="info" title="Claude Code wasn't found on this computer">
-                        You get the command to run in a terminal where it is installed.
+                      <Callout tone="info" title={t("connect.dialog.notFound")}>
+                        {t("connect.dialog.notFoundBody")}
                       </Callout>
                     )}
                   </TabsContent>
                   <TabsContent value="other" className="space-y-2">
-                    <Label htmlFor={nameId}>Name</Label>
-                    <Input id={nameId} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="off" placeholder="Cursor, Codex, a script…" autoFocus />
-                    <p className="text-xs text-muted-foreground">Any app that speaks MCP, or the godmode command line. The name tells your apps apart in the list.</p>
+                    <Label htmlFor={nameId}>{t("common:words.name")}</Label>
+                    <Input id={nameId} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="off" placeholder={t("connect.dialog.namePlaceholder")} autoFocus />
+                    <p className="text-xs text-muted-foreground">{t("connect.dialog.nameHint")}</p>
                   </TabsContent>
                 </Tabs>
 
                 <div className="space-y-2">
-                  <p className="text-sm font-medium">What it may do</p>
+                  <p className="text-sm font-medium">{t("connect.dialog.mayDo")}</p>
                   <ChoiceCards
                     name="connect-access"
                     value={access}
                     onChange={setAccess}
                     className="@container grid-cols-1 sm:grid-cols-2"
                     options={[
-                      { value: "manage", icon: <Wand2 />, title: "Set up and steer", description: "Create and change agents, automations and tasks, and start their work." },
-                      { value: "read", icon: <Eye />, title: "Look only", description: "See agents, tasks and what was done. It changes nothing." },
+                      { value: "manage", icon: <Wand2 />, title: t("connect.dialog.manage"), description: t("connect.dialog.manageDescription") },
+                      { value: "read", icon: <Eye />, title: t("connect.dialog.read"), description: t("connect.dialog.readDescription") },
                     ]}
                   />
                 </div>
 
                 {create.isError && (
-                  <Callout tone="danger" title="Couldn't connect the app">
+                  <Callout tone="danger" title={t("connect.dialog.error")}>
                     {errorMessage(create.error)}
                   </Callout>
                 )}
               </div>
               <div className="flex shrink-0 items-center justify-end gap-2 border-t px-6 py-4">
                 <Button type="button" variant="ghost" onClick={onClose} disabled={create.isPending}>
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button type="submit" disabled={!ready || create.isPending}>
                   {create.isPending ? <Spinner /> : client === "claude-code" && claudeCode ? <SquareTerminal /> : <KeyRound />}
-                  {client === "claude-code" && claudeCode ? (create.isPending ? "Adding…" : "Add to Claude Code") : "Create key"}
+                  {client === "claude-code" && claudeCode ? (create.isPending ? t("connect.dialog.adding") : t("connect.dialog.add")) : t("connect.dialog.createKey")}
                 </Button>
               </div>
             </motion.form>
@@ -137,6 +134,7 @@ export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab
 }
 
 function Created({ result, onDone }: { result: ConnectorCreated; onDone: () => void }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { connector, setup, install } = result;
   const added = install?.ok === true;
 
@@ -148,56 +146,54 @@ function Created({ result, onDone }: { result: ConnectorCreated; onDone: () => v
             <DrawCheck className="size-6" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-base font-medium tracking-[-0.01em]">{added ? "Claude Code is connected" : `The key for ${connector.name} is ready`}</h3>
+            <h3 className="text-base font-medium tracking-[-0.01em]">{added ? t("connect.created.connected") : t("connect.created.keyReady", { name: connector.name })}</h3>
             <p className="mt-1 text-sm text-muted-foreground" aria-live="polite">
-              {added
-                ? "Godmode is in Claude Code now, for every project. Sessions that are already open pick it up after a restart."
-                : "It is shown this once: Godmode only keeps its fingerprint. Copy what your app needs before you close this."}
+              {added ? t("connect.created.connectedBody") : t("connect.created.keyReadyBody")}
             </p>
           </div>
         </div>
 
         {added ? (
           <div className="space-y-2">
-            <CommandBlock text={TRY_PROMPT} title="Try it in a new Claude Code session" label="Copy prompt" />
+            <CommandBlock text={t("connect.created.tryPrompt")} title={t("connect.created.tryTitle")} label={t("importMemory.copyPrompt")} />
             <p className="text-xs text-muted-foreground">
-              Claude Code asks before it uses a Godmode tool for the first time. <span className="font-mono text-[11px]">/mcp</span> shows the server and its tools.
+              <Trans t={t} i18nKey="connect.created.asks" values={{ command: "/mcp" }} components={{ code: <span className="font-mono text-[11px]" /> }} />
             </p>
           </div>
         ) : connector.client === "claude-code" ? (
           <div className="space-y-3">
             {install && (
-              <Callout tone="warning" title="Godmode couldn't add itself to Claude Code">
+              <Callout tone="warning" title={t("connect.created.installError")}>
                 {install.detail}
               </Callout>
             )}
-            <CommandBlock text={setup.claudeCommand} title="Run this in a terminal" />
-            <p className="text-xs text-muted-foreground">It adds Godmode to Claude Code for every project. Then start a new session.</p>
+            <CommandBlock text={setup.claudeCommand} title={t("connect.created.runInTerminal")} />
+            <p className="text-xs text-muted-foreground">{t("connect.created.runHint")}</p>
           </div>
         ) : (
           <Tabs defaultValue="config" className="gap-3">
             <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="config">Config file</TabsTrigger>
+              <TabsTrigger value="config">{t("connect.created.configTab")}</TabsTrigger>
               <TabsTrigger value="claude">Claude Code</TabsTrigger>
               <TabsTrigger value="url">URL</TabsTrigger>
               <TabsTrigger value="terminal">Terminal</TabsTrigger>
             </TabsList>
             <TabsContent value="config" className="space-y-2">
-              <CommandBlock text={setup.json} title="MCP servers" label="Copy config" />
-              <p className="text-xs text-muted-foreground">For apps set up with a JSON file (Cursor, Claude Desktop, Windsurf…). The app starts the connection itself, and it finds Godmode on whichever port it runs.</p>
+              <CommandBlock text={setup.json} title={t("connect.created.mcpServers")} label={t("connect.created.copyConfig")} />
+              <p className="text-xs text-muted-foreground">{t("connect.created.configHint")}</p>
             </TabsContent>
             <TabsContent value="claude" className="space-y-2">
               <CommandBlock text={setup.claudeCommand} title="Terminal" />
-              <p className="text-xs text-muted-foreground">Adds Godmode to Claude Code for every project.</p>
+              <p className="text-xs text-muted-foreground">{t("connect.created.claudeHint")}</p>
             </TabsContent>
             <TabsContent value="url" className="space-y-2">
-              <CommandBlock text={`${setup.url}\nAuthorization: Bearer ${setup.token}`} title="Streamable HTTP" label="Copy address and header" />
-              <p className="text-xs text-muted-foreground">For apps that take an address and a header. It stops matching if Godmode ever starts on another port; the config file doesn't mind.</p>
+              <CommandBlock text={`${setup.url}\nAuthorization: Bearer ${setup.token}`} title="Streamable HTTP" label={t("connect.created.copyAddress")} />
+              <p className="text-xs text-muted-foreground">{t("connect.created.urlHint")}</p>
             </TabsContent>
             <TabsContent value="terminal" className="space-y-2">
-              <CommandBlock text={setup.cli} title="Terminal" label="Copy commands" />
+              <CommandBlock text={setup.cli} title="Terminal" label={t("connect.created.copyCommands")} />
               <p className="text-xs text-muted-foreground">
-                <span className="font-mono text-[11px]">tools</span> lists what the key can do, <span className="font-mono text-[11px]">call</span> runs one tool with JSON arguments. Handy for scripts.
+                <Trans t={t} i18nKey="connect.created.cliHint" components={{ code: <span className="font-mono text-[11px]" /> }} />
               </p>
             </TabsContent>
           </Tabs>
@@ -205,9 +201,9 @@ function Created({ result, onDone }: { result: ConnectorCreated; onDone: () => v
       </div>
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t px-6 py-4">
         <p className="min-w-0 flex-1 basis-48 text-xs text-muted-foreground">
-          {connector.access === "manage" ? "It can set up and steer your team." : "It can look, and change nothing."} Remove it anytime in the list.
+          {connector.access === "manage" ? t("connect.created.footerManage") : t("connect.created.footerRead")}
         </p>
-        <Button onClick={onDone}>Done</Button>
+        <Button onClick={onDone}>{t("common:actions.done")}</Button>
       </div>
     </>
   );

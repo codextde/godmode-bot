@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { create } from "zustand";
 import type { Conversation } from "@godmode/shared";
 import type { ChatBucket } from "./desktop-parity";
+import { t } from "./i18n";
 
 export type ChatSource = "mine" | "automations" | "agents";
 export type RecentSource = ChatSource | "all";
@@ -11,17 +12,81 @@ const SOURCE_KEY = "godmode.recentSource";
 const TAB_KEY = "godmode.recentTab";
 
 export const SOURCES: { value: RecentSource; label: string; hint: string }[] = [
-  { value: "mine", label: "Mine", hint: "Chats you started" },
-  { value: "automations", label: "Automations", hint: "Started by an automation or the API" },
-  { value: "agents", label: "Agents", hint: "Started by an agent: handovers, board tasks, heartbeats" },
-  { value: "all", label: "All", hint: "Every chat" },
+  {
+    value: "mine",
+    get label() {
+      return t("system:chatFilters.source.mine.label");
+    },
+    get hint() {
+      return t("system:chatFilters.source.mine.hint");
+    },
+  },
+  {
+    value: "automations",
+    get label() {
+      return t("system:chatFilters.source.automations.label");
+    },
+    get hint() {
+      return t("system:chatFilters.source.automations.hint");
+    },
+  },
+  {
+    value: "agents",
+    get label() {
+      return t("system:chatFilters.source.agents.label");
+    },
+    get hint() {
+      return t("system:chatFilters.source.agents.hint");
+    },
+  },
+  {
+    value: "all",
+    get label() {
+      return t("system:chatFilters.source.all.label");
+    },
+    get hint() {
+      return t("system:chatFilters.source.all.hint");
+    },
+  },
 ];
 
 export const TABS: { value: RecentTab; label: string; hint: string }[] = [
-  { value: "all", label: "All", hint: "Every recent chat" },
-  { value: "running", label: "Running", hint: "Working, queued or waiting for you" },
-  { value: "scheduled", label: "Scheduled", hint: "Continue on their own later" },
-  { value: "done", label: "Done", hint: "Finished chats" },
+  {
+    value: "all",
+    get label() {
+      return t("system:chatFilters.tab.all.label");
+    },
+    get hint() {
+      return t("system:chatFilters.tab.all.hint");
+    },
+  },
+  {
+    value: "running",
+    get label() {
+      return t("system:chatFilters.tab.running.label");
+    },
+    get hint() {
+      return t("system:chatFilters.tab.running.hint");
+    },
+  },
+  {
+    value: "scheduled",
+    get label() {
+      return t("system:chatFilters.tab.scheduled.label");
+    },
+    get hint() {
+      return t("system:chatFilters.tab.scheduled.hint");
+    },
+  },
+  {
+    value: "done",
+    get label() {
+      return t("system:chatFilters.tab.done.label");
+    },
+    get hint() {
+      return t("system:chatFilters.tab.done.hint");
+    },
+  },
 ];
 
 /** Mine: chats the human started, here or from Slack, Telegram or Teams. Automations: started by a trigger. Agents: an agent started it itself. */
@@ -79,6 +144,6 @@ export const useChatFilters = create<ChatFilters>((set) => ({
 void Promise.all([SecureStore.getItemAsync(SOURCE_KEY).catch(() => null), SecureStore.getItemAsync(TAB_KEY).catch(() => null)]).then(([source, tab]) => {
   const patch: Partial<ChatFilters> = {};
   if (SOURCES.some((s) => s.value === source)) patch.source = source as RecentSource;
-  if (TABS.some((t) => t.value === tab)) patch.tab = tab as RecentTab;
+  if (TABS.some((f) => f.value === tab)) patch.tab = tab as RecentTab;
   useChatFilters.setState(patch);
 });

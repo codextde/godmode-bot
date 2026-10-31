@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, CircleCheck, Download, HardDrive, RotateCcw, Trash2, TriangleAlert } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { Vm, VmImagePreset, VmPatch, VmStatus } from "@godmode/shared";
 import {
@@ -89,12 +90,13 @@ function SpecFields({
   diskHint?: ReactNode;
   onChange: (patch: Partial<{ cpu: number; memoryMb: number; display: string; disk: string }>) => void;
 }) {
+  const { t } = useTranslation("vms");
   const cpus = Array.from({ length: Math.max(host.cpus, cpu) }, (_, i) => i + 1);
   const diskNum = Number(disk);
   const diskInvalid = !disk.trim() || !Number.isInteger(diskNum) || diskNum < minDisk || diskNum > MAX_DISK_GB;
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      <Field label="CPU cores" htmlFor={`${idPrefix}-cpu`}>
+      <Field label={t("dialog.cpuCores")} htmlFor={`${idPrefix}-cpu`}>
         <Select value={String(cpu)} onValueChange={(v) => onChange({ cpu: Number(v) })}>
           <SelectTrigger id={`${idPrefix}-cpu`} className="w-full">
             <SelectValue />
@@ -102,13 +104,13 @@ function SpecFields({
           <SelectContent position="popper" className="max-h-64">
             {cpus.map((n) => (
               <SelectItem key={n} value={String(n)}>
-                {n} {n === 1 ? "core" : "cores"}
+                {t("cores", { count: n })}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Memory" htmlFor={`${idPrefix}-memory`}>
+      <Field label={t("dialog.memory")} htmlFor={`${idPrefix}-memory`}>
         <Select value={String(memoryMb)} onValueChange={(v) => onChange({ memoryMb: Number(v) })}>
           <SelectTrigger id={`${idPrefix}-memory`} className="w-full">
             <SelectValue />
@@ -122,7 +124,7 @@ function SpecFields({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Display" htmlFor={`${idPrefix}-display`}>
+      <Field label={t("dialog.display")} htmlFor={`${idPrefix}-display`}>
         <Select value={display} onValueChange={(v) => onChange({ display: v })}>
           <SelectTrigger id={`${idPrefix}-display`} className="w-full">
             <SelectValue />
@@ -136,7 +138,7 @@ function SpecFields({
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Disk size" htmlFor={`${idPrefix}-disk`} hint={diskHint}>
+      <Field label={t("dialog.diskSize")} htmlFor={`${idPrefix}-disk`} hint={diskHint}>
         <div
           className={cn(
             "flex h-9 items-center rounded-md border border-input bg-card shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50",
@@ -186,6 +188,7 @@ export function NewVmDialog({
   vms: Vm[];
   onCreated?: (vm: Vm) => void;
 }) {
+  const { t } = useTranslation(["vms", "common"]);
   const qc = useQueryClient();
   const short = useShortPath();
   const presets = status.images;
@@ -244,17 +247,17 @@ export function NewVmDialog({
     onSuccess: (vm) => {
       qc.setQueryData<Vm[]>(qk.vmList, (old) => (old ? (old.some((v) => v.id === vm.id) ? old : [...old, vm]) : old));
       void qc.invalidateQueries({ queryKey: qk.vms });
-      toast.success(`Creating ${vm.name}`, {
+      toast.success(t("dialog.new.toastCreating", { name: vm.name }), {
         description: preset?.downloaded
           ? start
-            ? "It's ready and booting in a moment."
-            : "It's ready in a moment."
-          : `Downloading ${preset?.name ?? "the image"} (${preset?.downloadGb ?? "~27"} GB) — keep working, progress shows on its card.`,
+            ? t("dialog.new.readyBooting")
+            : t("dialog.new.ready")
+          : t("dialog.new.downloading", { image: preset?.name ?? t("dialog.new.theImage"), size: preset?.downloadGb ?? "~27" }),
       });
       onCreated?.(vm);
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Couldn't create the VM", qc),
+    onError: (e) => toastApiError(e, t("dialog.new.createFailed"), qc),
   });
 
   const submit = (e: FormEvent) => {
@@ -267,20 +270,18 @@ export function NewVmDialog({
       <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl">
         <form onSubmit={submit}>
           <DialogHeader className="border-b bg-paper-2 px-6 pt-6 pb-5">
-            <DialogTitle>New virtual machine</DialogTitle>
-            <DialogDescription>
-              A clean macOS on this Mac for your agents to work in — isolated from your files and apps. It keeps its disk until you reset or delete it.
-            </DialogDescription>
+            <DialogTitle>{t("dialog.new.title")}</DialogTitle>
+            <DialogDescription>{t("dialog.new.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[min(38rem,calc(100dvh-16rem))] space-y-5 overflow-y-auto px-6 py-5">
-            <Field label="Name" htmlFor="new-vm-name">
-              <Input id="new-vm-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={MAX_NAME} autoFocus required placeholder="e.g. Build machine" />
+            <Field label={t("common:words.name")} htmlFor="new-vm-name">
+              <Input id="new-vm-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={MAX_NAME} autoFocus required placeholder={t("dialog.new.namePlaceholder")} />
             </Field>
 
             <div className="space-y-2">
               <span id="new-vm-image-label" className="text-sm font-medium">
-                macOS image
+                {t("dialog.new.image")}
               </span>
               <RadioGroup value={preset?.id ?? ""} onValueChange={pickImage} aria-labelledby="new-vm-image-label" className="grid gap-2">
                 {presets.map((p) => (
@@ -296,9 +297,9 @@ export function NewVmDialog({
                   className="flex items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <ChevronRight className={cn("size-4 transition-transform", advanced && "rotate-90")} />
-                  Advanced
+                  {t("dialog.new.advanced")}
                   <span className="font-normal">
-                    · {cpu} {cpu === 1 ? "core" : "cores"}, {formatMemory(memoryMb)}, {diskValid(disk, minDisk) ? `${disk} GB disk` : "disk"}, {formatDisplay(display)}
+                    · {t("cores", { count: cpu })}, {formatMemory(memoryMb)}, {diskValid(disk, minDisk) ? t("dialog.new.summaryDisk", { n: disk }) : t("dialog.new.summaryDiskInvalid")}, {formatDisplay(display)}
                   </span>
                 </button>
               </CollapsibleTrigger>
@@ -311,7 +312,7 @@ export function NewVmDialog({
                   display={display}
                   disk={disk}
                   minDisk={minDisk}
-                  diskHint={`At least ${minDisk} GB for this image. Disks can only grow later.`}
+                  diskHint={t("dialog.new.diskHint", { n: minDisk })}
                   onChange={(p) => {
                     if (p.cpu !== undefined) setCpu(p.cpu);
                     if (p.memoryMb !== undefined) setMemoryMb(p.memoryMb);
@@ -323,7 +324,7 @@ export function NewVmDialog({
                   }}
                 />
                 <p className="mt-3 text-xs text-muted-foreground">
-                  This Mac: {status.host.cpus} cores, {formatMemory(status.host.memoryMb)} memory. Changes to CPU, memory and display apply on the VM's next start.
+                  {t("dialog.new.host", { cpus: status.host.cpus, memory: formatMemory(status.host.memoryMb) })}
                 </p>
               </CollapsibleContent>
             </Collapsible>
@@ -331,8 +332,8 @@ export function NewVmDialog({
             <label htmlFor="new-vm-start" className="flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3.5 transition hover:border-foreground/15">
               <Checkbox id="new-vm-start" checked={start} onCheckedChange={(v) => setStart(v === true)} className="mt-0.5" />
               <span className="min-w-0 space-y-0.5">
-                <span className="block text-sm font-medium">Start when ready</span>
-                <span className="block text-xs text-muted-foreground">Boot macOS as soon as the VM is created, so it's warm when an agent needs it.</span>
+                <span className="block text-sm font-medium">{t("dialog.new.startWhenReady")}</span>
+                <span className="block text-xs text-muted-foreground">{t("dialog.new.startWhenReadyHint")}</span>
               </span>
             </label>
 
@@ -340,30 +341,31 @@ export function NewVmDialog({
               {tight ? <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" /> : <HardDrive className="mt-px size-3.5 shrink-0 text-muted-foreground" />}
               <p className="min-w-0 text-muted-foreground">
                 {free === null ? (
-                  "Free space on this Mac is unknown."
+                  t("dialog.new.freeUnknown")
                 ) : tight ? (
                   <>
-                    <span className="font-medium text-foreground">Only {free} GB free.</span>{" "}
-                    {preset && !preset.downloaded ? `The download (${preset.downloadGb} GB) and the VM's disk (up to ${diskGb || minDisk} GB)` : `The VM's disk (up to ${diskGb || minDisk} GB)`} may not
-                    fit — free up space or pick a smaller disk.
+                    <span className="font-medium text-foreground">{t("dialog.new.onlyFree", { n: free })}</span>{" "}
+                    {preset && !preset.downloaded
+                      ? t("dialog.new.tightDownload", { download: preset.downloadGb, disk: diskGb || minDisk })
+                      : t("dialog.new.tightDisk", { disk: diskGb || minDisk })}
                   </>
                 ) : (
                   <>
-                    <span className="font-medium text-foreground">{free} GB free</span> on this Mac. The VM's disk only takes up the space macOS actually uses.
+                    <Trans t={t} i18nKey="dialog.new.free" values={{ n: free }} components={{ b: <span className="font-medium text-foreground" /> }} />
                   </>
                 )}{" "}
-                Stored in <span className="font-mono break-all">{short(status.storageDir)}</span>.
+                <Trans t={t} i18nKey="dialog.new.storedIn" values={{ path: short(status.storageDir) }} components={{ mono: <span className="font-mono break-all" /> }} />
               </p>
             </div>
           </div>
 
           <DialogFooter className="border-t bg-paper-2 px-6 py-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!valid || create.isPending}>
               {create.isPending ? <Spinner /> : preset && !preset.downloaded ? <Download /> : null}
-              {create.isPending ? (status.tart.installed ? "Creating…" : "Setting up…") : preset && !preset.downloaded ? "Download & create" : "Create VM"}
+              {create.isPending ? (status.tart.installed ? t("dialog.new.creating") : t("dialog.new.settingUp")) : preset && !preset.downloaded ? t("dialog.new.downloadCreate") : t("dialog.new.createVm")}
             </Button>
           </DialogFooter>
         </form>
@@ -373,6 +375,7 @@ export function NewVmDialog({
 }
 
 function ImageCard({ preset: p, checked, downloading }: { preset: VmImagePreset; checked: boolean; downloading: number | null | undefined }) {
+  const { t } = useTranslation("vms");
   const id = useId();
   return (
     <Label
@@ -386,25 +389,26 @@ function ImageCard({ preset: p, checked, downloading }: { preset: VmImagePreset;
       <span className="min-w-0 flex-1 space-y-1">
         <span className="flex flex-wrap items-center gap-1.5 text-sm font-medium">
           {p.name}
-          {p.recommended && <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">Recommended</span>}
+          {p.recommended && <span className="rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-px text-[10px] font-medium text-brand-strong">{t("dialog.image.recommended")}</span>}
         </span>
         <span className="block text-xs leading-relaxed text-muted-foreground">{p.description}</span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-0.5 text-[11.5px] text-muted-foreground tabular-nums">
           {p.downloaded ? (
             <span className="inline-flex items-center gap-1 font-medium text-success">
-              <CircleCheck className="size-3.5" /> Downloaded — ready in seconds
+              <CircleCheck className="size-3.5" /> {t("dialog.image.downloaded")}
             </span>
           ) : downloading !== undefined ? (
             <span className="inline-flex items-center gap-1 font-medium text-foreground">
-              <Spinner className="size-3" /> Downloading{downloading !== null ? ` · ${Math.floor(downloading)}%` : "…"}
+              <Spinner className="size-3" /> {t("dialog.image.downloading")}
+              {downloading !== null ? ` · ${Math.floor(downloading)}%` : "…"}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1">
-              <Download className="size-3.5" /> ~{Math.round(p.downloadGb)} GB download
+              <Download className="size-3.5" /> {t("dialog.image.downloadSize", { n: Math.round(p.downloadGb) })}
             </span>
           )}
           <span className="opacity-40">·</span>
-          <span>{p.diskGb} GB disk</span>
+          <span>{t("dialog.image.disk", { n: p.diskGb })}</span>
         </span>
       </span>
     </Label>
@@ -416,6 +420,7 @@ function ImageCard({ preset: p, checked, downloading }: { preset: VmImagePreset;
 /* ------------------------------------------------------------------ */
 
 export function EditVmDialog({ vm, status, onClose, actions }: { vm: Vm | null; status: VmStatus | undefined; onClose: () => void; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const [name, setName] = useState("");
   const [cpu, setCpu] = useState(4);
   const [memoryMb, setMemoryMb] = useState(8192);
@@ -461,16 +466,16 @@ export function EditVmDialog({ vm, status, onClose, actions }: { vm: Vm | null; 
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={submit} className="grid gap-5">
           <DialogHeader>
-            <DialogTitle>Edit “{vm.name}”</DialogTitle>
+            <DialogTitle>{t("dialog.edit.title", { name: vm.name })}</DialogTitle>
             <DialogDescription>
               {suspended
-                ? "It's suspended with its current hardware. Shut it down (⋯ → Shut down) to change CPU, memory, display or disk."
+                ? t("dialog.edit.suspended")
                 : bootsLater
-                  ? "CPU, memory and display changes apply the next time the VM starts."
-                  : "Changes apply the next time the VM starts."}
+                  ? t("dialog.edit.bootsLater")
+                  : t("dialog.edit.later")}
             </DialogDescription>
           </DialogHeader>
-          <Field label="Name" htmlFor="edit-vm-name">
+          <Field label={t("common:words.name")} htmlFor="edit-vm-name">
             <Input id="edit-vm-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={MAX_NAME} autoFocus />
           </Field>
           {!suspended && (
@@ -483,7 +488,7 @@ export function EditVmDialog({ vm, status, onClose, actions }: { vm: Vm | null; 
             disk={disk}
             minDisk={vm.diskGb}
             diskDisabled={!canResize}
-            diskHint={canResize ? "Disks can only grow." : "Stop the VM to grow its disk."}
+            diskHint={canResize ? t("dialog.edit.diskGrow") : t("dialog.edit.diskStop")}
             onChange={(p) => {
               if (p.cpu !== undefined) setCpu(p.cpu);
               if (p.memoryMb !== undefined) setMemoryMb(p.memoryMb);
@@ -494,10 +499,10 @@ export function EditVmDialog({ vm, status, onClose, actions }: { vm: Vm | null; 
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!changed || !valid || actions.update.isPending}>
-              {actions.update.isPending && <Spinner />} Save changes
+              {actions.update.isPending && <Spinner />} {t("dialog.edit.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -511,6 +516,7 @@ export function EditVmDialog({ vm, status, onClose, actions }: { vm: Vm | null; 
 /* ------------------------------------------------------------------ */
 
 export function ResetVmDialog({ vm, presets, onClose, actions }: { vm: Vm | null; presets: VmImagePreset[] | undefined; onClose: () => void; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const [start, setStart] = useState(false);
   useEffect(() => {
     // Default: back to how it was (seeded per VM, not on every realtime update).
@@ -520,19 +526,19 @@ export function ResetVmDialog({ vm, presets, onClose, actions }: { vm: Vm | null
     <AlertDialog open={!!vm} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Reset “{vm?.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("dialog.reset.title", { name: vm?.name })}</AlertDialogTitle>
           <AlertDialogDescription>
-            Its disk is erased and recreated from {vm ? imageName(vm.image, presets) : "its image"} — apps, files and settings inside the VM are gone.
-            {vm?.state === "running" || vm?.state === "suspended" ? " It's shut down first." : ""} The shared folder ({vm ? guestFolderLabel(vm) : "~/Godmode"} in
-            the VM) and who uses the VM are kept.
+            {t("dialog.reset.body", { image: vm ? imageName(vm.image, presets) : t("dialog.reset.itsImage") })}
+            {vm?.state === "running" || vm?.state === "suspended" ? ` ${t("dialog.reset.shutFirst")}` : ""}{" "}
+            {t("dialog.reset.kept", { folder: vm ? guestFolderLabel(vm) : "~/Godmode" })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <label htmlFor="reset-vm-start" className="flex cursor-pointer items-center gap-2.5 text-sm">
           <Checkbox id="reset-vm-start" checked={start} onCheckedChange={(v) => setStart(v === true)} />
-          Start it again when it's ready
+          {t("dialog.reset.startAgain")}
         </label>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -540,7 +546,7 @@ export function ResetVmDialog({ vm, presets, onClose, actions }: { vm: Vm | null
               onClose();
             }}
           >
-            <RotateCcw /> Reset VM
+            <RotateCcw /> {t("dialog.reset.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -549,6 +555,7 @@ export function ResetVmDialog({ vm, presets, onClose, actions }: { vm: Vm | null
 }
 
 export function DeleteVmDialog({ vm, onClose, actions }: { vm: Vm | null; onClose: () => void; actions: VmActions }) {
+  const { t } = useTranslation(["vms", "common"]);
   const short = useShortPath();
   const [keepFiles, setKeepFiles] = useState(false);
   useEffect(() => {
@@ -559,26 +566,28 @@ export function DeleteVmDialog({ vm, onClose, actions }: { vm: Vm | null; onClos
     <AlertDialog open={!!vm} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{vm?.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("dialog.delete.title", { name: vm?.name })}</AlertDialogTitle>
           <AlertDialogDescription>
             {vm?.state === "creating"
-              ? "Creating it stops and the VM is removed from this Mac."
-              : `The VM and its disk${vm?.diskUsageBytes ? ` (${formatGb(vm.diskUsageBytes)})` : ""} are removed from this Mac. This can't be undone.`}
+              ? t("dialog.delete.creating")
+              : vm?.diskUsageBytes
+                ? t("dialog.delete.removedSize", { size: formatGb(vm.diskUsageBytes) })
+                : t("dialog.delete.removed")}
             {users > 0 &&
               (users === 1
-                ? ` ${vm?.assignments[0]?.name ?? "The agent, chat or workspace using it"} goes back to working on this Mac, unless it has another VM.`
-                : ` The ${users} agents, chats and workspaces using it go back to working on this Mac, unless they have another VM.`)}
+                ? ` ${vm?.assignments[0]?.name != null ? t("dialog.delete.oneUser", { name: vm.assignments[0].name }) : t("dialog.delete.oneUserFallback")}`
+                : ` ${t("dialog.delete.manyUsers", { n: users })}`)}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <label htmlFor="delete-vm-keep" className="flex cursor-pointer items-start gap-2.5 rounded-lg border bg-paper-2 p-3 text-sm">
           <Checkbox id="delete-vm-keep" checked={keepFiles} onCheckedChange={(v) => setKeepFiles(v === true)} className="mt-0.5" />
           <span className="min-w-0 space-y-0.5">
-            <span className="block font-medium">Keep the shared folder's files</span>
+            <span className="block font-medium">{t("dialog.delete.keepFiles")}</span>
             {vm && <span className="block font-mono text-[11px] break-all text-muted-foreground">{short(vm.sharedDir)}</span>}
           </span>
         </label>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -586,7 +595,7 @@ export function DeleteVmDialog({ vm, onClose, actions }: { vm: Vm | null; onClos
               onClose();
             }}
           >
-            <Trash2 /> Delete VM
+            <Trash2 /> {t("dialog.delete.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

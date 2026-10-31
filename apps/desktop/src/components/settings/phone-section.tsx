@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { ExternalLink, Network, QrCode, RefreshCw, ShieldCheck, Smartphone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { MobileDevice, MobileStatus, Settings } from "@godmode/shared";
 import {
   AlertDialog,
@@ -22,6 +23,7 @@ import { Switch } from "@/components/ui/switch";
 import { CopyButton } from "@/components/chat/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
+import { dateLocale } from "@/i18n";
 import { cloudContext } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
@@ -31,6 +33,7 @@ import { PairPhoneDialog, TAILSCALE_DOWNLOAD } from "./pair-phone-dialog";
 import { Callout, InfoRow, NumberField, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
 
 export function PhoneSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [pairing, setPairing] = useState(false);
   // Through Godmode Cloud the computer refuses phone management: the section is read-only there.
@@ -47,26 +50,23 @@ export function PhoneSection({ settings }: { settings: Settings }) {
       qc.setQueryData(qk.mobile, next);
       void qc.invalidateQueries({ queryKey: qk.settings });
     },
-    onError: (e) => toastApiError(e, "Could not change phone access", qc),
+    onError: (e) => toastApiError(e, t("phone.accessError"), qc),
   });
 
   const recheck = useMutation({
     mutationFn: () => api.mobile.status(true),
     onSuccess: (next) => qc.setQueryData(qk.mobile, next),
-    onError: (e) => toastApiError(e, "Could not check Tailscale", qc),
+    onError: (e) => toastApiError(e, t("phone.checkError"), qc),
   });
 
   const enabled = update.isPending && update.variables?.enabled !== undefined ? update.variables.enabled : (s?.enabled ?? settings.mobile.enabled);
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Phone"
-        description="Control Godmode from your iPhone or Android phone: chats, agents, automations and the screens they work on. Phones connect over Tailscale, or through Godmode Cloud when this computer is linked to it. No port is opened to the internet."
-      />
+      <SectionHeading title={t("phone.title")} description={t("phone.description")} />
 
       {remote ? (
-        <Callout tone="muted">Pairing phones and changing phone access only work in Godmode on the computer itself.</Callout>
+        <Callout tone="muted">{t("phone.remoteOnly")}</Callout>
       ) : (
         <Hero onConnect={() => setPairing(true)} ready={!!s?.tailscale.running || gateway} loading={status.isLoading} />
       )}
@@ -74,11 +74,11 @@ export function PhoneSection({ settings }: { settings: Settings }) {
       <SettingsGroup
         title="Tailscale"
         icon={<Network />}
-        description="Your private, end-to-end encrypted network."
+        description={t("phone.tailscale.description")}
         actions={
           <>
             {s && <TailscaleBadge status={s} />}
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="Check again" onClick={() => recheck.mutate()} disabled={recheck.isPending}>
+            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={t("botCheck.again")} onClick={() => recheck.mutate()} disabled={recheck.isPending}>
               {recheck.isPending ? <Spinner /> : <RefreshCw />}
             </Button>
           </>
@@ -95,40 +95,36 @@ export function PhoneSection({ settings }: { settings: Settings }) {
           <div className="py-4">
             <Callout
               tone={s.tailscale.installed ? "warning" : "info"}
-              title={s.tailscale.installed ? "Tailscale isn't connected" : "Tailscale isn't installed"}
+              title={s.tailscale.installed ? t("phone.tailscale.notConnectedTitle") : t("phone.tailscale.notInstalledTitle")}
             >
               <p>{s.tailscale.detail}</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => void openExternal(TAILSCALE_DOWNLOAD)}>
-                <ExternalLink /> Get Tailscale
+                <ExternalLink /> {t("phone.tailscale.get")}
               </Button>
             </Callout>
           </div>
         ) : (
           <>
             {s.tailscale.dnsName && (
-              <InfoRow label="This computer" mono>
+              <InfoRow label={t("phone.tailscale.thisComputer")} mono>
                 {s.tailscale.dnsName}
-                <CopyButton text={s.tailscale.dnsName} label="Copy name" />
+                <CopyButton text={s.tailscale.dnsName} label={t("phone.tailscale.copyName")} />
               </InfoRow>
             )}
-            <InfoRow label="Tailscale address" mono>
+            <InfoRow label={t("phone.tailscale.address")} mono>
               {s.tailscale.ip}
             </InfoRow>
             {s.tailscale.tailnet && <InfoRow label="Tailnet">{s.tailscale.tailnet}</InfoRow>}
           </>
         )}
         <SettingRow
-          label="Phone access"
+          label={t("phone.access")}
           htmlFor="phone-access"
-          description={
-            gateway
-              ? "Paired phones may connect, over this computer's Tailscale address or through Godmode Cloud. Godmode only answers phones you paired."
-              : "Paired phones may connect. Godmode listens only on this computer's Tailscale address, and only answers phones you paired."
-          }
+          description={gateway ? t("phone.accessGateway") : t("phone.accessTailscale")}
         >
           <Switch id="phone-access" checked={enabled} disabled={remote || update.isPending} onCheckedChange={(on) => update.mutate({ enabled: on })} />
         </SettingRow>
-        <SettingRow label="Port" htmlFor="phone-port" description="Change it only if another app uses it. Paired phones need a new code afterwards.">
+        <SettingRow label={t("security.web.port")} htmlFor="phone-port" description={t("phone.portDescription")}>
           <NumberField
             id="phone-port"
             disabled={remote}
@@ -140,7 +136,7 @@ export function PhoneSection({ settings }: { settings: Settings }) {
         </SettingRow>
         {s?.enabled && s.error && s.tailscale.running && (
           <div className="pb-4">
-            <Callout tone="warning" title="Phones can't connect">
+            <Callout tone="warning" title={t("phone.cantConnect")}>
               {s.error}
             </Callout>
           </div>
@@ -148,33 +144,32 @@ export function PhoneSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup
-        title="Paired phones"
+        title={t("phone.paired.title")}
         icon={<Smartphone />}
-        description="Each phone has its own key. Removing a phone disconnects it right away."
+        description={t("phone.paired.description")}
         actions={
           s?.devices.length && !remote ? (
             <Button variant="outline" size="sm" onClick={() => setPairing(true)}>
-              <QrCode /> Connect a phone
+              <QrCode /> {t("phone.connect")}
             </Button>
           ) : undefined
         }
       >
         {!s && status.isError ? (
-          <p className="py-5 text-sm text-muted-foreground">The list of phones isn't available here.</p>
+          <p className="py-5 text-sm text-muted-foreground">{t("phone.paired.unavailable")}</p>
         ) : !s ? (
           <div className="py-4">
             <Skeleton className="h-10 w-full" />
           </div>
         ) : s.devices.length === 0 ? (
-          <p className="py-5 text-sm text-muted-foreground">No phones yet. Connect one to use Godmode on the go.</p>
+          <p className="py-5 text-sm text-muted-foreground">{t("phone.paired.empty")}</p>
         ) : (
           s.devices.map((d) => <DeviceRow key={d.id} device={d} readOnly={remote} />)
         )}
       </SettingsGroup>
 
-      <Callout tone="muted" icon={<ShieldCheck className="text-muted-foreground" />} title="What a phone can do">
-        Chat with agents, stop runs, run automations, start and stop VMs, and watch browsers, shared screens and VMs live. It can only take control
-        of browsers and of screens you shared in a chat. Logins, 2FA codes, backups, integrations and settings can't be opened from a phone.
+      <Callout tone="muted" icon={<ShieldCheck className="text-muted-foreground" />} title={t("phone.can.title")}>
+        {t("phone.can.body")}
       </Callout>
 
       {!remote && <PairPhoneDialog open={pairing} onOpenChange={setPairing} tailnet={s?.tailscale.tailnet ?? null} gateway={gateway} />}
@@ -183,21 +178,18 @@ export function PhoneSection({ settings }: { settings: Settings }) {
 }
 
 function Hero({ onConnect, ready, loading }: { onConnect: () => void; ready: boolean; loading: boolean }) {
+  const { t } = useTranslation("settings");
   return (
     <section className="relative overflow-hidden rounded-xl border bg-card shadow-card">
       <div className="flex flex-col gap-6 p-6 @xl:flex-row @xl:items-center">
         <div className="min-w-0 flex-1">
-          <p className="eyebrow">Godmode for iOS and Android</p>
-          <h3 className="mt-2 text-xl leading-snug font-medium tracking-[-0.025em]">Your coworkers, in your pocket.</h3>
-          <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-            Hand over a task from anywhere, follow the answer as it's written, and look over an agent's shoulder in its browser or VM.
-          </p>
+          <p className="eyebrow">{t("phone.hero.eyebrow")}</p>
+          <h3 className="mt-2 text-xl leading-snug font-medium tracking-[-0.025em]">{t("phone.hero.title")}</h3>
+          <p className="mt-1.5 max-w-md text-sm text-muted-foreground">{t("phone.hero.body")}</p>
           <Button className="mt-5" onClick={onConnect} disabled={loading}>
-            <QrCode /> Connect a phone
+            <QrCode /> {t("phone.connect")}
           </Button>
-          {!loading && !ready && (
-            <p className="mt-2.5 text-xs text-muted-foreground">Needs Tailscale on this computer and your phone, or a link to Godmode Cloud.</p>
-          )}
+          {!loading && !ready && <p className="mt-2.5 text-xs text-muted-foreground">{t("phone.hero.needs")}</p>}
         </div>
         <PhoneGlyph />
       </div>
@@ -225,6 +217,7 @@ function PhoneGlyph() {
 }
 
 function TailscaleBadge({ status }: { status: MobileStatus }) {
+  const { t } = useTranslation("settings");
   const listening = status.enabled && status.urls.length > 0;
   const tone = listening ? "live" : status.tailscale.running ? "ready" : "off";
   return (
@@ -233,27 +226,28 @@ function TailscaleBadge({ status }: { status: MobileStatus }) {
       className={cn("gap-1.5 font-normal", tone === "live" ? "border-brand/25 bg-brand-soft text-brand-strong" : "text-muted-foreground")}
     >
       <span className={cn("size-1.5 rounded-full", tone === "live" ? "bg-brand" : tone === "ready" ? "bg-foreground/40" : "bg-muted-foreground/50")} />
-      {tone === "live" ? "Phones can connect" : tone === "ready" ? "Connected" : status.tailscale.installed ? "Not connected" : "Not installed"}
+      {tone === "live" ? t("phone.badge.live") : tone === "ready" ? t("phone.badge.connected") : status.tailscale.installed ? t("phone.badge.notConnected") : t("phone.badge.notInstalled")}
     </Badge>
   );
 }
 
 function DeviceRow({ device, readOnly }: { device: MobileDevice; readOnly: boolean }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState(false);
   const remove = useMutation({
     mutationFn: () => api.mobile.removeDevice(device.id),
     onSuccess: () => {
-      toast.success(`${device.name} removed`);
+      toast.success(t("phone.device.removed", { name: device.name }));
       void qc.invalidateQueries({ queryKey: qk.mobile });
     },
-    onError: (e) => toastApiError(e, "Could not remove the phone", qc),
+    onError: (e) => toastApiError(e, t("phone.device.removeError"), qc),
   });
   const seen = device.online
-    ? "Connected now"
+    ? t("phone.device.online")
     : device.lastSeenAt
-      ? `Last seen ${formatDistanceToNow(new Date(device.lastSeenAt), { addSuffix: true })}`
-      : "Never connected";
+      ? t("phone.device.lastSeen", { time: formatDistanceToNow(new Date(device.lastSeenAt), { addSuffix: true, locale: dateLocale() }) })
+      : t("phone.device.never");
 
   return (
     <div className="flex items-center gap-3 py-3.5">
@@ -264,24 +258,24 @@ function DeviceRow({ device, readOnly }: { device: MobileDevice; readOnly: boole
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{device.name}</p>
         <p className="truncate text-xs text-muted-foreground">
-          {[device.model ?? (device.platform === "ios" ? "iPhone" : "Android"), seen, `paired ${formatDistanceToNow(new Date(device.createdAt), { addSuffix: true })}`].join(" · ")}
+          {[device.model ?? (device.platform === "ios" ? "iPhone" : "Android"), seen, t("phone.device.paired", { time: formatDistanceToNow(new Date(device.createdAt), { addSuffix: true, locale: dateLocale() }) })].join(" · ")}
         </p>
       </div>
       {!readOnly && (
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${device.name}`} onClick={() => setConfirm(true)}>
+        <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" aria-label={t("phone.device.removeLabel", { name: device.name })} onClick={() => setConfirm(true)}>
           {remove.isPending ? <Spinner /> : <Trash2 />}
         </Button>
       )}
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {device.name}?</AlertDialogTitle>
-            <AlertDialogDescription>It's disconnected right away and can't control Godmode anymore. You can pair it again with a new code.</AlertDialogDescription>
+            <AlertDialogTitle>{t("phone.device.confirmTitle", { name: device.name })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("phone.device.confirmDescription")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
-              Remove
+              {t("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

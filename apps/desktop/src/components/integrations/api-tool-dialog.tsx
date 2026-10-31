@@ -2,6 +2,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight, ExternalLink, FlaskConical, Save, ShieldCheck, TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ApiTool, ApiToolAuth, ApiToolInput, ApiToolTestResult } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -14,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { PasswordInput } from "@/components/vault/password-input";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { api } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
@@ -72,7 +75,7 @@ function fromPreset(p: ApiToolPreset | null, scope: IntegrationScope): FormState
   const mode = p ? modeOf(p.auth) : "bearer";
   return {
     name: p?.name ?? "",
-    description: p?.description ?? "",
+    description: p ? t(p.description, { ns: "integrations" }) : "",
     apiKey: "",
     removeKey: false,
     baseUrl: p?.baseUrl ?? "",
@@ -99,30 +102,30 @@ type Field = "name" | "apiKey" | "baseUrl" | "headerName" | "queryName" | "envVa
 
 function validate(f: FormState): Partial<Record<Field, string>> {
   const errors: Partial<Record<Field, string>> = {};
-  if (!f.name.trim()) errors.name = "Give the tool a name.";
-  if (f.apiKey.trim() && (f.apiKey.trim().length < 8 || /\s/.test(f.apiKey.trim()))) errors.apiKey = "That doesn't look like a whole key — check what you pasted.";
+  if (!f.name.trim()) errors.name = t("integrations:apiToolDialog.errors.name");
+  if (f.apiKey.trim() && (f.apiKey.trim().length < 8 || /\s/.test(f.apiKey.trim()))) errors.apiKey = t("integrations:apiToolDialog.errors.apiKey");
   if (f.baseUrl.trim()) {
     try {
       const u = new URL(f.baseUrl.trim());
-      if (u.protocol !== "https:" && u.protocol !== "http:") errors.baseUrl = "Use an https:// address.";
-      else if (u.search || u.hash) errors.baseUrl = "Leave out ?query and #fragment.";
+      if (u.protocol !== "https:" && u.protocol !== "http:") errors.baseUrl = t("integrations:apiToolDialog.errors.baseUrlProtocol");
+      else if (u.search || u.hash) errors.baseUrl = t("integrations:apiToolDialog.errors.baseUrlQuery");
     } catch {
-      errors.baseUrl = "Enter the full address, e.g. https://api.example.com";
+      errors.baseUrl = t("integrations:apiToolDialog.errors.baseUrlInvalid");
     }
-  } else if (!f.envOn) errors.baseUrl = "Where do requests go? e.g. https://api.example.com";
-  if (f.keyMode === "header" && !HEADER_PATTERN.test(f.headerName.trim())) errors.headerName = "Header names have no spaces, e.g. x-api-key.";
-  if (f.keyMode === "query" && !/^[A-Za-z0-9_.~[\]-]+$/.test(f.queryName.trim())) errors.queryName = "e.g. key or api_key";
+  } else if (!f.envOn) errors.baseUrl = t("integrations:apiToolDialog.errors.baseUrlMissing");
+  if (f.keyMode === "header" && !HEADER_PATTERN.test(f.headerName.trim())) errors.headerName = t("integrations:apiToolDialog.errors.headerName");
+  if (f.keyMode === "query" && !/^[A-Za-z0-9_.~[\]-]+$/.test(f.queryName.trim())) errors.queryName = t("integrations:apiToolDialog.errors.queryName");
   if (f.envOn && (!ENV_VAR_PATTERN.test(f.envVar.trim()) || !SECRET_NAME_PATTERN.test(f.envVar.trim()))) {
-    errors.envVar = "Letters, digits and _, ending in _KEY, _TOKEN or _SECRET — e.g. GEMINI_API_KEY.";
+    errors.envVar = t("integrations:apiToolDialog.errors.envVar");
   }
   if (f.docsUrl.trim()) {
     try {
       new URL(f.docsUrl.trim());
     } catch {
-      errors.docsUrl = "Enter a full link, e.g. https://docs.example.com";
+      errors.docsUrl = t("integrations:apiToolDialog.errors.docsUrl");
     }
   }
-  if (f.testPath.trim() && !f.baseUrl.trim()) errors.testPath = "Needs the API address.";
+  if (f.testPath.trim() && !f.baseUrl.trim()) errors.testPath = t("integrations:apiToolDialog.errors.testPath");
   return errors;
 }
 
@@ -138,6 +141,8 @@ export function ApiToolDialog({
   onOpenChange: (open: boolean) => void;
   onTested?: (tool: ApiTool, result: ApiToolTestResult) => void;
 }) {
+  const { t } = useTranslation(["integrations", "common"]);
+  const { intlLocale } = useLocale();
   const qc = useQueryClient();
   const defaultScope = useDefaultScope();
   const [form, setForm] = useState<FormState>(() => fromPreset(null, defaultScope));
@@ -176,7 +181,7 @@ export function ApiToolDialog({
         ...(form.apiKey.trim() ? { apiKey: form.apiKey.trim() } : form.removeKey ? { apiKey: "" } : {}),
       };
       const tool = editing
-        ? await withGrant((grant) => api.apiTools.update(editing.id, input, grant), "Confirm to let the saved key go somewhere new.")
+        ? await withGrant((grant) => api.apiTools.update(editing.id, input, grant), t("apiToolDialog.grantReason"))
         : await api.apiTools.create({ ...input, preset: preset?.id ?? null });
       const result = test && tool.testPath ? await api.apiTools.test(tool.id) : null;
       return { tool, result };
@@ -185,13 +190,13 @@ export function ApiToolDialog({
       void qc.invalidateQueries({ queryKey: qk.apiTools });
       if (result) onTested?.(tool, result);
       if (!result || result.ok) {
-        toast.success(editing ? `Saved ${tool.name}` : `Added ${tool.name}`, {
-          description: result ? `Key works — ${result.message}` : "Agents in scope can use it from their next message.",
+        toast.success(editing ? t("mcpDialog.saved", { name: tool.name }) : t("mcpDialog.added", { name: tool.name }), {
+          description: result ? t("apiToolDialog.keyWorks", { message: result.message }) : t("apiToolDialog.availableNext"),
         });
-      } else toast.error(`${tool.name} was saved, but the test failed`, { description: result.message });
+      } else toast.error(t("apiToolDialog.savedTestFailed", { name: tool.name }), { description: result.message });
       onOpenChange(false);
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Couldn't save the tool", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("apiToolDialog.saveFailed"), qc),
   });
 
   const submit = (test: boolean) => (e?: FormEvent) => {
@@ -226,43 +231,43 @@ export function ApiToolDialog({
             <Icon className="size-5" />
           </span>
           <div className="min-w-0">
-            <DialogTitle>{editing ? `Edit ${editing.name}` : preset ? `Add ${preset.name}` : "Add an API tool"}</DialogTitle>
-            <DialogDescription className="mt-0.5">Hand agents an API with your key. Say what it's for — they work out the calls.</DialogDescription>
+            <DialogTitle>{editing ? t("mcpDialog.editTitle", { name: editing.name }) : preset ? t("mcpDialog.addNamed", { name: preset.name }) : t("apiToolDialog.addTitle")}</DialogTitle>
+            <DialogDescription className="mt-0.5">{t("apiToolDialog.description")}</DialogDescription>
           </div>
         </DialogHeader>
 
         <form id="api-tool-form" onSubmit={submit(false)} className="space-y-7 px-6 py-6">
-          <Group title="What it is">
+          <Group title={t("apiToolDialog.whatItIs")}>
             <div className="space-y-2">
-              <Label htmlFor="tool-name">Name</Label>
-              <Input id="tool-name" value={form.name} onChange={(e) => set("name", e.target.value)} onBlur={onNameBlur} placeholder="e.g. Nano Banana" aria-invalid={!!err("name")} autoComplete="off" />
+              <Label htmlFor="tool-name">{t("common:words.name")}</Label>
+              <Input id="tool-name" value={form.name} onChange={(e) => set("name", e.target.value)} onBlur={onNameBlur} placeholder={t("apiToolDialog.namePlaceholder")} aria-invalid={!!err("name")} autoComplete="off" />
               {err("name") && <p className="text-xs text-destructive">{err("name")}</p>}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tool-desc">What agents can use it for</Label>
+              <Label htmlFor="tool-desc">{t("apiToolDialog.useFor")}</Label>
               <Textarea
                 id="tool-desc"
                 value={form.description}
                 onChange={(e) => set("description", e.target.value)}
-                placeholder="e.g. Generate product photos, social media images and illustrations; edit photos."
+                placeholder={t("apiToolDialog.useForPlaceholder")}
                 className="min-h-16 resize-none"
                 maxLength={2000}
               />
-              <p className="text-xs text-muted-foreground">Agents reach for the tool when a task matches this, so be specific.</p>
+              <p className="text-xs text-muted-foreground">{t("apiToolDialog.useForHint")}</p>
             </div>
           </Group>
 
-          <Group title="API key">
+          <Group title={t("apiToolDialog.apiKey")}>
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="tool-key">Key</Label>
+                <Label htmlFor="tool-key">{t("apiToolDialog.key")}</Label>
                 {preset && (
                   <button
                     type="button"
                     onClick={() => void openExternal(preset.keyUrl.href)}
                     className="inline-flex items-center gap-1 text-xs font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground"
                   >
-                    Get a key at {preset.keyUrl.label} <ExternalLink className="size-3" />
+                    {t("apiKeys.getKeyAt", { site: preset.keyUrl.label })} <ExternalLink className="size-3" />
                   </button>
                 )}
               </div>
@@ -270,29 +275,29 @@ export function ApiToolDialog({
                 id="tool-key"
                 value={form.apiKey}
                 onChange={(e) => setForm((f) => ({ ...f, apiKey: e.target.value, removeKey: false }))}
-                placeholder={keySaved ? "Saved — paste a new key to replace it" : (preset?.keyPlaceholder ?? "Paste the API key")}
+                placeholder={keySaved ? t("apiToolDialog.keySavedPlaceholder") : (preset?.keyPlaceholder ?? t("apiToolDialog.keyPlaceholder"))}
                 aria-invalid={!!err("apiKey")}
               />
               {err("apiKey") && <p className="text-xs text-destructive">{err("apiKey")}</p>}
               <p className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                <ShieldCheck className="size-3.5 text-brand-strong" /> Encrypted in your vault and never shown again.
+                <ShieldCheck className="size-3.5 text-brand-strong" /> {t("apiToolDialog.encrypted")}
                 {keySaved && !form.apiKey && (
                   <button type="button" onClick={() => set("removeKey", true)} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-destructive hover:text-destructive">
-                    Remove key
+                    {t("composioKey.removeConfirm")}
                   </button>
                 )}
                 {editing?.hasKey && form.removeKey && (
                   <button type="button" onClick={() => set("removeKey", false)} className="font-medium text-destructive underline underline-offset-[3px]">
-                    Key will be removed — undo
+                    {t("apiToolDialog.keyWillBeRemoved")}
                   </button>
                 )}
               </p>
             </div>
           </Group>
 
-          <Group title="Where the key goes">
+          <Group title={t("apiToolDialog.whereKeyGoes")}>
             <div className="space-y-2">
-              <Label htmlFor="tool-url">API address</Label>
+              <Label htmlFor="tool-url">{t("apiToolDialog.apiAddress")}</Label>
               <Input
                 id="tool-url"
                 value={form.baseUrl}
@@ -307,23 +312,23 @@ export function ApiToolDialog({
                 <p className="text-xs text-destructive">{err("baseUrl")}</p>
               ) : insecure ? (
                 <p className="flex items-center gap-1.5 text-xs text-warning">
-                  <TriangleAlert className="size-3.5" /> Over http:// the key travels unencrypted — fine for a local server only.
+                  <TriangleAlert className="size-3.5" /> {t("apiToolDialog.insecure")}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">Godmode only ever sends the key to URLs under this address.</p>
+                <p className="text-xs text-muted-foreground">{t("apiToolDialog.addressHint")}</p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label id="tool-auth-label">Send the key as</Label>
+              <Label id="tool-auth-label">{t("apiToolDialog.sendAs")}</Label>
               <Segmented
                 label="tool-auth-label"
                 value={form.keyMode}
                 onChange={(v) => set("keyMode", v)}
                 options={[
-                  { id: "bearer", label: "Bearer token" },
-                  { id: "header", label: "Header" },
-                  { id: "query", label: "Query parameter" },
+                  { id: "bearer", label: t("apiToolDialog.bearer") },
+                  { id: "header", label: t("mcpDialog.header") },
+                  { id: "query", label: t("apiToolDialog.queryParam") },
                 ]}
               />
               <AnimatePresence initial={false} mode="wait">
@@ -332,13 +337,13 @@ export function ApiToolDialog({
                     <div className="grid gap-3 pt-1 sm:grid-cols-[1fr_9rem]">
                       <div className="space-y-1.5">
                         <Label htmlFor="tool-header" className="text-xs text-muted-foreground">
-                          Header name
+                          {t("apiToolDialog.headerName")}
                         </Label>
                         <Input id="tool-header" value={form.headerName} onChange={(e) => set("headerName", e.target.value)} className="font-mono text-[13px]" aria-invalid={!!err("headerName")} spellCheck={false} />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="tool-prefix" className="text-xs text-muted-foreground">
-                          Prefix (optional)
+                          {t("apiToolDialog.prefix")}
                         </Label>
                         <Input id="tool-prefix" value={form.prefix} onChange={(e) => set("prefix", e.target.value)} placeholder="Token " className="font-mono text-[13px]" spellCheck={false} />
                       </div>
@@ -350,7 +355,7 @@ export function ApiToolDialog({
                   <motion.div key="query" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                     <div className="space-y-1.5 pt-1">
                       <Label htmlFor="tool-query" className="text-xs text-muted-foreground">
-                        Parameter name
+                        {t("apiToolDialog.paramName")}
                       </Label>
                       <Input id="tool-query" value={form.queryName} onChange={(e) => set("queryName", e.target.value)} className="font-mono text-[13px] sm:max-w-60" aria-invalid={!!err("queryName")} spellCheck={false} />
                       {err("queryName") && <p className="text-xs text-destructive">{err("queryName")}</p>}
@@ -363,53 +368,55 @@ export function ApiToolDialog({
           </Group>
 
           <Group
-            title="How to use it"
-            aside={<span className="font-mono text-[11px] text-muted-foreground tabular-nums">{form.docs.length.toLocaleString()} / 100,000</span>}
+            title={t("apiToolDialog.howToUse")}
+            aside={
+              <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                {form.docs.length.toLocaleString(intlLocale)} / {(100_000).toLocaleString(intlLocale)}
+              </span>
+            }
           >
             <div className="space-y-2">
               <Label htmlFor="tool-docs" className="sr-only">
-                Documentation
+                {t("apiToolDialog.documentation")}
               </Label>
               <Textarea
                 id="tool-docs"
                 value={form.docs}
                 onChange={(e) => set("docs", e.target.value)}
-                placeholder={"Paste what agents need: endpoints, a sample request, model names, limits.\n\nPOST /v1/images\n{ \"prompt\": \"…\", \"size\": \"1024x1024\" }"}
+                placeholder={`${t("apiToolDialog.docsPlaceholder")}\n\nPOST /v1/images\n{ "prompt": "…", "size": "1024x1024" }`}
                 className="max-h-80 min-h-40 font-mono text-[12.5px] leading-relaxed"
                 maxLength={100_000}
                 spellCheck={false}
               />
-              <p className="text-xs text-muted-foreground">Agents read this before their first call. Markdown works. A link alone is fine too — they'll look the API up.</p>
+              <p className="text-xs text-muted-foreground">{t("apiToolDialog.docsHint")}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tool-docs-url">Documentation link</Label>
+              <Label htmlFor="tool-docs-url">{t("apiToolDialog.docsLink")}</Label>
               <Input id="tool-docs-url" value={form.docsUrl} onChange={(e) => set("docsUrl", e.target.value)} placeholder="https://docs.example.com/api" className="font-mono text-[13px]" aria-invalid={!!err("docsUrl")} spellCheck={false} />
               {err("docsUrl") && <p className="text-xs text-destructive">{err("docsUrl")}</p>}
             </div>
           </Group>
 
-          <Group title="Available to">
+          <Group title={t("mcpDialog.availableTo")}>
             <ScopePicker value={form.scope} onChange={(scope) => set("scope", scope)} />
           </Group>
 
           <Collapsible open={advanced} onOpenChange={setAdvanced}>
             <CollapsibleTrigger className="group flex w-full items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
-              <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" /> Advanced
+              <ChevronRight className="size-4 transition-transform group-data-[state=open]:rotate-90" /> {t("apiToolDialog.advanced")}
             </CollapsibleTrigger>
             <CollapsibleContent className="data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down overflow-hidden">
               <div className="space-y-4 pt-4">
                 <div className="rounded-lg border bg-paper-2 p-3.5">
                   <label className="flex cursor-pointer items-start justify-between gap-4">
                     <span>
-                      <span className="block text-sm font-medium">Also give runs the key as an environment variable</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">
-                        For scripts, SDKs and command-line tools. Agents can read the key then; it's still masked in chats and logs.
-                      </span>
+                      <span className="block text-sm font-medium">{t("apiToolDialog.envTitle")}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{t("apiToolDialog.envHint")}</span>
                     </span>
                     <Switch
                       checked={form.envOn}
                       onCheckedChange={(v) => setForm((f) => ({ ...f, envOn: v, envVar: f.envVar.trim() || suggestEnvVar(f.name) }))}
-                      aria-label="Environment variable"
+                      aria-label={t("mcpDialog.envVar")}
                       className="mt-0.5"
                     />
                   </label>
@@ -418,7 +425,7 @@ export function ApiToolDialog({
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
                         <div className="pt-3">
                           <Input
-                            aria-label="Variable name"
+                            aria-label={t("apiToolDialog.variableName")}
                             value={form.envVar}
                             onChange={(e) => set("envVar", e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_"))}
                             className="bg-card font-mono text-[13px] sm:max-w-72"
@@ -432,7 +439,7 @@ export function ApiToolDialog({
                   </AnimatePresence>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tool-test">Test request</Label>
+                  <Label htmlFor="tool-test">{t("apiToolDialog.testRequest")}</Label>
                   <div className="flex items-center gap-2">
                     <span className="rounded-md border bg-paper-2 px-2 py-2 font-mono text-[11px] leading-none text-muted-foreground">GET</span>
                     <Input id="tool-test" value={form.testPath} onChange={(e) => set("testPath", e.target.value)} placeholder="/v1/models" className="font-mono text-[13px]" aria-invalid={!!err("testPath")} spellCheck={false} />
@@ -440,7 +447,7 @@ export function ApiToolDialog({
                   {err("testPath") ? (
                     <p className="text-xs text-destructive">{err("testPath")}</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">A cheap request that only works with a valid key. Powers the Test button.</p>
+                    <p className="text-xs text-muted-foreground">{t("apiToolDialog.testHint")}</p>
                   )}
                 </div>
               </div>
@@ -450,15 +457,15 @@ export function ApiToolDialog({
 
         <DialogFooter className="sticky bottom-0 gap-2 border-t bg-card/95 px-6 py-4 backdrop-blur">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           {form.testPath.trim() && form.baseUrl.trim() && (
             <Button variant="outline" onClick={() => submit(true)()} disabled={save.isPending}>
-              <FlaskConical /> Save & test
+              <FlaskConical /> {t("mcpDialog.saveAndTest")}
             </Button>
           )}
           <Button type="submit" form="api-tool-form" disabled={save.isPending}>
-            {save.isPending ? <Spinner /> : <Save />} {editing ? "Save changes" : "Add tool"}
+            {save.isPending ? <Spinner /> : <Save />} {editing ? t("mcpDialog.saveChanges") : t("tools.addTool")}
           </Button>
         </DialogFooter>
       </DialogContent>

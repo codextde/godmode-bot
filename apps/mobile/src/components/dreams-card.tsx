@@ -4,19 +4,18 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { Trans, useTranslation } from "react-i18next";
 import type { Agent, Dream, DreamOverview, DreamStatus } from "@godmode/shared";
 import { Group, LinkRow } from "./form";
 import { Icon, type IconName } from "./icon";
 import {
   ACTIVE_DREAM,
-  CHANGE_KINDS,
   DreamStatusBadge,
   ROLLED_BACK,
   changeCounts,
   dreamWhen,
   entryCount,
   fileList,
-  plural,
   reviewedLabel,
   shortChars,
   upcomingWhen,
@@ -24,6 +23,7 @@ import {
 import { Button, Card, Hairline, SectionTitle, Skeleton, T, tap } from "./ui";
 import { api, ApiError, errorText } from "@/lib/api";
 import { elapsed } from "@/lib/format";
+import { dateLocale, t } from "@/lib/i18n";
 import { useNow } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { useSettings } from "@/lib/setup";
@@ -33,12 +33,6 @@ const JOURNAL_PREVIEW = 3;
 
 /** An older Godmode on the computer doesn't let the phone read it. */
 const refused = (err: unknown) => err instanceof ApiError && (err.status === 403 || err.status === 404);
-
-const LAST_DREAM: Partial<Record<DreamStatus, string>> = {
-  failed: "Last dream failed",
-  cancelled: "Last dream was cancelled",
-  paused: "Last dream paused",
-};
 
 const NODE: Record<DreamStatus, { icon: IconName; color: (c: Colors) => string }> = {
   queued: { icon: "clock", color: (c) => c.textMuted },
@@ -53,6 +47,7 @@ const NODE: Record<DreamStatus, { icon: IconName; color: (c: Colors) => string }
 /** The desktop's dreams panel: whether the agent dreams and when next, "Dream now", and its dream journal. */
 export function DreamsCard({ agent }: { agent: Agent }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [showAll, setShowAll] = useState(false);
   const q = useQuery({
     queryKey: qk.dreams(agent.id),
@@ -71,7 +66,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
       void queryClient.invalidateQueries({ queryKey: qk.agentMemory(agent.id) });
     },
     onError: (err) => {
-      Alert.alert("Couldn't start a dream", errorText(err));
+      Alert.alert(t("dreamsCard.startFailed"), errorText(err));
       void queryClient.invalidateQueries({ queryKey: qk.dreams(agent.id) });
     },
   });
@@ -80,8 +75,8 @@ export function DreamsCard({ agent }: { agent: Agent }) {
   const o = q.data;
   if (o && !o.enabled && !o.active && !o.dreams.length) {
     return (
-      <Group title="Dreaming">
-        <LinkRow icon="moon" title="Off" detail="Dreaming is off — turn it on in Settings → Memory" onPress={() => router.push("/settings/memory")} />
+      <Group title={t("dreamsCard.title")}>
+        <LinkRow icon="moon" title={t("common:status.off")} detail={t("dreamsCard.offHint")} onPress={() => router.push("/settings/memory")} />
       </Group>
     );
   }
@@ -92,7 +87,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
 
   return (
     <View>
-      <SectionTitle title="Dreaming" />
+      <SectionTitle title={t("dreamsCard.title")} />
       <Card style={{ overflow: "hidden" }}>
         <View style={styles.head}>
           <View style={{ flexDirection: "row", gap: space.md }}>
@@ -107,7 +102,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
                 </>
               ) : q.isError ? (
                 <T variant="footnote" color={c.danger}>
-                  {`Couldn't load dreams: ${errorText(q.error)}`}
+                  {t("dreamsCard.loadFailed", { error: errorText(q.error) })}
                 </T>
               ) : o ? (
                 <StatusLines overview={o} agent={agent} />
@@ -115,7 +110,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
             </View>
           </View>
           <Button
-            title="Dream now"
+            title={t("dreamsCard.dreamNow")}
             icon="sparkles"
             variant="secondary"
             disabled={!o || !!active || !agent.enabled}
@@ -129,7 +124,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
             <View>
               <Hairline />
               <T variant="eyebrow" muted style={styles.eyebrow}>
-                Dream journal
+                {t("dreamsCard.journal")}
               </T>
               {shown.map((d, i) => (
                 <View key={d.id}>
@@ -148,7 +143,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
                 >
                   <Icon name={showAll ? "up" : "down"} size={11} color={c.textMuted} weight="semibold" />
                   <T variant="footnote" muted style={{ fontWeight: "500" }}>
-                    {showAll ? "Show fewer" : `Show ${plural(older, "older dream")}`}
+                    {showAll ? t("dreamsCard.showFewer") : t("dreamsCard.showOlder", { count: older })}
                   </T>
                 </Pressable>
               ) : null}
@@ -157,7 +152,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
             <View>
               <Hairline />
               <T variant="footnote" muted style={{ padding: space.lg }}>
-                Every dream lands here: what {agent.name} reviewed, what it changed in its memory and why — with a line-by-line diff.
+                {t("dreamsCard.journalEmpty", { name: agent.name })}
               </T>
             </View>
           )
@@ -169,6 +164,7 @@ export function DreamsCard({ agent }: { agent: Agent }) {
 
 function StatusLines({ overview: o, agent }: { overview: DreamOverview; agent: Agent }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const minExchanges = useSettings().data?.memory?.dreaming?.minNewExchanges;
   const active = o.active;
 
@@ -177,7 +173,7 @@ function StatusLines({ overview: o, agent }: { overview: DreamOverview; agent: A
     return (
       <>
         <T variant="subhead" color={c.dream} style={{ fontWeight: "600" }}>
-          {queued ? "Waiting to dream…" : "Dreaming…"}
+          {queued ? t("dreamsCard.waitingToDream") : t("dreamsCard.dreaming")}
           {!queued ? <DreamElapsed since={active.startedAt ?? active.createdAt} /> : null}
         </T>
         <T variant="footnote" muted>
@@ -185,7 +181,7 @@ function StatusLines({ overview: o, agent }: { overview: DreamOverview; agent: A
         </T>
         {queued ? (
           <T variant="footnote" muted>
-            {`Starts as soon as ${agent.name} has finished what it's doing.`}
+            {t("dreamsCard.startsSoon", { name: agent.name })}
           </T>
         ) : null}
       </>
@@ -196,17 +192,27 @@ function StatusLines({ overview: o, agent }: { overview: DreamOverview; agent: A
   const lastAt = last ? new Date(last.finishedAt ?? last.createdAt) : null;
   const threshold = Math.max(1, minExchanges ?? 1);
   const { exchanges, conversations } = o.pending;
+  const lastKey =
+    last?.status === "failed"
+      ? "dreamsCard.last.failed"
+      : last?.status === "cancelled"
+        ? "dreamsCard.last.cancelled"
+        : last?.status === "paused"
+          ? last.reason === "size"
+            ? "dreamsCard.last.pausedSize"
+            : "dreamsCard.last.pausedIdle"
+          : last?.status === "reverted"
+            ? "dreamsCard.last.reverted"
+            : "dreamsCard.last.default";
   const lastText =
     last && lastAt
-      ? `${LAST_DREAM[last.status] ?? "Last dream"} ${formatDistanceToNowStrict(lastAt, { addSuffix: true })}${
-          last.status === "paused" ? (last.reason === "size" ? " — the next scheduled dream takes over" : ` — it continues when ${agent.name} is idle`) : ""
-        }${last.status === "reverted" ? " (undone)" : ""}`
-      : "Hasn't dreamt yet";
+      ? t(lastKey, { ago: formatDistanceToNowStrict(lastAt, { addSuffix: true, locale: dateLocale() }), name: agent.name })
+      : t("dreamsCard.neverDreamt");
   const nextText = !o.enabled
-    ? "Dreaming is off — turn it on in Settings → Memory"
+    ? t("dreamsCard.offHint")
     : o.nextDreamAt
-      ? `Next dream ${upcomingWhen(o.nextDreamAt)}`
-      : "No upcoming dream — check the schedule in Settings → Memory";
+      ? t("dreamsCard.nextDream", { when: upcomingWhen(o.nextDreamAt) })
+      : t("dreamsCard.noUpcoming");
 
   return (
     <>
@@ -218,18 +224,20 @@ function StatusLines({ overview: o, agent }: { overview: DreamOverview; agent: A
       </T>
       {!agent.enabled ? (
         <T variant="footnote" muted>
-          {agent.name} is switched off — switch it on to let it dream.
+          {t("dreamsCard.agentOff", { name: agent.name })}
         </T>
       ) : exchanges > 0 ? (
         <T variant="footnote" muted>
-          <T variant="footnote" style={{ fontWeight: "500" }}>
-            {plural(exchanges, "new exchange")}
-          </T>{" "}
-          in {plural(conversations, "chat")} waiting{o.enabled && exchanges < threshold ? ` — the next scheduled dream needs ${threshold}` : ""}
+          <Trans
+            t={t}
+            i18nKey={o.enabled && exchanges < threshold ? "dreamsCard.pendingBelowThreshold" : "dreamsCard.pending"}
+            values={{ exchanges: t("dreamsCard.newExchanges", { count: exchanges }), chats: t("dreamParts.chats", { count: conversations }), threshold }}
+            components={{ b: <T variant="footnote" style={{ fontWeight: "500" }} /> }}
+          />
         </T>
       ) : (
         <T variant="footnote" muted>
-          {last ? "Nothing new since the last dream." : "Nothing to dream about yet — chat with the agent first."}
+          {last ? t("dreamsCard.nothingNew") : t("dreamsCard.nothingYet")}
         </T>
       )}
     </>
@@ -246,29 +254,30 @@ function DreamElapsed({ since }: { since: string }) {
 function changeLine(d: Dream): { text: string; danger?: boolean } | null {
   if (d.status === "failed" && d.error) return { text: d.error, danger: true };
   if (ROLLED_BACK.includes(d.status)) {
-    if (d.changes.length) return { text: d.files.length ? "Attempted — rolled back where possible" : "Attempted — rolled back, nothing was kept" };
+    if (d.changes.length) return { text: d.files.length ? t("components:dreamsCard.attemptedPartly") : t("components:dreamsCard.attemptedNothingKept") };
     return d.error ? { text: d.error } : null;
   }
   if (ACTIVE_DREAM.includes(d.status)) return null;
-  const parts = changeCounts(d).map(({ kind, n }) => `${n} ${CHANGE_KINDS[kind].label.toLowerCase()}`);
+  const parts = changeCounts(d).map(({ kind, n }) => t(`components:dreamParts.changeCount.${kind}`, { n }));
   if (!parts.length && d.files.length) parts.push(fileList(d.files));
   if (d.memoryChars && shortChars(d.memoryChars.before) !== shortChars(d.memoryChars.after)) {
     parts.push(`MEMORY.md ${shortChars(d.memoryChars.before)} → ${shortChars(d.memoryChars.after)}`);
   }
   if (d.workspace.length) parts.push(entryCount(d.workspace.length));
   if (parts.length) return { text: parts.join(" · ") };
-  return d.status === "succeeded" ? { text: "Memory was already in good shape — nothing to rewrite." } : null;
+  return d.status === "succeeded" ? { text: t("components:dreamsCard.alreadyGood") } : null;
 }
 
 function JournalRow({ dream: d }: { dream: Dream }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const node = NODE[d.status] ?? NODE.queued;
   const rolledBack = ROLLED_BACK.includes(d.status);
   const line = changeLine(d);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Dream of ${dreamWhen(d.createdAt)}`}
+      accessibilityLabel={t("dreamsCard.dreamOf", { when: dreamWhen(d.createdAt) })}
       onPress={() => {
         tap();
         router.push({ pathname: "/dream/[id]", params: { id: d.id } });
@@ -286,7 +295,7 @@ function JournalRow({ dream: d }: { dream: Dream }) {
           <DreamStatusBadge status={d.status} />
         </View>
         <T variant="footnote" muted={rolledBack || !d.summary} numberOfLines={2}>
-          {d.summary || (ACTIVE_DREAM.includes(d.status) ? "Consolidating memory…" : reviewedLabel(d))}
+          {d.summary || (ACTIVE_DREAM.includes(d.status) ? t("dreamsCard.consolidating") : reviewedLabel(d))}
         </T>
         {line ? (
           <T variant="caption" color={line.danger ? c.danger : c.textMuted} numberOfLines={1}>

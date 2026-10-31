@@ -1,12 +1,14 @@
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ApiKeysTab } from "@/components/integrations/api-keys-tab";
 import { SectionHeading } from "./settings-kit";
 
 export function ApiKeysSection() {
+  const { t } = useTranslation("settings");
   const navigate = useNavigate();
   return (
     <div className="space-y-5">
-      <SectionHeading title="API keys" description="Keys Godmode itself uses: Claude or GLM on an API account, voice, CAPTCHA solving and browser sync." />
+      <SectionHeading title={t("apiKeys.title")} description={t("apiKeys.description")} />
       <ApiKeysTab onOpenComposio={() => navigate("/settings/integrations")} onOpenTools={() => navigate("/settings/integrations?tab=tools")} />
     </div>
   );

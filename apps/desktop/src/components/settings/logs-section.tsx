@@ -4,6 +4,7 @@ import { format, formatDistanceToNow, isToday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { Activity, Check, ChevronRight, CircleCheck, ClipboardCopy, Download, RefreshCw, ScanSearch, Search, ShieldCheck, Trash2, TriangleAlert, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { LogEntry, LogIssue, LogLevel, LogOverview, Settings } from "@godmode/shared";
 import { EmptyState } from "@/components/common";
 import {
@@ -27,6 +28,7 @@ import { CopyButton } from "@/components/vault/copy-button";
 import { writeClipboard } from "@/components/vault/clipboard";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
+import { dateLocale, intlLocale } from "@/i18n";
 import { saveBlob } from "@/lib/desktop";
 import { useAllAgents } from "@/lib/hooks";
 import { AgentAvatar } from "@/components/common";
@@ -39,11 +41,11 @@ const REFRESH_MS = 10_000;
 const ENTRY_LIMIT = 300;
 
 type Filter = "all" | "warn" | "error";
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "warn", label: "Warnings" },
-  { value: "error", label: "Errors" },
-];
+const FILTERS = [
+  { value: "all", labelKey: "common:words.all" },
+  { value: "warn", labelKey: "logs.warnings" },
+  { value: "error", labelKey: "logs.errors" },
+] as const satisfies readonly { value: Filter; labelKey: string }[];
 
 const LEVEL_DOT: Record<LogLevel, string> = {
   error: "bg-destructive",
@@ -60,7 +62,7 @@ function formatBytes(n: number): string {
 
 function stamp(ts: string): string {
   const d = new Date(ts);
-  return isToday(d) ? format(d, "HH:mm:ss") : format(d, "MMM d HH:mm");
+  return isToday(d) ? format(d, "HH:mm:ss", { locale: dateLocale() }) : format(d, "MMM d HH:mm", { locale: dateLocale() });
 }
 
 function formatMs(ms: number): string {
@@ -103,6 +105,7 @@ async function copyReport(): Promise<string> {
 }
 
 export function LogsSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const { patch } = useSettingsPatch();
   const [filter, setFilter] = useState<Filter>("all");
@@ -119,9 +122,9 @@ export function LogsSection({ settings }: { settings: Settings }) {
     onSuccess: (text) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-      toast.success("Log copied", { description: `Paste it into a chat with Claude · ${formatBytes(new Blob([text]).size)}` });
+      toast.success(t("logs.copied"), { description: t("logs.copiedDescription", { size: formatBytes(new Blob([text]).size) }) });
     },
-    onError: (e) => toast.error("Could not copy the log", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("logs.copyError"), { description: errorMessage(e) }),
   });
 
   const download = useMutation({
@@ -129,7 +132,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
       const text = await api.logs.report(true);
       return saveBlob(new Blob([text], { type: "text/markdown" }), `godmode-log-${format(new Date(), "yyyy-MM-dd-HHmm")}.md`);
     },
-    onError: (e) => toastApiError(e, "Could not download the log", qc),
+    onError: (e) => toastApiError(e, t("logs.downloadError"), qc),
   });
 
   const clear = useMutation({
@@ -137,10 +140,10 @@ export function LogsSection({ settings }: { settings: Settings }) {
     onSuccess: () => {
       setFilter("all");
       setSearch("");
-      toast.success("Log deleted");
+      toast.success(t("logs.deleted"));
       void qc.invalidateQueries({ queryKey: qk.logs });
     },
-    onError: (e) => toastApiError(e, "Could not delete the log", qc),
+    onError: (e) => toastApiError(e, t("logs.deleteError"), qc),
   });
 
   const showIssue = (issue: LogIssue) => {
@@ -154,10 +157,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Logs"
-        description="A private record of errors, slow spots and how runs went. Copy it into a chat with Claude to track down bugs and make Godmode faster."
-      />
+      <SectionHeading title={t("logs.title")} description={t("logs.description")} />
 
       <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
@@ -166,16 +166,16 @@ export function LogsSection({ settings }: { settings: Settings }) {
               <Activity />
             </div>
             <div className="min-w-0">
-              <h3 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Diagnostic log</h3>
+              <h3 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">{t("logs.diagnostic")}</h3>
               <div className="mt-0.5 text-xs text-muted-foreground">
                 {!o ? (
                   <Skeleton className="mt-1 h-3 w-48" />
                 ) : empty ? (
-                  "Nothing recorded yet"
+                  t("audit.emptyTitle")
                 ) : (
                   <>
-                    {o.entries.toLocaleString()} entries · {formatBytes(o.sizeBytes)}
-                    {o.firstTs && ` · since ${format(new Date(o.firstTs), "MMM d, HH:mm")}`}
+                    {t("logs.summary", { count: o.entries, entries: o.entries.toLocaleString(intlLocale()), size: formatBytes(o.sizeBytes) })}
+                    {o.firstTs && ` · ${t("logs.since", { time: format(new Date(o.firstTs), "MMM d, HH:mm", { locale: dateLocale() }) })}`}
                   </>
                 )}
               </div>
@@ -183,32 +183,32 @@ export function LogsSection({ settings }: { settings: Settings }) {
           </div>
           <span className="flex items-center gap-1.5 rounded-full border bg-paper-2 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
             <span className="size-1.5 animate-live-dot rounded-full bg-brand" />
-            {settings.diagnostics.verbose ? "Recording in detail" : "Recording"}
+            {settings.diagnostics.verbose ? t("logs.recordingDetail") : t("logs.recording")}
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3 px-5 pt-5 @xl:grid-cols-4">
-          <Stat label="Errors" value={o?.counts.error} tone={o && o.counts.error > 0 ? "error" : undefined} />
-          <Stat label="Warnings" value={o?.counts.warn} tone={o && o.counts.warn > 0 ? "warn" : undefined} />
-          <Stat label="Entries" value={o?.entries} />
-          <Stat label="Last entry" value={o ? (o.lastTs ? formatDistanceToNow(new Date(o.lastTs), { addSuffix: true }) : "—") : undefined} small />
+          <Stat label={t("logs.errors")} value={o?.counts.error} tone={o && o.counts.error > 0 ? "error" : undefined} />
+          <Stat label={t("logs.warnings")} value={o?.counts.warn} tone={o && o.counts.warn > 0 ? "warn" : undefined} />
+          <Stat label={t("logs.entries")} value={o?.entries} />
+          <Stat label={t("logs.lastEntry")} value={o ? (o.lastTs ? formatDistanceToNow(new Date(o.lastTs), { addSuffix: true, locale: dateLocale() }) : "—") : undefined} small />
         </div>
 
         <div className="flex flex-wrap items-center gap-2 px-5 pt-5 pb-4">
           <Button onClick={() => copy.mutate()} disabled={copy.isPending || empty}>
             {copy.isPending ? <Spinner /> : copied ? <Check /> : <ClipboardCopy />}
-            {copied ? "Copied" : "Copy for Claude"}
+            {copied ? t("common:actions.copied") : t("logs.copyForClaude")}
           </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" onClick={() => setFixing(true)} disabled={empty}>
-                <Wrench /> Fix in code
+                <Wrench /> {t("logs.fixInCode")}
               </Button>
             </TooltipTrigger>
-            <TooltipContent className="max-w-72">An agent gets this log as a ticket, fixes the causes in Godmode's code and merges the fix</TooltipContent>
+            <TooltipContent className="max-w-72">{t("logs.fixInCodeHint")}</TooltipContent>
           </Tooltip>
           <Button variant="outline" onClick={() => download.mutate()} disabled={download.isPending || empty}>
-            {download.isPending ? <Spinner /> : <Download />} Download
+            {download.isPending ? <Spinner /> : <Download />} {t("logs.download")}
           </Button>
           <Button
             variant="ghost"
@@ -216,12 +216,12 @@ export function LogsSection({ settings }: { settings: Settings }) {
             onClick={() => setConfirmDelete(true)}
             disabled={clear.isPending || empty}
           >
-            {clear.isPending ? <Spinner /> : <Trash2 />} Delete
+            {clear.isPending ? <Spinner /> : <Trash2 />} {t("common:actions.delete")}
           </Button>
         </div>
         <p className="flex items-center gap-2 border-t px-5 py-3 text-xs text-muted-foreground">
           <ShieldCheck className="size-3.5 shrink-0 text-success" />
-          Passwords, 2FA codes, API keys and tokens are masked before anything is written. Nothing leaves this device unless you copy it.
+          {t("logs.masked")}
         </p>
       </motion.section>
 
@@ -233,10 +233,10 @@ export function LogsSection({ settings }: { settings: Settings }) {
 
       <SelfRepairGroup settings={settings} />
 
-      <SettingsGroup title="Detailed logging" icon={<ScanSearch />} description="For chasing a specific problem. Turn it off again afterwards — the log fills much faster.">
+      <SettingsGroup title={t("logs.verbose.title")} icon={<ScanSearch />} description={t("logs.verbose.description")}>
         <SettingRow
-          label="Record every request and tool call"
-          description="Adds the timing of every API request and agent tool call, plus debug details from all parts of Godmode."
+          label={t("logs.verbose.label")}
+          description={t("logs.verbose.labelDescription")}
           htmlFor="verbose-logging"
         >
           <Switch id="verbose-logging" checked={settings.diagnostics.verbose} onCheckedChange={(verbose) => patch({ diagnostics: { verbose } })} />
@@ -248,16 +248,15 @@ export function LogsSection({ settings }: { settings: Settings }) {
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete the diagnostic log?</AlertDialogTitle>
+            <AlertDialogTitle>{t("logs.confirm.title")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {o ? `All ${o.entries.toLocaleString()} entries are removed` : "All entries are removed"}, including the desktop app's own log. Godmode keeps recording from
-              now on — handy after you've shared the log and the problems are fixed.
+              {o ? t("logs.confirm.bodyCount", { count: o.entries, entries: o.entries.toLocaleString(intlLocale()) }) : t("logs.confirm.body")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => clear.mutate()}>
-              Delete log
+              {t("logs.confirm.button")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -270,17 +269,18 @@ const DEFAULT_AGENT = "__default";
 
 /** Where fixes from the logs go, who makes them and whether they are merged without a review. */
 function SelfRepairGroup({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch } = useSettingsPatch();
   const agents = (useAllAgents().data ?? []).filter((a) => a.enabled || a.id === settings.selfRepair.agentId);
   const fallback = agents.find((a) => a.isDefault);
   const s = settings.selfRepair;
   return (
     <SettingsGroup
-      title="Self-repair"
+      title={t("logs.repair.title")}
       icon={<Wrench />}
-      description="“Fix in code” files a ticket on Godmode's source repository. Agents with the self_repair tool check the logs by themselves, too."
+      description={t("logs.repair.description")}
     >
-      <SettingRow stacked label="Repository" htmlFor="repair-repo" description="Godmode's source code, or your fork of it. Godmode pushes and merges with this computer's git and GitHub sign-in.">
+      <SettingRow stacked label={t("logs.repair.repo")} htmlFor="repair-repo" description={t("logs.repair.repoDescription")}>
         <CommitInput
           id="repair-repo"
           value={s.repoUrl}
@@ -291,7 +291,7 @@ function SelfRepairGroup({ settings }: { settings: Settings }) {
           className="font-mono text-[13px]"
         />
       </SettingRow>
-      <SettingRow label="Branch" htmlFor="repair-branch" description="Fixes start from it and are merged into it.">
+      <SettingRow label={t("logs.repair.branch")} htmlFor="repair-branch" description={t("logs.repair.branchDescription")}>
         <CommitInput
           id="repair-branch"
           value={s.baseBranch}
@@ -301,7 +301,7 @@ function SelfRepairGroup({ settings }: { settings: Settings }) {
           className="w-40 font-mono text-[13px]"
         />
       </SettingRow>
-      <SettingRow label="Agent" htmlFor="repair-agent" description="Works on the fixes. They go on its workspace's board.">
+      <SettingRow label={t("calls.inbound.agent")} htmlFor="repair-agent" description={t("logs.repair.agentDescription")}>
         <Select value={s.agentId ?? DEFAULT_AGENT} onValueChange={(v) => patch({ selfRepair: { agentId: v === DEFAULT_AGENT ? null : v } })}>
           <SelectTrigger id="repair-agent" className="w-56">
             <SelectValue />
@@ -309,8 +309,8 @@ function SelfRepairGroup({ settings }: { settings: Settings }) {
           <SelectContent position="popper" align="end">
             <SelectItem value={DEFAULT_AGENT}>
               {fallback ? <AgentAvatar agent={fallback} size="sm" still className="size-4" /> : null}
-              {fallback?.name ?? "Default agent"}
-              {fallback && <span className="text-xs text-muted-foreground">· default</span>}
+              {fallback?.name ?? t("calls.inbound.defaultAgent")}
+              {fallback && <span className="text-xs text-muted-foreground">· {t("calls.inbound.default")}</span>}
             </SelectItem>
             {agents.some((a) => !a.isDefault) && <SelectSeparator />}
             {agents
@@ -323,7 +323,7 @@ function SelfRepairGroup({ settings }: { settings: Settings }) {
           </SelectContent>
         </Select>
       </SettingRow>
-      <SettingRow label="Merge fixes automatically" htmlFor="repair-merge" description={`A delivered fix is merged into ${s.baseBranch} right away, without a review.`}>
+      <SettingRow label={t("logs.repair.merge")} htmlFor="repair-merge" description={t("logs.repair.mergeDescription", { branch: s.baseBranch })}>
         <Switch id="repair-merge" checked={s.autoMerge} onCheckedChange={(autoMerge) => patch({ selfRepair: { autoMerge } })} />
       </SettingRow>
     </SettingsGroup>
@@ -351,7 +351,7 @@ function Stat({ label, value, tone, small }: { label: string; value: number | st
             tone === "warn" && "text-warning",
           )}
         >
-          {typeof value === "number" ? value.toLocaleString() : value}
+          {typeof value === "number" ? value.toLocaleString(intlLocale()) : value}
         </div>
       )}
     </div>
@@ -359,12 +359,13 @@ function Stat({ label, value, tone, small }: { label: string; value: number | st
 }
 
 function IssuesCard({ overview, loading, onSelect }: { overview: LogOverview | undefined; loading: boolean; onSelect: (issue: LogIssue) => void }) {
+  const { t } = useTranslation("settings");
   const issues = overview?.issues ?? [];
   return (
     <SettingsGroup
-      title="Needs attention"
+      title={t("logs.issues.title")}
       icon={<TriangleAlert />}
-      description="Warnings and errors that keep coming back, grouped by what they say."
+      description={t("logs.issues.description")}
       bodyClassName="px-0"
     >
       {loading ? (
@@ -376,7 +377,7 @@ function IssuesCard({ overview, loading, onSelect }: { overview: LogOverview | u
       ) : !issues.length ? (
         <div className="flex items-center gap-3 px-5 py-4 text-sm text-muted-foreground">
           <CircleCheck className="size-4 shrink-0 text-success" />
-          Nothing needs attention — no warnings or errors recorded.
+          {t("logs.issues.none")}
         </div>
       ) : (
         <ul className="divide-y">
@@ -392,7 +393,7 @@ function IssuesCard({ overview, loading, onSelect }: { overview: LogOverview | u
                   <span className="line-clamp-2 text-sm break-words">{issue.msg}</span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
                     <ScopeTag scope={issue.scope} />
-                    <span>last {formatDistanceToNow(new Date(issue.lastTs), { addSuffix: true })}</span>
+                    <span>{t("logs.issues.last", { time: formatDistanceToNow(new Date(issue.lastTs), { addSuffix: true, locale: dateLocale() }) })}</span>
                   </span>
                 </span>
                 <span
@@ -401,7 +402,7 @@ function IssuesCard({ overview, loading, onSelect }: { overview: LogOverview | u
                     issue.level === "error" ? "bg-destructive/[0.08] text-destructive" : "bg-warning/[0.1] text-warning",
                   )}
                 >
-                  ×{issue.count.toLocaleString()}
+                  ×{issue.count.toLocaleString(intlLocale())}
                 </span>
                 <ChevronRight className="mt-1 size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
               </button>
@@ -428,6 +429,7 @@ function EntriesCard({
   search: string;
   setSearch: (s: string) => void;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const [open, setOpen] = useState<string | null>(null);
   const deferred = useDeferredValue(search.trim());
   const query = useQuery({
@@ -441,26 +443,26 @@ function EntriesCard({
 
   return (
     <SettingsGroup
-      title="Entries"
+      title={t("logs.entries")}
       icon={<Activity />}
-      description="Newest first. Click an entry for its details."
+      description={t("logs.list.description")}
       bodyClassName="px-0"
       actions={
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label="Refresh" onClick={() => query.refetch()} disabled={query.isFetching}>
+            <Button size="icon-sm" variant="ghost" aria-label={t("common:actions.refresh")} onClick={() => query.refetch()} disabled={query.isFetching}>
               <RefreshCw className={cn(query.isFetching && "animate-spin")} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Refresh</TooltipContent>
+          <TooltipContent>{t("common:actions.refresh")}</TooltipContent>
         </Tooltip>
       }
     >
       <div className="flex flex-wrap items-center gap-2 border-b px-5 py-3">
-        <Segmented value={filter} onChange={setFilter} options={FILTERS} aria-label="Filter by level" />
+        <Segmented value={filter} onChange={setFilter} options={FILTERS.map((f) => ({ value: f.value, label: t(f.labelKey) }))} aria-label={t("logs.list.filter")} />
         <div className="relative min-w-48 flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search messages, scopes, details…" aria-label="Search the log" className="pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("logs.list.searchPlaceholder")} aria-label={t("logs.list.search")} className="pl-9" />
         </div>
       </div>
 
@@ -472,15 +474,15 @@ function EntriesCard({
         </div>
       ) : query.isError ? (
         <div className="p-5 text-sm">
-          <p className="font-medium text-destructive">Could not load the log</p>
+          <p className="font-medium text-destructive">{t("logs.list.loadError")}</p>
           <p className="mt-1 text-muted-foreground">{errorMessage(query.error)}</p>
         </div>
       ) : !entries.length ? (
         <div className="p-5">
           <EmptyState
             icon={<Activity />}
-            title={deferred || filter !== "all" ? "No matching entries" : "The log is empty"}
-            description={deferred || filter !== "all" ? "Try another filter or search." : "Errors, slow spots and finished runs will show up here as Godmode works."}
+            title={deferred || filter !== "all" ? t("audit.noMatchTitle") : t("logs.list.emptyTitle")}
+            description={deferred || filter !== "all" ? t("logs.list.noMatchDescription") : t("logs.list.emptyDescription")}
             className="py-10"
           />
         </div>
@@ -493,7 +495,7 @@ function EntriesCard({
           </ul>
           {entries.length >= ENTRY_LIMIT && (
             <p className="border-t px-5 py-3 text-center text-xs text-muted-foreground">
-              Showing the newest {ENTRY_LIMIT}. Search or filter to find older entries — Copy and Download include everything.
+              {t("logs.list.limit", { count: ENTRY_LIMIT })}
             </p>
           )}
         </div>
@@ -534,7 +536,7 @@ function EntryRow({ entry, open, onToggle }: { entry: LogEntry; open: boolean; o
           <TooltipTrigger asChild>
             <span className="font-mono text-[11px] whitespace-nowrap text-muted-foreground tabular-nums">{stamp(entry.ts)}</span>
           </TooltipTrigger>
-          <TooltipContent>{format(new Date(entry.ts), "PPpp")}</TooltipContent>
+          <TooltipContent>{format(new Date(entry.ts), "PPpp", { locale: dateLocale() })}</TooltipContent>
         </Tooltip>
         <span className={cn("size-2 rounded-full", LEVEL_DOT[entry.level])} aria-label={entry.level} />
         <span className="flex min-w-0 items-center gap-2">
@@ -558,9 +560,10 @@ function EntryRow({ entry, open, onToggle }: { entry: LogEntry; open: boolean; o
 }
 
 function EntryDetails({ entry }: { entry: LogEntry }) {
+  const { t } = useTranslation("settings");
   const blocks: { label: string; body: ReactNode }[] = [];
-  if (entry.err) blocks.push({ label: entry.err.name ?? "Error", body: entry.err.stack ?? entry.err.message });
-  if (entry.data) blocks.push({ label: "Details", body: JSON.stringify(entry.data, null, 2) });
+  if (entry.err) blocks.push({ label: entry.err.name ?? t("logs.detail.error"), body: entry.err.stack ?? entry.err.message });
+  if (entry.data) blocks.push({ label: t("logs.detail.details"), body: JSON.stringify(entry.data, null, 2) });
   return (
     <div className="space-y-2 px-5 pt-1 pb-4 pl-[calc(1.25rem+5.75rem+0.75rem)]">
       {blocks.map((b) => (
@@ -570,7 +573,7 @@ function EntryDetails({ entry }: { entry: LogEntry }) {
         </div>
       ))}
       <div className="flex justify-end">
-        <CopyButton value={JSON.stringify(entry, null, 2)} label="Copy entry" toastLabel="Entry copied" size="icon-xs" />
+        <CopyButton value={JSON.stringify(entry, null, 2)} label={t("logs.detail.copy")} toastLabel={t("logs.detail.copied")} size="icon-xs" />
       </div>
     </div>
   );

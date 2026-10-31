@@ -3,7 +3,8 @@ import Constants from "expo-constants";
 import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
-import { EFFORT_LABELS, PALETTES, PALETTE_DEFS, findModel, type InterfaceMode, type Palette, type Theme } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { PALETTES, effortLabel, findModel, type AppLanguage, type InterfaceMode, type Palette, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, FieldRow, Group, LinkRow, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
@@ -11,6 +12,7 @@ import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAppearance } from "@/lib/appearance";
+import { useLanguage, currentLanguage } from "@/lib/i18n";
 import { useSuggestions } from "@/lib/suggestions";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
@@ -27,28 +29,34 @@ import { useWorkspace } from "@/lib/workspace";
 const PLATFORM: Record<string, string> = { darwin: "macOS", win32: "Windows", linux: "Linux" };
 
 const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "system", label: "System" },
-] as const satisfies readonly { value: Theme; label: string }[];
+  { value: "light", labelKey: "settings:overview.theme.light" },
+  { value: "dark", labelKey: "settings:overview.theme.dark" },
+  { value: "system", labelKey: "common:language.system" },
+] as const satisfies readonly { value: Theme; labelKey: string }[];
 
-const PALETTE_OPTIONS = PALETTES.map((value) => ({ value, label: PALETTE_DEFS[value].label, detail: PALETTE_DEFS[value].blurb }));
+const LANGUAGE_OPTIONS = [
+  { value: "system", labelKey: "common:language.system" },
+  { value: "en", labelKey: "common:language.en" },
+  { value: "de", labelKey: "common:language.de" },
+] as const satisfies readonly { value: AppLanguage; labelKey: string }[];
 
 const MODE_OPTIONS = [
-  { value: "easy", label: "Easy" },
-  { value: "pro", label: "Professional" },
-] as const satisfies readonly { value: InterfaceMode; label: string }[];
+  { value: "easy", labelKey: "settings:overview.mode.easy" },
+  { value: "pro", labelKey: "settings:overview.mode.pro" },
+] as const satisfies readonly { value: InterfaceMode; labelKey: string }[];
 
-const MODE_BLURB: Record<InterfaceMode, string> = {
-  easy: "Plain words and only what you need day to day. Everything else is one click away.",
-  pro: "Every tool, setting and detail in view: models, runs, machines, logs.",
-};
+const MODE_BLURB = {
+  easy: "settings:overview.mode.easyBlurb",
+  pro: "settings:overview.mode.proBlurb",
+} as const satisfies Record<InterfaceMode, string>;
 
 export default function Settings() {
   const c = useColors();
+  const { t } = useTranslation(["settings", "common"]);
   const connection = useSession((s) => s.connection);
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
+  const language = useLanguage((s) => s.language);
   const palette = useAppearance((s) => s.palette);
   const hideSuggestions = useSuggestions((s) => s.hidden);
   const setHideSuggestions = useSuggestions((s) => s.setHidden);
@@ -75,25 +83,25 @@ export default function Settings() {
   const preferredId = preferredOf(connection)?.instance.id;
   const primary = primaryOf(connection);
   const computerState = (id: string) => {
-    if (id === activeId) return status === "online" ? "Connected" : status === "connecting" ? "Connecting…" : "Out of reach";
-    return id === preferredId && preferredAway && status === "online" ? "Away" : null;
+    if (id === activeId) return status === "online" ? t("overview.status.connected") : status === "connecting" ? t("overview.status.connecting") : t("overview.status.outOfReach");
+    return id === preferredId && preferredAway && status === "online" ? t("overview.status.away") : null;
   };
   const pick = async (id: string | null) => {
     if (await preferComputer(id)) return;
-    const name = computers.find((p) => p.instance.id === (id ?? primary?.instance.id))?.instance.name ?? "That computer";
-    Alert.alert(`${name} doesn't answer right now`, "This phone switches to it as soon as it's back.");
+    const name = computers.find((p) => p.instance.id === (id ?? primary?.instance.id))?.instance.name ?? t("overview.pick.thatComputer");
+    Alert.alert(t("overview.pick.title", { name }), t("overview.pick.body"));
   };
 
   const toggleLock = async (on: boolean) => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: on ? "Turn on Face ID for Godmode" : "Turn off Face ID for Godmode" });
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage: on ? t("overview.lock.turnOn") : t("overview.lock.turnOff") });
     if (result.success) await useSession.getState().setAppLock(on);
   };
 
   const disconnect = () =>
-    Alert.alert(`Disconnect from ${instance.name}?`, "This phone forgets its key. Scan a new code to connect again.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("overview.disconnect.title", { name: instance.name }), t("overview.disconnect.body"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
       {
-        text: "Disconnect",
+        text: t("overview.disconnect.confirm"),
         style: "destructive",
         onPress: async () => {
           await api.unpair().catch(() => undefined);
@@ -104,7 +112,7 @@ export default function Settings() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: "Settings" }} />
+      <Stack.Screen options={{ title: t("common:words.settings") }} />
       <CloseButton />
 
       <Card style={styles.computer}>
@@ -119,18 +127,18 @@ export default function Settings() {
           <Row style={{ gap: 6, marginTop: 4 }}>
             <LiveDot live={status === "online"} size={6} color={status === "offline" ? c.warning : undefined} />
             <T variant="caption" muted>
-              {status === "online" ? "Connected" : status === "connecting" ? "Connecting…" : "Out of reach"}
+              {status === "online" ? t("overview.status.connected") : status === "connecting" ? t("overview.status.connecting") : t("overview.status.outOfReach")}
             </T>
           </Row>
         </View>
       </Card>
 
       {computers.length > 1 ? (
-        <Group title="This phone uses" footer="When the one you pick is out of reach, this phone uses another computer of the group and switches back once it answers again.">
+        <Group title={t("overview.computers.title")} footer={t("overview.computers.footer")}>
           <ChoiceRow
             icon="bolt"
-            title="Automatic"
-            detail={primary ? `The primary, ${primary.instance.name}` : "The computer that answers"}
+            title={t("overview.computers.automatic")}
+            detail={primary ? t("overview.computers.thePrimary", { name: primary.instance.name }) : t("overview.computers.whoAnswers")}
             selected={!connection.preferredInstanceId}
             onPress={() => void pick(null)}
           />
@@ -139,7 +147,7 @@ export default function Settings() {
               key={p.instance.id}
               icon="display"
               title={p.instance.name}
-              detail={[p.role === "primary" ? "Primary" : "Secondary", computerState(p.instance.id)].filter(Boolean).join(" · ")}
+              detail={[p.role === "primary" ? t("overview.computers.primary") : t("overview.computers.secondary"), computerState(p.instance.id)].filter(Boolean).join(" · ")}
               selected={connection.preferredInstanceId === p.instance.id}
               onPress={() => void pick(p.instance.id)}
             />
@@ -147,13 +155,13 @@ export default function Settings() {
         </Group>
       ) : null}
 
-      <Group title="Preferences" footer="Changes apply to your computer right away. Running chats pick them up with their next message.">
-        {s ? <FieldRow label="Your name" value={s.general.userName} placeholder="Add your name" maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}
+      <Group title={t("overview.preferences.title")} footer={t("overview.preferences.footer")}>
+        {s ? <FieldRow label={t("overview.preferences.yourName")} value={s.general.userName} placeholder={t("overview.preferences.addName")} maxLength={80} onCommit={(userName) => void patchSettings({ general: { userName } })} /> : null}
         {s ? (
           <SegmentRow
-            title="Appearance"
-            detail="System follows this phone's setting."
-            options={THEME_OPTIONS}
+            title={t("overview.theme.title")}
+            detail={t("overview.theme.detail")}
+            options={THEME_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
             value={theme}
             onChange={(next) => {
               useAppearance.getState().setTheme(next);
@@ -163,71 +171,83 @@ export default function Settings() {
         ) : null}
         {s ? (
           <PickerRow
-            title="Palette"
-            detail="Just for this phone, light and dark."
-            options={PALETTE_OPTIONS}
+            title={t("overview.palette.title")}
+            detail={t("overview.palette.detail")}
+            options={PALETTES.map((value) => ({ value, label: t(`overview.palette.names.${value}.label`), detail: t(`overview.palette.names.${value}.blurb`) }))}
             value={palette}
             onChange={(next: Palette) => useAppearance.getState().setPalette(next)}
           />
         ) : null}
         {s ? (
           <SegmentRow
-            title="Interface"
-            detail={`${MODE_BLURB[s.general.mode === "easy" ? "easy" : "pro"]} The same on your computer.`}
-            options={MODE_OPTIONS}
+            title={t("overview.language.title")}
+            detail={t("overview.language.detail")}
+            options={LANGUAGE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+            value={language}
+            onChange={(next) => {
+              useLanguage.getState().setLanguage(next);
+              void patchSettings({ general: { language: next } });
+            }}
+          />
+        ) : null}
+        {s ? (
+          <SegmentRow
+            title={t("overview.mode.title")}
+            detail={t("overview.mode.detail", { blurb: t(MODE_BLURB[s.general.mode === "easy" ? "easy" : "pro"]) })}
+            options={MODE_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
             value={s.general.mode === "easy" ? "easy" : "pro"}
             onChange={(mode) => void patchSettings({ general: { mode } })}
           />
         ) : null}
         <LinkRow
           icon="sparkles"
-          title="AI & Claude"
-          value={s && model ? `${model} · ${EFFORT_LABELS[s.runner.effort]}` : undefined}
+          title={t("overview.links.ai")}
+          value={s && model ? `${model} · ${effortLabel(s.runner.effort, currentLanguage())}` : undefined}
           onPress={() => router.push("/settings/ai")}
         />
         <LinkRow
           icon="text"
-          title="Instructions"
-          detail={s ? (s.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : "Rules for every agent, workspace and project") : undefined}
+          title={t("overview.links.instructions")}
+          detail={s ? (s.runner.appendSystemPrompt.trim() ? firstLine(s.runner.appendSystemPrompt) : t("overview.links.instructionsDetail")) : undefined}
           onPress={() => router.push("/settings/instructions")}
         />
-        <LinkRow icon="globe" title="Browser" detail="Profiles, background, live view" onPress={() => router.push("/settings/capabilities")} />
-        <LinkRow icon="display" title="Computer" detail="Computer use and virtual machines" onPress={() => router.push("/settings/capabilities")} />
-        <LinkRow icon="brain" title="Memory" detail="Learning, dreaming, upkeep" onPress={() => router.push("/settings/memory")} />
+        <LinkRow icon="globe" title={t("overview.links.browser")} detail={t("overview.links.browserDetail")} onPress={() => router.push("/settings/capabilities")} />
+        <LinkRow icon="display" title={t("overview.links.computer")} detail={t("overview.links.computerDetail")} onPress={() => router.push("/settings/capabilities")} />
+        <LinkRow icon="brain" title={t("overview.links.memory")} detail={t("overview.links.memoryDetail")} onPress={() => router.push("/settings/memory")} />
       </Group>
 
-      <Group title="Your team">
+      <Group title={t("overview.team.title")}>
         <LinkRow
           icon="layers"
-          title="Workspaces"
-          value={workspaces.length ? `${workspaces.length}${projects ? ` · ${projects} ${projects === 1 ? "project" : "projects"}` : ""}` : "None yet"}
+          title={t("overview.team.workspaces")}
+          value={workspaces.length ? `${workspaces.length}${projects ? ` · ${t("overview.team.projects", { count: projects })}` : ""}` : t("overview.team.noneYet")}
           onPress={() => router.push("/settings/workspaces")}
         />
-        <LinkRow icon="agents" title="Agents" value={agents ? String(agents.length) : undefined} onPress={() => router.push("/settings/agents")} />
+        <LinkRow icon="agents" title={t("common:words.agents")} value={agents ? String(agents.length) : undefined} onPress={() => router.push("/settings/agents")} />
       </Group>
 
-      <Group title="Data & privacy" footer="Logins, 2FA codes, backups and the rest of Security stay on your computer.">
+      <Group title={t("overview.privacy.title")} footer={t("overview.privacy.footer")}>
         {biometrics.data ? (
-          <SwitchRow icon="faceid" title="Require Face ID" detail="Hides Godmode in the app switcher and asks after 30 seconds away." value={appLock} onChange={(on) => void toggleLock(on)} />
+          <SwitchRow icon="faceid" title={t("overview.privacy.faceId")} detail={t("overview.privacy.faceIdDetail")} value={appLock} onChange={(on) => void toggleLock(on)} />
         ) : null}
-        <Info icon="lock" label="Security" value="On your computer" />
+        <Info icon="lock" label={t("overview.privacy.security")} value={t("overview.privacy.onComputer")} />
       </Group>
 
-      <Group title="App" footer="Remove this phone on your computer anytime in Settings → Phone.">
+      <Group title={t("overview.app.title")} footer={t("overview.app.footer")}>
         <SwitchRow
           icon="sparkles"
-          title="Show suggestions"
-          detail="Ideas like “Summarize my unread emails” on Home and in a new chat."
+          title={t("overview.suggestions.title")}
+          detail={t("overview.suggestions.detail")}
           value={!hideSuggestions}
           onChange={(on) => setHideSuggestions(!on)}
         />
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
-        <Info icon="phone" label="This phone" value={me.data?.device.name ?? connection.deviceName} />
+        <Info icon="phone" label={t("overview.app.thisPhone")} value={me.data?.device.name ?? connection.deviceName} />
       </Group>
 
-      <Button title="Disconnect this phone" variant="danger" icon="logout" onPress={disconnect} />
+      <Button title={t("overview.disconnect.button")} variant="danger" icon="logout" onPress={disconnect} />
       <T variant="caption" muted style={{ textAlign: "center" }}>
-        Godmode for {process.env.EXPO_OS === "ios" ? "iOS" : "Android"} {Constants.expoConfig?.version}
+        {t("overview.app.version", { platform: process.env.EXPO_OS === "ios" ? "iOS" : "Android", version: Constants.expoConfig?.version ?? "" })}
       </T>
     </ScrollView>
   );

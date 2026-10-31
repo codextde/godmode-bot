@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import type { Agent, Project } from "@godmode/shared";
 import { Check, ChevronDown, FolderKanban, Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
+import { t as translate } from "@/i18n";
 import { useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { effectiveProject, projectsFor, useProjectIndex } from "./project-utils";
@@ -16,10 +18,10 @@ export function projectMeta(project: Project): string {
   const folders = project.sources.length - repos;
   const parts = [
     project.description.trim().split("\n")[0],
-    folders ? `${folders} folder${folders === 1 ? "" : "s"}` : null,
-    repos ? `${repos} repo${repos === 1 ? "" : "s"}` : null,
+    folders ? translate("projects:meta.folders", { count: folders }) : null,
+    repos ? translate("projects:meta.repos", { count: repos }) : null,
   ];
-  return parts.filter(Boolean).join(" · ") || "No details yet";
+  return parts.filter(Boolean).join(" · ") || translate("projects:meta.none");
 }
 
 /**
@@ -38,6 +40,7 @@ export function ProjectChip({
   onChange: (projectId: string | null) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("projects");
   const { data: workspaces = [] } = useWorkspaces();
   const index = useProjectIndex();
   const navigate = useNavigate();
@@ -53,10 +56,10 @@ export function ProjectChip({
     if (projectId !== value) void onChange(projectId);
   };
   const tooltip = own
-    ? `This chat works on ${own.project.name}`
+    ? t("chip.tooltipOwn", { name: own.project.name })
     : inherited
-      ? `Works on ${inherited.project.name} — ${agent.name}'s project`
-      : "Work on a project";
+      ? t("chip.tooltipInherited", { name: inherited.project.name, agent: agent.name })
+      : t("chip.tooltipNone");
   const newIn = agent.workspaceId ?? groups[0]?.id;
 
   return (
@@ -67,7 +70,7 @@ export function ProjectChip({
             {shown ? (
               <button
                 type="button"
-                aria-label={`Project: ${shown.project.name}${own ? "" : " (default)"}`}
+                aria-label={own ? t("chip.label", { name: shown.project.name }) : t("chip.labelDefault", { name: shown.project.name })}
                 className={cn(
                   "flex h-8 max-w-[12rem] min-w-14 shrink items-center gap-1.5 rounded-lg border pr-1.5 pl-1.5 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                   own ? "bg-card hover:bg-accent" : "border-dashed text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -85,14 +88,14 @@ export function ProjectChip({
               <Button
                 type="button"
                 variant="ghost"
-                aria-label="Project"
+                aria-label={t("chip.project")}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
                 )}
               >
                 {busy ? <Loader2 className="animate-spin" /> : <FolderKanban />}
-                <span className="@max-sm/composer:sr-only">Project</span>
+                <span className="@max-sm/composer:sr-only">{t("chip.project")}</span>
               </Button>
             )}
           </PopoverTrigger>
@@ -101,29 +104,29 @@ export function ProjectChip({
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">Project</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat get the project's context, folders and repositories, and browse with its profile.</p>
+          <p className="text-[13px] font-medium">{t("chip.project")}</p>
+          <p className="text-xs text-muted-foreground">{t("chip.hint")}</p>
         </div>
         <Command>
-          {groups.reduce((n, w) => n + w.projects.length, 0) > 6 && <CommandInput placeholder="Find a project…" />}
+          {groups.reduce((n, w) => n + w.projects.length, 0) > 6 && <CommandInput placeholder={t("chip.find")} />}
           <CommandList className="max-h-72">
-            <CommandEmpty>No project with that name.</CommandEmpty>
+            <CommandEmpty>{t("chip.empty")}</CommandEmpty>
             <CommandGroup>
               <CommandItem value="__default" keywords={["none", "default"]} onSelect={() => pick(null)} className="gap-2.5 py-2">
                 <span className="grid size-6 shrink-0 place-items-center rounded-md border border-dashed text-muted-foreground">
                   <FolderKanban className="size-3.5" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate">{inherited ? `Default — ${inherited.project.name}` : "No project"}</span>
+                  <span className="block truncate">{inherited ? t("chip.default", { name: inherited.project.name }) : t("chip.noProject")}</span>
                   <span className="block truncate text-[11px] text-muted-foreground">
-                    {inherited ? `Set in ${agent.name}'s settings` : "Only the workspace's context and folders"}
+                    {inherited ? t("chip.setIn", { agent: agent.name }) : t("chip.onlyWorkspace")}
                   </span>
                 </span>
-                {!value && <Check className="size-4" aria-label="Selected" />}
+                {!value && <Check className="size-4" aria-label={t("chip.selected")} />}
               </CommandItem>
             </CommandGroup>
             {groups.map((w) => (
-              <CommandGroup key={w.id} heading={agent.workspaceId ? "Work on" : w.name}>
+              <CommandGroup key={w.id} heading={agent.workspaceId ? t("chip.workOn") : w.name}>
                 {w.projects.map((p) => (
                   <CommandItem key={p.id} value={p.id} keywords={[p.name, w.name, p.description]} onSelect={() => pick(p.id)} className="gap-2.5 py-2">
                     <WorkspaceTile icon={p.icon} color={p.color} size="sm" />
@@ -131,7 +134,7 @@ export function ProjectChip({
                       <span className="block truncate">{p.name}</span>
                       <span className="block truncate text-[11px] text-muted-foreground">{projectMeta(p)}</span>
                     </span>
-                    {value === p.id && <Check className="size-4" aria-label="Selected" />}
+                    {value === p.id && <Check className="size-4" aria-label={t("chip.selected")} />}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -149,7 +152,7 @@ export function ProjectChip({
                     }}
                     className="text-[13px]"
                   >
-                    <Plus /> New project
+                    <Plus /> {t("dialog.newTitle")}
                   </CommandItem>
                 </CommandGroup>
               </>

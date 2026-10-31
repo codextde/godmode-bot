@@ -1,8 +1,10 @@
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { format } from "date-fns";
 import { ArrowUpRight, Phone } from "lucide-react";
 import type { Message, MessageBlock } from "@godmode/shared";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { CALL_STATUS, callName } from "./call-parts";
 
 type CallBlock = Extract<MessageBlock, { type: "call" }>;
@@ -13,6 +15,8 @@ export function callBlock(message: Message): CallBlock | null {
 
 /** Where the chat went on after a call ended: who it was with, how it went, and a way to the whole call. */
 export function CallMarker({ block }: { block: CallBlock }) {
+  const { t } = useTranslation("calls");
+  const { dateLocale } = useLocale();
   const status = CALL_STATUS[block.status];
   const name = callName({ contactName: block.contactName, number: block.number, direction: "outbound" });
   return (
@@ -26,11 +30,11 @@ export function CallMarker({ block }: { block: CallBlock }) {
         </span>
         <span className="min-w-0 flex-1 leading-snug">
           <span className="flex flex-wrap items-baseline gap-x-1.5 text-[13px]">
-            <span className="font-medium">Call with {name} ended</span>
+            <span className="font-medium">{t("marker.ended", { name })}</span>
             <span className={cn("text-xs", block.status === "failed" ? "text-destructive" : "text-muted-foreground")}>
-              {block.status === "done" ? "" : `${status.label} · `}
+              {block.status === "done" ? "" : `${t(status.labelKey)} · `}
               <time dateTime={block.at} className="tabular-nums">
-                {format(new Date(block.at), "HH:mm")}
+                {format(new Date(block.at), "HH:mm", { locale: dateLocale })}
               </time>
             </span>
           </span>

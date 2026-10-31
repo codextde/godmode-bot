@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn } from "react-native-reanimated";
 import type { WorkspaceSource } from "@godmode/shared";
 import { EmojiGrid, Group, LinkRow } from "./form";
@@ -24,6 +25,7 @@ export function Identity({
   onChange: (patch: { icon?: string; name?: string; description?: string }) => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [picking, setPicking] = useState(false);
   const title = useEditable(name);
   const about = useEditable(description);
@@ -33,7 +35,7 @@ export function Identity({
       <View style={styles.identity}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Change the picture"
+          accessibilityLabel={t("setup.changePicture")}
           onPress={() => {
             tap();
             setPicking((v) => !v);
@@ -47,14 +49,14 @@ export function Identity({
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <TextInput
-            accessibilityLabel="Name"
+            accessibilityLabel={t("common:words.name")}
             value={title.text}
             onChangeText={title.setText}
             onBlur={() => {
               const next = title.done();
               if (next) onChange({ name: next });
             }}
-            placeholder="Name"
+            placeholder={t("common:words.name")}
             placeholderTextColor={c.textFaint}
             maxLength={80}
             returnKeyType="done"
@@ -62,14 +64,14 @@ export function Identity({
             style={[styles.name, { color: c.text }]}
           />
           <TextInput
-            accessibilityLabel="Description"
+            accessibilityLabel={t("common:words.description")}
             value={about.text}
             onChangeText={about.setText}
             onBlur={() => {
               const next = about.done();
               if (next !== null) onChange({ description: next });
             }}
-            placeholder="Add a short description"
+            placeholder={t("setup.descriptionPlaceholder")}
             placeholderTextColor={c.textFaint}
             maxLength={2000}
             returnKeyType="done"
@@ -91,12 +93,12 @@ export function Identity({
   );
 }
 
-const STATUS: Record<WorkspaceSource["status"], { label: string; tone: "neutral" | "brand" | "warning" | "danger"; live?: boolean }> = {
-  ready: { label: "Ready", tone: "brand" },
-  cloning: { label: "Cloning", tone: "neutral", live: true },
-  syncing: { label: "Updating", tone: "neutral", live: true },
-  missing: { label: "Not cloned", tone: "warning" },
-  error: { label: "Failed", tone: "danger" },
+const STATUS: Record<WorkspaceSource["status"], { tone: "neutral" | "brand" | "warning" | "danger"; live?: boolean }> = {
+  ready: { tone: "brand" },
+  cloning: { tone: "neutral", live: true },
+  syncing: { tone: "neutral", live: true },
+  missing: { tone: "warning" },
+  error: { tone: "danger" },
 };
 
 export function inputsOf(sources: WorkspaceSource[]): SourceInput[] {
@@ -116,6 +118,7 @@ export function Sources({
   footer: string;
 }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [adding, setAdding] = useState(false);
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
@@ -133,16 +136,16 @@ export function Sources({
   };
 
   const remove = (source: WorkspaceSource) =>
-    Alert.alert(`Remove ${source.name}?`, source.kind === "git" ? "Agents stop working with it and its clone goes to the trash." : "Agents stop working with this folder. The folder itself stays.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: () => void onSave(inputsOf(sources.filter((s) => s.id !== source.id))) },
+    Alert.alert(t("setup.removeTitle", { name: source.name }), source.kind === "git" ? t("setup.removeRepoMessage") : t("setup.removeFolderMessage"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
+      { text: t("common:actions.remove"), style: "destructive", onPress: () => void onSave(inputsOf(sources.filter((s) => s.id !== source.id))) },
     ]);
 
   return (
-    <Group title="Repositories and folders" footer={footer}>
+    <Group title={t("setup.sourcesTitle")} footer={footer}>
       {sources.map((s) => {
         const status = STATUS[s.status];
-        const where = s.kind === "git" ? [s.headBranch ?? s.branch ?? "Default branch", s.commit?.slice(0, 7)].filter(Boolean).join(" · ") : s.path;
+        const where = s.kind === "git" ? [s.headBranch ?? s.branch ?? t("setup.defaultBranch"), s.commit?.slice(0, 7)].filter(Boolean).join(" · ") : s.path;
         return (
           <View key={s.id} style={styles.source}>
             <View style={[styles.sourceIcon, { backgroundColor: c.sunken }]}>
@@ -155,7 +158,7 @@ export function Sources({
               <T variant="caption" muted numberOfLines={1}>
                 {where}
               </T>
-              {s.kind === "git" ? <Badge label={status.label} tone={status.tone} live={status.live} /> : null}
+              {s.kind === "git" ? <Badge label={t(`setup.status.${s.status}`)} tone={status.tone} live={status.live} /> : null}
               {s.error ? (
                 <T variant="caption" color={c.danger} numberOfLines={3}>
                   {s.error}
@@ -164,12 +167,12 @@ export function Sources({
             </View>
             {s.kind === "git" ? (
               <Pressable
-                accessibilityLabel={`Update ${s.name}`}
+                accessibilityLabel={t("setup.update", { name: s.name })}
                 hitSlop={6}
                 disabled={s.status === "cloning" || s.status === "syncing"}
                 onPress={() => {
                   tap();
-                  onSync(s.id).catch((err: unknown) => Alert.alert("Couldn't update it", err instanceof Error ? err.message : String(err)));
+                  onSync(s.id).catch((err: unknown) => Alert.alert(t("setup.updateFailed"), err instanceof Error ? err.message : String(err)));
                 }}
                 style={({ pressed }) => [styles.iconBtn, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
               >
@@ -177,7 +180,7 @@ export function Sources({
               </Pressable>
             ) : null}
             <Pressable
-              accessibilityLabel={`Remove ${s.name}`}
+              accessibilityLabel={t("setup.remove", { name: s.name })}
               hitSlop={6}
               onPress={() => {
                 tap();
@@ -193,7 +196,7 @@ export function Sources({
       {adding ? (
         <Animated.View entering={FadeIn.duration(160)} style={{ padding: space.lg, gap: space.sm }}>
           <TextInput
-            accessibilityLabel="Repository URL"
+            accessibilityLabel={t("setup.repoUrl")}
             value={url}
             onChangeText={setUrl}
             autoFocus
@@ -205,22 +208,22 @@ export function Sources({
             style={[styles.input, { color: c.text, backgroundColor: c.sunken }]}
           />
           <TextInput
-            accessibilityLabel="Branch"
+            accessibilityLabel={t("setup.branch")}
             value={branch}
             onChangeText={setBranch}
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder="Branch (optional)"
+            placeholder={t("setup.branchPlaceholder")}
             placeholderTextColor={c.textFaint}
             style={[styles.input, { color: c.text, backgroundColor: c.sunken }]}
           />
           <View style={{ flexDirection: "row", gap: space.sm, marginTop: 4 }}>
-            <Button title="Cancel" variant="secondary" onPress={() => setAdding(false)} style={{ flex: 1 }} />
-            <Button title="Add" icon="plus" loading={busy} disabled={!url.trim()} onPress={() => void add()} style={{ flex: 1 }} />
+            <Button title={t("common:actions.cancel")} variant="secondary" onPress={() => setAdding(false)} style={{ flex: 1 }} />
+            <Button title={t("common:actions.add")} icon="plus" loading={busy} disabled={!url.trim()} onPress={() => void add()} style={{ flex: 1 }} />
           </View>
         </Animated.View>
       ) : (
-        <LinkRow icon="plus" title="Add a git repository" tone="brand" chevron={false} onPress={() => setAdding(true)} />
+        <LinkRow icon="plus" title={t("setup.addRepo")} tone="brand" chevron={false} onPress={() => setAdding(true)} />
       )}
     </Group>
   );

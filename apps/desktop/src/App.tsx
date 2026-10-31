@@ -17,6 +17,7 @@ import { LoginPage } from "@/pages/auth/login";
 import { UnlockPage } from "@/pages/auth/unlock";
 import { OnboardingPage } from "@/pages/onboarding/onboarding";
 import { toast } from "sonner";
+import { t } from "@/i18n";
 
 const ChatHome = lazy(() => import("@/pages/chat/chat-home"));
 const ChatConversation = lazy(() => import("@/pages/chat/chat-conversation"));
@@ -75,11 +76,11 @@ export function App() {
     // A run start refused for the licence: one calm toast that leads to activation (and the gate, when it blocks).
     setLicenseRequiredHandler((message) => {
       void qc.invalidateQueries({ queryKey: qk.license });
-      toast.warning("Godmode needs an active licence", {
+      toast.warning(t("layout:app.licenseRequired"), {
         id: "license-required",
         description: message,
         duration: 12_000,
-        action: { label: "Activate", onClick: () => navigate("/settings/license") },
+        action: { label: t("layout:app.activate"), onClick: () => navigate("/settings/license") },
       });
     });
   }, [qc, navigate]);
@@ -139,7 +140,7 @@ export function App() {
           id: n.link ? `question:${n.link}` : undefined,
           description: n.body || undefined,
           duration: 20_000,
-          action: n.link ? { label: n.link.startsWith("/my-tasks") ? "Open" : "Answer", onClick: () => navigate(n.link!) } : undefined,
+          action: n.link ? { label: n.link.startsWith("/my-tasks") ? t("common:actions.open") : t("layout:app.answer"), onClick: () => navigate(n.link!) } : undefined,
         });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
@@ -159,7 +160,7 @@ export function App() {
           description: n.body || undefined,
           action: n.link
             ? {
-                label: "Open",
+                label: t("common:actions.open"),
                 onClick: () => {
                   navigate(n.link!);
                   void api.notifications.read([n.id]).catch(() => undefined);
@@ -183,7 +184,7 @@ export function App() {
   if (auth.isError) {
     // Signed out of the cloud: the browser is already on its way to the sign-in page.
     if (auth.error instanceof ApiRequestError && auth.error.code === CloudErrorCode.CloudUnauthorized) return <SplashScreen />;
-    return <SplashScreen error={cloudContext ? "Cannot reach this computer through Godmode Cloud." : "Cannot reach the Godmode core."} />;
+    return <SplashScreen error={cloudContext ? t("layout:app.cannotReachCloud") : t("layout:app.cannotReachCore")} />;
   }
   // In cloud mode the cloud signs people in; the core's own sign-in page never shows there.
   if (!authed) return cloudContext ? <SplashScreen /> : <LoginPage hasPassword={auth.data?.hasDashboardPassword ?? false} />;
@@ -247,21 +248,21 @@ export function App() {
 function cloudBlock(authError: unknown, authenticated: boolean | undefined, bootError: unknown, boot: Bootstrap | undefined): CloudState | null {
   for (const err of [authError, bootError]) {
     if (err instanceof ApiRequestError && (err.code === CloudErrorCode.CloudForbidden || err.code === CloudErrorCode.DeviceNotFound)) {
-      return { kind: "blocked", title: "Can't open this computer", message: err.message };
+      return { kind: "blocked", title: t("layout:app.cloudBlock.cantOpen"), message: err.message };
     }
   }
   if (authenticated === false) {
     return {
       kind: "blocked",
-      title: "Browser access is off",
-      message: "Godmode on this computer doesn't accept browser access through the cloud right now. Turn it on there under Settings → Cloud.",
+      title: t("layout:app.cloudBlock.browserOffTitle"),
+      message: t("layout:app.cloudBlock.browserOffMessage"),
     };
   }
   if (boot && (!boot.vault.initialized || !boot.settings.onboardingComplete)) {
     return {
       kind: "blocked",
-      title: "Godmode isn't set up on this computer yet",
-      message: "Finish the setup in Godmode on the computer itself, then open it here again.",
+      title: t("layout:app.cloudBlock.notSetUpTitle"),
+      message: t("layout:app.cloudBlock.notSetUpMessage"),
     };
   }
   return null;

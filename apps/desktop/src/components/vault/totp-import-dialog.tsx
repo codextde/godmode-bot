@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { Camera, ChevronDown, CircleCheck, ImagePlus, Keyboard, Lock, ScanQrCode, Smartphone, TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { TotpImportResult } from "@godmode/shared";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { DrawCheck } from "@/components/aicss/Motion";
+import { t as tg } from "@/i18n";
 import { api } from "@/lib/api";
 import { isOtpUri, parseOtpUri } from "@/lib/qr";
 import { qk } from "@/lib/queryKeys";
@@ -47,6 +49,7 @@ export function TotpImportDialog({
 }
 
 function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorkspaceId: string | null; initialTab: Tab; onClose: () => void }) {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [workspaceId, setWorkspaceId] = useState<string | null>(defaultWorkspaceId);
@@ -94,7 +97,7 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
       if (text && isOtpUri(text)) {
         e.preventDefault();
         addDirect(text);
-        toast.success("Link added to the import list");
+        toast.success(tg("vault:totpImport.linkAdded"));
       }
     };
     window.addEventListener("paste", onPaste);
@@ -125,9 +128,9 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
       setResult(res);
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      if (res.imported.length) toast.success(`Imported ${res.imported.length} ${res.imported.length === 1 ? "account" : "accounts"}`);
+      if (res.imported.length) toast.success(t("totpImport.imported", { count: res.imported.length }));
     },
-    onError: (e) => toastApiError(e, "Import failed", qc),
+    onError: (e) => toastApiError(e, t("totpImport.failed"), qc),
   });
 
   const reset = () => {
@@ -145,9 +148,9 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
           <ScanQrCode className="size-5" />
         </div>
         <div className="min-w-0 pr-8">
-          <DialogTitle className="text-lg">Import 2FA codes</DialogTitle>
+          <DialogTitle className="text-lg">{t("totpImport.title")}</DialogTitle>
           <DialogDescription className="mt-1">
-            Scan QR codes from Google Authenticator, another authenticator app, or a site's 2FA setup page.
+            {t("totpImport.description")}
           </DialogDescription>
         </div>
       </div>
@@ -159,22 +162,22 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
           <>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-paper-2 px-3 py-2.5">
               <Label htmlFor="totp-import-scope" className="shrink-0 text-xs text-muted-foreground">
-                Save to
+                {t("saveTo")}
               </Label>
               <WorkspaceSelect id="totp-import-scope" value={workspaceId} onChange={setWorkspaceId} className="h-8 w-56 bg-card" />
-              <span className="text-[11px] text-muted-foreground">{workspaceId ? "Only agents in this workspace can use them." : "Agents in every workspace can use them."}</span>
+              <span className="text-[11px] text-muted-foreground">{workspaceId ? t("totpImport.scopeWorkspace") : t("totpImport.scopeGlobal")}</span>
             </div>
 
             <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="images">
-                  <ImagePlus /> Screenshots
+                  <ImagePlus /> {t("totpImport.tabs.images")}
                 </TabsTrigger>
                 <TabsTrigger value="camera">
-                  <Camera /> Camera
+                  <Camera /> {t("totpImport.tabs.camera")}
                 </TabsTrigger>
                 <TabsTrigger value="manual">
-                  <Keyboard /> Setup key
+                  <Keyboard /> {t("totpManual.setupKey")}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="images" className="space-y-4 pt-3">
@@ -209,24 +212,24 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
       {(result || tab !== "manual") && (
         <div className="flex flex-col-reverse gap-3 border-t bg-paper-2 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Lock className="size-3.5 shrink-0 text-brand-strong" /> QR codes are decoded on this device · secrets go straight into your encrypted vault
+            <Lock className="size-3.5 shrink-0 text-brand-strong" /> {t("totpImport.footer")}
           </p>
           <div className="flex justify-end gap-2">
             {result ? (
               <>
                 <Button variant="ghost" onClick={reset}>
-                  Import more
+                  {t("totpImport.importMore")}
                 </Button>
-                <Button onClick={onClose}>Done</Button>
+                <Button onClick={onClose}>{t("common:actions.done")}</Button>
               </>
             ) : (
               <>
                 <Button variant="ghost" onClick={onClose} disabled={doImport.isPending}>
-                  Cancel
+                  {t("common:actions.cancel")}
                 </Button>
                 <Button onClick={() => doImport.mutate()} disabled={uris.length === 0 || doImport.isPending || decoding} className="min-w-32">
                   {doImport.isPending || decoding ? <Spinner /> : null}
-                  {decoding ? "Scanning…" : accountCount > 0 ? `Import ${accountCount} ${accountCount === 1 ? "account" : "accounts"}` : "Import"}
+                  {decoding ? t("qrDrop.scanning") : accountCount > 0 ? t("totpImport.importCount", { count: accountCount }) : t("totpImport.import")}
                 </Button>
               </>
             )}
@@ -238,23 +241,19 @@ function ImportFlow({ defaultWorkspaceId, initialTab, onClose }: { defaultWorksp
 }
 
 function GoogleAuthenticatorGuide({ hasCodes }: { hasCodes: boolean }) {
+  const { t } = useTranslation("vault");
   const [open, setOpen] = useState(!hasCodes);
   // Make room for the preview once something was added; the user can still reopen it.
   useEffect(() => {
     if (hasCodes) setOpen(false);
   }, [hasCodes]);
-  const steps = [
-    "Open Google Authenticator on your phone.",
-    "Tap the menu (⋮ or ☰) → Transfer accounts → Export accounts.",
-    "Select the accounts and tap Next — one or more QR codes appear.",
-    "Screenshot every QR code (swipe to the next one) and drop the screenshots here — or point the Camera tab at them.",
-  ];
+  const steps = [t("totpImport.guide.step1"), t("totpImport.guide.step2"), t("totpImport.guide.step3"), t("totpImport.guide.step4")];
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="rounded-xl border bg-card shadow-card">
       <CollapsibleTrigger asChild>
         <button type="button" className="flex w-full items-center gap-2.5 px-3.5 py-3 text-left text-sm font-medium">
           <Smartphone className="size-4 text-muted-foreground" />
-          <span className="flex-1">Moving from Google Authenticator?</span>
+          <span className="flex-1">{t("totpImport.guide.title")}</span>
           <ChevronDown className={cn("size-4 text-muted-foreground transition-transform", open && "rotate-180")} />
         </button>
       </CollapsibleTrigger>
@@ -268,7 +267,7 @@ function GoogleAuthenticatorGuide({ hasCodes }: { hasCodes: boolean }) {
           ))}
         </ol>
         <p className="border-t px-3.5 py-2.5 text-xs text-muted-foreground">
-          Other apps (Authy, 1Password, Microsoft Authenticator…) and most websites also show a QR code when you set up 2FA — screenshots of those work too.
+          {t("totpImport.guide.otherApps")}
         </p>
       </CollapsibleContent>
     </Collapsible>
@@ -279,11 +278,12 @@ function skippedLabel(item: TotpImportResult["skipped"][number]): string {
   if (item.label) return item.label;
   const p = parseOtpUri(item.uri);
   if (p.kind === "otpauth") return p.preview.account ? `${p.preview.issuer} · ${p.preview.account}` : p.preview.issuer;
-  if (p.kind === "migration") return "Google Authenticator export";
-  return "Unknown code";
+  if (p.kind === "migration") return tg("vault:otpPreview.googleExport");
+  return tg("vault:totpImport.unknownCode");
 }
 
 function ImportResultView({ result }: { result: TotpImportResult }) {
+  const { t } = useTranslation("vault");
   const ok = result.imported.length > 0;
   return (
     <div className="space-y-5">
@@ -300,27 +300,27 @@ function ImportResultView({ result }: { result: TotpImportResult }) {
           {ok ? <DrawCheck className="size-6" /> : <TriangleAlert className="size-6" />}
         </motion.div>
         <h3 className="mt-3 text-base font-medium tracking-[-0.01em]">
-          {ok ? `Imported ${result.imported.length} ${result.imported.length === 1 ? "account" : "accounts"}` : "Nothing was imported"}
+          {ok ? t("totpImport.imported", { count: result.imported.length }) : t("totpImport.nothing")}
         </h3>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          {ok ? "Your agents can now complete two-factor sign-ins for these accounts. Link each code to its login so it's typed in automatically." : "Every code was skipped — see why below."}
+          {ok ? t("totpImport.successText") : t("totpImport.allSkipped")}
         </p>
       </motion.div>
 
       {ok && (
         <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
-          {result.imported.map((t, i) => (
+          {result.imported.map((entry, i) => (
             <motion.div
-              key={t.id}
+              key={entry.id}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(i, 12) * 0.03 }}
               className="flex items-center gap-3 px-3 py-2.5"
             >
-              <Favicon domain={issuerDomain(t.issuer)} name={t.issuer} size="sm" />
+              <Favicon domain={issuerDomain(entry.issuer)} name={entry.issuer} size="sm" />
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{t.issuer}</p>
-                {t.accountName && <p className="truncate text-xs text-muted-foreground">{t.accountName}</p>}
+                <p className="truncate text-sm font-medium">{entry.issuer}</p>
+                {entry.accountName && <p className="truncate text-xs text-muted-foreground">{entry.accountName}</p>}
               </div>
               <CircleCheck className="size-4 text-success" />
             </motion.div>
@@ -330,7 +330,7 @@ function ImportResultView({ result }: { result: TotpImportResult }) {
 
       {result.skipped.length > 0 && (
         <div className="space-y-2">
-          <p className="eyebrow">Skipped ({result.skipped.length})</p>
+          <p className="eyebrow">{t("totpImport.skipped", { count: result.skipped.length })}</p>
           <div className="divide-y overflow-hidden rounded-xl border border-warning/25 bg-warning/[0.05]">
             {result.skipped.map((s, i) => (
               <div key={`${s.uri}-${i}`} className="flex items-start gap-3 px-3 py-2.5">

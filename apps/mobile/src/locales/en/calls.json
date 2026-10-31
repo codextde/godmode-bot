@@ -1,0 +1,43 @@
+{
+  "unavailableTitle": "Calls aren't available yet",
+  "unavailableBody": "Update Godmode on your computer to see calls here.",
+  "list": {
+    "title": "Calls",
+    "live_one": "{{count}} call is on the line right now. Its transcript and summary arrive as soon as it ends.",
+    "live_other": "{{count}} calls are on the line right now. Their transcripts and summaries arrive as soon as they end.",
+    "loadFailed": "Couldn't load your calls",
+    "emptyTitle": "No calls yet",
+    "emptyBody": "Agents can phone a business to book an appointment, follow up with a lead, or call you when a question can't wait. Calls are set up in Godmode on your computer.",
+    "incomingWith": "Incoming call with {{name}}",
+    "outgoingWith": "Outgoing call with {{name}}",
+    "incomingCall": "Incoming call",
+    "noGoal": "No goal given"
+  },
+  "detail": {
+    "title": "Call",
+    "openFailed": "Couldn't open this call",
+    "loading": "Loading the call…",
+    "goal": {
+      "task": "Goal",
+      "question": "Question for you",
+      "inform": "News for you",
+      "inbound": "What the caller wanted"
+    },
+    "incoming": "Incoming",
+    "outgoing": "Outgoing",
+    "dateFormat": "EEE, MMM d · HH:mm",
+    "ownerCall": "Owner call",
+    "duration": "Duration",
+    "openChat": "Open chat",
+    "outcome": "Outcome",
+    "outcomeMissed": "Outcome · goal not reached",
+    "yourAnswer": "Your answer",
+    "summary": "Summary",
+    "processing": "The call ended. Godmode is writing the summary.",
+    "waiting": "The transcript and summary show up here when the call ends.",
+    "recording": "The recording plays in Godmode on your computer.",
+    "caller": "Caller",
+    "them": "Them",
+    "transcript": "Transcript"
+  }
+}

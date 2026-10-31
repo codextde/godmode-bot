@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { MonitorSmartphone } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cloudContext, coreUrl } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
 import { useTheme } from "@/components/theme-provider";
@@ -140,6 +141,7 @@ export function ArtifactFrame({
   interactive?: boolean;
   lazy?: boolean;
 } & ArtifactFrameHandlers) {
+  const { t } = useTranslation("artifacts");
   const { resolved } = useTheme();
   const ref = useRef<HTMLIFrameElement>(null);
   const handlersRef = useRef(handlers);
@@ -219,8 +221,8 @@ export function ArtifactFrame({
       <div className={cn("grid place-items-center bg-paper-2 p-6 text-center", className)} style={style}>
         <div className="max-w-xs space-y-2">
           <MonitorSmartphone className="mx-auto size-6 text-muted-foreground" />
-          <p className="text-sm font-medium">Open it on your computer</p>
-          <p className="text-xs text-muted-foreground">Artifacts run in the Godmode app or the dashboard on your computer, not through Godmode Cloud.</p>
+          <p className="text-sm font-medium">{t("frame.cloudTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("frame.cloudDescription")}</p>
         </div>
       </div>
     );

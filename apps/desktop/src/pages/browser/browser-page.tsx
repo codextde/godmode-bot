@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { Globe, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { qk } from "@/lib/queryKeys";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function BrowserPage() {
+  const { t } = useTranslation(["browser", "common"]);
   const [params, setParams] = useSearchParams();
   const [createOpen, setCreateOpen] = useState(false);
   const actions = useProfileActions();
@@ -91,11 +93,11 @@ export default function BrowserPage() {
     <div className="relative">
       <PageHeader
         icon={<Globe />}
-        title="Browser"
-        description="Godmode's own Chromium profiles. Agents browse here — signed in with the sessions you import — and you can watch or take over at any time."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <Button onClick={() => setCreateOpen(true)}>
-            <Plus /> New profile
+            <Plus /> {t("page.newProfile")}
           </Button>
         }
       />
@@ -103,29 +105,29 @@ export default function BrowserPage() {
         {profilesQuery.isError ? (
           <EmptyState
             icon={<Globe />}
-            title={isVaultLocked(profilesQuery.error) ? "Vault is locked" : "Couldn't load browser profiles"}
+            title={isVaultLocked(profilesQuery.error) ? t("page.vaultLocked") : t("page.loadError")}
             description={errorMessage(profilesQuery.error)}
             action={
               <Button variant="outline" onClick={() => profilesQuery.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : !profilesQuery.isLoading && profiles.length === 0 ? (
           <EmptyState
             icon={<Globe />}
-            title="No browser profiles yet"
-            description="Create a profile to give your agents a browser. The core normally creates a default one on start."
+            title={t("page.emptyTitle")}
+            description={t("page.emptyDescription")}
             action={
               <Button onClick={() => setCreateOpen(true)}>
-                <Plus /> Create profile
+                <Plus /> {t("page.createProfile")}
               </Button>
             }
           />
         ) : (
           <div className="grid grid-cols-1 gap-6 @5xl:grid-cols-[300px_minmax(0,1fr)]">
             <aside className="space-y-3">
-              <h2 className="eyebrow px-1">Profiles</h2>
+              <h2 className="eyebrow px-1">{t("page.profiles")}</h2>
               <ProfileList
                 profiles={ordered}
                 defaultId={defaultProfile?.id ?? null}

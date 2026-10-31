@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
@@ -17,6 +18,7 @@ import { useWorkspace } from "@/lib/workspace";
 const DEFAULT = "default";
 
 export default function WorkspaceScreen() {
+  const { t } = useTranslation(["settings", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
@@ -26,9 +28,9 @@ export default function WorkspaceScreen() {
   if (!w) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic">
-        <Stack.Screen options={{ title: "Workspace" }} />
+        <Stack.Screen options={{ title: t("workspace.title") }} />
         <CloseButton />
-        {loading ? <ActivityIndicator style={{ marginTop: 80 }} /> : <EmptyState icon="layers" title="Workspace not found" body="It may have been deleted on your computer." />}
+        {loading ? <ActivityIndicator style={{ marginTop: 80 }} /> : <EmptyState icon="layers" title={t("workspace.notFound")} body={t("agent.notFound.body")} />}
       </ScrollView>
     );
   }
@@ -37,10 +39,10 @@ export default function WorkspaceScreen() {
   const usable = (profiles.data ?? []).filter((p) => !p.workspaceId || p.workspaceId === w.id);
 
   const remove = () =>
-    Alert.alert(`Delete ${w.name}?`, "Its repositories and context go with it. This can't be undone.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("workspace.deleteDialog.title", { name: w.name }), t("workspace.deleteDialog.body"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("common:actions.delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -48,7 +50,7 @@ export default function WorkspaceScreen() {
             await queryClient.invalidateQueries({ queryKey: qk.workspaces });
             router.back();
           } catch (err) {
-            Alert.alert("Couldn't delete it", err instanceof ApiError && err.status === 409 ? `${w.name} still has projects, agents, tasks, logins or other things in it. Move or delete them first, or delete the workspace on your computer.` : errorText(err));
+            Alert.alert(t("workspace.deleteFailed"), err instanceof ApiError && err.status === 409 ? t("workspace.notEmpty", { name: w.name }) : errorText(err));
           }
         },
       },
@@ -68,69 +70,69 @@ export default function WorkspaceScreen() {
       <Identity icon={w.icon} name={w.name} description={w.description} fallbackIcon="🗂️" onChange={(patch) => void patchWorkspace(w.id, patch)} />
 
       <View>
-        <SectionTitle title="Agent context" />
+        <SectionTitle title={t("workspace.context")} />
         <TextEditor
-          label={`Agent context for ${w.name}`}
+          label={t("workspace.contextLabel", { name: w.name })}
           value={w.instructions}
-          placeholder={"Who the client is, what the product does, links, tone, rules.\nEvery agent in this workspace gets it on every run."}
+          placeholder={t("workspace.contextPlaceholder")}
           maxLength={MAX_INSTRUCTIONS_LENGTH}
           onSave={(instructions) => patchWorkspace(w.id, { instructions }, { quiet: true })}
         />
       </View>
 
-      <Group title="Projects" footer="Projects add their own context and repositories on top of the workspace's.">
+      <Group title={t("workspace.projects")} footer={t("workspace.projectsFooter")}>
         {w.projects.map((p) => (
           <LinkRow
             key={p.id}
             emoji={p.icon || "📁"}
             title={p.name}
-            detail={firstLine(p.instructions) || p.description || "No project context yet"}
+            detail={firstLine(p.instructions) || p.description || t("instructions.workspaces.noProjectContext")}
             onPress={() => router.push({ pathname: "/settings/project/[id]", params: { id: p.id } })}
           />
         ))}
-        <LinkRow icon="plus" title="New project" tone="brand" chevron={false} onPress={() => router.push({ pathname: "/settings/new", params: { kind: "project", workspaceId: w.id } })} />
+        <LinkRow icon="plus" title={t("workspace.newProject")} tone="brand" chevron={false} onPress={() => router.push({ pathname: "/settings/new", params: { kind: "project", workspaceId: w.id } })} />
       </Group>
 
-      <Group title="Agents">
+      <Group title={t("common:words.agents")}>
         {team.map((a) => (
           <LinkRow
             key={a.id}
             lead={<CharacterAvatar agent={a} size={30} />}
             title={a.name}
             detail={a.role || a.description || undefined}
-            value={a.enabled ? undefined : "Off"}
+            value={a.enabled ? undefined : t("common:status.off")}
             onPress={() => router.push({ pathname: "/settings/agent/[id]", params: { id: a.id } })}
           />
         ))}
-        <LinkRow icon="plus" title="New agent" tone="brand" chevron={false} onPress={() => router.push({ pathname: "/settings/new", params: { kind: "agent", workspaceId: w.id } })} />
+        <LinkRow icon="plus" title={t("agents.new")} tone="brand" chevron={false} onPress={() => router.push({ pathname: "/settings/new", params: { kind: "agent", workspaceId: w.id } })} />
       </Group>
 
       <Sources
         sources={w.sources}
-        footer="Every agent in the workspace works with these. Tasks get their own branch of a repository. Add folders of your computer there."
+        footer={t("workspace.sourcesFooter")}
         onSave={(sources) => patchWorkspace(w.id, { sources })}
         onSync={(sourceId) => api.workspace.sync(w.id, sourceId)}
       />
 
-      <Group title="Behavior">
+      <Group title={t("workspace.behavior")}>
         <SwitchRow
           icon="branch"
-          title="Merge pull requests right away"
-          detail="A ticket is done when its agent delivers, without your review."
+          title={t("workspace.autoMerge")}
+          detail={t("workspace.autoMergeDetail")}
           value={w.autoMerge}
           onChange={(autoMerge) => void patchWorkspace(w.id, { autoMerge })}
         />
         <PickerRow
           icon="globe"
-          title="Browser profile"
+          title={t("workspace.browserProfile")}
           value={w.browserProfileId ?? DEFAULT}
-          options={[{ value: DEFAULT, label: "Default" }, ...usable.map((p) => ({ value: p.id, label: p.name }))]}
+          options={[{ value: DEFAULT, label: t("agent.thinking.default") }, ...usable.map((p) => ({ value: p.id, label: p.name }))]}
           onChange={(v) => void patchWorkspace(w.id, { browserProfileId: v === DEFAULT ? null : v })}
         />
       </Group>
 
-      <Group footer="Only an empty workspace can be deleted here: no projects, agents, tasks or logins. Its chats move to every workspace.">
-        <LinkRow icon="trash" title="Delete workspace" tone="danger" chevron={false} onPress={remove} />
+      <Group footer={t("workspace.deleteFooter")}>
+        <LinkRow icon="trash" title={t("workspace.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>
     </ScrollView>
   );

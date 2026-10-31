@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { Bell, Gauge, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { Bell, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { Settings } from "@godmode/shared";
+import type { AppLanguage, Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { isTauri } from "@/lib/core";
-import { PALETTE_DEFS } from "@/lib/palettes";
+import { paletteBlurb } from "@/lib/palettes";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
+import { useLanguage } from "@/i18n/language";
 import { ModePicker } from "./mode-picker";
 import { PalettePicker } from "./palette-picker";
 import { PowerGroup } from "./power-group";
@@ -19,6 +21,8 @@ import { CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useS
 type Theme = Settings["general"]["theme"];
 
 export function GeneralSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
+  const { language, setLanguage } = useLanguage();
   const { patch } = useSettingsPatch();
   const { theme, resolved, palette, setTheme, setPalette } = useTheme();
   const g = settings.general;
@@ -48,7 +52,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
       setAutostart(on);
       patch({ general: { launchAtLogin: on } });
     } catch (e) {
-      toast.error("Could not change launch at login", { description: errorMessage(e) });
+      toast.error(t("general.launchAtLoginError"), { description: errorMessage(e) });
     } finally {
       setAutostartBusy(false);
     }
@@ -56,53 +60,68 @@ export function GeneralSection({ settings }: { settings: Settings }) {
 
   return (
     <div className="space-y-5">
-      <SectionHeading title="General" description="How Godmode greets you, looks and behaves on your desktop." />
+      <SectionHeading title={t("general.title")} description={t("general.description")} />
 
       <SettingsGroup
-        title="Interface"
+        title={t("general.interface.title")}
         icon={<Gauge />}
-        description="Easy keeps Godmode simple for everyday work. Professional shows every tool and detail. Both can do exactly the same."
+        description={t("general.interface.description")}
         bodyClassName="p-5"
       >
         <ModePicker value={g.mode === "easy" ? "easy" : "pro"} onChange={(mode) => mode !== g.mode && setMode(mode)} />
       </SettingsGroup>
 
-      <SettingsGroup title="Profile" icon={<UserRound />}>
-        <SettingRow label="Your name" htmlFor="user-name" description="Agents use it to address you and sign messages on your behalf.">
+      <SettingsGroup title={t("general.profile.title")} icon={<UserRound />}>
+        <SettingRow label={t("general.profile.name")} htmlFor="user-name" description={t("general.profile.nameDescription")}>
           <CommitInput
             id="user-name"
             className="w-56"
-            placeholder="e.g. Alex"
+            placeholder={t("general.profile.namePlaceholder")}
             value={g.userName}
             onCommit={(userName) => patch({ general: { userName: userName.trim() } })}
           />
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Appearance" icon={<Palette />}>
-        <SettingRow label="Mode" description={`Every palette has a light and a dark side. System follows your OS. Switch any time with ${THEME_SHORTCUT}.`}>
-          <Segmented<Theme>
-            aria-label="Mode"
-            value={theme}
-            onChange={setTheme}
+      <SettingsGroup title={t("general.language.title")} icon={<Languages />}>
+        <SettingRow label={t("general.language.label")} description={t("general.language.description")}>
+          <Segmented<AppLanguage>
+            aria-label={t("general.language.label")}
+            value={language}
+            onChange={setLanguage}
             options={[
-              { value: "light", label: "Light", icon: <Sun /> },
-              { value: "dark", label: "Dark", icon: <Moon /> },
-              { value: "system", label: "System", icon: <Laptop /> },
+              { value: "system", label: t("common:language.system"), icon: <Laptop /> },
+              { value: "en", label: t("common:language.en") },
+              { value: "de", label: t("common:language.de") },
             ]}
           />
         </SettingRow>
-        <SettingRow label="Palette" description={PALETTE_DEFS[palette].blurb} stacked>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("general.appearance.title")} icon={<Palette />}>
+        <SettingRow label={t("general.appearance.mode")} description={t("general.appearance.modeDescription", { shortcut: THEME_SHORTCUT })}>
+          <Segmented<Theme>
+            aria-label={t("general.appearance.mode")}
+            value={theme}
+            onChange={setTheme}
+            options={[
+              { value: "light", label: t("general.appearance.light"), icon: <Sun /> },
+              { value: "dark", label: t("general.appearance.dark"), icon: <Moon /> },
+              { value: "system", label: t("common:language.system"), icon: <Laptop /> },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow label={t("general.appearance.palette")} description={paletteBlurb(palette)} stacked>
           <PalettePicker value={palette} mode={resolved} onChange={setPalette} />
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Desktop" icon={<Monitor />} description={isTauri ? undefined : "These options only apply to the desktop app."}>
+      <SettingsGroup title={t("general.desktop.title")} icon={<Monitor />} description={isTauri ? undefined : t("general.desktop.onlyDesktop")}>
         <SettingRow
-          label="Launch at login"
+          label={t("general.desktop.launchAtLogin")}
           htmlFor="launch-at-login"
           disabled={!isTauri}
-          description={isTauri ? "Start Godmode in the background when you sign in, so automations keep running." : "Desktop app only."}
+          description={isTauri ? t("general.desktop.launchAtLoginDescription") : t("general.desktop.desktopOnly")}
         >
           <Switch
             id="launch-at-login"
@@ -112,10 +131,10 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           />
         </SettingRow>
         <SettingRow
-          label="Keep running in the menu bar"
+          label={t("general.desktop.tray")}
           htmlFor="minimize-to-tray"
           disabled={!isTauri}
-          description="Closing the window hides Godmode to the tray instead of quitting — agents and automations keep working."
+          description={t("general.desktop.trayDescription")}
         >
           <Switch
             id="minimize-to-tray"
@@ -128,22 +147,22 @@ export function GeneralSection({ settings }: { settings: Settings }) {
 
       <PowerGroup settings={settings} />
 
-      <SettingsGroup title="Notifications" icon={<Bell />}>
+      <SettingsGroup title={t("general.notifications.title")} icon={<Bell />}>
         <SettingRow
-          label="Desktop notifications"
+          label={t("general.notifications.desktop")}
           htmlFor="desktop-notifications"
-          description="Get notified when a task finishes, an automation fails, or an agent needs a login from you."
+          description={t("general.notifications.desktopDescription")}
         >
           <Button
             variant="ghost"
             size="sm"
             disabled={!g.desktopNotifications}
             onClick={() => {
-              void notifyDesktop("Godmode Bot", "Notifications are working. You'll hear from your agents here.");
-              toast.info("Test notification sent", { description: "If nothing appeared, check your OS notification permissions." });
+              void notifyDesktop("Godmode Bot", t("general.notifications.testBody"));
+              toast.info(t("general.notifications.testSent"), { description: t("general.notifications.testHint") });
             }}
           >
-            <Send /> Test
+            <Send /> {t("general.notifications.test")}
           </Button>
           <Switch
             id="desktop-notifications"

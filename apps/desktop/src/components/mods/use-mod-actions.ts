@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { modUpdateAvailable, type Mod, type ModImportInput, type ModInput, type ModInstallInput, type ModPatch } from "@godmode/shared";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
@@ -13,17 +14,17 @@ export function installChoices(e: unknown): { name: string; description: string 
   return Array.isArray(plugins) ? (plugins as { name: string; description: string }[]) : null;
 }
 
-function version(mod: Mod): string {
-  return mod.source?.version ? ` ${mod.source.version}` : "";
+function installedTitle(mod: Mod): string {
+  return mod.source?.version ? t("mods:toasts.installedVersion", { title: mod.title, version: mod.source.version }) : t("mods:toasts.installed", { title: mod.title });
 }
 
 /** What a finished check means for the human, as a toast. */
-export function toastCheck(mod: Mod, verb = "checked") {
-  if (!mod.check) toast.warning(`${mod.title} wasn't checked`, { description: "Claude Code isn't installed on this computer." });
-  else if (mod.check.ok) toast.success(`${mod.title} passed the check`);
+export function toastCheck(mod: Mod) {
+  if (!mod.check) toast.warning(t("mods:toasts.notChecked", { title: mod.title }), { description: t("mods:toasts.noClaudeCode") });
+  else if (mod.check.ok) toast.success(t("mods:toasts.passed", { title: mod.title }));
   else {
     const first = mod.check.errors[0];
-    toast.error(`${mod.title} needs fixing`, { description: first ? `${first.where}: ${first.message}` : `It was ${verb}, but the check failed.` });
+    toast.error(t("mods:toasts.needsFixing", { title: mod.title }), { description: first ? `${first.where}: ${first.message}` : t("mods:toasts.checkFailedDescription") });
   }
 }
 
@@ -51,9 +52,9 @@ export function useModActions() {
     mutationFn: (input: ModInput) => api.mods.create(input),
     onSuccess: (mod) => {
       add(mod);
-      toast.success(`${mod.title} added`, { description: mod.enabled ? "It runs from the next message." : "It is switched off. Switch it on when you're ready." });
+      toast.success(t("mods:toasts.added", { title: mod.title }), { description: mod.enabled ? t("mods:toasts.runsFromNext") : t("mods:toasts.offWhenReady") });
     },
-    onError: (e) => toastApiError(e, "Couldn't add the plugin", qc),
+    onError: (e) => toastApiError(e, t("mods:toasts.addFailed"), qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
@@ -61,28 +62,28 @@ export function useModActions() {
     mutationFn: (input: ModImportInput) => api.mods.import(input),
     onSuccess: (mod) => {
       add(mod);
-      toast.success(`${mod.title} imported`, { description: mod.enabled ? "It runs from the next message." : "It is switched off. Read its code, then switch it on." });
+      toast.success(t("mods:toasts.imported", { title: mod.title }), { description: mod.enabled ? t("mods:toasts.runsFromNext") : t("mods:toasts.offReadCode") });
     },
-    onError: (e) => toastApiError(e, "Couldn't import the folder", qc),
+    onError: (e) => toastApiError(e, t("mods:toasts.importFailed"), qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
   const install = useMutation({
     mutationFn: ({ label: _label, ...input }: ModInstallInput & { label?: string }) => api.mods.install(input),
     onMutate: (input) =>
-      toast.loading(`Installing ${input.label ?? input.source}`, { id: `install-${input.catalogId ?? input.source}`, description: "Downloading it and checking it with Claude Code. Large plugins take a minute." }),
+      toast.loading(t("mods:toasts.installing", { name: input.label ?? input.source }), { id: `install-${input.catalogId ?? input.source}`, description: t("mods:toasts.installingDescription") }),
     onSuccess: (mod, input) => {
       add(mod);
       const id = `install-${input.catalogId ?? input.source}`;
-      if (mod.check && !mod.check.ok) toast.error(`${mod.title} installed, but Claude Code refuses it`, { id, description: mod.check.errors[0]?.message });
-      else if (mod.enabled) toast.success(`${mod.title}${version(mod)} installed`, { id, description: "It is on for every agent from the next message." });
-      else toast.success(`${mod.title}${version(mod)} installed`, { id, description: "It is switched off. Switch it on when you're ready." });
+      if (mod.check && !mod.check.ok) toast.error(t("mods:toasts.installedRefused", { title: mod.title }), { id, description: mod.check.errors[0]?.message });
+      else if (mod.enabled) toast.success(installedTitle(mod), { id, description: t("mods:toasts.onForEveryAgent") });
+      else toast.success(installedTitle(mod), { id, description: t("mods:toasts.offWhenReady") });
     },
     onError: (e, input) => {
       const id = `install-${input.catalogId ?? input.source}`;
       // The dialog lets the human pick one of several plugins: no toast for that.
       if (installChoices(e)) toast.dismiss(id);
-      else toast.error(`Couldn't install ${input.label ?? input.source}`, { id, description: errorMessage(e) });
+      else toast.error(t("mods:toasts.installFailed", { name: input.label ?? input.source }), { id, description: errorMessage(e) });
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
@@ -92,10 +93,13 @@ export function useModActions() {
     onMutate: (mod) => setUpgrading((s) => new Set(s).add(mod.id)),
     onSuccess: (next, mod) => {
       put(next);
-      if (next.source?.commit === mod.source?.commit) toast(`${next.title} is up to date`, { description: next.source?.version ? `Version ${next.source.version}` : undefined });
-      else toast.success(`${next.title} updated${next.source?.version ? ` to ${next.source.version}` : ""}`, { description: "Runs load the new version from the next message." });
+      if (next.source?.commit === mod.source?.commit) toast(t("mods:toasts.upToDate", { title: next.title }), { description: next.source?.version ? t("mods:toasts.versionN", { version: next.source.version }) : undefined });
+      else
+        toast.success(next.source?.version ? t("mods:toasts.updatedTo", { title: next.title, version: next.source.version }) : t("mods:toasts.updated", { title: next.title }), {
+          description: t("mods:toasts.newVersionNext"),
+        });
     },
-    onError: (e, mod) => toastApiError(e, `Couldn't update ${mod.title}`, qc),
+    onError: (e, mod) => toastApiError(e, t("mods:toasts.updateFailed", { title: mod.title }), qc),
     onSettled: (_next, _e, mod) => {
       setUpgrading((s) => {
         const next = new Set(s);
@@ -112,11 +116,14 @@ export function useModActions() {
       for (const mod of list) put(mod);
       const failed = list.filter((m) => m.source?.checkError);
       const waiting = list.filter(modUpdateAvailable);
-      if (waiting.length) toast.success(waiting.length === 1 ? `An update for ${waiting[0]!.title} is ready` : `${waiting.length} updates are ready`, { description: "Update from the plugin's card or page." });
-      else if (failed.length) toast.warning(`Couldn't look for updates of ${failed[0]!.title}`, { description: failed[0]!.source?.checkError ?? undefined });
-      else toast.success(list.length === 1 ? `${list[0]!.title} is up to date` : "All plugins are up to date");
+      if (waiting.length)
+        toast.success(waiting.length === 1 ? t("mods:toasts.updateReadyFor", { title: waiting[0]!.title }) : t("mods:toasts.updatesReady", { count: waiting.length }), {
+          description: t("mods:toasts.updateFromCard"),
+        });
+      else if (failed.length) toast.warning(t("mods:toasts.updateCheckFailedFor", { title: failed[0]!.title }), { description: failed[0]!.source?.checkError ?? undefined });
+      else toast.success(list.length === 1 ? t("mods:toasts.upToDate", { title: list[0]!.title }) : t("mods:toasts.allUpToDate"));
     },
-    onError: (e) => toastApiError(e, "Couldn't look for updates", qc),
+    onError: (e) => toastApiError(e, t("mods:toasts.updateCheckFailed"), qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 
@@ -135,15 +142,24 @@ export function useModActions() {
       put(next);
       if (patch.enabled === undefined) return;
       const id = `mod-switch-${next.id}`;
-      if (!next.enabled) toast(`${next.title} is off`, { id, description: "Runs stop loading it from the next message." });
-      else if (next.scope === "agents" && next.agentIds.length === 0) toast.success(`${next.title} is on`, { id, description: "No agent runs it yet — choose who it runs for." });
-      else toast.success(`${next.title} is on`, { id, description: "It loads from the next message." });
+      if (!next.enabled) toast(t("mods:toasts.isOff", { title: next.title }), { id, description: t("mods:toasts.stopsLoading") });
+      else if (next.scope === "agents" && next.agentIds.length === 0) toast.success(t("mods:toasts.isOn", { title: next.title }), { id, description: t("mods:toasts.noAgentYet") });
+      else toast.success(t("mods:toasts.isOn", { title: next.title }), { id, description: t("mods:toasts.loadsFromNext") });
     },
     onError: (e, { mod, patch }, ctx) => {
       if (ctx) put(ctx.previous);
       // 409: the core won't switch on a mod whose check fails, and says why.
-      if (patch.enabled && e instanceof ApiRequestError && e.status === 409) toast.error(`Can't switch on ${mod.title}`, { description: errorMessage(e) });
-      else toastApiError(e, patch.enabled === undefined ? `Couldn't save “${mod.title}”` : `Couldn't switch ${patch.enabled ? "on" : "off"} ${mod.title}`, qc);
+      if (patch.enabled && e instanceof ApiRequestError && e.status === 409) toast.error(t("mods:toasts.cantSwitchOn", { title: mod.title }), { description: errorMessage(e) });
+      else
+        toastApiError(
+          e,
+          patch.enabled === undefined
+            ? t("mods:toasts.saveFailed", { title: mod.title })
+            : patch.enabled
+              ? t("mods:toasts.switchOnFailed", { title: mod.title })
+              : t("mods:toasts.switchOffFailed", { title: mod.title }),
+          qc,
+        );
     },
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
@@ -158,7 +174,7 @@ export function useModActions() {
       put(next);
       if (!silent) toastCheck(next);
     },
-    onError: (e, { mod }) => toastApiError(e, `Couldn't check “${mod.title}”`, qc),
+    onError: (e, { mod }) => toastApiError(e, t("mods:toasts.checkFailed", { title: mod.title }), qc),
     onSettled: (_next, _e, { mod }) => {
       setChecking((s) => {
         const next = new Set(s);
@@ -173,9 +189,9 @@ export function useModActions() {
     mutationFn: (mod: Mod) => api.mods.delete(mod.id),
     onSuccess: (_res, mod) => {
       qc.setQueryData<Mod[]>(qk.mods, (old) => old?.filter((m) => m.id !== mod.id));
-      toast.success(`${mod.title} ${mod.source ? "uninstalled" : "deleted"}`, { description: "Runs stop loading it from the next message." });
+      toast.success(mod.source ? t("mods:toasts.uninstalled", { title: mod.title }) : t("mods:toasts.deleted", { title: mod.title }), { description: t("mods:toasts.stopsLoading") });
     },
-    onError: (e, mod) => toastApiError(e, `Couldn't ${mod.source ? "uninstall" : "delete"} “${mod.title}”`, qc),
+    onError: (e, mod) => toastApiError(e, mod.source ? t("mods:toasts.uninstallFailed", { title: mod.title }) : t("mods:toasts.deleteFailed", { title: mod.title }), qc),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.mods }),
   });
 

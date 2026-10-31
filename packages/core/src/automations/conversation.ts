@@ -7,7 +7,8 @@ import { getSettings } from "../services/settings";
 
 function formatDate(date: Date, timezone: string): string {
   try {
-    return new Intl.DateTimeFormat(getSettings().general.language || "en", {
+    const language = getSettings().general.language;
+    return new Intl.DateTimeFormat(language === "system" || !language ? undefined : language, {
       timeZone: timezone,
       year: "numeric",
       month: "short",

@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { useState, type ReactNode } from "react";
 import { LayoutAnimation, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Workspace } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, Skeleton, T, tap } from "@/components/ui";
@@ -10,6 +11,7 @@ import { radius, space, useColors } from "@/lib/theme";
 /** Pick the workspace, or one of its projects, the phone works in: chats, tasks and agents follow it, and new ones start in it. */
 export default function Workspaces() {
   const c = useColors();
+  const { t } = useTranslation("settings");
   const { id, projectId, workspaces, loading, select } = useWorkspace();
   const [open, setOpen] = useState<Set<string>>(() => new Set(id ? [id] : []));
 
@@ -32,9 +34,9 @@ export default function Workspaces() {
   return (
     <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: c.background }}>
       <View style={{ gap: 4 }}>
-        <T variant="title">Workspace</T>
+        <T variant="title">{t("workspace.title")}</T>
         <T variant="subhead" muted>
-          Chats and tasks you start from this phone go into the workspace or project you pick.
+          {t("pickWorkspace.intro")}
         </T>
       </View>
       <Card style={{ paddingVertical: 4 }}>
@@ -42,8 +44,8 @@ export default function Workspaces() {
           selected={!id}
           onPress={() => pick(null)}
           icon={<Icon name="layers" size={17} color={c.textMuted} />}
-          title="All workspaces"
-          body="Everything, from every workspace"
+          title={t("pickWorkspace.all")}
+          body={t("pickWorkspace.allBody")}
         />
         {loading
           ? [0, 1, 2].map((i) => (
@@ -80,7 +82,7 @@ export default function Workspaces() {
       >
         <Icon name="slider" size={15} color={c.text} />
         <T variant="subhead" style={{ fontWeight: "600" }}>
-          Manage workspaces
+          {t("pickWorkspace.manage")}
         </T>
       </Pressable>
     </ScrollView>
@@ -103,6 +105,7 @@ function WorkspaceChoice({
   onPick: (project: string | null) => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation("settings");
   const projects = workspace.projects ?? [];
   const count = projects.length;
   return (
@@ -113,12 +116,12 @@ function WorkspaceChoice({
         onPress={() => onPick(null)}
         icon={<T style={{ fontSize: 19 }}>{workspace.icon || "🗂️"}</T>}
         title={workspace.name}
-        body={workspace.description || (count ? (count === 1 ? "1 project" : `${count} projects`) : undefined)}
+        body={workspace.description || (count ? t("overview.team.projects", { count }) : undefined)}
         trailing={
           count ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={expanded ? `Hide projects of ${workspace.name}` : `Show projects of ${workspace.name}`}
+              accessibilityLabel={expanded ? t("pickWorkspace.hideProjects", { name: workspace.name }) : t("pickWorkspace.showProjects", { name: workspace.name })}
               accessibilityState={{ expanded }}
               hitSlop={10}
               onPress={onToggle}

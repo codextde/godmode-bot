@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ArrowRight, Box, Check, ChevronDown, Laptop, Loader2, Plus, Settings2 } from "lucide-react";
 import type { Vm } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useVmChoices } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { VM_STATE_LABEL, VmStateDot } from "./vm-parts";
+import { VmStateDot } from "./vm-parts";
 
 /** A VM a chat would use without its own choice, and where that comes from ("Coder", "ACME workspace"). */
 export interface InheritedVm {
@@ -44,6 +45,7 @@ export function VmChip({
   onChange: (vmId: string | null) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("vms");
   const { available, vms } = useVmChoices();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -62,10 +64,10 @@ export function VmChip({
   };
 
   const tooltip = own
-    ? `This chat works in ${own.name} (${VM_STATE_LABEL[own.state].toLowerCase()})`
+    ? t("picker.tooltipOwn", { name: own.name, state: t(`stateLower.${own.state}`) })
     : fallback
-      ? `Works in ${fallback.vm.name} — the VM of ${fallback.from}`
-      : "Work in a virtual machine";
+      ? t("picker.tooltipInherited", { name: fallback.vm.name, from: fallback.from })
+      : t("picker.tooltipNone");
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -75,7 +77,7 @@ export function VmChip({
             {current ? (
               <button
                 type="button"
-                aria-label={`Virtual machine: ${current.name}${own ? "" : " (default)"}`}
+                aria-label={own ? t("picker.ariaCurrent", { name: current.name }) : t("picker.ariaCurrentDefault", { name: current.name })}
                 className={cn(
                   "flex h-8 max-w-[12rem] min-w-0 shrink items-center gap-1.5 rounded-lg border pr-1.5 pl-2 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                   own ? "bg-card hover:bg-accent" : "border-dashed text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -90,14 +92,14 @@ export function VmChip({
               <Button
                 type="button"
                 variant="ghost"
-                aria-label="Work in a virtual machine"
+                aria-label={t("picker.tooltipNone")}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
                 )}
               >
                 {busy ? <Loader2 className="animate-spin" /> : <Box />}
-                <span className="@max-sm/composer:sr-only">VM</span>
+                <span className="@max-sm/composer:sr-only">{t("picker.button")}</span>
               </Button>
             )}
           </PopoverTrigger>
@@ -106,14 +108,14 @@ export function VmChip({
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">Virtual machine</p>
-          <p className="text-xs text-muted-foreground">Runs in this chat browse, run commands and use apps inside this macOS VM instead of on your Mac.</p>
+          <p className="text-[13px] font-medium">{t("picker.title")}</p>
+          <p className="text-xs text-muted-foreground">{t("picker.description")}</p>
         </div>
         {vms.length === 0 ? (
           <div className="space-y-3 px-3 py-4 text-center">
-            <p className="text-xs text-muted-foreground">No virtual machines yet.</p>
+            <p className="text-xs text-muted-foreground">{t("picker.empty")}</p>
             <Button size="sm" onClick={() => go("/vms?new=1")}>
-              <Plus /> Create a VM
+              <Plus /> {t("picker.create")}
             </Button>
           </div>
         ) : (
@@ -125,14 +127,14 @@ export function VmChip({
                     {fallback ? <Box /> : <Laptop />}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{fallback ? `Default — ${fallback.vm.name}` : "Default — this Mac"}</span>
-                    <span className="block truncate text-[11px] text-muted-foreground">{fallback ? `The VM of ${fallback.from}` : "The agent and its workspace have no VM"}</span>
+                    <span className="block truncate">{fallback ? t("picker.defaultVm", { name: fallback.vm.name }) : t("picker.defaultMac")}</span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{fallback ? t("picker.vmOf", { from: fallback.from }) : t("picker.defaultMacHint")}</span>
                   </span>
-                  {!value && <Check className="size-4" aria-label="Selected" />}
+                  {!value && <Check className="size-4" aria-label={t("picker.selected")} />}
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading="Work in">
+              <CommandGroup heading={t("picker.workIn")}>
                 {vms.map((vm) => (
                   <CommandItem key={vm.id} value={`vm ${vm.name} ${vm.id}`} onSelect={() => pick(vm.id)} className="gap-2.5 py-2">
                     <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground [&_svg]:size-3.5">
@@ -142,17 +144,17 @@ export function VmChip({
                       <span className="block truncate">{vm.name}</span>
                       <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                         <VmStateDot state={vm.state} />
-                        {vm.progress?.percent != null ? `${VM_STATE_LABEL[vm.state]} · ${Math.floor(vm.progress.percent)}%` : VM_STATE_LABEL[vm.state]}
+                        {vm.progress?.percent != null ? `${t(`state.${vm.state}`)} · ${Math.floor(vm.progress.percent)}%` : t(`state.${vm.state}`)}
                       </span>
                     </span>
-                    {value === vm.id && <Check className="size-4" aria-label="Selected" />}
+                    {value === vm.id && <Check className="size-4" aria-label={t("picker.selected")} />}
                   </CommandItem>
                 ))}
               </CommandGroup>
               <CommandSeparator />
               <CommandGroup>
                 <CommandItem value="__manage" onSelect={() => go("/vms")} className="text-muted-foreground">
-                  <Settings2 /> Manage virtual machines
+                  <Settings2 /> {t("picker.manage")}
                 </CommandItem>
               </CommandGroup>
             </CommandList>
@@ -182,6 +184,7 @@ export function VmSelectField({
   noneLabel: string;
   hint?: ReactNode;
 }) {
+  const { t } = useTranslation("vms");
   const { vms, isLoading } = useVmChoices();
   const known = value === null || vms.some((v) => v.id === value);
 
@@ -191,17 +194,17 @@ export function VmSelectField({
         <Label htmlFor={id}>{label}</Label>
         {vms.length > 0 && (
           <Link to="/vms" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-            Manage VMs <ArrowRight className="size-3" />
+            {t("picker.manageShort")} <ArrowRight className="size-3" />
           </Link>
         )}
       </div>
       {!isLoading && vms.length === 0 ? (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3.5">
           <Box className="size-5 shrink-0 text-muted-foreground" />
-          <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No virtual machines yet — create one to give agents their own Mac.</p>
+          <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{t("picker.fieldEmpty")}</p>
           <Button type="button" variant="outline" size="sm" asChild>
             <Link id={id} to="/vms?new=1">
-              <Plus /> Create a VM
+              <Plus /> {t("picker.create")}
             </Link>
           </Button>
         </div>
@@ -217,10 +220,10 @@ export function VmSelectField({
               <SelectItem key={vm.id} value={vm.id}>
                 <VmStateDot state={vm.state} />
                 {vm.name}
-                <span className="text-xs text-muted-foreground">{VM_STATE_LABEL[vm.state].toLowerCase()}</span>
+                <span className="text-xs text-muted-foreground">{t(`stateLower.${vm.state}`)}</span>
               </SelectItem>
             ))}
-            {!known && value && <SelectItem value={value}>VM not found</SelectItem>}
+            {!known && value && <SelectItem value={value}>{t("picker.notFound")}</SelectItem>}
           </SelectContent>
         </Select>
       )}

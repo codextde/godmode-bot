@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { Bell, BellOff, Bot, CheckCheck, ChevronRight, CircleCheck, CircleX, Info, KeyRound, MessageCircleQuestion, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import type { AppNotification, NotificationKind } from "@godmode/shared";
 import {
@@ -24,6 +25,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 
 const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string }> = {
   info: { icon: Info, className: "border bg-card text-muted-foreground shadow-card" },
@@ -38,6 +40,7 @@ const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string
 const PAGE = 30;
 
 export function NotificationList({ className }: { className?: string }) {
+  const { t } = useTranslation(["inbox", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [limit, setLimit] = useState(PAGE);
@@ -62,7 +65,7 @@ export function NotificationList({ className }: { className?: string }) {
     },
     onError: (e, _ids, ctx) => {
       if (ctx?.previous) qc.setQueryData(qk.notifications, ctx.previous);
-      toastApiError(e, "Could not mark as read", qc);
+      toastApiError(e, t("notifications.markReadError"), qc);
     },
     onSettled: invalidate,
   });
@@ -71,9 +74,9 @@ export function NotificationList({ className }: { className?: string }) {
     mutationFn: api.notifications.clear,
     onSuccess: () => {
       qc.setQueryData<AppNotification[]>(qk.notifications, []);
-      toast.success("Notifications cleared");
+      toast.success(t("notifications.cleared"));
     },
-    onError: (e) => toastApiError(e, "Could not clear notifications", qc),
+    onError: (e) => toastApiError(e, t("notifications.clearError"), qc),
     onSettled: invalidate,
   });
 
@@ -87,38 +90,38 @@ export function NotificationList({ className }: { className?: string }) {
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
         <Bell className="size-4 text-muted-foreground" />
         <h2 id="notifications-title" className="text-sm font-medium">
-          Notifications
+          {t("notifications.title")}
         </h2>
-        {unread > 0 && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-foreground tabular-nums">{unread} new</span>}
+        {unread > 0 && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-foreground tabular-nums">{t("notifications.new", { count: unread })}</span>}
         <div className="ml-auto flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label="Mark all read" disabled={!unread || markRead.isPending} onClick={() => markRead.mutate("all")}>
+              <Button variant="ghost" size="icon-sm" aria-label={t("notifications.markAllRead")} disabled={!unread || markRead.isPending} onClick={() => markRead.mutate("all")}>
                 <CheckCheck />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Mark all read</TooltipContent>
+            <TooltipContent>{t("notifications.markAllRead")}</TooltipContent>
           </Tooltip>
           <AlertDialog>
             <Tooltip>
               <TooltipTrigger asChild>
                 <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="icon-sm" aria-label="Clear notifications" disabled={!items.length || clear.isPending}>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("notifications.clear")} disabled={!items.length || clear.isPending}>
                     <Trash2 />
                   </Button>
                 </AlertDialogTrigger>
               </TooltipTrigger>
-              <TooltipContent>Clear all</TooltipContent>
+              <TooltipContent>{t("notifications.clearAll")}</TooltipContent>
             </Tooltip>
             <AlertDialogContent className="rounded-2xl">
               <AlertDialogHeader>
-                <AlertDialogTitle>Clear all notifications?</AlertDialogTitle>
-                <AlertDialogDescription>This removes {items.length} notification{items.length === 1 ? "" : "s"}. Agent runs and their results are not affected.</AlertDialogDescription>
+                <AlertDialogTitle>{t("notifications.clearTitle")}</AlertDialogTitle>
+                <AlertDialogDescription>{t("notifications.clearDescription", { count: items.length })}</AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
                 <AlertDialogAction variant="destructive" onClick={() => clear.mutate()}>
-                  Clear all
+                  {t("notifications.clearAll")}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -134,10 +137,10 @@ export function NotificationList({ className }: { className?: string }) {
         </div>
       ) : query.isError ? (
         <div className="p-6 text-center text-sm">
-          <p className="font-medium">Couldn't load notifications</p>
+          <p className="font-medium">{t("notifications.loadError")}</p>
           <p className="mt-1 text-muted-foreground">{errorMessage(query.error)}</p>
           <Button size="sm" variant="outline" className="mt-3" onClick={() => query.refetch()}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         </div>
       ) : items.length === 0 ? (
@@ -145,8 +148,8 @@ export function NotificationList({ className }: { className?: string }) {
           <div className="grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">
             <BellOff className="size-5" />
           </div>
-          <p className="mt-3 text-sm font-medium">No notifications</p>
-          <p className="mt-1 max-w-xs text-xs text-muted-foreground">Agents post updates here when they finish work, need something, or hit a problem.</p>
+          <p className="mt-3 text-sm font-medium">{t("notifications.emptyTitle")}</p>
+          <p className="mt-1 max-w-xs text-xs text-muted-foreground">{t("notifications.emptyDescription")}</p>
         </div>
       ) : (
         <ul className="divide-y">
@@ -169,7 +172,7 @@ export function NotificationList({ className }: { className?: string }) {
       {items.length > limit && (
         <div className="border-t p-2">
           <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setLimit((l) => l + PAGE)}>
-            Show {Math.min(PAGE, items.length - limit)} more
+            {t("notifications.showMore", { count: Math.min(PAGE, items.length - limit) })}
           </Button>
         </div>
       )}
@@ -178,11 +181,13 @@ export function NotificationList({ className }: { className?: string }) {
 }
 
 function NotificationRow({ n, onOpen }: { n: AppNotification; onOpen: () => void }) {
+  const { t } = useTranslation("inbox");
+  const { dateLocale } = useLocale();
   const meta = KIND_ICON[n.kind] ?? KIND_ICON.info;
   const Icon = meta.icon;
   const when = (() => {
     try {
-      return formatDistanceToNow(new Date(n.createdAt), { addSuffix: true });
+      return formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: dateLocale });
     } catch {
       return "";
     }
@@ -198,7 +203,7 @@ function NotificationRow({ n, onOpen }: { n: AppNotification; onOpen: () => void
         interactive && "hover:bg-accent/40 focus-visible:bg-accent/50",
         !n.read && "bg-paper-2/70",
       )}
-      aria-label={`${n.read ? "" : "Unread: "}${n.title}`}
+      aria-label={n.read ? n.title : t("notifications.unread", { title: n.title })}
     >
       <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg", meta.className)}>
         <Icon className="size-4" />

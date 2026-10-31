@@ -8,9 +8,9 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { useTranslation } from "react-i18next";
 import s from "./ReasoningEffort.module.css";
 
-const DEFAULT_STOPS = ["Low", "Medium", "High", "Extra High"] as const;
 const TRACK = 224;
 const HEIGHT = 32;
 const RADIUS = HEIGHT / 2;
@@ -182,13 +182,16 @@ export interface ReasoningEffortProps {
 }
 
 export function ReasoningEffort({
-  stops = DEFAULT_STOPS,
+  stops,
   value = 1,
   onChange,
-  label = "Effort",
-  "aria-label": ariaLabel = "Reasoning effort",
+  label,
+  "aria-label": ariaLabel,
 }: ReasoningEffortProps = {}) {
-  const STOPS = stops;
+  const { t } = useTranslation("aicss");
+  const STOPS = stops ?? [t("reasoningEffort.low"), t("reasoningEffort.medium"), t("reasoningEffort.high"), t("reasoningEffort.extraHigh")];
+  label ??= t("reasoningEffort.label");
+  ariaLabel ??= t("reasoningEffort.ariaLabel");
   const count = STOPS.length;
   const rootRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);

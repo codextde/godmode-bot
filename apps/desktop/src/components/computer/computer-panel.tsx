@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Eye, Hand, Loader2, Maximize2, MonitorUp, PanelRightClose, PanelRightOpen, Repeat2, ScreenShareOff } from "lucide-react";
 import type { Agent, ComputerTarget } from "@godmode/shared";
 import { computerTargetLabel } from "@godmode/shared";
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { ComputerLiveView, targetIcon } from "./computer-live-view";
 import { ComputerShareDialog } from "./share-dialog";
 import { controlNote, viewsOf } from "./computer-utils";
+import { currentLanguage } from "@/i18n";
 
 export type ComputerFocusMode = "watch" | "control";
 
@@ -56,6 +58,7 @@ export function ComputerShareChip({
   onWatch?: () => void;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("computer");
   const [picking, setPicking] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const pickAfterMenu = useRef(false);
@@ -66,8 +69,8 @@ export function ComputerShareChip({
       current={target}
       agentName={agentName}
       sharing={busy}
-      onShare={async (t) => {
-        await onShare(t);
+      onShare={async (next) => {
+        await onShare(next);
         setPicking(false);
       }}
     />
@@ -83,14 +86,14 @@ export function ComputerShareChip({
               type="button"
               variant="ghost"
               onClick={() => setPicking(true)}
-              aria-label="Share a window or screen"
+              aria-label={t("chip.share")}
               className="h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4"
             >
               {busy ? <Loader2 className="animate-spin" /> : <MonitorUp />}
-              <span className="@max-sm/composer:sr-only">Share screen</span>
+              <span className="@max-sm/composer:sr-only">{t("chip.shareShort")}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Share a window or screen</TooltipContent>
+          <TooltipContent>{t("chip.share")}</TooltipContent>
         </Tooltip>
         {dialog}
       </>
@@ -106,11 +109,11 @@ export function ComputerShareChip({
               <button
                 ref={triggerRef}
                 type="button"
-                aria-label={`Sharing: ${computerTargetLabel(target)}`}
+                aria-label={t("chip.sharing", { label: computerTargetLabel(target, currentLanguage()) })}
                 className="flex h-8 max-w-[15rem] min-w-0 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand-soft pr-1.5 pl-2 text-[13px] text-brand-strong transition hover:bg-brand-soft/80 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 {busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : targetIcon(target, "size-3.5 shrink-0")}
-                <span className="truncate font-medium">{computerTargetLabel(target)}</span>
+                <span className="truncate font-medium">{computerTargetLabel(target, currentLanguage())}</span>
                 <LiveDot className="shrink-0" />
                 <ChevronDown className="size-3.5 shrink-0 opacity-60" />
               </button>
@@ -129,22 +132,22 @@ export function ComputerShareChip({
           }}
         >
           <DropdownMenuLabel className="space-y-1 font-normal">
-            <span className="block text-xs text-muted-foreground">Shared with {agentName ?? "the agent"}</span>
-            <span className="block text-[13px] font-medium break-words text-foreground">{computerTargetLabel(target)}</span>
+            <span className="block text-xs text-muted-foreground">{t("chip.sharedWith", { name: agentName ?? t("chip.theAgent") })}</span>
+            <span className="block text-[13px] font-medium break-words text-foreground">{computerTargetLabel(target, currentLanguage())}</span>
             <span className="block text-[11px] text-muted-foreground">{controlNote(target)}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           {onWatch && (
             <DropdownMenuItem onClick={onWatch}>
-              <Eye /> Watch
+              <Eye /> {t("chip.watch")}
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={() => (pickAfterMenu.current = true)}>
-            <Repeat2 /> Share something else…
+            <Repeat2 /> {t("chip.shareElse")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => void onShare(null)}>
-            <ScreenShareOff /> Stop sharing
+            <ScreenShareOff /> {t("chip.stop")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -171,6 +174,7 @@ export function ComputerPanel({
   onStop: () => void;
   stopping?: boolean;
 }) {
+  const { t } = useTranslation("computer");
   const views = useComputerViews(target);
   const [index, setIndex] = useState(0);
   const view = views[Math.min(index, Math.max(0, views.length - 1))]?.view;
@@ -182,7 +186,7 @@ export function ComputerPanel({
 
   return (
     <motion.aside
-      aria-label="Shared screen"
+      aria-label={t("panel.aria")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -191,7 +195,7 @@ export function ComputerPanel({
     >
       <div className="flex h-full w-80 flex-col">
         <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
-          <span className="text-sm font-medium">Shared</span>
+          <span className="text-sm font-medium">{t("panel.title")}</span>
           <span
             className={cn(
               "inline-flex items-center gap-1.5 rounded-[5px] border px-1.5 py-0.5 text-[11px] font-medium",
@@ -199,15 +203,15 @@ export function ComputerPanel({
             )}
           >
             <LiveDot live={live} />
-            {live ? "Live" : "Idle"}
+            {live ? t("panel.live") : t("panel.idle")}
           </span>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label="Hide shared screen">
+              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label={t("panel.hideAria")}>
                 <PanelRightClose />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Hide</TooltipContent>
+            <TooltipContent>{t("panel.hide")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -233,7 +237,7 @@ export function ComputerPanel({
             <button
               type="button"
               onClick={() => onFocus("watch")}
-              aria-label="Watch full size"
+              aria-label={t("panel.watchFull")}
               className="group/preview relative block max-h-[45vh] w-full overflow-hidden rounded-xl border bg-card shadow-card outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               style={{ aspectRatio: frame?.width ? `${frame.width} / ${frame.height}` : "16 / 10" }}
             >
@@ -246,8 +250,8 @@ export function ComputerPanel({
                       <span className="text-xs text-muted-foreground">{frame.error}</span>
                     ) : (
                       <>
-                        <Orb variant="C3" size={24} label="Connecting to the screen" />
-                        <span className="text-shimmer text-xs font-medium">Connecting…</span>
+                        <Orb variant="C3" size={24} label={t("panel.connectingLabel")} />
+                        <span className="text-shimmer text-xs font-medium">{t("panel.connecting")}</span>
                       </>
                     )}
                   </span>
@@ -255,7 +259,7 @@ export function ComputerPanel({
               )}
               <span className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/preview:bg-black/30 group-hover/preview:opacity-100 group-focus-visible/preview:bg-black/30 group-focus-visible/preview:opacity-100">
                 <span className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground">
-                  <Maximize2 className="size-3.5" /> Watch full size
+                  <Maximize2 className="size-3.5" /> {t("panel.watchFull")}
                 </span>
               </span>
             </button>
@@ -264,7 +268,7 @@ export function ComputerPanel({
           <div className="flex min-w-0 items-center gap-2.5">
             <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-card text-muted-foreground">{targetIcon(target, "size-3.5")}</span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] leading-5 font-medium">{frame?.label || computerTargetLabel(target)}</p>
+              <p className="truncate text-[13px] leading-5 font-medium">{frame?.label || computerTargetLabel(target, currentLanguage())}</p>
               <p className="text-[11px] leading-4 text-muted-foreground">{controlNote(target)}</p>
             </div>
           </div>
@@ -282,21 +286,21 @@ export function ComputerPanel({
 
           <div className="flex gap-2">
             <Button size="sm" className="flex-1" onClick={() => onFocus("control")} disabled={!frame?.data}>
-              <Hand /> Take control
+              <Hand /> {t("panel.takeControl")}
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="icon-sm" onClick={onStop} disabled={stopping} aria-label="Stop sharing">
+                <Button variant="outline" size="icon-sm" onClick={onStop} disabled={stopping} aria-label={t("chip.stop")}>
                   {stopping ? <Loader2 className="animate-spin" /> : <ScreenShareOff />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Stop sharing</TooltipContent>
+              <TooltipContent>{t("chip.stop")}</TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         <div className="shrink-0 border-t px-4 py-3 text-[11px] text-muted-foreground">
-          {agent.name} sees only what you share here, and only while it's shared. Stopping takes effect immediately.
+          {t("panel.footer", { name: agent.name })}
         </div>
       </div>
     </motion.aside>
@@ -324,15 +328,16 @@ export function ComputerFocus({ target, mode, onClose }: { target: ComputerTarge
 
 /** Header button that brings the shared-screen panel back once it's hidden. */
 export function ComputerToggle({ working, onClick }: { working: boolean; onClick: () => void }) {
+  const { t } = useTranslation("computer");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Show shared screen" onClick={onClick} className="relative text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" aria-label={t("panel.show")} onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
           {working && <LiveDot className="absolute top-1.5 right-1.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Show shared screen</TooltipContent>
+      <TooltipContent>{t("panel.show")}</TooltipContent>
     </Tooltip>
   );
 }

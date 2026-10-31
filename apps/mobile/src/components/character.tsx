@@ -28,6 +28,7 @@ import {
 } from "@godmode/shared";
 import { LiveDot } from "./ui";
 import { api } from "@/lib/api";
+import { t } from "@/lib/i18n";
 import { qk } from "@/lib/query";
 import { fonts, useColors, useIsDark } from "@/lib/theme";
 
@@ -107,6 +108,27 @@ export function moodOf(presence: AgentPresence): CharacterMood {
       return "error";
     default:
       return "idle";
+  }
+}
+
+/** What the agent is doing right now in words, the desktop's (presenceLabel) in the app language. */
+export function presenceText(p: AgentPresence): string {
+  switch (p.state) {
+    case "off":
+      return t("components:character.presence.off");
+    case "working":
+      return p.running > 1 ? t("components:character.presence.workingInChats", { count: p.running }) : t("components:character.presence.working");
+    case "waiting":
+      if (!p.waiting) return t("components:character.presence.needsLogin");
+      return p.waiting > 1 ? t("components:character.presence.needsYouQuestions", { count: p.waiting }) : t("components:character.presence.needsAnswer");
+    case "failed":
+      return t("components:character.presence.failed");
+    case "paused":
+      return p.paused > 1 ? t("components:character.presence.pausedChats", { count: p.paused }) : t("components:character.presence.paused");
+    case "queued":
+      return p.queued > 1 ? t("components:character.presence.queuedCount", { count: p.queued }) : t("components:character.presence.queued");
+    default:
+      return t("components:character.presence.idle");
   }
 }
 

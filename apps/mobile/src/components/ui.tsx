@@ -14,6 +14,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { cancelAnimation, Easing, FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
 import { Glass } from "./glass";
 import { Icon, type IconName } from "./icon";
@@ -147,9 +148,10 @@ export function Badge({ label, tone = "neutral", live, icon, dot = true }: { lab
 /** Nobody is on it: the desktop's dashed square where an agent's face would be. */
 export function UnassignedAvatar({ size = 40 }: { size?: number }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <View
-      accessibilityLabel="Unassigned"
+      accessibilityLabel={t("ui.unassigned")}
       style={{
         width: size,
         height: size,
@@ -338,8 +340,9 @@ export function Skeleton({ width, height = 12, radius: r = radius.sm, style }: {
 
 /** List rows while a list loads: the shape of what comes, so the screen is never blank. */
 export function SkeletonRows({ count = 6, avatar = 44, inset = space.lg }: { count?: number; avatar?: number; inset?: number }) {
+  const { t } = useTranslation("components");
   return (
-    <View accessibilityLabel="Loading" accessibilityRole="progressbar">
+    <View accessibilityLabel={t("ui.loading")} accessibilityRole="progressbar">
       {Array.from({ length: count }, (_, i) => (
         <View key={i} style={[styles.skeletonRow, { paddingHorizontal: inset }]}>
           {avatar > 0 && <Skeleton width={avatar} height={avatar} radius={avatar * 0.32} />}
@@ -354,8 +357,10 @@ export function SkeletonRows({ count = 6, avatar = 44, inset = space.lg }: { cou
 }
 
 /** A whole screen waiting for its data. */
-export function LoadingState({ label = "Loading…", style }: { label?: string; style?: StyleProp<ViewStyle> }) {
+export function LoadingState({ label: labelProp, style }: { label?: string; style?: StyleProp<ViewStyle> }) {
   const c = useColors();
+  const { t } = useTranslation("common");
+  const label = labelProp ?? t("status.loading");
   return (
     <View style={[styles.loading, style]} accessibilityRole="progressbar" accessibilityLabel={label}>
       <ActivityIndicator color={c.textMuted} />
@@ -368,12 +373,13 @@ export function LoadingState({ label = "Loading…", style }: { label?: string; 
 
 /** Loading failed: say why and offer to try again instead of an empty screen. */
 export function ErrorState({ title, error, onRetry }: { title: string; error: string; onRetry?: () => void }) {
+  const { t } = useTranslation("common");
   return (
     <EmptyState
       icon="wifi"
       title={title}
       body={error}
-      action={onRetry ? <Button title="Try again" icon="refresh" variant="outline" onPress={onRetry} /> : undefined}
+      action={onRetry ? <Button title={t("actions.tryAgain")} icon="refresh" variant="outline" onPress={onRetry} /> : undefined}
     />
   );
 }

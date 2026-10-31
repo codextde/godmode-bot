@@ -2,13 +2,14 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, SectionList, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { isHumanTaskActive, isHumanTaskWaiting, type HumanTask, type HumanTaskPriority } from "@godmode/shared";
 import { Segmented } from "@/components/form";
 import { HeaderActions } from "@/components/header-actions";
 import { HumanTaskRow } from "@/components/human-task-row";
 import { Icon } from "@/components/icon";
 import { Button, Card, EmptyState, ErrorState, Hairline, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -22,6 +23,7 @@ const byPosition = (a: HumanTask, b: HumanTask) => a.position - b.position || a.
 
 /** What agents need from the human — a passkey, a CAPTCHA, an answer, an OK — and the human's own tasks, in the desktop's columns. */
 export default function MyTasks() {
+  const { t } = useTranslation(["humanTasks", "common"]);
   const list = useQuery({ queryKey: qk.humanTaskList("all"), queryFn: () => api.humanTasks.list({ status: "all" }) });
   const { byId } = useAgents();
   const pull = usePullRefresh(list.refetch);
@@ -29,31 +31,39 @@ export default function MyTasks() {
   const all = useMemo(() => list.data ?? [], [list.data]);
 
   const sections = useMemo(() => {
-    const closed = all.filter((t) => !isHumanTaskActive(t)).sort((a, b) => (b.closedAt ?? b.updatedAt).localeCompare(a.closedAt ?? a.updatedAt));
+    const closed = all.filter((h) => !isHumanTaskActive(h)).sort((a, b) => (b.closedAt ?? b.updatedAt).localeCompare(a.closedAt ?? a.updatedAt));
     return [
-      { title: "Backlog", data: all.filter((t) => t.status === "backlog").sort(byPosition) },
-      { title: "To do", data: all.filter((t) => t.status === "open").sort(byPosition) },
-      { title: "Doing", data: all.filter((t) => t.status === "doing").sort(byPosition) },
-      { title: "Done", data: closed.slice(0, DONE_SHOWN) },
+      { title: t("myTasks.lanes.backlog"), data: all.filter((h) => h.status === "backlog").sort(byPosition) },
+      { title: t("myTasks.lanes.open"), data: all.filter((h) => h.status === "open").sort(byPosition) },
+      { title: t("myTasks.lanes.doing"), data: all.filter((h) => h.status === "doing").sort(byPosition) },
+      { title: t("myTasks.lanes.done"), data: closed.slice(0, DONE_SHOWN) },
     ].filter((s) => s.data.length);
-  }, [all]);
+  }, [all, t]);
 
-  const waiting = all.filter((t) => t.status === "open").length;
-  const agentsWaiting = new Set(all.filter((t) => isHumanTaskWaiting(t) && t.agentId).map((t) => t.agentId)).size;
-  const parked = all.filter((t) => t.status === "backlog").length;
+  const waiting = all.filter((h) => h.status === "open").length;
+  const agentsWaiting = new Set(all.filter((h) => isHumanTaskWaiting(h) && h.agentId).map((h) => h.agentId)).size;
+  const parked = all.filter((h) => h.status === "backlog").length;
   const summary = waiting
-    ? `${waiting} waiting for you${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Close or answer one and its agent picks up where it left off.`
+    ? t("myTasks.summary", {
+        parts: [
+          t("myTasks.waiting", { count: waiting }),
+          agentsWaiting ? t("myTasks.agentsOnHold", { count: agentsWaiting }) : null,
+          parked ? t("myTasks.inBacklog", { count: parked }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })
     : parked
-      ? `Nothing waits for you right now · ${parked} in the backlog for later. Close or answer one and its agent picks up where it left off.`
+      ? t("myTasks.summaryNothing", { count: parked })
       : null;
 
   return (
     <>
-      <Stack.Title>My tasks</Stack.Title>
-      <HeaderActions actions={[{ icon: "plus", label: "New task", onPress: () => setAdding(true) }]} />
+      <Stack.Title>{t("myTasks.title")}</Stack.Title>
+      <HeaderActions actions={[{ icon: "plus", label: t("myTasks.newTask"), onPress: () => setAdding(true) }]} />
       <SectionList<HumanTask>
         sections={sections}
-        keyExtractor={(t) => t.id}
+        keyExtractor={(h) => h.id}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{ paddingHorizontal: space.sm, paddingBottom: 80 }}
         refreshControl={<RefreshControl {...pull} />}
@@ -84,13 +94,13 @@ export default function MyTasks() {
               <SkeletonRows count={5} avatar={40} />
             </View>
           ) : list.isError ? (
-            <ErrorState title="Couldn't load your tasks" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("myTasks.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : adding ? null : (
             <EmptyState
               icon="person"
-              title="Nothing waits for you"
-              body="When an agent can't go on without you — a passkey, a CAPTCHA, a question, a decision it left open — it lands here and you are told. Once you close or answer it, the agent continues by itself."
-              action={<Button title="Add one of your own" icon="plus" variant="secondary" onPress={() => setAdding(true)} />}
+              title={t("myTasks.emptyTitle")}
+              body={t("myTasks.emptyBody")}
+              action={<Button title={t("myTasks.addOwn")} icon="plus" variant="secondary" onPress={() => setAdding(true)} />}
             />
           )
         }
@@ -102,6 +112,7 @@ export default function MyTasks() {
 /** One of the human's own: what, an optional note, how urgent, now or later. */
 function AddTask({ onDone }: { onDone: () => void }) {
   const c = useColors();
+  const { t } = useTranslation(["humanTasks", "common"]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [priority, setPriority] = useState<HumanTaskPriority>("normal");
@@ -112,7 +123,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
       void queryClient.invalidateQueries({ queryKey: qk.humanTasks });
       onDone();
     },
-    onError: (err) => Alert.alert("Couldn't add the task", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err)),
+    onError: (err) => Alert.alert(t("myTasks.addFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err)),
   });
   const urgent = priority === "high";
   return (
@@ -120,7 +131,7 @@ function AddTask({ onDone }: { onDone: () => void }) {
       <TextInput
         value={title}
         onChangeText={setTitle}
-        placeholder="What do you need to do?"
+        placeholder={t("myTasks.titlePlaceholder")}
         placeholderTextColor={c.textFaint}
         autoFocus
         returnKeyType="next"
@@ -130,15 +141,15 @@ function AddTask({ onDone }: { onDone: () => void }) {
       <TextInput
         value={body}
         onChangeText={setBody}
-        placeholder="Note (optional)"
+        placeholder={t("myTasks.noteOptional")}
         placeholderTextColor={c.textFaint}
         multiline
         style={[styles.body, { color: c.text, borderTopColor: c.border }]}
       />
       <Segmented
         options={[
-          { value: "open", label: "To do" },
-          { value: "backlog", label: "Backlog" },
+          { value: "open", label: t("myTasks.lanes.open") },
+          { value: "backlog", label: t("myTasks.lanes.backlog") },
         ]}
         value={status}
         onChange={setStatus}
@@ -154,12 +165,12 @@ function AddTask({ onDone }: { onDone: () => void }) {
       >
         <Icon name="warning" size={13} color={urgent ? c.danger : c.textMuted} />
         <T variant="subhead" color={urgent ? c.danger : c.text} style={{ fontWeight: "600" }}>
-          {urgent ? "Urgent" : "Mark urgent"}
+          {urgent ? t("myTasks.urgent") : t("myTasks.markUrgent")}
         </T>
       </Pressable>
       <Row style={{ gap: space.sm }}>
-        <Button title="Cancel" variant="secondary" onPress={onDone} style={{ flex: 1 }} />
-        <Button title="Add task" icon="plus" loading={create.isPending} disabled={!title.trim()} onPress={() => create.mutate()} style={{ flex: 1 }} />
+        <Button title={t("common:actions.cancel")} variant="secondary" onPress={onDone} style={{ flex: 1 }} />
+        <Button title={t("myTasks.addTask")} icon="plus" loading={create.isPending} disabled={!title.trim()} onPress={() => create.mutate()} style={{ flex: 1 }} />
       </Row>
     </Card>
   );

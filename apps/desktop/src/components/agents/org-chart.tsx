@@ -1,12 +1,13 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { Ban, CornerDownRight, Plus, Users } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { Agent, TeamNode } from "@godmode/shared";
-import { leadOf, presenceLabel, teamTree } from "@godmode/shared";
+import { leadOf, teamTree } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { AgentStatus, useAgentMood, useAgentPresence } from "./agent-actions";
+import { AgentStatus, agentPresenceLabel, useAgentMood, useAgentPresence } from "./agent-actions";
 import { type AgentGroup } from "./agent-groups";
 import { DroppableSection, useAgentDrag, useAgentDrop, type AgentDropTarget } from "./agent-dnd";
 
@@ -40,6 +41,7 @@ export function OrgChart({
   stats: (agents: Agent[]) => { working: number; needsYou: number };
   forceOpen?: boolean;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const { data: workspaces = [] } = useWorkspaces();
   const groups = teamTree(shown, all, { byWorkspace });
   let hub: TeamNode<Agent> | null = null;
@@ -68,7 +70,7 @@ export function OrgChart({
     const teams = roots.filter((n) => n.reports.length);
     if (loose.length) panels.push({ group: { key: "org:direct", workspace: null, agents: loose.map((n) => n.agent) }, roots: loose });
     if (others.length) panels.push({ group: { key: "org:others", workspace: null, agents: others.map((n) => n.agent) }, roots: others });
-    for (const t of teams) panels.push({ group: { key: `org:team:${t.agent.id}`, workspace: null, agents: flatten(t) }, roots: [t], lead: t.agent });
+    for (const team of teams) panels.push({ group: { key: `org:team:${team.agent.id}`, workspace: null, agents: flatten(team) }, roots: [team], lead: team.agent });
   }
 
   const onlyBuiltin = all.length === 1 && all[0]!.isDefault;
@@ -100,7 +102,7 @@ export function OrgChart({
                     needsYou={s.needsYou}
                     panel
                     forceOpen={forceOpen}
-                    label={p.lead ? `${p.lead.name}’s team` : byWorkspace ? undefined : p.group.key === "org:direct" && hub ? `Reports to ${hub.agent.name}` : hub ? "Other agents" : "Agents"}
+                    label={p.lead ? t("orgChart.teamOf", { name: p.lead.name }) : byWorkspace ? undefined : p.group.key === "org:direct" && hub ? t("orgChart.reportsToPanel", { name: hub.agent.name }) : hub ? t("orgChart.otherAgents") : t("common:words.agents")}
                     icon={p.lead ? <AgentAvatar agent={p.lead} size="sm" still /> : byWorkspace ? undefined : p.group.key === "org:direct" && hub ? <AgentAvatar agent={hub.agent} size="sm" still /> : <Users className="size-4 text-muted-foreground" aria-hidden />}
                   >
                     <ul className="space-y-0.5 p-1.5">
@@ -124,8 +126,8 @@ export function OrgChart({
             <Plus className="size-4" />
           </span>
           <span>
-            <span className="block font-medium text-foreground">Hire your first agent</span>
-            It reports to {all[0]!.name} until you give it another lead.
+            <span className="block font-medium text-foreground">{t("orgChart.hireFirst")}</span>
+            {t("orgChart.hireFirstHint", { name: all[0]!.name })}
           </span>
         </Link>
       )}
@@ -169,13 +171,14 @@ function rank(p: Panel, order: Map<string, number>) {
 
 /** The built-in agent: everyone without a lead of their own reports to it. */
 function Hub({ agent, dim, reports }: { agent: Agent; dim: boolean; reports: Agent[] }) {
+  const { t } = useTranslation("agents");
   const mood = useAgentMood(agent);
   const presence = useAgentPresence(agent);
   const direct = reports.length;
   const global = reports.some((a) => !a.workspaceId);
   const workspaces = new Set(reports.flatMap((a) => (a.workspaceId ? [a.workspaceId] : []))).size;
-  const where = [global && "Global", workspaces > 0 && `${workspaces} workspace${workspaces === 1 ? "" : "s"}`].filter(Boolean).join(" and ");
-  const label = `${agent.name}, ${agent.role || "no role yet"}, ${presenceLabel(presence)}, reports to you`;
+  const where = global ? t("orgChart.hub.whereGlobalAnd", { count: workspaces }) : t("orgChart.hub.whereWorkspaces", { count: workspaces });
+  const label = t("orgChart.hub.ariaLabel", { name: agent.name, role: agent.role || t("orgChart.noRoleLower"), status: agentPresenceLabel(presence) });
   const drop = useAgentDrop({ kind: "hub", agent }, "hub");
   return (
     <div className="flex flex-col items-start gap-3 @2xl:flex-row @2xl:items-center">
@@ -199,7 +202,7 @@ function Hub({ agent, dim, reports }: { agent: Agent; dim: boolean; reports: Age
             >
               {agent.name}
             </Link>
-            <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Built-in</span>
+            <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("orgChart.builtIn")}</span>
           </div>
           {agent.role && <p className="truncate text-xs text-muted-foreground">{agent.role}</p>}
           <AgentStatus agent={agent} interactive className="mt-0.5 max-w-full" />
@@ -207,9 +210,11 @@ function Hub({ agent, dim, reports }: { agent: Agent; dim: boolean; reports: Age
       </div>
       {direct > 0 && (
         <p className="text-sm text-muted-foreground">
-          Leads <span className="font-medium text-foreground tabular-nums">{direct}</span> agent{direct === 1 ? "" : "s"} directly
-          {(workspaces > 1 || (global && workspaces > 0)) && <>, across {where}</>}
-          . Everyone without a lead of their own reports here.
+          {workspaces > 1 || (global && workspaces > 0) ? (
+            <Trans t={t} i18nKey="orgChart.hub.leadsAcross" count={direct} values={{ where }} components={{ n: <span className="font-medium text-foreground tabular-nums" /> }} />
+          ) : (
+            <Trans t={t} i18nKey="orgChart.hub.leads" count={direct} components={{ n: <span className="font-medium text-foreground tabular-nums" /> }} />
+          )}
         </p>
       )}
     </div>
@@ -239,11 +244,12 @@ function Branch({ node, depth, all, matches, last }: { node: TeamNode<Agent>; de
 }
 
 function Row({ node, all, dim }: { node: TeamNode<Agent>; all: Agent[]; dim: boolean }) {
+  const { t } = useTranslation("agents");
   const agent = node.agent;
   const mood = useAgentMood(agent);
   const presence = useAgentPresence(agent);
   const lead = leadOf(agent, all);
-  const label = `${agent.name}, ${agent.role || "no role yet"}, ${presenceLabel(presence)}, reports to ${lead?.name ?? "Godmode"}`;
+  const label = t("orgChart.row.ariaLabel", { name: agent.name, role: agent.role || t("orgChart.noRoleLower"), status: agentPresenceLabel(presence), lead: lead?.name ?? "Godmode" });
   const team = node.reports.length;
   const drag = useAgentDrag(agent, `row:${agent.id}`);
   const drop = useAgentDrop({ kind: "agent", agent }, `lead:${agent.id}`);
@@ -278,20 +284,20 @@ function Row({ node, all, dim }: { node: TeamNode<Agent>; all: Agent[]; dim: boo
             {agent.name}
           </Link>
           {team > 0 && (
-            <span className="shrink-0 rounded-[5px] bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground tabular-nums" title={`Leads ${team}`}>
-              Lead · {team}
+            <span className="shrink-0 rounded-[5px] bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground tabular-nums" title={t("orgChart.row.leadsTitle", { n: team })}>
+              {t("orgChart.row.leadBadge", { n: team })}
             </span>
           )}
         </div>
         <p className="truncate text-xs text-muted-foreground" title={agent.role || undefined}>
-          {agent.role || <span className="italic opacity-70">No role yet</span>}
+          {agent.role || <span className="italic opacity-70">{t("orgChart.noRole")}</span>}
         </p>
         {node.leadElsewhere && (
           <Link
             to={`/agents/${node.leadElsewhere.id}`}
             className="relative z-10 mt-1 inline-flex max-w-full items-center gap-1 rounded-[5px] border bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground transition hover:border-foreground/25 hover:text-foreground"
           >
-            Reports to <AgentAvatar agent={node.leadElsewhere} size="sm" still className="size-3.5 rounded-[3px] text-[8px]" />
+            {t("orgChart.row.reportsTo")} <AgentAvatar agent={node.leadElsewhere} size="sm" still className="size-3.5 rounded-[3px] text-[8px]" />
             <span className="truncate">{node.leadElsewhere.name}</span>
           </Link>
         )}
@@ -305,11 +311,11 @@ function Row({ node, all, dim }: { node: TeamNode<Agent>; all: Agent[]; dim: boo
           )}
         >
           {drop.state === "valid" ? <CornerDownRight className="size-3" aria-hidden /> : <Ban className="size-3" aria-hidden />}
-          {drop.state === "valid" ? "Report here" : "Not here"}
+          {drop.state === "valid" ? t("orgChart.row.reportHere") : t("orgChart.row.notHere")}
         </span>
       ) : presence.state === "idle" ? (
-        <span className="mt-[0.8125rem] mr-1 size-1.5 shrink-0 rounded-full bg-success/70" title="Idle">
-          <span className="sr-only">Idle</span>
+        <span className="mt-[0.8125rem] mr-1 size-1.5 shrink-0 rounded-full bg-success/70" title={t("orgChart.row.idle")}>
+          <span className="sr-only">{t("orgChart.row.idle")}</span>
         </span>
       ) : (
         <AgentStatus agent={agent} interactive className="mt-2 max-w-[45%] shrink-0" />

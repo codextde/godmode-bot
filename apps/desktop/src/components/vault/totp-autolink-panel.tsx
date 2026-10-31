@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ArrowRight, Link2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,13 +36,14 @@ function loadDismissed(): Set<string> {
 
 /** Logins and 2FA codes that clearly belong together, linked in one click. Agents also link them on their own once a guessed code works. */
 export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[]; credById: Map<string, Credential> }) {
+  const { t } = useTranslation("vault");
   const qc = useQueryClient();
   const [dismissed, setDismissed] = useState(loadDismissed);
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
   const [checkedLikely, setCheckedLikely] = useState<Set<string>>(new Set());
   const suggestions = useQuery({ queryKey: qk.totpAutolink, queryFn: api.totp.autolinkSuggestions, enabled: entries.length > 0 });
 
-  const totpById = useMemo(() => new Map(entries.map((t) => [t.id, t])), [entries]);
+  const totpById = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
   const rows = useMemo(
     () =>
       (suggestions.data ?? [])
@@ -83,10 +85,10 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
       void qc.invalidateQueries({ queryKey: qk.credentials });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
       const n = res.linked.length;
-      if (n) toast.success(`${n} 2FA ${n === 1 ? "code" : "codes"} linked`, { description: "Agents fill them in by themselves on the next sign-in." });
-      else toast.info("Nothing to link anymore", { description: "These logins got a 2FA code in the meantime." });
+      if (n) toast.success(t("autolink.linked", { count: n }), { description: t("autolink.linkedDescription") });
+      else toast.info(t("autolink.nothing"), { description: t("autolink.nothingDescription") });
     },
-    onError: (e) => toastApiError(e, "Could not link the 2FA codes", qc),
+    onError: (e) => toastApiError(e, t("autolink.failed"), qc),
   });
 
   if (!rows.length) return null;
@@ -97,7 +99,7 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
         initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
-        aria-label="2FA codes that match a login"
+        aria-label={t("autolink.label")}
         className="overflow-hidden rounded-xl border border-brand/25 bg-card shadow-card"
       >
         <div className="flex items-start gap-3 px-4 pt-4 pb-3">
@@ -106,14 +108,14 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium tracking-[-0.01em]">
-              {rows.length === 1 ? "1 code matches a login" : `${rows.length} codes match a login`}
+              {t("autolink.title", { count: rows.length })}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Matched by service and account. Link them and agents finish two-factor on their own.
-              {sureCount < rows.length ? " Likely matches stay unchecked; agents also try them and link the ones that work." : ""}
+              {t("autolink.description")}
+              {sureCount < rows.length ? ` ${t("autolink.likelyHint")}` : ""}
             </p>
           </div>
-          <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 text-muted-foreground" aria-label="Hide these suggestions" onClick={() => dismiss(rows.map((r) => r.key))}>
+          <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 text-muted-foreground" aria-label={t("autolink.hide")} onClick={() => dismiss(rows.map((r) => r.key))}>
             <X />
           </Button>
         </div>
@@ -126,7 +128,7 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
             return (
               <li key={r.key}>
                 <label className={cn("flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent/50", !checked && "opacity-75")}>
-                  <Checkbox checked={checked} onCheckedChange={(v) => toggle(r, v === true)} aria-label={`Link ${service} to ${r.cred.name}`} />
+                  <Checkbox checked={checked} onCheckedChange={(v) => toggle(r, v === true)} aria-label={t("autolink.linkPair", { service, login: r.cred.name })} />
                   <span className="flex min-w-0 flex-1 items-center gap-2.5">
                     <Favicon domain={credDomain || issuerDomain(r.totp.issuer)} name={service} size="sm" />
                     <span className="min-w-0 flex-1">
@@ -145,7 +147,7 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
                       r.sure ? "bg-success/10 text-success" : "bg-muted text-muted-foreground",
                     )}
                   >
-                    {r.sure ? "Match" : "Likely"}
+                    {r.sure ? t("autolink.match") : t("autolink.likely")}
                   </span>
                 </label>
               </li>
@@ -155,10 +157,10 @@ export function TotpAutoLinkPanel({ entries, credById }: { entries: TotpEntry[];
 
         <div className="flex items-center justify-end gap-2 bg-paper-2 px-4 py-3">
           <Button variant="ghost" size="sm" onClick={() => dismiss(rows.map((r) => r.key))} disabled={link.isPending}>
-            Not now
+            {t("notNow")}
           </Button>
           <Button size="sm" onClick={() => link.mutate()} disabled={!selected.length || link.isPending}>
-            {link.isPending ? <Spinner /> : <Link2 />} Link {selected.length || ""}
+            {link.isPending ? <Spinner /> : <Link2 />} {selected.length ? t("autolink.linkCount", { count: selected.length }) : t("autolink.link")}
           </Button>
         </div>
     </motion.section>

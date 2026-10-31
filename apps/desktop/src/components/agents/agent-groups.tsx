@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUpRight, ChevronRight, Globe } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent, Workspace } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
@@ -8,6 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Button } from "@/components/ui/button";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { t as translate } from "@/i18n";
 
 export interface AgentGroup<T = Agent> {
   /** "global" or the workspace id. */
@@ -31,7 +33,7 @@ export function groupByWorkspace<T extends { workspaceId: string | null }>(agent
 }
 
 export function groupLabel(group: { key: string; workspace: Workspace | null }) {
-  return group.key === "global" ? "Global" : (group.workspace?.name ?? "Workspace");
+  return group.key === "global" ? translate("agents:agentGroups.global") : (group.workspace?.name ?? translate("agents:agentGroups.workspace"));
 }
 
 export function GroupIcon({ workspace, isGlobal, className }: { workspace: Workspace | null; isGlobal: boolean; className?: string }) {
@@ -82,6 +84,7 @@ export function WorkspaceSection({
   dropState?: "none" | "available" | "valid" | "invalid";
   children: ReactNode;
 }) {
+  const { t } = useTranslation("agents");
   const folded = useUi((s) => s.collapsedAgentGroups.includes(group.key));
   const collapsed = folded && !forceOpen;
   const toggle = useUi((s) => s.toggleAgentGroup);
@@ -121,7 +124,7 @@ export function WorkspaceSection({
         <GroupStats working={working} needsYou={needsYou} />
         {dropState === "valid" && (
           <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="shrink-0 rounded-full bg-brand-strong px-2 py-0.5 text-[11px] font-medium text-white dark:bg-brand dark:text-black">
-            Drop here
+            {t("agentGroups.dropHere")}
           </motion.span>
         )}
         <AnimatePresence initial={false}>
@@ -141,13 +144,13 @@ export function WorkspaceSection({
                 variant="ghost"
                 size="icon-sm"
                 className="ml-auto text-muted-foreground opacity-0 transition-opacity group-hover/head:opacity-100 focus-visible:opacity-100"
-                aria-label={`Open ${label}`}
+                aria-label={t("agentGroups.open", { label })}
                 onClick={() => setWorkspace(group.workspace!.id)}
               >
                 <ArrowUpRight />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Show only {label}</TooltipContent>
+            <TooltipContent>{t("agentGroups.showOnly", { label })}</TooltipContent>
           </Tooltip>
         )}
       </div>
@@ -173,22 +176,23 @@ export function WorkspaceSection({
 }
 
 function GroupStats({ working, needsYou }: { working: number; needsYou: number }) {
+  const { t } = useTranslation("agents");
   if (!working && !needsYou) return null;
   // In a narrow heading the name keeps the room: just dot and number, the words on hover.
   return (
     <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
       {working > 0 && (
-        <span className="inline-flex items-center gap-1" title={`${working} working`}>
+        <span className="inline-flex items-center gap-1" title={t("agentGroups.workingTitle", { count: working })}>
           <span aria-hidden className="size-1.5 rounded-full bg-brand animate-live-dot" />
           {working}
-          <span className="hidden @[26rem]/head:inline">working</span>
+          <span className="hidden @[26rem]/head:inline">{t("agentGroups.workingWord", { count: working })}</span>
         </span>
       )}
       {needsYou > 0 && (
-        <span className="inline-flex items-center gap-1 text-foreground" title={`${needsYou} need${needsYou === 1 ? "s" : ""} you`}>
+        <span className="inline-flex items-center gap-1 text-foreground" title={t("agentGroups.needsYouTitle", { count: needsYou })}>
           <span aria-hidden className="size-1.5 rounded-full bg-warning" />
           {needsYou}
-          <span className="hidden @[26rem]/head:inline">need{needsYou === 1 ? "s" : ""} you</span>
+          <span className="hidden @[26rem]/head:inline">{t("agentGroups.needsYouWord", { count: needsYou })}</span>
         </span>
       )}
     </span>

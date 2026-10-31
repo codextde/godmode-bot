@@ -2,14 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { format, isThisYear, isToday, isYesterday } from "date-fns";
 import { BellRing, ChevronDown, HeartPulse, Hourglass, ListChecks, Repeat2, RotateCcw, ShieldCheck, Timer, Zap, type LucideIcon } from "lucide-react";
 import {
   HEARTBEAT_INTERVALS,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
-  heartbeatIntervalLabel,
-  heartbeatIntervalText,
   normalizeHeartbeat,
   type Agent,
   type AgentHeartbeat,
@@ -26,6 +25,7 @@ import { qk } from "@/lib/queryKeys";
 import { useSettings } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { dateLocale, intlLocale, t } from "@/i18n";
 import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,10 +36,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useNow } from "@/components/runs/run-row";
 import { Segmented, SettingRow, SettingsGroup } from "@/components/settings/settings-kit";
-import { plural, upcomingWhen } from "./dream-parts";
+import { upcomingWhen } from "./dream-parts";
 
 const BEATS_PREVIEW = 10;
 const WORKING_HOURS = { from: 8, to: 18 };
+
+/** "every hour", "every 4 hours", "once a day" */
+function intervalText(minutes: number) {
+  if (minutes >= 1440) return t("agents:heartbeatTab.interval.daily");
+  if (minutes === 60) return t("agents:heartbeatTab.interval.hourly");
+  if (minutes > 60) return t("agents:heartbeatTab.interval.hours", { count: Math.round(minutes / 60) });
+  return t("agents:heartbeatTab.interval.minutes", { count: minutes });
+}
+
+/** "15 min", "1 h", "4 h", "Daily" */
+function intervalLabel(minutes: number) {
+  if (minutes >= 1440) return t("agents:heartbeatTab.interval.dailyShort");
+  return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
+}
 
 /** Realtime ("heartbeats" entity) keeps it fresh; polling covers the board, and a timer refetches right after the next beat. */
 function useHeartbeatState(agentId: string) {
@@ -62,6 +76,7 @@ function useHeartbeatState(agentId: string) {
 
 /** Optimistic: the agent's heartbeat changes right away and rolls back when the core refuses. */
 function useSaveHeartbeat(agent: Agent) {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (heartbeat: AgentHeartbeatInput) => api.agents.update(agent.id, { heartbeat }),
@@ -73,7 +88,7 @@ function useSaveHeartbeat(agent: Agent) {
     },
     onError: (err, _patch, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.agent(agent.id), ctx.prev);
-      toast.error("Couldn't save the heartbeat", { description: errorMessage(err) });
+      toast.error(t("heartbeatTab.toast.saveError"), { description: errorMessage(err) });
     },
     onSuccess: (updated) => {
       qc.setQueryData(qk.agent(agent.id), updated);
@@ -121,6 +136,7 @@ function Hero({
   onRetry: () => void;
   save: SaveHeartbeat;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const now = useNow(hb.enabled, 30_000);
@@ -133,21 +149,21 @@ function Hero({
       qc.setQueryData<AgentHeartbeatState>(qk.agentHeartbeat(agent.id), (old) => (old ? { ...old, beats: [b, ...old.beats.filter((x) => x.id !== b.id)] } : old));
       qc.invalidateQueries({ queryKey: qk.agentHeartbeat(agent.id) });
       qc.invalidateQueries({ queryKey: qk.runs });
-      if (b.outcome === "failed") toast.error("The beat couldn't start", { description: b.summary });
+      if (b.outcome === "failed") toast.error(t("heartbeatTab.toast.beatFailed"), { description: b.summary });
       else if (b.outcome === "woke")
-        toast.success(`${agent.name} is on it`, {
+        toast.success(t("heartbeatTab.toast.onIt", { name: agent.name }), {
           description: b.summary,
-          action: b.conversationId ? { label: "Watch", onClick: () => navigate(`/chat/${b.conversationId}`) } : undefined,
+          action: b.conversationId ? { label: t("heartbeatTab.watch"), onClick: () => navigate(`/chat/${b.conversationId}`) } : undefined,
         });
-      else toast(b.outcome === "quiet" ? "All quiet" : "Beat skipped", { description: b.summary });
+      else toast(b.outcome === "quiet" ? t("heartbeatTab.toast.allQuiet") : t("heartbeatTab.toast.skipped"), { description: b.summary });
     },
-    onError: (err) => !isLicenseRequired(err) && toast.error(`Couldn't wake ${agent.name}`, { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error(t("heartbeatTab.toast.wakeError", { name: agent.name }), { description: errorMessage(err) }),
   });
 
   const titleId = `heartbeat-${agent.id}`;
   const wake = (
     <Button size="sm" variant="outline" disabled={!agent.enabled || beat.isPending} onClick={() => beat.mutate()}>
-      {beat.isPending ? <Spinner /> : <Zap />} Wake now
+      {beat.isPending ? <Spinner /> : <Zap />} {t("heartbeatTab.wakeNow")}
     </Button>
   );
 
@@ -165,18 +181,18 @@ function Hero({
         </div>
         <div className="min-w-0 flex-1 basis-64">
           <h2 id={titleId} className="text-sm font-medium tracking-[-0.01em]">
-            {easy ? "Check-ins" : "Heartbeat"}
+            {easy ? t("heartbeatTab.titleEasy") : t("heartbeatTab.title")}
           </h2>
           <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-muted-foreground">
             {easy
-              ? `Wakes ${agent.name} regularly to move its tasks forward and go through its checklist, and keeps a note of every check-in.`
-              : `Wakes ${agent.name} on its own rhythm to move its tickets forward and run its checklist — and leaves a trail.`}
+              ? t("heartbeatTab.introEasy", { name: agent.name })
+              : t("heartbeatTab.introPro", { name: agent.name })}
           </p>
           {error ? (
             <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-destructive">
-              Couldn't load the heartbeat: {errorMessage(error)}
+              {t("heartbeatTab.loadError", { error: errorMessage(error) })}
               <Button size="xs" variant="ghost" onClick={onRetry}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             </p>
           ) : (
@@ -197,16 +213,16 @@ function Hero({
                   {wake}
                 </span>
               </TooltipTrigger>
-              <TooltipContent>Switch {agent.name} on first</TooltipContent>
+              <TooltipContent>{t("heartbeatTab.switchOnFirst", { name: agent.name })}</TooltipContent>
             </Tooltip>
           )}
           <label className="flex cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 text-xs text-muted-foreground shadow-card">
             <Switch
               checked={hb.enabled}
               onCheckedChange={(enabled) => save.mutate({ enabled })}
-              aria-label={hb.enabled ? `Switch ${agent.name}'s heartbeat off` : `Switch ${agent.name}'s heartbeat on`}
+              aria-label={hb.enabled ? t("heartbeatTab.switchOff", { name: agent.name }) : t("heartbeatTab.switchOn", { name: agent.name })}
             />
-            <span className="@max-md:sr-only">{hb.enabled ? "On" : "Off"}</span>
+            <span className="@max-md:sr-only">{hb.enabled ? t("common:status.on") : t("common:status.off")}</span>
           </label>
         </div>
       </div>
@@ -217,24 +233,24 @@ function Hero({
 
 /** "Beats every hour · 8:00 AM–6:00 PM · weekdays · next at 10:30 AM" or "Off". */
 function statusLine(agent: Agent, hb: AgentHeartbeat, state: AgentHeartbeatState | undefined, now: number) {
-  if (!hb.enabled) return "Off";
-  const parts = [`Beats ${heartbeatIntervalText(hb.intervalMinutes)}`];
+  if (!hb.enabled) return t("common:status.off");
+  const parts = [t("agents:heartbeatTab.status.beats", { interval: intervalText(hb.intervalMinutes) })];
   if (hb.hours) parts.push(`${hourLabel(hb.hours.from)}–${hourLabel(hb.hours.to)}`);
-  if (hb.weekdays) parts.push("weekdays");
-  if (!agent.enabled) parts.push(`waits while ${agent.name} is switched off`);
+  if (hb.weekdays) parts.push(t("agents:heartbeatTab.status.weekdays"));
+  if (!agent.enabled) parts.push(t("agents:heartbeatTab.status.agentOff", { name: agent.name }));
   else if (state?.nextAt) parts.push(nextLabel(state.nextAt, now));
-  else if (state) parts.push("no hour to wake in");
+  else if (state) parts.push(t("agents:heartbeatTab.status.noHour"));
   return parts.join(" · ");
 }
 
 function nextLabel(iso: string, now: number) {
   const d = new Date(iso);
-  if (d.getTime() <= now) return "due now";
-  return isToday(d) ? `next at ${format(d, "p")}` : `next ${upcomingWhen(iso, now)}`;
+  if (d.getTime() <= now) return t("agents:heartbeatTab.status.dueNow");
+  return isToday(d) ? t("agents:heartbeatTab.status.nextAt", { time: format(d, "p", { locale: dateLocale() }) }) : t("agents:heartbeatTab.status.next", { when: upcomingWhen(iso, now) });
 }
 
 function hourLabel(hour: number) {
-  return format(new Date(2000, 0, 1, hour % 24), "p");
+  return format(new Date(2000, 0, 1, hour % 24), "p", { locale: dateLocale() });
 }
 
 /** A heart trace: a bright pulse runs along it while the heartbeat is on, a flat line while it is off. */
@@ -262,14 +278,15 @@ function Ekg({ live, className }: { live: boolean; className?: string }) {
   );
 }
 
-const BOARD: { key: keyof AgentHeartbeatState["board"]; label: string; tone?: string }[] = [
-  { key: "working", label: "Working" },
-  { key: "waiting", label: "Waiting" },
-  { key: "waitingOnYou", label: "Waiting on you", tone: "text-warning" },
-  { key: "blocked", label: "Blocked", tone: "text-destructive" },
-];
+const BOARD = [
+  { key: "working", labelKey: "heartbeatTab.board.working" },
+  { key: "waiting", labelKey: "heartbeatTab.board.waiting" },
+  { key: "waitingOnYou", labelKey: "heartbeatTab.board.waitingOnYou", tone: "text-warning" },
+  { key: "blocked", labelKey: "heartbeatTab.board.blocked", tone: "text-destructive" },
+] as const satisfies readonly { key: keyof AgentHeartbeatState["board"]; labelKey: string; tone?: string }[];
 
 function BoardStrip({ agentId, board }: { agentId: string; board: AgentHeartbeatState["board"] | undefined }) {
+  const { t } = useTranslation("agents");
   return (
     <div className="grid grid-cols-2 border-t @xl:grid-cols-4">
       {BOARD.map((b, i) => {
@@ -285,11 +302,11 @@ function BoardStrip({ agentId, board }: { agentId: string; board: AgentHeartbeat
               i === 2 && "@xl:border-l",
             )}
           >
-            <div className="eyebrow text-[10.5px]">{b.label}</div>
+            <div className="eyebrow text-[10.5px]">{t(b.labelKey)}</div>
             {n == null ? (
               <Skeleton className="mt-1 h-6 w-8" />
             ) : (
-              <div className={cn("mt-0.5 text-xl font-medium tracking-[-0.03em] tabular-nums", n > 0 ? b.tone : "text-muted-foreground/70")}>{n}</div>
+              <div className={cn("mt-0.5 text-xl font-medium tracking-[-0.03em] tabular-nums", n > 0 ? ("tone" in b ? b.tone : undefined) : "text-muted-foreground/70")}>{n}</div>
             )}
           </Link>
         );
@@ -303,30 +320,31 @@ function BoardStrip({ agentId, board }: { agentId: string; board: AgentHeartbeat
 /* ------------------------------------------------------------------ */
 
 function Rhythm({ hb, save }: { hb: AgentHeartbeat; save: SaveHeartbeat }) {
+  const { t } = useTranslation("agents");
   const hours = hb.hours;
   return (
-    <SettingsGroup title="Rhythm" icon={<Timer />} description="How often it beats, and when.">
-      <SettingRow label="Every">
+    <SettingsGroup title={t("heartbeatTab.rhythm.title")} icon={<Timer />} description={t("heartbeatTab.rhythm.description")}>
+      <SettingRow label={t("heartbeatTab.rhythm.every")}>
         <Segmented
-          aria-label="Time between beats"
+          aria-label={t("heartbeatTab.rhythm.intervalAria")}
           value={String(hb.intervalMinutes)}
           onChange={(v) => save.mutate({ intervalMinutes: Number(v) })}
-          options={HEARTBEAT_INTERVALS.map((m) => ({ value: String(m), label: <span className="normal-case">{heartbeatIntervalLabel(m)}</span> }))}
+          options={HEARTBEAT_INTERVALS.map((m) => ({ value: String(m), label: <span className="normal-case">{intervalLabel(m)}</span> }))}
         />
       </SettingRow>
-      <SettingRow label="When" description={hours ? "Only inside these hours, in your local time." : "Day and night."}>
+      <SettingRow label={t("heartbeatTab.rhythm.when")} description={hours ? t("heartbeatTab.rhythm.whenHours") : t("heartbeatTab.rhythm.whenAny")}>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {hours && (
             <span className="flex items-center gap-1.5">
               <HourSelect
-                aria-label="From"
+                aria-label={t("heartbeatTab.rhythm.from")}
                 value={hours.from}
                 hours={range(0, 23).filter((h) => h !== hours.to % 24)}
                 onChange={(from) => save.mutate({ hours: { ...hours, from } })}
               />
-              <span className="text-xs text-muted-foreground">to</span>
+              <span className="text-xs text-muted-foreground">{t("heartbeatTab.rhythm.to")}</span>
               <HourSelect
-                aria-label="To"
+                aria-label={t("heartbeatTab.rhythm.toAria")}
                 value={hours.to}
                 hours={range(1, 24).filter((h) => h % 24 !== hours.from)}
                 onChange={(to) => save.mutate({ hours: { ...hours, to } })}
@@ -334,24 +352,24 @@ function Rhythm({ hb, save }: { hb: AgentHeartbeat; save: SaveHeartbeat }) {
             </span>
           )}
           <Segmented
-            aria-label="When it may beat"
+            aria-label={t("heartbeatTab.rhythm.whenAria")}
             value={hours ? "hours" : "any"}
             onChange={(v) => save.mutate({ hours: v === "hours" ? WORKING_HOURS : null })}
             options={[
-              { value: "any", label: <span className="normal-case">Any time</span> },
-              { value: "hours", label: <span className="normal-case">Working hours</span> },
+              { value: "any", label: <span className="normal-case">{t("heartbeatTab.rhythm.anyTime")}</span> },
+              { value: "hours", label: <span className="normal-case">{t("heartbeatTab.rhythm.workingHours")}</span> },
             ]}
           />
         </div>
       </SettingRow>
-      <SettingRow label="Weekdays only" htmlFor="hb-weekdays" description="Monday to Friday.">
+      <SettingRow label={t("heartbeatTab.rhythm.weekdaysOnly")} htmlFor="hb-weekdays" description={t("heartbeatTab.rhythm.weekdaysDescription")}>
         <Switch id="hb-weekdays" checked={hb.weekdays} onCheckedChange={(weekdays) => save.mutate({ weekdays })} />
       </SettingRow>
       <SettingRow
         stacked
-        label="Every beat, also…"
+        label={t("heartbeatTab.rhythm.checklist")}
         htmlFor="hb-checklist"
-        description="Standing duties it runs in its Heartbeat chat. Leave empty and it only looks after its tickets — quiet beats start no run."
+        description={t("heartbeatTab.rhythm.checklistDescription")}
       >
         <ChecklistField value={hb.checklist} save={save} />
       </SettingRow>
@@ -382,6 +400,7 @@ function HourSelect({ value, hours, onChange, "aria-label": ariaLabel }: { value
 
 /** Saves when it loses focus; "Saved" shows for a moment after. */
 function ChecklistField({ value, save }: { value: string; save: SaveHeartbeat }) {
+  const { t } = useTranslation(["agents", "common"]);
   const [draft, setDraft] = useState(value);
   const [saved, setSaved] = useState(false);
   const focused = useRef(false);
@@ -414,7 +433,7 @@ function ChecklistField({ value, save }: { value: string; save: SaveHeartbeat })
         id="hb-checklist"
         value={draft}
         maxLength={MAX_HEARTBEAT_CHECKLIST_LENGTH}
-        placeholder="Check Stripe for unpaid orders and follow up on yesterday's leads."
+        placeholder={t("heartbeatTab.checklistPlaceholder")}
         className="min-h-20 text-[13px] leading-relaxed"
         onChange={(e) => setDraft(e.target.value)}
         onFocus={() => {
@@ -425,17 +444,17 @@ function ChecklistField({ value, save }: { value: string; save: SaveHeartbeat })
       <div className="mt-1.5 flex h-4 items-center justify-between gap-3 text-[11px] text-muted-foreground">
         <span aria-live="polite">
           {pending ? (
-            "Saving…"
+            t("common:status.saving")
           ) : saved ? (
             <motion.span initial={{ opacity: 0, y: 2 }} animate={{ opacity: 1, y: 0 }} className="inline-flex items-center gap-1.5">
               <span aria-hidden className="size-1.5 rounded-full bg-brand" />
-              Saved
+              {t("common:status.saved")}
             </motion.span>
           ) : null}
         </span>
         {draft.length > 0 && (
           <span className={cn("tabular-nums", nearLimit && "text-warning")}>
-            {draft.length.toLocaleString()} / {MAX_HEARTBEAT_CHECKLIST_LENGTH.toLocaleString()}
+            {draft.length.toLocaleString(intlLocale())} / {MAX_HEARTBEAT_CHECKLIST_LENGTH.toLocaleString(intlLocale())}
           </span>
         )}
       </div>
@@ -447,18 +466,18 @@ function ChecklistField({ value, save }: { value: string; save: SaveHeartbeat })
 /* Recent beats                                                         */
 /* ------------------------------------------------------------------ */
 
-const OUTCOME: Record<HeartbeatOutcome, { label: string; dot: string }> = {
-  woke: { label: "Woke", dot: "bg-brand" },
-  quiet: { label: "Quiet", dot: "bg-muted-foreground/40" },
-  skipped: { label: "Skipped", dot: "bg-warning" },
-  failed: { label: "Failed", dot: "bg-destructive" },
-};
+const OUTCOME = {
+  woke: { labelKey: "heartbeatTab.outcome.woke", dot: "bg-brand" },
+  quiet: { labelKey: "heartbeatTab.outcome.quiet", dot: "bg-muted-foreground/40" },
+  skipped: { labelKey: "heartbeatTab.outcome.skipped", dot: "bg-warning" },
+  failed: { labelKey: "heartbeatTab.outcome.failed", dot: "bg-destructive" },
+} as const satisfies Record<HeartbeatOutcome, { labelKey: string; dot: string }>;
 
-const WHY: Record<HeartbeatWakeReason, string> = {
-  stalled: "Stalled",
-  unstarted: "Not started yet",
-  retry: "Failed — trying again",
-};
+const WHY = {
+  stalled: "heartbeatTab.why.stalled",
+  unstarted: "heartbeatTab.why.unstarted",
+  retry: "heartbeatTab.why.retry",
+} as const satisfies Record<HeartbeatWakeReason, string>;
 
 type BeatItem = { kind: "beat"; beat: HeartbeatBeat } | { kind: "quiet"; beats: HeartbeatBeat[] };
 
@@ -476,12 +495,14 @@ function groupBeats(beats: HeartbeatBeat[]): BeatItem[] {
 /** "10:30 AM" today, "Yesterday, 10:30 AM", "Mon, Oct 5, 10:30 AM". */
 function beatTime(iso: string) {
   const d = new Date(iso);
-  if (isToday(d)) return format(d, "p");
-  if (isYesterday(d)) return `Yesterday, ${format(d, "p")}`;
-  return format(d, isThisYear(d) ? "EEE, MMM d, p" : "MMM d, yyyy, p");
+  const locale = dateLocale();
+  if (isToday(d)) return format(d, "p", { locale });
+  if (isYesterday(d)) return t("agents:heartbeatTab.time.yesterday", { time: format(d, "p", { locale }) });
+  return format(d, isThisYear(d) ? t("agents:heartbeatTab.time.thisYearFormat") : t("agents:heartbeatTab.time.otherYearFormat"), { locale });
 }
 
 function RecentBeats({ agent, hb, state, loading }: { agent: Agent; hb: AgentHeartbeat; state: AgentHeartbeatState | undefined; loading: boolean }) {
+  const { t } = useTranslation("agents");
   const [showAll, setShowAll] = useState(false);
   const items = groupBeats(state?.beats ?? []);
   const shown = showAll ? items : items.slice(0, BEATS_PREVIEW);
@@ -490,7 +511,7 @@ function RecentBeats({ agent, hb, state, loading }: { agent: Agent; hb: AgentHea
   return (
     <section aria-labelledby={`beats-${agent.id}`} className="min-w-0 rounded-xl border bg-card shadow-card">
       <h2 id={`beats-${agent.id}`} className="px-4 pt-4 pb-3 text-sm font-medium tracking-[-0.01em] @xl:px-5">
-        Recent beats
+        {t("heartbeatTab.recent.title")}
       </h2>
       {loading ? (
         <div className="space-y-2 px-4 pb-4 @xl:px-5">
@@ -501,10 +522,10 @@ function RecentBeats({ agent, hb, state, loading }: { agent: Agent; hb: AgentHea
       ) : items.length === 0 ? (
         <p className="border-t px-4 py-8 text-center text-sm text-muted-foreground">
           {!hb.enabled
-            ? "No beats yet. Switch the heartbeat on and the first one comes one interval later."
+            ? t("heartbeatTab.recent.emptyOff")
             : state?.nextAt && agent.enabled
-              ? `No beats yet — the first one comes ${upcomingWhen(state.nextAt)}.`
-              : "No beats yet."}
+              ? t("heartbeatTab.recent.emptyNext", { when: upcomingWhen(state.nextAt) })
+              : t("heartbeatTab.recent.empty")}
         </p>
       ) : (
         <>
@@ -526,7 +547,7 @@ function RecentBeats({ agent, hb, state, loading }: { agent: Agent; hb: AgentHea
               className="flex w-full items-center gap-1.5 rounded-b-xl border-t px-4 py-2.5 text-left text-xs font-medium text-muted-foreground transition hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none @xl:px-5"
             >
               <ChevronDown className={cn("size-3.5 transition-transform", showAll && "rotate-180")} aria-hidden />
-              {showAll ? "Show fewer" : `Show ${older} older`}
+              {showAll ? t("heartbeatTab.recent.showFewer") : t("heartbeatTab.recent.showOlder", { count: older })}
             </button>
           )}
         </>
@@ -546,18 +567,19 @@ function TimelineItem({ dot, isLast, children }: { dot: string; isLast: boolean;
 }
 
 function BeatRow({ beat: b, isLast }: { beat: HeartbeatBeat; isLast: boolean }) {
+  const { t } = useTranslation("agents");
   const meta = OUTCOME[b.outcome] ?? OUTCOME.quiet;
   return (
     <TimelineItem dot={meta.dot} isLast={isLast}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <time dateTime={b.createdAt} title={format(new Date(b.createdAt), "PPpp")} className="text-[13px] font-medium tabular-nums">
+        <time dateTime={b.createdAt} title={format(new Date(b.createdAt), "PPpp", { locale: dateLocale() })} className="text-[13px] font-medium tabular-nums">
           {beatTime(b.createdAt)}
         </time>
         <span className="text-xs text-muted-foreground">
-          {meta.label}
-          {b.reason === "now" && " · Wake now"}
+          {t(meta.labelKey)}
+          {b.reason === "now" && ` · ${t("heartbeatTab.wakeNow")}`}
         </span>
-        {b.changes > 0 && <span className="ml-auto text-[11px] text-muted-foreground">{plural(b.changes, "change")} since the beat before</span>}
+        {b.changes > 0 && <span className="ml-auto text-[11px] text-muted-foreground">{t("heartbeatTab.changesSinceBeat", { count: b.changes })}</span>}
       </div>
       {b.summary && <p className={cn("mt-0.5 max-w-3xl text-sm leading-relaxed text-pretty", b.outcome === "quiet" && "text-muted-foreground")}>{b.summary}</p>}
       {b.wakes.length > 0 && (
@@ -574,8 +596,8 @@ function BeatRow({ beat: b, isLast }: { beat: HeartbeatBeat; isLast: boolean }) 
                 </Link>
               </TooltipTrigger>
               <TooltipContent>
-                {WHY[w.why] ?? "Woke on it"}
-                {w.changes > 0 && ` · ${plural(w.changes, "change")} since it last worked on it`}
+                {WHY[w.why] ? t(WHY[w.why]) : t("heartbeatTab.why.default")}
+                {w.changes > 0 && ` · ${t("heartbeatTab.changesSinceWork", { count: w.changes })}`}
               </TooltipContent>
             </Tooltip>
           ))}
@@ -587,30 +609,32 @@ function BeatRow({ beat: b, isLast }: { beat: HeartbeatBeat; isLast: boolean }) 
 }
 
 function QuietRow({ beats, isLast }: { beats: HeartbeatBeat[]; isLast: boolean }) {
+  const { t } = useTranslation("agents");
   const newest = new Date(beats[0]!.createdAt);
   const oldest = beats[beats.length - 1]!.createdAt;
   const sameDay = newest.toDateString() === new Date(oldest).toDateString();
   return (
     <TimelineItem dot={OUTCOME.quiet.dot} isLast={isLast}>
       <p className="text-[13px] text-muted-foreground">
-        <span className="font-medium text-foreground/80">Quiet</span> · {beats.length} beats ·{" "}
+        <span className="font-medium text-foreground/80">{t("heartbeatTab.outcome.quiet")}</span> · {t("heartbeatTab.beatCount", { count: beats.length })} ·{" "}
         <span className="tabular-nums">
-          {beatTime(oldest)}–{sameDay ? format(newest, "p") : beatTime(beats[0]!.createdAt)}
+          {beatTime(oldest)}–{sameDay ? format(newest, "p", { locale: dateLocale() }) : beatTime(beats[0]!.createdAt)}
         </span>
       </p>
     </TimelineItem>
   );
 }
 
-const RUN_STATE: Record<string, { label: string; className?: string }> = {
-  queued: { label: "Waiting to start", className: "text-shimmer" },
-  running: { label: "Working through it…", className: "text-shimmer" },
-  paused: { label: "Paused" },
-  failed: { label: "Failed", className: "text-destructive" },
-  cancelled: { label: "Stopped" },
+const RUN_STATE: Record<string, { labelKey: "heartbeatTab.runState.queued" | "heartbeatTab.runState.running" | "heartbeatTab.runState.paused" | "heartbeatTab.runState.failed" | "heartbeatTab.runState.cancelled"; className?: string }> = {
+  queued: { labelKey: "heartbeatTab.runState.queued", className: "text-shimmer" },
+  running: { labelKey: "heartbeatTab.runState.running", className: "text-shimmer" },
+  paused: { labelKey: "heartbeatTab.runState.paused" },
+  failed: { labelKey: "heartbeatTab.runState.failed", className: "text-destructive" },
+  cancelled: { labelKey: "heartbeatTab.runState.cancelled" },
 };
 
 function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
+  const { t } = useTranslation(["agents", "common"]);
   const [open, setOpen] = useState(false);
   const state = b.runStatus && b.runStatus !== "succeeded" ? RUN_STATE[b.runStatus] : undefined;
   const running = b.runStatus === "running" || b.runStatus === "queued";
@@ -620,12 +644,12 @@ function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
     <div className="mt-2 max-w-3xl rounded-lg border bg-paper-2/60 px-3 py-2">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <ListChecks className="size-3.5 shrink-0" aria-hidden />
-        <span className="font-medium text-foreground/80">Checklist</span>
-        {state && <span className={state.className}>{state.label}</span>}
+        <span className="font-medium text-foreground/80">{t("heartbeatTab.checklist")}</span>
+        {state && <span className={state.className}>{t(state.labelKey)}</span>}
         <span className="ml-auto flex items-center gap-3">
           {b.conversationId && (
             <Link to={`/chat/${b.conversationId}`} className="font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline">
-              {running ? "Watch" : "Open chat"}
+              {running ? t("heartbeatTab.watch") : t("heartbeatTab.openChat")}
             </Link>
           )}
         </span>
@@ -644,7 +668,7 @@ function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
           className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition hover:text-foreground"
         >
           <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} aria-hidden />
-          {open ? "Show less" : "Show all"}
+          {open ? t("common:actions.showLess") : t("heartbeatTab.showAll")}
         </button>
       )}
     </div>
@@ -664,19 +688,20 @@ function plainText(md: string) {
 /* Watchdog                                                             */
 /* ------------------------------------------------------------------ */
 
-const KIND: Record<WatchdogKind, { label: string; icon: LucideIcon }> = {
-  stalled: { label: "Stalled", icon: Hourglass },
-  looping: { label: "Going in circles", icon: Repeat2 },
-};
+const KIND = {
+  stalled: { labelKey: "heartbeatTab.watchdog.kind.stalled", icon: Hourglass },
+  looping: { labelKey: "heartbeatTab.watchdog.kind.looping", icon: Repeat2 },
+} as const satisfies Record<WatchdogKind, { labelKey: string; icon: LucideIcon }>;
 
-const ACTION: Record<WatchdogEvent["action"], { label: string; icon: LucideIcon }> = {
-  retry: { label: "Tried again", icon: RotateCcw },
-  escalated: { label: "Escalated to you", icon: BellRing },
-};
+const ACTION = {
+  retry: { labelKey: "heartbeatTab.watchdog.action.retry", icon: RotateCcw },
+  escalated: { labelKey: "heartbeatTab.watchdog.action.escalated", icon: BellRing },
+} as const satisfies Record<WatchdogEvent["action"], { labelKey: string; icon: LucideIcon }>;
 
 const settingsLink = "font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground";
 
 function WatchdogPanel({ events, loading }: { events: WatchdogEvent[] | undefined; loading: boolean }) {
+  const { t } = useTranslation("agents");
   const on = useSettings().data?.runner.watchdog ?? true;
   const list = events ?? [];
   return (
@@ -684,14 +709,14 @@ function WatchdogPanel({ events, loading }: { events: WatchdogEvent[] | undefine
       <div className="px-4 pt-4 pb-3">
         <h2 id="watchdog-heading" className="flex items-center gap-2 text-sm font-medium tracking-[-0.01em]">
           <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
-          Watchdog
+          {t("heartbeatTab.watchdog.title")}
         </h2>
         <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-          {on ? "Stops runs that stall or go in circles. Set it up in " : "Off — runs aren't supervised. Turn it on in "}
-          <Link to="/settings/ai" className={settingsLink}>
-            Settings → AI
-          </Link>
-          .
+          <Trans
+            t={t}
+            i18nKey={on ? "heartbeatTab.watchdog.descriptionOn" : "heartbeatTab.watchdog.descriptionOff"}
+            components={{ link: <Link to="/settings/ai" className={settingsLink} /> }}
+          />
         </p>
       </div>
       {loading ? (
@@ -699,7 +724,7 @@ function WatchdogPanel({ events, loading }: { events: WatchdogEvent[] | undefine
           <Skeleton className="h-16 w-full rounded-lg" />
         </div>
       ) : list.length === 0 ? (
-        <p className="border-t px-4 py-8 text-center text-sm text-muted-foreground">{on ? "No interventions — every run kept moving." : "No interventions."}</p>
+        <p className="border-t px-4 py-8 text-center text-sm text-muted-foreground">{on ? t("heartbeatTab.watchdog.emptyOn") : t("heartbeatTab.watchdog.empty")}</p>
       ) : (
         <ul className="divide-y border-t">
           {list.map((e) => (
@@ -712,6 +737,7 @@ function WatchdogPanel({ events, loading }: { events: WatchdogEvent[] | undefine
 }
 
 function WatchdogRow({ event: e }: { event: WatchdogEvent }) {
+  const { t } = useTranslation("agents");
   const kind = KIND[e.kind] ?? KIND.stalled;
   const action = ACTION[e.action] ?? ACTION.escalated;
   return (
@@ -719,9 +745,9 @@ function WatchdogRow({ event: e }: { event: WatchdogEvent }) {
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-warning/30 bg-warning/[0.07] px-1.5 text-[11px] font-medium text-warning">
           <kind.icon className="size-3" aria-hidden />
-          {kind.label}
+          {t(kind.labelKey)}
         </span>
-        <time dateTime={e.createdAt} title={format(new Date(e.createdAt), "PPpp")} className="text-xs text-muted-foreground tabular-nums">
+        <time dateTime={e.createdAt} title={format(new Date(e.createdAt), "PPpp", { locale: dateLocale() })} className="text-xs text-muted-foreground tabular-nums">
           {beatTime(e.createdAt)}
         </time>
       </div>
@@ -729,16 +755,16 @@ function WatchdogRow({ event: e }: { event: WatchdogEvent }) {
       <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span className={cn("inline-flex items-center gap-1", e.action === "escalated" && "font-medium text-foreground/80")}>
           <action.icon className="size-3" aria-hidden />
-          {action.label}
+          {t(action.labelKey)}
         </span>
         <span className="ml-auto flex items-center gap-3">
           {e.taskId && (
             <Link to={`/tasks?task=${e.taskId}`} className="underline-offset-2 hover:text-foreground hover:underline">
-              Ticket <span className="font-mono tabular-nums">#{e.taskNumber}</span>
+              {t("heartbeatTab.watchdog.ticket")} <span className="font-mono tabular-nums">#{e.taskNumber}</span>
             </Link>
           )}
           <Link to={`/chat/${e.conversationId}`} className="underline-offset-2 hover:text-foreground hover:underline">
-            Open chat
+            {t("heartbeatTab.openChat")}
           </Link>
         </span>
       </div>

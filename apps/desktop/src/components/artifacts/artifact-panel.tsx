@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import type { MessageBlock } from "@godmode/shared";
 import { AppWindow, ArrowUpRight, Loader2, PanelRightOpen } from "lucide-react";
@@ -41,6 +42,7 @@ export function artifactIdOf(block: ToolUseBlock): string | null {
 }
 
 export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const scope = useContext(ArtifactScope);
   const show = useArtifactPanel((s) => s.show);
   const id = artifactIdOf(block);
@@ -49,14 +51,14 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
   const creating = block.name.endsWith("artifact_create");
   const pending = !block.result && streaming;
   const failed = !!block.isError;
-  const title = artifact?.title ?? input.title ?? "Artifact";
+  const title = artifact?.title ?? input.title ?? t("card.artifact");
   const what = creating
-    ? "Built it"
+    ? t("card.built")
     : input.html || input.edits
-      ? input.note || "Changed the code"
+      ? input.note || t("card.changedCode")
       : input.data !== undefined
-        ? "Updated the data"
-        : "Updated it";
+        ? t("card.updatedData")
+        : t("card.updated");
   const open = scope && id ? () => show(scope.conversationId, id) : null;
   const isOpen = !!scope && scope.openId === id;
 
@@ -79,11 +81,11 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
         <p className="truncate text-sm font-medium tracking-[-0.01em]">{title}</p>
         <p className={cn("truncate text-xs", failed ? "text-destructive" : "text-muted-foreground")}>
           {failed
-            ? truncate(block.result ?? "It didn't work", 140)
+            ? truncate(block.result ?? t("card.failed"), 140)
             : pending
               ? creating
-                ? "Building…"
-                : "Changing it…"
+                ? t("card.building")
+                : t("card.changing")
               : `${what}${artifact ? ` · v${artifact.version} · ${ago(artifact.updatedAt)}` : ""}`}
         </p>
       </div>
@@ -98,12 +100,12 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
               open();
             }}
           >
-            <PanelRightOpen /> {isOpen ? "Showing" : "Open"}
+            <PanelRightOpen /> {isOpen ? t("card.showing") : t("common:actions.open")}
           </Button>
         ) : (
           <Button asChild size="sm" variant="outline" className="shrink-0">
             <Link to={`/artifacts/${id}`}>
-              Open <ArrowUpRight />
+              {t("common:actions.open")} <ArrowUpRight />
             </Link>
           </Button>
         )
@@ -118,12 +120,13 @@ function truncate(text: string, max: number) {
 
 /** The artifact beside a chat. */
 export function ArtifactPanel({ id, onHide }: { id: string; onHide: () => void }) {
+  const { t } = useTranslation("artifacts");
   const wide = useArtifactPanel((s) => s.wide);
   const setWide = useArtifactPanel((s) => s.setWide);
   const width = wide ? "min(72vw, 1100px)" : "min(48vw, 720px)";
   return (
     <motion.aside
-      aria-label="Artifact"
+      aria-label={t("card.artifact")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -160,15 +163,16 @@ export function useAutoOpenArtifacts(conversationId: string, enabled: boolean) {
 }
 
 export function ArtifactToggle({ count, onClick }: { count: number; onClick: () => void }) {
+  const { t } = useTranslation("artifacts");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label="Show the artifact" onClick={onClick} className="gap-1.5 px-2 text-muted-foreground">
+        <Button variant="ghost" size="sm" aria-label={t("toggle.showOne")} onClick={onClick} className="gap-1.5 px-2 text-muted-foreground">
           <AppWindow />
           {count > 1 && <span className="text-xs tabular-nums">{count}</span>}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>{count > 1 ? `Show the artifacts (${count})` : "Show the artifact"}</TooltipContent>
+      <TooltipContent>{count > 1 ? t("toggle.showMany", { count }) : t("toggle.showOne")}</TooltipContent>
     </Tooltip>
   );
 }

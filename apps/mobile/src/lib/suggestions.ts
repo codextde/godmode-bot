@@ -1,6 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { Alert } from "react-native";
 import { create } from "zustand";
+import { t } from "./i18n";
 
 const KEY = "godmode.hideSuggestions";
 
@@ -24,8 +25,8 @@ void SecureStore.getItemAsync(KEY)
   });
 
 export function confirmHideSuggestions() {
-  Alert.alert("Hide suggestions?", "Show them again anytime in Settings → App.", [
-    { text: "Cancel", style: "cancel" },
-    { text: "Hide", onPress: () => useSuggestions.getState().setHidden(true) },
+  Alert.alert(t("system:suggestions.hideTitle"), t("system:suggestions.hideBody"), [
+    { text: t("common:actions.cancel"), style: "cancel" },
+    { text: t("system:suggestions.hide"), onPress: () => useSuggestions.getState().setHidden(true) },
   ]);
 }

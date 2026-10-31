@@ -1342,6 +1342,10 @@ export const THEMES: readonly Theme[] = ["light", "dark", "system"];
 export type Palette = "paper" | "graphite" | "nord" | "solarized" | "rose" | "forest" | "ocean" | "dracula";
 export const PALETTES: readonly Palette[] = ["paper", "graphite", "nord", "solarized", "rose", "forest", "ocean", "dracula"];
 
+/** The language the apps are shown in; "system" follows each device's own language. */
+export type AppLanguage = "system" | "en" | "de";
+export const APP_LANGUAGES: readonly AppLanguage[] = ["system", "en", "de"];
+
 export interface GeneralSettings {
   theme: Theme;
   palette: Palette;
@@ -1353,7 +1357,7 @@ export interface GeneralSettings {
   launchAtLogin: boolean;
   minimizeToTray: boolean;
   desktopNotifications: boolean;
-  language: string;
+  language: AppLanguage;
 }
 
 /** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */

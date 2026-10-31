@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowUpRight, Brain, Clock3, NotebookText, Trash2 } from "lucide-react";
 import type { Agent, AgentFilesOverview } from "@godmode/shared";
 import { formatBytes, memoryBudget } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useBootstrap } from "@/lib/hooks";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +26,7 @@ function compactChars(n: number) {
 
 /** Every agent's files at a glance, the largest first: where tidying pays off. */
 export function FilesOverview({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("files");
   const overview = useFilesOverview();
   const boot = useBootstrap();
   const budget = memoryBudget(boot.data?.settings.memory.dreaming.maxMemoryChars);
@@ -44,20 +47,25 @@ export function FilesOverview({ agents }: { agents: Agent[] }) {
           <p className="text-[13px] text-muted-foreground">
             {overview.data ? (
               <>
-                <span className="font-medium text-foreground tabular-nums">{formatBytes(total)}</span> across {plural(rows.length, "agent")}
-                {scratch > 0 && <> · {formatBytes(scratch)} of it scratch in tmp/, which goes by itself</>}
+                <Trans
+                  t={t}
+                  i18nKey="overview.total"
+                  values={{ size: formatBytes(total), agents: plural(rows.length, "agent") }}
+                  components={{ b: <span className="font-medium text-foreground tabular-nums" /> }}
+                />
+                {scratch > 0 && <> · {t("overview.scratch", { size: formatBytes(scratch) })}</>}
               </>
             ) : (
-              "Counting what every agent keeps…"
+              t("overview.counting")
             )}
           </p>
         </div>
-        <ToggleGroup type="single" size="sm" variant="outline" value={sort} onValueChange={(v) => v && setSort(v as "size" | "name")} aria-label="Sort agents">
+        <ToggleGroup type="single" size="sm" variant="outline" value={sort} onValueChange={(v) => v && setSort(v as "size" | "name")} aria-label={t("overview.sortAgents")}>
           <ToggleGroupItem value="size" className="px-2.5 text-xs">
-            Largest first
+            {t("overview.largest")}
           </ToggleGroupItem>
           <ToggleGroupItem value="name" className="px-2.5 text-xs">
-            A–Z
+            {t("overview.az")}
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
@@ -74,6 +82,8 @@ export function FilesOverview({ agents }: { agents: Agent[] }) {
 }
 
 function AgentCard({ agent, row, largest, memoryLimit }: { agent: Agent; row: AgentFilesOverview | null; largest: number; memoryLimit: number }) {
+  const { t } = useTranslation(["files", "common"]);
+  const { intlLocale } = useLocale();
   const over = row ? row.memoryChars > memoryLimit : false;
   return (
     <Link
@@ -84,7 +94,7 @@ function AgentCard({ agent, row, largest, memoryLimit }: { agent: Agent; row: Ag
         <AgentAvatar agent={agent} size="md" still />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium tracking-[-0.01em]">{agent.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{agent.role || "Agent"}</p>
+          <p className="truncate text-xs text-muted-foreground">{agent.role || t("common:words.agent")}</p>
         </div>
         <ArrowUpRight className="size-4 text-muted-foreground/0 transition group-hover/card:text-muted-foreground" />
       </div>
@@ -115,17 +125,17 @@ function AgentCard({ agent, row, largest, memoryLimit }: { agent: Agent; row: Ag
             <span className="inline-flex items-center gap-1">
               <NotebookText className="size-3" /> {plural(row.notes, "note")}
             </span>
-            <span className={cn("inline-flex items-center gap-1", over && "text-warning")} title={`MEMORY.md: ${row.memoryChars.toLocaleString()} of ${memoryLimit.toLocaleString()} characters`}>
+            <span className={cn("inline-flex items-center gap-1", over && "text-warning")} title={t("overview.memoryTitle", { chars: row.memoryChars.toLocaleString(intlLocale), limit: memoryLimit.toLocaleString(intlLocale) })}>
               <Brain className="size-3" /> {compactChars(row.memoryChars)} / {compactChars(memoryLimit)}
             </span>
             {row.scratchBytes > 0 && (
-              <span className="inline-flex items-center gap-1" title="Scratch in workspace/tmp — goes by itself a week after its last change">
+              <span className="inline-flex items-center gap-1" title={t("overview.scratchTitle")}>
                 <Clock3 className="size-3" /> tmp {formatBytes(row.scratchBytes)}
               </span>
             )}
             {row.deleted > 0 && (
               <span className="inline-flex items-center gap-1">
-                <Trash2 className="size-3" /> {row.deleted} in bin
+                <Trash2 className="size-3" /> {t("overview.inBin", { n: row.deleted })}
               </span>
             )}
           </>

@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { Globe2, Info, Layers, Plus } from "lucide-react";
 import type { BrowserProfile } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export function AssignWorkspaceDialog({
   onClose: () => void;
   actions: ProfileActions;
 }) {
+  const { t } = useTranslation(["browser", "common"]);
   const { data: workspaces = [], isLoading } = useWorkspaces();
   const [target, setTarget] = useState(GLOBAL);
   const [makeDefault, setMakeDefault] = useState(true);
@@ -50,7 +52,7 @@ export function AssignWorkspaceDialog({
   const submit = () => {
     if (!profile || unchanged) return;
     const isDefault = workspaceId ? makeDefault || !targetDefault : undefined;
-    actions.assign.mutate({ profile, workspaceId, isDefault, scopeName: workspace?.name ?? "Global" }, { onSuccess: onClose });
+    actions.assign.mutate({ profile, workspaceId, isDefault, scopeName: workspace?.name ?? t("scope.global") }, { onSuccess: onClose });
   };
 
   return (
@@ -63,14 +65,12 @@ export function AssignWorkspaceDialog({
           }}
         >
           <DialogHeader className="border-b bg-paper-2 px-6 pt-6 pb-5">
-            <DialogTitle>Assign “{profile?.name}” to a workspace</DialogTitle>
-            <DialogDescription>
-              Cookies and sessions stay with the profile. Agents that picked it in their own settings keep using it wherever they are.
-            </DialogDescription>
+            <DialogTitle>{t("assign.title", { name: profile?.name })}</DialogTitle>
+            <DialogDescription>{t("assign.description")}</DialogDescription>
           </DialogHeader>
 
           <div className="max-h-[min(30rem,calc(100dvh-16rem))] space-y-4 overflow-y-auto px-6 py-5">
-            <RadioGroup value={target} onValueChange={setTarget} aria-label="Workspace" className="gap-2">
+            <RadioGroup value={target} onValueChange={setTarget} aria-label={t("scope.workspace")} className="gap-2">
               <ScopeOption
                 value={GLOBAL}
                 checked={target === GLOBAL}
@@ -80,8 +80,8 @@ export function AssignWorkspaceDialog({
                     <Globe2 className="size-5" />
                   </span>
                 }
-                title="Global"
-                hint="Not tied to a workspace; agents use it when they pick it"
+                title={t("scope.global")}
+                hint={t("assign.globalHint")}
               />
               {workspaces.map((w) => {
                 const browser = defaultOf(w.id);
@@ -93,7 +93,7 @@ export function AssignWorkspaceDialog({
                     current={profile?.workspaceId === w.id}
                     tile={<WorkspaceTile icon={w.icon} color={w.color} size="md" />}
                     title={w.name}
-                    hint={browser ? `Agents browse with ${browser.name}` : `No profile yet — agents browse with ${globalDefault?.name ?? "the global default"}`}
+                    hint={browser ? t("assign.browsesWith", { name: browser.name }) : t("assign.noProfile", { name: globalDefault?.name ?? t("assign.theGlobalDefault") })}
                   />
                 );
               })}
@@ -102,10 +102,10 @@ export function AssignWorkspaceDialog({
             {!isLoading && workspaces.length === 0 && (
               <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3.5">
                 <Layers className="size-5 shrink-0 text-muted-foreground" />
-                <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No workspaces yet — create one per client or project to keep their sessions apart.</p>
+                <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{t("assign.noWorkspaces")}</p>
                 <Button type="button" variant="outline" size="sm" asChild>
                   <Link to="/workspaces?new=1">
-                    <Plus /> New workspace
+                    <Plus /> {t("assign.newWorkspace")}
                   </Link>
                 </Button>
               </div>
@@ -114,13 +114,13 @@ export function AssignWorkspaceDialog({
             {workspace && !unchanged && (
               <label htmlFor={switchId} className={cn("flex items-start gap-3 rounded-lg border bg-card p-3.5 transition", targetDefault && "cursor-pointer hover:border-foreground/15")}>
                 <span className="min-w-0 flex-1 space-y-0.5">
-                  <span className="block text-sm font-medium">Use for {workspace.name}'s agents</span>
+                  <span className="block text-sm font-medium">{t("assign.useFor", { name: workspace.name })}</span>
                   <span className="block text-xs text-muted-foreground">
                     {!targetDefault
-                      ? `${workspace.name} has no profile yet, so its agents browse with this one unless they pick their own.`
+                      ? t("assign.noProfileYet", { name: workspace.name })
                       : makeDefault
-                        ? `Replaces ${targetDefault.name} as the browser its agents use, unless they pick their own.`
-                        : `Its agents keep browsing with ${targetDefault.name}.`}
+                        ? t("assign.replaces", { name: targetDefault.name })
+                        : t("assign.keeps", { name: targetDefault.name })}
                   </span>
                 </span>
                 <Switch id={switchId} checked={makeDefault || !targetDefault} onCheckedChange={setMakeDefault} disabled={!targetDefault} className="mt-0.5" />
@@ -131,8 +131,12 @@ export function AssignWorkspaceDialog({
               <div className="flex items-start gap-2.5 rounded-lg border bg-paper-2 px-3 py-2.5 text-xs text-muted-foreground">
                 <Info className="mt-px size-3.5 shrink-0" />
                 <p className="min-w-0">
-                  {leaving.name}'s agents will browse with <span className="font-medium text-foreground">{globalDefault?.name ?? "the global default"}</span> instead, unless you
-                  make another of its profiles the default.
+                  <Trans
+                    t={t}
+                    i18nKey="assign.leaving"
+                    values={{ workspace: leaving.name, profile: globalDefault?.name ?? t("assign.theGlobalDefault") }}
+                    components={{ b: <span className="font-medium text-foreground" /> }}
+                  />
                 </p>
               </div>
             )}
@@ -140,11 +144,11 @@ export function AssignWorkspaceDialog({
 
           <DialogFooter className="border-t bg-paper-2 px-6 py-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={unchanged || pending}>
               {pending && <Spinner />}
-              {workspaceId ? "Assign profile" : "Make global"}
+              {workspaceId ? t("assign.assignProfile") : t("assign.makeGlobal")}
             </Button>
           </DialogFooter>
         </form>
@@ -168,6 +172,7 @@ function ScopeOption({
   title: string;
   hint: string;
 }) {
+  const { t } = useTranslation("browser");
   const id = useId();
   return (
     <Label
@@ -181,7 +186,7 @@ function ScopeOption({
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 text-sm font-medium">
           <span className="truncate">{title}</span>
-          {current && <span className="shrink-0 rounded-[5px] border px-1.5 py-px text-[10px] font-medium text-muted-foreground">Current</span>}
+          {current && <span className="shrink-0 rounded-[5px] border px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("assign.current")}</span>}
         </span>
         <span className="block truncate text-xs text-muted-foreground">{hint}</span>
       </span>

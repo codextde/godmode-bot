@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { MAX_INSTRUCTIONS_LENGTH } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { CloseButton } from "@/components/close-button";
@@ -17,6 +18,7 @@ import { useWorkspace } from "@/lib/workspace";
 const DEFAULT = "default";
 
 export default function ProjectScreen() {
+  const { t } = useTranslation(["settings", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const { workspaces, loading } = useWorkspace();
   const { data: agents } = useAgents();
@@ -27,9 +29,9 @@ export default function ProjectScreen() {
   if (!workspace || !p) {
     return (
       <ScrollView contentInsetAdjustmentBehavior="automatic">
-        <Stack.Screen options={{ title: "Project" }} />
+        <Stack.Screen options={{ title: t("agent.project") }} />
         <CloseButton />
-        {loading ? <ActivityIndicator style={{ marginTop: 80 }} /> : <EmptyState icon="folder" title="Project not found" body="It may have been deleted on your computer." />}
+        {loading ? <ActivityIndicator style={{ marginTop: 80 }} /> : <EmptyState icon="folder" title={t("project.notFound")} body={t("agent.notFound.body")} />}
       </ScrollView>
     );
   }
@@ -38,10 +40,10 @@ export default function ProjectScreen() {
   const usable = (profiles.data ?? []).filter((b) => !b.workspaceId || b.workspaceId === workspace.id);
 
   const remove = () =>
-    Alert.alert(`Delete ${p.name}?`, "Its context and repositories go with it. Chats, tickets and agents stay in the workspace.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("workspace.deleteDialog.title", { name: p.name }), t("project.deleteBody"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("common:actions.delete"),
         style: "destructive",
         onPress: async () => {
           try {
@@ -49,7 +51,7 @@ export default function ProjectScreen() {
             await queryClient.invalidateQueries({ queryKey: qk.workspaces });
             router.back();
           } catch (err) {
-            Alert.alert("Couldn't delete it", errorText(err));
+            Alert.alert(t("workspace.deleteFailed"), errorText(err));
           }
         },
       },
@@ -71,23 +73,23 @@ export default function ProjectScreen() {
       <LinkRow
         emoji={workspace.icon || "🗂️"}
         title={workspace.name}
-        detail="Workspace: its context comes first"
+        detail={t("project.workspaceDetail")}
         onPress={() => router.push({ pathname: "/settings/workspace/[id]", params: { id: workspace.id } })}
       />
 
       <View>
-        <SectionTitle title="Project context" />
+        <SectionTitle title={t("project.context")} />
         <TextEditor
-          label={`Context for ${p.name}`}
+          label={t("project.contextLabel", { name: p.name })}
           value={p.instructions}
-          placeholder={"Goals, scope, conventions and links for this project.\nAdded to the workspace's context on every run."}
+          placeholder={t("project.contextPlaceholder")}
           maxLength={MAX_INSTRUCTIONS_LENGTH}
           onSave={(instructions) => patchProject(p.id, { instructions }, { quiet: true })}
         />
       </View>
 
       {team.length ? (
-        <Group title="Agents on it" footer="Agents work on this project by default. Chats and tickets can pick another.">
+        <Group title={t("project.agents")} footer={t("project.agentsFooter")}>
           {team.map((a) => (
             <LinkRow
               key={a.id}
@@ -102,7 +104,7 @@ export default function ProjectScreen() {
 
       <Sources
         sources={p.sources}
-        footer="On top of the workspace's. Add folders of your computer there."
+        footer={t("project.sourcesFooter")}
         onSave={(sources) => patchProject(p.id, { sources })}
         onSync={(sourceId) => api.projects.sync(p.id, sourceId)}
       />
@@ -110,15 +112,15 @@ export default function ProjectScreen() {
       <Group>
         <PickerRow
           icon="globe"
-          title="Browser profile"
+          title={t("workspace.browserProfile")}
           value={p.browserProfileId ?? DEFAULT}
-          options={[{ value: DEFAULT, label: "The workspace's" }, ...usable.map((b) => ({ value: b.id, label: b.name }))]}
+          options={[{ value: DEFAULT, label: t("project.workspaceProfile") }, ...usable.map((b) => ({ value: b.id, label: b.name }))]}
           onChange={(v) => void patchProject(p.id, { browserProfileId: v === DEFAULT ? null : v })}
         />
       </Group>
 
       <Group>
-        <LinkRow icon="trash" title="Delete project" tone="danger" chevron={false} onPress={remove} />
+        <LinkRow icon="trash" title={t("project.delete")} tone="danger" chevron={false} onPress={remove} />
       </Group>
     </ScrollView>
   );

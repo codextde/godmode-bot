@@ -1,6 +1,7 @@
 import { router } from "expo-router";
 import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { AppNotification, NotificationKind } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { T } from "./ui";
@@ -49,12 +50,13 @@ export function openNotificationLink(link: string | null): boolean {
 
 export const NotificationRow = memo(function NotificationRow({ notification: n, onOpen }: { notification: AppNotification; onOpen: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const meta = KIND[n.kind] ?? KIND.info;
   const tone = meta.tone(c);
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${n.read ? "" : "Unread: "}${n.title}`}
+      accessibilityLabel={n.read ? n.title : t("notificationRow.unread", { title: n.title })}
       onPress={onOpen}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
     >

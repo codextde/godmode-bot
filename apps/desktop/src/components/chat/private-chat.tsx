@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ghost } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/common";
 import { api } from "@/lib/api";
@@ -8,10 +9,9 @@ import { isMac, modKey } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
-export const PRIVATE_CHAT_HINT = "Nothing is saved: no history, no memory. It's gone when you leave.";
-
 /** Switches the new chat to private (Home, top right). */
 export function PrivateChatToggle({ value, onChange, className }: { value: boolean; onChange: (on: boolean) => void; className?: string }) {
+  const { t } = useTranslation("chat");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -29,11 +29,11 @@ export function PrivateChatToggle({ value, onChange, className }: { value: boole
           )}
         >
           <Ghost className="size-3.5" />
-          {value ? "Private on" : "Private"}
+          {value ? t("private.on") : t("private.label")}
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-60 text-center">
-        {value ? "Back to a normal chat" : "Start a private chat. Nothing is saved."}
+        {value ? t("private.backToNormal") : t("private.start")}
         <span className="ml-1.5 inline-flex gap-0.5 align-middle opacity-80">
           <Kbd>⇧</Kbd>
           <Kbd>{modKey}N</Kbd>
@@ -45,25 +45,27 @@ export function PrivateChatToggle({ value, onChange, className }: { value: boole
 
 /** Next to the title of a private chat. */
 export function PrivateChatBadge() {
+  const { t } = useTranslation("chat");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-foreground/30 px-2 py-0.5 text-[11px] font-medium text-foreground/80">
-          <Ghost className="size-3" /> Private
+          <Ghost className="size-3" /> {t("private.label")}
         </span>
       </TooltipTrigger>
-      <TooltipContent className="max-w-60 text-center">{PRIVATE_CHAT_HINT}</TooltipContent>
+      <TooltipContent className="max-w-60 text-center">{t("private.hint")}</TooltipContent>
     </Tooltip>
   );
 }
 
 /** Above the thread of a private chat. */
 export function PrivateChatNote() {
+  const { t } = useTranslation("chat");
   return (
     <div className="flex shrink-0 items-center justify-center gap-1.5 border-b border-dashed bg-muted/30 px-4 py-1.5 text-center text-[12px] text-muted-foreground">
       <Ghost className="size-3.5 shrink-0" />
       <span>
-        <span className="font-medium text-foreground/80">Private chat.</span> {PRIVATE_CHAT_HINT}
+        <span className="font-medium text-foreground/80">{t("private.note")}</span> {t("private.hint")}
       </span>
     </div>
   );

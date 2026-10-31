@@ -1,0 +1,149 @@
+{
+  "age": {
+    "seconds": "{{n}} Sek.",
+    "minutes": "{{n}} Min.",
+    "hours": "{{n}} Std.",
+    "days": "{{n}} T.",
+    "months": "{{n}} Mon.",
+    "years": "{{n}} J."
+  },
+  "words": {
+    "task": {
+      "done": "Erledigt",
+      "declined": "Geht nicht",
+      "wasDone": "Erledigt",
+      "wasDeclined": "Ging nicht"
+    },
+    "decision": {
+      "done": "Antworten",
+      "declined": "Verwerfen",
+      "wasDone": "Beantwortet",
+      "wasDeclined": "Verworfen"
+    },
+    "approval": {
+      "done": "Freigeben",
+      "declined": "Ablehnen",
+      "wasDone": "Freigegeben",
+      "wasDeclined": "Abgelehnt"
+    }
+  },
+  "status": {
+    "backlog": "Backlog",
+    "open": "Offen",
+    "doing": "In Arbeit",
+    "withdrawn": "Zurückgezogen"
+  },
+  "kind": {
+    "decision": "Entscheidung",
+    "approval": "Braucht deine Freigabe"
+  },
+  "card": {
+    "urgent": "Dringend",
+    "onIt": "Dran",
+    "yourOwn": "Eigenes",
+    "agentRemoved": "Agent entfernt"
+  },
+  "chat": {
+    "youAnswered": "Beantwortet",
+    "youDid": "Erledigt",
+    "youCouldnt": "Nicht geschafft",
+    "moreInNeedsYou_one": "+{{count}} weiteres in „Braucht dich“",
+    "moreInNeedsYou_other": "+{{count}} weitere in „Braucht dich“",
+    "waitingAnswer": "Wartet auf deine Antwort",
+    "waitingYou": "Wartet auf dich",
+    "replyHere": "antworte einfach hier",
+    "dismissHint": "Nichts zu entscheiden – {{name}} wird nicht geweckt",
+    "done": "Erledigt",
+    "doneHint": "Als erledigt markieren – {{name}} macht weiter"
+  },
+  "board": {
+    "addError": "To-do konnte nicht hinzugefügt werden",
+    "search": "To-dos durchsuchen",
+    "refreshError": "Liste konnte nicht aktualisiert werden",
+    "loadError": "Deine To-dos konnten nicht geladen werden",
+    "emptyTitle": "Nichts wartet auf dich",
+    "emptyDescription": "Wenn ein Agent ohne dich nicht weiterkommt – ein Passkey, ein CAPTCHA, eine Frage, eine offene Entscheidung –, landet es hier und du bekommst Bescheid. Sobald du es abschließt oder beantwortest, macht der Agent von selbst weiter.",
+    "addOwn": "Eigenes To-do hinzufügen",
+    "addTask": "To-do hinzufügen",
+    "dropDone": "Hier ablegen, um es zu erledigen",
+    "dropHere": "Hier ablegen",
+    "quickAddPlaceholder": "Was musst du erledigen?",
+    "quickAddHint": "Enter zum Hinzufügen · Esc zum Schließen"
+  },
+  "columns": {
+    "backlog": {
+      "label": "Backlog",
+      "hint": "Park, was warten kann. Es bleibt für seinen Agenten offen, zählt aber nicht als wartend."
+    },
+    "open": {
+      "label": "Offen",
+      "hint": "Was deine Agenten von dir brauchen, erscheint hier: Aufgaben, Fragen, Entscheidungen."
+    },
+    "doing": {
+      "label": "In Arbeit",
+      "hint": "Zieh ein To-do hierher, während du daran arbeitest."
+    },
+    "closed": {
+      "label": "Erledigt",
+      "hint": "Leg ein To-do hier ab, um es abzuschließen oder zu beantworten – sein Agent macht dann weiter."
+    }
+  },
+  "closedToast": {
+    "taskDone": "{{ref}} erledigt",
+    "taskDeclined": "{{ref}} geschlossen",
+    "decisionDone": "{{ref}} beantwortet",
+    "decisionDeclined": "{{ref}} verworfen",
+    "approvalDone": "{{ref}} freigegeben",
+    "approvalDeclined": "{{ref}} abgelehnt",
+    "continued": "{{name}} macht ab hier weiter."
+  },
+  "actions": {
+    "updateError": "To-do konnte nicht aktualisiert werden",
+    "closeError": "To-do konnte nicht abgeschlossen werden",
+    "deleted": "To-do gelöscht",
+    "deleteError": "To-do konnte nicht gelöscht werden"
+  },
+  "detail": {
+    "more": "Mehr",
+    "openChat": "Chat öffnen",
+    "openTask": "Aufgabe #{{number}} öffnen",
+    "moveToOpen": "Nach „Offen“ verschieben",
+    "moveToBacklog": "In den Backlog verschieben",
+    "notUrgent": "Nicht dringend",
+    "markUrgent": "Als dringend markieren",
+    "yourOwnTask": "Dein eigenes To-do",
+    "removedAgent": "Ein entfernter Agent",
+    "forTask": "für Aufgabe #{{number}}",
+    "openHost": "{{host}} öffnen",
+    "notes": "Notizen",
+    "bodyHeading": {
+      "task": "Was zu tun ist",
+      "decision": "Worum es geht",
+      "approval": "Warum"
+    },
+    "fromAnswer": "{{name}} hat das in seiner abschließenden Antwort offengelassen. <link>Ganze Antwort lesen</link>",
+    "theAgentCap": "Der Agent",
+    "theAgent": "der Agent",
+    "tookBack": "{{name}} hat es zurückgezogen"
+  },
+  "closeHint": {
+    "waitsForDecision": "{{name}} wartet, bis du entscheidest, und macht direkt danach weiter.",
+    "waitsForAnswer": "{{name}} wartet, bis du antwortest, und macht direkt danach weiter.",
+    "decision": "{{name}} macht mit deiner Antwort weiter. Du kannst auch im Chat antworten.",
+    "task": "{{name}} macht von selbst weiter, sobald du das abschließt. Was er wissen sollte, schreib in die Notiz."
+  },
+  "closeBox": {
+    "note": "Notiz (optional)",
+    "ownWords": "Oder antworte mit eigenen Worten",
+    "answerFor": "Deine Antwort – {{name}} liest mit",
+    "noteFor": "Notiz (optional) – {{name}} liest mit",
+    "suggested": "Vorgeschlagene Antworten",
+    "recommended": "Empfohlen",
+    "attach": "Dateien anhängen",
+    "thinking": "Ich denke drüber nach",
+    "onIt": "Bin dran",
+    "backToOpen": "Zurück zu „Offen“",
+    "noAnswerNeeded": "Keine Antwort mehr nötig. {{name}} macht ohne weiter.",
+    "nothingToDecide": "Hier gibt es nichts zu entscheiden. {{name}} wird nicht geweckt."
+  }
+}

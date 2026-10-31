@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
   MAX_TASK_DESCRIPTION_LENGTH,
   MAX_TASK_TITLE_LENGTH,
@@ -29,6 +30,7 @@ const NONE = "none";
 /** A new task in the picked workspace: with an agent it starts right away, without one it waits in the backlog. */
 export default function NewTask() {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   const { agentId } = useLocalSearchParams<{ agentId?: string }>();
   const { id: workspaceId, workspace, projectId: scopeProject } = useWorkspace();
   const [projectPick, setProjectPick] = useState<string | null | undefined>(undefined);
@@ -54,7 +56,7 @@ export default function NewTask() {
     // Every link takes its name twice plus the url; checked before anything is uploaded.
     const links = files.reduce((sum, f) => sum + f.name.length * 3 + 64, 0);
     if (description.trim().length + links > MAX_TASK_DESCRIPTION_LENGTH) {
-      Alert.alert("The details are too long", "Shorten the text or attach fewer files.");
+      Alert.alert(t("newTask.tooLongTitle"), t("newTask.tooLongMessage"));
       return;
     }
     setSaving(true);
@@ -72,7 +74,7 @@ export default function NewTask() {
       router.dismiss();
       router.push({ pathname: "/task/[id]", params: { id: task.id } });
     } catch (err) {
-      Alert.alert("Couldn't create the task", errorText(err));
+      Alert.alert(t("newTask.createFailed"), errorText(err));
     } finally {
       setSaving(false);
     }
@@ -87,7 +89,7 @@ export default function NewTask() {
       automaticallyAdjustKeyboardInsets
     >
       <View style={{ gap: space.sm }}>
-        <T variant="title">New task</T>
+        <T variant="title">{t("newTask.title")}</T>
         <WorkspaceChip />
       </View>
 
@@ -95,7 +97,7 @@ export default function NewTask() {
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="What needs to be done?"
+          placeholder={t("newTask.titlePlaceholder")}
           placeholderTextColor={c.textFaint}
           maxLength={MAX_TASK_TITLE_LENGTH}
           autoFocus
@@ -108,7 +110,7 @@ export default function NewTask() {
         <TextInput
           value={description}
           onChangeText={setDescription}
-          placeholder="Details, links, what done looks like (optional)"
+          placeholder={t("newTask.detailsPlaceholder")}
           placeholderTextColor={c.textFaint}
           multiline
           style={[styles.description, { color: c.text }]}
@@ -116,7 +118,7 @@ export default function NewTask() {
         {files.length > 0 && <AttachmentTray files={files} busy={saving} onRemove={remove} />}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={files.length ? `Add more files, ${files.length} added` : "Add photos or files"}
+          accessibilityLabel={files.length ? t("newTask.addMoreFilesA11y", { count: files.length }) : t("newTask.addFiles")}
           disabled={saving}
           onPress={() => {
             tap();
@@ -126,11 +128,11 @@ export default function NewTask() {
         >
           <Icon name="attach" size={15} color={c.textMuted} />
           <T variant="subhead" muted style={{ flex: 1 }}>
-            {files.length ? "Add more" : "Add photos or files"}
+            {files.length ? t("newTask.addMore") : t("newTask.addFiles")}
           </T>
           {files.length > 0 && (
             <T variant="footnote" color={c.textFaint}>
-              {files.length === 1 ? "1 file" : `${files.length} files`}
+              {t("newTask.fileCount", { count: files.length })}
             </T>
           )}
         </Pressable>
@@ -138,16 +140,16 @@ export default function NewTask() {
 
       <View style={{ gap: space.sm }}>
         <T variant="eyebrow" muted>
-          Kind
+          {t("newTask.kind")}
         </T>
         <View style={styles.chips}>
-          {TASK_TYPES.map((t) => (
-            <Chip key={t} active={t === type} onPress={() => setType(t)} label={TYPE_META[t].label} />
+          {TASK_TYPES.map((k) => (
+            <Chip key={k} active={k === type} onPress={() => setType(k)} label={TYPE_META[k].label} />
           ))}
         </View>
         <T variant="footnote" muted>
           {TYPE_META[type].hint}
-          {type === "coding" && !workspace ? ". Pick a workspace with a repository on your computer." : "."}
+          {type === "coding" && !workspace ? t("newTask.codingNeedsWorkspace") : "."}
         </T>
       </View>
 
@@ -156,26 +158,26 @@ export default function NewTask() {
         projects={workspace?.projects ?? []}
         value={projectId}
         onChange={setProjectPick}
-        hint={projectId ? "The agent works with the project's context, folders and repositories." : "It uses the workspace's setup."}
+        hint={projectId ? t("newTask.projectHint") : t("newTask.workspaceHint")}
       />
 
       <View style={{ gap: space.sm }}>
         <T variant="eyebrow" muted>
-          Agent
+          {t("common:words.agent")}
         </T>
         <View style={styles.chips}>
           {agentsLoading
             ? [104, 128, 92].map((w) => <Skeleton key={w} width={w} height={36} radius={18} />)
             : agents.map((a) => <Chip key={a.id} active={a.id === agent?.id} onPress={() => setPicked(a.id)} label={a.name} agent={a} />)}
-          <Chip active={!agent} onPress={() => setPicked(NONE)} label="Unassigned" />
+          <Chip active={!agent} onPress={() => setPicked(NONE)} label={t("newTask.unassigned")} />
         </View>
         <T variant="footnote" muted>
-          {agent ? `${agent.name} starts as soon as you create it.` : "It waits in the backlog until you assign an agent."}
+          {agent ? t("newTask.agentStarts", { name: agent.name }) : t("newTask.waitsInBacklog")}
         </T>
       </View>
 
       <Button
-        title={agent ? `Start with ${agent.name}` : "Add to backlog"}
+        title={agent ? t("newTask.startWith", { name: agent.name }) : t("newTask.addToBacklog")}
         icon={agent ? "play" : "plus"}
         size="lg"
         loading={saving}

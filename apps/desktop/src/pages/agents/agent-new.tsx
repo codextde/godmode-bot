@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Bot, Plus, Sparkles, Wand2, X } from "lucide-react";
 import type { Agent, AgentInput } from "@godmode/shared";
@@ -10,6 +11,7 @@ import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { qk } from "@/lib/queryKeys";
 import { clearDraft, draftKeys, loadDraft, useDraft } from "@/lib/drafts";
 import { useAgentTemplates, useBootstrap, useScopeWorkspace } from "@/lib/hooks";
+import { templateText } from "@/lib/templates";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { useEasyMode } from "@/lib/mode";
@@ -27,12 +29,7 @@ import { randomLook } from "@/components/agents/character-studio";
 import { TeamTemplates } from "@/components/agents/team-templates";
 import { RoleTemplates } from "@/components/agents/role-templates";
 
-const EXAMPLES = [
-  "Download my invoices from all vendor portals on the 1st of every month",
-  "Check my GitHub notifications every morning and summarize what needs me",
-  "Watch competitor pricing pages weekly and report changes",
-  "Triage my inbox twice a day and draft replies for anything urgent",
-];
+const EXAMPLES = ["agentNew.examples.invoices", "agentNew.examples.github", "agentNew.examples.pricing", "agentNew.examples.inbox"] as const;
 
 const FORM_DRAFTS = "agent-new:template:";
 
@@ -51,6 +48,7 @@ export default function AgentNewPage() {
 /* ------------------------------------------------------------------ */
 
 function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) => void; focusStructures: boolean }) {
+  const { t } = useTranslation(["agents", "common"]);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
@@ -64,6 +62,10 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     .map((key) => ({ key, templateId: key.slice(FORM_DRAFTS.length), values: loadDraft<Partial<AgentFormValues> | null>(key, null) }))
     .filter((d) => d.values !== null)
     .map((d) => ({ ...d, values: { ...agentToValues(undefined), ...d.values } }));
+  const draftTemplateName = (id: string) => {
+    const tpl = templates.data?.find((x) => x.id === id);
+    return tpl ? templateText(tpl).name : t("agentNew.drafts.aTemplate");
+  };
 
   const describe = useMutation({
     mutationFn: () =>
@@ -77,7 +79,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't reach Godmode", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error(t("agentNew.describeError"), { description: errorMessage(err) }),
   });
   const canDescribe = description.trim().length > 3 && !describe.isPending;
   const describeRef = useRef<HTMLTextAreaElement>(null);
@@ -94,8 +96,8 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
           <span className="grid size-7 place-items-center rounded-md border bg-card text-foreground shadow-card">
             <Wand2 className="size-4" />
           </span>
-          <span className="text-base font-medium tracking-[-0.01em]">{easy ? "Or describe it" : "Describe it"}</span>
-          <span className="text-muted-foreground">— Godmode sets it up for you</span>
+          <span className="text-base font-medium tracking-[-0.01em]">{easy ? t("agentNew.describe.titleEasy") : t("agentNew.describe.title")}</span>
+          <span className="text-muted-foreground">{t("agentNew.describe.subtitle")}</span>
         </div>
         <form
           onSubmit={(e) => {
@@ -121,8 +123,8 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
               }
             }}
             rows={4}
-            placeholder="An agent that logs into my utility and phone provider accounts on the 3rd of each month, downloads the latest bills as PDF and tells me the totals…"
-            aria-label="Describe your agent"
+            placeholder={t("agentNew.describe.placeholder")}
+            aria-label={t("agentNew.describe.label")}
             className="block w-full resize-none bg-transparent px-3 py-2.5 text-[15px] leading-relaxed outline-none placeholder:text-muted-foreground/70"
           />
           <div className="flex flex-wrap items-center gap-2 px-2 pb-1">
@@ -136,7 +138,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
               className="ml-auto"
             >
               {describe.isPending ? <Spinner /> : <Sparkles />}
-              Create with Godmode
+              {t("agentNew.describe.submit")}
             </Button>
           </div>
         </form>
@@ -145,10 +147,10 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
             <button
               key={ex}
               type="button"
-              onClick={() => setDescription(ex)}
+              onClick={() => setDescription(t(ex))}
               className="rounded-md border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              {ex}
+              {t(ex)}
             </button>
           ))}
         </div>
@@ -159,12 +161,10 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     <section ref={structuresRef} className="scroll-mt-6" aria-labelledby="structures-title">
       <div className="mb-4">
         <h2 id="structures-title" className="text-lg font-medium tracking-[-0.02em]">
-          {easy ? "Or set up a whole team" : "Or start a whole company"}
+          {easy ? t("agentNew.structures.titleEasy") : t("agentNew.structures.title")}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {easy
-            ? "Several helpers at once: each has its own job, and a lead hands out the work and checks it."
-            : "An org chart hired in one go: every agent has its job, every lead hands out the work and reviews it."}
+          {easy ? t("agentNew.structures.descriptionEasy") : t("agentNew.structures.description")}
         </p>
       </div>
       <TeamTemplates />
@@ -172,9 +172,9 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
   );
   const rolesSection = (
     <RoleTemplates
-      title={easy ? "Pick a helper to start from" : undefined}
-      description={easy ? "Ready-made helpers for everyday jobs. Pick one and change anything you like, or start with a blank one." : undefined}
-      blankLabel={easy ? "Start blank" : undefined}
+      title={easy ? t("agentNew.roles.titleEasy") : undefined}
+      description={easy ? t("agentNew.roles.descriptionEasy") : undefined}
+      blankLabel={easy ? t("agentNew.roles.blankEasy") : undefined}
       templates={templates.data ?? []}
       loading={templates.isLoading}
       onPick={onPick}
@@ -190,12 +190,12 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
     <>
       <PageHeader
         icon={<Bot />}
-        title="New agent"
-        description={easy ? "Start from a ready-made helper, or describe what you need in your own words." : "Describe what you need in plain words, or start from a template."}
+        title={t("agentNew.title")}
+        description={easy ? t("agentNew.descriptionEasy") : t("agentNew.description")}
         actions={
           <Button variant="ghost" asChild>
             <Link to="/agents">
-              <ArrowLeft /> Agents
+              <ArrowLeft /> {t("common:words.agents")}
             </Link>
           </Button>
         }
@@ -204,14 +204,14 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
         {drafts.length > 0 && (
           <section aria-labelledby="agent-drafts-title">
             <h2 id="agent-drafts-title" className="eyebrow mb-3">
-              Pick up where you left off
+              {t("agentNew.drafts.title")}
             </h2>
             <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
               {drafts.map((d, i) => (
                 <DraftCard
                   key={d.key}
                   values={d.values}
-                  source={d.templateId === "scratch" ? "From scratch" : `From ${templates.data?.find((t) => t.id === d.templateId)?.name ?? "a template"}`}
+                  source={d.templateId === "scratch" ? t("agentNew.drafts.fromScratch") : t("agentNew.drafts.fromTemplate", { name: draftTemplateName(d.templateId) })}
                   index={i}
                   onOpen={() => onPick(d.templateId)}
                   onDiscard={() => {
@@ -237,7 +237,7 @@ function ChooseStep({ onPick, focusStructures }: { onPick: (templateId: string) 
             {rolesSection}
           </>
         )}
-        {templates.isError && <p className="text-sm text-muted-foreground">Templates are unavailable right now ({errorMessage(templates.error)}).</p>}
+        {templates.isError && <p className="text-sm text-muted-foreground">{t("agentNew.templatesUnavailable", { error: errorMessage(templates.error) })}</p>}
       </PageBody>
     </>
   );
@@ -256,7 +256,8 @@ function DraftCard({
   onOpen: () => void;
   onDiscard: () => void;
 }) {
-  const name = values.name.trim() || "Unnamed agent";
+  const { t } = useTranslation("agents");
+  const name = values.name.trim() || t("agentNew.drafts.unnamed");
   return (
     <motion.div
       layout
@@ -269,25 +270,25 @@ function DraftCard({
       <button
         type="button"
         onClick={onOpen}
-        aria-label={`Continue ${name}`}
+        aria-label={t("agentNew.drafts.continueLabel", { name })}
         className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 after:rounded-xl"
       >
         <span className="block truncate text-sm font-medium tracking-[-0.01em]">{name}</span>
         <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand" />
-          <span className="truncate">Draft · {source}</span>
+          <span className="truncate">{t("agentNew.drafts.draftSource", { source })}</span>
         </span>
       </button>
       <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground transition group-hover:text-foreground">
-        Continue <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" />
+        {t("agentNew.drafts.continue")} <ArrowRight className="size-3.5 transition group-hover:translate-x-0.5" />
       </span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button type="button" variant="ghost" size="icon" onClick={onDiscard} aria-label={`Discard draft ${name}`} className="relative z-10 size-7 text-muted-foreground">
+          <Button type="button" variant="ghost" size="icon" onClick={onDiscard} aria-label={t("agentNew.drafts.discardLabel", { name })} className="relative z-10 size-7 text-muted-foreground">
             <X />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Discard draft</TooltipContent>
+        <TooltipContent>{t("agentNew.drafts.discard")}</TooltipContent>
       </Tooltip>
     </motion.div>
   );
@@ -298,12 +299,13 @@ function DraftCard({
 /* ------------------------------------------------------------------ */
 
 function FormStep({ templateId, onBack }: { templateId: string; onBack: () => void }) {
+  const { t } = useTranslation(["agents", "common"]);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const templates = useAgentTemplates();
   const isScratch = templateId === "scratch";
   const draftKey = FORM_DRAFTS + templateId;
-  const template = isScratch ? null : (templates.data?.find((t) => t.id === templateId) ?? null);
+  const template = isScratch ? null : (templates.data?.find((tpl) => tpl.id === templateId) ?? null);
   const [withRoutine, setWithRoutine] = useState(true);
 
   // Scratch agents get a fresh random look (once per visit); templates bring their own.
@@ -311,14 +313,14 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
     () =>
       template
         ? {
-            name: template.name,
+            name: templateText(template).name,
             avatar: template.avatar,
             color: template.color,
             character: template.character,
             personality: template.personality,
-            description: template.description,
+            description: templateText(template).description,
             instructions: template.instructions,
-            role: template.role,
+            role: templateText(template).role,
           }
         : isScratch
           ? { ...randomLook(), personality: "buddy" }
@@ -334,7 +336,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
         try {
           await api.routines.create({
             agentId: agent.id,
-            name: template.routine.name,
+            name: templateText(template).routine!.name,
             cron: template.routine.cron,
             prompt: template.routine.prompt,
             timezone: localTimezone(),
@@ -351,11 +353,11 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success(`${agent.name} is ready`, { description: "Say hi or give it a first task." });
-      if (routineError) toast.error("The automation couldn't be created", { description: errorMessage(routineError) });
+      toast.success(t("agentNew.form.ready", { name: agent.name }), { description: t("agentNew.form.readyDescription") });
+      if (routineError) toast.error(t("agentNew.form.routineError"), { description: errorMessage(routineError) });
       navigate(`/agents/${agent.id}`);
     },
-    onError: (err) => !isGrantCancelled(err) && toast.error("Couldn't create agent", { description: errorMessage(err) }),
+    onError: (err) => !isGrantCancelled(err) && toast.error(t("agentNew.form.createError"), { description: errorMessage(err) }),
   });
 
   if (!isScratch && templates.isLoading) {
@@ -373,11 +375,11 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
       <PageBody className="pt-8">
         <EmptyState
           icon={<Bot />}
-          title="Template not found"
-          description="It may have been removed. Start from scratch or pick another one."
+          title={t("agentNew.form.notFound")}
+          description={t("agentNew.form.notFoundDescription")}
           action={
             <Button variant="outline" onClick={onBack}>
-              <ArrowLeft /> Back to templates
+              <ArrowLeft /> {t("agentNew.form.backToTemplates")}
             </Button>
           }
         />
@@ -395,11 +397,11 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
             <Plus />
           )
         }
-        title={template ? `New agent from “${template.name}”` : "Start from scratch"}
-        description="Fine-tune it now or later — everything can be changed in the agent's settings."
+        title={template ? t("agentNew.form.titleFromTemplate", { name: templateText(template).name }) : t("agentNew.form.titleScratch")}
+        description={t("agentNew.form.description")}
         actions={
           <Button variant="ghost" onClick={onBack}>
-            <ArrowLeft /> Back
+            <ArrowLeft /> {t("common:actions.back")}
           </Button>
         }
       />
@@ -409,7 +411,7 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
           mode="create"
           initial={initial}
           draftKey={draftKey}
-          submitLabel="Create agent"
+          submitLabel={t("agentNew.form.submit")}
           pending={create.isPending}
           onSubmit={(input) => create.mutate(input)}
           onCancel={onBack}
@@ -418,8 +420,12 @@ function FormStep({ templateId, onBack }: { templateId: string; onBack: () => vo
               <div className="flex items-start gap-2.5">
                 <Checkbox id="template-routine" checked={withRoutine} onCheckedChange={(v) => setWithRoutine(v === true)} className="mt-0.5" />
                 <Label htmlFor="template-routine" className="block cursor-pointer text-sm leading-snug font-normal">
-                  Also create automation <span className="font-medium">{template.routine.name}</span>{" "}
-                  <span className="text-muted-foreground">({cronToHuman(template.routine.cron)})</span>
+                  <Trans
+                    t={t}
+                    i18nKey="agentNew.form.alsoRoutine"
+                    values={{ name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron) }}
+                    components={{ b: <span className="font-medium" />, muted: <span className="text-muted-foreground" /> }}
+                  />
                 </Label>
               </div>
             ) : undefined

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { AGENT_COLORS, characterPalette } from "@godmode/shared";
 import { colorGradient } from "@/components/common";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ export function AvatarPicker({
   onChange: (emoji: string) => void;
   id?: string;
 }) {
+  const { t } = useTranslation("agents");
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   return (
@@ -35,7 +37,7 @@ export function AvatarPicker({
         <button
           id={id}
           type="button"
-          aria-label={`Emoji ${avatar || "🤖"} — change`}
+          aria-label={t("avatarPicker.change", { emoji: avatar || "🤖" })}
           className={cn(
             "grid size-9 shrink-0 place-items-center rounded-lg text-lg ring-1 ring-inset transition hover:ring-foreground/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             colorGradient(color),
@@ -45,7 +47,7 @@ export function AvatarPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-3">
-        <div role="listbox" aria-label="Choose an emoji" className="grid grid-cols-8 gap-1">
+        <div role="listbox" aria-label={t("avatarPicker.choose")} className="grid grid-cols-8 gap-1">
           {AGENT_EMOJIS.map((e) => (
             <button
               key={e}
@@ -77,7 +79,7 @@ export function AvatarPicker({
             }
           }}
         >
-          <Input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="Or type any emoji…" aria-label="Custom emoji" className="h-8" />
+          <Input value={custom} onChange={(e) => setCustom(e.target.value)} placeholder={t("avatarPicker.customPlaceholder")} aria-label={t("avatarPicker.custom")} className="h-8" />
         </form>
       </PopoverContent>
     </Popover>
@@ -85,8 +87,9 @@ export function AvatarPicker({
 }
 
 export function ColorSwatches({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+  const { t } = useTranslation("agents");
   return (
-    <div role="radiogroup" aria-label="Accent color" className="flex flex-wrap gap-2">
+    <div role="radiogroup" aria-label={t("avatarPicker.accentColor")} className="flex flex-wrap gap-2">
       {AGENT_COLORS.map((c) => (
         <button
           key={c}

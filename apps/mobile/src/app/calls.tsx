@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { memo, useCallback } from "react";
 import { Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { isCallActive, type Agent, type PhoneCall } from "@godmode/shared";
 import { CallStatusBadge, callListQuery, callName, formatCallTime, openCall } from "@/components/call-parts";
 import { CharacterAvatar } from "@/components/character";
@@ -16,6 +17,7 @@ import { radius, space, useColors } from "@/lib/theme";
 
 /** Calls agents made and took: who they talked to, how it went. Placed in Godmode on the computer. */
 export default function Calls() {
+  const { t } = useTranslation("calls");
   const list = useQuery(callListQuery);
   const { byId } = useAgents();
   const pull = usePullRefresh(list.refetch);
@@ -34,7 +36,7 @@ export default function Calls() {
 
   return (
     <>
-      <Stack.Title>Calls</Stack.Title>
+      <Stack.Title>{t("list.title")}</Stack.Title>
       <FlashList
         data={list.isLoading ? [] : calls}
         keyExtractor={(c) => c.id}
@@ -46,7 +48,7 @@ export default function Calls() {
         ListHeaderComponent={
           live ? (
             <T variant="footnote" muted style={styles.note}>
-              {live === 1 ? "1 call is on the line right now. Its transcript and summary arrive as soon as it ends." : `${live} calls are on the line right now. Their transcripts and summaries arrive as soon as they end.`}
+              {t("list.live", { count: live })}
             </T>
           ) : null
         }
@@ -56,14 +58,14 @@ export default function Calls() {
               <SkeletonRows count={6} avatar={40} />
             </View>
           ) : list.error instanceof ApiError && list.error.code === "device_forbidden" ? (
-            <EmptyState icon="call" title="Calls aren't available yet" body="Update Godmode on your computer to see calls here." />
+            <EmptyState icon="call" title={t("unavailableTitle")} body={t("unavailableBody")} />
           ) : list.isError ? (
-            <ErrorState title="Couldn't load your calls" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("list.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : (
             <EmptyState
               icon="call"
-              title="No calls yet"
-              body="Agents can phone a business to book an appointment, follow up with a lead, or call you when a question can't wait. Calls are set up in Godmode on your computer."
+              title={t("list.emptyTitle")}
+              body={t("list.emptyBody")}
             />
           )
         }
@@ -74,12 +76,13 @@ export default function Calls() {
 
 const CallRow = memo(function CallRow({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
   const colors = useColors();
+  const { t } = useTranslation("calls");
   const inbound = c.direction === "inbound";
   const agentName = agent?.name ?? c.agentName;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${inbound ? "Incoming" : "Outgoing"} call with ${callName(c)}`}
+      accessibilityLabel={inbound ? t("list.incomingWith", { name: callName(c) }) : t("list.outgoingWith", { name: callName(c) })}
       onPress={() => openCall(c.id)}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: colors.sunken }]}
     >
@@ -96,7 +99,7 @@ const CallRow = memo(function CallRow({ call: c, agent }: { call: PhoneCall; age
           </T>
         </Row>
         <T variant="footnote" muted numberOfLines={1}>
-          {c.outcome || c.goal || (inbound ? "Incoming call" : "No goal given")}
+          {c.outcome || c.goal || (inbound ? t("list.incomingCall") : t("list.noGoal"))}
         </T>
         <Row style={{ gap: space.sm, marginTop: 3 }}>
           <CallStatusBadge status={c.status} />
