@@ -37,6 +37,7 @@ import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRu
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
+import { generateChatTitle } from "../runner/chatTitle";
 import { normalizeWorkingDirectory } from "./folders";
 import { projectOfChat } from "./projects";
 import { parseComputerTarget } from "../computer/targets";
@@ -1031,7 +1032,34 @@ export async function sendMessage(
   const restore = bool(conv.archived) && (input.trigger ?? "chat") === "chat" && conv.origin !== "task";
   setConversationState(conversationId, { lastMessageAt: message.createdAt, archived: restore ? false : undefined });
   emitConversationUpdated(conversationId);
+  if ((input.trigger ?? "chat") === "chat" && !input.marker && !input.source && (conv.origin === "chat" || conv.origin === "api")) {
+    nameChat(conversationId, conv.title, content, attachments);
+  }
   return { message: getMessage(message.id), run: started };
+}
+
+function placeholderTitles(content: string, attachments: Attachment[]): Set<string> {
+  const titles = new Set([DEFAULT_CONVERSATION_TITLE]);
+  if (content) titles.add(titleFromContent(content));
+  if (attachments[0]) titles.add(titleFromContent(attachments[0].name));
+  return titles;
+}
+
+function nameChat(conversationId: string, current: string, content: string, attachments: Attachment[]) {
+  const placeholders = placeholderTitles(content, attachments);
+  if (!placeholders.has(current)) return;
+  void generateChatTitle(
+    content,
+    attachments.map((a) => a.name),
+  )
+    .then((title) => {
+      if (!title || placeholders.has(title)) return;
+      const row = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", conversationId);
+      if (!row || !placeholders.has(row.title)) return;
+      setConversationState(conversationId, { title });
+      emitConversationUpdated(conversationId);
+    })
+    .catch((err) => log.warn(`could not name conversation ${conversationId}`, err));
 }
 
 /** Create a conversation for the agent (default agent if omitted) and send the first message. */
