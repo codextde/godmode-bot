@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { assetRedirect, latestRelease, PLATFORMS } from '@/lib/releases';
+import { assetRedirect, findAsset, PLATFORMS } from '@/lib/releases';
 import { allowed } from '@/lib/limit';
 
 export const prerender = false;
@@ -11,8 +11,7 @@ export const GET: APIRoute = async ({ params, request }) => {
   const target = PLATFORMS[platform];
   if (!(await allowed('CHECKOUT_LIMIT', request))) return new Response('Too many requests', { status: 429 });
   try {
-    const release = await latestRelease();
-    const asset = release.assets.find((a) => target.match.test(a.name));
+    const { release, asset } = await findAsset((a) => target.match.test(a.name));
     if (!asset) return new Response(`No ${target.label} build in ${release.tag_name} yet.`, { status: 404 });
     return await assetRedirect(asset);
   } catch (e) {
