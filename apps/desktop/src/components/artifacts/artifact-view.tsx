@@ -54,8 +54,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CopyButton } from "@/components/chat/copy-button";
 import { useTheme } from "@/components/theme-provider";
 import { api, errorMessage } from "@/lib/api";
-import { isTauri } from "@/lib/core";
-import { isMac, saveBlob } from "@/lib/desktop";
+import { saveBlob } from "@/lib/desktop";
 import { useArtifact } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -191,7 +190,7 @@ export function ArtifactView({
 
   return (
     <div className="@container flex h-full min-h-0 flex-col">
-      <header className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-3", variant === "panel" && isTauri && isMac && "h-auto pt-7 pb-2")}>
+      <header data-titlebar data-tauri-drag-region className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <h2 className="truncate text-sm font-medium tracking-[-0.01em]">{artifact.title}</h2>
