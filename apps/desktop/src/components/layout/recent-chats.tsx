@@ -8,13 +8,13 @@ import { AlarmClock, Archive, Bot, ChevronDown, CircleCheck, MessagesSquare, Pin
 import {
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { NavSectionHeader } from "@/components/layout/nav-section-header";
 import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
@@ -74,6 +74,8 @@ export function RecentChats() {
   const setRecentTab = useUi((s) => s.setRecentTab);
   const recentSource = useUi((s) => s.recentSource);
   const setRecentSource = useUi((s) => s.setRecentSource);
+  const open = useUi((s) => !s.collapsedNav.includes("recent"));
+  const toggleOpen = useUi((s) => s.toggleNavCollapsed);
 
   const unarchived = conversations.filter((c) => !c.archived);
   const sources = sourceStats(unarchived);
@@ -104,8 +106,26 @@ export function RecentChats() {
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <SidebarGroupLabel className="eyebrow text-[10.5px]">Recent</SidebarGroupLabel>
-      {visible.some((c) => c.unread) && (
+      <div className="flex items-center justify-between gap-2">
+        <NavSectionHeader label="Recent" open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} quiet />
+        {!open && (counts.running > 0 || needsYou > 0) && (
+          <span className="mr-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
+            {needsYou > 0 && (
+              <span className="flex items-center gap-1 text-warning">
+                <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                {needsYou} needs you
+              </span>
+            )}
+            {counts.running > 0 && (
+              <span className="flex items-center gap-1 text-brand-strong">
+                <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                {counts.running} running
+              </span>
+            )}
+          </span>
+        )}
+      </div>
+      {open && visible.some((c) => c.unread) && (
         <button
           type="button"
           onClick={() =>
@@ -116,137 +136,141 @@ export function RecentChats() {
           Mark all read
         </button>
       )}
-      <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou}>
-        <SourceTabs value={recentSource} onChange={setRecentSource} stats={sources} />
-      </RecentTabs>
-      <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
-        <SidebarMenu>
-          {items.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
-          {items.map((c, i) => {
-            const day = dated && (i === 0 || dayOf(items[i - 1]!) !== dayOf(c)) ? dayOf(c) : null;
-            const agent = agents.find((a) => a.id === c.agentId);
-            const workspaceId = c.workspaceId ?? agent?.workspaceId;
-            const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
-            const projectId = !workspace && !scopeProject ? chatProject(c, agents) : null;
-            const project = projectId ? projectIndex.get(projectId)?.project : undefined;
-            const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
-            const queued = !running && queuedConversations.has(c.id);
-            return (
-              <Fragment key={c.id}>
-              {day && (
-                <li role="presentation" className={cn("px-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/80", i > 0 ? "pt-3" : "pt-1")}>
-                  {day}
-                </li>
-              )}
-              <SidebarMenuItem>
-                <SidebarMenuButton
-                  asChild
-                  isActive={conversationId === c.id}
-                  className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
-                >
-                  <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
-                    <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1">
-                        <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || "New chat"}</span>
-                        {c.unread && conversationId !== c.id && (
-                          <span
-                            className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}
-                            role="img"
-                            aria-label={c.unread.failed ? "Something went wrong here" : "New reply"}
-                          />
-                        )}
-                        {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                        {workspace && <WorkspaceChip workspace={workspace} />}
-                        {project && <WorkspaceChip workspace={project} kind="Project" />}
-                        <span className="block min-w-0 flex-1 truncate">
-                          {chatStatus(c, { running, queued }) ?? (
-                            <>
-                              {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
-                            </>
-                          )}
+      {open && (
+        <>
+          <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou}>
+            <SourceTabs value={recentSource} onChange={setRecentSource} stats={sources} />
+          </RecentTabs>
+          <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
+            <SidebarMenu>
+              {items.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
+              {items.map((c, i) => {
+                const day = dated && (i === 0 || dayOf(items[i - 1]!) !== dayOf(c)) ? dayOf(c) : null;
+                const agent = agents.find((a) => a.id === c.agentId);
+                const workspaceId = c.workspaceId ?? agent?.workspaceId;
+                const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
+                const projectId = !workspace && !scopeProject ? chatProject(c, agents) : null;
+                const project = projectId ? projectIndex.get(projectId)?.project : undefined;
+                const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
+                const queued = !running && queuedConversations.has(c.id);
+                return (
+                  <Fragment key={c.id}>
+                  {day && (
+                    <li role="presentation" className={cn("px-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/80", i > 0 ? "pt-3" : "pt-1")}>
+                      {day}
+                    </li>
+                  )}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={conversationId === c.id}
+                      className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
+                    >
+                      <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
+                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1">
+                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || "New chat"}</span>
+                            {c.unread && conversationId !== c.id && (
+                              <span
+                                className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}
+                                role="img"
+                                aria-label={c.unread.failed ? "Something went wrong here" : "New reply"}
+                              />
+                            )}
+                            {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+                          </span>
+                          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                            {workspace && <WorkspaceChip workspace={workspace} />}
+                            {project && <WorkspaceChip workspace={project} kind="Project" />}
+                            <span className="block min-w-0 flex-1 truncate">
+                              {chatStatus(c, { running, queued }) ?? (
+                                <>
+                                  {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
+                                </>
+                              )}
+                            </span>
+                          </span>
                         </span>
-                      </span>
-                    </span>
-                  </Link>
-                </SidebarMenuButton>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarMenuAction
-                      showOnHover
-                      aria-label={`Archive “${c.title || "New chat"}”`}
-                      onClick={() => setArchived(c, true)}
-                      className={cn(ROW_ACTION, "right-7.5")}
-                    >
-                      <Archive />
-                    </SidebarMenuAction>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Archive</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <SidebarMenuAction
-                      showOnHover
-                      aria-label={`Delete “${c.title || "New chat"}”`}
-                      onClick={() => askDelete(c)}
-                      className={cn(ROW_ACTION, "hover:text-destructive")}
-                    >
-                      <Trash2 />
-                    </SidebarMenuAction>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">Delete</TooltipContent>
-                </Tooltip>
-              </SidebarMenuItem>
-              </Fragment>
-            );
-          })}
-          {more > 0 && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                size="sm"
-                onClick={() => setLimit((n) => n + PAGE)}
-                className="mt-1 gap-2 text-[12.5px] text-muted-foreground [&>svg]:size-3.5"
-              >
-                <ChevronDown />
-                <span>
-                  Show {Math.min(more, PAGE)} more
-                  <span className="ml-1 text-muted-foreground/60">of {more}</span>
-                </span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
-          {hasArchived && (
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                asChild
-                size="sm"
-                isActive={pathname === "/archived"}
-                className="mt-1 gap-2 text-[12.5px] text-muted-foreground data-[active=true]:bg-card data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border [&>svg]:size-3.5"
-              >
-                <Link to="/archived">
-                  <Archive />
-                  <span>Archived chats</span>
-                  {archivedOngoing > 0 && (
+                      </Link>
+                    </SidebarMenuButton>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="ml-auto flex h-4 items-center gap-1 rounded-full bg-foreground/6 px-1.5 text-[10px] leading-none tabular-nums">
-                          <AlarmClock className="size-2.5 text-brand-strong" aria-hidden />
-                          {archivedOngoing}
-                        </span>
+                        <SidebarMenuAction
+                          showOnHover
+                          aria-label={`Archive “${c.title || "New chat"}”`}
+                          onClick={() => setArchived(c, true)}
+                          className={cn(ROW_ACTION, "right-7.5")}
+                        >
+                          <Archive />
+                        </SidebarMenuAction>
                       </TooltipTrigger>
-                      <TooltipContent side="top">
-                        {archivedOngoing === 1 ? "1 archived chat still has" : `${archivedOngoing} archived chats still have`} work ahead
-                      </TooltipContent>
+                      <TooltipContent side="top">Archive</TooltipContent>
                     </Tooltip>
-                  )}
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          )}
-        </SidebarMenu>
-      </SidebarGroupContent>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SidebarMenuAction
+                          showOnHover
+                          aria-label={`Delete “${c.title || "New chat"}”`}
+                          onClick={() => askDelete(c)}
+                          className={cn(ROW_ACTION, "hover:text-destructive")}
+                        >
+                          <Trash2 />
+                        </SidebarMenuAction>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">Delete</TooltipContent>
+                    </Tooltip>
+                  </SidebarMenuItem>
+                  </Fragment>
+                );
+              })}
+              {more > 0 && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    size="sm"
+                    onClick={() => setLimit((n) => n + PAGE)}
+                    className="mt-1 gap-2 text-[12.5px] text-muted-foreground [&>svg]:size-3.5"
+                  >
+                    <ChevronDown />
+                    <span>
+                      Show {Math.min(more, PAGE)} more
+                      <span className="ml-1 text-muted-foreground/60">of {more}</span>
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {hasArchived && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    size="sm"
+                    isActive={pathname === "/archived"}
+                    className="mt-1 gap-2 text-[12.5px] text-muted-foreground data-[active=true]:bg-card data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border [&>svg]:size-3.5"
+                  >
+                    <Link to="/archived">
+                      <Archive />
+                      <span>Archived chats</span>
+                      {archivedOngoing > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="ml-auto flex h-4 items-center gap-1 rounded-full bg-foreground/6 px-1.5 text-[10px] leading-none tabular-nums">
+                              <AlarmClock className="size-2.5 text-brand-strong" aria-hidden />
+                              {archivedOngoing}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {archivedOngoing === 1 ? "1 archived chat still has" : `${archivedOngoing} archived chats still have`} work ahead
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </>
+      )}
       {deleteDialog}
     </SidebarGroup>
   );

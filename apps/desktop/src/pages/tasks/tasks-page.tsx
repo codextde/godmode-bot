@@ -47,6 +47,7 @@ import { GoalsStrip } from "@/components/tasks/goals-strip";
 import { qk } from "@/lib/queryKeys";
 import { upsertTask } from "@/lib/realtime";
 import { useUi } from "@/stores/ui";
+import { DirectionHint } from "@/components/layout/direction-hint";
 
 const ALL = "all";
 const UNASSIGNED = "unassigned";
@@ -300,13 +301,13 @@ export default function TasksPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         icon={<SquareKanban />}
-        title="Tasks"
+        title="Agent tasks"
         description={
           workspace
-            ? `${workspace.icon} ${workspace.name}${scopeProject ? ` / ${scopeProject.icon} ${scopeProject.name}` : ""} — create tickets, assign an agent, and it gets to work.`
+            ? `${workspace.icon} ${workspace.name}${scopeProject ? ` / ${scopeProject.icon} ${scopeProject.name}` : ""} — tickets you hand to your agents.`
             : scope === "global"
-              ? "Global tasks — create tickets, assign an agent, and it gets to work."
-              : "Every workspace's board. Create tickets, assign an agent, and it gets to work."
+              ? "Global tasks — tickets you hand to your agents."
+              : "Every workspace's board of tickets you hand to your agents."
         }
         actions={
           <>
@@ -335,6 +336,7 @@ export default function TasksPage() {
           </>
         }
       />
+      <DirectionHint direction="to-agents" />
 
       <div className="flex flex-wrap items-center gap-2 px-5 pb-4 @2xl:px-8">
         <Tabs value={view} onValueChange={setView}>

@@ -21,6 +21,7 @@ import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AttentionList } from "@/components/attention/attention-list";
 import { HumanTaskBoard } from "@/components/human-tasks/human-task-board";
 import { HumanTaskSheet } from "@/components/human-tasks/human-task-sheet";
+import { DirectionHint } from "@/components/layout/direction-hint";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
 
@@ -104,7 +105,7 @@ export default function InboxPage() {
     ? `${waiting} to do${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Drag to plan, drop on Done and its agent picks up where it left off.`
     : parked
       ? `Nothing to do right now · ${parked} in the backlog for later.`
-      : "Your to-dos as a board: what agents hand you and what you add yourself. Drop one on Done and its agent picks up where it left off.";
+      : "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off.";
 
   return (
     <div className={view === "board" ? "flex h-full min-h-0 flex-col" : "relative"}>
@@ -117,6 +118,7 @@ export default function InboxPage() {
           setAdding("open");
         }}
       />
+      <DirectionHint direction="to-you" />
       {view === "board" ? <HumanTaskBoard adding={adding} onAdding={setAdding} onOpen={openTask} /> : <InboxList agentById={agentById} />}
       <HumanTaskSheet task={selected} agent={selected?.agentId ? agentById.get(selected.agentId) : undefined} focusNote={focusNote} onClose={closeTask} />
     </div>
@@ -129,7 +131,7 @@ function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView
   return (
     <PageHeader
       icon={<Inbox />}
-      title="Inbox"
+      title="Needs you"
       description={
         description ??
         (openCount > 0
@@ -155,7 +157,7 @@ function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView
             ))}
           </div>
           <Button onClick={onNewTask}>
-            <Plus /> New task
+            <Plus /> New to-do
           </Button>
         </>
       }
