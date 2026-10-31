@@ -1058,6 +1058,8 @@
     "trySomething": "Probier zum Beispiel",
     "hideSuggestions": "Vorschläge ausblenden",
     "suggestionsHidden": "Vorschläge ausgeblendet",
+    "hideSuggestion": "Diesen Vorschlag ausblenden",
+    "suggestionHidden": "Vorschlag ausgeblendet",
     "hint": {
       "send": "senden",
       "dropAnywhere": "Dateien überall ablegen",
@@ -1065,10 +1067,6 @@
       "search": "suchen",
       "shortcuts": "Tastenkürzel"
     },
-    "nothingHere_one": "Hier wartet nichts auf dich. {{count}} Sache wartet in anderen Workspaces",
-    "nothingHere_other": "Hier wartet nichts auf dich. {{count}} Sachen warten in anderen Workspaces",
-    "elsewhereLink": "+{{n}} in anderen Workspaces · Braucht dich",
-    "allIn": "Alle {{n}} in „Braucht dich“",
     "workingNow": "Arbeitet gerade",
     "queuedCount": "{{n}} in der Warteschlange",
     "recentChats": "Letzte Chats",
