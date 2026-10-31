@@ -24,7 +24,7 @@
     "cache": "{{read}} cache read · {{write}} cache write",
     "started": "Started",
     "ended": "Ended",
-    "dateTime": "MMM d, HH:mm"
+    "dateTime": "MMM d, p"
   },
   "startedByAutomation": "Started by an automation",
   "prompt": "Prompt",

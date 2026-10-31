@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Bell, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { Bell, Clock, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import type { AppLanguage, Settings } from "@godmode/shared";
+import type { AppLanguage, Settings, TimeFormat } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
@@ -22,7 +22,7 @@ type Theme = Settings["general"]["theme"];
 
 export function GeneralSection({ settings }: { settings: Settings }) {
   const { t } = useTranslation(["settings", "common"]);
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, timeFormat, setTimeFormat, systemHour12 } = useLanguage();
   const { patch } = useSettingsPatch();
   const { theme, resolved, palette, setTheme, setPalette } = useTheme();
   const g = settings.general;
@@ -93,6 +93,21 @@ export function GeneralSection({ settings }: { settings: Settings }) {
               { value: "system", label: t("common:language.system"), icon: <Laptop /> },
               { value: "en", label: t("common:language.en") },
               { value: "de", label: t("common:language.de") },
+            ]}
+          />
+        </SettingRow>
+        <SettingRow
+          label={t("general.timeFormat.label")}
+          description={t("general.timeFormat.description", { example: systemHour12 ? t("general.timeFormat.h12") : t("general.timeFormat.h24") })}
+        >
+          <Segmented<TimeFormat>
+            aria-label={t("general.timeFormat.label")}
+            value={timeFormat}
+            onChange={setTimeFormat}
+            options={[
+              { value: "system", label: t("general.timeFormat.system"), icon: <Clock /> },
+              { value: "24h", label: t("general.timeFormat.h24") },
+              { value: "12h", label: t("general.timeFormat.h12") },
             ]}
           />
         </SettingRow>

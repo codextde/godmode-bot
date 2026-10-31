@@ -24,7 +24,7 @@
     "cache": "{{read}} Cache gelesen · {{write}} Cache geschrieben",
     "started": "Gestartet",
     "ended": "Beendet",
-    "dateTime": "d. MMM, HH:mm"
+    "dateTime": "d. MMM, p"
   },
   "startedByAutomation": "Von einer Automation gestartet",
   "prompt": "Prompt",

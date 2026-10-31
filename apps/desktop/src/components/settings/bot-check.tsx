@@ -94,7 +94,7 @@ export function BotCheck({ browser }: { browser: BrowserSettings }) {
             <div className="mt-0.5 truncate text-xs text-muted-foreground">
               {r ? (
                 <>
-                  {r.browser.replace("/", " ")} · {r.headless ? t("botCheck.headless") : t("botCheck.visible")} · {r.stealth ? t("botCheck.stealthOn") : t("botCheck.stealthOff")} · {format(new Date(r.checkedAt), "HH:mm", { locale: dateLocale() })}
+                  {r.browser.replace("/", " ")} · {r.headless ? t("botCheck.headless") : t("botCheck.visible")} · {r.stealth ? t("botCheck.stealthOn") : t("botCheck.stealthOff")} · {format(new Date(r.checkedAt), "p", { locale: dateLocale() })}
                 </>
               ) : (
                 t("botCheck.opening")

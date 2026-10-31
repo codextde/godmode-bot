@@ -197,7 +197,7 @@ function intervalText(minutes: number): string {
 function nextLabel(iso: string, now: number): string {
   const d = new Date(iso);
   if (d.getTime() <= now) return t("components:dreamParts.upcoming.dueNow");
-  return isToday(d) ? t("components:heartbeatCard.nextAt", { time: format(d, "HH:mm") }) : t("components:heartbeatCard.next", { when: upcomingWhen(iso, now) });
+  return isToday(d) ? t("components:heartbeatCard.nextAt", { time: format(d, "p", { locale: dateLocale() }) }) : t("components:heartbeatCard.next", { when: upcomingWhen(iso, now) });
 }
 
 function hourLabel(hour: number): string {
@@ -207,8 +207,8 @@ function hourLabel(hour: number): string {
 /** "10:30" today, "Yesterday, 10:30", "Mon, Oct 5, 10:30". */
 function beatTime(iso: string): string {
   const d = new Date(iso);
-  if (isToday(d)) return format(d, "HH:mm");
-  if (isYesterday(d)) return t("components:dreamParts.yesterdayAt", { time: format(d, "HH:mm") });
+  if (isToday(d)) return format(d, "p", { locale: dateLocale() });
+  if (isYesterday(d)) return t("components:dreamParts.yesterdayAt", { time: format(d, "p", { locale: dateLocale() }) });
   return format(d, isThisYear(d) ? t("components:dreamParts.dateTimeFormat") : t("components:dreamParts.dateTimeYearFormat"), { locale: dateLocale() });
 }
 
@@ -316,7 +316,7 @@ function QuietRow({ beats }: { beats: HeartbeatBeat[] }) {
         <T variant="footnote" style={{ fontWeight: "500" }}>
           {t("heartbeatCard.outcome.quiet")}
         </T>
-        {` · ${t("heartbeatCard.beatCount", { count: beats.length })} · ${beatTime(oldest)}–${sameDay ? format(newest, "HH:mm") : beatTime(beats[0]!.createdAt)}`}
+        {` · ${t("heartbeatCard.beatCount", { count: beats.length })} · ${beatTime(oldest)}–${sameDay ? format(newest, "p", { locale: dateLocale() }) : beatTime(beats[0]!.createdAt)}`}
       </T>
     </View>
   );

@@ -200,7 +200,7 @@ function AuditRow({
         <TableCell className="whitespace-nowrap">
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className="text-xs text-muted-foreground tabular-nums">{format(ts, "MMM d, HH:mm:ss", { locale: dateLocale() })}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{format(ts, "MMM d, pp", { locale: dateLocale() })}</span>
             </TooltipTrigger>
             <TooltipContent>{formatDistanceToNow(ts, { addSuffix: true, locale: dateLocale() })}</TooltipContent>
           </Tooltip>

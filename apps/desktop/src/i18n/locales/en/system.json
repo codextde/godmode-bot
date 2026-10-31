@@ -123,7 +123,8 @@
     "saveError": {
       "theme": "Could not save the theme",
       "palette": "Could not save the palette",
-      "language": "Could not save the language"
+      "language": "Could not save the language",
+      "timeFormat": "Could not save the time format"
     }
   }
 }

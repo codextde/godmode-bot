@@ -67,7 +67,7 @@
     "composerPlaceholder": "Tell {{agent}} what to change…",
     "composerPlaceholderUnnamed": "Tell the agent what to change…",
     "activity": "Activity",
-    "filedFormat": "d MMM yyyy, HH:mm",
+    "filedFormat": "d MMM yyyy, p",
     "filedByYou": "Filed by you on {{date}}",
     "filedBy": "Filed by {{name}} on {{date}}",
     "filedByAgent": "Filed by an agent on {{date}}",
