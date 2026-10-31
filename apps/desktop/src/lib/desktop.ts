@@ -107,3 +107,13 @@ export async function saveBlob(blob: Blob, filename: string) {
 
 export const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 export const modKey = isMac ? "⌘" : "Ctrl";
+
+export function installIdleMotion() {
+  const root = document.documentElement;
+  const sync = () => root.classList.toggle("gm-idle", document.hidden || !document.hasFocus());
+  const later = () => setTimeout(sync, 0);
+  window.addEventListener("focus", sync);
+  window.addEventListener("blur", later);
+  document.addEventListener("visibilitychange", sync);
+  sync();
+}

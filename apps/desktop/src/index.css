@@ -703,6 +703,12 @@
   app-region: no-drag;
 }
 
+.gm-idle *,
+.gm-idle *::before,
+.gm-idle *::after {
+  animation-iteration-count: 1 !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

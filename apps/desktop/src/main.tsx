@@ -9,7 +9,7 @@ import { VaultGrantDialog } from "@/components/vault/grant";
 import { MacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { isCloudError } from "@/lib/api";
 import { cloudContext } from "@/lib/core";
-import { installExternalLinks, installDropGuard } from "@/lib/desktop";
+import { installExternalLinks, installDropGuard, installIdleMotion } from "@/lib/desktop";
 import { installErrorReporting, reactRootErrorHandlers, reportRequestError } from "@/lib/diagnostics";
 import "./index.css";
 import { App } from "./App";
@@ -17,6 +17,7 @@ import { App } from "./App";
 installErrorReporting();
 installExternalLinks();
 installDropGuard();
+installIdleMotion();
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: (err, query) => reportRequestError(err, query.queryKey.slice(0, 2).join(".")) }),
