@@ -187,8 +187,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const chatItem: NavItem = { to: "/", label: "Chat", icon: <MessagesSquare />, end: true };
   const workNav: NavItem[] = [
-    { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
-    { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
+    { to: "/inbox", label: "Needs you", icon: <Inbox />, badge: inboxCount || undefined },
+    { to: "/tasks", label: "Agent tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: "Agents", icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: "Automations", icon: <Workflow />, badge: attention?.automation || undefined },
     { to: "/activity", label: "Activity", icon: <Activity /> },
@@ -207,10 +207,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const byPath = new Map([...workNav, ...machineNav].map((item) => [item.to, item]));
   const easyItem = (to: string, label: string): NavItem => ({ ...byPath.get(to)!, label });
   const easyNav: NavItem[] = [
-    easyItem("/inbox", "Inbox"),
+    easyItem("/inbox", "Needs you"),
     easyItem("/agents", "Agents"),
     easyItem("/automations", "Automations"),
-    easyItem("/tasks", "Task board"),
+    easyItem("/tasks", "Agent tasks"),
     easyItem("/vault/logins", "Passwords"),
   ];
   const easyMore: NavItem[] = [
@@ -358,7 +358,7 @@ function MobileBar({ attention }: { attention: boolean }) {
         variant="ghost"
         size="icon"
         className="relative"
-        aria-label={attention ? "Open navigation — inbox needs attention" : "Open navigation"}
+        aria-label={attention ? "Open navigation — something needs you" : "Open navigation"}
         aria-haspopup="dialog"
         aria-expanded={openMobile}
         onClick={() => setOpenMobile(true)}

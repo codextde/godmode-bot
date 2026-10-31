@@ -473,7 +473,7 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
         </h2>
         {(items.length > shown.length || elsewhere > 0) && (
           <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-            {elsewhere > 0 ? `+${elsewhere} in other workspaces · Inbox` : `All ${items.length} in the Inbox`}
+            {elsewhere > 0 ? `+${elsewhere} in other workspaces · Needs you` : `All ${items.length} in Needs you`}
           </Link>
         )}
       </div>
