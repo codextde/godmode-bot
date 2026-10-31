@@ -1,4 +1,4 @@
-import { INTERFACE_MODES, THEMES } from "@godmode/shared";
+import { INTERFACE_MODES, PALETTES, THEMES } from "@godmode/shared";
 
 /** Ranges for the numbers a phone or an agent may set (as in the app); for text, the maximum length. */
 const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
@@ -19,6 +19,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
 /** Settings that take one of a few words. */
 export const SETTING_CHOICES: Record<string, readonly string[]> = {
   "general.theme": THEMES,
+  "general.palette": PALETTES,
   "general.mode": INTERFACE_MODES,
 };
 
