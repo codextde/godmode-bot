@@ -41,8 +41,6 @@ import { ProjectChip } from "@/components/projects/project-chip";
 import { modKey } from "@/lib/desktop";
 import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
-import { AttentionList } from "@/components/attention/attention-list";
-import { useScopedAttention } from "@/components/workspaces/workspace-activity";
 import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { OffersCard } from "@/components/attention/offers-card";
 import { useLive, type LiveRun } from "@/stores/live";
@@ -121,6 +119,14 @@ export default function ChatHome() {
     setHideSuggestions(true);
     toast(t("home.suggestionsHidden"), { action: { label: t("common:actions.undo"), onClick: () => setHideSuggestions(false) } });
   };
+  const hiddenSuggestions = useUi((s) => s.hiddenSuggestions);
+  const setSuggestionHidden = useUi((s) => s.setSuggestionHidden);
+  const hideSuggestion = (key: string) => {
+    setSuggestionHidden(key, true);
+    toast(t("home.suggestionHidden"), { action: { label: t("common:actions.undo"), onClick: () => setSuggestionHidden(key, false) } });
+  };
+  const suggestions = SUGGESTIONS.filter((s) => !hiddenSuggestions.includes(s.text));
+  const easySuggestions = EASY_SUGGESTIONS.filter((s) => !hiddenSuggestions.includes(s.text));
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -355,7 +361,7 @@ export default function ChatHome() {
         </motion.div>
 
         {privateChat ? null : easy ? (
-          hideSuggestions ? null : (
+          hideSuggestions || !easySuggestions.length ? null : (
           <ContextMenu>
           <ContextMenuTrigger asChild>
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
@@ -372,18 +378,23 @@ export default function ChatHome() {
               </button>
             </div>
             <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
-              {EASY_SUGGESTIONS.map(({ icon: Icon, text, prompt }) => (
-                <button
+              {easySuggestions.map(({ icon: Icon, text, prompt }) => (
+                <div
                   key={text}
-                  type="button"
-                  onClick={() => composerRef.current?.setText(t(prompt ?? text))}
-                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="group relative flex rounded-xl border bg-card text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float has-[button:focus-visible]:ring-[3px] has-[button:focus-visible]:ring-ring/50"
                 >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
-                    <Icon className="size-3.5" />
-                  </span>
-                  <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{t(text)}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => composerRef.current?.setText(t(prompt ?? text))}
+                    className="flex min-w-0 flex-1 items-start gap-3 rounded-xl p-3 pr-8 text-left focus-visible:outline-none"
+                  >
+                    <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
+                      <Icon className="size-3.5" />
+                    </span>
+                    <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{t(text)}</span>
+                  </button>
+                  <SuggestionDismiss label={t("home.hideSuggestion")} onClick={() => hideSuggestion(text)} className="absolute top-2 right-2" />
+                </div>
               ))}
             </div>
           </motion.div>
@@ -396,21 +407,26 @@ export default function ChatHome() {
           </ContextMenuContent>
           </ContextMenu>
           )
-        ) : (
+        ) : suggestions.length ? (
           <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
-            {SUGGESTIONS.map(({ icon: Icon, text }) => (
-              <button
+            {suggestions.map(({ icon: Icon, text }) => (
+              <div
                 key={text}
-                type="button"
-                onClick={() => composerRef.current?.setText(t(text))}
-                className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                className="group flex items-center rounded-md border bg-card text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground has-[button:focus-visible]:ring-[3px] has-[button:focus-visible]:ring-ring/50"
               >
-                <Icon className="size-3.5 transition group-hover:text-foreground" />
-                {t(text)}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => composerRef.current?.setText(t(text))}
+                  className="flex items-center gap-2 rounded-md py-1.5 pr-1 pl-3 focus-visible:outline-none"
+                >
+                  <Icon className="size-3.5 transition group-hover:text-foreground" />
+                  {t(text)}
+                </button>
+                <SuggestionDismiss label={t("home.hideSuggestion")} onClick={() => hideSuggestion(text)} className="mr-1" />
+              </div>
             ))}
           </motion.div>
-        )}
+        ) : null}
 
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
@@ -432,7 +448,6 @@ export default function ChatHome() {
       {!privateChat && (
         <div className="relative mx-auto w-full max-w-5xl space-y-10 px-4 pb-16 @md:px-5 @xl:px-8">
           <AwaySummaryCard agents={agents} />
-          <NeedsYou agents={agents} />
           <OffersCard agents={agents} />
           <RunningNow agents={agents} />
           <RecentChats agents={agents} />
@@ -462,45 +477,20 @@ export default function ChatHome() {
   );
 }
 
-/** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
-function NeedsYou({ agents }: { agents: Agent[] }) {
-  const { t } = useTranslation("chat");
-  const { items, elsewhere, workspaceOf } = useScopedAttention();
-  const scope = useUi((s) => s.workspace);
-  const { data: workspaces = [] } = useWorkspaces();
-  const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
-  if (!items.length && !elsewhere) return null;
-  const shown = items.slice(0, 5);
-  if (!items.length)
-    return (
-      <Link
-        to="/inbox"
-        className="flex items-center gap-2 rounded-xl border border-dashed px-4 py-3 text-[13px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
-      >
-        <span className="size-1.5 rounded-full bg-warning" aria-hidden />
-        {t("home.nothingHere", { count: elsewhere })}
-        <ArrowRight className="ml-auto size-3.5" />
-      </Link>
-    );
+function SuggestionDismiss({ label, onClick, className }: { label: string; onClick: () => void; className?: string }) {
   return (
-    <section aria-labelledby="needs-you-title">
-      <div className="mb-3 flex items-center gap-2">
-        <h2 id="needs-you-title" className="eyebrow flex items-center gap-2">
-          {t("mood.needsYou")}
-          <span className="rounded-[4px] bg-warning/12 px-1 font-mono text-[10px] font-medium text-warning tabular-nums">{items.length}</span>
-        </h2>
-        {(items.length > shown.length || elsewhere > 0) && (
-          <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-            {elsewhere > 0 ? t("home.elsewhereLink", { n: elsewhere }) : t("home.allIn", { n: items.length })}
-          </Link>
-        )}
-      </div>
-      <AttentionList
-        items={shown}
-        agentById={agentById}
-        workspaceOf={scope === "all" ? (item) => workspaces.find((w) => w.id === workspaceOf(item)) : undefined}
-      />
-    </section>
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={cn(
+        "grid size-5 shrink-0 place-items-center rounded text-muted-foreground/60 transition hover:bg-muted hover:text-foreground focus-visible:text-foreground focus-visible:outline-none",
+        className,
+      )}
+    >
+      <X className="size-3" />
+    </button>
   );
 }
 

@@ -1058,6 +1058,8 @@
     "trySomething": "Try something like",
     "hideSuggestions": "Hide suggestions",
     "suggestionsHidden": "Suggestions hidden",
+    "hideSuggestion": "Hide this suggestion",
+    "suggestionHidden": "Suggestion hidden",
     "hint": {
       "send": "send",
       "dropAnywhere": "drop files anywhere",
@@ -1065,10 +1067,6 @@
       "search": "search",
       "shortcuts": "shortcuts"
     },
-    "nothingHere_one": "Nothing waits for you here. {{count}} thing waits in other workspaces",
-    "nothingHere_other": "Nothing waits for you here. {{count}} things wait in other workspaces",
-    "elsewhereLink": "+{{n}} in other workspaces · Needs you",
-    "allIn": "All {{n}} in Needs you",
     "workingNow": "Working now",
     "queuedCount": "{{n}} queued",
     "recentChats": "Recent chats",
