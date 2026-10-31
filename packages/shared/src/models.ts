@@ -1452,7 +1452,27 @@ export interface ComputerSettings {
   screenshotMaxSize: number;
 }
 
-export type SttProvider = "browser" | "openai";
+export type SttProvider = "browser" | "openai" | "hex";
+
+export const HEX_LANGUAGES = ["en", "de"] as const;
+export type HexLanguage = (typeof HEX_LANGUAGES)[number];
+
+export const HEX_MODELS = [
+  { id: "parakeet_v3", name: "Parakeet v3", sizeMb: 740 },
+  { id: "whisper_large_v3_turbo", name: "Whisper large-v3-turbo", sizeMb: 890 },
+  { id: "qwen3_asr06_b", name: "Qwen3-ASR 0.6B", sizeMb: 850 },
+  { id: "cohere_transcribe", name: "Cohere Transcribe", sizeMb: 2410 },
+] as const;
+
+export interface HexStatus {
+  path: string | null;
+  version: string | null;
+  model: string;
+  installed: boolean;
+  downloadBytes: number | null;
+  progress: { phase: "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
+  error: string | null;
+}
 export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
 export interface VoiceSettings {
@@ -1464,6 +1484,8 @@ export interface VoiceSettings {
   language: string;
   openaiBaseUrl: string;
   sttModel: string;
+  hexPath: string;
+  hexModel: string;
   ttsModel: string;
   ttsVoice: string;
   elevenlabsVoiceId: string;

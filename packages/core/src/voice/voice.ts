@@ -8,6 +8,7 @@ import { apiToolKey, apiToolsForAgent, markApiToolUsed } from "../integrations/a
 import { getSettings } from "../services/settings";
 import * as vault from "../vault/vault";
 import { badRequest, HttpError } from "../util";
+import { transcribeWithHex } from "./hex";
 
 export const OPENAI_API_KEY_SECRET = "openai_api_key";
 export const ELEVENLABS_API_KEY_SECRET = "elevenlabs_api_key";
@@ -131,6 +132,10 @@ async function providerFetch(provider: Provider, url: string, init: RequestInit,
 
 export async function transcribe(audio: Blob, opts: { language?: string | null; filename?: string | null } = {}): Promise<{ text: string }> {
   const voice = getSettings().voice;
+  if (voice.sttProvider === "hex") {
+    if (!audio || audio.size === 0) throw badRequest("The recording is empty");
+    return { text: await transcribeWithHex(audio, { language: opts.language }) };
+  }
   if (voice.sttProvider !== "openai" && voice.sttProvider !== "browser") {
     throw badRequest(`Unsupported speech recognition provider: ${String(voice.sttProvider)}`);
   }
