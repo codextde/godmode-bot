@@ -14,7 +14,7 @@ import {
   type CronDraft,
   type CronKind,
 } from "@godmode/shared";
-import { currentLanguage, intlLocale, t } from "@/i18n";
+import { currentLanguage, intlLocale, t, uses12Hour } from "@/i18n";
 
 export {
   ALL_DAYS,
@@ -209,10 +209,10 @@ export const validateCron = (cron: string): string | null => sharedValidateCron(
 export const formatMinutes = (minutes: number): string => sharedFormatMinutes(minutes, currentLanguage());
 
 /** "Every day at 09:00", "Weekdays at 08:30", "Every 15 minutes", … */
-export const cronToHuman = (cron: string): string => sharedCronToHuman(cron, currentLanguage());
+export const cronToHuman = (cron: string): string => sharedCronToHuman(cron, currentLanguage(), uses12Hour());
 
 /** Like cronToHuman, with the random start window: "Weekdays between 8:00 AM and 9:30 AM", "5 times a day at random times between …". */
-export const scheduleToHuman = (cron: string, startWindowMinutes = 0, runsPerWindow = 1): string => sharedScheduleToHuman(cron, startWindowMinutes, runsPerWindow, currentLanguage());
+export const scheduleToHuman = (cron: string, startWindowMinutes = 0, runsPerWindow = 1): string => sharedScheduleToHuman(cron, startWindowMinutes, runsPerWindow, currentLanguage(), uses12Hour());
 
 export function formatTime(hour: number, minute: number): string {
   return new Date(2000, 0, 1, hour, minute).toLocaleTimeString(intlLocale(), { hour: "numeric", minute: "2-digit" });

@@ -80,13 +80,14 @@ const PLATFORM: Partial<Record<AnswerVia, string>> = { slack: "Slack", telegram:
 
 function AnsweredLine({ answer: a, status, choice }: { answer: QuestionAnswer; status: QuestionStatus; choice: string | null }) {
   const { t } = useTranslation("chat");
+  const { dateLocale } = useLocale();
   const where = a.via === "phone" ? "phone" : PLATFORM[a.via] ? "platform" : "here";
   const kind = status === "approved" ? "approved" : status === "declined" ? "declined" : choice ? "chose" : "answered";
   return (
     <Trans
       t={t}
       i18nKey={`question.answered.${kind}.${where}`}
-      values={{ platform: PLATFORM[a.via], choice, time: format(new Date(a.at), "HH:mm") }}
+      values={{ platform: PLATFORM[a.via], choice, time: format(new Date(a.at), "p", { locale: dateLocale }) }}
       components={{ time: <time dateTime={a.at} />, b: <span className="font-medium text-foreground" /> }}
     />
   );

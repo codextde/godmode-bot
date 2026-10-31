@@ -1,4 +1,4 @@
-import { APP_LANGUAGES, INTERFACE_MODES, PALETTES, THEMES } from "@godmode/shared";
+import { APP_LANGUAGES, INTERFACE_MODES, PALETTES, THEMES, TIME_FORMATS } from "@godmode/shared";
 
 /** Ranges for the numbers a phone or an agent may set (as in the app); for text, the maximum length. */
 const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
@@ -22,6 +22,7 @@ export const SETTING_CHOICES: Record<string, readonly string[]> = {
   "general.palette": PALETTES,
   "general.mode": INTERFACE_MODES,
   "general.language": APP_LANGUAGES,
+  "general.timeFormat": TIME_FORMATS,
 };
 
 export function settingInRange(key: string, value: unknown): boolean {

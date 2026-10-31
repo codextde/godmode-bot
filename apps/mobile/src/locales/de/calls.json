@@ -25,7 +25,7 @@
     },
     "incoming": "Eingehend",
     "outgoing": "Ausgehend",
-    "dateFormat": "EEE, d. MMM · HH:mm",
+    "dateFormat": "EEE, d. MMM · p",
     "ownerCall": "Von deiner Nummer",
     "duration": "Dauer",
     "openChat": "Chat öffnen",

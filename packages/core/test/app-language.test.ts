@@ -25,6 +25,22 @@ describe("app language", () => {
     expect(validateCron("61 * * * *")).toBe("Minute must be between 0 and 59");
   });
 
+  test("time format follows the region by default and takes 24h or 12h", () => {
+    expect(DEFAULT_SETTINGS.general.timeFormat).toBe("system");
+    for (const timeFormat of ["system", "24h", "12h"]) expect(() => checkSettingsPatch({ general: { timeFormat } }, () => {})).not.toThrow();
+    expect(() => checkSettingsPatch({ general: { timeFormat: "13h" } }, () => {})).toThrow("general.timeFormat");
+    expect(settingInRange("general.timeFormat", "12h")).toBe(true);
+    expect(settingInRange("general.timeFormat", "am/pm")).toBe(false);
+  });
+
+  test("schedules read in the chosen clock", () => {
+    expect(cronToHuman("0 15 * * *", "en", false)).toBe("Every day at 15:00");
+    expect(cronToHuman("0 15 * * *", "en", true)).toBe("Every day at 3:00 PM");
+    expect(cronToHuman("0 0 * * *", "en", true)).toBe("Every day at 12:00 AM");
+    expect(cronToHuman("30 8 * * 1-5", "de", true)).toBe("Werktags um 8:30 AM");
+    expect(scheduleToHuman("0 8 * * 1-5", 90, 1, "en", false)).toBe("Weekdays between 08:00 and 09:30");
+  });
+
   test("presence reads in German", () => {
     expect(presenceLabel({ state: "idle" } as never, "de")).toBe("Bereit");
     expect(presenceLabel({ state: "idle" } as never)).toBe("Idle");

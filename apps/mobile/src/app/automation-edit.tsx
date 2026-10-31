@@ -24,7 +24,7 @@ import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
-import { currentLanguage } from "@/lib/i18n";
+import { currentLanguage, uses12Hour } from "@/lib/i18n";
 
 type PhoneTrigger = "schedule" | "condition";
 
@@ -163,7 +163,7 @@ function AutomationForm({ routine, agents, defaultAgentId }: { routine: Routine 
   const choosable = agents.filter((a) => a.enabled || a.id === draft.agentId);
   const agent = agents.find((a) => a.id === draft.agentId);
   const notifyOptions: Option<RoutineNotify>[] = NOTIFY_VALUES.map((value) => ({ value, label: t(`notify.${value}`) }));
-  const checkOptions: Option<string>[] = [...new Set([...CHECK_EVERY, draft.checkCron])].map((cron) => ({ value: cron, label: cronToHuman(cron, currentLanguage()) }));
+  const checkOptions: Option<string>[] = [...new Set([...CHECK_EVERY, draft.checkCron])].map((cron) => ({ value: cron, label: cronToHuman(cron, currentLanguage(), uses12Hour()) }));
 
   const buildTrigger = (): RoutineTrigger => {
     if (type === "condition") {

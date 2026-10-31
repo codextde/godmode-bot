@@ -61,7 +61,7 @@
     "noGoal": "Kein Ziel angegeben"
   },
   "detail": {
-    "dateFormat": "EEE, d. MMM · HH:mm",
+    "dateFormat": "EEE, d. MMM · p",
     "openChat": "Chat öffnen",
     "status": "Status",
     "duration": "Dauer",

@@ -566,7 +566,7 @@
     "previousResult": "Previous result",
     "report": "Report",
     "result": "Result",
-    "dateFormat": "d MMM yyyy, HH:mm",
+    "dateFormat": "d MMM yyyy, p",
     "filedByYou": "Filed by you on {{date}}",
     "filedBy": "Filed by {{name}} on {{date}}",
     "worked_one": "{{name}} worked {{time}} in {{count}} run",

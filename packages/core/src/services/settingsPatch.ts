@@ -1,5 +1,5 @@
-import type { AppLanguage, CaptchaSolver, Effort, InterfaceMode, Palette, Theme } from "@godmode/shared";
-import { APP_LANGUAGES, CAPTCHA_SOLVERS, EFFORT_OPTIONS, INTERFACE_MODES, PALETTES, THEMES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import type { AppLanguage, CaptchaSolver, Effort, InterfaceMode, Palette, Theme, TimeFormat } from "@godmode/shared";
+import { APP_LANGUAGES, CAPTCHA_SOLVERS, TIME_FORMATS, EFFORT_OPTIONS, INTERFACE_MODES, PALETTES, THEMES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
@@ -20,11 +20,12 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
   const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
   if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") needsGrant();
-  const { mode, theme, palette, language } = (patch.general ?? {}) as { mode?: unknown; theme?: unknown; palette?: unknown; language?: unknown };
+  const { mode, theme, palette, language, timeFormat } = (patch.general ?? {}) as { mode?: unknown; theme?: unknown; palette?: unknown; language?: unknown; timeFormat?: unknown };
   if (mode !== undefined && !INTERFACE_MODES.includes(mode as InterfaceMode)) throw badRequest(`general.mode must be one of ${INTERFACE_MODES.join(", ")}`);
   if (theme !== undefined && !THEMES.includes(theme as Theme)) throw badRequest(`general.theme must be one of ${THEMES.join(", ")}`);
   if (palette !== undefined && !PALETTES.includes(palette as Palette)) throw badRequest(`general.palette must be one of ${PALETTES.join(", ")}`);
   if (language !== undefined && !APP_LANGUAGES.includes(language as AppLanguage)) throw badRequest(`general.language must be one of ${APP_LANGUAGES.join(", ")}`);
+  if (timeFormat !== undefined && !TIME_FORMATS.includes(timeFormat as TimeFormat)) throw badRequest(`general.timeFormat must be one of ${TIME_FORMATS.join(", ")}`);
   const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
   const instructions = runner?.appendSystemPrompt;
   if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {

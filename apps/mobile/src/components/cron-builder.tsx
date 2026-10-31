@@ -19,7 +19,7 @@ import {
 import { Group, PickerRow, StepperRow, SwitchRow } from "./form";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
-import { currentLanguage, dateLocale } from "@/lib/i18n";
+import { currentLanguage, dateLocale, uses12Hour } from "@/lib/i18n";
 import { fonts, radius, space, useColors, useIsDark } from "@/lib/theme";
 
 type Kind = "hourly" | "daily" | "weekdays" | "weekly" | "monthly" | "custom";
@@ -154,7 +154,7 @@ export function CronBuilder({
       >
         <Icon name={error ? "warning" : "clock"} size={14} color={error ? c.danger : c.textMuted} />
         <T variant="footnote" color={error ? c.danger : c.text} style={{ flex: 1 }}>
-          {error ?? `${scheduleToHuman(cron, startWindowMinutes, runsPerWindow, lang)}${zone ? ` (${zone})` : ""}`}
+          {error ?? `${scheduleToHuman(cron, startWindowMinutes, runsPerWindow, lang, uses12Hour())}${zone ? ` (${zone})` : ""}`}
         </T>
         {!error ? (
           <T variant="caption" muted style={{ fontFamily: fonts.mono }}>
