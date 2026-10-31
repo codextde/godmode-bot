@@ -95,13 +95,13 @@ export function WorkspaceSwitcher() {
               type="button"
               aria-label={`Workspace: ${label}. Switch workspace`}
               className={cn(
-                "group/ws relative flex h-11 w-full items-center gap-2.5 rounded-lg border bg-card px-1.5 text-left shadow-card outline-none transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent",
+                "group/ws relative flex h-10 w-full items-center gap-2 rounded-lg border bg-card px-1.5 text-left shadow-card outline-none transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent",
                 "group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
               )}
             >
-              <ScopeTile scope={scope} workspace={currentProject ?? current} className="size-8 rounded-md text-base group-data-[collapsible=icon]:size-7" />
+              <ScopeTile scope={scope} workspace={currentProject ?? current} className="size-7 rounded-md text-sm" />
               <span className="min-w-0 flex-1 leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="block truncate text-[13.5px] font-medium">{label}</span>
+                <span className="block truncate text-[13px] font-medium">{label}</span>
                 <span className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                   {currentProject && current && (
                     <span className={cn("truncate", (shown.running > 0 || shown.needsYou > 0) && "max-w-[45%]")}>{current.name}</span>
