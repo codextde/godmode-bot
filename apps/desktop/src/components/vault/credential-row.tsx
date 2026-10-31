@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { Copy, ExternalLink, Eye, EyeOff, KeyRound, MoreHorizontal, Pencil, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScopeBadge } from "@/components/common";
+import { useLocale } from "@/i18n/language";
 import { api } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -43,6 +45,8 @@ export const CredentialRow = memo(function CredentialRow({
   onEdit: (credential: Credential) => void;
   onDelete: (credential: Credential) => void;
 }) {
+  const { t } = useTranslation(["vault", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const [revealed, setRevealed] = useState<{ password: string | null; at: number } | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -59,7 +63,7 @@ export const CredentialRow = memo(function CredentialRow({
 
   const reveal = useMutation({
     mutationFn: () => withGrant((grant) => api.credentials.reveal(c.id, grant)),
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not reveal password", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("credentialRow.revealFailed"), qc),
   });
 
   const showPassword = async () => {
@@ -78,10 +82,10 @@ export const CredentialRow = memo(function CredentialRow({
     return res?.password ?? null;
   };
 
-  const lastUsed = c.lastUsedAt ? formatDistanceToNow(new Date(c.lastUsedAt), { addSuffix: true }) : null;
+  const lastUsed = c.lastUsedAt ? formatDistanceToNow(new Date(c.lastUsedAt), { addSuffix: true, locale: dateLocale }) : null;
 
   const passwordCell = !c.hasPassword ? (
-    <span className="text-xs text-muted-foreground italic">No password</span>
+    <span className="text-xs text-muted-foreground italic">{t("credentialRow.noPassword")}</span>
   ) : (
     <div className="flex min-w-0 items-center gap-1">
       <div className="relative min-w-0 flex-1 overflow-hidden">
@@ -93,12 +97,12 @@ export const CredentialRow = memo(function CredentialRow({
               animate={{ opacity: 1, filter: "blur(0px)" }}
               exit={{ opacity: 0, filter: "blur(4px)" }}
               className="block truncate font-mono text-[13px] select-all"
-              title="Hides automatically"
+              title={t("credentialRow.hidesAutomatically")}
             >
               {revealed.password ?? "—"}
             </motion.span>
           ) : (
-            <motion.span key="hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="block font-mono text-sm tracking-[0.2em] text-muted-foreground" aria-label="Password hidden">
+            <motion.span key="hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="block font-mono text-sm tracking-[0.2em] text-muted-foreground" aria-label={t("credentialRow.passwordHidden")}>
               ••••••••••
             </motion.span>
           )}
@@ -120,7 +124,7 @@ export const CredentialRow = memo(function CredentialRow({
             variant="ghost"
             size="icon-sm"
             className="text-muted-foreground hover:text-foreground"
-            aria-label={revealed ? "Hide password" : "Reveal password"}
+            aria-label={revealed ? t("credentialRow.hidePassword") : t("credentialRow.revealPassword")}
             onClick={(e) => {
               e.stopPropagation();
               if (revealed) hide();
@@ -131,9 +135,9 @@ export const CredentialRow = memo(function CredentialRow({
             {reveal.isPending ? <Spinner /> : revealed ? <EyeOff /> : <Eye />}
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{revealed ? "Hide" : `Reveal for ${REVEAL_SECONDS} s (audited)`}</TooltipContent>
+        <TooltipContent>{revealed ? t("passwordInput.hide") : t("credentialRow.revealFor", { seconds: REVEAL_SECONDS })}</TooltipContent>
       </Tooltip>
-      <CopyButton getValue={getPassword} secret label="Copy password" toastLabel="Password copied" />
+      <CopyButton getValue={getPassword} secret label={t("credentialRow.copyPassword")} toastLabel={t("generator.copied")} />
     </div>
   );
 
@@ -153,13 +157,13 @@ export const CredentialRow = memo(function CredentialRow({
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {totp ? `Linked to ${totp.issuer}${totp.accountName ? ` · ${totp.accountName}` : ""}` : "Two-factor code linked"}
+                  {totp ? t("credentialRow.linkedTo", { name: totp.accountName ? `${totp.issuer} · ${totp.accountName}` : totp.issuer }) : t("credentialRow.codeLinked")}
                 </TooltipContent>
               </Tooltip>
             )}
-            {c.tags.slice(0, 2).map((t) => (
-              <Badge key={t} variant="outline" className="hidden h-5 px-1.5 text-[10px] font-normal text-muted-foreground @xl:inline-flex">
-                {t}
+            {c.tags.slice(0, 2).map((tag) => (
+              <Badge key={tag} variant="outline" className="hidden h-5 px-1.5 text-[10px] font-normal text-muted-foreground @xl:inline-flex">
+                {tag}
               </Badge>
             ))}
           </div>
@@ -175,10 +179,10 @@ export const CredentialRow = memo(function CredentialRow({
         {c.username ? (
           <>
             <span className="truncate text-sm">{c.username}</span>
-            <CopyButton value={c.username} label="Copy username" toastLabel="Username copied" className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
+            <CopyButton value={c.username} label={t("credentialRow.copyUsername")} toastLabel={t("credentialRow.usernameCopied")} className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100" />
           </>
         ) : (
-          <span className="text-xs text-muted-foreground italic">No username</span>
+          <span className="text-xs text-muted-foreground italic">{t("credentialRow.noUsername")}</span>
         )}
       </div>
 
@@ -188,55 +192,55 @@ export const CredentialRow = memo(function CredentialRow({
       {/* Scope + last used */}
       <div className="hidden min-w-0 flex-col items-start gap-1 @3xl:flex">
         <ScopeBadge workspaceId={c.workspaceId} className="max-w-full truncate" />
-        <span className="text-[11px] text-muted-foreground">{lastUsed ? `Used ${lastUsed}` : "Never used"}</span>
+        <span className="text-[11px] text-muted-foreground">{lastUsed ? t("credentialRow.used", { when: lastUsed }) : t("credentialRow.neverUsed")}</span>
       </div>
 
       {/* Actions */}
       <div className="flex items-center justify-end gap-0.5">
         <div className="@3xl:hidden">
-          {c.hasPassword && <CopyButton getValue={getPassword} secret label="Copy password" toastLabel="Password copied" icon={<KeyRound />} />}
+          {c.hasPassword && <CopyButton getValue={getPassword} secret label={t("credentialRow.copyPassword")} toastLabel={t("generator.copied")} icon={<KeyRound />} />}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${c.name}`} className="text-muted-foreground">
+            <Button variant="ghost" size="icon-sm" aria-label={t("actionsFor", { name: c.name })} className="text-muted-foreground">
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={onEdit}>
-              <Pencil /> Edit
+              <Pencil /> {t("common:actions.edit")}
             </DropdownMenuItem>
             {c.username && (
-              <DropdownMenuItem onClick={() => void copyText(c.username, "Username copied")}>
-                <UserRound /> Copy username
+              <DropdownMenuItem onClick={() => void copyText(c.username, t("credentialRow.usernameCopied"))}>
+                <UserRound /> {t("credentialRow.copyUsername")}
               </DropdownMenuItem>
             )}
             {c.hasPassword && (
               <DropdownMenuItem
                 onClick={() =>
                   void getPassword()
-                    .then((p) => (p ? copySecret(p, "Password copied") : undefined))
+                    .then((p) => (p ? copySecret(p, t("generator.copied")) : undefined))
                     .catch(() => undefined)
                 }
               >
-                <Copy /> Copy password
+                <Copy /> {t("credentialRow.copyPassword")}
               </DropdownMenuItem>
             )}
             {(c.url || domain) && (
               <DropdownMenuItem onClick={() => void openExternal(normalizeUrl(c.url || domain))}>
-                <ExternalLink /> Open website
+                <ExternalLink /> {t("credentialRow.openWebsite")}
               </DropdownMenuItem>
             )}
             {c.totpId && (
               <DropdownMenuItem asChild>
                 <Link to="/vault/2fa">
-                  <ShieldCheck /> View 2FA code
+                  <ShieldCheck /> {t("credentialRow.viewCode")}
                 </Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 /> Delete
+              <Trash2 /> {t("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

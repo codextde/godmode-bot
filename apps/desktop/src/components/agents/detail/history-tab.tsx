@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
 import { GitCommitHorizontal, History } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent, GitCommit } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -10,6 +11,8 @@ import { EmptyState } from "@/components/common";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useReduceAnimations } from "@/lib/motion";
+import { dateLocale, t } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 
 /** isomorphic-git reports seconds; accept ISO strings and ms too. */
 function commitDate(ts: string): Date {
@@ -21,26 +24,28 @@ function commitDate(ts: string): Date {
 }
 
 function dayLabel(d: Date) {
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return format(d, "EEEE, MMM d, yyyy");
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
+  return format(d, t("agents:historyTab.dayFormat"), { locale: dateLocale() });
 }
 
 export function HistoryTab({ agent }: { agent: Agent }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("agents");
+  const { dateLocale } = useLocale();
   const q = useQuery({ queryKey: qk.agentCommits(agent.id), queryFn: () => api.agents.commits(agent.id) });
 
   const groups = useMemo(() => {
     const out: { label: string; commits: (GitCommit & { date: Date })[] }[] = [];
     for (const c of q.data ?? []) {
       const date = commitDate(c.timestamp);
-      const label = Number.isNaN(date.getTime()) ? "Unknown date" : dayLabel(date);
+      const label = Number.isNaN(date.getTime()) ? t("historyTab.unknownDate") : dayLabel(date);
       const last = out[out.length - 1];
       if (last?.label === label) last.commits.push({ ...c, date });
       else out.push({ label, commits: [{ ...c, date }] });
     }
     return out;
-  }, [q.data]);
+  }, [q.data, t, dateLocale]);
 
   if (q.isLoading) {
     return (
@@ -51,13 +56,13 @@ export function HistoryTab({ agent }: { agent: Agent }) {
       </div>
     );
   }
-  if (q.isError) return <EmptyState icon={<History />} title="Couldn't load history" description={errorMessage(q.error)} />;
+  if (q.isError) return <EmptyState icon={<History />} title={t("historyTab.loadError")} description={errorMessage(q.error)} />;
   if (!groups.length) {
     return (
       <EmptyState
         icon={<History />}
-        title="No history yet"
-        description={`Every run, memory update and settings change is committed to ${agent.name}'s git repository and shows up here.`}
+        title={t("historyTab.emptyTitle")}
+        description={t("historyTab.emptyDescription", { name: agent.name })}
       />
     );
   }
@@ -66,7 +71,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
-        {agent.name}'s memory lives in a git repository — every change is versioned.
+        {t("historyTab.intro", { name: agent.name })}
         <span className="ml-1 font-mono text-xs">{agent.repoPath}</span>
       </p>
       {groups.map((g) => (
@@ -89,9 +94,9 @@ export function HistoryTab({ agent }: { agent: Agent }) {
                     <GitCommitHorizontal className="size-3" />
                   </span>
                   <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="min-w-0 flex-1 text-sm font-medium">{title || "(no message)"}</span>
-                    <span className="text-xs text-muted-foreground tabular-nums" title={Number.isNaN(c.date.getTime()) ? undefined : format(c.date, "PPpp")}>
-                      {Number.isNaN(c.date.getTime()) ? c.timestamp : formatDistanceToNowStrict(c.date, { addSuffix: true })}
+                    <span className="min-w-0 flex-1 text-sm font-medium">{title || t("historyTab.noMessage")}</span>
+                    <span className="text-xs text-muted-foreground tabular-nums" title={Number.isNaN(c.date.getTime()) ? undefined : format(c.date, "PPpp", { locale: dateLocale })}>
+                      {Number.isNaN(c.date.getTime()) ? c.timestamp : formatDistanceToNowStrict(c.date, { addSuffix: true, locale: dateLocale })}
                     </span>
                   </div>
                   {body && <p className="mt-1 line-clamp-4 text-xs whitespace-pre-wrap text-muted-foreground">{body}</p>}
@@ -99,7 +104,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
                     <span>{c.author}</span>
                     <span>·</span>
                     <code className="rounded-[4px] border bg-secondary px-1 font-mono">{c.oid.slice(0, 7)}</code>
-                    <CopyButton text={c.oid} label="Copy commit hash" className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100" />
+                    <CopyButton text={c.oid} label={t("historyTab.copyHash")} className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100" />
                   </div>
                 </motion.li>
               );

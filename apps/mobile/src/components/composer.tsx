@@ -2,6 +2,7 @@ import { Button as MenuButton, Host, Image as SwiftImage, Menu } from "@expo/ui/
 import { accessibilityLabel, background, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
@@ -30,7 +31,7 @@ export function Composer({
   onSend,
   onStop,
   running,
-  placeholder = "Message",
+  placeholder,
   autoFocus,
   disabled,
   draftKey,
@@ -59,6 +60,7 @@ export function Composer({
   ref?: Ref<ComposerHandle>;
 }) {
   const c = useColors();
+  const { t: tr } = useTranslation(["components", "common"]);
   const input = useRef<TextInput>(null);
   const draft = useDraft(draftKey);
   const setDraft = useDrafts((s) => s.set);
@@ -158,7 +160,7 @@ export function Composer({
   };
 
   const active = showStop || canSend;
-  const label = showStop ? "Stop" : (sendLabel ?? "Send");
+  const label = showStop ? tr("common:actions.stop") : (sendLabel ?? tr("common:actions.send"));
 
   return (
     <View style={styles.root}>
@@ -175,14 +177,14 @@ export function Composer({
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder={files.length ? "Add a message" : placeholder}
+          placeholder={files.length ? tr("composer.addMessage") : (placeholder ?? tr("composer.message"))}
           placeholderTextColor={c.textFaint}
           multiline
           autoFocus={autoFocus}
           editable={!disabled}
           style={[styles.input, { color: c.text }]}
           submitBehavior="newline"
-          accessibilityLabel="Message"
+          accessibilityLabel={tr("composer.message")}
         />
         <View style={styles.toolbar}>
           {allowFiles ? (
@@ -192,7 +194,7 @@ export function Composer({
           {agentId ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Slash commands"
+              accessibilityLabel={tr("composer.slashCommands")}
               accessibilityState={{ selected: menuOpen }}
               onPress={toggleCommands}
               disabled={disabled}
@@ -238,6 +240,7 @@ export function ComposerDock({ children }: { children: ReactNode }) {
 /** Photos, camera and files: the system menu on iOS, a choice dialog on Android. */
 function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => void; disabled?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   if (process.env.EXPO_OS === "ios") {
     return (
       <View style={[styles.tool, disabled && { opacity: 0.4 }]} pointerEvents={disabled ? "none" : "auto"}>
@@ -251,11 +254,11 @@ function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => vo
                 modifiers={[frame({ width: 36, height: 36 }), background(c.sunken, shapes.circle()), contentShape(shapes.circle())]}
               />
             }
-            modifiers={[accessibilityLabel("Attach")]}
+            modifiers={[accessibilityLabel(t("composer.attach"))]}
           >
-            <MenuButton label="Photo Library" systemImage="photo.on.rectangle" onPress={() => onPick("library")} />
-            <MenuButton label="Take Photo" systemImage="camera" onPress={() => onPick("camera")} />
-            <MenuButton label="Choose Files" systemImage="folder" onPress={() => onPick("files")} />
+            <MenuButton label={t("composer.photoLibrary")} systemImage="photo.on.rectangle" onPress={() => onPick("library")} />
+            <MenuButton label={t("composer.takePhoto")} systemImage="camera" onPress={() => onPick("camera")} />
+            <MenuButton label={t("composer.chooseFiles")} systemImage="folder" onPress={() => onPick("files")} />
           </Menu>
         </Host>
       </View>
@@ -264,14 +267,14 @@ function AttachButton({ onPick, disabled }: { onPick: (source: FileSource) => vo
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="Attach"
+      accessibilityLabel={t("composer.attach")}
       disabled={disabled}
       onPress={() => {
         tap();
-        Alert.alert("Attach", "Add photos or files to the message.", [
-          { text: "Photos", onPress: () => onPick("library") },
-          { text: "Camera", onPress: () => onPick("camera") },
-          { text: "Files", onPress: () => onPick("files") },
+        Alert.alert(t("composer.attach"), t("composer.attachMessage"), [
+          { text: t("composer.photos"), onPress: () => onPick("library") },
+          { text: t("composer.camera"), onPress: () => onPick("camera") },
+          { text: t("composer.files"), onPress: () => onPick("files") },
         ], { cancelable: true });
       }}
       style={({ pressed }) => [styles.tool, { backgroundColor: c.sunken, opacity: disabled ? 0.4 : pressed ? 0.6 : 1 }]}
@@ -312,6 +315,7 @@ function SlashMenu({
   onPick: (command: SlashCommand) => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <Animated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.menuWrap}>
       <Glass style={styles.menu} fallback={c.surface}>
@@ -322,7 +326,7 @@ function SlashMenu({
               <View key={cmd.name}>
                 {header ? (
                   <T variant="eyebrow" muted style={styles.menuHeader}>
-                    {cmd.builtin ? "Claude Code" : "This agent"}
+                    {cmd.builtin ? "Claude Code" : t("composer.thisAgent")}
                   </T>
                 ) : null}
                 <Pressable
@@ -353,7 +357,7 @@ function SlashMenu({
             <View style={styles.menuEmpty}>
               {loading ? <ActivityIndicator size="small" color={c.textMuted} /> : null}
               <T variant="footnote" muted style={{ flex: 1 }}>
-                {loading ? "Loading Claude Code commands…" : error ? `Couldn't load commands — ${errorText(error)}` : "No matching command — it will be sent as a message."}
+                {loading ? t("composer.loadingCommands") : error ? t("composer.commandsFailed", { error: errorText(error) }) : t("composer.noMatch")}
               </T>
             </View>
           ) : null}

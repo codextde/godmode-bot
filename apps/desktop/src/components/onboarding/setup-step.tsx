@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, CircleAlert, Globe, LogIn, RotateCw, Sparkles, UserRound } from "lucide-react";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type DependencyId, type DependencyStatus, type DoctorReport, type InterfaceMode } from "@godmode/shared";
 import { Character, SpeechBubble } from "@/components/character";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { t as translate } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -40,7 +42,7 @@ function reason(output: string | undefined): string {
     .map((l) => l.trim())
     .filter(Boolean);
   const line = lines.findLast((l) => /error|fail|denied|not found|timed out|unable|cannot|could not/i.test(l)) ?? lines.at(-1) ?? "";
-  return line.length > 160 ? `${line.slice(0, 157)}…` : line || "The installer stopped without saying why.";
+  return line.length > 160 ? `${line.slice(0, 157)}…` : line || translate("onboarding:setup.noReason");
 }
 
 export function SetupStep({
@@ -56,6 +58,7 @@ export function SetupStep({
   onMode: (mode: InterfaceMode) => void;
   onNext: (doctorOk: boolean) => void;
 }) {
+  const { t } = useTranslation(["onboarding", "common"]);
   const qc = useQueryClient();
   const doctor = useDoctor();
   const report = doctor.data;
@@ -174,28 +177,28 @@ export function SetupStep({
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={mood} follow title="Godmode" />
           <SpeechBubble tail="left" delay={0.35} className="max-w-xs text-[14px]">
             {allOk && started
-              ? "All set. I'm ready to work."
+              ? t("setup.bubble.ready")
               : running || login.state === "waiting"
-                ? "Getting myself ready. This takes a few minutes."
+                ? t("setup.bubble.working")
                 : first
-                  ? `Hi ${first}, I'm Godmode, your new coworker.`
-                  : "Hi, I'm Godmode, your new coworker."}
+                  ? t("setup.bubble.hiNamed", { name: first })
+                  : t("setup.bubble.hi")}
           </SpeechBubble>
         </motion.div>
         <h1 className="heading-display mt-7 text-[36px] sm:text-[44px]">
-          Let's get Godmode ready.
-          <span className="block text-foreground/35">One click, a few minutes.</span>
+          {t("setup.title")}
+          <span className="block text-foreground/35">{t("setup.subtitle")}</span>
         </h1>
         <p className="mt-4 max-w-lg text-[15px] leading-relaxed text-muted-foreground">
           {allOk && !started
-            ? "Everything Godmode needs is already on this computer. Pick how it should look and carry on."
-            : "Godmode sets up everything it needs on this computer by itself. You only approve the Claude sign-in in your browser."}
+            ? t("setup.introReady")
+            : t("setup.intro")}
         </p>
       </div>
 
       <StepCard>
         <div className="space-y-2">
-          <Label htmlFor="onboarding-name">What should Godmode call you?</Label>
+          <Label htmlFor="onboarding-name">{t("setup.nameLabel")}</Label>
           <div className="relative">
             <UserRound className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
             <Input
@@ -207,7 +210,7 @@ export function SetupStep({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !started) submit();
               }}
-              placeholder="Your first name"
+              placeholder={t("setup.namePlaceholder")}
               className="h-10 pl-9 text-[15px]"
               maxLength={60}
             />
@@ -218,10 +221,10 @@ export function SetupStep({
           {!report ? (
             doctor.isError ? (
               <div className="rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm">
-                <p className="font-medium text-destructive">Could not look at this computer</p>
+                <p className="font-medium text-destructive">{t("setup.checkFailed")}</p>
                 <p className="mt-1 text-muted-foreground">{errorMessage(doctor.error)}</p>
                 <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => doctor.refetch()}>
-                  <RotateCw /> Try again
+                  <RotateCw /> {t("common:actions.tryAgain")}
                 </Button>
               </div>
             ) : (
@@ -236,10 +239,10 @@ export function SetupStep({
               {started && (
                 <div className="mb-3 flex items-center gap-3" role="status" aria-live="polite">
                   <p className="min-w-0 flex-1 text-sm font-medium">
-                    {allOk ? "Godmode is ready to work." : finished ? "Almost there." : "Setting things up…"}
+                    {allOk ? t("setup.status.ready") : finished ? t("setup.status.almost") : t("setup.status.working")}
                   </p>
                   <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
-                    {doneCount} of {rows.length}
+                    {t("setup.progress", { done: doneCount, total: rows.length })}
                   </span>
                   <div className="h-1 w-24 overflow-hidden rounded-full bg-foreground/[0.07]">
                     <motion.div
@@ -255,30 +258,30 @@ export function SetupStep({
                 <SetupRow
                   icon={<Sparkles />}
                   title="Claude Code"
-                  body="The AI that does the work."
+                  body={t("setup.rows.claude.body")}
                   state={claudeRow.state}
-                  activeText="Installing…"
-                  doneText={find(report, "claude")?.version ? `Installed · ${find(report, "claude")!.version}` : "Installed"}
+                  activeText={t("doctor.installing")}
+                  doneText={find(report, "claude")?.version ? t("setup.installedVersion", { version: find(report, "claude")!.version }) : t("setup.installed")}
                   failure={claudeRow.job ? { output: claudeRow.job.output, hint: find(report, "claude")?.installHint } : undefined}
                   onRetry={running ? undefined : () => void run()}
                 />
                 <SetupRow
                   icon={<LogIn />}
-                  title="Your Claude account"
-                  body="Sign in with a Claude Pro or Max plan."
+                  title={t("setup.rows.account.title")}
+                  body={t("setup.rows.account.body")}
                   state={accountState}
-                  activeText="Waiting for you in the browser"
-                  waitingText={claudeOk ? "Starting the sign-in…" : "Starts once Claude Code is installed"}
-                  doneText={authDep?.ok ? authDep.detail || "Signed in" : "Signed in"}
-                  actionText="Not signed in yet. It opens in your browser."
+                  activeText={t("setup.rows.account.active")}
+                  waitingText={claudeOk ? t("setup.rows.account.starting") : t("setup.rows.account.waitsForClaude")}
+                  doneText={authDep?.ok ? authDep.detail || t("setup.signedIn") : t("setup.signedIn")}
+                  actionText={t("setup.rows.account.action")}
                   failureText={
                     login.state === "failed"
-                      ? login.status?.message || "The sign-in did not finish."
+                      ? login.status?.message || t("setup.rows.account.unfinished")
                       : !claudeOk
-                        ? "Needs Claude Code first."
-                        : "Only the owner of this computer can sign Claude in."
+                        ? t("setup.rows.account.needsClaude")
+                        : t("doctor.ownerOnly")
                   }
-                  retryLabel={login.state === "failed" ? "Try again" : "Sign in"}
+                  retryLabel={login.state === "failed" ? t("common:actions.tryAgain") : t("setup.rows.account.signIn")}
                   onRetry={claudeOk && maySignIn ? () => login.start.mutate() : undefined}
                   retrying={login.start.isPending}
                 >
@@ -287,11 +290,11 @@ export function SetupStep({
                 {showBrowser && (
                   <SetupRow
                     icon={<Globe />}
-                    title="Web browser"
-                    body="So your agents can open websites and sign in."
+                    title={t("setup.rows.browser.title")}
+                    body={t("setup.rows.browser.body")}
                     state={browserRow.state}
-                    activeText={browserRow.job?.id === "chrome" ? "Downloading the browser…" : "Installing…"}
-                    doneText="Installed"
+                    activeText={browserRow.job?.id === "chrome" ? t("setup.rows.browser.downloading") : t("doctor.installing")}
+                    doneText={t("setup.installed")}
                     failure={browserRow.job ? { output: browserRow.job.output, hint: find(report, browserRow.job.id)?.installHint } : undefined}
                     onRetry={running ? undefined : () => void run()}
                   />
@@ -310,7 +313,7 @@ export function SetupStep({
               className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
               aria-expanded={details}
             >
-              {details ? "Hide details" : "Show details"}
+              {details ? t("setup.hideDetails") : t("setup.showDetails")}
               <ChevronDown className={cn("size-3.5 transition-transform", details && "rotate-180")} />
             </button>
             <AnimatePresence initial={false}>
@@ -326,36 +329,36 @@ export function SetupStep({
 
         {(started || allOk) && (
           <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="mt-7 space-y-2">
-            <p className="text-sm font-medium">{running || login.state === "waiting" ? "While you wait: how should Godmode look?" : "How should Godmode look?"}</p>
+            <p className="text-sm font-medium">{running || login.state === "waiting" ? t("setup.lookWhileWaiting") : t("setup.look")}</p>
             <ModePicker value={mode} onChange={onMode} />
-            <p className="text-xs text-muted-foreground">Same features either way. You can switch any time in Settings.</p>
+            <p className="text-xs text-muted-foreground">{t("setup.lookHint")}</p>
           </motion.div>
         )}
 
         {!started && !allOk ? (
           <div className="mt-7 border-t pt-6">
             <SubmitButton busy={false} disabled={!report} type="button" onClick={submit} className="h-12 text-[15px]">
-              Set up Godmode
+              {t("setup.start")}
             </SubmitButton>
-            <p className="mt-2.5 text-center text-xs text-muted-foreground">Installs everything by itself, then opens the Claude sign-in.</p>
+            <p className="mt-2.5 text-center text-xs text-muted-foreground">{t("setup.startHint")}</p>
           </div>
         ) : (
           <StepFooter>
             {allOk ? (
               <SubmitButton busy={false} type="button" onClick={() => onNext(true)} className="w-auto px-6">
-                Continue
+                {t("common:actions.continue")}
               </SubmitButton>
             ) : finished ? (
               <Button type="button" variant="outline" onClick={() => onNext(false)}>
-                Continue anyway
+                {t("setup.continueAnyway")}
               </Button>
             ) : (
-              <p className="text-xs text-muted-foreground">You can keep this window open, it finishes by itself.</p>
+              <p className="text-xs text-muted-foreground">{t("setup.keepOpen")}</p>
             )}
           </StepFooter>
         )}
         {finished && !allOk && (
-          <p className="mt-3 text-right text-xs text-muted-foreground">Agents start working once everything above is green. You can finish this later in Settings, System.</p>
+          <p className="mt-3 text-right text-xs text-muted-foreground">{t("setup.finishLater")}</p>
         )}
       </StepCard>
     </div>
@@ -368,12 +371,12 @@ function SetupRow({
   body,
   state,
   activeText,
-  waitingText = "Waiting",
+  waitingText,
   doneText,
   actionText,
   failure,
-  failureText = "Did not install.",
-  retryLabel = "Retry",
+  failureText,
+  retryLabel,
   onRetry,
   retrying,
   children,
@@ -393,6 +396,7 @@ function SetupRow({
   retrying?: boolean;
   children?: ReactNode;
 }) {
+  const { t } = useTranslation(["onboarding", "common"]);
   const [log, setLog] = useState(false);
   const status =
     state === "done"
@@ -400,13 +404,13 @@ function SetupRow({
       : state === "active"
         ? activeText
         : state === "waiting"
-          ? waitingText
+          ? (waitingText ?? t("setup.waiting"))
           : state === "action"
             ? actionText
             : state === "failed"
               ? failure
                 ? reason(failure.output)
-                : failureText
+                : (failureText ?? t("setup.didNotInstall"))
               : body;
   return (
     <li className={cn("px-4 py-3.5 transition-colors", state === "active" && "bg-paper-2/60", state === "failed" && "bg-destructive/[0.03]")}>
@@ -431,7 +435,7 @@ function SetupRow({
         </div>
         {(state === "failed" || state === "action") && onRetry && (
           <Button type="button" size="sm" variant={state === "action" ? "default" : "outline"} onClick={onRetry} disabled={retrying}>
-            {retrying ? <Spinner /> : state === "action" ? <LogIn /> : <RotateCw />} {retryLabel}
+            {retrying ? <Spinner /> : state === "action" ? <LogIn /> : <RotateCw />} {retryLabel ?? t("common:actions.retry")}
           </Button>
         )}
       </div>
@@ -443,7 +447,7 @@ function SetupRow({
             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
             aria-expanded={log}
           >
-            {log ? "Hide details" : "Show details"}
+            {log ? t("setup.hideDetails") : t("setup.showDetails")}
             <ChevronDown className={cn("size-3.5 transition-transform", log && "rotate-180")} />
           </button>
           <AnimatePresence initial={false}>
@@ -451,11 +455,11 @@ function SetupRow({
               <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                 {failure.hint && (
                   <p className="mt-2 text-xs leading-relaxed text-foreground/85">
-                    To install it by hand: <InlineCode text={failure.hint} />
+                    {t("setup.byHand")} <InlineCode text={failure.hint} />
                   </p>
                 )}
                 <pre className="mt-2 max-h-48 overflow-auto rounded-md border bg-paper-2 p-3 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85">
-                  {failure.output || "(no output)"}
+                  {failure.output || t("doctor.noOutput")}
                 </pre>
               </motion.div>
             )}
@@ -468,6 +472,7 @@ function SetupRow({
 }
 
 function TechDetails({ report }: { report: DoctorReport }) {
+  const { t } = useTranslation("onboarding");
   const deps = DETAIL_IDS.map((id) => find(report, id)).filter((d): d is DependencyStatus => !!d);
   return (
     <div className="mt-2 rounded-lg border bg-paper-2 p-3">
@@ -481,7 +486,7 @@ function TechDetails({ report }: { report: DoctorReport }) {
             <span className="w-36 shrink-0 font-medium">{d.name}</span>
             <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground" title={d.path ?? d.detail}>
               {d.ok ? [d.version, d.path].filter(Boolean).join("  ") || d.detail : d.detail}
-              {!d.required && " (optional)"}
+              {!d.required && ` ${t("setup.optionalSuffix")}`}
             </span>
           </li>
         ))}

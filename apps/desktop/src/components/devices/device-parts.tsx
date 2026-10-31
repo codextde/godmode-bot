@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, isToday } from "date-fns";
 import { ArrowRightFromLine, ChevronDown, Laptop, Monitor } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { DeviceGroup, GroupDevice, RunnerState } from "@godmode/shared";
-import { RUNNER_STATE_LABEL, RunnerStateDot, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
+import { RunnerStateDot } from "@/components/runners/runner-parts";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +17,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { useNow } from "@/components/vault/use-now";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
+import { isMac } from "@/lib/desktop";
+import { dateLocale, t } from "@/i18n";
 import { useDeviceGroup } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -28,13 +31,13 @@ export function DeviceIcon({ device, className }: { device: Pick<GroupDevice, "n
 }
 
 export function deviceName(device: GroupDevice): string {
-  return device.self ? THIS_COMPUTER : device.name;
+  return device.self ? (isMac ? t("devices:thisMac") : t("devices:thisComputer")) : device.name;
 }
 
 /** "2 working · 14 chats" */
 export function deviceWorkLine(device: Pick<GroupDevice, "activeRuns" | "conversations">): string {
-  const chats = device.conversations === 1 ? "1 chat" : `${device.conversations} chats`;
-  return device.activeRuns > 0 ? `${device.activeRuns} working · ${chats}` : chats;
+  const chats = t("devices:chats", { count: device.conversations });
+  return device.activeRuns > 0 ? t("devices:workingChats", { working: device.activeRuns, chats }) : chats;
 }
 
 /** A link slower than this is worth a word; below it the number means nothing to anyone. */
@@ -43,7 +46,7 @@ const SLOW_MS = 300;
 /** "14:02" today, "12 Oct, 14:02" before. */
 export function clockTime(iso: string): string {
   const d = new Date(iso);
-  return format(d, isToday(d) ? "HH:mm" : "d MMM, HH:mm");
+  return format(d, isToday(d) ? t("devices:clock.today") : t("devices:clock.earlier"), { locale: dateLocale() });
 }
 
 /** "1:40" */
@@ -71,19 +74,19 @@ export function deviceState(device: GroupDevice, group: DeviceGroup | undefined)
 
 /** "Online", "Online · slow connection", "Away since 14:02", "Takes over in 1:40", "Stands in since 14:04". */
 export function deviceStateLine(device: GroupDevice, group?: DeviceGroup, now = Date.now()): string {
-  if (isStandingIn(device, group)) return device.self && group?.standIn.since ? `Stands in since ${clockTime(group.standIn.since)}` : "Stands in";
+  if (isStandingIn(device, group)) return device.self && group?.standIn.since ? t("devices:state.standsInSince", { time: clockTime(group.standIn.since) }) : t("devices:state.standsIn");
   if (device.self) {
     const standIn = group?.role === "secondary" ? group.standIn : null;
     if (standIn?.state === "waiting" && standIn.takesOverAt) {
       const left = new Date(standIn.takesOverAt).getTime() - now;
-      return left > 0 ? `Takes over in ${countdown(left)}` : "Taking over…";
+      return left > 0 ? t("devices:state.takesOverIn", { time: countdown(left) }) : t("devices:state.takingOver");
     }
-    return "Online";
+    return t("devices:state.online");
   }
   const state = deviceState(device, group);
-  if (state === "online") return device.latencyMs !== null && device.latencyMs > SLOW_MS ? "Online · slow connection" : "Online";
-  if (state === "offline") return device.lastSeenAt ? `Away since ${clockTime(device.lastSeenAt)}` : "Away";
-  return RUNNER_STATE_LABEL[state];
+  if (state === "online") return device.latencyMs !== null && device.latencyMs > SLOW_MS ? t("devices:state.onlineSlow") : t("devices:state.online");
+  if (state === "offline") return device.lastSeenAt ? t("devices:state.awaySince", { time: clockTime(device.lastSeenAt) }) : t("devices:state.away");
+  return state === "connecting" ? t("devices:state.connecting") : t("devices:state.updateRequired");
 }
 
 export function DeviceDot({ device, group, className }: { device: GroupDevice; group?: DeviceGroup; className?: string }) {
@@ -104,6 +107,7 @@ export function handoffTargets(group: DeviceGroup | undefined): GroupDevice[] {
 
 /** Hand this computer's working chats to another computer of the group, with a toast that says how it went. */
 export function useHandoff() {
+  const { t } = useTranslation("devices");
   const qc = useQueryClient();
   const { data: group } = useDeviceGroup();
   const self = group?.devices.find((d) => d.self) ?? null;
@@ -114,23 +118,22 @@ export function useHandoff() {
     onSuccess: (result, to) => {
       const moved = result.moved.length;
       const failed = result.failed.length;
-      const chats = (n: number) => (n === 1 ? "1 chat" : `${n} chats`);
       const details = result.failed.map((f) => `${f.title}: ${f.error}`).join("\n");
-      if (!moved && !failed) toast("Nothing to hand off", { description: `No chat is working on ${THIS_COMPUTER_INLINE} right now.` });
-      else if (!failed) toast.success(`Moved ${chats(moved)} to ${to.name}`, { description: "They continue there with everything they did so far." });
-      else if (!moved) toast.error(`Couldn't move ${failed === 1 ? "the chat" : "the chats"} to ${to.name}`, { description: details });
-      else toast.warning(`Moved ${moved} of ${moved + failed} chats to ${to.name}`, { description: details });
+      if (!moved && !failed) toast(t("handoff.nothing"), { description: isMac ? t("handoff.nothingDescriptionMac") : t("handoff.nothingDescription") });
+      else if (!failed) toast.success(t("handoff.moved", { count: moved, name: to.name }), { description: t("handoff.movedDescription") });
+      else if (!moved) toast.error(t("handoff.moveError", { count: failed, name: to.name }), { description: details });
+      else toast.warning(t("handoff.movedPartly", { moved, total: moved + failed, name: to.name }), { description: details });
       void qc.invalidateQueries({ queryKey: qk.devices });
       void qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
-    onError: (e, to) => toastApiError(e, `Couldn't hand off to ${to.name}`, qc),
+    onError: (e, to) => toastApiError(e, t("handoff.error", { name: to.name }), qc),
   });
   return { group, self, targets, working: self?.activeRuns ?? 0, handoff: run.mutate, pending: run.isPending };
 }
 
 function targetLine(d: GroupDevice): string {
-  if (d.activeRuns > 0) return `${d.activeRuns} working`;
-  return d.latencyMs !== null && d.latencyMs > SLOW_MS ? "Slow connection" : "";
+  if (d.activeRuns > 0) return t("devices:working", { count: d.activeRuns });
+  return d.latencyMs !== null && d.latencyMs > SLOW_MS ? t("devices:slowConnection") : "";
 }
 
 /**
@@ -141,7 +144,7 @@ export function HandoffButton({
   size = "default",
   variant = "default",
   className,
-  label = "Hand off to",
+  label,
   stacked = false,
 }: {
   size?: "default" | "sm";
@@ -150,10 +153,12 @@ export function HandoffButton({
   label?: string;
   stacked?: boolean;
 }) {
+  const { t } = useTranslation("devices");
   const { group, targets, working, handoff, pending } = useHandoff();
+  label ??= t("handoff.label");
   const icon = pending ? <Spinner /> : <ArrowRightFromLine />;
   const to = targets.length === 1 ? targets[0] : null;
-  const unavailable = group?.role === "secondary" ? `${group.primaryName ?? "The primary"} is away` : "No other computer is online";
+  const unavailable = group?.role === "secondary" ? (group.primaryName ? t("handoff.primaryAway", { name: group.primaryName }) : t("handoff.primaryAwayFallback")) : t("handoff.noneOnline");
   const menu = targets.length > 1;
   // Nowhere to go: never the loud style, whatever is running.
   const look = targets.length ? variant : "outline";
@@ -163,16 +168,16 @@ export function HandoffButton({
       {icon}
       <span className="min-w-0 flex-1 text-left">
         <span className="block truncate text-[13px] leading-5 font-medium">
-          {pending ? "Handing off…" : working > 0 ? `Hand off ${working === 1 ? "the running chat" : `${working} running chats`}` : "Hand off running work"}
+          {pending ? t("handoff.handingOff") : working > 0 ? t("handoff.handOffChats", { count: working }) : t("handoff.handOffWork")}
         </span>
-        <span className="block truncate text-[11.5px] leading-4 font-normal opacity-70">{to ? `to ${to.name}` : menu ? "Pick a computer" : unavailable}</span>
+        <span className="block truncate text-[11.5px] leading-4 font-normal opacity-70">{to ? t("handoff.toName", { name: to.name }) : menu ? t("handoff.pick") : unavailable}</span>
       </span>
       {menu && !pending && <ChevronDown className="opacity-60" />}
     </>
   ) : (
     <>
       {icon}
-      <span className="truncate">{pending ? "Handing off…" : to ? `${label} ${to.name}` : menu ? `${label}…` : unavailable}</span>
+      <span className="truncate">{pending ? t("handoff.handingOff") : to ? `${label} ${to.name}` : menu ? `${label}…` : unavailable}</span>
       {menu && !pending && <ChevronDown className="opacity-60" />}
     </>
   );
@@ -193,7 +198,7 @@ export function HandoffButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className={cn("min-w-56", stacked && "w-(--radix-dropdown-menu-trigger-width)")}>
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Continue the running work on</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t("handoff.continueOn")}</DropdownMenuLabel>
         {targets.map((d) => (
           <DropdownMenuItem key={d.id ?? "primary"} onSelect={() => handoff(d)}>
             <DeviceIcon device={d} />

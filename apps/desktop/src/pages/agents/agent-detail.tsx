@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
-import { leadOf, reportsOf } from "@godmode/shared";
+import { effortLabel, leadOf, reportsOf } from "@godmode/shared";
+import { currentLanguage } from "@/i18n";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -43,27 +45,31 @@ import { SettingsTab } from "@/components/agents/detail/settings-tab";
 import { useReduceAnimations } from "@/lib/motion";
 
 const TABS = [
-  { id: "", label: "Overview", icon: LayoutGrid },
-  { id: "chats", label: "Chats", icon: MessagesSquare },
-  { id: "routines", label: "Automations", icon: Workflow },
-  { id: "heartbeat", label: "Heartbeat", icon: HeartPulse },
-  { id: "memory", label: "Memory", icon: Brain },
-  { id: "history", label: "History", icon: GitCommitHorizontal },
-  { id: "settings", label: "Settings", icon: Settings2 },
+  { id: "", labelKey: "agentDetail.tabs.overview", icon: LayoutGrid },
+  { id: "chats", labelKey: "agentDetail.tabs.chats", icon: MessagesSquare },
+  { id: "routines", labelKey: "agentDetail.tabs.routines", icon: Workflow },
+  { id: "heartbeat", labelKey: "agentDetail.tabs.heartbeat", icon: HeartPulse },
+  { id: "memory", labelKey: "agentDetail.tabs.memory", icon: Brain },
+  { id: "history", labelKey: "agentDetail.tabs.history", icon: GitCommitHorizontal },
+  { id: "settings", labelKey: "agentDetail.tabs.settings", icon: Settings2 },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 // Easy mode keeps the everyday tabs in the bar and moves the inner workings under "More", with plainer names.
 const EASY_MORE: readonly TabId[] = ["heartbeat", "history"];
-const EASY_LABELS: Partial<Record<TabId, string>> = { heartbeat: "Check-ins", history: "Version history" };
+const EASY_LABELS: Partial<Record<TabId, "agentDetail.easyTabs.heartbeat" | "agentDetail.easyTabs.history">> = {
+  heartbeat: "agentDetail.easyTabs.heartbeat",
+  history: "agentDetail.easyTabs.history",
+};
 
 export default function AgentDetailPage() {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("agents");
   const params = useParams();
   const agentId = params.agentId!;
   const rest = (params["*"] ?? "").split("/")[0];
-  const tab: TabId = (TABS.find((t) => t.id === rest)?.id ?? "") as TabId;
+  const tab: TabId = (TABS.find((item) => item.id === rest)?.id ?? "") as TabId;
   const qc = useQueryClient();
 
   const q = useQuery({
@@ -86,12 +92,12 @@ export default function AgentDetailPage() {
       <PageBody className="pt-10">
         <EmptyState
           icon={<Bot />}
-          title={notFound ? "Agent not found" : "Couldn't load this agent"}
-          description={notFound ? "It may have been deleted." : errorMessage(q.error)}
+          title={notFound ? t("agentDetail.notFound") : t("agentDetail.loadError")}
+          description={notFound ? t("agentDetail.notFoundDescription") : errorMessage(q.error)}
           action={
             <Button variant="outline" asChild>
               <Link to="/agents">
-                <ArrowLeft /> All agents
+                <ArrowLeft /> {t("agentDetail.allAgents")}
               </Link>
             </Button>
           }
@@ -121,6 +127,7 @@ export default function AgentDetailPage() {
 }
 
 function AgentHeader({ agent }: { agent: Agent }) {
+  const { t } = useTranslation(["agents", "common"]);
   const modelLabel = useModelLabel();
   const navigate = useNavigate();
   const chat = useStartAgentChat();
@@ -141,7 +148,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
     <div className="relative border-b">
       <div className="relative px-5 pt-5 pb-5 @2xl:px-8 @2xl:pt-6 @2xl:pb-6">
         <Link to="/agents" className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          <ArrowLeft className="size-3.5" /> Agents
+          <ArrowLeft className="size-3.5" /> {t("common:words.agents")}
         </Link>
         <div className="flex flex-wrap items-start gap-x-4 gap-y-4 @2xl:gap-x-5">
           <AgentAvatar agent={agent} size="xl" mood={mood} follow className="@max-xl:size-12" />
@@ -149,7 +156,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-[23px] leading-tight font-medium tracking-[-0.03em] @2xl:text-[26px]">{agent.name}</h1>
               {agent.isDefault && (
-                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Built-in</span>
+                <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{t("agentDetail.builtIn")}</span>
               )}
             </div>
             {agent.role ? (
@@ -157,7 +164,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
             ) : (
               !agent.isDefault && (
                 <Link to={`/agents/${agent.id}/settings#identity`} className="mt-0.5 inline-block text-sm text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-                  Add a role
+                  {t("agentDetail.addRole")}
                 </Link>
               )
             )}
@@ -165,30 +172,35 @@ function AgentHeader({ agent }: { agent: Agent }) {
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <AgentStatus agent={agent} interactive />
               {agent.isDefault ? (
-                <span>Reports to you</span>
+                <span>{t("agentDetail.reportsToYou")}</span>
               ) : (
                 lead && (
                   <Link to={`/agents/${lead.id}`} className="flex items-center gap-1.5 underline-offset-2 hover:text-foreground hover:underline">
-                    Reports to <AgentAvatar agent={lead} size="sm" still className="size-4 rounded-[4px] text-[9px]" /> {lead.name}
+                    <Trans
+                      t={t}
+                      i18nKey="agentDetail.reportsTo"
+                      values={{ name: lead.name }}
+                      components={{ avatar: <AgentAvatar agent={lead} size="sm" still className="size-4 rounded-[4px] text-[9px]" /> }}
+                    />
                   </Link>
                 )
               )}
               {reports.length > 0 && (
                 <Link to="/agents?view=chart" className="underline-offset-2 hover:text-foreground hover:underline">
-                  Leads {reports.length}
+                  {t("agentDetail.leads", { count: reports.length })}
                 </Link>
               )}
               <ScopeBadge workspaceId={agent.workspaceId} />
               {!easy && (
                 <span className="flex items-center gap-1">
-                  <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : "Default model"}
-                  {agent.effort && <span className="text-muted-foreground/70">· {agent.effort} effort</span>}
+                  <Cpu className="size-3.5" /> {agent.model ? modelLabel(agent.model) : t("agentDetail.defaultModel")}
+                  {agent.effort && <span className="text-muted-foreground/70">· {t("agentDetail.effort", { effort: effortLabel(agent.effort, currentLanguage()).toLowerCase() })}</span>}
                   {agent.ultracode && <span className="text-muted-foreground/70">· Ultracode</span>}
                 </span>
               )}
               {agent.browser.enabled && (
                 <span className="flex items-center gap-1">
-                  <Globe className="size-3.5" /> Browser
+                  <Globe className="size-3.5" /> {t("agentDetail.browser")}
                 </span>
               )}
               {agent.workingDirectory && (
@@ -206,58 +218,58 @@ function AgentHeader({ agent }: { agent: Agent }) {
                     checked={agent.enabled}
                     onCheckedChange={(enabled) => toggle.mutate({ id: agent.id, enabled })}
                     disabled={toggle.isPending}
-                    aria-label={agent.enabled ? `Switch ${agent.name} off` : `Switch ${agent.name} on`}
+                    aria-label={agent.enabled ? t("agentDetail.switchOffLabel", { name: agent.name }) : t("agentDetail.switchOnLabel", { name: agent.name })}
                   />
-                  <span className="@max-md:sr-only">{agent.enabled ? "On" : "Off"}</span>
+                  <span className="@max-md:sr-only">{agent.enabled ? t("common:status.on") : t("common:status.off")}</span>
                 </label>
               </TooltipTrigger>
-              <TooltipContent>{agent.enabled ? "Switch off: it stops answering, and its automations and handoffs wait" : "Switch on"}</TooltipContent>
+              <TooltipContent>{agent.enabled ? t("agentDetail.switchOffHint") : t("agentDetail.switchOn")}</TooltipContent>
             </Tooltip>
             {(agent.openQuestions ?? 0) > 0 && (
               <Button asChild variant="outline" className="border-warning/40">
                 <Link to="/inbox">
                   <MessageCircleQuestion className="text-warning" />
-                  {(agent.openQuestions ?? 0) > 1 ? `Answer ${agent.openQuestions} questions` : "Answer"}
+                  {(agent.openQuestions ?? 0) > 1 ? t("agentDetail.answerQuestions", { count: agent.openQuestions }) : t("agentDetail.answer")}
                 </Link>
               </Button>
             )}
             {(agent.pausedRuns ?? 0) > 0 && (
               <Button variant="outline" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
-                {resume.isPending ? <Spinner /> : <StepForward />} Continue
+                {resume.isPending ? <Spinner /> : <StepForward />} {t("common:actions.continue")}
               </Button>
             )}
             {running && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
-                    {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
+                    {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} {t("agentDetail.pause")}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Pause what it is working on — it continues where it stopped</TooltipContent>
+                <TooltipContent>{t("agentDetail.pauseHint")}</TooltipContent>
               </Tooltip>
             )}
             <Button variant="outline" onClick={() => setRunTask(true)} disabled={!agent.enabled}>
-              <Play /> Run task
+              <Play /> {t("agentDetail.runTask")}
             </Button>
             <Button onClick={() => chat.mutate(agent)} disabled={chat.isPending}>
-              {chat.isPending ? <Spinner /> : <MessageSquare />} Chat
+              {chat.isPending ? <Spinner /> : <MessageSquare />} {t("agentDetail.chat")}
             </Button>
             {!agent.isDefault && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="More actions">
+                  <Button variant="ghost" size="icon" aria-label={t("agentDetail.moreActions")}>
                     <Ellipsis />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
-                    <Settings2 /> Settings
+                    <Settings2 /> {t("common:words.settings")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
-                    <Copy /> Duplicate
+                    <Copy /> {t("agentDetail.duplicate")}
                   </DropdownMenuItem>
                   <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                    <Trash2 /> Delete agent
+                    <Trash2 /> {t("agentDetail.deleteAgent")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -273,27 +285,29 @@ function AgentHeader({ agent }: { agent: Agent }) {
 
 function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("agents");
   const { isMobile } = useSidebar();
   const easy = useEasyMode();
   const navigate = useNavigate();
-  const shown = easy ? TABS.filter((t) => !EASY_MORE.includes(t.id)) : TABS;
-  const more = easy ? TABS.filter((t) => EASY_MORE.includes(t.id)) : [];
-  const activeMore = more.find((t) => t.id === active);
+  const shown = easy ? TABS.filter((item) => !EASY_MORE.includes(item.id)) : TABS;
+  const more = easy ? TABS.filter((item) => EASY_MORE.includes(item.id)) : [];
+  const activeMore = more.find((item) => item.id === active);
+  const activeMoreLabel = activeMore && EASY_LABELS[activeMore.id];
   const href = (id: TabId) => (id ? `/agents/${agentId}/${id}` : `/agents/${agentId}`);
   return (
     <nav
-      aria-label="Agent sections"
+      aria-label={t("agentDetail.sections")}
       // Clear the macOS title-bar drag region in the desktop shell
       className={cn("sticky z-20 border-b bg-background px-3 @2xl:px-6", isTauri && isMac && !isMobile ? "top-7" : "top-0")}
     >
       <div className="scroll-fade-x flex gap-1 overflow-x-auto py-2 [scrollbar-width:none]">
-        {shown.map((t) => {
-          const isActive = t.id === active;
-          const Icon = t.icon;
+        {shown.map((item) => {
+          const isActive = item.id === active;
+          const Icon = item.icon;
           return (
             <NavLink
-              key={t.id}
-              to={href(t.id)}
+              key={item.id}
+              to={href(item.id)}
               end
               aria-current={isActive ? "page" : undefined}
               className={cn(
@@ -309,7 +323,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
                 />
               )}
               <Icon className="relative size-4" />
-              <span className="relative">{t.label}</span>
+              <span className="relative">{t(item.labelKey)}</span>
             </NavLink>
           );
         })}
@@ -330,15 +344,18 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
                 />
               )}
               {activeMore ? <activeMore.icon className="relative size-4" /> : <Ellipsis className="relative size-4" />}
-              <span className="relative">{activeMore ? EASY_LABELS[activeMore.id] : "More"}</span>
+              <span className="relative">{activeMore ? activeMoreLabel && t(activeMoreLabel) : t("agentDetail.more")}</span>
               <ChevronDown className="relative size-3.5 opacity-60" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              {more.map((t) => (
-                <DropdownMenuItem key={t.id} onClick={() => navigate(href(t.id))}>
-                  <t.icon /> {EASY_LABELS[t.id] ?? t.label}
-                </DropdownMenuItem>
-              ))}
+              {more.map((item) => {
+                const easyLabel = EASY_LABELS[item.id];
+                return (
+                  <DropdownMenuItem key={item.id} onClick={() => navigate(href(item.id))}>
+                    <item.icon /> {t(easyLabel ?? item.labelKey)}
+                  </DropdownMenuItem>
+                );
+              })}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

@@ -15,6 +15,7 @@ import {
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
@@ -92,7 +93,7 @@ const NO_ATTACHMENTS: PendingAttachment[] = [];
 
 export function Composer({
   onSubmit,
-  placeholder = "Ask anything, or give your coworker a task…",
+  placeholder,
   autoFocus,
   busy,
   running,
@@ -111,6 +112,7 @@ export function Composer({
   ref,
 }: ComposerProps) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("chat");
   const navigate = useNavigate();
   const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
@@ -323,7 +325,7 @@ export function Composer({
       return;
     }
     if (!dictation.supported) {
-      toast.error("Voice input isn't supported in this browser.");
+      toast.error(t("composer.voiceUnsupported"));
       return;
     }
     if (dictation.active) {
@@ -410,7 +412,7 @@ export function Composer({
       <AnimatePresence initial={false}>{hint && <SlashHint key="slash-hint" command={hint} />}</AnimatePresence>
 
       <label htmlFor={draftKey ? `composer-${draftKey}` : "composer"} className="sr-only">
-        Message
+        {t("composer.message")}
       </label>
       <textarea
         id={draftKey ? `composer-${draftKey}` : "composer"}
@@ -427,7 +429,7 @@ export function Composer({
         onPaste={onPaste}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        placeholder={listening ? "Listening…" : placeholder}
+        placeholder={listening ? t("composer.listening") : (placeholder ?? t("composer.placeholder"))}
         rows={1}
         disabled={disabled}
         className={cn(
@@ -447,18 +449,18 @@ export function Composer({
             e.target.value = "";
           }}
         />
-        <ToolbarButton label="Attach files" onClick={() => fileInputRef.current?.click()} disabled={disabled}>
+        <ToolbarButton label={t("composer.attachFiles")} onClick={() => fileInputRef.current?.click()} disabled={disabled}>
           <Paperclip />
         </ToolbarButton>
 
         {agentId && (
-          <ToolbarButton label="Slash commands" onClick={toggleCommands} active={menuOpen} keepFocus disabled={disabled} className={cn("@max-md/composer:hidden", menuOpen && "bg-accent text-foreground")}>
+          <ToolbarButton label={t("composer.slashCommands")} onClick={toggleCommands} active={menuOpen} keepFocus disabled={disabled} className={cn("@max-md/composer:hidden", menuOpen && "bg-accent text-foreground")}>
             <SquareSlash />
           </ToolbarButton>
         )}
 
         <ToolbarButton
-          label={!voiceEnabled ? "Voice is off — enable it in Settings" : dictation.active ? "Stop dictation (Esc)" : "Dictate"}
+          label={!voiceEnabled ? t("composer.voiceOff") : dictation.active ? t("composer.stopDictation") : t("composer.dictate")}
           onClick={toggleDictation}
           active={dictation.active}
           disabled={disabled && !dictation.active}
@@ -478,7 +480,7 @@ export function Composer({
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
-                <span className="truncate">{transcribing ? "Transcribing…" : "Working — new messages are queued"}</span>
+                <span className="truncate">{transcribing ? t("composer.transcribing") : t("composer.workingQueued")}</span>
               </motion.span>
             )}
             {!running && !transcribing && focused && text.length > 0 && (
@@ -489,7 +491,7 @@ export function Composer({
                 className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
               >
                 <Kbd>⇧</Kbd>
-                <Kbd>↵</Kbd> new line
+                <Kbd>↵</Kbd> {t("composer.newLine")}
               </motion.span>
             )}
           </AnimatePresence>
@@ -497,7 +499,7 @@ export function Composer({
           {status}
           {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}
 
-          <ToolbarButton label={voiceEnabled ? "Voice mode" : "Voice is off — enable it in Settings"} onClick={openVoiceMode} disabled={disabled}>
+          <ToolbarButton label={voiceEnabled ? t("header.voiceMode") : t("composer.voiceOff")} onClick={openVoiceMode} disabled={disabled}>
             <AudioLines />
           </ToolbarButton>
 
@@ -508,7 +510,7 @@ export function Composer({
                 size="icon"
                 onClick={() => void submit()}
                 disabled={!canSend}
-                aria-label={blocked ?? sendHint ?? (running ? "Queue message" : "Send message")}
+                aria-label={blocked ?? sendHint ?? (running ? t("composer.queueMessage") : t("composer.sendMessage"))}
                 className="ml-0.5 size-8 rounded-lg transition-[background-color,scale] active:scale-95 disabled:bg-secondary disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none"
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-[18px]" strokeWidth={2.4} />}
@@ -517,7 +519,7 @@ export function Composer({
             <TooltipContent>
               {blocked ?? (
                 <>
-                  {sendHint ?? (running ? "Queue message" : "Send")} <Kbd>↵</Kbd>
+                  {sendHint ?? (running ? t("composer.queueMessage") : t("composer.send"))} <Kbd>↵</Kbd>
                 </>
               )}
             </TooltipContent>
@@ -538,20 +540,21 @@ export function Composer({
 
 /** Easy mode: the model, folder and machine pickers in one place, each still working as it does inline. */
 function OptionsButton({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("chat");
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label="Options"
+          aria-label={t("composer.options")}
           className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground transition outline-none hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent data-[state=open]:text-foreground"
         >
           <SlidersHorizontal className="size-4" />
-          <span className="@max-sm/composer:hidden">Options</span>
+          <span className="@max-sm/composer:hidden">{t("composer.options")}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent side="top" align="end" className="w-auto max-w-[min(26rem,calc(100vw-2rem))] p-2">
-        <div className="eyebrow px-1.5 pt-1 pb-2">Options for this chat</div>
+        <div className="eyebrow px-1.5 pt-1 pb-2">{t("composer.optionsTitle")}</div>
         <div className="flex flex-wrap items-center gap-1">{children}</div>
       </PopoverContent>
     </Popover>

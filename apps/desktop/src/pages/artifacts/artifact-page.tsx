@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { ArrowLeft, ArrowUp, MessageSquareText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { ArtifactView, useArtifactActions, useArtifactBusy } from "@/components/artifacts/artifact-view";
@@ -9,6 +10,7 @@ import { cn } from "@/lib/utils";
 
 /** One artifact on the whole screen, with a line to ask its agent for changes. */
 export default function ArtifactPage() {
+  const { t } = useTranslation("artifacts");
   const { artifactId = "" } = useParams();
   const navigate = useNavigate();
   return (
@@ -16,7 +18,7 @@ export default function ArtifactPage() {
       <div className="flex h-10 shrink-0 items-center border-b bg-paper-2 px-2">
         <Button asChild variant="ghost" size="sm" className="gap-1.5 text-muted-foreground">
           <Link to="/settings/artifacts">
-            <ArrowLeft /> Artifacts
+            <ArrowLeft /> {t("page.back")}
           </Link>
         </Button>
       </div>
@@ -28,12 +30,13 @@ export default function ArtifactPage() {
 }
 
 function ChangeBar({ id }: { id: string }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const { data: artifact } = useArtifact(id);
   const { message } = useArtifactActions(artifact);
   const busy = useArtifactBusy(artifact);
   const [text, setText] = useState("");
   if (!artifact) return null;
-  const agent = artifact.agentName ?? "the agent";
+  const agent = artifact.agentName ?? t("theAgent");
   const send = () => {
     const content = text.trim();
     if (!content || message.isPending) return;
@@ -58,18 +61,18 @@ function ChangeBar({ id }: { id: string }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={onKey}
-            placeholder={busy ? `${agent} is working on it — you can add more` : `Ask ${agent} to change something…`}
-            aria-label="Ask for a change"
+            placeholder={busy ? t("page.busyPlaceholder", { agent }) : t("page.placeholder", { agent })}
+            aria-label={t("page.askForChange")}
             className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Button size="icon-sm" className="rounded-lg" onClick={send} disabled={!text.trim() || message.isPending} aria-label="Send">
+          <Button size="icon-sm" className="rounded-lg" onClick={send} disabled={!text.trim() || message.isPending} aria-label={t("common:actions.send")}>
             {message.isPending ? <Spinner /> : <ArrowUp />}
           </Button>
         </div>
         {artifact.conversationId && (
           <Button asChild variant="ghost" size="sm" className="shrink-0 gap-1.5 text-muted-foreground">
             <Link to={`/chat/${artifact.conversationId}`}>
-              <MessageSquareText /> Chat
+              <MessageSquareText /> {t("page.chat")}
             </Link>
           </Button>
         )}

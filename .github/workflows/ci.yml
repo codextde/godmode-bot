@@ -58,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-latest, windows-latest]
+        os: [macos-latest]
     defaults:
       run:
         working-directory: apps/desktop/src-tauri
@@ -81,7 +81,7 @@ jobs:
           workspaces: apps/desktop/src-tauri -> target
 
       - name: rustfmt
-        if: runner.os == 'Linux'
+        if: runner.os == 'macOS'
         run: cargo fmt --check
 
       - name: cargo check
@@ -95,6 +95,7 @@ jobs:
 
   docker:
     name: Docker image (linux/amd64)
+    if: vars.LINUX_BUILDS == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { RefreshControl, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Routine } from "@godmode/shared";
 import { FilterChips } from "@/components/filter-chips";
 import { FollowupsSection } from "@/components/followup-row";
@@ -36,6 +37,7 @@ const openNew = () => router.push("/automation-edit");
 
 /** Every automation of the picked workspace's agents (or project's), the ones that are on first, and the chats they'll pick up again. */
 export default function Automations() {
+  const { t } = useTranslation(["automations", "common"]);
   const { id: workspaceId, projectId } = useWorkspace();
   const list = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list() });
   const followups = useQuery({ queryKey: qk.followups, queryFn: () => api.followups.list() });
@@ -83,8 +85,8 @@ export default function Automations() {
 
   return (
     <>
-      <Stack.Title>Automations</Stack.Title>
-      <HeaderActions actions={[{ icon: "plus", label: "New automation", onPress: openNew }]} />
+      <Stack.Title>{t("list.title")}</Stack.Title>
+      <HeaderActions actions={[{ icon: "plus", label: t("list.new"), onPress: openNew }]} />
       <FlashList
         data={loading ? [] : visible}
         keyExtractor={(r) => r.id}
@@ -101,10 +103,10 @@ export default function Automations() {
                 value={filter}
                 onChange={setFilter}
                 filters={[
-                  { id: "all", label: "All", count: scoped.length },
-                  { id: "active", label: "Active", count: scoped.filter((r) => r.enabled).length },
-                  { id: "paused", label: "Paused", count: scoped.filter((r) => !r.enabled).length },
-                  { id: "failing", label: "Failing", count: scoped.filter(isFailingRoutine).length },
+                  { id: "all", label: t("common:words.all"), count: scoped.length },
+                  { id: "active", label: t("status.active"), count: scoped.filter((r) => r.enabled).length },
+                  { id: "paused", label: t("status.paused"), count: scoped.filter((r) => !r.enabled).length },
+                  { id: "failing", label: t("status.failing"), count: scoped.filter(isFailingRoutine).length },
                 ]}
               />
             )}
@@ -119,15 +121,15 @@ export default function Automations() {
               <SkeletonRows count={6} avatar={40} />
             </View>
           ) : list.isError ? (
-            <ErrorState title="Couldn't load automations" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("list.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : scoped.length ? (
-            <EmptyState icon="search" title="No automations match" action={<Button title="Clear filters" variant="secondary" onPress={() => setFilter("all")} />} />
+            <EmptyState icon="search" title={t("list.noMatch")} action={<Button title={t("list.clearFilters")} variant="secondary" onPress={() => setFilter("all")} />} />
           ) : (
             <EmptyState
               icon="clock"
-              title="No automations yet"
-              body="Set one up yourself — a morning inbox summary, a reply draft for every customer email, a watch on competitor pricing."
-              action={<Button title="New automation" icon="plus" variant="outline" onPress={openNew} />}
+              title={t("list.emptyTitle")}
+              body={t("list.emptyBody")}
+              action={<Button title={t("list.new")} icon="plus" variant="outline" onPress={openNew} />}
             />
           )
         }

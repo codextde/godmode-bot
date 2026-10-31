@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Check, Copy, KeyRound, Link2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ export function TotpCard({
   onDelete: () => void;
 }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["vault", "common"]);
   const [copiedAt, setCopiedAt] = useState<number | null>(null);
   const [peek, setPeek] = useState(false);
 
@@ -52,7 +54,7 @@ export function TotpCard({
 
   const copy = async () => {
     if (!code || expired) return;
-    await copySecret(code.code, `${entry.issuer} code copied`);
+    await copySecret(code.code, t("totpCard.codeCopied", { name: entry.issuer }));
     setCopiedAt(Date.now());
     setTimeout(() => setCopiedAt(null), 1400);
   };
@@ -77,27 +79,27 @@ export function TotpCard({
         <Favicon domain={domain} name={entry.issuer} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium tracking-[-0.01em]">{entry.issuer}</p>
-          <p className="truncate text-xs text-muted-foreground">{entry.accountName || "No account name"}</p>
+          <p className="truncate text-xs text-muted-foreground">{entry.accountName || t("totpCard.noAccount")}</p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 text-muted-foreground" aria-label={`Actions for ${entry.issuer}`}>
+            <Button variant="ghost" size="icon-sm" className="-mt-1 -mr-1 text-muted-foreground" aria-label={t("actionsFor", { name: entry.issuer })}>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem onClick={() => void copy()} disabled={expired}>
-              <Copy /> Copy code
+              <Copy /> {t("totpCard.copyCode")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(false)}>
-              <Pencil /> Edit
+              <Pencil /> {t("common:actions.edit")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onEdit(true)}>
-              <Link2 /> {entry.credentialId ? "Change linked login" : "Link to a login"}
+              <Link2 /> {entry.credentialId ? t("totpCard.changeLink") : t("totpCard.linkToLogin")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 /> Delete
+              <Trash2 /> {t("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -108,7 +110,7 @@ export function TotpCard({
           type="button"
           onClick={() => void copy()}
           disabled={expired}
-          aria-label={masked ? `Copy ${entry.issuer} code` : `Copy ${entry.issuer} code ${code?.code ?? ""}`}
+          aria-label={masked ? t("totpCard.copyNamed", { name: entry.issuer }) : t("totpCard.copyNamedCode", { name: entry.issuer, code: code?.code ?? "" })}
           className="relative -mx-2 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-default"
         >
           {code ? (
@@ -143,7 +145,7 @@ export function TotpCard({
                 exit={{ opacity: 0, y: -4 }}
                 className="absolute -top-5 left-2 rounded-[5px] border border-success/25 bg-card px-1.5 py-0.5 text-[10px] font-medium text-success shadow-card"
               >
-                Copied
+                {t("common:actions.copied")}
               </motion.span>
             )}
           </AnimatePresence>
@@ -163,13 +165,13 @@ export function TotpCard({
             onClick={() => onEdit(true)}
             className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-dashed px-1.5 text-[11px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
           >
-            <Link2 className="size-3" /> Link login
+            <Link2 className="size-3" /> {t("totpCard.linkLogin")}
           </button>
         )}
         <ScopeBadge workspaceId={entry.workspaceId} />
         {(entry.algorithm !== "SHA1" || digits !== 6 || entry.period !== 30) && (
           <Badge variant="outline" className="font-normal text-muted-foreground">
-            {[entry.algorithm !== "SHA1" && entry.algorithm, digits !== 6 && `${digits} digits`, entry.period !== 30 && `${entry.period}s`].filter(Boolean).join(" · ")}
+            {[entry.algorithm !== "SHA1" && entry.algorithm, digits !== 6 && t("otpPreview.digits", { digits }), entry.period !== 30 && `${entry.period}s`].filter(Boolean).join(" · ")}
           </Badge>
         )}
       </div>

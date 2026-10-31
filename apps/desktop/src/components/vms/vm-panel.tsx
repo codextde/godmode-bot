@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Vm } from "@godmode/shared";
@@ -58,6 +59,7 @@ function aspectOf(vm: Vm, shot?: { width: number; height: number }): string {
 
 /** What the screen area shows while there is no picture: starting, stopped, suspended… */
 function ScreenPlaceholder({ vm, failed, onStart, starting }: { vm: Vm; failed: boolean; onStart: () => void; starting: boolean }) {
+  const { t } = useTranslation("vms");
   const idle = vm.state === "stopped" || vm.state === "suspended";
   return (
     <span className="absolute inset-0 grid place-items-center bg-paper-2 px-6 text-center">
@@ -67,19 +69,19 @@ function ScreenPlaceholder({ vm, failed, onStart, starting }: { vm: Vm; failed: 
             <span className="grid size-9 place-items-center rounded-xl border bg-card text-muted-foreground shadow-card">
               <Box className="size-4" />
             </span>
-            <span className="text-xs text-muted-foreground">{vm.state === "suspended" ? "Suspended — resumes with the next message" : "Off — starts with the next message"}</span>
+            <span className="text-xs text-muted-foreground">{vm.state === "suspended" ? t("panel.suspendedHint") : t("panel.offHint")}</span>
             <Button size="xs" variant="outline" onClick={onStart} disabled={starting}>
-              {starting ? <Spinner className="size-3" /> : <Play />} {vm.state === "suspended" ? "Resume now" : "Start now"}
+              {starting ? <Spinner className="size-3" /> : <Play />} {vm.state === "suspended" ? t("panel.resumeNow") : t("panel.startNow")}
             </Button>
           </>
         ) : vm.state === "error" ? (
-          <span className="text-xs text-destructive">{vm.error ?? "The VM needs attention."}</span>
+          <span className="text-xs text-destructive">{vm.error ?? t("panel.needsAttention")}</span>
         ) : failed ? (
-          <span className="text-xs text-muted-foreground">The screen isn't available right now</span>
+          <span className="text-xs text-muted-foreground">{t("panel.screenUnavailable")}</span>
         ) : (
           <>
-            <Orb variant="C3" size={24} label="Connecting to the screen" />
-            <span className="text-shimmer text-xs font-medium">{vm.progress?.label ?? (vm.state === "running" ? "Connecting…" : `${VM_STATE_LABEL[vm.state]}…`)}</span>
+            <Orb variant="C3" size={24} label={t("panel.connectingLabel")} />
+            <span className="text-shimmer text-xs font-medium">{vm.progress?.label ?? (vm.state === "running" ? t("panel.connecting") : t("panel.stateEllipsis", { state: VM_STATE_LABEL[vm.state] }))}</span>
           </>
         )}
       </span>
@@ -88,9 +90,9 @@ function ScreenPlaceholder({ vm, failed, onStart, starting }: { vm: Vm; failed: 
 }
 
 const INSIDE = [
-  { icon: Globe, label: "Chrome" },
-  { icon: AppWindow, label: "Apps" },
-  { icon: SquareTerminal, label: "Shell" },
+  { icon: Globe, label: "panel.inside.chrome" },
+  { icon: AppWindow, label: "panel.inside.apps" },
+  { icon: SquareTerminal, label: "panel.inside.shell" },
 ] as const;
 
 /** Side panel of a chat that works in a VM: the VM's screen, what the agent is doing, and a way in. */
@@ -109,6 +111,7 @@ export function VmPanel({
   onHide: () => void;
   onFocus: () => void;
 }) {
+  const { t } = useTranslation("vms");
   const { shot, live, failed } = useVmScreen(vm, 640, !!activity);
   const { data: settings } = useSettings();
   const hostShellOff = settings?.vm.isolateHostShell !== false;
@@ -118,7 +121,7 @@ export function VmPanel({
 
   return (
     <motion.aside
-      aria-label="Virtual machine"
+      aria-label={t("picker.title")}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
@@ -127,7 +130,7 @@ export function VmPanel({
     >
       <div className="flex h-full w-80 flex-col">
         <div className={cn("flex h-14 shrink-0 items-center gap-2 border-b px-4", isTauri && isMac && "h-auto pt-7 pb-2")}>
-          <span className="text-sm font-medium">Virtual machine</span>
+          <span className="text-sm font-medium">{t("picker.title")}</span>
           {vm.state === "running" ? (
             <span
               className={cn(
@@ -136,18 +139,18 @@ export function VmPanel({
               )}
             >
               <LiveDot live={live} />
-              {live ? "Live" : "Idle"}
+              {live ? t("panel.live") : t("panel.idle")}
             </span>
           ) : (
             <VmStateBadge state={vm.state} />
           )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label="Hide the VM">
+              <Button variant="ghost" size="icon-sm" className="-mr-1.5 ml-auto text-muted-foreground" onClick={onHide} aria-label={t("panel.hide")}>
                 <PanelRightClose />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Hide the VM</TooltipContent>
+            <TooltipContent>{t("panel.hide")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -158,13 +161,13 @@ export function VmPanel({
                 <button
                   type="button"
                   onClick={onFocus}
-                  aria-label={`Watch ${vm.name} full size`}
+                  aria-label={t("panel.watchNamed", { name: vm.name })}
                   className="group/preview absolute inset-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
-                  <img src={`data:${shot.mime};base64,${shot.data}`} alt={`Screen of ${vm.name}`} draggable={false} className="absolute inset-0 size-full object-contain select-none" />
+                  <img src={`data:${shot.mime};base64,${shot.data}`} alt={t("panel.screenOf", { name: vm.name })} draggable={false} className="absolute inset-0 size-full object-contain select-none" />
                   <span className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/preview:bg-black/30 group-hover/preview:opacity-100 group-focus-visible/preview:bg-black/30 group-focus-visible/preview:opacity-100">
                     <span className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground">
-                      <Maximize2 className="size-3.5" /> Watch full size
+                      <Maximize2 className="size-3.5" /> {t("panel.watchFull")}
                     </span>
                   </span>
                 </button>
@@ -181,23 +184,23 @@ export function VmPanel({
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] leading-5 font-medium">{vm.name}</p>
               <p className="truncate text-[11px] leading-4 text-muted-foreground">
-                macOS · {vm.cpu} CPUs · {formatMemory(vm.memoryMb)}
+                {t("panel.specs", { cpu: vm.cpu, memory: formatMemory(vm.memoryMb) })}
               </p>
             </div>
           </div>
 
           <div className="rounded-lg border bg-card px-3 py-2.5 shadow-card">
-            <p className="text-[11px] font-medium text-muted-foreground">The agent works inside this VM</p>
+            <p className="text-[11px] font-medium text-muted-foreground">{t("panel.insideTitle")}</p>
             <div className="mt-2 flex gap-1.5">
               {INSIDE.map(({ icon: Icon, label }) => (
                 <span key={label} className="inline-flex h-6 flex-1 items-center justify-center gap-1.5 rounded-md border bg-paper-2 text-[11.5px] text-foreground">
                   <Icon className="size-3.5 text-muted-foreground" aria-hidden />
-                  {label}
+                  {t(label)}
                 </span>
               ))}
             </div>
             <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
-              {hostShellOff ? "Nothing opens on your Mac — no browser, no apps, no shell." : "No browser or apps open on your Mac."}
+              {hostShellOff ? t("panel.hostShellOff") : t("panel.hostShellOn")}
             </p>
           </div>
 
@@ -220,15 +223,15 @@ export function VmPanel({
 
           <div className="flex gap-2">
             <Button size="sm" className="flex-1" onClick={() => actions.open.mutate({ vm, what: "screen" })} disabled={opening || vm.state === "creating" || vm.state === "error"}>
-              {opening ? <Spinner className="size-3.5" /> : <Hand />} Take control
+              {opening ? <Spinner className="size-3.5" /> : <Hand />} {t("panel.takeControl")}
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" size="icon-sm" onClick={onFocus} disabled={!shot} aria-label="Watch full size">
+                <Button variant="outline" size="icon-sm" onClick={onFocus} disabled={!shot} aria-label={t("panel.watchFull")}>
                   <Maximize2 />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Watch full size</TooltipContent>
+              <TooltipContent>{t("panel.watchFull")}</TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -241,8 +244,8 @@ export function VmPanel({
             <Box className="size-4" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium">Virtual machines</span>
-            <span className="block truncate text-[11px] text-muted-foreground">{from ? `The VM of ${from}` : "Picked for this chat"}</span>
+            <span className="block truncate text-xs font-medium">{t("panel.footerTitle")}</span>
+            <span className="block truncate text-[11px] text-muted-foreground">{from ? t("picker.vmOf", { from }) : t("panel.picked")}</span>
           </span>
           <ArrowUpRight className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
         </Link>
@@ -253,6 +256,7 @@ export function VmPanel({
 
 /** The VM's screen full size on top of the chat; Take control opens it in Screen Sharing. */
 export function VmFocus({ vm, open, working, onClose }: { vm: Vm | null; open: boolean; working: boolean; onClose: () => void }) {
+  const { t } = useTranslation("vms");
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -275,7 +279,7 @@ export function VmFocus({ vm, open, working, onClose }: { vm: Vm | null; open: b
             key="focus"
             role="dialog"
             aria-modal
-            aria-label={`Screen of ${vm.name}`}
+            aria-label={t("panel.screenOf", { name: vm.name })}
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.15 } }}
@@ -291,6 +295,7 @@ export function VmFocus({ vm, open, working, onClose }: { vm: Vm | null; open: b
 }
 
 function VmFocusBody({ vm, working, onClose }: { vm: Vm; working: boolean; onClose: () => void }) {
+  const { t } = useTranslation("vms");
   const { shot, live, failed } = useVmScreen(vm, 1440, true);
   const actions = useVmActions();
   const opening = actions.open.isPending && actions.open.variables?.vm.id === vm.id;
@@ -311,28 +316,28 @@ function VmFocusBody({ vm, working, onClose }: { vm: Vm; working: boolean; onClo
               )}
             >
               <LiveDot live={live} />
-              {live ? "Live" : "Idle"}
+              {live ? t("panel.live") : t("panel.idle")}
             </span>
           ) : (
             <VmStateBadge state={vm.state} />
           )}
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={() => actions.open.mutate({ vm, what: "screen" })} disabled={opening || vm.state === "creating" || vm.state === "error"}>
-              {opening ? <Spinner className="size-3.5" /> : <Hand />} Take control
+              {opening ? <Spinner className="size-3.5" /> : <Hand />} {t("panel.takeControl")}
             </Button>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Exit focus view">
+                <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label={t("panel.exitFocus")}>
                   <Minimize2 />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Exit focus view</TooltipContent>
+              <TooltipContent>{t("panel.exitFocus")}</TooltipContent>
             </Tooltip>
           </div>
         </div>
         <div className="relative min-h-0 flex-1 bg-[#1c1b19]">
           {shot ? (
-            <img src={`data:${shot.mime};base64,${shot.data}`} alt={`Screen of ${vm.name}`} draggable={false} className="absolute inset-0 size-full object-contain select-none" />
+            <img src={`data:${shot.mime};base64,${shot.data}`} alt={t("panel.screenOf", { name: vm.name })} draggable={false} className="absolute inset-0 size-full object-contain select-none" />
           ) : (
             <ScreenPlaceholder vm={vm} failed={failed} onStart={() => actions.start.mutate(vm)} starting={starting} />
           )}
@@ -344,15 +349,16 @@ function VmFocusBody({ vm, working, onClose }: { vm: Vm; working: boolean; onClo
 
 /** Header button that brings the VM panel back once it's hidden (or opens the screen full size on narrow windows). */
 export function VmToggle({ working, onClick }: { working: boolean; onClick: () => void }) {
+  const { t } = useTranslation("vms");
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label="Show the VM" onClick={onClick} className="relative text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" aria-label={t("panel.show")} onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
           {working && <LiveDot className="absolute top-1.5 right-1.5" />}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Show the VM</TooltipContent>
+      <TooltipContent>{t("panel.show")}</TooltipContent>
     </Tooltip>
   );
 }

@@ -1,0 +1,759 @@
+{
+  "status": {
+    "backlog": {
+      "label": "Backlog",
+      "hint": "Parked. Assigning an agent here never starts it."
+    },
+    "todo": {
+      "label": "Todo",
+      "hint": "Queued. A task here with an agent starts that agent — the most urgent first."
+    },
+    "in_progress": {
+      "label": "In progress",
+      "hint": "The agent is working on it."
+    },
+    "in_review": {
+      "label": "In review",
+      "hint": "Delivered — waiting for your review."
+    },
+    "blocked": {
+      "label": "Blocked",
+      "hint": "Stalled: the agent needs something, the run failed or was stopped, or publishing didn't work."
+    },
+    "done": {
+      "label": "Done",
+      "hint": "Completed. Set automatically when the pull request merges."
+    },
+    "cancelled": {
+      "label": "Cancelled",
+      "hint": "Decided not to do it."
+    }
+  },
+  "type": {
+    "general": {
+      "label": "Task",
+      "hint": "The agent does it and reports back."
+    },
+    "coding": {
+      "label": "Coding",
+      "hint": "Works on its own branch and worktree, opens a pull request."
+    },
+    "research": {
+      "label": "Research",
+      "hint": "The agent investigates and writes a report."
+    }
+  },
+  "pause": {
+    "needsOk": "Needs your OK",
+    "needsOkTitle": "Needs your OK: {{title}}",
+    "needsAnswer": "Needs your answer",
+    "needsAnswerTitle": "Needs your answer: {{title}}",
+    "limit": "Waiting — Claude's {{limit}} is reached",
+    "usageLimit": "usage limit",
+    "paused": "Paused"
+  },
+  "priority": {
+    "urgent": "Urgent",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "none": "No priority"
+  },
+  "blocked": {
+    "needs_input": {
+      "title": "{{agent}} needs something from you",
+      "cardPrefix": "Needs you:"
+    },
+    "failed": {
+      "title": "The run failed",
+      "cardPrefix": "Failed:"
+    },
+    "stopped": {
+      "title": "Stopped",
+      "cardPrefix": "Stopped:"
+    },
+    "interrupted": {
+      "title": "Interrupted by a restart",
+      "cardPrefix": "Interrupted:"
+    },
+    "publish": {
+      "title": "Couldn't publish the work",
+      "cardPrefix": "Publishing failed:"
+    },
+    "setup": {
+      "title": "Couldn't set it up",
+      "cardPrefix": "Setup:"
+    },
+    "manual": {
+      "title": "Blocked"
+    }
+  },
+  "waiting": {
+    "parts_one": "Waiting for {{count}} part",
+    "parts_other": "Waiting for {{count}} parts",
+    "partsBlocked_one": "Waiting for {{count}} part · {{blocked}} blocked",
+    "partsBlocked_other": "Waiting for {{count}} parts · {{blocked}} blocked",
+    "continues": "Waiting — continues {{when}}"
+  },
+  "due": {
+    "tomorrow": "Tomorrow"
+  },
+  "work": {
+    "seconds": "{{n}}s",
+    "minutes": "{{n}}m",
+    "hours": "{{h}}h {{m}}m",
+    "needsOk": "{{name}} needs your OK",
+    "waitingAnswer": "{{name}} is waiting for your answer",
+    "limitReached": "Claude's {{limit}} is reached",
+    "pausedUser": "{{name}} picks the work up where it stopped.",
+    "pausedAuto": "{{name}} continues by itself {{when}}, where it stopped.",
+    "limitResets": "The limit resets {{when}} — continue it then.",
+    "continueWhenReset": "Continue it when the limit has reset.",
+    "continueNow": "Continue now",
+    "workingOnIt": "{{name}} is working on it",
+    "working": "Working on it",
+    "watchLive": "Watch live",
+    "plan": "{{name}}'s plan: {{note}}",
+    "cancelFollowup": "Cancel follow-up",
+    "cancelFollowupHint": "{{name}} won't continue on its own — the task goes to In review",
+    "needsAttention": "Something needs your attention.",
+    "timedOut": "It hit the run's time limit. Try again, or split the task into smaller ones.",
+    "interrupted": "Godmode restarted while {{name}} was working. It continues in the same chat, with what it did so far.",
+    "assignToGoOn": "Assign an agent to go on.",
+    "answer": "Answer",
+    "publishing": "Publishing…",
+    "publishAgain": "Publish again",
+    "delivered": "Delivered — ready for your review",
+    "branchPushed": "Branch pushed — open the pull request on {{host}}",
+    "review": "Review",
+    "merging": "Merging…",
+    "requestChanges": "Request changes",
+    "mergesInto": "Merges #{{number}} into <code>{{branch}}</code> on {{host}} and moves the ticket to Done.",
+    "waitsFor_one": "Waits for {{list}} — {{name}} starts by itself once it is delivered, with its result.",
+    "waitsFor_other": "Waits for {{list}} — {{name}} starts by itself once they are delivered, with their result.",
+    "startWithoutWaiting": "Start without waiting",
+    "readyFor": "Ready for {{name}}.",
+    "assignStarts": "Assign an agent — it starts right away.",
+    "assignAndMove": "Assign an agent and move it to Todo to start it.",
+    "reasonPlaceholder": "Add a reason…",
+    "reasonLabel": "Why it is blocked"
+  },
+  "archive": {
+    "oneArchived": "#{{number}} archived",
+    "oneRestored": "#{{number}} back on the board",
+    "manyArchived_one": "{{count}} task archived",
+    "manyArchived_other": "{{count}} tasks archived",
+    "manyRestored_one": "{{count}} task back on the board",
+    "manyRestored_other": "{{count}} tasks back on the board",
+    "archiveError": "Could not archive",
+    "restoreError": "Could not restore"
+  },
+  "card": {
+    "queued": "Queued — waiting for a free slot",
+    "working": "Working…",
+    "overdueDays": "Overdue · {{n}}d",
+    "aria": {
+      "due": "due {{date}}",
+      "overdue": "overdue",
+      "partOf": "part of #{{number}}",
+      "waitsFor": "waits for {{list}}"
+    },
+    "partsFinished": "{{done}} of {{total}} parts finished",
+    "partOf": "Part of #{{number}}",
+    "global": "Global",
+    "waitsFor": "Waits for {{list}}",
+    "restartedMidRun": "Godmode restarted mid-run.",
+    "unassigned": "Unassigned",
+    "due": "Due {{date}}",
+    "files_one": "{{count}} attached file",
+    "files_other": "{{count}} attached files",
+    "elapsedMinutes": "{{m}}m {{s}}s",
+    "elapsedHours": "{{h}}h {{m}}m"
+  },
+  "pr": {
+    "openNew": "Open pull request",
+    "merged": "#{{number}} merged",
+    "closed": "#{{number}} closed",
+    "open": "#{{number}} open"
+  },
+  "event": {
+    "approved": {
+      "you": "{{a}} approved it",
+      "other": "{{a}} approved it"
+    },
+    "markedDone": {
+      "you": "{{a}} marked it done",
+      "other": "{{a}} marked it done"
+    },
+    "cancelled": {
+      "you": "{{a}} cancelled it",
+      "other": "{{a}} cancelled it"
+    },
+    "reopened": {
+      "you": "{{a}} reopened it",
+      "other": "{{a}} reopened it"
+    },
+    "movedBlocked": {
+      "you": "{{a}} moved it to Blocked",
+      "other": "{{a}} moved it to Blocked"
+    },
+    "restarted": {
+      "you": "{{a}} restarted it",
+      "other": "{{a}} restarted it"
+    },
+    "stopped": {
+      "you": "{{a}} stopped it",
+      "other": "{{a}} stopped it"
+    },
+    "moved": {
+      "you": "{{a}} moved it from {{from}} to {{to}}",
+      "other": "{{a}} moved it from {{from}} to {{to}}"
+    },
+    "assignedTo": {
+      "you": "{{a}} assigned it to {{name}}",
+      "other": "{{a}} assigned it to {{name}}"
+    },
+    "tookOff": {
+      "you": "{{a}} took {{name}} off it",
+      "other": "{{a}} took {{name}} off it"
+    },
+    "handed": {
+      "you": "{{a}} handed it from {{from}} to {{to}}",
+      "other": "{{a}} handed it from {{from}} to {{to}}"
+    },
+    "archived": {
+      "you": "{{a}} archived it",
+      "other": "{{a}} archived it"
+    },
+    "restored": {
+      "you": "{{a}} put it back on the board",
+      "other": "{{a}} put it back on the board"
+    },
+    "retryMore": {
+      "you": "{{a}} tried once more on its own",
+      "other": "{{a}} tried once more on its own"
+    },
+    "retry": {
+      "you": "{{a}} tried again on its own after the run failed",
+      "other": "{{a}} tried again on its own after the run failed"
+    },
+    "started": {
+      "you": "{{a}} started working",
+      "other": "{{a}} started working"
+    },
+    "continuedPlanned": {
+      "you": "{{a}} continued as planned",
+      "other": "{{a}} continued as planned"
+    },
+    "heartbeat": {
+      "you": "{{a}} picked it up on its heartbeat",
+      "other": "{{a}} picked it up on its heartbeat"
+    },
+    "startedOver": {
+      "you": "{{a}} started over",
+      "other": "{{a}} started over"
+    },
+    "pickedUp": {
+      "you": "{{a}} picked it up again",
+      "other": "{{a}} picked it up again"
+    },
+    "waitingFor": {
+      "you": "{{a}} is waiting for {{list}}",
+      "other": "{{a}} is waiting for {{list}}"
+    },
+    "waitingContinues": {
+      "you": "{{a}} is waiting — continues {{when}}",
+      "other": "{{a}} is waiting — continues {{when}}"
+    },
+    "delivered": {
+      "you": "{{a}} delivered",
+      "other": "{{a}} delivered"
+    },
+    "deliveredPr": {
+      "you": "{{a}} delivered — pull request #{{number}}",
+      "other": "{{a}} delivered — pull request #{{number}}"
+    },
+    "needsInput": {
+      "you": "{{a}} needs something from you",
+      "other": "{{a}} needs something from you"
+    },
+    "requestedChanges": {
+      "you": "{{a}} requested changes",
+      "other": "{{a}} requested changes"
+    },
+    "answered": {
+      "you": "{{a}} answered",
+      "other": "{{a}} answered"
+    },
+    "reopenedMessage": {
+      "you": "{{a}} reopened it with a message",
+      "other": "{{a}} reopened it with a message"
+    },
+    "wrote": {
+      "you": "{{a}} wrote",
+      "other": "{{a}} wrote"
+    },
+    "noted": {
+      "you": "{{a}} noted",
+      "other": "{{a}} noted"
+    },
+    "mergedPr": {
+      "you": "{{a}} merged pull request #{{number}}",
+      "other": "{{a}} merged pull request #{{number}}"
+    },
+    "askedTask": {
+      "you": "{{a}} gave you a task",
+      "other": "{{a}} gave you a task"
+    },
+    "askedOk": {
+      "you": "{{a}} asked you for an OK",
+      "other": "{{a}} asked you for an OK"
+    },
+    "asked": {
+      "you": "{{a}} asked you",
+      "other": "{{a}} asked you"
+    },
+    "taskDeclined": {
+      "you": "{{a}} couldn't do the task",
+      "other": "{{a}} couldn't do the task"
+    },
+    "taskDone": {
+      "you": "{{a}} did the task",
+      "other": "{{a}} did the task"
+    },
+    "approvedPlain": {
+      "you": "{{a}} approved",
+      "other": "{{a}} approved"
+    },
+    "declined": {
+      "you": "{{a}} declined",
+      "other": "{{a}} declined"
+    },
+    "pickedUpSubtasks": {
+      "you_one": "{{a}} picked it up again — {{list}} is done",
+      "you_other": "{{a}} picked it up again — {{list}} are done",
+      "other_one": "{{a}} picked it up again — {{list}} is done",
+      "other_other": "{{a}} picked it up again — {{list}} are done"
+    },
+    "actor": {
+      "you": "You",
+      "agent": "An agent"
+    },
+    "fallback": {
+      "anAgent": "an agent",
+      "theAgent": "the agent",
+      "anotherAgent": "another agent"
+    },
+    "later": "later",
+    "stoppedEarly": "Stopped before it finished",
+    "prOpened": "Pull request #{{number}} opened",
+    "branchPushed": "Branch pushed — the pull request still has to be opened",
+    "prMergedAuto": "Pull request #{{number}} merged automatically",
+    "prMerged": "Pull request #{{number}} merged",
+    "prClosed": "Pull request #{{number}} closed without merging"
+  },
+  "timeline": {
+    "goneAgent": "An agent that no longer exists",
+    "title": "Activity",
+    "loadError": "Couldn't load the activity.",
+    "youFiled": "You filed this",
+    "filed": "{{name}} filed this",
+    "showEarlier_one": "Show earlier activity ({{count}})",
+    "showEarlier_other": "Show earlier activity ({{count}})",
+    "sending": "Sending…",
+    "resultAbove": "— the result above",
+    "hideResult": "Hide this result",
+    "showResult": "Show this result",
+    "files": "Files: {{list}}"
+  },
+  "fields": {
+    "global": "global",
+    "status": "Status",
+    "type": "Type",
+    "priority": "Priority",
+    "dueDate": "Due date",
+    "overdueBy_one": "overdue by {{count}} day",
+    "overdueBy_other": "overdue by {{count}} days",
+    "removeDueDate": "Remove the due date",
+    "noDueDate": "No due date",
+    "removeLabel": "Remove label {{label}}",
+    "maxLabels_one": "Up to {{count}} label",
+    "maxLabels_other": "Up to {{count}} labels",
+    "addLabelPlaceholder": "Add a label…",
+    "addLabel": "Add a label"
+  },
+  "archived": {
+    "previous7": "Previous 7 days",
+    "previous30": "Previous 30 days",
+    "noMatch": "No archived tasks match",
+    "emptyTitle": "Nothing archived yet",
+    "tryAnotherFilter": "Try another filter.",
+    "emptyDescription": "Archive finished work to keep the board focused: right-click a card, or clear a whole Done column from its header. Archived tasks keep everything and come back in one click.",
+    "clearFilters": "Clear filters",
+    "archivedAt": "Archived {{date}}",
+    "restore": "Restore",
+    "deleteNumber": "Delete #{{number}}",
+    "deleteForever": "Delete forever"
+  },
+  "goals": {
+    "label": "Goals",
+    "goal": "Goal",
+    "add": "Add a goal",
+    "hideFinished": "Hide finished",
+    "finished_one": "{{count}} finished",
+    "finished_other": "{{count}} finished",
+    "intro": "Goals say what the work is for — tickets that serve one tell their agent why, and you see how far it is.",
+    "changeError": "Couldn't change the goal",
+    "deleted": "“{{title}}” deleted",
+    "deletedDescription": "Its tickets stay, serving no goal.",
+    "deleteError": "Couldn't delete the goal",
+    "progress": "{{done}} of {{total}} done",
+    "noTickets": "No tickets yet",
+    "moreFor": "More for {{title}}",
+    "markAchieved": "Mark achieved",
+    "drop": "Drop it",
+    "reactivate": "Make it active again",
+    "deleteTitle": "Delete “{{title}}”?",
+    "deleteDescription_one": "Its ticket stays, serving no goal. To keep it on record, mark it achieved or drop it instead.",
+    "deleteDescription_other": "Its {{count}} tickets stay, serving no goal. To keep it on record, mark it achieved or drop it instead.",
+    "deleteDescriptionEmpty": "No ticket serves it yet. To keep it on record, mark it achieved or drop it instead.",
+    "keep": "Keep it",
+    "saved": "Goal saved",
+    "added": "Goal “{{title}}” added",
+    "addedDescription": "File tickets under it — their agents are told why.",
+    "saveError": "Couldn't save the goal",
+    "editTitle": "Edit goal",
+    "newTitle": "New goal",
+    "dialogDescription": "What the work is for. Tickets that serve it tell their agent why.",
+    "titlePlaceholder": "Launch the new pricing",
+    "why": "Why it matters",
+    "whyPlaceholder": "Raise revenue per customer by 20% this quarter — the agents get this with every ticket.",
+    "targetDate": "Target date",
+    "addGoal": "Add goal"
+  },
+  "fix": {
+    "filed": "Ticket #{{number}} filed",
+    "filedMerge": "The fix goes into {{branch}} once it's done.",
+    "filedReview": "You review the pull request when it's done.",
+    "fileError": "Couldn't file the fix",
+    "anAgent": "An agent",
+    "title": "Fix in code",
+    "description": "{{who}} gets this computer's log as a ticket, finds the causes in Godmode's code and fixes them, with tests.",
+    "noRepo": "<b>Which repository?</b> Add Godmode's source repository (or your fork) under Self-repair first.",
+    "openSettings": "Open settings",
+    "moreInLog_one": "and {{count}} more in the log",
+    "moreInLog_other": "and {{count}} more in the log",
+    "noteLabel": "What did you notice?",
+    "notePlaceholder": "Optional, e.g. “Chats stop after a few minutes”",
+    "mergeLabel": "Merge into {{branch}} when done",
+    "mergeOn": "No review step: the pull request is merged as soon as the fix is delivered.",
+    "mergeOff": "The pull request waits for your review.",
+    "filing": "Filing…",
+    "submit": "File the fix"
+  },
+  "board": {
+    "continuing_one": "Continuing {{count}} task",
+    "continuing_other": "Continuing {{count}} tasks",
+    "continueAll_one": "Continue {{count}} interrupted task",
+    "continueAll_other": "Continue all {{count}} interrupted tasks",
+    "archiveAllLabel": "Archive all {{label}} tasks",
+    "archiveAll_one": "Archive {{count}} — off the board, never deleted",
+    "archiveAll_other": "Archive all {{count}} — off the board, never deleted",
+    "fold": "Fold {{label}}",
+    "addTo": "Add a task to {{label}}",
+    "dropHere": "Drop here",
+    "addTask": "Add task",
+    "showColumn": "Show {{label}} ({{count}})",
+    "quickAddPlaceholder": "What needs to be done?",
+    "quickAddHint": "Enter to add · Esc to close"
+  },
+  "actions": {
+    "continue": "Continue",
+    "startAgain": "Start again",
+    "openChat": "Open chat",
+    "approveMerge": "Approve & merge",
+    "approve": "Approve",
+    "requestChangesMenu": "Request changes…",
+    "answerMenu": "Answer…",
+    "reopen": "Reopen",
+    "start": "Start",
+    "archive": "Archive",
+    "deleteMenu": "Delete…"
+  },
+  "dialog": {
+    "onIt": "{{name}} is on it",
+    "created": "#{{number}} created",
+    "createError": "Could not create the task",
+    "waitUpload": "Wait for the upload to finish",
+    "waitUploadDescription": "Then close — the task is kept as a draft.",
+    "newPart": "New part of #{{number}}",
+    "newTask": "New task",
+    "srDescription": "Give the task a title and a description — paste or drop images, PDFs and files into it.",
+    "smaller": "Smaller",
+    "larger": "Larger",
+    "title": "Title",
+    "titlePlaceholder": "Task title",
+    "descriptionPlaceholder": "Add a description… Paste or drop screenshots and files, type - for a list or [] for a checklist.",
+    "repository": "Repository",
+    "anotherRepo": "Another repository…",
+    "repoUrl": "Repository URL",
+    "baseBranch": "Base branch",
+    "defaultBranch": "default",
+    "repoHint": "The task gets its own git worktree on a new branch. Godmode opens a pull request when the agent is done — with your own git and GitHub CLI login.",
+    "repoHintWithTip": "Tip: add repositories to the workspace to pick them here. The task gets its own git worktree on a new branch. Godmode opens a pull request when the agent is done — with your own git and GitHub CLI login.",
+    "willStart": "{{name}} will start working right after creation.",
+    "noAgent": "No agent",
+    "removeGoal": "Don't file it under “{{title}}”",
+    "workspace": "Workspace",
+    "project": "Project",
+    "noProject": "No project",
+    "attach": "Attach files",
+    "attachTitle": "Attach images, PDFs or other files",
+    "createAnother": "Create another",
+    "uploading": "Uploading…",
+    "createStart": "Create & start",
+    "create": "Create task"
+  },
+  "editor": {
+    "tooLarge": "{{name}} is too large",
+    "maxSize": "Files can be up to {{size}}.",
+    "attachError": "Could not attach {{name}}",
+    "removeName": "Remove {{name}}",
+    "unavailable": "{{name}} isn't available anymore",
+    "imageUnavailable": "Image isn't available anymore",
+    "image": "image",
+    "doubleClickDownload": "{{name}} — double-click to download",
+    "uploadingName": "Uploading {{name}}…",
+    "heading": "Heading",
+    "bold": "Bold",
+    "italic": "Italic",
+    "strikethrough": "Strikethrough",
+    "inlineCode": "Inline code",
+    "bulletList": "Bulleted list",
+    "numberedList": "Numbered list",
+    "checklist": "Checklist",
+    "quote": "Quote",
+    "codeBlock": "Code block",
+    "attachHint": "or paste / drop them into the text",
+    "link": "Link",
+    "linkAddress": "Link address",
+    "dropToAttach": "Drop to attach"
+  },
+  "sheet": {
+    "uploadPending": "The file is still on its way into the description.",
+    "updateError": "Could not update the task",
+    "more": "More",
+    "restoreToBoard": "Restore to the board",
+    "archiveTask": "Archive task",
+    "deleteTask": "Delete task",
+    "archivedBanner": "<b>Archived</b> {{when}} — off the board, nothing is lost.",
+    "srDescription": "Task details",
+    "waitsFor": "Waits for",
+    "labels": "Labels",
+    "branch": "Branch",
+    "copyBranch": "Copy branch name",
+    "defaultBranch": "default branch",
+    "merge": "Merge",
+    "autoMergeLabel": "Merge the pull request by itself once delivered",
+    "autoMergeOn": "Into <code>{{branch}}</code> by itself once delivered",
+    "theDefaultBranch": "the default branch",
+    "afterReview": "After your review",
+    "worktree": "Worktree",
+    "copyWorktree": "Copy the worktree's path",
+    "theAgent": "The agent",
+    "theAgentLower": "the agent",
+    "anAgent": "an agent",
+    "previousResult": "Previous result",
+    "report": "Report",
+    "result": "Result",
+    "dateFormat": "d MMM yyyy, p",
+    "filedByYou": "Filed by you on {{date}}",
+    "filedBy": "Filed by {{name}} on {{date}}",
+    "worked_one": "{{name}} worked {{time}} in {{count}} run",
+    "worked_other": "{{name}} worked {{time}} in {{count}} runs",
+    "workedSoFar_one": "{{name}} worked {{time}} in {{count}} run so far",
+    "workedSoFar_other": "{{name}} worked {{time}} in {{count}} runs so far",
+    "closedAgo": "closed {{when}}",
+    "stopWaiting": "Stop waiting for #{{number}}",
+    "waitForAnother": "Wait for another ticket",
+    "alsoWaitFor": "Also wait for…",
+    "waitForTicket": "Wait for a ticket…",
+    "nothing": "Nothing",
+    "partGoal": "A part serves its ticket's goal",
+    "noGoal": "No goal",
+    "publishError": "Couldn't publish",
+    "approvedToast": "#{{number}} approved",
+    "reopenedToast": "#{{number}} reopened",
+    "addDescription": "Add a description",
+    "editDescription": "Edit the description",
+    "addDescriptionPlaceholder": "Add a description…",
+    "descriptionKinds": "Text, checklists, screenshots, files",
+    "descriptionPlaceholder": "Details, acceptance criteria, links… Type # for a heading, - for a list, [] for a checklist.",
+    "notSaved": "Not saved",
+    "savesAsYouType": "Saves as you type · paste or drop screenshots and files"
+  },
+  "parts": {
+    "title": "Parts",
+    "titleCount": "Parts · {{done}} of {{total}} finished",
+    "add": "Add a part",
+    "partOf": "Part of <link>#{{number}} {{title}}</link>",
+    "archived_one": "{{count}} more part is archived.",
+    "archived_other": "{{count}} more parts are archived.",
+    "hint": "Split the work: each part is a ticket of its own, and this one waits until they're finished."
+  },
+  "github": {
+    "pushError": "Couldn't push the branch",
+    "prOpen": "Pull request #{{number}} is open",
+    "view": "View",
+    "createError": "Couldn't create the pull request",
+    "openBranch": "Open the branch on GitHub",
+    "openOnGithub": "Open on GitHub",
+    "pushAndOpenLabel": "Push the branch and open it on GitHub",
+    "pushAndOpen": "Push to GitHub and open",
+    "creating": "Creating…",
+    "createPr": "Create PR",
+    "pushChangesHint": "Push the latest changes and open a pull request into {{branch}}",
+    "pushBranchHint": "Push the branch and open a pull request into {{branch}}"
+  },
+  "reply": {
+    "sendError": "Could not send",
+    "answer": "Answer {{name}}…",
+    "changePr": "What should {{name}} change? The pull request updates.",
+    "change": "What should {{name}} change?",
+    "howToGoOn": "Tell {{name}} how to go on…",
+    "continuesNow": "Message {{name}} — it continues right away",
+    "readsLater": "Message {{name}} — it reads it when this run is done",
+    "reopens": "Something still missing? Tell {{name}} — the task reopens.",
+    "message": "Message {{name}}…"
+  },
+  "page": {
+    "assignToStart": "Assign an agent to start it",
+    "assign": "Assign",
+    "movedToBlocked": "#{{number}} moved to Blocked",
+    "addReason": "Add a reason",
+    "moveError": "Could not move the task",
+    "mergedInto": "#{{number}} merged into {{branch}}",
+    "prMergedDone": "Pull request #{{number}} is merged and the ticket is done.",
+    "prMerged": "Pull request #{{number}} is merged.",
+    "queuedToMerge": "#{{number}} is queued to merge",
+    "queuedToMergeDescription": "The ticket moves to Done once GitHub merges it.",
+    "approveError": "Could not approve the task",
+    "mergeError": "Couldn't merge #{{number}}",
+    "markDoneAnyway": "Mark done anyway",
+    "reassignError": "Could not change the agent",
+    "addError": "Could not add the task",
+    "deleted": "#{{number}} deleted",
+    "deleteError": "Could not delete the task",
+    "title": "Agent tasks",
+    "descriptionScoped": "{{scope}} — tickets you hand to your agents.",
+    "descriptionGlobal": "Global tasks — tickets you hand to your agents.",
+    "descriptionAll": "Every workspace's board of tickets you hand to your agents.",
+    "connectRepo": "Connect a repository",
+    "board": "Board",
+    "archived": "Archived",
+    "filterPlaceholder": "Filter tasks…",
+    "filterLabel": "Filter tasks",
+    "allAgents": "All agents",
+    "filter": "Filter",
+    "due": {
+      "label": "Due",
+      "overdue": "Overdue",
+      "week": "Due in 7 days",
+      "none": "No due date"
+    },
+    "noLabels": "No labels yet",
+    "archivedInfo_one": "<n>{{count}}</n> archived · restoring puts a task back on top of its column",
+    "archivedInfo_other": "<n>{{count}}</n> archived · restoring puts a task back on top of its column",
+    "showing": "Showing <n>{{visible}}</n> of <n>{{total}}</n>",
+    "stats": {
+      "overdue_one": "{{count}} overdue",
+      "overdue_other": "{{count}} overdue",
+      "running_one": "{{count}} running",
+      "running_other": "{{count}} running",
+      "inReview_one": "{{count}} in review",
+      "inReview_other": "{{count}} in review",
+      "blocked_one": "{{count}} blocked",
+      "blocked_other": "{{count}} blocked",
+      "total_one": "{{count}} total",
+      "total_other": "{{count}} total"
+    },
+    "loadError": "Couldn't load the board",
+    "noMatch": "No tasks match",
+    "noMatchDescription": "Nothing on this board fits the filters.",
+    "deleteTitle": "Delete #{{number}}?",
+    "deleteText": "The task is gone for good. The agent's conversation is kept.",
+    "deleteTextBranch": "The task is gone for good and its worktree is removed (a pushed branch and pull request stay). The agent's conversation is kept.",
+    "deleteArchiveHint": "To just get it off the board, archive it — you can restore it anytime.",
+    "archiveInstead": "Archive instead"
+  },
+  "stop": {
+    "keepAgent": "Keep {{who}}",
+    "keepWaiting": "Keep waiting",
+    "takeOff": {
+      "title": "Take {{who}} off #{{number}}?",
+      "text": "The run stops and the task is parked in the Backlog.",
+      "confirm": "Take off"
+    },
+    "handOver": {
+      "title": "Hand #{{number}} to {{next}}?",
+      "text": "{{who}} is still on it. {{ends}} and {{next}} starts over.",
+      "confirm": "Hand over",
+      "runStops": "{{who}}'s run stops",
+      "followupCancelled": "{{who}}'s follow-up is cancelled",
+      "runEnds": "{{who}}'s run ends"
+    },
+    "endConfirm": {
+      "archive": "End and archive",
+      "move": "End and move"
+    },
+    "working": {
+      "title": "Stop the agent?",
+      "keep": "Keep working",
+      "text": {
+        "archive": "{{who}} is still working on #{{number}}. Archiving it stops the run and parks the task in the Backlog.",
+        "move": "{{who}} is still working on #{{number}}. Moving it to {{status}} stops the run."
+      },
+      "confirm": {
+        "archive": "Stop and archive",
+        "move": "Stop and move"
+      }
+    },
+    "question": {
+      "title": "Drop the question?",
+      "text": {
+        "archive": "{{who}} is waiting for your answer on #{{number}}. Archiving it ends the run and parks the task in the Backlog — it can't be continued afterwards.",
+        "move": "{{who}} is waiting for your answer on #{{number}}. Moving it to {{status}} ends the run — it can't be continued afterwards."
+      }
+    },
+    "limit": {
+      "title": "End the waiting run?",
+      "text": {
+        "archive": "#{{number}} waits for Claude's {{limit}} to reset. Archiving it ends the run and parks the task in the Backlog — it can't be continued afterwards.",
+        "move": "#{{number}} waits for Claude's {{limit}} to reset. Moving it to {{status}} ends the run — it can't be continued afterwards."
+      }
+    },
+    "paused": {
+      "title": "End the paused run?",
+      "keep": "Keep it paused",
+      "text": {
+        "archive": "#{{number}} is paused. Archiving it ends the run and parks the task in the Backlog — it can't be continued afterwards.",
+        "move": "#{{number}} is paused. Moving it to {{status}} ends the run — it can't be continued afterwards."
+      }
+    },
+    "followup": {
+      "title": "Cancel the follow-up?",
+      "text": {
+        "archive": "{{who}} plans to continue #{{number}}. Archiving it cancels that and parks the task in the Backlog.",
+        "move": "{{who}} plans to continue #{{number}}. Moving it to {{status}} cancels that."
+      },
+      "textWhen": {
+        "archive": "{{who}} plans to continue #{{number}} {{when}}. Archiving it cancels that and parks the task in the Backlog.",
+        "move": "{{who}} plans to continue #{{number}} {{when}}. Moving it to {{status}} cancels that."
+      },
+      "confirm": {
+        "archive": "Cancel and archive",
+        "move": "Cancel and move"
+      }
+    }
+  }
+}

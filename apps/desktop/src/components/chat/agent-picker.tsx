@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Agent } from "@godmode/shared";
 import { Bot, Check, ChevronDown, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AgentAvatar } from "@/components/common";
@@ -21,6 +22,7 @@ export function AgentPicker({
   onChange: (id: string) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { data: workspaces = [] } = useWorkspaces();
@@ -28,7 +30,7 @@ export function AgentPicker({
   const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.agentId] : []))), [liveRuns]);
   const current = agents.find((a) => a.id === value) ?? null;
 
-  const wsName = (id: string | null) => (id ? (workspaces.find((w) => w.id === id)?.name ?? "Workspace") : "Global");
+  const wsName = (id: string | null) => (id ? (workspaces.find((w) => w.id === id)?.name ?? t("agentPicker.workspace")) : t("agentPicker.global"));
   const sorted = [...agents].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
 
   return (
@@ -36,7 +38,7 @@ export function AgentPicker({
       <PopoverTrigger asChild>
         <button
           type="button"
-          aria-label={`Agent: ${current?.name ?? "choose"}`}
+          aria-label={current ? t("agentPicker.ariaChosen", { name: current.name }) : t("agentPicker.ariaChoose")}
           className={cn(
             "flex h-8 max-w-[13rem] min-w-0 items-center gap-2 rounded-lg border bg-card pr-2 pl-1 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             className,
@@ -49,16 +51,16 @@ export function AgentPicker({
               <Bot className="size-4 text-muted-foreground" />
             </span>
           )}
-          <span className="truncate font-medium @max-xs/composer:sr-only">{current?.name ?? "Choose agent"}</span>
+          <span className="truncate font-medium @max-xs/composer:sr-only">{current?.name ?? t("agentPicker.choose")}</span>
           <ChevronDown className="size-3.5 shrink-0 opacity-60" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 overflow-hidden p-0">
         <Command>
-          <CommandInput placeholder="Search agents…" />
+          <CommandInput placeholder={t("agentPicker.search")} />
           <CommandList className="max-h-80">
-            <CommandEmpty>No agents found.</CommandEmpty>
-            <CommandGroup heading="Talk to">
+            <CommandEmpty>{t("agentPicker.empty")}</CommandEmpty>
+            <CommandGroup heading={t("agentPicker.talkTo")}>
               {sorted.map((a) => (
                 <CommandItem
                   key={a.id}
@@ -73,7 +75,7 @@ export function AgentPicker({
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="truncate font-medium">{a.name}</span>
-                      {running.has(a.id) && <span className="text-shimmer text-[10.5px] font-medium">working</span>}
+                      {running.has(a.id) && <span className="text-shimmer text-[10.5px] font-medium">{t("agentPicker.working")}</span>}
                     </span>
                     <span className="block truncate text-xs text-muted-foreground">{[a.role, a.description].filter(Boolean).join(" · ") || wsName(a.workspaceId)}</span>
                   </span>
@@ -90,7 +92,7 @@ export function AgentPicker({
                   navigate("/agents/new");
                 }}
               >
-                <Plus /> Create a new agent
+                <Plus /> {t("agentPicker.create")}
               </CommandItem>
             </CommandGroup>
           </CommandList>

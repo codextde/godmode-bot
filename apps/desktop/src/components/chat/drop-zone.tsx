@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { FileText, ImageIcon, Paperclip } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { usePageScroll } from "@/components/layout/page-scroll";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ export function ChatDropZone({
   children: ReactNode;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
   const [over, setOver] = useState(false);
   const catcherRef = useRef<HTMLDivElement>(null);
   const watchdog = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -94,7 +96,7 @@ export function ChatDropZone({
         e.preventDefault();
         const { files, folders } = readDrop(e.dataTransfer);
         if (files.length) onFiles(files);
-        if (folders) toast.warning("Folders can't be attached — drop the files inside instead.");
+        if (folders) toast.warning(t("drop.foldersWarning"));
       }}
     >
       {children}
@@ -110,6 +112,7 @@ export function ChatDropZone({
 const SPRING = { type: "spring", stiffness: 420, damping: 30 } as const;
 
 function DropSurface() {
+  const { t } = useTranslation("chat");
   const reduce = useReducedMotion();
   // On a page that scrolls as a whole, the surface stays with what is on screen.
   const viewport = usePageScroll()?.clientHeight;
@@ -178,8 +181,8 @@ function DropSurface() {
             transition={{ ...SPRING, delay: 0.05 }}
             className="mt-4"
           >
-            <div className="text-[17px] font-medium tracking-[-0.01em]">Drop files to attach</div>
-            <div className="mt-1 text-sm text-muted-foreground">Images, PDFs, spreadsheets… up to 25 MB each</div>
+            <div className="text-[17px] font-medium tracking-[-0.01em]">{t("drop.title")}</div>
+            <div className="mt-1 text-sm text-muted-foreground">{t("drop.hint")}</div>
           </motion.div>
         </div>
       </motion.div>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -18,6 +19,7 @@ import { ChipInput } from "@/components/vault/chip-input";
 import { domainFromUrl, toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 
@@ -35,6 +37,7 @@ export function ImportSessionsCard({
   targetId: string | null;
   onTargetChange: (id: string) => void;
 }) {
+  const { t } = useTranslation("browser");
   const target = profiles.find((p) => p.id === targetId) ?? null;
   return (
     <section className="@container rounded-xl border bg-card p-5 shadow-card">
@@ -44,26 +47,26 @@ export function ImportSessionsCard({
             <Cookie className="size-[18px]" />
           </div>
           <div>
-            <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Import sessions</h2>
+            <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">{t("import.title")}</h2>
             <p className="mt-0.5 max-w-md text-xs text-muted-foreground">
-              Continue where Chrome left off — copy your logged-in sessions so agents don't have to sign in again.
+              {t("import.description")}
             </p>
           </div>
         </div>
         {profiles.length > 0 && (
           <div className="flex items-center gap-2">
             <Label htmlFor="import-target" className="text-xs text-muted-foreground">
-              Into
+              {t("import.into")}
             </Label>
             <Select value={targetId ?? undefined} onValueChange={onTargetChange}>
               <SelectTrigger id="import-target" size="sm" className="w-44">
-                <SelectValue placeholder="Choose profile" />
+                <SelectValue placeholder={t("import.chooseProfile")} />
               </SelectTrigger>
               <SelectContent>
                 {profiles.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
                     {p.name}
-                    {p.id === defaultId && <span className="text-muted-foreground"> · default</span>}
+                    {p.id === defaultId && <span className="text-muted-foreground"> · {t("import.defaultTag")}</span>}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -73,15 +76,15 @@ export function ImportSessionsCard({
       </div>
 
       {!target ? (
-        <p className="rounded-lg border border-dashed bg-paper-2/60 p-6 text-center text-sm text-muted-foreground">Create a browser profile first.</p>
+        <p className="rounded-lg border border-dashed bg-paper-2/60 p-6 text-center text-sm text-muted-foreground">{t("import.createFirst")}</p>
       ) : (
         <Tabs defaultValue="chrome">
           <TabsList variant="line" className="mb-3">
             <TabsTrigger value="chrome">
-              <AppWindow /> From Chrome
+              <AppWindow /> {t("import.fromChrome")}
             </TabsTrigger>
             <TabsTrigger value="json">
-              <FileJson /> Cookies JSON
+              <FileJson /> {t("import.cookiesJson")}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="chrome">
@@ -101,6 +104,7 @@ export function ImportSessionsCard({
 type Step = 1 | 2 | 3;
 
 function ChromeWizard({ target }: { target: BrowserProfile }) {
+  const { t } = useTranslation(["browser", "common"]);
   const qc = useQueryClient();
   const [step, setStep] = useState<Step>(1);
   const [source, setSource] = useState<LocalChromeProfile | null>(null);
@@ -116,7 +120,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
       setStep(3);
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
     },
-    onError: (e) => toastApiError(e, "Import failed", qc),
+    onError: (e) => toastApiError(e, t("import.failed"), qc),
   });
 
   const reset = () => {
@@ -142,20 +146,20 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
               </div>
             ) : chrome.isError ? (
               <div className="rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm">
-                <p className="font-medium text-destructive">Couldn't look for Chrome profiles</p>
+                <p className="font-medium text-destructive">{t("import.lookFailed")}</p>
                 <p className="mt-1 text-muted-foreground">{errorMessage(chrome.error)}</p>
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => chrome.refetch()}>
-                  <RefreshCw /> Try again
+                  <RefreshCw /> {t("common:actions.tryAgain")}
                 </Button>
               </div>
             ) : !chrome.data?.length ? (
               <NoChromeProfiles
                 onRetry={() => chrome.refetch()}
                 retrying={chrome.isFetching}
-                footer="You can also import a cookie export in the “Cookies JSON” tab."
+                footer={t("import.jsonFooter")}
               />
             ) : (
-              <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2" role="radiogroup" aria-label="Chrome profile to import from">
+              <div className="grid grid-cols-1 gap-2 @lg:grid-cols-2" role="radiogroup" aria-label={t("import.profileAria")}>
                 {chrome.data.map((p, i) => (
                   <ChromeProfileCard key={p.path} profile={p} index={i} selected={source?.path === p.path} onSelect={() => setSource(p)} />
                 ))}
@@ -163,7 +167,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
             )}
             <div className="mt-4 flex justify-end">
               <Button onClick={() => setStep(2)} disabled={!source}>
-                Next <ArrowRight />
+                {t("common:actions.next")} <ArrowRight />
               </Button>
             </div>
           </motion.div>
@@ -172,17 +176,17 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
         {step === 2 && source && (
           <motion.div key="s2" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.18 }} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="import-domains">Only these sites (optional)</Label>
+              <Label htmlFor="import-domains">{t("import.onlySites")}</Label>
               <ChipInput
                 id="import-domains"
                 value={domains}
                 onChange={setDomains}
                 normalize={(s) => domainFromUrl(s)}
                 validate={(s) => s.includes(".")}
-                placeholder="Leave empty to import every site — or type a domain and press Enter"
+                placeholder={t("import.domainsPlaceholder")}
               />
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-muted-foreground">Suggestions:</span>
+                <span className="text-xs text-muted-foreground">{t("import.suggestions")}</span>
                 {SUGGESTED_DOMAINS.filter((d) => !domains.includes(d)).map((d) => (
                   <button
                     key={d}
@@ -198,17 +202,16 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
             <div className="flex items-start gap-3 rounded-lg border bg-paper-2 p-3 text-xs text-muted-foreground">
               <KeyRound className="mt-0.5 size-4 shrink-0 text-foreground" />
               <p>
-                On macOS you may see a Keychain prompt — allow access so Godmode can decrypt Chrome cookies. Cookies stay on this machine and are only
-                copied into <span className="font-medium text-foreground">{target.name}</span>.
+                <Trans t={t} i18nKey="import.keychain" values={{ name: target.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
               </p>
             </div>
             <div className="flex items-center justify-between gap-2">
               <Button variant="ghost" onClick={() => setStep(1)}>
-                <ArrowLeft /> Back
+                <ArrowLeft /> {t("common:actions.back")}
               </Button>
               <Button onClick={() => importMut.mutate()} disabled={importMut.isPending}>
                 {importMut.isPending ? <Spinner /> : <Upload />}
-                {importMut.isPending ? "Importing…" : domains.length ? `Import ${domains.length} site${domains.length === 1 ? "" : "s"}` : "Import all sessions"}
+                {importMut.isPending ? t("import.importing") : domains.length ? t("import.importSites", { count: domains.length }) : t("import.importAll")}
               </Button>
             </div>
           </motion.div>
@@ -216,7 +219,7 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
 
         {step === 3 && result && (
           <motion.div key="s3" initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-            <ImportResultView result={result} source={source ? `${source.browser} — ${source.name}` : "cookie file"} onAgain={reset} />
+            <ImportResultView result={result} source={source ? `${source.browser} — ${source.name}` : t("import.cookieFile")} onAgain={reset} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -225,9 +228,10 @@ function ChromeWizard({ target }: { target: BrowserProfile }) {
 }
 
 function Stepper({ step }: { step: Step }) {
-  const steps = ["Choose profile", "Pick sites", "Done"];
+  const { t } = useTranslation("browser");
+  const steps = [t("import.steps.choose"), t("import.steps.pick"), t("import.steps.done")];
   return (
-    <ol className="mb-4 flex items-center gap-2 text-xs" aria-label="Import progress">
+    <ol className="mb-4 flex items-center gap-2 text-xs" aria-label={t("import.progressAria")}>
       {steps.map((label, i) => {
         const n = (i + 1) as Step;
         const done = step > n;
@@ -254,6 +258,7 @@ function Stepper({ step }: { step: Step }) {
 }
 
 function ChromeProfileCard({ profile: p, index, selected, onSelect }: { profile: LocalChromeProfile; index: number; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation("browser");
   return (
     <motion.button
       type="button"
@@ -274,7 +279,7 @@ function ChromeProfileCard({ profile: p, index, selected, onSelect }: { profile:
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium">{p.name}</div>
-        <div className="truncate text-xs text-muted-foreground">{p.email ?? "Not signed in"}</div>
+        <div className="truncate text-xs text-muted-foreground">{p.email ?? t("import.notSignedIn")}</div>
         <div className="truncate text-[11px] text-muted-foreground/80">
           {p.browser} · <span className="font-mono">{p.profileDir}</span>
         </div>
@@ -293,6 +298,8 @@ function ChromeProfileCard({ profile: p, index, selected, onSelect }: { profile:
 }
 
 function ImportResultView({ result, source, onAgain }: { result: ChromeImportResult; source: string; onAgain: () => void }) {
+  const { t } = useTranslation("browser");
+  const { intlLocale } = useLocale();
   const shown = result.domains.slice(0, 24);
   const more = result.domains.length - shown.length;
   const ok = result.imported > 0;
@@ -310,14 +317,14 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
         {ok ? <DrawCheck className="size-7" /> : <Cookie className="size-7" />}
       </motion.div>
       <h3 className="mt-3 text-base font-medium tracking-[-0.01em]">
-        {ok ? `Imported ${result.imported.toLocaleString()} cookie${result.imported === 1 ? "" : "s"}` : "No cookies imported"}
+        {ok ? t("import.imported", { count: result.imported, n: result.imported.toLocaleString(intlLocale) }) : t("import.noneImported")}
       </h3>
       <p className="mt-1 text-xs text-muted-foreground">
-        From {source}
-        {result.skipped > 0 && ` · ${result.skipped.toLocaleString()} skipped (expired or not matching)`}
+        {t("import.from", { source })}
+        {result.skipped > 0 && ` · ${t("import.skipped", { n: result.skipped.toLocaleString(intlLocale) })}`}
       </p>
       <Badge variant="outline" className="mt-2 font-mono text-[10px] font-normal text-muted-foreground">
-        method: {result.method}
+        {t("import.method", { method: result.method })}
       </Badge>
       {shown.length > 0 && (
         <div className="mt-4 flex max-w-lg flex-wrap justify-center gap-1.5">
@@ -332,16 +339,16 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
               {d}
             </motion.span>
           ))}
-          {more > 0 && <span className="inline-flex h-6 items-center rounded-[5px] bg-secondary px-2 text-xs text-muted-foreground">+{more} more</span>}
+          {more > 0 && <span className="inline-flex h-6 items-center rounded-[5px] bg-secondary px-2 text-xs text-muted-foreground">{t("import.more", { n: more })}</span>}
         </div>
       )}
       {ok && (
         <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <ShieldCheck className="size-3.5 text-brand-strong" /> Agents using this profile are now signed in to these sites.
+          <ShieldCheck className="size-3.5 text-brand-strong" /> {t("import.signedIn")}
         </p>
       )}
       <Button variant="outline" size="sm" className="mt-4" onClick={onAgain}>
-        <RefreshCw /> Import more
+        <RefreshCw /> {t("import.importMore")}
       </Button>
     </div>
   );
@@ -350,6 +357,7 @@ function ImportResultView({ result, source, onAgain }: { result: ChromeImportRes
 /* ------------------------------------------------------------------ */
 
 function JsonImport({ target }: { target: BrowserProfile }) {
+  const { t } = useTranslation("browser");
   const qc = useQueryClient();
   const [json, setJson] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -363,9 +371,9 @@ function JsonImport({ target }: { target: BrowserProfile }) {
       JSON.parse(trimmed);
       return null;
     } catch {
-      return "This isn't valid JSON yet.";
+      return t("import.invalidJson");
     }
-  }, [trimmed]);
+  }, [trimmed, t]);
 
   const importMut = useMutation({
     mutationFn: () => api.browser.import(target.id, { cookiesJson: trimmed }),
@@ -373,13 +381,13 @@ function JsonImport({ target }: { target: BrowserProfile }) {
       setResult(res);
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
     },
-    onError: (e) => toastApiError(e, "Import failed", qc),
+    onError: (e) => toastApiError(e, t("import.failed"), qc),
   });
 
   const onFile = async (file: File | undefined) => {
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
-      toast.error("Can't read this file", { description: "Cookie files larger than 20 MB aren't supported." });
+      toast.error(t("import.cantRead"), { description: t("import.tooLarge") });
       return;
     }
     setJson(await file.text());
@@ -390,7 +398,7 @@ function JsonImport({ target }: { target: BrowserProfile }) {
     return (
       <ImportResultView
         result={result}
-        source={fileName ?? "pasted JSON"}
+        source={fileName ?? t("import.pastedJson")}
         onAgain={() => {
           setResult(null);
           setJson("");
@@ -410,11 +418,10 @@ function JsonImport({ target }: { target: BrowserProfile }) {
       }}
     >
       <p className="text-xs text-muted-foreground">
-        Paste cookies exported by <span className="font-mono">profile-use</span>, a cookie-editor extension or a Playwright <span className="font-mono">storage_state</span>{" "}
-        file — or drop the file here.
+        <Trans t={t} i18nKey="import.jsonHint" components={{ mono: <span className="font-mono" /> }} />
       </p>
       <Textarea
-        aria-label="Cookies JSON"
+        aria-label={t("import.cookiesJson")}
         value={json}
         onChange={(e) => {
           setJson(e.target.value);
@@ -430,12 +437,12 @@ function JsonImport({ target }: { target: BrowserProfile }) {
         <div className="flex items-center gap-2">
           <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={(e) => void onFile(e.target.files?.[0])} />
           <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-            <FileJson /> Choose file…
+            <FileJson /> {t("import.chooseFile")}
           </Button>
           {fileName && <span className="max-w-48 truncate text-xs text-muted-foreground">{fileName}</span>}
         </div>
         <Button onClick={() => importMut.mutate()} disabled={!trimmed || !!parseError || importMut.isPending}>
-          {importMut.isPending ? <Spinner /> : <Upload />} Import into {target.name}
+          {importMut.isPending ? <Spinner /> : <Upload />} {t("import.importInto", { name: target.name })}
         </Button>
       </div>
     </div>

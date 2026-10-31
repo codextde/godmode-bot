@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { CircleCheck, CircleX, MessagesSquare, Phone, PhoneIncoming, PhoneOutgoing, Plus, RefreshCw, Settings2, Target, TriangleAlert } from "lucide-react";
 import type { Agent, CallPurpose, PhoneCall } from "@godmode/shared";
@@ -19,18 +20,20 @@ import { useAllAgents, useSettings } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useReduceAnimations } from "@/lib/motion";
+import { useLocale } from "@/i18n/language";
 
 const LIMIT = 200;
 const LIVE_POLL = 5_000;
 
-const GOAL_LABEL: Record<CallPurpose, string> = {
-  task: "Goal",
-  question: "Question for you",
-  inform: "News for you",
-  inbound: "What the caller wanted",
-};
+const GOAL_LABEL = {
+  task: "goalLabel.task",
+  question: "goalLabel.question",
+  inform: "goalLabel.inform",
+  inbound: "goalLabel.inbound",
+} as const satisfies Record<CallPurpose, string>;
 
 export default function CallsPage() {
+  const { t } = useTranslation(["calls", "common"]);
   const [params, setParams] = useSearchParams();
   const [dialog, setDialog] = useState(false);
   const phone = useSettings().data?.phone;
@@ -71,11 +74,11 @@ export default function CallsPage() {
       <TooltipTrigger asChild>
         <span tabIndex={phone?.enabled ? -1 : 0}>
           <Button onClick={() => setDialog(true)} disabled={!phone?.enabled}>
-            <Plus /> New call
+            <Plus /> {t("page.newCall")}
           </Button>
         </span>
       </TooltipTrigger>
-      {!phone?.enabled && <TooltipContent>Turn on phone calls in Settings first</TooltipContent>}
+      {!phone?.enabled && <TooltipContent>{t("page.turnOnFirst")}</TooltipContent>}
     </Tooltip>
   );
 
@@ -83,17 +86,13 @@ export default function CallsPage() {
     <div className="relative">
       <PageHeader
         icon={<Phone />}
-        title="Calls"
-        description={
-          live
-            ? `${live} call${live === 1 ? "" : "s"} on the line right now. The transcript and summary arrive as soon as ${live === 1 ? "it ends" : "they end"}.`
-            : "Calls your agents made and took: who they talked to, what came out of it, and every word."
-        }
+        title={t("page.title")}
+        description={live ? t("page.live", { count: live }) : t("page.description")}
         actions={
           <>
             <Button variant="outline" asChild>
               <Link to="/settings/calls">
-                <Settings2 /> Settings
+                <Settings2 /> {t("common:words.settings")}
               </Link>
             </Button>
             {newCall}
@@ -102,7 +101,7 @@ export default function CallsPage() {
       />
       <PageBody>
         {calls.isError && !calls.data ? (
-          <QueryError error={calls.error} onRetry={() => calls.refetch()} title="Couldn't load your calls" />
+          <QueryError error={calls.error} onRetry={() => calls.refetch()} title={t("page.loadError")} />
         ) : calls.isPending ? (
           <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
             <Skeleton className="h-80 rounded-xl" />
@@ -111,22 +110,17 @@ export default function CallsPage() {
         ) : list.length === 0 && !wanted ? (
           <EmptyState
             icon={<Phone />}
-            title="No calls yet"
-            description={
-              <>
-                Agents can phone a business to book an appointment, follow up with a lead, or call you when a question can't wait. Your number answers too: each
-                incoming call becomes a chat for an agent. It runs on ElevenLabs with a Twilio or SIP number.
-              </>
-            }
+            title={t("page.emptyTitle")}
+            description={t("page.emptyDescription")}
             action={
               phone?.enabled ? (
                 <Button onClick={() => setDialog(true)}>
-                  <Plus /> Place a call
+                  <Plus /> {t("page.placeCall")}
                 </Button>
               ) : (
                 <Button asChild>
                   <Link to="/settings/calls">
-                    <Settings2 /> Set up phone calls
+                    <Settings2 /> {t("page.setUp")}
                   </Link>
                 </Button>
               )
@@ -138,7 +132,7 @@ export default function CallsPage() {
             {selected ? (
               <CallDetail key={selected.id} call={selected} agent={selected.agentId ? agentById.get(selected.agentId) : undefined} />
             ) : single.isError ? (
-              <EmptyState icon={<Phone />} title="Couldn't open this call" description={errorMessage(single.error)} />
+              <EmptyState icon={<Phone />} title={t("page.openError")} description={errorMessage(single.error)} />
             ) : (
               <Skeleton className="h-[28rem] rounded-xl" />
             )}
@@ -153,8 +147,9 @@ export default function CallsPage() {
 
 function CallList({ calls, selectedId, agents, onSelect }: { calls: PhoneCall[]; selectedId: string | null; agents: Map<string, Agent>; onSelect: (id: string) => void }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("calls");
   return (
-    <ul aria-label="Calls" className="divide-y overflow-hidden rounded-xl border bg-card shadow-card @4xl:sticky @4xl:top-6">
+    <ul aria-label={t("page.title")} className="divide-y overflow-hidden rounded-xl border bg-card shadow-card @4xl:sticky @4xl:top-6">
       {calls.map((c, i) => (
         <motion.li key={c.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.025 } }}>
           <CallRow call={c} agent={c.agentId ? agents.get(c.agentId) : undefined} selected={c.id === selectedId} onSelect={() => onSelect(c.id)} />
@@ -165,6 +160,8 @@ function CallList({ calls, selectedId, agents, onSelect }: { calls: PhoneCall[];
 }
 
 function CallRow({ call: c, agent, selected, onSelect }: { call: PhoneCall; agent?: Agent; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation("calls");
+  const { dateLocale } = useLocale();
   const inbound = c.direction === "inbound";
   const DirectionIcon = inbound ? PhoneIncoming : PhoneOutgoing;
   const agentName = agent?.name ?? c.agentName;
@@ -180,16 +177,16 @@ function CallRow({ call: c, agent, selected, onSelect }: { call: PhoneCall; agen
     >
       {selected && <span aria-hidden className="absolute inset-y-2 left-0 w-0.5 rounded-full bg-foreground/70" />}
       <span className={cn("mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-4", inbound ? "text-sky-600 dark:text-sky-400" : "text-brand-strong")}>
-        <DirectionIcon aria-label={inbound ? "Incoming" : "Outgoing"} />
+        <DirectionIcon aria-label={inbound ? t("incoming") : t("outgoing")} />
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-3">
           <span className="truncate text-sm font-medium tracking-[-0.005em]">{callName(c)}</span>
           <time dateTime={c.createdAt} className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
-            {formatDistanceToNowStrict(new Date(c.createdAt), { addSuffix: true })}
+            {formatDistanceToNowStrict(new Date(c.createdAt), { addSuffix: true, locale: dateLocale })}
           </time>
         </span>
-        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{c.goal || (inbound ? "Incoming call" : "No goal given")}</span>
+        <span className="mt-0.5 block truncate text-xs text-muted-foreground">{c.goal || (inbound ? t("row.incomingCall") : t("row.noGoal"))}</span>
         <span className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
           <CallStatusPill status={c.status} />
           {c.fromOwner && <OwnerCallBadge />}
@@ -208,6 +205,8 @@ function CallRow({ call: c, agent, selected, onSelect }: { call: PhoneCall; agen
 
 function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["calls", "common"]);
+  const { dateLocale } = useLocale();
   const inbound = c.direction === "inbound";
   const active = isCallActive(c);
   const DirectionIcon = inbound ? PhoneIncoming : PhoneOutgoing;
@@ -228,31 +227,31 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
                   <span aria-hidden>·</span>
                 </>
               )}
-              <span>{inbound ? "Incoming" : "Outgoing"}</span>
+              <span>{inbound ? t("incoming") : t("outgoing")}</span>
               <span aria-hidden>·</span>
-              <time dateTime={c.createdAt}>{format(new Date(c.createdAt), "EEE, MMM d · HH:mm")}</time>
+              <time dateTime={c.createdAt}>{format(new Date(c.createdAt), t("detail.dateFormat"), { locale: dateLocale })}</time>
             </p>
           </div>
         </div>
         {c.conversationId && (
           <Button variant="outline" size="sm" asChild>
             <Link to={`/chat/${c.conversationId}`}>
-              <MessagesSquare /> Open chat
+              <MessagesSquare /> {t("detail.openChat")}
             </Link>
           </Button>
         )}
       </header>
 
       <dl className="grid grid-cols-2 gap-px border-y bg-border @2xl:grid-cols-4">
-        <Fact label="Status">
+        <Fact label={t("detail.status")}>
           <span className="flex flex-wrap items-center gap-1.5">
             <CallStatusPill status={c.status} />
             {c.fromOwner && <OwnerCallBadge />}
           </span>
         </Fact>
-        <Fact label="Duration">{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : formatCallTime(c.durationSecs)}</Fact>
-        <Fact label="Cost">{formatCallCost(c.costUsd)}</Fact>
-        <Fact label="Agent">
+        <Fact label={t("detail.duration")}>{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : formatCallTime(c.durationSecs)}</Fact>
+        <Fact label={t("detail.cost")}>{formatCallCost(c.costUsd)}</Fact>
+        <Fact label={t("common:words.agent")}>
           {agentName ? (
             <span className="flex min-w-0 items-center gap-1.5">
               {agent && <AgentAvatar agent={agent} size="sm" still className="size-4" />}
@@ -273,7 +272,7 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
         )}
 
         {c.goal && (
-          <Block label={GOAL_LABEL[c.purpose]}>
+          <Block label={t(GOAL_LABEL[c.purpose])}>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.goal}</p>
           </Block>
         )}
@@ -281,13 +280,13 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
         {c.outcome && <Outcome text={c.outcome} successful={c.successful} />}
 
         {c.purpose === "question" && c.answer && (
-          <Block label="Your answer">
+          <Block label={t("detail.yourAnswer")}>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{c.answer}</p>
           </Block>
         )}
 
         {c.summary && (
-          <Block label="Summary">
+          <Block label={t("detail.summary")}>
             <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground/85">{c.summary}</p>
           </Block>
         )}
@@ -299,8 +298,8 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
               <span className="relative size-2.5 rounded-full bg-brand" />
             </span>
             {c.status === "processing"
-              ? "The call ended. Godmode is writing the summary."
-              : "The transcript, summary and recording show up here when the call ends."}
+              ? t("detail.processing")
+              : t("detail.active")}
           </div>
         )}
 
@@ -331,13 +330,14 @@ function Block({ label, children }: { label: string; children: ReactNode }) {
 }
 
 function Outcome({ text, successful }: { text: string; successful: boolean | null }) {
+  const { t } = useTranslation("calls");
   const missed = successful === false;
   const Icon = successful === true ? CircleCheck : missed ? CircleX : Target;
   return (
     <section className={cn("rounded-lg border px-4 py-3.5", missed ? "border-warning/30 bg-warning/[0.07]" : "border-brand/25 bg-brand-soft/60")}>
       <h3 className={cn("eyebrow mb-1.5 flex items-center gap-1.5", missed ? "text-warning" : "text-brand-strong")}>
         <Icon className="size-3.5" aria-hidden />
-        {missed ? "Outcome · goal not reached" : "Outcome"}
+        {missed ? t("detail.outcomeMissed") : t("detail.outcome")}
       </h3>
       <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{text}</p>
     </section>
@@ -350,6 +350,7 @@ function LiveTimer({ since }: { since: string }) {
 }
 
 function Recording({ id }: { id: string }) {
+  const { t } = useTranslation(["calls", "common"]);
   const audio = useQuery({ queryKey: qk.callAudio(id), queryFn: () => api.calls.audio(id), staleTime: Infinity, gcTime: 10 * 60_000, retry: 1 });
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -363,12 +364,12 @@ function Recording({ id }: { id: string }) {
   }, [audio.data]);
 
   return (
-    <Block label="Recording">
+    <Block label={t("detail.recording")}>
       {audio.isError ? (
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          Couldn't load the recording: {errorMessage(audio.error)}
+          {t("detail.recordingError", { error: errorMessage(audio.error) })}
           <Button size="xs" variant="ghost" onClick={() => audio.refetch()}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         </p>
       ) : url ? (
@@ -381,13 +382,14 @@ function Recording({ id }: { id: string }) {
 }
 
 function Transcript({ call: c }: { call: PhoneCall }) {
-  const other = c.contactName || (c.direction === "inbound" ? "Caller" : "Them");
+  const { t } = useTranslation("calls");
+  const other = c.contactName || (c.direction === "inbound" ? t("transcript.caller") : t("transcript.them"));
   return (
-    <Block label="Transcript">
+    <Block label={t("transcript.label")}>
       <ol className="mt-3 space-y-1.5">
-        {c.transcript.map((t, i) => {
-          const mine = t.speaker === "agent";
-          const first = i === 0 || c.transcript[i - 1]!.speaker !== t.speaker;
+        {c.transcript.map((line, i) => {
+          const mine = line.speaker === "agent";
+          const first = i === 0 || c.transcript[i - 1]!.speaker !== line.speaker;
           return (
             <li key={i} className={cn("flex flex-col", mine ? "items-end" : "items-start", first && i > 0 && "pt-2.5")}>
               {first && <span className="mb-1 px-1 text-[11px] font-medium text-muted-foreground">{mine ? "Godmode" : other}</span>}
@@ -398,9 +400,9 @@ function Transcript({ call: c }: { call: PhoneCall }) {
                     mine ? "rounded-br-[6px] border border-foreground/[0.05] bg-secondary" : "rounded-bl-[6px] border bg-card",
                   )}
                 >
-                  {t.text}
+                  {line.text}
                 </p>
-                <span className="pb-1 text-[10.5px] text-muted-foreground/70 tabular-nums">{formatCallTime(t.at)}</span>
+                <span className="pb-1 text-[10.5px] text-muted-foreground/70 tabular-nums">{formatCallTime(line.at)}</span>
               </div>
             </li>
           );

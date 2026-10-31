@@ -2,8 +2,10 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { format, formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, Braces, ChevronRight, CircleAlert, FlaskConical, Hourglass, Inbox, Radar } from "lucide-react";
 import type { AutomationEvent, AutomationEventStatus, Routine } from "@godmode/shared";
+import { dateLocale } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useRoutineEvents, useRuns } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -22,7 +24,7 @@ function relative(iso: string | null) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return { text: formatDistanceToNowStrict(d, { addSuffix: true }), full: format(d, "PPpp") };
+  return { text: formatDistanceToNowStrict(d, { addSuffix: true, locale: dateLocale() }), full: format(d, "PPpp", { locale: dateLocale() }) };
 }
 
 /** Event data is untrusted: always rendered as text, never as markup. */
@@ -58,11 +60,12 @@ export function EventsSheet({
   onOpenChange: (open: boolean) => void;
   onSendTest: () => void;
 }) {
+  const { t } = useTranslation(["automations", "common"]);
   const eventsQ = useRoutineEvents(routine.id, { limit: LIMIT, enabled: open });
   const runsQ = useRuns(routine.agentId);
   const conversationByRun = useMemo(() => new Map((runsQ.data ?? []).map((r) => [r.id, r.conversationId])), [runsQ.data]);
-  const t = routine.trigger;
-  const Icon = TRIGGER_TYPES[t.type].icon;
+  const trigger = routine.trigger;
+  const Icon = TRIGGER_TYPES[trigger.type].icon;
   const status = routine.triggerStatus;
   const lastCheck = relative(status.lastCheckAt);
   const events = eventsQ.data ?? [];
@@ -70,9 +73,9 @@ export function EventsSheet({
   const conversationLink = (e: AutomationEvent): { to: string; label: string } | null => {
     if (!e.runId) return null;
     const conversationId = conversationByRun.get(e.runId);
-    if (conversationId) return { to: `/chat/${conversationId}`, label: "Open conversation" };
-    if (routine.reuseConversation && routine.conversationId) return { to: `/chat/${routine.conversationId}`, label: "Open conversation" };
-    return { to: `/activity?run=${e.runId}`, label: "View run" };
+    if (conversationId) return { to: `/chat/${conversationId}`, label: t("events.openConversation") };
+    if (routine.reuseConversation && routine.conversationId) return { to: `/chat/${routine.conversationId}`, label: t("events.openConversation") };
+    return { to: `/activity?run=${e.runId}`, label: t("events.viewRun") };
   };
 
   return (
@@ -81,8 +84,8 @@ export function EventsSheet({
         <div className="flex h-full min-h-0 flex-col">
           <SheetHeader className="gap-3 border-b bg-paper-2 p-5 pr-12">
             <div className="flex items-center gap-3">
-              {t.type === "app" ? (
-                <ToolkitLogo src={toolkitLogoUrl(t.toolkit)} name={t.toolkit} size="md" />
+              {trigger.type === "app" ? (
+                <ToolkitLogo src={toolkitLogoUrl(trigger.toolkit)} name={trigger.toolkit} size="md" />
               ) : (
                 <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-card text-foreground shadow-card">
                   <Icon className="size-5" />
@@ -107,28 +110,28 @@ export function EventsSheet({
                 role={status.state === "error" ? "alert" : "status"}
               >
                 {status.state === "error" ? <CircleAlert className="mt-px size-3.5 shrink-0" /> : <Hourglass className="mt-px size-3.5 shrink-0" />}
-                <span>{status.message ?? (status.state === "error" ? "The trigger isn't working." : "Setting up the trigger…")}</span>
+                <span>{status.message ?? (status.state === "error" ? t("events.triggerError") : t("events.triggerPending"))}</span>
               </div>
             )}
 
-            {t.type === "condition" && (status.observation || lastCheck) && (
+            {trigger.type === "condition" && (status.observation || lastCheck) && (
               <div className="rounded-lg border bg-card p-3 shadow-card">
                 <div className="eyebrow flex items-center gap-1.5">
-                  <Radar className="size-3.5" /> Last check
+                  <Radar className="size-3.5" /> {t("events.lastCheck")}
                   {lastCheck && (
                     <span className="font-normal tracking-normal normal-case" title={lastCheck.full}>
                       · {lastCheck.text}
                     </span>
                   )}
                 </div>
-                <p className="mt-1 text-sm whitespace-pre-line text-foreground/85">{status.observation ?? "Nothing noted yet."}</p>
+                <p className="mt-1 text-sm whitespace-pre-line text-foreground/85">{status.observation ?? t("events.nothingNoted")}</p>
               </div>
             )}
 
-            {isEventTrigger(t.type) && (
+            {isEventTrigger(trigger.type) && (
               <div>
                 <Button size="sm" variant="outline" onClick={onSendTest}>
-                  <FlaskConical /> Send test event
+                  <FlaskConical /> {t("testEvent.submit")}
                 </Button>
               </div>
             )}
@@ -136,7 +139,7 @@ export function EventsSheet({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
             <h3 className="eyebrow mb-2 flex items-center gap-2">
-              Recent events
+              {t("events.recent")}
               {events.length > 0 && <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{events.length}</span>}
             </h3>
             {eventsQ.isLoading ? (
@@ -147,10 +150,10 @@ export function EventsSheet({
               </div>
             ) : eventsQ.isError ? (
               <div className="rounded-xl border border-destructive/25 bg-destructive/[0.05] p-4 text-sm" role="alert">
-                <p className="font-medium">Couldn't load events</p>
+                <p className="font-medium">{t("events.loadFailed")}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{errorMessage(eventsQ.error)}</p>
                 <Button size="sm" variant="outline" className="mt-3" onClick={() => eventsQ.refetch()}>
-                  Try again
+                  {t("common:actions.tryAgain")}
                 </Button>
               </div>
             ) : events.length === 0 ? (
@@ -166,7 +169,7 @@ export function EventsSheet({
                 </AnimatePresence>
               </ol>
             )}
-            {events.length >= LIMIT && <p className="mt-3 text-center text-xs text-muted-foreground">Showing the latest {LIMIT} events.</p>}
+            {events.length >= LIMIT && <p className="mt-3 text-center text-xs text-muted-foreground">{t("events.showingLatest", { count: LIMIT })}</p>}
           </div>
         </div>
       </SheetContent>
@@ -175,6 +178,7 @@ export function EventsSheet({
 }
 
 function EventRow({ event, link }: { event: AutomationEvent; link: { to: string; label: string } | null }) {
+  const { t } = useTranslation("automations");
   const [open, setOpen] = useState(false);
   const source = EVENT_SOURCES[event.source] ?? EVENT_SOURCES.manual;
   const SourceIcon = source.icon;
@@ -204,7 +208,7 @@ function EventRow({ event, link }: { event: AutomationEvent; link: { to: string;
               {payload && (
                 <CollapsibleTrigger asChild>
                   <Button size="xs" variant="ghost" className="-ml-1.5 text-muted-foreground">
-                    <Braces /> Event data
+                    <Braces /> {t("testEvent.dataLabel")}
                     <ChevronRight className={cn("transition-transform", open && "rotate-90")} />
                   </Button>
                 </CollapsibleTrigger>
@@ -223,7 +227,7 @@ function EventRow({ event, link }: { event: AutomationEvent; link: { to: string;
       {payload && (
         <CollapsibleContent>
           <div className="relative mt-2 ml-10 rounded-lg border bg-paper-2">
-            <CopyButton text={payload} label="Copy event data" className="absolute top-1.5 right-1.5" />
+            <CopyButton text={payload} label={t("events.copyData")} className="absolute top-1.5 right-1.5" />
             <pre className="max-h-72 overflow-auto p-3 pr-9 font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-foreground/85 [overflow-wrap:anywhere]">{payload}</pre>
           </div>
         </CollapsibleContent>
@@ -233,16 +237,26 @@ function EventRow({ event, link }: { event: AutomationEvent; link: { to: string;
 }
 
 function EmptyEvents({ routine }: { routine: Routine }) {
-  const t = routine.trigger;
+  const { t } = useTranslation("automations");
+  const trigger = routine.trigger;
   const next = relative(routine.nextRunAt);
   const copy =
-    t.type === "schedule"
-      ? { title: "No runs yet", body: next && routine.enabled ? `The first run is ${next.text}.` : "Runs show up here when the schedule fires." }
-      : t.type === "app"
-        ? { title: "Waiting for the first event", body: `Godmode is listening for “${t.triggerName}” in ${prettySlug(t.toolkit)}.` }
-        : t.type === "condition"
-          ? { title: "Not met yet", body: next && routine.enabled ? `The next check is ${next.text}.` : "Once a check finds the condition true, it shows up here." }
-          : { title: "No calls yet", body: "Call the webhook URL — or send a test event — and it shows up here." };
+    trigger.type === "schedule"
+      ? {
+          title: t("events.empty.scheduleTitle"),
+          body: next && routine.enabled ? t("events.empty.scheduleNext", { when: next.text }) : t("events.empty.scheduleBody"),
+        }
+      : trigger.type === "app"
+        ? {
+            title: t("events.empty.appTitle"),
+            body: t("events.empty.appBody", { trigger: trigger.triggerName, app: prettySlug(trigger.toolkit) }),
+          }
+        : trigger.type === "condition"
+          ? {
+              title: t("events.empty.conditionTitle"),
+              body: next && routine.enabled ? t("events.empty.conditionNext", { when: next.text }) : t("events.empty.conditionBody"),
+            }
+          : { title: t("events.empty.webhookTitle"), body: t("events.empty.webhookBody") };
   return (
     <div className="flex flex-col items-center rounded-xl border border-dashed bg-card/50 px-6 py-10 text-center">
       <div className="mb-3 grid size-10 place-items-center rounded-lg border bg-card text-foreground shadow-card">

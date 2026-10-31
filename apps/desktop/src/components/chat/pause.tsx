@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceStrict, isToday } from "date-fns";
 import type { ConversationWithMessages, MessageBlock, RunPause } from "@godmode/shared";
 import { ArrowUp, Hourglass, MessageCircleQuestion, Pause, Play, ShieldCheck, Square } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,15 +12,18 @@ import { useNow } from "@/components/vault/use-now";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { dateLocale, t } from "@/i18n";
 import { followupIn, followupWhen } from "./followup";
 
 /** "Session limit", "Usage limit" */
 function limitTitle(limit: string | null | undefined): string {
-  const name = limit?.trim() || "usage limit";
+  const name = limit?.trim();
+  if (!name) return t("chat:pause.usageLimitTitle");
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 export function usePauseActions(conversationId: string) {
+  const { t } = useTranslation("chat");
   const qc = useQueryClient();
   const key = qk.conversation(conversationId);
   const refresh = () => {
@@ -28,14 +32,14 @@ export function usePauseActions(conversationId: string) {
   };
   const pause = useMutation({
     mutationFn: () => api.conversations.pause(conversationId),
-    onError: (err) => toast.error("Couldn't pause", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("pause.pauseError"), { description: errorMessage(err) }),
   });
   const resume = useMutation({
     mutationFn: () => api.conversations.continue(conversationId),
     onSuccess: refresh,
     onError: (err) => {
       refresh();
-      toast.error("Couldn't continue", { description: errorMessage(err) });
+      toast.error(t("pause.continueError"), { description: errorMessage(err) });
     },
   });
   const auto = useMutation({
@@ -44,13 +48,13 @@ export function usePauseActions(conversationId: string) {
     onSuccess: (paused) => qc.setQueryData<ConversationWithMessages>(key, (old) => (old?.paused ? { ...old, paused } : old)),
     onError: (err) => {
       refresh();
-      toast.error("Couldn't change that", { description: errorMessage(err) });
+      toast.error(t("pause.changeError"), { description: errorMessage(err) });
     },
   });
   const stop = useMutation({
     mutationFn: (runId: string) => api.runs.cancel(runId),
     onSuccess: refresh,
-    onError: (err) => toast.error("Couldn't stop the run", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("pause.stopError"), { description: errorMessage(err) }),
   });
   return { pause, resume, auto, stop };
 }
@@ -73,6 +77,7 @@ export function PauseBar({
 
 /** The run waits for the human's answer: the card in the thread asks; this bar says so where the human types. */
 function QuestionBar({ conversationId, pause, agentName }: { conversationId: string; pause: RunPause; agentName: string }) {
+  const { t } = useTranslation(["chat", "common"]);
   const now = useNow(30_000);
   const { stop } = usePauseActions(conversationId);
   const approval = pause.question?.kind === "approval";
@@ -89,32 +94,32 @@ function QuestionBar({ conversationId, pause, agentName }: { conversationId: str
       </span>
       <div className="min-w-0 flex-1 leading-snug">
         <div className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
-          <span className="truncate font-medium">{approval ? `${agentName} needs your OK` : `${agentName} is waiting for your answer`}</span>
+          <span className="truncate font-medium">{approval ? t("pause.needsOk", { name: agentName }) : t("pause.waitingAnswer", { name: agentName })}</span>
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {now - new Date(pause.pausedAt).getTime() < 60_000
-              ? "just now"
-              : formatDistanceStrict(new Date(pause.pausedAt), now, { addSuffix: true, roundingMethod: "floor" })}
+              ? t("pause.justNow")
+              : formatDistanceStrict(new Date(pause.pausedAt), now, { addSuffix: true, roundingMethod: "floor", locale: dateLocale() })}
           </span>
         </div>
         <p className="truncate text-xs text-muted-foreground" title={pause.question?.title}>
-          {approval ? "Approve or decline above — or reply below." : "Pick an answer above or type it below."}
+          {approval ? t("pause.approveHint") : t("pause.answerHint")}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {pause.question && (
           <Button size="xs" variant="ghost" onClick={show}>
             <ArrowUp />
-            <span className="hidden @lg:inline">{approval ? "Show request" : "Show question"}</span>
+            <span className="hidden @lg:inline">{approval ? t("pause.showRequest") : t("pause.showQuestion")}</span>
           </Button>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="xs" variant="ghost" aria-label="Stop" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
+            <Button size="xs" variant="ghost" aria-label={t("common:actions.stop")} className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
               {stop.isPending ? <Spinner /> : <Square className="size-2.5 fill-current" />}
-              <span className="hidden @lg:inline">Stop</span>
+              <span className="hidden @lg:inline">{t("common:actions.stop")}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">Stop for good — the question is withdrawn</TooltipContent>
+          <TooltipContent side="top">{t("pause.stopQuestionHint")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -122,10 +127,10 @@ function QuestionBar({ conversationId, pause, agentName }: { conversationId: str
 }
 
 function StandStillBar({ conversationId, pause, agentName, queued }: { conversationId: string; pause: RunPause; agentName: string; queued: number }) {
+  const { t } = useTranslation(["chat", "common"]);
   const now = useNow(30_000);
   const { resume, auto, stop } = usePauseActions(conversationId);
   const limit = pause.reason === "limit";
-  const along = queued > 0 ? ` with your ${queued > 1 ? `${queued} messages` : "message"}` : "";
   const resetPassed = !!pause.resumeAt && new Date(pause.resumeAt).getTime() <= now;
 
   return (
@@ -140,25 +145,25 @@ function StandStillBar({ conversationId, pause, agentName, queued }: { conversat
       </span>
       <div className="min-w-0 flex-1 leading-snug">
         <div className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
-          <span className="truncate font-medium">{limit ? `Claude's ${pause.limit ?? "usage limit"} is reached` : "Paused"}</span>
+          <span className="truncate font-medium">{limit ? t("pause.limitReached", { limit: pause.limit ?? t("pause.usageLimit") }) : t("status.paused")}</span>
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             {limit && pause.resumeAt
               ? resetPassed
-                ? "resets any moment"
-                : `resets ${followupIn(pause.resumeAt, now)}`
+                ? t("pause.resetsAnyMoment")
+                : t("pause.resetsWhen", { when: followupIn(pause.resumeAt, now) })
               : now - new Date(pause.pausedAt).getTime() < 60_000
-                ? "just now"
-                : formatDistanceStrict(new Date(pause.pausedAt), now, { addSuffix: true, roundingMethod: "floor" })}
+                ? t("pause.justNow")
+                : formatDistanceStrict(new Date(pause.pausedAt), now, { addSuffix: true, roundingMethod: "floor", locale: dateLocale() })}
           </span>
         </div>
         <p className="truncate text-xs text-muted-foreground">
           {!limit
-            ? `${agentName} picks the work up where it stopped${along}.`
+            ? t("pause.picksUp", { name: agentName, count: queued })
             : pause.auto && pause.resumeAt
-              ? `${agentName} continues by itself ${followupWhen(pause.resumeAt)}${along}.`
+              ? t("pause.continuesAuto", { name: agentName, when: followupWhen(pause.resumeAt), count: queued })
               : pause.resumeAt
-                ? `Resets ${followupWhen(pause.resumeAt)} — continue then, and ${agentName} goes on where it stopped.`
-                : `Continue when the limit has reset — ${agentName} goes on where it stopped.`}
+                ? t("pause.resetsThen", { name: agentName, when: followupWhen(pause.resumeAt) })
+                : t("pause.continueWhenReset", { name: agentName })}
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
@@ -166,30 +171,30 @@ function StandStillBar({ conversationId, pause, agentName, queued }: { conversat
           <Tooltip>
             <TooltipTrigger asChild>
               <label className="mr-1 flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                <Switch size="sm" checked={pause.auto} onCheckedChange={(on) => auto.mutate(on)} aria-label="Continue by itself when the limit resets" />
-                <span className="hidden @lg:inline">Auto</span>
+                <Switch size="sm" checked={pause.auto} onCheckedChange={(on) => auto.mutate(on)} aria-label={t("pause.autoLabel")} />
+                <span className="hidden @lg:inline">{t("pause.auto")}</span>
               </label>
             </TooltipTrigger>
-            <TooltipContent side="top">{pause.auto ? "Continues by itself when the limit resets" : "Waits for you after the reset"}</TooltipContent>
+            <TooltipContent side="top">{pause.auto ? t("pause.autoOn") : t("pause.autoOff")}</TooltipContent>
           </Tooltip>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button size="xs" variant={limit ? "ghost" : "default"} disabled={resume.isPending} onClick={() => resume.mutate()}>
               {resume.isPending ? <Spinner /> : <Play className="fill-current" />}
-              {limit ? <span className="hidden @lg:inline">Continue now</span> : "Continue"}
+              {limit ? <span className="hidden @lg:inline">{t("followup.continueNow")}</span> : t("common:actions.continue")}
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">{limit ? "Try now instead of waiting for the reset" : `${agentName} goes on where it stopped`}</TooltipContent>
+          <TooltipContent side="top">{limit ? t("pause.tryNowHint") : t("pause.goesOn", { name: agentName })}</TooltipContent>
         </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button size="xs" variant="ghost" aria-label="Stop" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
+            <Button size="xs" variant="ghost" aria-label={t("common:actions.stop")} className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate(pause.runId)}>
               {stop.isPending ? <Spinner /> : <Square className="size-2.5 fill-current" />}
-              <span className="hidden @lg:inline">Stop</span>
+              <span className="hidden @lg:inline">{t("common:actions.stop")}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="top">Stop for good — it won't continue</TooltipContent>
+          <TooltipContent side="top">{t("pause.stopHint")}</TooltipContent>
         </Tooltip>
       </div>
     </div>
@@ -200,22 +205,31 @@ type PauseBlock = Extract<MessageBlock, { type: "pause" }>;
 
 /** Where a run stood still, inside the turn it belongs to. */
 export function PauseMarker({ block }: { block: PauseBlock }) {
+  const { t } = useTranslation("chat");
   const limit = block.reason === "limit";
   const Icon = limit ? Hourglass : Pause;
-  const time = (iso: string) => format(new Date(iso), "HH:mm");
+  const time = (iso: string) => format(new Date(iso), "p", { locale: dateLocale() });
   return (
     <div role="note" className="flex items-center gap-3 py-0.5 text-[11px] text-muted-foreground">
       <span className="h-px flex-1 bg-border" />
       <span className="inline-flex items-center gap-1.5 tabular-nums">
         <Icon className={cn("size-3.5", limit ? "text-warning" : "fill-current text-foreground/70")} aria-hidden />
-        <span className="font-medium text-foreground">{limit ? `${limitTitle(block.limit)} reached` : "Paused"}</span>
+        <span className="font-medium text-foreground">{limit ? t("pause.reached", { limit: limitTitle(block.limit) }) : t("status.paused")}</span>
         <time dateTime={block.at}>{time(block.at)}</time>
         {block.resumedAt ? (
           <span>
-            · continued <time dateTime={block.resumedAt}>{time(block.resumedAt)}</time>
+            · <Trans t={t} i18nKey="pause.continuedAt" values={{ time: time(block.resumedAt) }} components={{ time: <time dateTime={block.resumedAt} /> }} />
           </span>
         ) : (
-          limit && block.resumeAt && <span>· resets {isToday(new Date(block.resumeAt)) ? time(block.resumeAt) : followupWhen(block.resumeAt)}</span>
+          limit &&
+          block.resumeAt && (
+            <span>
+              ·{" "}
+              {isToday(new Date(block.resumeAt))
+                ? t("pause.resetsAtTime", { time: time(block.resumeAt) })
+                : t("pause.resetsWhen", { when: followupWhen(block.resumeAt) })}
+            </span>
+          )
         )}
       </span>
       <span className="h-px flex-1 bg-border" />

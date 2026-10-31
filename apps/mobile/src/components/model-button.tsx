@@ -1,9 +1,11 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View, type ColorValue } from "react-native";
-import { EFFORT_LABELS, type Agent } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { effortLabel, type Agent } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { useEffectiveModel, type ModelChoice } from "@/lib/composer";
+import { currentLanguage } from "@/lib/i18n";
 import { radius, useColors } from "@/lib/theme";
 
 export function EffortGlyph({ level, count, color }: { level: number; count: number; color: ColorValue }) {
@@ -22,13 +24,14 @@ export function EffortGlyph({ level, count, color }: { level: number; count: num
 /** The model and effort a chat runs with, in the composer's toolbar; opens the picker. */
 export function ModelButton({ agent, choice, conversationId }: { agent?: Agent; choice: ModelChoice; conversationId?: string }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const { current, effort, ultracode } = useEffectiveModel(agent, choice);
-  const summary = [current.label, effort && `${EFFORT_LABELS[effort]} effort`, ultracode && "Ultracode"].filter(Boolean).join(", ");
+  const summary = [current.label, effort && t("modelButton.effort", { level: effortLabel(effort, currentLanguage()) }), ultracode && "Ultracode"].filter(Boolean).join(", ");
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Model: ${summary}`}
-      accessibilityHint="Choose the model and effort"
+      accessibilityLabel={t("modelButton.label", { summary })}
+      accessibilityHint={t("modelButton.hint")}
       hitSlop={4}
       onPress={() => {
         tap();

@@ -2,9 +2,11 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { format, isToday, isYesterday } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { Activity, RefreshCw, Search } from "lucide-react";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { useAllAgents, useRuns } from "@/lib/hooks";
+import { dateLocale, t as translate } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
@@ -17,41 +19,22 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RunRow, useNow } from "@/components/runs/run-row";
 import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
-import { formatElapsed } from "@/components/runs/run-status";
+import { formatElapsed, runStatusLabel } from "@/components/runs/run-status";
 import { useReduceAnimations } from "@/lib/motion";
 
-const STATUSES: { id: "all" | RunStatus; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "running", label: "Running" },
-  { id: "paused", label: "Paused" },
-  { id: "succeeded", label: "Succeeded" },
-  { id: "failed", label: "Failed" },
-  { id: "cancelled", label: "Cancelled" },
-  { id: "queued", label: "Queued" },
-];
+const STATUSES: ("all" | RunStatus)[] = ["all", "running", "paused", "succeeded", "failed", "cancelled", "queued"];
 
-const TRIGGERS: { id: "all" | RunTrigger; label: string }[] = [
-  { id: "all", label: "Any trigger" },
-  { id: "chat", label: "Chat" },
-  { id: "routine", label: "Automation" },
-  { id: "check", label: "Condition check" },
-  { id: "dream", label: "Dream" },
-  { id: "delegation", label: "Delegation" },
-  { id: "task", label: "Task" },
-  { id: "followup", label: "Follow-up" },
-  { id: "heartbeat", label: "Heartbeat" },
-  { id: "manual", label: "Manual" },
-  { id: "api", label: "API" },
-];
+const TRIGGERS: RunTrigger[] = ["chat", "routine", "check", "dream", "delegation", "task", "followup", "heartbeat", "manual", "api"];
 
 function dayLabel(d: Date) {
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return format(d, "EEEE, MMM d");
+  if (isToday(d)) return translate("common:words.today");
+  if (isYesterday(d)) return translate("common:words.yesterday");
+  return format(d, translate("activity:dayFormat"), { locale: dateLocale() });
 }
 
 export default function ActivityPage() {
   const reduce = useReduceAnimations();
+  const { t, i18n } = useTranslation(["activity", "runs", "common"]);
   const [params, setParams] = useSearchParams();
   const agentFilter = params.get("agent") ?? "all";
   const statusFilter = params.get("status") ?? "all";
@@ -97,7 +80,7 @@ export default function ActivityPage() {
       else out.push({ label, runs: [r] });
     }
     return out;
-  }, [runs]);
+  }, [runs, i18n.language]);
 
   const successRate = useMemo(() => {
     const finished = runs.filter((r) => r.status === "succeeded" || r.status === "failed");
@@ -113,10 +96,10 @@ export default function ActivityPage() {
     <>
       <PageHeader
         icon={<Activity />}
-        title="Activity"
-        description="Every run across your agents."
+        title={t("title")}
+        description={t("description")}
         actions={
-          <Button variant="outline" size="icon" onClick={() => runsQ.refetch()} aria-label="Refresh" disabled={runsQ.isFetching}>
+          <Button variant="outline" size="icon" onClick={() => runsQ.refetch()} aria-label={t("common:actions.refresh")} disabled={runsQ.isFetching}>
             <RefreshCw className={cn(runsQ.isFetching && "animate-spin")} />
           </Button>
         }
@@ -129,10 +112,10 @@ export default function ActivityPage() {
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
               className="overflow-visible"
-              aria-label="Running now"
+              aria-label={t("runningNow")}
             >
               <h2 className="eyebrow mb-3 flex items-center gap-2">
-                <LiveDot /> Live now
+                <LiveDot /> {t("liveNow")}
                 <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{liveList.length}</span>
               </h2>
               <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
@@ -147,14 +130,14 @@ export default function ActivityPage() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-full max-w-xs">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search prompts & results…" aria-label="Search runs" className="pl-9" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("searchPlaceholder")} aria-label={t("searchLabel")} className="pl-9" />
           </div>
           <Select value={agentFilter} onValueChange={(v) => setParam("agent", v)}>
-            <SelectTrigger className="w-48" aria-label="Filter by agent">
+            <SelectTrigger className="w-48" aria-label={t("filterByAgent")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              <SelectItem value="all">All agents</SelectItem>
+              <SelectItem value="all">{t("allAgents")}</SelectItem>
               {agentsWithAvatar.length > 0 && <SelectSeparator />}
               {agentsWithAvatar.map((a) => (
                 <SelectItem key={a.id} value={a.id}>
@@ -164,40 +147,40 @@ export default function ActivityPage() {
             </SelectContent>
           </Select>
           <Select value={trigger} onValueChange={(v) => setTrigger(v as "all" | RunTrigger)}>
-            <SelectTrigger className="w-40" aria-label="Filter by trigger">
+            <SelectTrigger className="w-40" aria-label={t("filterByTrigger")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent position="popper">
-              {TRIGGERS.map((t) => (
-                <SelectItem key={t.id} value={t.id}>
-                  {t.label}
+              <SelectItem value="all">{t("anyTrigger")}</SelectItem>
+              {TRIGGERS.map((id) => (
+                <SelectItem key={id} value={id}>
+                  {t(`runs:trigger.${id}`)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        <div role="tablist" aria-label="Filter by status" className="-mt-2 flex flex-wrap gap-1.5">
+        <div role="tablist" aria-label={t("filterByStatus")} className="-mt-2 flex flex-wrap gap-1.5">
           {STATUSES.map((s) => (
             <button
-              key={s.id}
+              key={s}
               role="tab"
-              aria-selected={statusFilter === s.id}
-              onClick={() => setParam("status", s.id)}
+              aria-selected={statusFilter === s}
+              onClick={() => setParam("status", s)}
               className={cn(
                 "rounded-md border px-3 py-1 text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
-                statusFilter === s.id
+                statusFilter === s
                   ? "border-foreground/25 bg-card text-foreground shadow-card"
                   : "text-muted-foreground hover:border-foreground/15 hover:text-foreground",
               )}
             >
-              {s.label}
+              {s === "all" ? t("common:words.all") : runStatusLabel(s)}
             </button>
           ))}
           {runs.length > 0 && (
             <span className="ml-auto self-center text-xs text-muted-foreground tabular-nums">
-              {runs.length} run{runs.length === 1 ? "" : "s"}
-              {successRate != null && ` · ${successRate}% success`}
+              {successRate != null ? t("countWithSuccess", { count: runs.length, rate: successRate }) : t("count", { count: runs.length })}
             </span>
           )}
         </div>
@@ -219,19 +202,19 @@ export default function ActivityPage() {
         ) : runsQ.isError ? (
           <EmptyState
             icon={<Activity />}
-            title="Couldn't load activity"
+            title={t("loadFailed")}
             description={errorMessage(runsQ.error)}
             action={
               <Button variant="outline" onClick={() => runsQ.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : runs.length === 0 ? (
           <EmptyState
             icon={<Activity />}
-            title={filtered ? "No runs match these filters" : "No activity yet"}
-            description={filtered ? undefined : "When your agents chat, run automations or delegate work, every run shows up here — live."}
+            title={filtered ? t("noMatch") : t("emptyTitle")}
+            description={filtered ? undefined : t("emptyDescription")}
             action={
               filtered ? (
                 <Button
@@ -242,7 +225,7 @@ export default function ActivityPage() {
                     setSearch("");
                   }}
                 >
-                  Clear filters
+                  {t("clearFilters")}
                 </Button>
               ) : undefined
             }
@@ -262,7 +245,7 @@ export default function ActivityPage() {
               </section>
             ))}
             {(runsQ.data?.length ?? 0) >= 200 && (
-              <p className="text-center text-xs text-muted-foreground">Showing the latest 200 runs. Narrow the filters to look further back.</p>
+              <p className="text-center text-xs text-muted-foreground">{t("limitHint", { count: 200 })}</p>
             )}
           </div>
         )}
@@ -275,6 +258,7 @@ export default function ActivityPage() {
 
 function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpen: () => void }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["activity", "common"]);
   const now = useNow(true);
   return (
     <motion.button
@@ -289,10 +273,10 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
       {agent ? <AgentAvatar agent={agent} size="md" /> : <Orb variant="S3" size={24} />}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-sm font-medium">
-          <span className="truncate">{agent?.name ?? "Agent"}</span>
-          <Orb variant="S3" size={14} label="Running" />
+          <span className="truncate">{agent?.name ?? t("common:words.agent")}</span>
+          <Orb variant="S3" size={14} label={t("common:status.running")} />
         </div>
-        <div className="text-shimmer truncate text-xs font-medium">{live.activity ?? "Thinking…"}</div>
+        <div className="text-shimmer truncate text-xs font-medium">{live.activity ?? t("thinking")}</div>
       </div>
       <div className="flex flex-col items-end gap-1">
         {!reduce && <WorkingTicks count={6} className="h-3 text-brand-strong" />}

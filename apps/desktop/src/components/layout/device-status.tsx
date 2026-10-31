@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowRight, Laptop, LaptopMinimalCheck, Settings2, Timer, TriangleAlert, WifiOff } from "lucide-react";
 import type { DeviceGroup, GroupDevice } from "@godmode/shared";
 import {
@@ -16,7 +17,6 @@ import {
   useGroupClock,
   useHandoff,
 } from "@/components/devices/device-parts";
-import { THIS_COMPUTER } from "@/components/runners/runner-parts";
 import { useNow } from "@/components/vault/use-now";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -25,6 +25,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { isMac } from "@/lib/desktop";
 import { useDeviceGroup } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
+import { t as translate } from "@/i18n";
+
+const thisDevice = () => (isMac ? translate("layout:deviceStatus.thisMac") : translate("layout:deviceStatus.thisComputer"));
 
 /** True once `on` held for `delay` ms; false right away when it doesn't. A primary that blips for a second stays quiet. */
 function useSteady(on: boolean, delay: number): boolean {
@@ -39,24 +42,26 @@ function useSteady(on: boolean, delay: number): boolean {
 
 /** Ticks for the eye; a screen reader hears the time once instead of every second (the banner is a live region). */
 function TakesOverIn({ at }: { at: string }) {
+  const { t } = useTranslation("layout");
   const now = useNow(1000);
   const left = new Date(at).getTime() - now;
   return (
     <>
       <span className="tabular-nums" aria-hidden>
-        {left > 0 ? `in ${countdown(left)}` : "in a moment"}
+        {left > 0 ? t("deviceStatus.inTime", { time: countdown(left) }) : t("deviceStatus.inAMoment")}
       </span>
-      <span className="sr-only">at {clockTime(at)}</span>
+      <span className="sr-only">{t("deviceStatus.atTime", { time: clockTime(at) })}</span>
     </>
   );
 }
 
 /** On a secondary while its primary is away: this computer keeps everything working, and soon stands in for it. */
 export function PrimaryOfflineBanner() {
+  const { t } = useTranslation("layout");
   const { data: group } = useDeviceGroup();
   const { pathname } = useLocation();
   const shown = useSteady(group?.role === "secondary" && !group.primaryOnline, 2500);
-  const name = group?.primaryName ?? "Your primary";
+  const name = group?.primaryName ?? t("deviceStatus.yourPrimary");
   const standIn = group?.standIn;
   const waiting = standIn?.state === "waiting" && !!standIn.takesOverAt;
   const active = standIn?.state === "active";
@@ -78,29 +83,27 @@ export function PrimaryOfflineBanner() {
               <p className="min-w-0 flex-1 leading-snug">
                 {active ? (
                   <>
-                    <span className="font-medium">
-                      {THIS_COMPUTER} stands in for {name}.
-                    </span>
-                    <span className="text-muted-foreground"> Automations, the board and your phone run here; changes go back when it's back.</span>
+                    <span className="font-medium">{t("deviceStatus.standsIn", { device: thisDevice(), name })}</span>
+                    <span className="text-muted-foreground"> {t("deviceStatus.standsInHint")}</span>
                   </>
                 ) : waiting ? (
                   <>
-                    <span className="font-medium">{name} is away.</span>
+                    <span className="font-medium">{t("deviceStatus.away", { name })}</span>
                     <span className="text-muted-foreground">
                       {" "}
-                      {THIS_COMPUTER} takes over <TakesOverIn at={standIn.takesOverAt!} /> — everything keeps working.
+                      <Trans t={t} i18nKey="deviceStatus.takesOver" values={{ device: thisDevice() }} components={{ time: <TakesOverIn at={standIn.takesOverAt!} /> }} />
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="font-medium">{name} is away.</span>
-                    <span className="text-muted-foreground"> Everything keeps working here; automations and messages wait until it's back.</span>
+                    <span className="font-medium">{t("deviceStatus.away", { name })}</span>
+                    <span className="text-muted-foreground"> {t("deviceStatus.awayHint")}</span>
                   </>
                 )}
               </p>
               {!pathname.startsWith("/settings/devices") && (
                 <Button size="sm" variant="outline" className="h-7 shrink-0 bg-card" asChild>
-                  <Link to="/settings/devices">Devices</Link>
+                  <Link to="/settings/devices">{t("deviceStatus.devices")}</Link>
                 </Button>
               )}
             </div>
@@ -122,18 +125,19 @@ const DOT: Record<Tone, string> = {
 function summary(group: DeviceGroup): { label: string; tone: Tone } {
   if (group.role === "secondary") {
     const primary = group.devices.find((d) => d.role === "primary");
-    if (group.standIn.state === "active") return { label: `Standing in for ${group.primaryName}`, tone: "ok" };
-    if (group.primaryOnline) return { label: `Synced with ${group.primaryName}`, tone: "ok" };
-    return { label: `${group.primaryName} is away`, tone: group.standIn.state === "waiting" || primary?.state === "connecting" ? "busy" : "away" };
+    if (group.standIn.state === "active") return { label: translate("layout:deviceStatus.summary.standingIn", { name: group.primaryName }), tone: "ok" };
+    if (group.primaryOnline) return { label: translate("layout:deviceStatus.summary.synced", { name: group.primaryName }), tone: "ok" };
+    return { label: translate("layout:deviceStatus.summary.away", { name: group.primaryName }), tone: group.standIn.state === "waiting" || primary?.state === "connecting" ? "busy" : "away" };
   }
   const n = group.devices.length;
-  const noun = isMac ? (n === 1 ? "Mac" : "Macs") : n === 1 ? "computer" : "computers";
   const anyOnline = group.devices.some((d) => !d.self && d.state === "online");
-  return { label: `${n} ${noun} in your group`, tone: anyOnline || n === 1 ? "ok" : "away" };
+  const label = isMac ? translate("layout:deviceStatus.summary.groupMacs", { count: n }) : translate("layout:deviceStatus.summary.groupComputers", { count: n });
+  return { label, tone: anyOnline || n === 1 ? "ok" : "away" };
 }
 
 /** Sidebar footer: the device group at a glance, with the hand-off one click away. */
 export function DeviceIndicator() {
+  const { t } = useTranslation("layout");
   const { group, working, targets } = useHandoff();
   const { state: sidebar, isMobile } = useSidebar();
   const [open, setOpen] = useState(false);
@@ -141,13 +145,13 @@ export function DeviceIndicator() {
   const railed = sidebar === "collapsed" && !isMobile;
   const { label, tone } = summary(group);
   const attention = group.devices.filter(needsFullDiskAccess).length;
-  const hint = [label, working > 0 && `${working} working`, attention > 0 && (attention === 1 ? "1 needs attention" : `${attention} need attention`)].filter(Boolean).join(" · ");
+  const hint = [label, working > 0 && t("counts.working", { count: working }), attention > 0 && t("deviceStatus.needsAttention", { count: attention })].filter(Boolean).join(" · ");
 
   const trigger = (
     <PopoverTrigger asChild>
       <button
         type="button"
-        aria-label={`${hint}. Devices`}
+        aria-label={t("deviceStatus.triggerLabel", { hint })}
         title={railed ? undefined : hint}
         className={cn(
           "flex h-8 w-full min-w-0 items-center gap-2.5 rounded-md px-2.5 text-xs text-muted-foreground outline-none transition-colors",
@@ -161,7 +165,7 @@ export function DeviceIndicator() {
         </span>
         <span className="min-w-0 flex-1 truncate text-left group-data-[collapsible=icon]:hidden">{label}</span>
         {working > 0 ? (
-          <span className="shrink-0 text-[11px] text-foreground/70 tabular-nums group-data-[collapsible=icon]:hidden">{working} working</span>
+          <span className="shrink-0 text-[11px] text-foreground/70 tabular-nums group-data-[collapsible=icon]:hidden">{t("counts.working", { count: working })}</span>
         ) : (
           attention > 0 && <TriangleAlert className="size-3.5 shrink-0 text-warning group-data-[collapsible=icon]:hidden" aria-hidden />
         )}
@@ -187,14 +191,19 @@ export function DeviceIndicator() {
 }
 
 function GroupPopover({ group, working, canHandOff, onClose }: { group: DeviceGroup; working: number; canHandOff: boolean; onClose: () => void }) {
+  const { t } = useTranslation("layout");
   const now = useGroupClock(group);
   const standingIn = group.role === "secondary" && group.standIn.state === "active";
   const subtitle =
-    group.role === "primary" ? `${THIS_COMPUTER} is the primary.` : standingIn ? `${THIS_COMPUTER} stands in for ${group.primaryName}.` : `${group.primaryName} is the primary.`;
+    group.role === "primary"
+      ? t("deviceStatus.isPrimary", { name: thisDevice() })
+      : standingIn
+        ? t("deviceStatus.standsIn", { device: thisDevice(), name: group.primaryName })
+        : t("deviceStatus.isPrimary", { name: group.primaryName });
   return (
     <>
       <div className="px-3 pt-3 pb-1.5">
-        <p className="text-[13px] font-medium">Device group</p>
+        <p className="text-[13px] font-medium">{t("deviceStatus.group")}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
       </div>
       <ul className="pb-1.5">
@@ -213,7 +222,7 @@ function GroupPopover({ group, working, canHandOff, onClose }: { group: DeviceGr
         className="flex h-9 items-center gap-2.5 border-t bg-muted/40 px-3 text-[12.5px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
       >
         <Settings2 className="size-4 shrink-0" aria-hidden />
-        <span className="flex-1">Manage devices</span>
+        <span className="flex-1">{t("deviceStatus.manage")}</span>
         <ArrowRight className="size-3.5 shrink-0" aria-hidden />
       </Link>
     </>
@@ -221,11 +230,12 @@ function GroupPopover({ group, working, canHandOff, onClose }: { group: DeviceGr
 }
 
 function PopoverDevice({ device: d, group, now, onClose }: { device: GroupDevice; group: DeviceGroup; now: number; onClose: () => void }) {
+  const { t } = useTranslation("layout");
   const navigate = useNavigate();
   const online = deviceState(d, group) === "online";
   const standing = isStandingIn(d, group);
-  const roles = [d.self && THIS_COMPUTER, d.role === "primary" && "Primary"].filter(Boolean).join(" · ");
-  const work = d.activeRuns > 0 ? `${d.activeRuns} working` : null;
+  const roles = [d.self && thisDevice(), d.role === "primary" && t("deviceStatus.primary")].filter(Boolean).join(" · ");
+  const work = d.activeRuns > 0 ? t("counts.working", { count: d.activeRuns }) : null;
   return (
     <li className="flex gap-2.5 px-3 py-1.5">
       <DeviceIcon device={d} className={cn("mt-0.5 size-4 shrink-0", online ? "text-foreground/80" : "text-muted-foreground/60")} />
@@ -253,10 +263,10 @@ function PopoverDevice({ device: d, group, now, onClose }: { device: GroupDevice
                 className="inline-flex h-5 items-center gap-1 rounded-[5px] border border-warning/30 bg-warning/[0.07] px-1.5 text-[11px] font-medium text-warning outline-none transition-colors hover:bg-warning/[0.13] focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 <TriangleAlert className="size-3" aria-hidden />
-                Needs Full Disk Access
+                {t("deviceStatus.needsFullDisk")}
               </button>
             )}
-            {d.runnerTwin && <span className="text-[11px] text-muted-foreground">Also paired as a runner</span>}
+            {d.runnerTwin && <span className="text-[11px] text-muted-foreground">{t("deviceStatus.alsoRunner")}</span>}
           </div>
         )}
       </div>

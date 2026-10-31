@@ -69,7 +69,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/models$/],
 
   ["GET", /^\/api\/conversations$/],
-  ["POST", /^\/api\/conversations\/read$/],
+  ["POST", /^\/api\/conversations\/(read|unread)$/],
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
@@ -133,7 +133,7 @@ const ROUTES: [method: string, path: RegExp][] = [
  * phone listener and the cloud link stay on the computer.
  */
 const SETTINGS: Record<string, string[]> = {
-  general: ["userName", "desktopNotifications", "theme", "mode"],
+  general: ["userName", "desktopNotifications", "theme", "mode", "language", "timeFormat"],
   runner: [
     "model",
     "fallbackModel",

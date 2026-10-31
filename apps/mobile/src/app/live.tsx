@@ -3,6 +3,8 @@ import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, useWindowDimensions, View, type GestureResponderEvent } from "react-native";
 import { KeyboardStickyView, useKeyboardState } from "react-native-keyboard-controller";
 import Animated, { FadeIn, FadeOut, ZoomIn } from "react-native-reanimated";
@@ -25,26 +27,27 @@ const DIM = "rgba(255,255,255,0.7)";
 /** The type box, key bar and buttons above the keyboard. */
 const TOOLS_HEIGHT = 184;
 
-type Key = { label: string; key: string; modifiers?: string[]; a11y: string };
+type Key = { label: string; key: string; modifiers?: string[]; a11y: "escape" | "tab" | "delete" | "left" | "up" | "down" | "right" | "spotlight" | "switchApps" | "closeWindow" | "quitApp" | "enter" };
 
 const KEYS: Key[] = [
-  { label: "esc", key: "Escape", a11y: "Escape" },
-  { label: "tab", key: "Tab", a11y: "Tab" },
-  { label: "⌫", key: "Backspace", a11y: "Delete" },
-  { label: "←", key: "ArrowLeft", a11y: "Left arrow" },
-  { label: "↑", key: "ArrowUp", a11y: "Up arrow" },
-  { label: "↓", key: "ArrowDown", a11y: "Down arrow" },
-  { label: "→", key: "ArrowRight", a11y: "Right arrow" },
+  { label: "esc", key: "Escape", a11y: "escape" },
+  { label: "tab", key: "Tab", a11y: "tab" },
+  { label: "⌫", key: "Backspace", a11y: "delete" },
+  { label: "←", key: "ArrowLeft", a11y: "left" },
+  { label: "↑", key: "ArrowUp", a11y: "up" },
+  { label: "↓", key: "ArrowDown", a11y: "down" },
+  { label: "→", key: "ArrowRight", a11y: "right" },
 ];
 
 const MAC_KEYS: Key[] = [
-  { label: "⌘ space", key: "space", modifiers: ["cmd"], a11y: "Spotlight" },
-  { label: "⌘ tab", key: "Tab", modifiers: ["cmd"], a11y: "Switch apps" },
-  { label: "⌘ W", key: "w", modifiers: ["cmd"], a11y: "Close window" },
-  { label: "⌘ Q", key: "q", modifiers: ["cmd"], a11y: "Quit app" },
+  { label: "⌘ space", key: "space", modifiers: ["cmd"], a11y: "spotlight" },
+  { label: "⌘ tab", key: "Tab", modifiers: ["cmd"], a11y: "switchApps" },
+  { label: "⌘ W", key: "w", modifiers: ["cmd"], a11y: "closeWindow" },
+  { label: "⌘ Q", key: "q", modifiers: ["cmd"], a11y: "quitApp" },
 ];
 
 export default function Live() {
+  const { t } = useTranslation(["chat", "common"]);
   const params = useLocalSearchParams<{ kind: LiveScreen["kind"]; id: string; title?: string; chat?: string }>();
   const chat = params.chat || null;
   const insets = useSafeAreaInsets();
@@ -57,9 +60,9 @@ export default function Live() {
   // Subscribed even while it's off: the core starts streaming as soon as the browser runs.
   const screen: LiveScreen | null =
     params.kind === "browser"
-      ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? "Browser", running: profile?.running ?? true }
+      ? { kind: "browser", key: `browser:${browserView(params.id, chat)}`, id: params.id, conversationId: chat, title: params.title ?? t("live.browser"), running: profile?.running ?? true }
       : params.kind === "share"
-        ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? "Shared screen", conversationId: "" }
+        ? { kind: "share", key: `computer:${params.id}`, view: params.id, title: params.title ?? t("live.sharedScreen"), conversationId: "" }
         : null;
   const phones = useQuery({ queryKey: qk.androidDevices, queryFn: api.android.devices, enabled: params.kind === "android", retry: false });
   const phone = params.kind === "android" ? (phones.data?.find((d) => d.id === params.id) ?? null) : null;
@@ -94,18 +97,18 @@ export default function Live() {
     onSuccess: () => {
       if (params.kind === "vm") setTimeout(() => queryClient.refetchQueries({ queryKey: qk.vmScreen(params.id) }), 250);
     },
-    onError: (err) => Alert.alert("Couldn't reach the screen", errorText(err)),
+    onError: (err) => Alert.alert(t("live.inputFailed"), errorText(err)),
   });
 
   const vmAction = useMutation({
     mutationFn: (action: "start" | "stop") => (action === "start" ? api.vms.start(params.id) : api.vms.stop(params.id)),
-    onError: (err) => Alert.alert("Couldn't change the VM", errorText(err)),
+    onError: (err) => Alert.alert(t("live.vmFailed"), errorText(err)),
   });
 
   const launch = useMutation({
     mutationFn: () => api.browser.launch(params.id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: qk.browserProfiles }),
-    onError: (err) => Alert.alert("Couldn't start the browser", errorText(err)),
+    onError: (err) => Alert.alert(t("live.browserFailed"), errorText(err)),
   });
 
   // With the keyboard up, the picture moves into the space between the title and the controls above the keyboard.
@@ -146,25 +149,25 @@ export default function Live() {
     const value = text;
     setText("");
     if (value && !(await input.mutateAsync({ type: "text", text: value }).then(() => true, () => false))) return;
-    sendKey({ label: "Enter", key: "Enter", a11y: "Enter" });
+    sendKey({ label: "Enter", key: "Enter", a11y: "enter" });
   };
 
   const subtitle =
     params.kind === "vm"
       ? vm
         ? vmState(vm.state)
-        : "Virtual machine"
+        : t("live.virtualMachine")
       : params.kind === "android"
         ? phone
           ? phoneState(phone)
-          : "Android phone"
+          : t("live.androidPhone")
       : frame?.error
         ? frame.error
         : params.kind === "browser"
           ? profile?.running === false
-            ? "Not running"
-            : hostOf(frame?.url) || "Browser"
-          : frame?.title || "Shared screen";
+            ? t("live.notRunning")
+            : hostOf(frame?.url) || t("live.browser")
+          : frame?.title || t("live.sharedScreen");
 
   return (
     <View style={styles.root}>
@@ -185,7 +188,7 @@ export default function Live() {
             onLongPress={mac ? (e) => press(e, "right") : null}
             delayLongPress={380}
             disabled={!control}
-            accessibilityHint={mac ? "In control: tap to click, hold to right-click" : "In control: tap to click"}
+            accessibilityHint={mac ? t("live.controlHintMac") : t("live.controlHint")}
             style={shown}
           >
             <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="contain" transition={0} cachePolicy="none" />
@@ -204,10 +207,10 @@ export default function Live() {
               <>
                 <Icon name="vm" size={34} color={DIM} />
                 <T variant="headline" color={WHITE}>
-                  {vm.name} is {vmState(vm.state).toLowerCase()}
+                  {t("live.vmIs", { name: vm.name, state: vmState(vm.state).toLowerCase() })}
                 </T>
                 {vm.state === "stopped" || vm.state === "suspended" ? (
-                  <Button title="Start VM" icon="play" variant="glass" dark loading={vmAction.isPending} onPress={() => vmAction.mutate("start")} />
+                  <Button title={t("live.startVm")} icon="play" variant="glass" dark loading={vmAction.isPending} onPress={() => vmAction.mutate("start")} />
                 ) : (
                   <ActivityIndicator color={WHITE} />
                 )}
@@ -216,28 +219,28 @@ export default function Live() {
               <>
                 <Icon name="phone" size={34} color={DIM} />
                 <T variant="headline" color={WHITE}>
-                  {`${phone.name} isn't connected`}
+                  {t("live.phoneNotConnected", { name: phone.name })}
                 </T>
                 <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
-                  Plug it in or connect it over Wi-Fi in Godmode on your computer.
+                  {t("live.phoneConnectHint")}
                 </T>
               </>
             ) : profile && !profile.running ? (
               <>
                 <Icon name="globe" size={34} color={DIM} />
                 <T variant="headline" color={WHITE}>
-                  {`${profile.name} isn't running`}
+                  {t("live.browserNotRunning", { name: profile.name })}
                 </T>
                 <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
-                  {chat ? "It starts when the agent needs the web." : "Agents start it when they need the web. Start it now to watch it here."}
+                  {chat ? t("live.browserStartsChat") : t("live.browserStartsHint")}
                 </T>
-                {!chat && <Button title="Start browser" icon="play" variant="glass" dark loading={launch.isPending} onPress={() => launch.mutate()} />}
+                {!chat && <Button title={t("live.startBrowser")} icon="play" variant="glass" dark loading={launch.isPending} onPress={() => launch.mutate()} />}
               </>
             ) : (
               <>
                 <ActivityIndicator color={WHITE} />
                 <T variant="subhead" color={DIM} style={{ textAlign: "center" }}>
-                  {params.kind === "browser" && chat ? "Waiting for the browser. It shows up here as soon as an agent uses it." : "Waiting for the picture…"}
+                  {params.kind === "browser" && chat ? t("live.waitingBrowser") : t("live.waitingPicture")}
                 </T>
                 {(params.kind === "vm" && shot.error) || (params.kind === "android" && phoneShot.error) ? (
                   <T variant="caption" color={DIM} style={{ textAlign: "center" }}>
@@ -251,12 +254,12 @@ export default function Live() {
       </ScrollView>
 
       <View style={[styles.top, { paddingTop: insets.top + 8, paddingLeft: insets.left + 16, paddingRight: insets.right + 16 }]}>
-        <GlassIconButton icon="close" label="Close" onPress={() => router.back()} dark />
+        <GlassIconButton icon="close" label={t("common:actions.close")} onPress={() => router.back()} dark />
         <Glass style={styles.title} scheme="dark" fallback={SMOKE}>
           {fresh ? <LiveDot size={7} /> : <View style={[styles.idleDot]} />}
           <View style={{ flexShrink: 1 }}>
             <T variant="footnote" color={WHITE} numberOfLines={1} style={{ fontWeight: "600" }}>
-              {params.title ?? vm?.name ?? phone?.name ?? "Screen"}
+              {params.title ?? vm?.name ?? phone?.name ?? t("live.screen")}
             </T>
             <T variant="caption" color={DIM} numberOfLines={1}>
               {subtitle}
@@ -264,7 +267,7 @@ export default function Live() {
           </View>
         </Glass>
         {params.kind === "vm" && vm?.state === "running" ? (
-          <GlassIconButton icon="power" label="Stop VM" onPress={() => confirmStop(() => vmAction.mutate("stop"))} dark />
+          <GlassIconButton icon="power" label={t("live.stopVm")} onPress={() => confirmStop(() => vmAction.mutate("stop"), t)} dark />
         ) : (
           <View style={{ width: 44 }} />
         )}
@@ -276,7 +279,7 @@ export default function Live() {
             <Animated.View entering={FadeIn} style={{ width: "100%", maxWidth: 520, gap: 8 }}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always" contentContainerStyle={styles.keys}>
                 {[...KEYS, ...(params.kind === "vm" ? MAC_KEYS : [])].map((k) => (
-                  <Pressable key={k.a11y} accessibilityRole="button" accessibilityLabel={k.a11y} onPress={() => sendKey(k)}>
+                  <Pressable key={k.a11y} accessibilityRole="button" accessibilityLabel={t(`live.keys.${k.a11y}`)} onPress={() => sendKey(k)}>
                     {({ pressed }) => (
                       <Glass style={[styles.key, pressed && styles.keyPressed]} scheme="dark" fallback={SMOKE}>
                         <T variant="footnote" color={WHITE} style={{ fontWeight: "600" }}>
@@ -295,14 +298,14 @@ export default function Live() {
                   value={text}
                   onChangeText={setText}
                   onSubmitEditing={sendText}
-                  placeholder="Type into the screen"
+                  placeholder={t("live.typePlaceholder")}
                   placeholderTextColor={DIM}
                   returnKeyType="send"
                   style={styles.typeInput}
                 />
                 <Pressable onPress={enter} style={styles.enter}>
                   <T variant="caption" color={WHITE} style={{ fontWeight: "600" }}>
-                    Enter
+                    {t("live.enter")}
                   </T>
                 </Pressable>
               </Glass>
@@ -319,21 +322,21 @@ export default function Live() {
               <Glass interactive tint={control ? "rgba(14,202,123,0.55)" : undefined} scheme="dark" fallback={SMOKE} style={styles.controlPill}>
                 <Icon name="hand" size={16} color={WHITE} />
                 <T variant="subhead" color={WHITE} style={{ fontWeight: "600" }}>
-                  {control ? "You're in control" : "Take control"}
+                  {control ? t("live.inControl") : t("live.takeControl")}
                 </T>
               </Glass>
             </Pressable>
             {control && (
               <>
-                <GlassIconButton icon="keyboard" label="Type" onPress={() => setTyping((v) => !v)} dark />
-                <GlassIconButton icon="up" label="Scroll up" onPress={() => scroll(-500)} dark />
-                <GlassIconButton icon="down" label="Scroll down" onPress={() => scroll(500)} dark />
+                <GlassIconButton icon="keyboard" label={t("live.type")} onPress={() => setTyping((v) => !v)} dark />
+                <GlassIconButton icon="up" label={t("live.scrollUp")} onPress={() => scroll(-500)} dark />
+                <GlassIconButton icon="down" label={t("live.scrollDown")} onPress={() => scroll(500)} dark />
               </>
             )}
           </GlassGroup>
           {control && !typing && (
             <T variant="caption" color={DIM}>
-              {mac ? "Tap to click, hold to right-click" : "Tap the picture to click there"}
+              {mac ? t("live.tapHintMac") : t("live.tapHint")}
             </T>
           )}
         </KeyboardStickyView>
@@ -342,10 +345,10 @@ export default function Live() {
   );
 }
 
-function confirmStop(stop: () => void) {
-  Alert.alert("Stop this VM?", "macOS shuts down; agents working in it are interrupted.", [
-    { text: "Cancel", style: "cancel" },
-    { text: "Stop", style: "destructive", onPress: stop },
+function confirmStop(stop: () => void, t: TFunction<["chat", "common"]>) {
+  Alert.alert(t("live.stopVmTitle"), t("live.stopVmMessage"), [
+    { text: t("common:actions.cancel"), style: "cancel" },
+    { text: t("common:actions.stop"), style: "destructive", onPress: stop },
   ]);
 }
 

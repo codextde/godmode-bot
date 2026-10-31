@@ -1,0 +1,83 @@
+{
+  "unknownCaller": "Unknown caller",
+  "unknownNumber": "Unknown number",
+  "incoming": "Incoming",
+  "outgoing": "Outgoing",
+  "status": {
+    "calling": "Ringing",
+    "inProgress": "On the line",
+    "processing": "Wrapping up",
+    "done": "Done",
+    "noAnswer": "No answer",
+    "voicemail": "Voicemail left",
+    "failed": "Failed"
+  },
+  "ownerCall": {
+    "title": "Came from your own number: its requests go to your agent as yours",
+    "label": "Owner call"
+  },
+  "marker": {
+    "ended": "Call with {{name}} ended"
+  },
+  "newCall": {
+    "calling": "Calling {{name}}",
+    "callingDescription": "The transcript and summary show up here when the call ends.",
+    "placeError": "Couldn't place the call",
+    "title": "New call",
+    "description": "Godmode's voice calls for you and works toward the goal. You get the transcript, a summary and the outcome afterwards.",
+    "number": "Number",
+    "badNumber": "Add the country code, e.g. +49.",
+    "numberHint": "With the country code.",
+    "who": "Who",
+    "goal": "Goal",
+    "goalPlaceholder": "Book a haircut for next week, ideally Tuesday or Wednesday after 5 pm.",
+    "context": "Good to know",
+    "contextPlaceholder": "Customer number, what's been agreed before, what not to say yes to.",
+    "language": "Language",
+    "callNow": "Call now"
+  },
+  "goalLabel": {
+    "task": "Goal",
+    "question": "Question for you",
+    "inform": "News for you",
+    "inbound": "What the caller wanted"
+  },
+  "page": {
+    "title": "Calls",
+    "newCall": "New call",
+    "turnOnFirst": "Turn on phone calls in Settings first",
+    "live_one": "{{count}} call on the line right now. The transcript and summary arrive as soon as it ends.",
+    "live_other": "{{count}} calls on the line right now. The transcript and summary arrive as soon as they end.",
+    "description": "Calls your agents made and took: who they talked to, what came out of it, and every word.",
+    "loadError": "Couldn't load your calls",
+    "emptyTitle": "No calls yet",
+    "emptyDescription": "Agents can phone a business to book an appointment, follow up with a lead, or call you when a question can't wait. Your number answers too: each incoming call becomes a chat for an agent. It runs on ElevenLabs with a Twilio or SIP number.",
+    "placeCall": "Place a call",
+    "setUp": "Set up phone calls",
+    "openError": "Couldn't open this call"
+  },
+  "row": {
+    "incomingCall": "Incoming call",
+    "noGoal": "No goal given"
+  },
+  "detail": {
+    "dateFormat": "EEE, MMM d · p",
+    "openChat": "Open chat",
+    "status": "Status",
+    "duration": "Duration",
+    "cost": "Cost",
+    "yourAnswer": "Your answer",
+    "summary": "Summary",
+    "processing": "The call ended. Godmode is writing the summary.",
+    "active": "The transcript, summary and recording show up here when the call ends.",
+    "outcome": "Outcome",
+    "outcomeMissed": "Outcome · goal not reached",
+    "recording": "Recording",
+    "recordingError": "Couldn't load the recording: {{error}}"
+  },
+  "transcript": {
+    "label": "Transcript",
+    "caller": "Caller",
+    "them": "Them"
+  }
+}

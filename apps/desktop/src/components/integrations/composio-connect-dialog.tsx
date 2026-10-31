@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, ExternalLink, RotateCcw, ShieldCheck, TriangleAlert } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { ComposioConnectResult, ComposioToolkit } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +32,7 @@ type Phase =
 
 /** Connect a Composio toolkit account: choose scope → OAuth in the browser → poll until ACTIVE. */
 export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: ComposioToolkit | null; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation(["integrations", "common"]);
   const open = !!toolkit;
   const qc = useQueryClient();
   const defaultScope = useDefaultScope();
@@ -54,15 +56,15 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
     cancelled.current = !slug;
   }, [slug]);
 
-  const t = toolkit ?? lastToolkit;
+  const tk = toolkit ?? lastToolkit;
 
   const finish = (ok: boolean, message?: string) => {
     void qc.invalidateQueries({ queryKey: qk.composio });
     void qc.invalidateQueries({ queryKey: qk.mcpServers });
     if (ok) {
       setPhase({ kind: "success" });
-      toast.success(`${t?.name ?? "App"} connected`, { description: "Your agents can use it right away." });
-    } else setPhase({ kind: "error", message: message ?? "The connection did not complete." });
+      toast.success(tk ? t("connect.connectedToast", { name: tk.name }) : t("connect.appConnectedToast"), { description: t("connect.connectedToastHint") });
+    } else setPhase({ kind: "error", message: message ?? t("connect.notCompleted") });
   };
 
   // Poll the connection status while waiting for the OAuth round-trip.
@@ -87,17 +89,17 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
           const conn = await api.composio.refresh(connectionId);
           const status = conn.status.toUpperCase();
           if (status === "ACTIVE") return finish(true);
-          if (FAILED.has(status)) return finish(false, `Composio reports the connection as ${status.toLowerCase()}.`);
+          if (FAILED.has(status)) return finish(false, t("connect.reportedAs", { status: status.toLowerCase() }));
         }
       } catch (e) {
         if (isVaultLocked(e)) {
           toastApiError(e, "", qc);
-          return finish(false, "The vault was locked.");
+          return finish(false, t("connect.vaultLocked"));
         }
         /* transient — keep polling */
       }
       if (stop || cancelled.current) return;
-      if (Date.now() - started > TIMEOUT_MS) return finish(false, "Timed out waiting for the sign-in to finish. You can try again.");
+      if (Date.now() - started > TIMEOUT_MS) return finish(false, t("connect.timedOut"));
       timer = setTimeout(tick, POLL_MS);
     };
     timer = setTimeout(tick, 1_200);
@@ -108,10 +110,10 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
   }, [phase]);
 
   const start = async () => {
-    if (!t) return;
+    if (!tk) return;
     setPhase({ kind: "starting" });
     try {
-      const result = await api.composio.connect({ toolkit: t.slug, workspaceId: scope.workspaceId, agentId: scope.agentId });
+      const result = await api.composio.connect({ toolkit: tk.slug, workspaceId: scope.workspaceId, agentId: scope.agentId });
       if (cancelled.current) return;
       if (result.redirectUrl) {
         void openExternal(result.redirectUrl);
@@ -130,10 +132,10 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader className="flex-row items-center gap-3 space-y-0 text-left">
-          {t && <ToolkitLogo src={t.logo} name={t.name} size="lg" />}
+          {tk && <ToolkitLogo src={tk.logo} name={tk.name} size="lg" />}
           <div className="min-w-0">
-            <DialogTitle>Connect {t?.name}</DialogTitle>
-            <DialogDescription className="mt-1 line-clamp-2">{t?.description || "Give your agents access through Composio."}</DialogDescription>
+            <DialogTitle>{t("connect.title", { name: tk?.name })}</DialogTitle>
+            <DialogDescription className="mt-1 line-clamp-2">{tk?.description || t("connect.defaultDescription")}</DialogDescription>
           </div>
         </DialogHeader>
 
@@ -141,14 +143,12 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
           {(phase.kind === "configure" || phase.kind === "starting") && (
             <motion.div key="configure" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-4">
               <div>
-                <p className="mb-2 text-sm font-medium">Who can use this account?</p>
+                <p className="mb-2 text-sm font-medium">{t("connect.whoCanUse")}</p>
                 <ScopePicker value={scope} onChange={setScope} disabled={phase.kind === "starting"} />
               </div>
               <div className="flex items-start gap-2.5 rounded-lg border bg-paper-2 p-3 text-xs text-muted-foreground">
                 <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-strong" />
-                {t?.noAuth
-                  ? "This app doesn't need a sign-in — it's enabled right away."
-                  : `You'll sign in on ${t?.name ?? "the app"}'s own page in your browser. Godmode never sees that password; Composio stores the resulting token.`}
+                {tk?.noAuth ? t("connect.noAuth") : tk ? t("connect.signInHint", { name: tk.name }) : t("connect.signInHintApp")}
               </div>
             </motion.div>
           )}
@@ -156,11 +156,11 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
           {phase.kind === "waiting" && (
             <motion.div key="waiting" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="flex flex-col items-center py-4 text-center">
               <div className="glow-border grid size-16 place-items-center rounded-xl border bg-paper-2">
-                <Orb variant="C2" size={28} label="Waiting for sign-in" />
+                <Orb variant="C2" size={28} label={t("connections.status.pending")} />
               </div>
-              <p className="text-shimmer mt-4 text-sm font-medium">Waiting for you to finish in the browser…</p>
+              <p className="text-shimmer mt-4 text-sm font-medium">{t("connect.waiting")}</p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Sign in to {t?.name} and approve access. This window updates automatically once Composio confirms the connection.
+                {t("connect.waitingHint", { name: tk?.name })}
               </p>
               {phase.result.redirectUrl && (
                 <button
@@ -168,7 +168,7 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
                   className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
                   onClick={() => void openExternal(phase.result.redirectUrl!)}
                 >
-                  Browser didn't open? Open the sign-in page again <ExternalLink className="size-3" />
+                  {t("connect.reopen")} <ExternalLink className="size-3" />
                 </button>
               )}
             </motion.div>
@@ -184,9 +184,9 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
               >
                 <DrawCheck className="size-8" />
               </motion.div>
-              <p className="mt-4 text-sm font-medium">{t?.name} is connected</p>
+              <p className="mt-4 text-sm font-medium">{t("connect.isConnected", { name: tk?.name })}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Available to <ScopeSummary scope={scope} /> from their next run.
+                <ScopeSummary scope={scope} />
               </p>
             </motion.div>
           )}
@@ -196,7 +196,7 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
               <div className="grid size-14 place-items-center rounded-xl border border-destructive/20 bg-destructive/[0.06] text-destructive">
                 <TriangleAlert className="size-7" />
               </div>
-              <p className="mt-4 text-sm font-medium">Couldn't connect {t?.name}</p>
+              <p className="mt-4 text-sm font-medium">{t("connect.failed", { name: tk?.name })}</p>
               <p className="mt-1 max-w-sm text-xs text-muted-foreground">{phase.message}</p>
             </motion.div>
           )}
@@ -206,27 +206,33 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
           {(phase.kind === "configure" || phase.kind === "starting") && (
             <>
               <Button variant="ghost" onClick={close}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button onClick={start} disabled={phase.kind === "starting"}>
                 {phase.kind === "starting" ? <Spinner /> : <ArrowRight />}
-                {phase.kind === "starting" ? "Starting…" : t?.noAuth ? "Enable" : `Continue to ${t?.name ?? "sign-in"}`}
+                {phase.kind === "starting"
+                  ? t("connect.starting")
+                  : tk?.noAuth
+                    ? t("common:actions.enable")
+                    : tk
+                      ? t("connect.continueTo", { name: tk.name })
+                      : t("connect.continueToSignIn")}
               </Button>
             </>
           )}
           {phase.kind === "waiting" && (
             <Button variant="outline" onClick={close}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
           )}
-          {phase.kind === "success" && <Button onClick={close}>Done</Button>}
+          {phase.kind === "success" && <Button onClick={close}>{t("common:actions.done")}</Button>}
           {phase.kind === "error" && (
             <>
               <Button variant="ghost" onClick={close}>
-                Close
+                {t("common:actions.close")}
               </Button>
               <Button onClick={() => setPhase({ kind: "configure" })}>
-                <RotateCcw /> Try again
+                <RotateCcw /> {t("common:actions.tryAgain")}
               </Button>
             </>
           )}
@@ -237,10 +243,17 @@ export function ComposioConnectDialog({ toolkit, onOpenChange }: { toolkit: Comp
 }
 
 function ScopeSummary({ scope }: { scope: IntegrationScope }) {
+  const { t } = useTranslation("integrations");
   const { data: workspaces = [] } = useWorkspaces();
   const { data: agents = [] } = useAllAgents();
-  if (scope.agentId) return <strong className="font-medium text-foreground">{agents.find((a) => a.id === scope.agentId)?.name ?? "the agent"}</strong>;
-  if (scope.workspaceId)
-    return <strong className="font-medium text-foreground">agents in {workspaces.find((w) => w.id === scope.workspaceId)?.name ?? "the workspace"}</strong>;
-  return <strong className="font-medium text-foreground">every agent</strong>;
+  const agentName = scope.agentId ? agents.find((a) => a.id === scope.agentId)?.name : undefined;
+  const workspaceName = scope.workspaceId ? workspaces.find((w) => w.id === scope.workspaceId)?.name : undefined;
+  const who = scope.agentId
+    ? (agentName ?? t("connect.scopeTheAgent"))
+    : scope.workspaceId
+      ? workspaceName
+        ? t("connect.scopeWorkspace", { name: workspaceName })
+        : t("connect.scopeTheWorkspace")
+      : t("connect.scopeEveryAgent");
+  return <Trans t={t} i18nKey="connect.availableTo" values={{ who }} components={{ b: <strong className="font-medium text-foreground" /> }} />;
 }

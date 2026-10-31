@@ -46,6 +46,7 @@ import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
 import { requireLicense } from "../license/license";
 import { claudeConfigDir } from "./claudeUpdate";
+import { matchExpr, parseQuery } from "./searchQuery";
 import { continueConversation, pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "./pauses";
 
 const log = logger("chat");
@@ -503,13 +504,12 @@ export function listConversations(
     where.push("(c.project_id = ? OR (c.project_id IS NULL AND c.agent_id IN (SELECT id FROM agents WHERE project_id = ?)))");
     params.push(opts.projectId, opts.projectId);
   }
-  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
-  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
-    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  for (const term of parseQuery(opts.search ?? "").slice(0, 6)) {
+    const expr = matchExpr([term]);
     where.push(
-      "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
+      "(c.rowid IN (SELECT rowid FROM search_titles WHERE search_titles MATCH ?) OR c.id IN (SELECT m2.conversation_id FROM search_messages s2 JOIN messages m2 ON m2.rowid = s2.rowid WHERE search_messages MATCH ?))",
     );
-    params.push(like, like);
+    params.push(expr, expr);
   }
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
@@ -630,6 +630,25 @@ export function markConversationsRead(ids: string[] | "all"): number {
     emitConversationUpdated(r.id);
   }
   return rows.length;
+}
+
+/**
+ * "Mark as unread": the chat's latest run counts as new again until the human opens the chat. A failed run is only
+ * taken when there is no other, so a reminder doesn't bring the failure back to "Needs you". Private chats stay unmarked.
+ */
+export function markConversationsUnread(ids: string[]): number {
+  let marked = 0;
+  for (const id of ids) {
+    const r = get<{ run_id: string }>(
+      `SELECT r.id AS run_id FROM conversations c JOIN runs r ON r.conversation_id = c.id
+       WHERE c.id = ? AND c.unread_run_id IS NULL AND c.private = 0 ORDER BY r.status = 'failed', r.created_at DESC, r.rowid DESC LIMIT 1`,
+      id,
+    );
+    if (!r || !sql("UPDATE conversations SET unread_run_id = ? WHERE id = ? AND unread_run_id IS NULL", r.run_id, id).changes) continue;
+    marked++;
+    emitConversationUpdated(id);
+  }
+  return marked;
 }
 
 export async function deleteConversation(id: string): Promise<void> {

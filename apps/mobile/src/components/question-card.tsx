@@ -2,11 +2,13 @@ import { format } from "date-fns";
 import { useRecyclingState } from "@shopify/flash-list";
 import { createContext, useContext } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { AnswerQuestionInput, MessageBlock } from "@godmode/shared";
 import { Icon } from "./icon";
 import { Markdown } from "./markdown";
 import { T, tap } from "./ui";
 import { ApiError, api, errorText } from "@/lib/api";
+import { dateLocale, t } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, type, useColors } from "@/lib/theme";
@@ -35,7 +37,7 @@ export async function answerQuestion(id: string, input: AnswerQuestionInput, con
     void queryClient.invalidateQueries({ queryKey: qk.questions });
     if (conversationId) void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
     const settled = err instanceof ApiError && err.code === "question_closed";
-    Alert.alert(settled ? "Already settled" : "Couldn't send your answer", errorText(err));
+    Alert.alert(settled ? t("components:questionCard.alreadySettled") : t("components:questionCard.answerFailed"), errorText(err));
     return false;
   }
 }
@@ -46,6 +48,7 @@ export async function answerQuestion(id: string, input: AnswerQuestionInput, con
  */
 export function QuestionCard({ question: q, streaming }: { question: QuestionBlock; streaming?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const scope = useContext(ChatScope);
   // Rows are reused for other messages while scrolling: a note typed for one approval must not show up in the next.
   const [pressed, setPressed] = useRecyclingState<string | null>(null, [q.id]);
@@ -56,7 +59,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
   const open = q.status === "open";
   const answerable = open && !streaming && scope?.openQuestionId === q.id;
   const lost = open && !streaming && !!scope && scope.openQuestionId !== q.id;
-  const agentName = scope?.agentName ?? "The agent";
+  const agentName = scope?.agentName ?? t("questionCard.theAgent");
   const busy = pressed !== null;
 
   const send = (key: string, input: AnswerQuestionInput) => {
@@ -71,13 +74,13 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
     return (
       <View style={[styles.card, styles.withdrawn, { borderColor: c.borderStrong }]}>
         <T variant="eyebrow" muted>
-          {approval ? "Approval withdrawn" : "Question withdrawn"}
+          {approval ? t("questionCard.approvalWithdrawn") : t("questionCard.questionWithdrawn")}
         </T>
         <T variant="subhead" muted style={{ textDecorationLine: "line-through" }}>
           {q.title}
         </T>
         <T variant="footnote" muted>
-          The run was stopped before this was answered.
+          {t("questionCard.stoppedBeforeAnswer")}
         </T>
       </View>
     );
@@ -91,7 +94,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
       <View style={styles.head}>
         <Icon name={approval ? "shield" : "warning"} size={13} color={open ? c.warning : c.textMuted} />
         <T variant="eyebrow" color={open ? c.warning : c.textMuted}>
-          {approval ? (open ? "Needs your OK" : "Approval") : "Question"}
+          {approval ? (open ? t("questionCard.needsOk") : t("questionCard.approval")) : t("questionCard.question")}
         </T>
       </View>
       <T variant="body" style={{ fontWeight: "600" }} selectable>
@@ -101,7 +104,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
         approval ? (
           <T variant="footnote" muted selectable>
             <T variant="footnote" style={{ fontWeight: "600" }}>
-              Why{" "}
+              {t("questionCard.why")}{" "}
             </T>
             {q.body}
           </T>
@@ -112,7 +115,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
       {approval && q.affects ? (
         <T variant="footnote" muted selectable>
           <T variant="footnote" style={{ fontWeight: "600" }}>
-            Affects{" "}
+            {t("questionCard.affects")}{" "}
           </T>
           {q.affects}
         </T>
@@ -128,7 +131,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
               <Pressable
                 key={o.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${o.label}${o.recommended ? ", recommended" : ""}`}
+                accessibilityLabel={o.recommended ? t("questionCard.optionRecommended", { label: o.label }) : o.label}
                 accessibilityState={{ disabled: !answerable || busy, selected: picked }}
                 disabled={!answerable || busy}
                 onPress={() => send(o.id, { optionId: o.id })}
@@ -160,7 +163,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
                 </View>
                 {o.recommended ? (
                   <T variant="caption" color={fg} style={{ opacity: 0.72, fontWeight: "600" }}>
-                    Recommended
+                    {t("questionCard.recommended")}
                   </T>
                 ) : null}
               </Pressable>
@@ -177,20 +180,20 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
               multiline
               value={note}
               onChangeText={setNote}
-              placeholder={`Note for ${agentName} (optional)`}
+              placeholder={t("questionCard.notePlaceholder", { name: agentName })}
               placeholderTextColor={c.textFaint}
-              accessibilityLabel={`Note for ${agentName}`}
+              accessibilityLabel={t("questionCard.noteLabel", { name: agentName })}
               maxLength={2000}
               style={[type.subhead, styles.note, { color: c.text, backgroundColor: c.surface, borderColor: c.border }]}
             />
           )}
           <View style={styles.decide}>
-            <Decision label="Approve" icon="check" primary busy={pressed === "approve"} disabled={!answerable || busy} onPress={() => decide("approve")} />
-            <Decision label="Decline" icon="close" busy={pressed === "decline"} disabled={!answerable || busy} onPress={() => decide("decline")} />
+            <Decision label={t("questionCard.approve")} icon="check" primary busy={pressed === "approve"} disabled={!answerable || busy} onPress={() => decide("approve")} />
+            <Decision label={t("questionCard.decline")} icon="close" busy={pressed === "decline"} disabled={!answerable || busy} onPress={() => decide("decline")} />
             {!noting && answerable ? (
               <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setNoting(true)} style={{ paddingHorizontal: 6 }}>
                 <T variant="footnote" muted style={{ fontWeight: "600" }}>
-                  Add a note
+                  {t("questionCard.addNote")}
                 </T>
               </Pressable>
             ) : null}
@@ -201,19 +204,28 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
       {open ? (
         <T variant="footnote" muted>
           {streaming || !answerable
-            ? `${agentName} is finishing the step it was in…`
+            ? t("questionCard.finishingStep", { name: agentName })
             : approval
-              ? "Or reply below: your message counts as the answer."
+              ? t("questionCard.replyCountsAsAnswer")
               : q.options.length
-                ? "Or type your own answer below."
-                : "Reply below to answer."}
+                ? t("questionCard.typeOwnAnswer")
+                : t("questionCard.replyToAnswer")}
         </T>
       ) : q.answer ? (
         <View style={[styles.settled, { borderTopColor: c.border }]}>
           <Icon name={q.status === "declined" ? "close" : "check"} size={12} color={approved ? c.brandStrong : c.textMuted} weight="bold" />
           <T variant="footnote" color={approved ? c.brandStrong : c.textMuted} style={{ flex: 1 }} selectable>
-            {approved ? "You approved" : q.status === "declined" ? "You declined" : chosen ? `You chose ${chosen.label}` : "You answered"}
-            {q.answer.via === "phone" ? " from your phone" : ""} · {format(new Date(q.answer.at), "HH:mm")}
+            {t(
+              approved
+                ? q.answer.via === "phone" ? "questionCard.settled.approvedPhone" : "questionCard.settled.approved"
+                : q.status === "declined"
+                  ? q.answer.via === "phone" ? "questionCard.settled.declinedPhone" : "questionCard.settled.declined"
+                  : chosen
+                    ? q.answer.via === "phone" ? "questionCard.settled.chosePhone" : "questionCard.settled.chose"
+                    : q.answer.via === "phone" ? "questionCard.settled.answeredPhone" : "questionCard.settled.answered",
+              { option: chosen?.label ?? "" },
+            )}
+            {` · ${format(new Date(q.answer.at), "p", { locale: dateLocale() })}`}
             {q.answer.text && !chosen ? `\n${q.answer.text}` : ""}
           </T>
         </View>

@@ -112,10 +112,11 @@ function changed(row: Pick<PausedRow, "conversation_id">) {
   arm();
 }
 
-export function savePause(row: PausedRow): void {
+/** `quiet`: the run goes on right away on another Claude account, nobody needs to hear about the limit. */
+export function savePause(row: PausedRow, { quiet = false } = {}): void {
   insert("paused_runs", { ...row });
   changed(row);
-  if (row.reason === "limit") announceLimit(row);
+  if (row.reason === "limit" && !quiet) announceLimit(row);
 }
 
 export function dropPause(row: Pick<PausedRow, "run_id" | "conversation_id">): void {

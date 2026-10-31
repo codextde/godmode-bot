@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Blocks, CalendarDays, Plus, Radar, Sun, Workflow } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { useRoutines } from "@/lib/hooks";
@@ -12,15 +13,16 @@ import { RoutineDialog, type RoutineDraft } from "../routine-dialog";
 import { RoutineItem } from "../routine-item";
 import { useReduceAnimations } from "@/lib/motion";
 
-const QUICK_STARTS: { icon: typeof Sun; label: string; draft: Partial<RoutineDraft> }[] = [
-  { icon: Sun, label: "Every morning", draft: { name: "Morning check-in", triggerType: "schedule", cron: "0 8 * * *" } },
-  { icon: CalendarDays, label: "Every Monday", draft: { name: "Weekly review", triggerType: "schedule", cron: "0 9 * * 1" } },
-  { icon: Blocks, label: "On an app event", draft: { triggerType: "app" } },
-  { icon: Radar, label: "When something changes", draft: { triggerType: "condition" } },
-];
+const QUICK_STARTS = [
+  { icon: Sun, labelKey: "routinesTab.quickStarts.morning", nameKey: "routinesTab.quickStarts.morningName", draft: { triggerType: "schedule", cron: "0 8 * * *" } },
+  { icon: CalendarDays, labelKey: "routinesTab.quickStarts.monday", nameKey: "routinesTab.quickStarts.mondayName", draft: { triggerType: "schedule", cron: "0 9 * * 1" } },
+  { icon: Blocks, labelKey: "routinesTab.quickStarts.appEvent", nameKey: null, draft: { triggerType: "app" } },
+  { icon: Radar, labelKey: "routinesTab.quickStarts.condition", nameKey: null, draft: { triggerType: "condition" } },
+] as const satisfies readonly { icon: typeof Sun; labelKey: string; nameKey: string | null; draft: Partial<RoutineDraft> }[];
 
 export function RoutinesTab({ agent }: { agent: Agent }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("agents");
   const q = useRoutines(agent.id);
   const easy = useEasyMode();
   const [dialog, setDialog] = useState<{ key: string; open: boolean; routine: Routine | null; initial?: Partial<RoutineDraft> } | null>(null);
@@ -32,12 +34,10 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {easy
-            ? `Automations put ${agent.name} to work on its own: on a schedule, when something happens in one of your apps or when a condition is true.`
-            : `Automations put ${agent.name} to work on a schedule, when something happens in your apps, when a condition is met or when a webhook is called.`}
+          {easy ? t("routinesTab.introEasy", { name: agent.name }) : t("routinesTab.introPro", { name: agent.name })}
         </p>
         <Button onClick={() => openNew()} disabled={!agent.enabled}>
-          <Plus /> New automation
+          <Plus /> {t("routinesTab.newAutomation")}
         </Button>
       </div>
 
@@ -48,17 +48,17 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
           ))}
         </div>
       ) : q.isError ? (
-        <EmptyState icon={<Workflow />} title="Couldn't load automations" description={errorMessage(q.error)} />
+        <EmptyState icon={<Workflow />} title={t("routinesTab.loadError")} description={errorMessage(q.error)} />
       ) : routines.length === 0 ? (
         <EmptyState
           icon={<Workflow />}
-          title="No automations yet"
-          description={`Let ${agent.name} get to work on its own — even while you're away.`}
+          title={t("routinesTab.emptyTitle")}
+          description={t("routinesTab.emptyDescription", { name: agent.name })}
           action={
             <div className="flex flex-wrap justify-center gap-2">
               {QUICK_STARTS.map((s) => (
-                <Button key={s.label} variant="outline" size="sm" onClick={() => openNew(s.draft)} disabled={!agent.enabled}>
-                  <s.icon /> {s.label}
+                <Button key={s.labelKey} variant="outline" size="sm" onClick={() => openNew(s.nameKey ? { ...s.draft, name: t(s.nameKey) } : s.draft)} disabled={!agent.enabled}>
+                  <s.icon /> {t(s.labelKey)}
                 </Button>
               ))}
             </div>

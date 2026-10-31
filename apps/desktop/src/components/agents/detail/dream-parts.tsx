@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import { addDays, format, isThisYear, isToday, isTomorrow, isYesterday, startOfDay } from "date-fns";
 import { CalendarClock, CheckCheck, Combine, Gauge, Hand, Minus, PencilLine, Plus, Undo2, type LucideIcon } from "lucide-react";
 import type { Dream, DreamChangeKind, DreamReason, DreamStatus } from "@godmode/shared";
@@ -18,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { dateLocale, t } from "@/i18n";
 
 export const ACTIVE_DREAM: DreamStatus[] = ["queued", "running"];
 /** Dreams that ended early: the core rolled their memory changes back, so their changes describe an attempt. */
@@ -43,13 +45,14 @@ export function shortChars(n: number) {
 
 /** "MEMORY.md", "MEMORY.md and memory/people.md", "3 memory files" */
 export function fileList(files: string[]) {
-  if (files.length <= 2) return files.join(" and ");
-  return `${files.length} memory files`;
+  if (files.length === 2) return t("agents:dreamParts.fileListTwo", { first: files[0], second: files[1] });
+  if (files.length < 2) return files.join("");
+  return t("agents:dreamParts.memoryFiles", { count: files.length });
 }
 
 /** "1 workspace entry", "12 workspace entries" */
 export function entryCount(n: number) {
-  return `${n.toLocaleString()} workspace ${n === 1 ? "entry" : "entries"}`;
+  return t("agents:dreamParts.workspaceEntries", { count: n });
 }
 
 /** What the dream read: "Reviewed 14 exchanges in 5 chats". */
@@ -57,105 +60,114 @@ export function reviewedLabel(dream: Pick<Dream, "exchanges" | "conversations" |
   const active = ACTIVE_DREAM.includes(dream.status);
   const ended = ROLLED_BACK.includes(dream.status);
   if (!dream.exchanges) {
-    if (active) return "Nothing new to read — tidying up and refreshing dates";
-    return ended ? "Set out to tidy up and refresh dates" : "No new conversations — tidied up and refreshed dates";
+    if (active) return t("agents:dreamParts.reviewed.nothingActive");
+    return ended ? t("agents:dreamParts.reviewed.nothingEnded") : t("agents:dreamParts.reviewed.nothingDone");
   }
-  const what = `${plural(dream.exchanges, "exchange")} in ${plural(dream.conversations, "chat")}`;
-  return active ? `Reviewing ${what}` : ended ? `Set out to review ${what}` : `Reviewed ${what}`;
+  const what = {
+    exchanges: t("agents:dreamParts.exchanges", { count: dream.exchanges }),
+    chats: t("agents:dreamParts.chats", { count: dream.conversations }),
+  };
+  return active ? t("agents:dreamParts.reviewed.active", what) : ended ? t("agents:dreamParts.reviewed.ended", what) : t("agents:dreamParts.reviewed.done", what);
 }
 
 /** "Today, 3:00 AM" · "Yesterday, 3:00 AM" · "Mon, Sep 22, 3:00 AM" */
 export function dreamWhen(iso: string) {
   const d = new Date(iso);
-  if (isToday(d)) return `Today, ${format(d, "p")}`;
-  if (isYesterday(d)) return `Yesterday, ${format(d, "p")}`;
-  return format(d, isThisYear(d) ? "EEE, MMM d, p" : "MMM d, yyyy, p");
+  const locale = dateLocale();
+  if (isToday(d)) return t("agents:dreamParts.when.today", { time: format(d, "p", { locale }) });
+  if (isYesterday(d)) return t("agents:dreamParts.when.yesterday", { time: format(d, "p", { locale }) });
+  return format(d, isThisYear(d) ? t("agents:dreamParts.when.thisYearFormat") : t("agents:dreamParts.when.otherYearFormat"), { locale });
 }
 
 /** "due now" · "tonight at 3:00 AM" · "today at 3:00 PM" · "tomorrow at 3:00 PM" · "Saturday at 4:00 AM" · "Mon, Oct 12 at 3:00 AM" */
 export function upcomingWhen(iso: string, now = Date.now()) {
   const d = new Date(iso);
-  if (d.getTime() <= now) return "due now";
-  const time = format(d, "p");
+  if (d.getTime() <= now) return t("agents:dreamParts.upcoming.dueNow");
+  const locale = dateLocale();
+  const time = format(d, "p", { locale });
   const hour = d.getHours();
   // "Tonight" is this evening or the small hours after it — never tomorrow evening.
-  if ((isToday(d) && hour >= 20) || (isTomorrow(d) && hour < 6)) return `tonight at ${time}`;
-  if (isToday(d)) return `today at ${time}`;
-  if (isTomorrow(d)) return `tomorrow at ${time}`;
-  if (d < addDays(startOfDay(now), 7)) return `${format(d, "EEEE")} at ${time}`;
-  return `${format(d, isThisYear(d) ? "EEE, MMM d" : "MMM d, yyyy")} at ${time}`;
+  if ((isToday(d) && hour >= 20) || (isTomorrow(d) && hour < 6)) return t("agents:dreamParts.upcoming.tonight", { time });
+  if (isToday(d)) return t("agents:dreamParts.upcoming.today", { time });
+  if (isTomorrow(d)) return t("agents:dreamParts.upcoming.tomorrow", { time });
+  if (d < addDays(startOfDay(now), 7)) return t("agents:dreamParts.upcoming.onDay", { day: format(d, "EEEE", { locale }), time });
+  return t("agents:dreamParts.upcoming.onDay", {
+    day: format(d, isThisYear(d) ? t("agents:dreamParts.upcoming.thisYearFormat") : t("agents:dreamParts.upcoming.otherYearFormat"), { locale }),
+    time,
+  });
 }
 
-const STATUS_META: Record<DreamStatus, { label: string; className: string; dot: string }> = {
-  queued: { label: "Waiting", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
-  running: { label: "Running", className: "border-dream/25 bg-dream-soft text-dream", dot: "bg-dream motion-safe:animate-dream-dot" },
-  succeeded: { label: "Consolidated", className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
-  failed: { label: "Failed", className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
-  cancelled: { label: "Cancelled", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
-  paused: { label: "Paused", className: "border-warning/25 bg-warning/[0.07] text-warning", dot: "bg-warning" },
-  reverted: { label: "Undone", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/40" },
+const STATUS_META: Record<DreamStatus, { className: string; dot: string }> = {
+  queued: { className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
+  running: { className: "border-dream/25 bg-dream-soft text-dream", dot: "bg-dream motion-safe:animate-dream-dot" },
+  succeeded: { className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
+  failed: { className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
+  cancelled: { className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
+  paused: { className: "border-warning/25 bg-warning/[0.07] text-warning", dot: "bg-warning" },
+  reverted: { className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/40" },
 };
 
 export function DreamStatusBadge({ status, className }: { status: DreamStatus; className?: string }) {
-  const meta = STATUS_META[status] ?? STATUS_META.queued;
+  const { t } = useTranslation("agents");
+  const key: DreamStatus = status in STATUS_META ? status : "queued";
+  const meta = STATUS_META[key];
   return (
     <span className={cn("inline-flex h-5 items-center gap-1.5 rounded-[5px] border px-1.5 text-[11px] font-medium", meta.className, className)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />
-      {meta.label}
+      {t(`dreamParts.status.${key}`)}
     </span>
   );
 }
 
-const REASON_META: Record<DreamReason, { label: string; icon: LucideIcon }> = {
-  schedule: { label: "Scheduled", icon: CalendarClock },
-  manual: { label: "Manual", icon: Hand },
-  size: { label: "Memory full", icon: Gauge },
+const REASON_META: Record<DreamReason, { icon: LucideIcon }> = {
+  schedule: { icon: CalendarClock },
+  manual: { icon: Hand },
+  size: { icon: Gauge },
 };
 
 export function DreamReasonBadge({ reason }: { reason: DreamReason }) {
-  const meta = REASON_META[reason] ?? REASON_META.manual;
+  const { t } = useTranslation("agents");
+  const key: DreamReason = reason in REASON_META ? reason : "manual";
+  const meta = REASON_META[key];
   return (
     <span className="inline-flex h-5 items-center gap-1 rounded-[5px] border bg-card px-1.5 text-[11px] font-medium text-muted-foreground">
       <meta.icon className="size-3" />
-      {meta.label}
+      {t(`dreamParts.reason.${key}`)}
     </span>
   );
 }
 
-export const CHANGE_KINDS: Record<DreamChangeKind, { label: string; icon: LucideIcon; className: string }> = {
+export const CHANGE_KINDS: Record<DreamChangeKind, { icon: LucideIcon; className: string }> = {
   added: {
-    label: "Added",
     icon: Plus,
     className: "bg-emerald-500/10 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-400/10 dark:text-emerald-300 dark:ring-emerald-300/15",
   },
   updated: {
-    label: "Updated",
     icon: PencilLine,
     className: "bg-sky-500/10 text-sky-700 ring-sky-600/15 dark:bg-sky-400/10 dark:text-sky-300 dark:ring-sky-300/15",
   },
   merged: {
-    label: "Merged",
     icon: Combine,
     className: "bg-fuchsia-500/10 text-fuchsia-700 ring-fuchsia-600/15 dark:bg-fuchsia-400/10 dark:text-fuchsia-300 dark:ring-fuchsia-300/15",
   },
   corrected: {
-    label: "Corrected",
     icon: CheckCheck,
     className: "bg-amber-500/12 text-amber-800 ring-amber-600/20 dark:bg-amber-400/10 dark:text-amber-300 dark:ring-amber-300/15",
   },
   removed: {
-    label: "Removed",
     icon: Minus,
     className: "bg-rose-500/10 text-rose-700 ring-rose-600/15 dark:bg-rose-400/10 dark:text-rose-300 dark:ring-rose-300/15",
   },
-  dated: { label: "Dated", icon: CalendarClock, className: "bg-dream-soft text-dream ring-dream/20" },
+  dated: { icon: CalendarClock, className: "bg-dream-soft text-dream ring-dream/20" },
 };
 
 export const CHANGE_KIND_ORDER: DreamChangeKind[] = ["added", "updated", "merged", "corrected", "dated", "removed"];
 
 /** Small coloured chip for a kind of memory change; with `count` it reads "3 added". */
 export function ChangeKindChip({ kind, count, className }: { kind: DreamChangeKind; count?: number; className?: string }) {
-  const meta = CHANGE_KINDS[kind] ?? CHANGE_KINDS.updated;
+  const { t } = useTranslation("agents");
+  const key: DreamChangeKind = kind in CHANGE_KINDS ? kind : "updated";
+  const meta = CHANGE_KINDS[key];
   return (
     <span
       className={cn(
@@ -166,7 +178,7 @@ export function ChangeKindChip({ kind, count, className }: { kind: DreamChangeKi
       )}
     >
       <meta.icon className="size-3 shrink-0" aria-hidden />
-      {count === undefined ? meta.label : <span className="tabular-nums">{`${count} ${meta.label.toLowerCase()}`}</span>}
+      {count === undefined ? t(`dreamParts.kind.${key}`) : <span className="tabular-nums">{t(`dreamParts.kindCount.${key}`, { count })}</span>}
     </span>
   );
 }
@@ -181,47 +193,62 @@ export function useRevertDream() {
       qc.invalidateQueries({ queryKey: [...qk.agentFilesAll, dream.agentId] });
       qc.invalidateQueries({ queryKey: [...qk.agentFileAll, dream.agentId] });
       qc.invalidateQueries({ queryKey: qk.agentCommits(dream.agentId) });
-      const back = [
-        dream.files.length > 0 && `${fileList(dream.files)} ${dream.files.length === 1 ? "is" : "are"} back the way ${dream.files.length === 1 ? "it was" : "they were"} before`,
-        dream.workspace.length > 0 && `${entryCount(dream.workspace.length)} ${dream.workspace.length === 1 ? "is" : "are"} back where ${dream.workspace.length === 1 ? "it was" : "they were"}`,
-      ].filter(Boolean);
-      toast.success("Dream undone", { description: `${back.join(", and ")}.` });
+      const files = dream.files.length;
+      const moved = dream.workspace.length;
+      const description =
+        files && moved
+          ? t("agents:dreamParts.undone.both", { files: fileList(dream.files), entries: entryCount(moved) })
+          : files
+            ? t("agents:dreamParts.undone.files", { count: files, files: fileList(dream.files) })
+            : moved
+              ? t("agents:dreamParts.undone.entries", { count: moved, entries: entryCount(moved) })
+              : undefined;
+      toast.success(t("agents:dreamParts.undone.title"), { description });
     },
     onError: (err) => {
-      toast.error("Couldn't undo the dream", { description: errorMessage(err) });
+      toast.error(t("agents:dreamParts.undone.error"), { description: errorMessage(err) });
       qc.invalidateQueries({ queryKey: qk.dreams });
     },
   });
 }
 
 export function UndoDreamDialog({ dream, agentName, onOpenChange }: { dream: Dream | null; agentName: string; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation("agents");
   const revert = useRevertDream();
   const shown = useLastDefined(dream);
   const files = shown?.files ?? [];
   const moved = shown?.workspace.length ?? 0;
-  const one = files.length === 1;
+  const b = <span className="font-medium text-foreground" />;
   return (
     <AlertDialog open={!!dream} onOpenChange={(open) => !revert.isPending && onOpenChange(open)}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Undo this dream?</AlertDialogTitle>
+          <AlertDialogTitle>{t("dreamParts.undoDialog.title")}</AlertDialogTitle>
           <AlertDialogDescription>
             {files.length || !moved ? (
               <>
-                Put {files.length ? <span className="font-medium text-foreground">{fileList(files)}</span> : "the memory"} back the way {one ? "it was" : "they were"}{" "}
-                before this dream{moved ? <>, and move <span className="font-medium text-foreground">{entryCount(moved)}</span> back where {moved === 1 ? "it was" : "they were"}</> : ""}?
-                Whatever {agentName} consolidated in it is forgotten — the dream stays in the journal, marked as undone.
+                {!files.length ? (
+                  t("dreamParts.undoDialog.putMemory")
+                ) : moved ? (
+                  <Trans
+                    t={t}
+                    i18nKey="dreamParts.undoDialog.putFilesAndMove"
+                    count={files.length}
+                    values={{ files: fileList(files), entries: entryCount(moved) }}
+                    components={{ b }}
+                  />
+                ) : (
+                  <Trans t={t} i18nKey="dreamParts.undoDialog.putFiles" count={files.length} values={{ files: fileList(files) }} components={{ b }} />
+                )}{" "}
+                {t("dreamParts.undoDialog.forgotten", { name: agentName })}
               </>
             ) : (
-              <>
-                Move <span className="font-medium text-foreground">{entryCount(moved)}</span> back where {moved === 1 ? "it was" : "they were"} before this dream? The dream
-                stays in the journal, marked as undone.
-              </>
+              <Trans t={t} i18nKey="dreamParts.undoDialog.moveOnly" count={moved} values={{ entries: entryCount(moved) }} components={{ b }} />
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={revert.isPending}>Keep changes</AlertDialogCancel>
+          <AlertDialogCancel disabled={revert.isPending}>{t("dreamParts.undoDialog.keep")}</AlertDialogCancel>
           <AlertDialogAction
             disabled={revert.isPending || !dream}
             onClick={(e) => {
@@ -231,7 +258,7 @@ export function UndoDreamDialog({ dream, agentName, onOpenChange }: { dream: Dre
             }}
           >
             {revert.isPending ? <Spinner /> : <Undo2 />}
-            Undo dream
+            {t("dreamParts.undoDialog.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

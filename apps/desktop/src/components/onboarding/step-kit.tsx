@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, Check } from "lucide-react";
 import { DrawCheck } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
@@ -18,8 +19,9 @@ export interface StepMeta {
 
 /** Vertical progress rail (wide screens). */
 export function StepRail({ steps, current }: { steps: StepMeta[]; current: number }) {
+  const { t } = useTranslation(["onboarding", "common"]);
   return (
-    <ol className="relative space-y-1" aria-label="Setup steps">
+    <ol className="relative space-y-1" aria-label={t("kit.steps")}>
       {steps.map((s, i) => {
         const done = i < current;
         const active = i === current;
@@ -48,7 +50,7 @@ export function StepRail({ steps, current }: { steps: StepMeta[]; current: numbe
             <div className="min-w-0 pt-0.5">
               <p className={cn("text-sm font-medium tracking-[-0.01em] transition-colors", !active && !done && "text-muted-foreground")}>
                 {s.title}
-                {s.optional && <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">optional</span>}
+                {s.optional && <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">{t("common:words.optional")}</span>}
               </p>
               <p className="truncate text-xs text-muted-foreground">{s.hint}</p>
             </div>
@@ -61,12 +63,13 @@ export function StepRail({ steps, current }: { steps: StepMeta[]; current: numbe
 
 /** Compact progress bar (narrow screens). */
 export function StepProgress({ steps, current }: { steps: StepMeta[]; current: number }) {
+  const { t } = useTranslation("onboarding");
   return (
     <div className="mb-8 lg:hidden">
       <div className="mb-2.5 flex items-center justify-between text-xs text-muted-foreground">
         <span className="font-medium text-foreground">{steps[current]?.title}</span>
         <span className="font-mono text-[11px] tabular-nums">
-          Step {current + 1} of {steps.length}
+          {t("kit.stepOf", { current: current + 1, total: steps.length })}
         </span>
       </div>
       <div className="flex gap-1">
@@ -103,11 +106,12 @@ export function StepCard({ children, className }: { children: ReactNode; classNa
 
 /** Back + primary actions row. */
 export function StepFooter({ onBack, children, className }: { onBack?: () => void; children: ReactNode; className?: string }) {
+  const { t } = useTranslation("common");
   return (
     <div className={cn("mt-7 flex flex-wrap items-center justify-between gap-3 border-t pt-5", className)}>
       {onBack ? (
         <Button type="button" variant="ghost" onClick={onBack} className="text-muted-foreground">
-          <ArrowLeft /> Back
+          <ArrowLeft /> {t("actions.back")}
         </Button>
       ) : (
         <span />
@@ -143,6 +147,7 @@ export function NewSecretFields({
   userInputs?: string[];
   autoFocus?: boolean;
 }) {
+  const { t } = useTranslation("onboarding");
   const tooShort = value.length > 0 && value.length < minLength;
   const mismatch = confirm.length > 0 && confirm !== value;
   return (
@@ -156,28 +161,28 @@ export function NewSecretFields({
           onChange={(e) => onChange(e.target.value)}
           aria-invalid={tooShort}
           aria-describedby={`${idPrefix}-hint`}
-          placeholder={`At least ${minLength} characters`}
+          placeholder={t("kit.atLeast", { count: minLength })}
         />
         <StrengthMeter password={value} userInputs={userInputs} />
         {tooShort && (
           <p id={`${idPrefix}-hint`} className="text-xs text-destructive">
-            Use at least {minLength} characters.
+            {t("kit.useAtLeast", { count: minLength })}
           </p>
         )}
       </div>
       <div className="space-y-2">
-        <Label htmlFor={`${idPrefix}-confirm`}>Confirm</Label>
+        <Label htmlFor={`${idPrefix}-confirm`}>{t("kit.confirm")}</Label>
         <PasswordInput
           id={`${idPrefix}-confirm`}
           value={confirm}
           onChange={(e) => onConfirmChange(e.target.value)}
           aria-invalid={mismatch}
-          placeholder="Type it again"
+          placeholder={t("kit.typeAgain")}
           trailing={
-            confirm.length > 0 && !mismatch ? <Check className="size-4 text-success" aria-label="Matches" /> : undefined
+            confirm.length > 0 && !mismatch ? <Check className="size-4 text-success" aria-label={t("kit.matches")} /> : undefined
           }
         />
-        {mismatch && <p className="text-xs text-destructive">Doesn't match yet.</p>}
+        {mismatch && <p className="text-xs text-destructive">{t("kit.mismatch")}</p>}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import type { Project, Workspace } from "@godmode/shared";
 import { Check, ChevronRight, ChevronsUpDown, FolderPlus, Globe2, Layers, Plus, Settings2 } from "lucide-react";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
@@ -12,6 +13,7 @@ import { useWorkspaces } from "@/lib/hooks";
 import { altKey, isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { t as translate } from "@/i18n";
 
 /** ⌥⌘0 is all workspaces, ⌥⌘1–9 the workspaces in A–Z order. Not behind dialogs or on a remote screen the human controls. */
 export function useWorkspaceShortcuts() {
@@ -36,6 +38,7 @@ export function useWorkspaceShortcuts() {
 
 /** Switches the active scope: all workspaces, global only, or a single workspace. */
 export function WorkspaceSwitcher() {
+  const { t } = useTranslation("layout");
   const { data: workspaces = [] } = useWorkspaces();
   const scope = useUi((s) => s.workspace);
   const projectScope = useUi((s) => s.project);
@@ -65,7 +68,7 @@ export function WorkspaceSwitcher() {
 
   const current = workspaces.find((w) => w.id === scope);
   const currentProject = current?.projects.find((p) => p.id === projectScope);
-  const label = scope === "global" ? "Global" : (currentProject?.name ?? current?.name ?? "All workspaces");
+  const label = scope === "global" ? t("scope.global") : (currentProject?.name ?? current?.name ?? t("scope.all"));
   const here = scope === "all" ? null : currentProject ? activity(projectKey(currentProject.id)) : activity(scope === "global" ? null : scope);
   const shown = here ?? totals;
   // Waiting elsewhere: the human sees it without opening the list.
@@ -93,7 +96,7 @@ export function WorkspaceSwitcher() {
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={`Workspace: ${label}. Switch workspace`}
+              aria-label={t("workspaceSwitcher.triggerLabel", { label })}
               className={cn(
                 "group/ws relative flex h-10 w-full items-center gap-2 rounded-lg border bg-card px-1.5 text-left shadow-card outline-none transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent",
                 "group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0",
@@ -108,7 +111,7 @@ export function WorkspaceSwitcher() {
                   )}
                   {currentProject && current && (shown.running > 0 || shown.needsYou > 0) && <span aria-hidden className="opacity-50">·</span>}
                   {!(currentProject && !shown.running && !shown.needsYou) && (
-                    <ActivityLine activity={shown} fallback={scope === "all" ? `${workspaces.length} workspace${workspaces.length === 1 ? "" : "s"}` : "All quiet"} />
+                    <ActivityLine activity={shown} fallback={scope === "all" ? t("workspaceSwitcher.workspaceCount", { count: workspaces.length }) : t("workspaceSwitcher.allQuiet")} />
                   )}
                 </span>
               </span>
@@ -116,7 +119,7 @@ export function WorkspaceSwitcher() {
               {elsewhere > 0 && (
                 <span
                   className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-warning px-1 font-mono text-[9.5px] font-semibold text-white dark:text-black ring-2 ring-sidebar tabular-nums"
-                  aria-label={`${elsewhere} waiting for you in other workspaces`}
+                  aria-label={t("workspaceSwitcher.waitingElsewhere", { count: elsewhere })}
                 >
                   {elsewhere}
                 </span>
@@ -127,41 +130,41 @@ export function WorkspaceSwitcher() {
         {(railed || elsewhere > 0) && !open && (
           <TooltipContent side="right">
             {railed && `${label} · `}
-            {elsewhere > 0 ? `${elsewhere} waiting for you in other workspaces` : `Switch workspace (${altKey}${modKey}0–9)`}
+            {elsewhere > 0 ? t("workspaceSwitcher.waitingElsewhere", { count: elsewhere }) : t("workspaceSwitcher.switchShortcut", { shortcut: `${altKey}${modKey}0–9` })}
           </TooltipContent>
         )}
       </Tooltip>
       <PopoverContent align="start" sideOffset={6} className="w-80 overflow-hidden p-0">
         <Command loop filter={(_value, search, keywords) => (keywords?.join(" ").toLowerCase().includes(search.trim().toLowerCase()) ? 1 : 0)}>
-          <CommandInput placeholder="Find a workspace…" value={query} onValueChange={setQuery} className="h-10" />
+          <CommandInput placeholder={t("workspaceSwitcher.find")} value={query} onValueChange={setQuery} className="h-10" />
           <CommandList className="max-h-[min(62vh,440px)]">
-            <CommandEmpty>No workspace called “{query}”.</CommandEmpty>
+            <CommandEmpty>{t("workspaceSwitcher.noMatch", { query })}</CommandEmpty>
             <CommandGroup>
               <ScopeRow
                 value="all"
-                keywords={["All workspaces", "everything"]}
+                keywords={["All workspaces", "everything", t("scope.all")]}
                 selected={scope === "all"}
                 onSelect={() => pick("all")}
                 shortcut={`${altKey}${modKey}0`}
                 lead={indent ? <FoldSpace /> : undefined}
               >
                 <ScopeTile scope="all" />
-                <RowText name="All workspaces" meta={<ActivityLine activity={totals} fallback="Everything in one place" />} />
+                <RowText name={t("scope.all")} meta={<ActivityLine activity={totals} fallback={t("workspaceSwitcher.everything")} />} />
               </ScopeRow>
               <ScopeRow
                 value="global"
-                keywords={["Global", "shared"]}
+                keywords={["Global", "shared", t("scope.global")]}
                 selected={scope === "global"}
                 onSelect={() => pick("global")}
                 activity={activity(null)}
                 lead={indent ? <FoldSpace /> : undefined}
               >
                 <ScopeTile scope="global" />
-                <RowText name="Global" meta="Shared with every workspace" />
+                <RowText name={t("scope.global")} meta={t("workspaceSwitcher.globalMeta")} />
               </ScopeRow>
             </CommandGroup>
             {recent.length > 0 && !query && (
-              <CommandGroup heading="Recent">
+              <CommandGroup heading={t("recent.title")}>
                 {recent.map((w) => (
                   <WorkspaceRow
                     key={w.id}
@@ -176,7 +179,7 @@ export function WorkspaceSwitcher() {
               </CommandGroup>
             )}
             {sorted.length > 0 && (
-              <CommandGroup heading={`Workspaces · ${sorted.length}`}>
+              <CommandGroup heading={t("workspaceSwitcher.heading", { count: sorted.length })}>
                 {sorted.map((w, i) => {
                   const projects = w.projects ?? [];
                   const shownProjects = projects.length > 0 && (!!query || unfolded.has(w.id));
@@ -210,24 +213,24 @@ export function WorkspaceSwitcher() {
             )}
             <CommandSeparator />
             <CommandGroup>
-              <CommandItem value="new" keywords={["New workspace", "create", "add"]} onSelect={() => go("/workspaces?new=1")} className="text-[13px]">
-                <Plus /> New workspace
+              <CommandItem value="new" keywords={["New workspace", "create", "add", t("workspaceSwitcher.newWorkspace")]} onSelect={() => go("/workspaces?new=1")} className="text-[13px]">
+                <Plus /> {t("workspaceSwitcher.newWorkspace")}
               </CommandItem>
               {current && (
                 <CommandItem
                   value="new-project"
-                  keywords={["New project", "create", "add", current.name]}
+                  keywords={["New project", "create", "add", current.name, t("workspaceSwitcher.newProjectKeyword")]}
                   onSelect={() => go(`/workspaces?newProject=${current.id}`)}
                   className="text-[13px]"
                 >
                   <FolderPlus />
                   <span className="truncate">
-                    New project <span className="text-muted-foreground">in {current.name}</span>
+                    <Trans t={t} i18nKey="workspaceSwitcher.newProject" values={{ name: current.name }} components={{ muted: <span className="text-muted-foreground" /> }} />
                   </span>
                 </CommandItem>
               )}
-              <CommandItem value="manage" keywords={["Manage workspaces", "settings", "edit"]} onSelect={() => go("/workspaces")} className="text-[13px]">
-                <Settings2 /> Manage workspaces
+              <CommandItem value="manage" keywords={["Manage workspaces", "settings", "edit", t("workspaceSwitcher.manage")]} onSelect={() => go("/workspaces")} className="text-[13px]">
+                <Settings2 /> {t("workspaceSwitcher.manage")}
               </CommandItem>
             </CommandGroup>
           </CommandList>
@@ -248,19 +251,20 @@ function ScopeTile({ scope, workspace, className }: { scope: string; workspace?:
 }
 
 function ActivityLine({ activity, fallback }: { activity: Pick<WorkspaceActivity, "running" | "needsYou">; fallback: string }) {
+  const { t } = useTranslation("layout");
   if (!activity.running && !activity.needsYou) return <span className="truncate">{fallback}</span>;
   return (
     <>
       {activity.needsYou > 0 && (
         <span className="flex shrink-0 items-center gap-1 text-warning">
           <span className="size-1.5 rounded-full bg-current" aria-hidden />
-          {activity.needsYou} need{activity.needsYou === 1 ? "s" : ""} you
+          {t("counts.needsYou", { count: activity.needsYou })}
         </span>
       )}
       {activity.running > 0 && (
         <span className="flex shrink-0 items-center gap-1 text-brand-strong">
           <span className="size-1.5 full-motion:animate-pulse rounded-full bg-current" aria-hidden />
-          {activity.running} working
+          {t("counts.working", { count: activity.running })}
         </span>
       )}
     </>
@@ -315,17 +319,18 @@ function ScopeRow({
 }
 
 function RowBadges({ activity }: { activity?: WorkspaceActivity }) {
+  const { t } = useTranslation("layout");
   if (!activity) return null;
   return (
     <span className="flex shrink-0 items-center gap-1">
       {activity.running > 0 && (
-        <span className="flex h-4.5 items-center gap-1 rounded-full bg-brand-strong/10 px-1.5 font-mono text-[10px] text-brand-strong tabular-nums" title={`${activity.running} working`}>
+        <span className="flex h-4.5 items-center gap-1 rounded-full bg-brand-strong/10 px-1.5 font-mono text-[10px] text-brand-strong tabular-nums" title={t("counts.working", { count: activity.running })}>
           <span className="size-1 full-motion:animate-pulse rounded-full bg-current" aria-hidden />
           {activity.running}
         </span>
       )}
       {activity.needsYou > 0 && (
-        <span className="flex h-4.5 items-center rounded-full bg-warning/15 px-1.5 font-mono text-[10px] font-medium text-warning tabular-nums" title={`${activity.needsYou} waiting for you`}>
+        <span className="flex h-4.5 items-center rounded-full bg-warning/15 px-1.5 font-mono text-[10px] font-medium text-warning tabular-nums" title={t("counts.waitingForYou", { count: activity.needsYou })}>
           {activity.needsYou}
         </span>
       )}
@@ -336,8 +341,8 @@ function RowBadges({ activity }: { activity?: WorkspaceActivity }) {
 function activityMeta(activity: WorkspaceActivity, extra: (string | null)[] = []): string {
   return [
     ...extra,
-    activity.agents ? `${activity.agents} agent${activity.agents === 1 ? "" : "s"}` : null,
-    activity.openTasks ? `${activity.openTasks} open task${activity.openTasks === 1 ? "" : "s"}` : null,
+    activity.agents ? translate("layout:counts.agents", { count: activity.agents }) : null,
+    activity.openTasks ? translate("layout:counts.openTasks", { count: activity.openTasks }) : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -364,8 +369,9 @@ function WorkspaceRow({
   /** Keep the room of a fold toggle (other rows have one). */
   indent?: boolean;
 }) {
+  const { t } = useTranslation("layout");
   const count = workspace.projects?.length ?? 0;
-  const meta = activityMeta(activity, [count ? `${count} project${count === 1 ? "" : "s"}` : null]);
+  const meta = activityMeta(activity, [count ? t("counts.projects", { count }) : null]);
   return (
     <ScopeRow
       value={`${keyPrefix}:${workspace.id}`}
@@ -379,7 +385,7 @@ function WorkspaceRow({
           <button
             type="button"
             tabIndex={-1}
-            aria-label={fold.open ? `Hide ${workspace.name}'s projects` : `Show ${workspace.name}'s projects`}
+            aria-label={fold.open ? t("workspaceSwitcher.hideProjects", { name: workspace.name }) : t("workspaceSwitcher.showProjects", { name: workspace.name })}
             aria-expanded={fold.open}
             onPointerDown={(e) => e.preventDefault()}
             onClick={(e) => {
@@ -396,7 +402,7 @@ function WorkspaceRow({
       }
     >
       <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" />
-      <RowText name={workspace.name} meta={meta || "Empty"} />
+      <RowText name={workspace.name} meta={meta || t("workspaceSwitcher.empty")} />
     </ScopeRow>
   );
 }

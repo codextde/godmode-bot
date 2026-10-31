@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Folder, FolderGit2, FolderKanban, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { Agent, Task, TaskPriority, TaskStatus, TaskType, Workspace } from "@godmode/shared";
 import { MAX_TASK_TITLE_LENGTH, TASK_PRIORITIES, TASK_TYPES } from "@godmode/shared";
 import { AgentAvatar, DraftStatus, Kbd } from "@/components/common";
@@ -74,6 +75,7 @@ export function TaskDialog({
   /** The goal the new ticket serves (the board is filtered by it). */
   defaultGoalId?: string | null;
 }) {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   const editor = useRef<DescriptionEditorHandle>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -170,7 +172,7 @@ export function TaskDialog({
       }),
     onSuccess: (task) => {
       void qc.invalidateQueries({ queryKey: qk.tasks });
-      toast.success(starting ? `${agent!.name} is on it` : `#${task.number} created`, { description: task.title });
+      toast.success(starting ? t("dialog.onIt", { name: agent!.name }) : t("dialog.created", { number: task.number }), { description: task.title });
       if (another) {
         // Same workspace, agent and type for the next one: only the text starts over.
         setForm((f) => ({ ...f, title: "", description: "" }));
@@ -181,7 +183,7 @@ export function TaskDialog({
       onOpenChange(false);
       onCreated?.(task);
     },
-    onError: (e) => toastApiError(e, "Could not create the task", qc),
+    onError: (e) => toastApiError(e, t("dialog.createError"), qc),
   });
 
   const submit = (e?: FormEvent) => {
@@ -199,7 +201,7 @@ export function TaskDialog({
   // The upload would land in a closed dialog: its file would be lost.
   const close = (next: boolean) => {
     if (!next && uploading) {
-      toast("Wait for the upload to finish", { description: "Then close — the task is kept as a draft." });
+      toast(t("dialog.waitUpload"), { description: t("dialog.waitUploadDescription") });
       return;
     }
     onOpenChange(next);
@@ -224,7 +226,7 @@ export function TaskDialog({
                     {workspace.icon} {workspace.name}
                   </>
                 ) : (
-                  "Global"
+                  t("card.global")
                 )}
               </span>
               {project && (
@@ -236,21 +238,21 @@ export function TaskDialog({
                 </>
               )}
               <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
-              <span className="font-medium">{parent ? `New part of #${parent.number}` : "New task"}</span>
+              <span className="font-medium">{parent ? t("dialog.newPart", { number: parent.number }) : t("dialog.newTask")}</span>
             </DialogTitle>
-            <DialogDescription className="sr-only">Give the task a title and a description — paste or drop images, PDFs and files into it.</DialogDescription>
+            <DialogDescription className="sr-only">{t("dialog.srDescription")}</DialogDescription>
             <div className="ml-auto flex items-center gap-0.5">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground"
-                aria-label={expanded ? "Smaller" : "Larger"}
+                aria-label={expanded ? t("dialog.smaller") : t("dialog.larger")}
                 onClick={() => setExpanded((v) => !v)}
               >
                 {expanded ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </Button>
-              <Button type="button" variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label="Close" onClick={() => close(false)}>
+              <Button type="button" variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label={t("common:actions.close")} onClick={() => close(false)}>
                 <X className="size-4" />
               </Button>
             </div>
@@ -260,9 +262,9 @@ export function TaskDialog({
             <input
               ref={titleRef}
               autoFocus
-              aria-label="Title"
+              aria-label={t("dialog.title")}
               maxLength={MAX_TASK_TITLE_LENGTH}
-              placeholder="Task title"
+              placeholder={t("dialog.titlePlaceholder")}
               value={title}
               onChange={(e) => set("title", e.target.value)}
               onKeyDown={(e) => {
@@ -275,11 +277,11 @@ export function TaskDialog({
             />
             <DescriptionEditor
               ref={editor}
-              aria-label="Description"
+              aria-label={t("common:words.description")}
               value={description}
               onChange={setDescription}
               onBusyChange={setUploading}
-              placeholder="Add a description… Paste or drop screenshots and files, type - for a list or [] for a checklist."
+              placeholder={t("dialog.descriptionPlaceholder")}
               minHeight={expanded ? 360 : 180}
               className="mt-3"
             />
@@ -288,7 +290,7 @@ export function TaskDialog({
               <div className="mt-4 grid gap-3 rounded-xl border bg-paper-2 p-3.5 sm:grid-cols-[1fr_11rem]">
                 <div className="space-y-1.5">
                   <label htmlFor="task-repo" className="flex items-center gap-1.5 text-sm font-medium">
-                    <FolderGit2 className="size-3.5 text-muted-foreground" /> Repository
+                    <FolderGit2 className="size-3.5 text-muted-foreground" /> {t("dialog.repository")}
                   </label>
                   {repos.length > 0 && (
                     <Select value={choice} onValueChange={(v) => set("repoChoice", v)}>
@@ -304,14 +306,14 @@ export function TaskDialog({
                           </SelectItem>
                         ))}
                         <SelectSeparator />
-                        <SelectItem value={OTHER_REPO}>Another repository…</SelectItem>
+                        <SelectItem value={OTHER_REPO}>{t("dialog.anotherRepo")}</SelectItem>
                       </SelectContent>
                     </Select>
                   )}
                   {choice === OTHER_REPO && (
                     <Input
                       id={repos.length ? undefined : "task-repo"}
-                      aria-label="Repository URL"
+                      aria-label={t("dialog.repoUrl")}
                       placeholder="https://github.com/acme/app.git"
                       value={repoUrl}
                       onChange={(e) => set("repoUrl", e.target.value)}
@@ -322,20 +324,18 @@ export function TaskDialog({
                 </div>
                 <div className="space-y-1.5">
                   <label htmlFor="task-base" className="text-sm font-medium">
-                    Base branch
+                    {t("dialog.baseBranch")}
                   </label>
                   <Input
                     id="task-base"
-                    placeholder={picked?.branch || "default"}
+                    placeholder={picked?.branch || t("dialog.defaultBranch")}
                     value={baseBranch}
                     onChange={(e) => set("baseBranch", e.target.value)}
                     className="bg-card font-mono text-[13px]"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground sm:col-span-2">
-                  {!repos.length && "Tip: add repositories to the workspace to pick them here. "}
-                  The task gets its own git worktree on a new branch. Godmode opens a pull request when the agent is done — with your own
-                  git and GitHub CLI login.
+                  {!repos.length ? t("dialog.repoHintWithTip") : t("dialog.repoHint")}
                 </p>
               </div>
             )}
@@ -345,37 +345,37 @@ export function TaskDialog({
             {starting && (
               <p className="flex items-center gap-2 px-2 text-[13px] text-muted-foreground">
                 <AgentAvatar agent={agent!} size="sm" />
-                {agent!.name} will start working right after creation.
+                {t("dialog.willStart", { name: agent!.name })}
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2">
-              <Pill value={status} onChange={(v) => set("status", v as TaskStatus)} label="Status">
+              <Pill value={status} onChange={(v) => set("status", v as TaskStatus)} label={t("fields.status")}>
                 {START_STATUSES.map((s) => (
                   <SelectItem key={s} value={s}>
                     <StatusIcon status={s} /> {STATUS_META[s].label}
                   </SelectItem>
                 ))}
               </Pill>
-              <Pill value={agentId && agent ? agentId : NONE} onChange={(v) => set("agentId", v === NONE ? null : v)} label="Agent">
+              <Pill value={agentId && agent ? agentId : NONE} onChange={(v) => set("agentId", v === NONE ? null : v)} label={t("common:words.agent")}>
                 <SelectItem value={NONE}>
-                  <span className="size-4 rounded-full border border-dashed border-muted-foreground/50" /> No agent
+                  <span className="size-4 rounded-full border border-dashed border-muted-foreground/50" /> {t("dialog.noAgent")}
                 </SelectItem>
                 {reachable.length > 0 && <SelectSeparator />}
                 {reachable.map((a) => (
                   <SelectItem key={a.id} value={a.id}>
                     <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
-                    {!a.workspaceId && !a.isDefault && <span className="text-xs text-muted-foreground">· global</span>}
+                    {!a.workspaceId && !a.isDefault && <span className="text-xs text-muted-foreground">· {t("fields.global")}</span>}
                   </SelectItem>
                 ))}
               </Pill>
-              <Pill value={type} onChange={(v) => set("type", v as TaskType)} label="Type">
+              <Pill value={type} onChange={(v) => set("type", v as TaskType)} label={t("fields.type")}>
                 {TASK_TYPES.map((t) => (
                   <SelectItem key={t} value={t}>
                     <TypeIcon type={t} /> {TYPE_META[t].label}
                   </SelectItem>
                 ))}
               </Pill>
-              <Pill value={priority} onChange={(v) => set("priority", v as TaskPriority)} label="Priority">
+              <Pill value={priority} onChange={(v) => set("priority", v as TaskPriority)} label={t("fields.priority")}>
                 {TASK_PRIORITIES.map((p) => (
                   <SelectItem key={p} value={p}>
                     <PriorityIcon priority={p} /> {PRIORITY_META[p].label}
@@ -389,7 +389,7 @@ export function TaskDialog({
                 <span className="flex h-8 items-center gap-1.5 rounded-full border border-border/80 pr-1.5 pl-2.5 text-[13px]" title={goal.why || undefined}>
                   <Target className="size-3.5 text-brand-strong" aria-hidden />
                   <span className="max-w-44 truncate">{goal.title}</span>
-                  <button type="button" className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Don't file it under “${goal.title}”`} onClick={() => setGoalOff(true)}>
+                  <button type="button" className="grid size-5 place-items-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("dialog.removeGoal", { title: goal.title })} onClick={() => setGoalOff(true)}>
                     <X className="size-3" />
                   </button>
                 </span>
@@ -398,7 +398,7 @@ export function TaskDialog({
               {!parent && (
                 <Pill
                   value={workspaceId ?? GLOBAL}
-                  label="Workspace"
+                  label={t("dialog.workspace")}
                   onChange={(v) => {
                     const next = v === GLOBAL ? null : v;
                     setForm((f) => ({
@@ -410,7 +410,7 @@ export function TaskDialog({
                   }}
                 >
                   <SelectItem value={GLOBAL}>
-                    <Globe2 className="size-4" /> Global
+                    <Globe2 className="size-4" /> {t("card.global")}
                   </SelectItem>
                   {workspaces.length > 0 && <SelectSeparator />}
                   {workspaces.map((w) => (
@@ -421,9 +421,9 @@ export function TaskDialog({
                 </Pill>
               )}
               {!parent && projects.length > 0 && (
-                <Pill value={projectId ?? NONE} label="Project" onChange={(v) => set("projectId", v === NONE ? null : v)}>
+                <Pill value={projectId ?? NONE} label={t("dialog.project")} onChange={(v) => set("projectId", v === NONE ? null : v)}>
                   <SelectItem value={NONE}>
-                    <FolderKanban className="size-4 text-muted-foreground" /> No project
+                    <FolderKanban className="size-4 text-muted-foreground" /> {t("dialog.noProject")}
                   </SelectItem>
                   <SelectSeparator />
                   {projects.map((p) => (
@@ -445,8 +445,8 @@ export function TaskDialog({
               variant="ghost"
               size="icon"
               className="size-8 text-muted-foreground"
-              aria-label="Attach files"
-              title="Attach images, PDFs or other files"
+              aria-label={t("dialog.attach")}
+              title={t("dialog.attachTitle")}
               onClick={() => editor.current?.pickFiles()}
             >
               <Paperclip className="size-4" />
@@ -454,11 +454,11 @@ export function TaskDialog({
             {kept.saved && <DraftStatus onDiscard={kept.discard} />}
             <label className="ml-auto flex items-center gap-2 text-[13px] text-muted-foreground">
               <Switch checked={another} onCheckedChange={setAnother} />
-              Create another
+              {t("dialog.createAnother")}
             </label>
             <Button type="submit" disabled={!canCreate || create.isPending} className="gap-2">
               {create.isPending && <Spinner />}
-              {uploading ? "Uploading…" : starting ? "Create & start" : "Create task"}
+              {uploading ? t("dialog.uploading") : starting ? t("dialog.createStart") : t("dialog.create")}
               <span className="hidden items-center gap-0.5 sm:flex">
                 <Kbd>{modKey}</Kbd>
                 <Kbd>↵</Kbd>

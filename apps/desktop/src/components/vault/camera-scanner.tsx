@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Camera, CameraOff, CircleCheck, QrCode, RefreshCw, VideoOff } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { t as tg } from "@/i18n";
 import { isOtpUri, parseOtpUri, scanVideoFrame } from "@/lib/qr";
 import { cn } from "@/lib/utils";
 
@@ -14,8 +16,8 @@ const SCAN_INTERVAL_MS = 150;
 function describe(uri: string): string {
   const p = parseOtpUri(uri);
   if (p.kind === "otpauth") return p.preview.issuer;
-  if (p.kind === "migration") return `${p.preview.accounts.length} account${p.preview.accounts.length === 1 ? "" : "s"} from Google Authenticator`;
-  return "code";
+  if (p.kind === "migration") return tg("vault:camera.migrationAccounts", { count: p.preview.accounts.length });
+  return tg("vault:camera.code");
 }
 
 /**
@@ -23,6 +25,7 @@ function describe(uri: string): string {
  * scanning continues so several codes (e.g. a multi-part export) can be captured in one go.
  */
 export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (uri: string) => void }) {
+  const { t } = useTranslation(["vault", "common"]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [state, setState] = useState<CameraState>("starting");
@@ -62,20 +65,20 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
       if (!isOtpUri(payload)) {
         if (lastIgnored !== payload) {
           lastIgnored = payload;
-          setFlash({ kind: "not-otp", text: "That QR code isn't a 2FA code", at: Date.now() });
+          setFlash({ kind: "not-otp", text: tg("vault:camera.notOtp"), at: Date.now() });
         }
         return;
       }
       if (knownRef.current.has(payload)) {
         if (lastIgnored !== payload) {
           lastIgnored = payload;
-          setFlash({ kind: "duplicate", text: "Already added", at: Date.now() });
+          setFlash({ kind: "duplicate", text: tg("vault:camera.duplicate"), at: Date.now() });
         }
         return;
       }
       lastIgnored = payload;
       onCodeRef.current(payload);
-      setFlash({ kind: "added", text: `Added ${describe(payload)}`, at: Date.now() });
+      setFlash({ kind: "added", text: tg("vault:camera.added", { what: describe(payload) }), at: Date.now() });
     };
 
     (async () => {
@@ -133,12 +136,12 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
     const content = {
       denied: {
         icon: <CameraOff />,
-        title: "Camera access was blocked",
-        text: "Allow camera access for Godmode (on macOS: System Settings → Privacy & Security → Camera), then try again. Or drop a screenshot instead.",
+        title: t("camera.denied.title"),
+        text: t("camera.denied.text"),
       },
-      notfound: { icon: <VideoOff />, title: "No camera found", text: "Connect a camera, or take a screenshot of the QR code and drop it on the Images tab." },
-      unsupported: { icon: <VideoOff />, title: "Camera not available here", text: "This window can't access cameras. Use screenshots on the Images tab instead." },
-      error: { icon: <CameraOff />, title: "Couldn't start the camera", text: errorText || "Something went wrong while opening the camera." },
+      notfound: { icon: <VideoOff />, title: t("camera.notfound.title"), text: t("camera.notfound.text") },
+      unsupported: { icon: <VideoOff />, title: t("camera.unsupported.title"), text: t("camera.unsupported.text") },
+      error: { icon: <CameraOff />, title: t("camera.error.title"), text: errorText || t("camera.error.text") },
     }[state];
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed bg-card/50 px-6 py-10 text-center">
@@ -149,7 +152,7 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
         </div>
         {state !== "unsupported" && (
           <Button size="sm" variant="outline" onClick={() => setAttempt((a) => a + 1)}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         )}
       </div>
@@ -161,11 +164,11 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
   return (
     <div className="space-y-2">
       <div className="relative aspect-video overflow-hidden rounded-xl border bg-black">
-        <video ref={videoRef} muted playsInline className="size-full object-cover" aria-label="Camera preview" />
+        <video ref={videoRef} muted playsInline className="size-full object-cover" aria-label={t("camera.preview")} />
         {state === "starting" && (
           <div className="absolute inset-0 grid place-items-center text-white/80">
             <div className="flex items-center gap-2 text-sm">
-              <Spinner /> Starting camera…
+              <Spinner /> {t("camera.starting")}
             </div>
           </div>
         )}
@@ -209,17 +212,17 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Camera className="size-3.5" /> Hold the QR code inside the frame — keep scanning to add several.
+          <Camera className="size-3.5" /> {t("camera.hint")}
         </p>
         {devices.length > 1 && (
           <Select value={deviceId ?? devices[0]?.deviceId} onValueChange={setDeviceId}>
-            <SelectTrigger size="sm" className="w-48" aria-label="Camera">
+            <SelectTrigger size="sm" className="w-48" aria-label={t("camera.select")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {devices.map((d, i) => (
                 <SelectItem key={d.deviceId} value={d.deviceId}>
-                  {d.label || `Camera ${i + 1}`}
+                  {d.label || t("camera.numbered", { n: i + 1 })}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -4,9 +4,11 @@ import { useRecyclingState } from "@shopify/flash-list";
 import { format } from "date-fns";
 import { memo, useEffect, useMemo } from "react";
 import { LayoutAnimation, Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from "react-native-reanimated";
-import type { Attachment, CompactInfo, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { isPlaceholderReply, tokensLabel, toolActivity } from "@godmode/shared";
+import type { Agent, Attachment, CharacterMood, CompactInfo, Message, MessageBlock } from "@godmode/shared";
+import { BABY_FACE_SCALE, babyCharacter, defaultCharacter, isPlaceholderReply, readableModelId, reportPreview, shortenPaths, tokensLabel, toolActivity } from "@godmode/shared";
+import { Character } from "./character";
 import { FileChip } from "./attachments";
 import { CALL_STATUS, callName, openCall } from "./call-parts";
 import { Icon, type IconName } from "./icon";
@@ -14,13 +16,16 @@ import { Markdown } from "./markdown";
 import { QuestionCard } from "./question-card";
 import { RemoteImage } from "./remote-image";
 import { Row, T, tap } from "./ui";
-import { shortTime, toolLabel } from "@/lib/format";
+import { toolLabel } from "@/lib/format";
 import { useNow } from "@/lib/hooks";
+import { dateLocale, t as translate } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
 
 type Step = Extract<MessageBlock, { type: "tool_use" | "thinking" }>;
 type ToolUse = Extract<MessageBlock, { type: "tool_use" }>;
-type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | { kind: "subagent"; block: ToolUse; children: MessageBlock[] };
+type SubagentEntry = { block: ToolUse; children: MessageBlock[] };
+type Part = { kind: "block"; block: MessageBlock } | { kind: "steps"; steps: Step[] } | ({ kind: "subagent" } & SubagentEntry) | { kind: "subagents"; entries: SubagentEntry[] };
+type ParentAgent = Pick<Agent, "id" | "color" | "character">;
 
 const isSubagent = (block: MessageBlock) => block.type === "tool_use" && (block.name === "Task" || block.name === "Agent");
 
@@ -40,7 +45,13 @@ function group(blocks: MessageBlock[]): Part[] {
     if ("parentToolUseId" in block && block.parentToolUseId) continue;
     if (block.type === "text" && isPlaceholderReply(block.text)) continue;
     if (isAsk(block)) continue;
-    if (block.type === "tool_use" && isSubagent(block)) parts.push({ kind: "subagent", block, children: children.get(block.id) ?? [] });
+    if (block.type === "tool_use" && isSubagent(block)) {
+      const entry = { block, children: children.get(block.id) ?? [] };
+      const last = parts[parts.length - 1];
+      if (last?.kind === "subagents") last.entries.push(entry);
+      else if (last?.kind === "subagent") parts[parts.length - 1] = { kind: "subagents", entries: [{ block: last.block, children: last.children }, entry] };
+      else parts.push({ kind: "subagent", ...entry });
+    }
     else if (block.type === "tool_use" || block.type === "thinking") {
       const last = parts[parts.length - 1];
       if (last?.kind === "steps") last.steps.push(block);
@@ -61,8 +72,13 @@ function subagentState(block: ToolUse, streaming: boolean) {
   const running = status ? status === "running" : !background && streaming && block.result === undefined;
   const failed = status === "failed" || !!block.isError;
   const result = background ? task?.summary : block.result;
-  return { task, background, status, running, failed, result };
+  const phase: Phase = running ? "running" : failed ? "failed" : status === "stopped" ? "stopped" : "done";
+  return { task, background, status, running, failed, result, phase };
 }
+
+type Phase = "running" | "done" | "failed" | "stopped";
+
+const PHASE_MOOD: Record<Phase, CharacterMood> = { running: "working", done: "happy", failed: "error", stopped: "sleeping" };
 
 /** The compression divider already says what /compact did. */
 function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
@@ -70,12 +86,13 @@ function withoutCompactCard(blocks: MessageBlock[]): MessageBlock[] {
   return blocks.filter((b) => !(b.type === "command" && b.name === "compact"));
 }
 
-const SOURCE_CAPTION = { automation: "Automation", delegation: "From another agent", task: "Board ticket", offer: "Offer you took up" } as const;
+const SOURCE_CAPTION = { automation: "message.source.automation", delegation: "message.source.delegation", task: "message.source.task", offer: "message.source.offer" } as const;
 
 export const UserMessage = memo(function UserMessage({ message }: { message: Message }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   // A turn the human didn't write keeps the neutral surface and says who it came from.
-  const caption = message.source ? SOURCE_CAPTION[message.source] : null;
+  const caption = message.source ? t(SOURCE_CAPTION[message.source]) : null;
   const fg = caption ? c.text : c.onPrimary;
   return (
     <View style={[styles.userWrap, caption ? { alignItems: "flex-start" } : null]}>
@@ -96,7 +113,7 @@ export const UserMessage = memo(function UserMessage({ message }: { message: Mes
   );
 });
 
-export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content }: { blocks: MessageBlock[]; streaming?: boolean; content?: string }) {
+export const AssistantMessage = memo(function AssistantMessage({ blocks, streaming, content, agent }: { blocks: MessageBlock[]; streaming?: boolean; content?: string; agent?: ParentAgent }) {
   // A reply stored without blocks is its text.
   const parts = useMemo(() => group(blocks.length || !content ? withoutCompactCard(blocks) : [{ type: "text", text: content }]), [blocks, content]);
   const last = parts[parts.length - 1];
@@ -107,12 +124,14 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
         p.kind === "steps" ? (
           <Steps key={i} steps={p.steps} live={streaming && p === last} />
         ) : p.kind === "subagent" ? (
-          <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} />
+          <SubagentCard key={p.block.id} block={p.block} childBlocks={p.children} streaming={!!streaming} agent={agent} />
+        ) : p.kind === "subagents" ? (
+          <SubagentGroup key={p.entries[0]!.block.id} entries={p.entries} streaming={!!streaming} agent={agent} />
         ) : (
           <Block key={i} block={p.block} streaming={!!streaming} />
         ),
       )}
-      {streaming ? <BackgroundAgents parts={parts} /> : null}
+      {streaming ? <BackgroundAgents parts={parts} agent={agent} /> : null}
       {streaming && last?.kind === "block" && last.block.type === "text" ? <Caret /> : null}
       {!streaming && content?.trim() && parts.some((p) => p.kind !== "block" || p.block.type === "text") ? <CopyReply text={content} /> : null}
     </View>
@@ -122,6 +141,7 @@ export const AssistantMessage = memo(function AssistantMessage({ blocks, streami
 /** Long-press selects text, so the whole reply is copied from here, like the desktop's "Copy reply". */
 function CopyReply({ text }: { text: string }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [copied, setCopied] = useRecyclingState(false, [text]);
   useEffect(() => {
     if (!copied) return;
@@ -131,7 +151,7 @@ function CopyReply({ text }: { text: string }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={copied ? "Copied" : "Copy reply"}
+      accessibilityLabel={copied ? t("common:actions.copied") : t("message.copyReply")}
       hitSlop={10}
       onPress={() => {
         void Clipboard.setStringAsync(text);
@@ -142,7 +162,7 @@ function CopyReply({ text }: { text: string }) {
     >
       <Icon name={copied ? "check" : "copy"} size={13} color={copied ? c.success : c.textFaint} />
       <T variant="caption" color={copied ? c.success : c.textFaint}>
-        {copied ? "Copied" : "Copy"}
+        {copied ? t("common:actions.copied") : t("common:actions.copy")}
       </T>
     </Pressable>
   );
@@ -159,8 +179,11 @@ function Files({ attachments, spaced, color }: { attachments: Attachment[]; spac
   );
 }
 
+const RETRY_CAUSES = ["restart", "offline", "error", "background"] as const;
+
 const Block = memo(function Block({ block, streaming }: { block: MessageBlock; streaming: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   switch (block.type) {
     case "text":
       return block.text.trim() ? <Markdown text={block.text} /> : null;
@@ -196,28 +219,40 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
       return (
         <Marker
           icon="clock"
-          text={block.reason === "now" ? "Continued now, ahead of its follow-up" : block.reason === "late" ? "Continued late, as it planned" : "Continued on its own, as it planned"}
+          text={block.reason === "now" ? t("message.followup.now") : block.reason === "late" ? t("message.followup.late") : t("message.followup.onTime")}
           detail={block.note}
           at={block.dueAt}
         />
       );
-    case "retry":
+    case "retry": {
+      const cause = RETRY_CAUSES.find((x) => x === (block.cause ?? "restart")) ?? "restart";
+      const mode = block.mode === "continue" || block.mode === "again" ? block.mode : null;
       return (
         <Marker
           icon={block.mode === "continue" ? "play" : "refresh"}
-          text={block.auto ? ((AUTO_RETRY[block.cause ?? "restart"] ?? AUTO_RETRY.restart)[block.mode] ?? "Picked up again") : block.mode === "continue" ? "Continued where it stopped" : "Tried again"}
-          detail={block.masked ? "Saved secrets stay masked" : undefined}
+          text={
+            block.auto
+              ? mode
+                ? t(`message.retry.${cause}.${mode}`)
+                : t("message.retry.pickedUpAgain")
+              : block.mode === "continue"
+                ? t("message.retry.continuedWhereStopped")
+                : t("message.retry.triedAgain")
+          }
+          detail={block.masked ? t("message.retry.secretsMasked") : undefined}
           at={block.at}
         />
       );
+    }
     case "moved":
-      return <Marker icon="move" text={`Moved from ${block.from} to ${block.to}`} detail={block.continued ? "Continued there" : undefined} at={block.at} />;
+      return <Marker icon="move" text={t("message.moved", { from: block.from, to: block.to })} detail={block.continued ? t("message.continuedThere") : undefined} at={block.at} />;
     case "call": {
-      const status = block.status === "done" ? "" : ` · ${CALL_STATUS[block.status]?.label ?? ""}`;
+      const name = callName({ contactName: block.contactName, number: block.number, direction: "outbound" });
+      const status = block.status !== "done" && CALL_STATUS[block.status] ? t(`callParts.status.${block.status}`) : null;
       return (
         <Marker
           icon="call"
-          text={`Call with ${callName({ contactName: block.contactName, number: block.number, direction: "outbound" })} ended${status}`}
+          text={block.status === "done" ? t("message.callEnded", { name }) : t("message.callEndedStatus", { name, status: status ?? "" })}
           detail={block.outcome || block.summary}
           at={block.at}
           onPress={() => openCall(block.callId)}
@@ -249,7 +284,9 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
             ) : null}
           </View>
           <T variant="caption" muted style={{ marginTop: 4, marginRight: 4 }}>
-            Picked up mid-task{Number.isNaN(new Date(block.sentAt).getTime()) ? "" : ` · sent ${format(new Date(block.sentAt), "HH:mm")}`}
+            {Number.isNaN(new Date(block.sentAt).getTime())
+              ? t("message.pickedUpMidTask")
+              : t("message.pickedUpMidTaskSent", { time: format(new Date(block.sentAt), "p", { locale: dateLocale() }) })}
           </T>
         </View>
       );
@@ -262,7 +299,7 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
           <Icon name={done ? "check" : "close"} size={14} color={c.textMuted} style={{ marginTop: 2 }} />
           <View style={{ flex: 1, gap: 2 }}>
             <T variant="footnote" style={{ fontWeight: "600" }}>
-              {done ? "You did" : "You couldn't do"} H-{block.number}: {block.title}
+              {done ? t("message.humanTaskDone", { number: block.number, title: block.title }) : t("message.humanTaskNotDone", { number: block.number, title: block.title })}
             </T>
             {block.note ? (
               <T variant="footnote" muted selectable>
@@ -277,13 +314,13 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
       // The question card says why a run stands still for an answer.
       if (block.reason === "question") return null;
       const limit = block.reason === "limit";
-      const what = limit ? `${block.limit ?? "Usage limit"} reached` : "Paused";
+      const what = limit ? t("message.limitReached", { limit: block.limit ?? t("message.usageLimit") }) : t("message.paused");
       return (
         <View style={[styles.callout, { backgroundColor: limit ? c.warningSoft : c.sunken }]}>
           <Icon name={limit ? "clock" : "pause"} size={14} color={limit ? c.warning : c.textMuted} />
           <T variant="footnote" muted style={{ flex: 1 }}>
             {what.charAt(0).toUpperCase() + what.slice(1)}
-            {block.resumedAt ? " · continued" : ""}
+            {block.resumedAt ? ` · ${t("message.continued")}` : ""}
           </T>
         </View>
       );
@@ -293,20 +330,13 @@ const Block = memo(function Block({ block, streaming }: { block: MessageBlock; s
   }
 });
 
-const AUTO_RETRY: Record<RetryCause, Record<RetryMode, string>> = {
-  restart: { continue: "Continued after Godmode restarted", again: "Sent again after Godmode restarted" },
-  offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
-  error: { continue: "Continued after an error", again: "Sent again after an error" },
-  background: { continue: "Continued after background work was stopped", again: "Sent again after background work was stopped" },
-  unfinished: { continue: "Continued: the last turn stopped before the work was done", again: "Sent again: the last turn stopped before the work was done" },
-};
-
 /**
  * Where the chat went on without the human: a follow-up the agent set, a turn that was picked up again, a move to
  * another computer, or a call that ended (it opens the call).
  */
 function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: string; detail?: string; at: string; onPress?: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <Pressable accessibilityRole={onPress ? "button" : undefined} disabled={!onPress} onPress={onPress} style={({ pressed }) => [styles.marker, pressed && { opacity: 0.6 }]}>
       <View style={[styles.markerLine, { backgroundColor: c.border }]} />
@@ -314,7 +344,7 @@ function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: str
         <Row style={{ gap: 6 }}>
           <Icon name={icon} size={11} color={c.textFaint} />
           <T variant="caption" muted style={{ fontWeight: "600" }}>
-            {text} · {shortTime(at) === "now" ? "just now" : format(new Date(at), "MMM d, HH:mm")}
+            {text} · {Date.now() - new Date(at).getTime() < 60_000 ? t("message.justNow") : format(new Date(at), t("message.markerDateFormat"), { locale: dateLocale() })}
           </T>
           {onPress ? <Icon name="chevron" size={9} color={c.textFaint} weight="semibold" /> : null}
         </Row>
@@ -329,17 +359,72 @@ function Marker({ icon, text, detail, at, onPress }: { icon: IconName; text: str
   );
 }
 
-const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean }) {
-  const c = useColors();
-  const { task, background, status, running, failed, result } = subagentState(block, streaming);
-  const [open, setOpen] = useRecyclingState<boolean | null>(null, [block.id]);
-  const expanded = open ?? false;
-  const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown };
-  const title = (typeof input.description === "string" && input.description) || task?.description || "Helper";
+function SubagentAvatar({ agent, phase, size, seed }: { agent?: ParentAgent; phase: Phase; size: number; seed: string }) {
+  const base = agent?.id ?? "agent";
+  const character = useMemo(() => babyCharacter(agent?.character ?? defaultCharacter(base)), [agent?.character, base]);
+  return <Character character={character} color={agent?.color ?? "violet"} mood={PHASE_MOOD[phase]} size={size} seed={seed} faceScale={BABY_FACE_SCALE} />;
+}
+
+function useSubagentView(block: ToolUse, childBlocks: MessageBlock[], streaming: boolean) {
+  const { t } = useTranslation("components");
+  const state = subagentState(block, streaming);
+  const { task, phase, result } = state;
+  const input = (block.input && typeof block.input === "object" ? block.input : {}) as { description?: unknown; subagent_type?: unknown; model?: unknown };
+  const title = (typeof input.description === "string" && input.description) || task?.description || t("message.helper.helper");
+  const type = typeof input.subagent_type === "string" && input.subagent_type !== "general-purpose" ? input.subagent_type : null;
+  const model = task?.model ?? (typeof input.model === "string" ? input.model : null);
   const tools = childBlocks.filter((b): b is ToolUse => b.type === "tool_use");
   const steps = Math.max(tools.length, task?.toolUses ?? 0);
-  const state = running ? task?.activity || "Working…" : failed ? "Failed" : status === "stopped" ? "Stopped" : "Done";
-  const meta = [background ? "Background helper" : "Helper", state, steps > 0 ? `${steps} steps` : null, !running && task?.durationMs ? duration(task.durationMs) : null]
+  const preview = result ? reportPreview(result) : "";
+  const status =
+    phase === "running"
+      ? shortenPaths(task?.activity ?? "") || t("message.helper.working")
+      : phase === "failed"
+        ? preview || t("message.helper.failed")
+        : phase === "stopped"
+          ? t("message.helper.stopped")
+          : preview || t("message.helper.done");
+  const stats = [steps > 0 ? t("message.steps", { count: steps }) : null, task?.totalTokens ? tokensLabel(task.totalTokens) : null, model ? readableModelId(model) : null].filter(
+    (x): x is string => !!x,
+  );
+  return { ...state, title, type, tools, status, stats };
+}
+
+function SubagentDetail({ tools, result, background, running }: { tools: ToolUse[]; result?: string; background: boolean; running: boolean }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  return (
+    <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
+      {tools.slice(-12).map((step, i) => (
+        <ToolStep key={step.id ?? i} step={step} />
+      ))}
+      {tools.length > 12 ? (
+        <T variant="caption" muted>
+          {t("message.earlierSteps", { count: tools.length - 12 })}
+        </T>
+      ) : null}
+      {result ? (
+        <View style={[styles.report, { backgroundColor: c.sunken }]}>
+          <T variant="eyebrow" muted>
+            {background ? t("message.helper.report") : t("message.helper.result")}
+          </T>
+          <Markdown text={result.length > 6000 ? `${result.slice(0, 6000)}…` : result} />
+        </View>
+      ) : running && !tools.length ? (
+        <Thinking />
+      ) : null}
+    </Animated.View>
+  );
+}
+
+const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming, agent }: { block: ToolUse; childBlocks: MessageBlock[]; streaming: boolean; agent?: ParentAgent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const view = useSubagentView(block, childBlocks, streaming);
+  const { task, background, running, failed, phase } = view;
+  const [open, setOpen] = useRecyclingState<boolean | null>(null, [block.id]);
+  const expanded = open ?? false;
+  const meta = [background ? t("message.helper.background") : t("message.helper.helper"), view.type, view.status, ...view.stats, !running && task?.durationMs ? duration(task.durationMs) : null]
     .filter(Boolean)
     .join(" · ");
 
@@ -354,57 +439,131 @@ const SubagentCard = memo(function SubagentCard({ block, childBlocks, streaming 
         }}
         style={styles.stepsHeader}
       >
-        <View style={[styles.stepIcon, { backgroundColor: failed ? c.dangerSoft : running ? c.brandSoft : c.sunken }]}>
-          <Icon name="subagent" size={13} color={failed ? c.danger : running ? c.brandStrong : c.textMuted} />
-        </View>
+        <SubagentAvatar agent={agent} phase={phase} size={30} seed={block.id} />
         <View style={{ flex: 1, minWidth: 0 }}>
           <T variant="subhead" numberOfLines={1} style={{ fontWeight: "500" }}>
-            {title}
+            {view.title}
           </T>
           <T variant="caption" muted numberOfLines={1} color={failed ? c.danger : undefined}>
             {meta}
           </T>
         </View>
         {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
-        {running ? <Spinner /> : <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />}
+        <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: expanded ? "180deg" : "0deg" }] }} />
       </Pressable>
-      {expanded && (
-        <Animated.View entering={FadeIn.duration(160)} style={{ gap: 10, paddingTop: 4, paddingBottom: 12, paddingHorizontal: space.md }}>
-          {tools.slice(-12).map((t, i) => (
-            <ToolStep key={t.id ?? i} step={t} />
-          ))}
-          {tools.length > 12 ? (
-            <T variant="caption" muted>
-              and {tools.length - 12} earlier steps
-            </T>
-          ) : null}
-          {result ? (
-            <View style={[styles.report, { backgroundColor: c.sunken }]}>
-              <T variant="eyebrow" muted>
-                {background ? "Report" : "Result"}
-              </T>
-              <Markdown text={result.length > 6000 ? `${result.slice(0, 6000)}…` : result} />
-            </View>
-          ) : running && !tools.length ? (
-            <Thinking />
-          ) : null}
-        </Animated.View>
-      )}
+      {expanded && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
     </View>
   );
 });
 
-/** Helpers still at work in the background, at the foot of the turn: without this the chat would look idle. */
-function BackgroundAgents({ parts }: { parts: Part[] }) {
+function SubagentRow({ entry, streaming, agent }: { entry: SubagentEntry; streaming: boolean; agent?: ParentAgent }) {
   const c = useColors();
-  const working = parts.flatMap((p) => (p.kind === "subagent" && subagentState(p.block, true).background && subagentState(p.block, true).running ? [p.block] : []));
+  const { block, children } = entry;
+  const view = useSubagentView(block, children, streaming);
+  const { task, background, running, failed, phase } = view;
+  const [open, setOpen] = useRecyclingState(false, [block.id]);
+  const meta = [view.type, view.status].filter(Boolean).join(" · ");
+
+  return (
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => {
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setOpen(!open);
+        }}
+        style={styles.subagentRow}
+      >
+        <SubagentAvatar agent={agent} phase={phase} size={24} seed={block.id} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="footnote" numberOfLines={1} style={{ fontWeight: "500" }}>
+            {view.title}
+          </T>
+          <T variant="caption" muted numberOfLines={1} color={failed ? c.danger : undefined}>
+            {meta}
+          </T>
+        </View>
+        <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
+          {running && task?.startedAt ? null : task?.durationMs ? duration(task.durationMs) : null}
+        </T>
+        {running && task?.startedAt ? <Elapsed since={task.startedAt} /> : null}
+        <Icon name="down" size={10} color={c.textFaint} style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />
+      </Pressable>
+      {open && <SubagentDetail tools={view.tools} result={view.result} background={background} running={running} />}
+    </View>
+  );
+}
+
+function AvatarStack({ blocks, agent, size, streaming }: { blocks: ToolUse[]; agent?: ParentAgent; size: number; streaming: boolean }) {
+  const c = useColors();
+  const shown = blocks.slice(0, 4);
+  return (
+    <View style={{ flexDirection: "row" }}>
+      {shown.map((b, i) => (
+        <View key={b.id} style={{ marginLeft: i > 0 ? -size / 3 : 0, zIndex: shown.length - i, borderRadius: size, backgroundColor: c.surface }}>
+          <SubagentAvatar agent={agent} phase={subagentState(b, streaming).phase} size={size} seed={b.id} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const SubagentGroup = memo(function SubagentGroup({ entries, streaming, agent }: { entries: SubagentEntry[]; streaming: boolean; agent?: ParentAgent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const states = entries.map((e) => subagentState(e.block, streaming));
+  const count = (phase: Phase) => states.filter((s) => s.phase === phase).length;
+  const working = count("running");
+  const anyFailed = count("failed") > 0;
+  const summary = (["running", "done", "failed", "stopped"] as const)
+    .filter((phase) => count(phase) > 0)
+    .map((phase) => t(`message.subagents.${phase}`, { count: count(phase) }))
+    .join(" · ");
+
+  return (
+    <View style={[styles.steps, { borderColor: working > 0 ? c.brand : anyFailed ? c.danger : c.border }]}>
+      <View style={styles.stepsHeader}>
+        <AvatarStack blocks={entries.map((e) => e.block)} agent={agent} size={26} streaming={streaming} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <T variant="subhead" numberOfLines={1} style={{ fontWeight: "500" }}>
+            {t("message.subagents.helpers", { count: entries.length })}
+          </T>
+          <T variant="caption" muted numberOfLines={1}>
+            {summary}
+          </T>
+        </View>
+      </View>
+      {working > 0 ? (
+        <View style={[styles.progressTrack, { backgroundColor: c.border }]}>
+          <View style={[styles.progressFill, { backgroundColor: c.brand, width: `${((entries.length - working) / entries.length) * 100}%` }]} />
+        </View>
+      ) : null}
+      <View style={{ paddingVertical: 4 }}>
+        {entries.map((e) => (
+          <SubagentRow key={e.block.id} entry={e} streaming={streaming} agent={agent} />
+        ))}
+      </View>
+    </View>
+  );
+});
+
+function BackgroundAgents({ parts, agent }: { parts: Part[]; agent?: ParentAgent }) {
+  const c = useColors();
+  const { t } = useTranslation("components");
+  const entries = parts.flatMap((p) => (p.kind === "subagent" ? [p.block] : p.kind === "subagents" ? p.entries.map((e) => e.block) : []));
+  const working = entries.filter((b) => {
+    const s = subagentState(b, true);
+    return s.background && s.running;
+  });
   const last = parts[parts.length - 1];
-  if (!working.length || (working.length === 1 && last?.kind === "subagent" && last.block === working[0])) return null;
+  const inLast = last?.kind === "subagent" ? [last.block] : last?.kind === "subagents" ? last.entries.map((e) => e.block) : [];
+  if (!working.length || working.every((b) => inLast.includes(b))) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)} style={[styles.background, { borderColor: c.border }]}>
-      <Spinner />
+      <AvatarStack blocks={working} agent={agent} size={20} streaming />
       <T variant="footnote" muted style={{ flex: 1 }}>
-        {working.length === 1 ? "1 helper is working in the background" : `${working.length} helpers are working in the background`}
+        {t("message.helpersInBackground", { count: working.length })}
       </T>
     </Animated.View>
   );
@@ -428,13 +587,14 @@ function duration(ms: number): string {
 
 const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const [open, setOpen] = useRecyclingState(false, [steps.find((s) => s.type === "tool_use")?.id ?? (steps[0]?.type === "thinking" ? steps[0].text.slice(0, 40) : "")]);
   const tools = steps.filter((s): s is Extract<Step, { type: "tool_use" }> => s.type === "tool_use");
   const latest = tools[tools.length - 1];
   const label = latest ? toolLabel(latest) : null;
-  const failed = tools.some((t) => t.isError);
+  const failed = tools.some((x) => x.isError);
   const pending = live && latest && latest.result === undefined;
-  const summary = pending ? toolActivity(latest.name, latest.input).replace(/…$/, "") : label ? label.title : "Thought it through";
+  const summary = pending ? toolActivity(latest.name, latest.input).replace(/…$/, "") : label ? label.title : t("message.thoughtItThrough");
   const count = tools.length;
 
   return (
@@ -454,7 +614,7 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
         </T>
         {count > 1 && (
           <T variant="caption" muted>
-            {count} steps
+            {t("message.steps", { count })}
           </T>
         )}
         {live ? <Spinner /> : <Icon name="down" size={11} color={c.textFaint} style={{ transform: [{ rotate: open ? "180deg" : "0deg" }] }} />}
@@ -470,6 +630,7 @@ const Steps = memo(function Steps({ steps, live }: { steps: Step[]; live?: boole
 
 const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const label = toolLabel(step);
   const [more, setMore] = useRecyclingState(false, [step.id]);
   const todos = step.name === "TodoWrite" ? todoItems(step.input) : null;
@@ -515,7 +676,7 @@ const ToolStep = memo(function ToolStep({ step }: { step: ToolUse }) {
         </View>
       ) : null}
       {step.imageUrl ? (
-        <RemoteImage path={step.imageUrl} alt="Screenshot" />
+        <RemoteImage path={step.imageUrl} alt={t("message.screenshot")} />
       ) : step.image ? (
         <Image source={{ uri: imageUri(step.image) }} style={[styles.shot, { backgroundColor: c.sunken }]} contentFit="contain" cachePolicy="none" />
       ) : null}
@@ -578,27 +739,29 @@ function fileEdit(step: ToolUse): { lines: DiffLine[] } | null {
   } else return null;
   if (!lines.length) return null;
   const more = lines.length - DIFF_LINES;
-  return { lines: more > 0 ? [...lines.slice(0, DIFF_LINES), { kind: "fold", text: `⋯ ${more} more lines` }] : lines };
+  return { lines: more > 0 ? [...lines.slice(0, DIFF_LINES), { kind: "fold", text: `⋯ ${translate("components:message.moreLines", { count: more })}` }] : lines };
 }
 
 function ThinkingStep({ text }: { text: string }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   return (
     <Row style={{ gap: 8, alignItems: "flex-start" }}>
       <Icon name="sparkles" size={13} color={c.dream} style={{ marginTop: 3 }} />
       <T variant="footnote" muted style={{ flex: 1, fontStyle: "italic" }} numberOfLines={8}>
-        {text.trim() || "Thinking"}
+        {text.trim() || t("message.thinkingStep")}
       </T>
     </Row>
   );
 }
 
 function Thinking() {
+  const { t } = useTranslation("components");
   return (
     <Row style={{ gap: 8 }}>
       <Spinner />
       <T variant="subhead" muted>
-        Thinking…
+        {t("message.thinking")}
       </T>
     </Row>
   );
@@ -705,6 +868,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  subagentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+  },
+  progressTrack: {
+    height: 2,
+    marginHorizontal: space.md,
+    borderRadius: 1,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 1,
+  },
   report: {
     gap: 6,
     padding: space.md,
@@ -748,6 +928,7 @@ const styles = StyleSheet.create({
 /** Where the chat was summarized: a quiet divider, earlier messages stay readable above it. */
 function CompactedDivider({ info }: { info: CompactInfo }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const sizes = info.preTokens !== null && info.postTokens !== null ? ` · ${tokensLabel(info.preTokens)} → ${tokensLabel(info.postTokens)}` : "";
   return (
     <View style={styles.compacted} accessibilityRole="text">
@@ -756,7 +937,7 @@ function CompactedDivider({ info }: { info: CompactInfo }) {
         <Icon name="layers" size={12} color={c.success} />
         <T variant="caption" muted>
           <T variant="caption" style={{ fontWeight: "600" }}>
-            {info.auto ? "Compressed automatically" : "Chat compressed"}
+            {info.auto ? t("message.compressedAuto") : t("message.compressed")}
           </T>
           {sizes}
         </T>

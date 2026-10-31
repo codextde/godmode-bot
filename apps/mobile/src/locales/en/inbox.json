@@ -1,0 +1,34 @@
+{
+  "title": "Inbox",
+  "anAgent": "An agent",
+  "attention": "Needs your attention",
+  "attentionCount": "Needs your attention · {{count}}",
+  "allClear": "All clear",
+  "allClearBody": "When an agent needs a decision, your OK or a login, it lands here.",
+  "login": {
+    "kind": {
+      "missingCredential": "Missing login",
+      "invalidCredential": "Login failed",
+      "missingTotp": "Missing 2FA",
+      "missingAccount": "No account",
+      "other": "Needs attention"
+    },
+    "updateFailed": "Couldn't update the request",
+    "unknownService": "Unknown service",
+    "reportedBy": "Reported by {{name}}",
+    "reportedByAgent": "Reported by an agent",
+    "reportedByGodmode": "Reported by Godmode",
+    "addOnComputer": "Add the login in Godmode on your computer, where the vault is.",
+    "dismiss": "Dismiss",
+    "markResolved": "Mark resolved"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "titleNew": "Notifications · {{count}} new",
+    "markAllRead": "Mark all read",
+    "markReadFailed": "Couldn't mark it read",
+    "loadFailed": "Couldn't load notifications",
+    "empty": "No notifications. Agents post updates here when they finish work, need something or hit a problem.",
+    "showMore": "Show {{count}} more"
+  }
+}

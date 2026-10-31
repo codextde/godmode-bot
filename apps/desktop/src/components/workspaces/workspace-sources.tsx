@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
+import { Trans, useTranslation } from "react-i18next";
 import {
   Copy,
   EllipsisVertical,
@@ -27,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 import { copyText } from "@/components/chat/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { dateLocale, t as translate } from "@/i18n";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/core";
 import { isMac, openExternal } from "@/lib/desktop";
@@ -65,7 +67,7 @@ async function revealInFileManager(path: string) {
     const { revealItemInDir } = await import("@tauri-apps/plugin-opener");
     await revealItemInDir(path);
   } catch {
-    toast.error(`Couldn't open ${isMac ? "Finder" : "the file manager"}`);
+    toast.error(isMac ? translate("workspaces:sources.openFinderFailed") : translate("workspaces:sources.openFileManagerFailed"));
   }
 }
 
@@ -85,6 +87,7 @@ export function WorkspaceSourcesField({
   value: WorkspaceSourceInput[];
   onChange: (next: WorkspaceSourceInput[]) => void;
 }) {
+  const { t } = useTranslation("workspaces");
   const { data: workspaces } = useWorkspaces();
   const workspace = workspaceId ? workspaces?.find((w) => w.id === workspaceId) : undefined;
   const saved = (projectId ? workspace?.projects.find((p) => p.id === projectId)?.sources : workspace?.sources) ?? [];
@@ -93,7 +96,7 @@ export function WorkspaceSourcesField({
 
   const add = (source: WorkspaceSourceInput) => {
     if (value.some((s) => keyOf(s) === keyOf(source))) {
-      toast.info(source.kind === "folder" ? "That folder is already attached" : "That repository is already attached");
+      toast.info(source.kind === "folder" ? t("sources.folderAttached") : t("sources.repoAttached"));
       return;
     }
     onChange([...value, source]);
@@ -146,14 +149,14 @@ export function WorkspaceSourcesField({
             </span>
           </div>
           <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-            Give every agent here the files it needs — a project folder on this computer, or a git repository Godmode clones for them.
+            {t("sources.emptyHint")}
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             <Button type="button" variant="outline" size="sm" onClick={() => setPicking(true)}>
-              <FolderOpen /> Add folder
+              <FolderOpen /> {t("sources.addFolder")}
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)}>
-              <FolderGit2 /> Add repository
+              <FolderGit2 /> {t("sources.addRepository")}
             </Button>
           </div>
         </div>
@@ -161,10 +164,10 @@ export function WorkspaceSourcesField({
         !adding && (
           <div className="flex flex-wrap gap-1.5">
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setPicking(true)}>
-              <Plus /> Folder
+              <Plus /> {t("sources.folder")}
             </Button>
             <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setAdding(true)}>
-              <Plus /> Repository
+              <Plus /> {t("sources.repository")}
             </Button>
           </div>
         )
@@ -175,8 +178,8 @@ export function WorkspaceSourcesField({
         onOpenChange={setPicking}
         value={null}
         onPick={(path) => add({ kind: "folder", path })}
-        title="Add a folder to the workspace"
-        description="Every agent in this workspace can read and edit the files in it. Their chats keep working in their own folder."
+        title={t("sources.pickerTitle")}
+        description={t("sources.pickerDescription")}
       />
     </div>
   );
@@ -195,6 +198,7 @@ function SourceRow({
   live: WorkspaceSource | undefined;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const qc = useQueryClient();
   const short = useShortPath();
   const git = source.kind === "git";
@@ -202,7 +206,7 @@ function SourceRow({
   const sync = useMutation({
     mutationFn: () => (projectId ? api.projects.syncSource(projectId, live!.id) : api.workspaces.syncSource(workspaceId!, live!.id)),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.workspaces }),
-    onError: (e) => toastApiError(e, "Couldn't update the repository", qc),
+    onError: (e) => toastApiError(e, t("sources.updateFailed"), qc),
   });
   const busy = live?.status === "cloning" || live?.status === "syncing" || sync.isPending;
   const path = live?.path || (source.kind === "folder" ? source.path : "");
@@ -241,7 +245,7 @@ function SourceRow({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={live.status === "ready" ? `Update ${name}` : `Clone ${name}`}
+                aria-label={live.status === "ready" ? t("sources.updateNamed", { name }) : t("sources.cloneNamed", { name })}
                 disabled={busy}
                 onClick={() => sync.mutate()}
                 className="text-muted-foreground"
@@ -249,34 +253,34 @@ function SourceRow({
                 <RefreshCw className={cn(sync.isPending && "animate-spin")} />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{live.status === "ready" ? "Pull the latest changes" : "Clone now"}</TooltipContent>
+            <TooltipContent>{live.status === "ready" ? t("sources.pull") : t("sources.cloneNow")}</TooltipContent>
           </Tooltip>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${name}`} className="text-muted-foreground">
+            <Button type="button" variant="ghost" size="icon-sm" aria-label={t("sources.moreFor", { name })} className="text-muted-foreground">
               <EllipsisVertical />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             {path && (
-              <DropdownMenuItem onClick={() => void copyText(path).then((ok) => ok && toast.success("Path copied"))}>
-                <Copy /> Copy path
+              <DropdownMenuItem onClick={() => void copyText(path).then((ok) => ok && toast.success(t("sources.pathCopied")))}>
+                <Copy /> {t("sources.copyPath")}
               </DropdownMenuItem>
             )}
             {path && isTauri && (live?.status === "ready" || (!git && live?.status !== "missing")) && (
               <DropdownMenuItem onClick={() => void revealInFileManager(path)}>
-                <FolderSearch /> {isMac ? "Show in Finder" : "Show in folder"}
+                <FolderSearch /> {isMac ? t("sources.showInFinder") : t("sources.showInFolder")}
               </DropdownMenuItem>
             )}
             {web && (
               <DropdownMenuItem onClick={() => void openExternal(web)}>
-                <ExternalLink /> Open repository page
+                <ExternalLink /> {t("sources.openRepoPage")}
               </DropdownMenuItem>
             )}
             {(path || web) && <DropdownMenuSeparator />}
             <DropdownMenuItem variant="destructive" onClick={onRemove}>
-              {git ? <Trash2 /> : <X />} Remove from workspace
+              {git ? <Trash2 /> : <X />} {t("sources.remove")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -286,10 +290,11 @@ function SourceRow({
 }
 
 function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput; live: WorkspaceSource | undefined; pending: boolean }) {
+  const { t } = useTranslation("workspaces");
   if (!live) {
     return (
       <p className="mt-1 text-[11px] text-muted-foreground">
-        {source.kind === "git" ? "Godmode clones it when you save." : "Attached when you save."}
+        {source.kind === "git" ? t("sources.clonesOnSave") : t("sources.attachedOnSave")}
       </p>
     );
   }
@@ -298,16 +303,16 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
     return (
       <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <Loader2 className="size-3 animate-spin" />
-        {cloning ? "Cloning…" : "Pulling the latest changes…"}
+        {cloning ? t("sources.cloning") : t("sources.pulling")}
       </p>
     );
   }
   if (live.status === "error" || live.status === "missing") {
     const text =
       live.kind === "folder"
-        ? (live.error ?? "Folder not found")
+        ? (live.error ?? t("sources.folderNotFound"))
         : live.status === "missing"
-          ? "Not cloned yet — it's cloned before the next run."
+          ? t("sources.notCloned")
           : live.error;
     return (
       <p className={cn("mt-1 flex items-start gap-1.5 text-[11px] leading-snug", live.status === "error" ? "text-destructive" : "text-warning")}>
@@ -323,7 +328,7 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
     <>
       <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
         <span aria-hidden className="size-1.5 rounded-full bg-success" />
-        <span className="font-mono">{live.headBranch ?? "detached"}</span>
+        <span className="font-mono">{live.headBranch ?? t("sources.detached")}</span>
         {live.commit && (
           <>
             <span className="opacity-40">·</span>
@@ -333,14 +338,14 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
         {synced && !Number.isNaN(synced.getTime()) && (
           <>
             <span className="opacity-40">·</span>
-            <span>checked {formatDistanceToNowStrict(synced, { addSuffix: true })}</span>
+            <span>{t("sources.checked", { when: formatDistanceToNowStrict(synced, { addSuffix: true, locale: dateLocale() }) })}</span>
           </>
         )}
       </p>
       {warning && (
         <p className={cn("mt-1 flex items-start gap-1.5 text-[11px] leading-snug", live.error ? "text-warning" : "text-muted-foreground")}>
           <TriangleAlert className="mt-px size-3 shrink-0" />
-          <span className="line-clamp-3">{live.error ? `Couldn't pull the latest changes: ${live.error}` : live.note}</span>
+          <span className="line-clamp-3">{live.error ? t("sources.pullFailed", { error: live.error }) : live.note}</span>
         </p>
       )}
     </>
@@ -348,6 +353,7 @@ function SourceStatus({ source, live, pending }: { source: WorkspaceSourceInput;
 }
 
 function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInput) => void; onCancel: () => void }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -381,16 +387,16 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
     <div data-escape-local className="rounded-xl border bg-paper-2 p-3">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-medium">
-          <FolderGit2 className="size-4 text-brand-strong" /> Add a git repository
+          <FolderGit2 className="size-4 text-brand-strong" /> {t("sources.addGitTitle")}
         </p>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label="Cancel" onClick={onCancel} className="text-muted-foreground">
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={t("common:actions.cancel")} onClick={onCancel} className="text-muted-foreground">
           <X />
         </Button>
       </div>
       <div className="mt-2.5 flex flex-col gap-2 sm:flex-row">
         <Input
           autoFocus
-          aria-label="Repository URL"
+          aria-label={t("sources.repoUrl")}
           aria-invalid={!!error}
           placeholder="https://github.com/owner/repo"
           value={url}
@@ -411,8 +417,8 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
         <div className="relative sm:w-36">
           <GitBranch className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
-            aria-label="Branch (optional)"
-            placeholder="default branch"
+            aria-label={t("sources.branchLabel")}
+            placeholder={t("sources.branchPlaceholder")}
             value={branch}
             spellCheck={false}
             autoCapitalize="off"
@@ -423,7 +429,7 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
           />
         </div>
         <Button type="button" onClick={submit} disabled={!url.trim()}>
-          Add
+          {t("common:actions.add")}
         </Button>
       </div>
       {error ? (
@@ -433,18 +439,25 @@ function AddRepository({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceInp
         </p>
       ) : preview ? (
         <p className="mt-2 truncate text-xs text-muted-foreground">
-          Clones <span className="font-medium text-foreground">{preview.name}</span> from <span className="font-mono">{displayUrl(preview.url)}</span>
-          {(branch.trim() || preview.branch) && (
-            <>
-              {" "}
-              on <span className="font-mono">{branch.trim() || preview.branch}</span>
-            </>
+          {branch.trim() || preview.branch ? (
+            <Trans
+              t={t}
+              i18nKey="sources.clonesFromBranch"
+              values={{ name: preview.name, url: displayUrl(preview.url), branch: branch.trim() || preview.branch }}
+              components={{ b: <span className="font-medium text-foreground" />, mono: <span className="font-mono" /> }}
+            />
+          ) : (
+            <Trans
+              t={t}
+              i18nKey="sources.clonesFrom"
+              values={{ name: preview.name, url: displayUrl(preview.url) }}
+              components={{ b: <span className="font-medium text-foreground" />, mono: <span className="font-mono" /> }}
+            />
           )}
         </p>
       ) : (
         <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-          Private repositories use this computer's git sign-in — an SSH key for <span className="font-mono">git@</span> URLs, or a credential helper such
-          as <span className="font-mono">gh auth login</span>.
+          <Trans t={t} i18nKey="sources.privateHint" components={{ mono: <span className="font-mono" /> }} />
         </p>
       )}
     </div>

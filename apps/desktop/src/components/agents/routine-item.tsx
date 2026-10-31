@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict, format } from "date-fns";
 import {
@@ -24,6 +25,7 @@ import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { cloudContext, coreUrl } from "@/lib/core";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { dateLocale } from "@/i18n";
 import { AgentAvatar } from "@/components/common";
 import { RunStatusBadge } from "@/components/runs/run-status";
 import { copyText } from "@/components/chat/copy-button";
@@ -62,6 +64,7 @@ function patchRoutineCaches(qc: ReturnType<typeof useQueryClient>, id: string, p
 }
 
 export function useToggleRoutine() {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.routines.update(id, { enabled }),
@@ -71,7 +74,7 @@ export function useToggleRoutine() {
     },
     onError: (err, { id, enabled }) => {
       patchRoutineCaches(qc, id, { enabled: !enabled });
-      toast.error("Couldn't update automation", { description: errorMessage(err) });
+      toast.error(t("routineItem.toast.updateError"), { description: errorMessage(err) });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: qk.routines }),
   });
@@ -79,6 +82,7 @@ export function useToggleRoutine() {
 
 /** Schedule: run now · condition: check now · app/webhook: run with a test event. */
 export function useRunRoutine() {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   const navigate = useNavigate();
   return useMutation({
@@ -89,27 +93,28 @@ export function useRunRoutine() {
       qc.invalidateQueries({ queryKey: qk.automationEvents });
       const title =
         routine.trigger.type === "condition"
-          ? `Checking “${routine.name}”…`
+          ? t("routineItem.toast.checking", { name: routine.name })
           : isEventTrigger(routine.trigger.type)
-            ? `Test event sent to “${routine.name}”`
-            : `“${routine.name}” started`;
-      toast.success(title, { action: { label: "Watch", onClick: () => navigate(`/chat/${run.conversationId}`) } });
+            ? t("routineItem.toast.testEventSent", { name: routine.name })
+            : t("routineItem.toast.started", { name: routine.name });
+      toast.success(title, { action: { label: t("routineItem.toast.watch"), onClick: () => navigate(`/chat/${run.conversationId}`) } });
     },
     onError: (err, routine) =>
       !isLicenseRequired(err) &&
-      toast.error(routine.trigger.type === "condition" ? "Couldn't start the check" : "Couldn't start the automation", { description: errorMessage(err) }),
+      toast.error(routine.trigger.type === "condition" ? t("routineItem.toast.checkError") : t("routineItem.toast.startError"), { description: errorMessage(err) }),
   });
 }
 
 export function useDeleteRoutine() {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (routine: Routine) => api.routines.delete(routine.id),
     onSuccess: (_, routine) => {
       qc.invalidateQueries({ queryKey: qk.routines });
-      toast.success(`“${routine.name}” deleted`);
+      toast.success(t("routineItem.toast.deleted", { name: routine.name }));
     },
-    onError: (err) => toast.error("Couldn't delete automation", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("routineItem.toast.deleteError"), { description: errorMessage(err) }),
   });
 }
 
@@ -117,13 +122,14 @@ function relative(iso: string | null) {
   if (!iso) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
-  return { text: formatDistanceToNowStrict(d, { addSuffix: true }), full: format(d, "PPpp") };
+  return { text: formatDistanceToNowStrict(d, { addSuffix: true, locale: dateLocale() }), full: format(d, "PPpp", { locale: dateLocale() }) };
 }
 
 const RUN_ICONS = { schedule: Play, condition: ScanSearch, app: FlaskConical, webhook: FlaskConical } as const;
 
 /** One automation as a rich row: trigger, trigger health, next run / last event, enable switch and actions. */
 export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agent?: Agent; onEdit: (r: Routine) => void }) {
+  const { t } = useTranslation(["agents", "common"]);
   const toggle = useToggleRoutine();
   const run = useRunRoutine();
   const del = useDeleteRoutine();
@@ -146,7 +152,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
 
   const copyWebhook = async () => {
     if (!routine.webhookPath) return;
-    if (await copyText(coreUrl(routine.webhookPath))) toast.success("Webhook URL copied");
+    if (await copyText(coreUrl(routine.webhookPath))) toast.success(t("routineItem.webhookCopied"));
   };
 
   return (
@@ -158,7 +164,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
         {agent ? (
-          <Link to={`/agents/${agent.id}/routines`} aria-label={`Open ${agent.name}`} className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+          <Link to={`/agents/${agent.id}/routines`} aria-label={t("routineItem.openAgent", { name: agent.name })} className="rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
             <AgentAvatar agent={agent} size="md" />
           </Link>
         ) : (
@@ -176,13 +182,13 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
               {routine.name}
             </button>
             {agent && <span className="truncate text-xs text-muted-foreground">· {agent.name}</span>}
-            {!routine.enabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Paused</span>}
+            {!routine.enabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("routineItem.paused")}</span>}
             {routine.fillOnly && agent?.permissions.secretAccess === "reveal" && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Fill-only secrets</span>
+                  <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("routineItem.fillOnly")}</span>
                 </TooltipTrigger>
-                <TooltipContent>Set up by an agent: its runs fill logins into pages but can't read them. Edit it to change that.</TooltipContent>
+                <TooltipContent>{t("routineItem.fillOnlyHint")}</TooltipContent>
               </Tooltip>
             )}
             {routine.pendingEvents > 0 && (
@@ -193,29 +199,29 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
                     onClick={openEvents}
                     className="rounded-[5px] border border-warning/25 bg-warning/[0.08] px-1.5 py-px text-[10px] font-medium text-warning tabular-nums transition hover:bg-warning/[0.14] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                   >
-                    {routine.pendingEvents} waiting
+                    {t("routineItem.waiting", { count: routine.pendingEvents })}
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {routine.pendingEvents === 1 ? "1 event waits" : `${routine.pendingEvents} events wait`} for the current run to finish
+                  {t("routineItem.eventsWait", { count: routine.pendingEvents })}
                 </TooltipContent>
               </Tooltip>
             )}
           </div>
           <TriggerSummary routine={routine} className="mt-0.5" />
           {routine.filter && eventTrigger && (
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">Only when {routine.filter.replace(/^only\s+(when\s+|if\s+)?/i, "")}</p>
+            <p className="mt-0.5 truncate text-xs text-muted-foreground">{t("routineItem.onlyWhen", { filter: routine.filter.replace(/^only\s+(when\s+|if\s+)?/i, "") })}</p>
           )}
           {status.state === "error" && (
             <p className="mt-1 flex items-start gap-1.5 text-xs text-destructive" role="alert">
               <CircleAlert className="mt-px size-3.5 shrink-0" />
-              <span className="line-clamp-2">{status.message ?? "The trigger isn't working."}</span>
+              <span className="line-clamp-2">{status.message ?? t("routineItem.triggerError")}</span>
             </p>
           )}
           {status.state === "pending" && (
             <p className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground" role="status">
               <Hourglass className="mt-px size-3.5 shrink-0" />
-              <span className="line-clamp-2">{status.message ?? "Setting up the trigger…"}</span>
+              <span className="line-clamp-2">{status.message ?? t("routineItem.triggerPending")}</span>
             </p>
           )}
           {routine.prompt && <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{routine.prompt}</p>}
@@ -227,7 +233,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
           <UpcomingCell routine={routine} onOpenEvents={openEvents} />
         </div>
         <div className="min-w-28 text-xs">
-          <div className="eyebrow">Last run</div>
+          <div className="eyebrow">{t("routineItem.lastRun")}</div>
           {routine.lastStatus && last ? (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -239,14 +245,14 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
               <TooltipContent>{last.full}</TooltipContent>
             </Tooltip>
           ) : (
-            <span className="font-medium text-muted-foreground">Never</span>
+            <span className="font-medium text-muted-foreground">{t("common:words.never")}</span>
           )}
         </div>
         <div className="ml-auto flex items-center gap-1.5">
           <Switch
             checked={routine.enabled}
             onCheckedChange={(enabled) => toggle.mutate({ id: routine.id, enabled })}
-            aria-label={routine.enabled ? `Pause ${routine.name}` : `Enable ${routine.name}`}
+            aria-label={routine.enabled ? t("routineItem.pauseNamed", { name: routine.name }) : t("routineItem.enableNamed", { name: routine.name })}
           />
           <Tooltip>
             <TooltipTrigger asChild>
@@ -258,27 +264,27 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
           </Tooltip>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${routine.name}`}>
+              <Button variant="ghost" size="icon-sm" aria-label={t("routineItem.moreActions", { name: routine.name })}>
                 <Ellipsis />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuItem onClick={() => onEdit(routine)}>
-                <Pencil /> Edit
+                <Pencil /> {t("common:actions.edit")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={openEvents}>
-                <History /> Recent events
+                <History /> {t("routineItem.recentEvents")}
               </DropdownMenuItem>
               {routine.conversationId && (
                 <DropdownMenuItem asChild>
                   <Link to={`/chat/${routine.conversationId}`}>
-                    <MessageSquare /> Open conversation
+                    <MessageSquare /> {t("routineItem.openConversation")}
                   </Link>
                 </DropdownMenuItem>
               )}
               {eventTrigger && (
                 <DropdownMenuItem onClick={() => setTestOpen(true)}>
-                  <FlaskConical /> Send test event…
+                  <FlaskConical /> {t("routineItem.sendTestEvent")}
                 </DropdownMenuItem>
               )}
               {type === "webhook" && (
@@ -287,17 +293,17 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
                   {/* Through Godmode Cloud the page's address isn't one webhooks can reach; the URL is copied on the computer. */}
                   {!cloudContext && (
                     <DropdownMenuItem onClick={copyWebhook} disabled={!routine.webhookPath}>
-                      <Copy /> {routine.webhookPath ? "Copy webhook URL" : "Unlock the vault to copy the URL"}
+                      <Copy /> {routine.webhookPath ? t("routineItem.copyWebhook") : t("routineItem.unlockToCopy")}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => setConfirmRotate(true)} disabled={rotate.isPending}>
-                    <RefreshCw /> Rotate webhook URL
+                    <RefreshCw /> {t("routineItem.rotateWebhook")}
                   </DropdownMenuItem>
                 </>
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(true)}>
-                <Trash2 /> Delete
+                <Trash2 /> {t("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -307,20 +313,20 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{routine.name}”?</AlertDialogTitle>
+            <AlertDialogTitle>{t("routineItem.deleteDialog.title", { name: routine.name })}</AlertDialogTitle>
             <AlertDialogDescription>
               {routine.trigger.type === "app"
-                ? `Godmode stops listening for “${routine.trigger.triggerName}” in ${prettySlug(routine.trigger.toolkit)}.`
+                ? t("routineItem.deleteDialog.app", { trigger: routine.trigger.triggerName, app: prettySlug(routine.trigger.toolkit) })
                 : type === "webhook"
-                  ? "Its webhook URL stops working."
-                  : "It won't run again."}{" "}
-              Past runs and conversations stay in your history.
+                  ? t("routineItem.deleteDialog.webhook")
+                  : t("routineItem.deleteDialog.schedule")}{" "}
+              {t("routineItem.deleteDialog.history")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => del.mutate(routine)}>
-              Delete automation
+              {t("routineItem.deleteDialog.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -344,6 +350,7 @@ export function RoutineItem({ routine, agent, onEdit }: { routine: Routine; agen
 
 /** Schedule → next run · condition → next check (last observation in the tooltip) · app/webhook → last event. */
 function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvents: () => void }) {
+  const { t } = useTranslation("agents");
   const type = routine.trigger.type;
   const status = routine.triggerStatus;
 
@@ -351,7 +358,7 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
     const lastEvent = relative(status.lastEventAt);
     return (
       <>
-        <div className="eyebrow">Last event</div>
+        <div className="eyebrow">{t("routineItem.lastEvent")}</div>
         {lastEvent ? (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -363,10 +370,10 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
                 <Clock className="size-3" /> {lastEvent.text}
               </button>
             </TooltipTrigger>
-            <TooltipContent>{lastEvent.full} · show recent events</TooltipContent>
+            <TooltipContent>{t("routineItem.lastEventTooltip", { date: lastEvent.full })}</TooltipContent>
           </Tooltip>
         ) : (
-          <span className="font-medium text-muted-foreground">{routine.enabled ? "None yet" : "Paused"}</span>
+          <span className="font-medium text-muted-foreground">{routine.enabled ? t("routineItem.noneYet") : t("routineItem.paused")}</span>
         )}
       </>
     );
@@ -381,15 +388,15 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
     tooltip = (
       <div className="space-y-0.5">
         <div>{next.full}</div>
-        <div className="opacity-80">Picked at random within the start window</div>
+        <div className="opacity-80">{t("routineItem.randomPick")}</div>
       </div>
     );
   }
   if (type === "condition" && (lastCheck || status.observation)) {
     tooltip = (
       <div className="max-w-72 space-y-1">
-        {next && <div>Next check: {next.full}</div>}
-        {lastCheck && <div className="opacity-80">Last check {lastCheck.text}</div>}
+        {next && <div>{t("routineItem.nextCheckAt", { date: next.full })}</div>}
+        {lastCheck && <div className="opacity-80">{t("routineItem.lastCheckAgo", { time: lastCheck.text })}</div>}
         {status.observation && <div className="line-clamp-4 opacity-80">“{status.observation}”</div>}
       </div>
     );
@@ -397,7 +404,7 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
 
   return (
     <>
-      <div className="eyebrow">{type === "condition" ? "Next check" : "Next run"}</div>
+      <div className="eyebrow">{type === "condition" ? t("routineItem.nextCheck") : t("routineItem.nextRun")}</div>
       {routine.enabled && next ? (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -408,7 +415,7 @@ function UpcomingCell({ routine, onOpenEvents }: { routine: Routine; onOpenEvent
           <TooltipContent>{tooltip}</TooltipContent>
         </Tooltip>
       ) : (
-        <span className="font-medium text-muted-foreground">{routine.enabled ? "—" : "Paused"}</span>
+        <span className="font-medium text-muted-foreground">{routine.enabled ? "—" : t("routineItem.paused")}</span>
       )}
     </>
   );

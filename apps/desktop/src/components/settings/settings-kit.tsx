@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { CircleAlert, Info, ShieldAlert, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { Settings } from "@godmode/shared";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -35,6 +36,7 @@ function deepMerge<T>(base: T, patch: DeepPartial<T>): T {
 
 /** Optimistic settings update (PUT /api/settings with a partial) with rollback + a de-duplicated "Saved" toast. */
 export function useSettingsPatch() {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const m = useMutation({
     // Some changes (secret access "reveal") need a vault passphrase grant; withGrant asks for it when the core does.
@@ -47,12 +49,12 @@ export function useSettingsPatch() {
     },
     onError: (err, _p, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.settings, ctx.prev);
-      if (!isGrantCancelled(err)) toastApiError(err, "Could not save settings", qc);
+      if (!isGrantCancelled(err)) toastApiError(err, t("kit.saveError"), qc);
     },
     onSuccess: (next) => {
       if (isPlainObject(next) && "general" in next) qc.setQueryData(qk.settings, next);
       else void qc.invalidateQueries({ queryKey: qk.settings });
-      toast.success("Saved", { id: "settings-saved", duration: 1200 });
+      toast.success(t("common:status.saved"), { id: "settings-saved", duration: 1200 });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
     },
   });

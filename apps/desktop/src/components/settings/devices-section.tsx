@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Cable, Check, ClipboardPaste, Copy, KeyRound, LaptopMinimalCheck, LogOut, MessagesSquare, MonitorPause, MonitorSmartphone, MoonStar, Network, Plus, RefreshCw, Timer, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import { DEVICE_INVITE_PREFIX, parseDeviceInvite, RUNNER_CODE_PREFIX, type BrowserSignIns, type DeviceGroup, type DeviceGroupPatch, type GroupDevice, type RemoteRunner } from "@godmode/shared";
 import {
   AlertDialog,
@@ -38,10 +39,12 @@ import {
   useHandoff,
 } from "@/components/devices/device-parts";
 import { useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
-import { RUNNER_STATE_LABEL, RunnerStateBadge, RunnerStateDot, runnerWorkLine, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "@/components/runners/runner-parts";
+import { RUNNER_STATE_LABEL, RunnerStateBadge, RunnerStateDot, runnerWorkLine } from "@/components/runners/runner-parts";
 import { useNow } from "@/components/vault/use-now";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
+import { t as translate } from "@/i18n";
+import { isMac } from "@/lib/desktop";
 import { useDeviceGroup, useRunners } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -49,16 +52,16 @@ import { ExpiryRing, Step } from "./pair-phone-dialog";
 import { Callout, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
 import { useReduceAnimations } from "@/lib/motion";
 
+const here = (form: "start" | "inline" | "dat" | "acc") => translate(isMac ? `settings:devices.here.mac.${form}` : `settings:devices.here.pc.${form}`);
+
 export function DevicesSection() {
+  const { t } = useTranslation(["settings", "common"]);
   const { data: group, isLoading, isError, error, refetch } = useDeviceGroup();
   useJoinedToasts(group);
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Devices"
-        description="Use Godmode on several Macs as one. Chats can run on any of them and move between them, also while they work."
-      />
+      <SectionHeading title={t("devices.title")} description={t("devices.description")} />
       {isLoading ? (
         <div className="space-y-4 rounded-xl border bg-card p-6 shadow-card">
           <Skeleton className="h-5 w-48" />
@@ -66,10 +69,10 @@ export function DevicesSection() {
           <Skeleton className="h-9 w-40" />
         </div>
       ) : isError || !group ? (
-        <Callout tone="warning" title="Couldn't load your devices">
+        <Callout tone="warning" title={t("devices.loadError")}>
           <p>{errorMessage(error)}</p>
           <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         </Callout>
       ) : group.role ? (
@@ -81,8 +84,7 @@ export function DevicesSection() {
       {group?.port && (
         <p className="flex items-center gap-1.5 px-1 text-[11px] text-muted-foreground">
           <Network className="size-3" aria-hidden />
-          The other computers reach this one on port <span className="font-mono tabular-nums text-foreground/80">{group.port}</span>. If they can't connect, allow
-          it in your firewall.
+          <Trans t={t} i18nKey="devices.port" values={{ port: group.port }} components={{ code: <span className="font-mono tabular-nums text-foreground/80" /> }} />
         </p>
       )}
     </div>
@@ -96,7 +98,7 @@ function useJoinedToasts(group: DeviceGroup | undefined) {
     if (!group) return;
     const ids = new Set(group.devices.filter((d) => !d.self && d.id).map((d) => d.id!));
     if (known.current && group.role === "primary") {
-      for (const d of group.devices) if (d.id && !d.self && !known.current.has(d.id)) toast.success(`${d.name} joined your group`);
+      for (const d of group.devices) if (d.id && !d.self && !known.current.has(d.id)) toast.success(translate("settings:devices.joinedToast", { name: d.name }));
     }
     known.current = ids;
   }, [group]);
@@ -107,24 +109,22 @@ function useJoinedToasts(group: DeviceGroup | undefined) {
 /* ------------------------------------------------------------------ */
 
 function AloneView() {
+  const { t } = useTranslation("settings");
   const [mode, setMode] = useState<"invite" | "join" | null>(null);
   return (
     <>
       <section className="relative overflow-hidden rounded-xl border bg-card shadow-card">
         <div className="flex flex-col gap-6 p-6 @xl:flex-row @xl:items-center">
           <div className="min-w-0 flex-1">
-            <p className="eyebrow">Device group</p>
-            <h3 className="mt-2 text-xl leading-snug font-medium tracking-[-0.025em]">One Godmode, on every Mac.</h3>
-            <p className="mt-1.5 max-w-md text-sm text-muted-foreground">
-              Every Mac has your agents, logins and chats, and chats can move between them, also while they work. One is the primary — keep it on
-              (a Mac mini or a desktop); while it's away, another Mac stands in.
-            </p>
+            <p className="eyebrow">{t("devices.alone.eyebrow")}</p>
+            <h3 className="mt-2 text-xl leading-snug font-medium tracking-[-0.025em]">{t("devices.alone.title")}</h3>
+            <p className="mt-1.5 max-w-md text-sm text-muted-foreground">{t("devices.alone.body")}</p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button aria-expanded={mode === "invite"} onClick={() => setMode((m) => (m === "invite" ? null : "invite"))}>
-                <Plus /> Add a computer
+                <Plus /> {t("devices.add")}
               </Button>
               <Button variant="outline" aria-expanded={mode === "join"} onClick={() => setMode((m) => (m === "join" ? null : "join"))}>
-                <ClipboardPaste /> Join with an invite
+                <ClipboardPaste /> {t("devices.alone.join")}
               </Button>
             </div>
           </div>
@@ -136,9 +136,9 @@ function AloneView() {
         {mode === "invite" ? (
           <motion.div key="invite" exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
             <SettingsGroup
-              title="Add a computer"
+              title={t("devices.add")}
               icon={<Plus />}
-              description="Make this Mac the primary and invite another one."
+              description={t("devices.alone.addDescription")}
               actions={<CloseButton onClick={() => setMode(null)} />}
               bodyClassName="py-5"
             >
@@ -148,9 +148,9 @@ function AloneView() {
         ) : mode === "join" ? (
           <motion.div key="join" exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }}>
             <SettingsGroup
-              title="Join with an invite"
+              title={t("devices.alone.join")}
               icon={<ClipboardPaste />}
-              description="Make the invite on the Mac that should be the primary: Settings → Devices → Add a computer."
+              description={t("devices.alone.joinDescription")}
               actions={<CloseButton onClick={() => setMode(null)} />}
               bodyClassName="py-5"
             >
@@ -160,17 +160,17 @@ function AloneView() {
         ) : null}
       </AnimatePresence>
 
-      <Callout tone="muted" icon={<MessagesSquare className="text-muted-foreground" />} title="What lives where">
-        Every computer keeps a copy of the agents, logins, settings, the task board, automations and your to-dos, and changes travel both ways. The
-        primary runs the schedules. Each chat lives on the computer it runs on, and every computer of the group sees all of them.
+      <Callout tone="muted" icon={<MessagesSquare className="text-muted-foreground" />} title={t("devices.alone.whereTitle")}>
+        {t("devices.alone.whereBody")}
       </Callout>
     </>
   );
 }
 
 function CloseButton({ onClick }: { onClick: () => void }) {
+  const { t } = useTranslation("common");
   return (
-    <Button variant="ghost" size="icon-sm" className="-my-1 text-muted-foreground" aria-label="Close" onClick={onClick}>
+    <Button variant="ghost" size="icon-sm" className="-my-1 text-muted-foreground" aria-label={t("actions.close")} onClick={onClick}>
       <X />
     </Button>
   );
@@ -216,6 +216,7 @@ function GroupGlyph() {
 
 /** Makes an invite as it mounts and shows it with its expiry; a new one on request. */
 function InviteCode({ becomesPrimary }: { becomesPrimary?: boolean }) {
+  const { t } = useTranslation(["settings", "common"]);
   const create = useMutation({ mutationFn: api.devices.invite });
   const now = useNow(1000);
   const [copied, setCopied] = useState(false);
@@ -240,10 +241,10 @@ function InviteCode({ becomesPrimary }: { becomesPrimary?: boolean }) {
   return (
     <div className="space-y-5">
       {create.isError ? (
-        <Callout tone="warning" title="Couldn't make an invite">
+        <Callout tone="warning" title={t("devices.invite.error")}>
           <p>{errorMessage(create.error)}</p>
           <Button variant="outline" size="sm" className="mt-3" onClick={() => create.mutate()}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         </Callout>
       ) : !invite ? (
@@ -258,46 +259,46 @@ function InviteCode({ becomesPrimary }: { becomesPrimary?: boolean }) {
               "max-h-24 overflow-y-auto rounded-lg border bg-paper-2 px-3.5 py-3 font-mono text-[11.5px] leading-relaxed break-all text-foreground/85 transition-opacity select-all",
               (expired || create.isPending) && "opacity-40",
             )}
-            aria-label="Invite"
+            aria-label={t("devices.invite.label")}
           >
             {invite.code}
           </p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <Button size="sm" onClick={() => void copy()} disabled={expired || create.isPending}>
               {copied ? <Check /> : <Copy />}
-              {copied ? "Copied" : "Copy invite"}
+              {copied ? t("common:actions.copied") : t("devices.invite.copy")}
             </Button>
             <span className="flex items-center gap-2 text-xs text-muted-foreground tabular-nums" aria-live="polite">
               {expired ? (
-                "This invite has expired."
+                t("devices.invite.expired")
               ) : (
                 <>
                   <ExpiryRing seconds={remaining} total={total} />
-                  Valid for {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}
+                  {t("devices.invite.valid", { time: `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}` })}
                 </>
               )}
             </span>
             <Button variant={expired ? "outline" : "ghost"} size="xs" className={cn("ml-auto", !expired && "text-muted-foreground")} onClick={() => create.mutate()} disabled={create.isPending}>
-              {create.isPending ? <Spinner className="size-3" /> : <RefreshCw />} New invite
+              {create.isPending ? <Spinner className="size-3" /> : <RefreshCw />} {t("devices.invite.new")}
             </Button>
           </div>
         </div>
       )}
 
       <ol className="space-y-3.5">
-        <Step n={1} title="On the other Mac, open Godmode">
-          Settings → Devices → Join with an invite.
+        <Step n={1} title={t("devices.invite.step1")}>
+          {t("devices.invite.step1Body")}
         </Step>
-        <Step n={2} title="Paste this invite and join">
-          It works once and only for a few minutes. Joining takes about ten seconds.
+        <Step n={2} title={t("devices.invite.step2")}>
+          {t("devices.invite.step2Body")}
         </Step>
         {becomesPrimary ? (
-          <Step n={3} title={`${THIS_COMPUTER} becomes the primary`}>
-            Keep it on. The other Mac takes its agents, logins and settings; its own chats stay and show up here too.
+          <Step n={3} title={t("devices.invite.step3Primary", { computer: here("start") })}>
+            {t("devices.invite.step3PrimaryBody")}
           </Step>
         ) : (
-          <Step n={3} title="It joins the group">
-            It takes the group's agents, logins and settings. Its own chats stay and show up on every computer of the group.
+          <Step n={3} title={t("devices.invite.step3")}>
+            {t("devices.invite.step3Body")}
           </Step>
         )}
       </ol>
@@ -306,6 +307,7 @@ function InviteCode({ becomesPrimary }: { becomesPrimary?: boolean }) {
 }
 
 function JoinForm() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const now = useNow(1000);
@@ -315,7 +317,7 @@ function JoinForm() {
       qc.setQueryData(qk.devices, next);
       // The setup here was replaced by the primary's: everything the app shows changed.
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "devices" });
-      toast.success(next.primaryName ? `${THIS_COMPUTER} joined ${next.primaryName}'s group` : `${THIS_COMPUTER} joined the group`, { description: "Its agents, logins and settings are here now." });
+      toast.success(next.primaryName ? t("devices.join.toastNamed", { computer: here("start"), name: next.primaryName }) : t("devices.join.toast", { computer: here("start") }), { description: t("devices.join.toastDescription") });
     },
   });
 
@@ -326,13 +328,13 @@ function JoinForm() {
     ? null
     : !parsed
       ? text.startsWith(RUNNER_CODE_PREFIX)
-        ? `That's a runner's pairing code. Here, paste an invite from another Mac; it starts with ${DEVICE_INVITE_PREFIX}`
-        : `That isn't an invite. It starts with ${DEVICE_INVITE_PREFIX} — copy all of it, line breaks don't matter.`
+        ? t("devices.join.runnerCode", { prefix: DEVICE_INVITE_PREFIX })
+        : t("devices.join.notInvite", { prefix: DEVICE_INVITE_PREFIX })
       : expired
-        ? "This invite has expired. Make a new one on the other Mac."
+        ? t("devices.join.expired")
         : null;
   const ready = !!parsed && !expired;
-  const name = parsed?.name ?? "the primary";
+  const name = parsed?.name ?? t("devices.thePrimary");
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -352,7 +354,7 @@ function JoinForm() {
         spellCheck={false}
         autoComplete="off"
         disabled={join.isPending}
-        aria-label="Invite"
+        aria-label={t("devices.invite.label")}
         aria-invalid={!!problem || undefined}
         placeholder={`${DEVICE_INVITE_PREFIX}…`}
         className="max-h-40 font-mono text-[12px] break-all md:text-[12px]"
@@ -364,20 +366,20 @@ function JoinForm() {
           <div className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/[0.05] px-3 py-2.5 text-xs" role="alert">
             <TriangleAlert className="mt-px size-3.5 shrink-0 text-destructive" aria-hidden />
             <div className="min-w-0 space-y-0.5">
-              <p className="font-medium text-destructive">Couldn't join {name}</p>
+              <p className="font-medium text-destructive">{t("devices.join.error", { name })}</p>
               <p className="leading-relaxed break-words text-destructive/85">{errorMessage(join.error)}</p>
             </div>
           </div>
         ) : null}
       </div>
-      <Callout tone="warning" title={`${THIS_COMPUTER} takes ${name}'s setup`}>
-        Its agents, logins and settings replace the ones here. The chats on {THIS_COMPUTER_INLINE} stay, and show up on every computer of the group.
+      <Callout tone="warning" title={parsed ? t("devices.join.takesSetup", { computer: here("start"), name: parsed.name }) : t("devices.join.takesSetupPrimary", { computer: here("start") })}>
+        {t("devices.join.takesSetupBody", { computer: here("dat") })}
       </Callout>
       <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
-        {join.isPending && <span className="mr-auto text-xs text-muted-foreground">Connecting to {name} and copying its setup…</span>}
+        {join.isPending && <span className="mr-auto text-xs text-muted-foreground">{t("devices.join.connecting", { name })}</span>}
         <Button type="submit" disabled={!ready || join.isPending}>
           {join.isPending ? <Spinner /> : <ClipboardPaste />}
-          {join.isPending ? "Joining…" : parsed ? `Join ${parsed.name}` : "Join"}
+          {join.isPending ? t("devices.join.joining") : parsed ? t("devices.join.joinNamed", { name: parsed.name }) : t("devices.join.join")}
         </Button>
       </div>
     </form>
@@ -389,12 +391,14 @@ function JoinForm() {
 /* ------------------------------------------------------------------ */
 
 function GroupView({ group }: { group: DeviceGroup }) {
+  const { t } = useTranslation("settings");
   const [inviting, setInviting] = useState(false);
   const primary = group.role === "primary";
   const others = group.devices.filter((d) => !d.self).length;
   const now = useGroupClock(group);
   // While the primary is away what this computer does about it matters most.
   const away = group.role === "secondary" && !group.primaryOnline;
+  const computers = t("devices.group.computersDescription", { count: group.devices.length });
 
   return (
     <>
@@ -403,12 +407,12 @@ function GroupView({ group }: { group: DeviceGroup }) {
       <HandoffCard group={group} />
 
       <SettingsGroup
-        title="Computers"
+        title={t("devices.group.computers")}
         icon={<Network />}
-        description={`${group.devices.length} ${group.devices.length === 1 ? "computer" : "computers"} in this group. Chats can run on any of them.`}
+        description={computers}
         actions={
           <Button variant="outline" size="sm" onClick={() => setInviting(true)}>
-            <Plus /> Add a computer
+            <Plus /> {t("devices.add")}
           </Button>
         }
       >
@@ -417,7 +421,7 @@ function GroupView({ group }: { group: DeviceGroup }) {
             <DeviceRow key={d.id ?? "primary"} device={d} group={group} now={now} removable={primary && !d.self && d.role === "secondary"} />
           ))}
         </AnimatePresence>
-        {primary && others === 0 && <p className="py-4 text-sm text-muted-foreground">No other computer yet. Add one to share this Mac's Godmode.</p>}
+        {primary && others === 0 && <p className="py-4 text-sm text-muted-foreground">{t("devices.group.noOthers")}</p>}
       </SettingsGroup>
 
       {!away && <StandInGroup group={group} now={now} />}
@@ -428,9 +432,9 @@ function GroupView({ group }: { group: DeviceGroup }) {
       <Dialog open={inviting} onOpenChange={setInviting}>
         <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-[560px]">
           <DialogHeader className="border-b px-6 pt-6 pb-5 text-left">
-            <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Add a computer</DialogTitle>
+            <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{t("devices.add")}</DialogTitle>
             <DialogDescription>
-              {primary ? "Paste this invite in Godmode on the other Mac." : `The invite comes from ${group.primaryName}: the new computer joins the group there.`}
+              {primary ? t("devices.group.invitePrimary") : t("devices.group.inviteSecondary", { name: group.primaryName })}
             </DialogDescription>
           </DialogHeader>
           <div className="px-6 py-6">
@@ -443,30 +447,33 @@ function GroupView({ group }: { group: DeviceGroup }) {
 }
 
 const ROLE_BADGE = {
-  primary: { label: "Primary", cls: "border-brand/25 bg-brand-soft text-brand-strong" },
-  secondary: { label: "Secondary", cls: "border-border bg-secondary text-muted-foreground" },
-  standIn: { label: "Stands in", cls: "border-brand/25 bg-brand-soft text-brand-strong" },
-};
+  primary: { labelKey: "devices.role.primary", cls: "border-brand/25 bg-brand-soft text-brand-strong" },
+  secondary: { labelKey: "devices.role.secondary", cls: "border-border bg-secondary text-muted-foreground" },
+  standIn: { labelKey: "devices.role.standIn", cls: "border-brand/25 bg-brand-soft text-brand-strong" },
+} as const;
 
 function RoleBadge({ role }: { role: keyof typeof ROLE_BADGE }) {
-  const { label, cls } = ROLE_BADGE[role];
-  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-[5px] border px-1.5 text-[11px] font-medium whitespace-nowrap", cls)}>{label}</span>;
+  const { t } = useTranslation("settings");
+  const { labelKey, cls } = ROLE_BADGE[role];
+  return <span className={cn("inline-flex h-5 shrink-0 items-center rounded-[5px] border px-1.5 text-[11px] font-medium whitespace-nowrap", cls)}>{t(labelKey)}</span>;
 }
 
 function StatusCard({ group }: { group: DeviceGroup }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("settings");
   const self = group.devices.find((d) => d.self);
   const primaryDevice = group.devices.find((d) => d.role === "primary");
   const secondary = group.role === "secondary";
   const standing = secondary && group.standIn.state === "active";
   const count = group.devices.length;
+  const name = group.primaryName ?? t("devices.thePrimary");
   const title = !secondary
-    ? `${THIS_COMPUTER} is the primary`
+    ? t("devices.status.primary", { computer: here("start") })
     : group.primaryOnline
-      ? `Synced with ${group.primaryName}`
+      ? t("devices.status.synced", { name })
       : standing
-        ? `Standing in for ${group.primaryName}`
-        : `${group.primaryName} is away`;
+        ? t("devices.status.standing", { name })
+        : t("devices.status.away", { name });
 
   return (
     <motion.section initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
@@ -481,10 +488,14 @@ function StatusCard({ group }: { group: DeviceGroup }) {
           </div>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
             {standing
-              ? `${group.primaryName} is away, so ${THIS_COMPUTER_INLINE} runs the automations, the task board and the phone app until it's back. Everything that changes here goes back to it then.`
+              ? t("devices.status.bodyStanding", { name, computer: here("inline") })
               : secondary
-              ? `${group.primaryName} runs the schedules. ${THIS_COMPUTER} has a copy of everything and keeps working while it's away. Chats can run here or on any other computer of the group.`
-              : `It runs the schedules for ${count === 1 ? "the group" : `all ${count} computers`}. Keep it on and awake${group.standInEnabled && count > 1 ? " — while it's away, another computer stands in" : ""}.`}
+                ? t("devices.status.bodySecondary", { name, computer: here("start") })
+                : count === 1
+                  ? t("devices.status.bodyPrimarySolo")
+                  : group.standInEnabled
+                    ? t("devices.status.bodyPrimaryAllStandIn", { count })
+                    : t("devices.status.bodyPrimaryAll", { count })}
           </p>
         </div>
         {secondary && primaryDevice && group.primaryOnline && (
@@ -500,16 +511,17 @@ function StatusCard({ group }: { group: DeviceGroup }) {
 
 /** The live side of standing in, on a secondary while its primary is away. */
 function StandInNow({ group, now }: { group: DeviceGroup; now: number }) {
-  const name = group.primaryName ?? "The primary";
+  const { t } = useTranslation("settings");
+  const name = group.primaryName ?? t("devices.thePrimaryStart");
   const { state, since, takesOverAt } = group.standIn;
   const error = group.primaryError && <p className="mb-1 break-words">{group.primaryError}</p>;
   if (state === "active") {
     const n = group.pendingChanges;
     return (
-      <Callout icon={<LaptopMinimalCheck className="text-brand-strong" />} title={`${THIS_COMPUTER} stands in for ${name}`} className="border-brand/20 bg-brand-soft/50">
+      <Callout icon={<LaptopMinimalCheck className="text-brand-strong" />} title={t("devices.standInNow.activeTitle", { computer: here("start"), name })} className="border-brand/20 bg-brand-soft/50">
         <p>
-          {since ? `Since ${clockTime(since)} the` : "The"} automations, the task board, messaging and the phone app run here.{" "}
-          {n > 0 ? `${n === 1 ? "1 change goes" : `${n} changes go`} back when ${name} is back.` : `What changes here goes back when ${name} is back.`}
+          {since ? t("devices.standInNow.activeSince", { time: clockTime(since) }) : t("devices.standInNow.active")}{" "}
+          {n > 0 ? t("devices.standInNow.pending", { count: n, name }) : t("devices.standInNow.pendingNone", { name })}
         </p>
       </Callout>
     );
@@ -517,22 +529,22 @@ function StandInNow({ group, now }: { group: DeviceGroup; now: number }) {
   if (state === "waiting" && takesOverAt) {
     const left = new Date(takesOverAt).getTime() - now;
     return (
-      <Callout icon={<Timer className="text-foreground" />} title={`${name} is away`}>
+      <Callout icon={<Timer className="text-foreground" />} title={t("devices.status.away", { name })}>
         {error}
         <p className="tabular-nums">
-          {THIS_COMPUTER} takes over {left > 0 ? `in ${countdown(left)}` : "in a moment"}. Everything keeps working.
+          {left > 0 ? t("devices.standInNow.takesOverIn", { computer: here("start"), time: countdown(left) }) : t("devices.standInNow.takesOverSoon", { computer: here("start") })}
         </p>
       </Callout>
     );
   }
   const other = group.devices.find((d) => !d.self && d.standingIn);
   return (
-    <Callout tone="muted" title={`${name} is away`}>
+    <Callout tone="muted" title={t("devices.status.away", { name })}>
       {error}
       <p>
         {other
-          ? `${other.name} stands in for it. Everything keeps working here too.`
-          : "Everything keeps working here. Automations, messaging and the phone app wait until it's back."}
+          ? t("devices.standInNow.otherStandsIn", { name: other.name })
+          : t("devices.standInNow.waitsHere")}
       </p>
     </Callout>
   );
@@ -540,6 +552,7 @@ function StandInNow({ group, now }: { group: DeviceGroup; now: number }) {
 
 /** One PATCH /api/devices, shown at once and rolled back when it fails. */
 function useGroupPatch() {
+  const { t } = useTranslation("common");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: DeviceGroupPatch) => api.devices.update(input),
@@ -551,11 +564,11 @@ function useGroupPatch() {
     },
     onError: (e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.devices, ctx.prev);
-      toastApiError(e, "Could not save", qc);
+      toastApiError(e, t("errors.couldNotSave"), qc);
     },
     onSuccess: (next) => {
       qc.setQueryData(qk.devices, next);
-      toast.success("Saved", { id: "settings-saved", duration: 1200 });
+      toast.success(t("status.saved"), { id: "settings-saved", duration: 1200 });
     },
   });
 }
@@ -563,40 +576,44 @@ function useGroupPatch() {
 const STAND_IN_MINUTES = [1, 2, 3, 5, 10, 15];
 
 function StandInGroup({ group, now }: { group: DeviceGroup; now: number }) {
+  const { t } = useTranslation("settings");
   const patch = useGroupPatch();
   const primary = group.role === "primary";
-  const subject = primary ? THIS_COMPUTER_INLINE : (group.primaryName ?? "the primary");
+  const subject = primary ? here("inline") : (group.primaryName ?? t("devices.thePrimary"));
   const m = group.standInMinutes;
   const minutes = STAND_IN_MINUTES.includes(m) ? STAND_IN_MINUTES : [...STAND_IN_MINUTES, m].sort((a, b) => a - b);
-  const elsewhere = primary ? "" : ` Change this on ${group.primaryName}.`;
 
   return (
-    <SettingsGroup title="While the primary is away" icon={<MonitorPause />} description="Every computer has a copy of everything, so nothing stops when the primary sleeps or its lid closes. With Tailscale on each computer they also find each other on different networks, so only one of them does the work.">
+    <SettingsGroup title={t("devices.standIn.title")} icon={<MonitorPause />} description={t("devices.standIn.description")}>
       {group.role === "secondary" && !group.primaryOnline && (
         <div className="py-4">
           <StandInNow group={group} now={now} />
         </div>
       )}
       <SettingRow
-        label="Another computer stands in"
+        label={t("devices.standIn.label")}
         htmlFor="devices-stand-in"
         disabled={!primary}
         description={
-          (group.standInEnabled
-            ? `When ${subject} is away for ${m} min, another computer runs the automations, the task board, messaging and the phone app until it's back.`
-            : `Automations, messaging and the phone app wait until ${subject} is back.`) + elsewhere
+          group.standInEnabled
+            ? primary
+              ? t("devices.standIn.on", { subject, minutes: m })
+              : t("devices.standIn.onElsewhere", { subject, minutes: m, name: group.primaryName })
+            : primary
+              ? t("devices.standIn.off", { subject })
+              : t("devices.standIn.offElsewhere", { subject, name: group.primaryName })
         }
       >
         <div className="flex items-center gap-2">
           {group.standInEnabled && (
             <Select value={String(m)} disabled={!primary} onValueChange={(v) => patch.mutate({ standInMinutes: Number(v) })}>
-              <SelectTrigger aria-label="After" className="w-32">
+              <SelectTrigger aria-label={t("devices.after")} className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper" align="end">
                 {minutes.map((n) => (
                   <SelectItem key={n} value={String(n)}>
-                    after {n} min
+                    {t("devices.afterMinutes", { minutes: n })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -609,42 +626,45 @@ function StandInGroup({ group, now }: { group: DeviceGroup; now: number }) {
   );
 }
 
-const SIGN_INS: Record<BrowserSignIns, { label: string; line: string }> = {
-  own: { label: "Each computer signs in", line: "With your saved logins, 2FA codes and passkeys." },
-  seed: { label: "Start from the primary's", line: "A computer new to a site copies the primary's sign-in." },
-};
+const SIGN_INS = {
+  own: { labelKey: "devices.signIns.ownLabel", lineKey: "devices.signIns.ownLine" },
+  seed: { labelKey: "devices.signIns.seedLabel", lineKey: "devices.signIns.seedLine" },
+} as const satisfies Record<BrowserSignIns, { labelKey: string; lineKey: string }>;
 
 function BrowserSignInsGroup({ group }: { group: DeviceGroup }) {
+  const { t } = useTranslation(["settings", "common"]);
   const patch = useGroupPatch();
   const primary = group.role === "primary";
   const value = group.browserSignIns;
-  const from = primary ? `${THIS_COMPUTER_INLINE}'s` : `${group.primaryName}'s`;
   return (
-    <SettingsGroup title="Browser sign-ins" icon={<KeyRound />} description="How the other computers get signed in to websites.">
+    <SettingsGroup title={t("devices.signIns.title")} icon={<KeyRound />} description={t("devices.signIns.description")}>
       <SettingRow
-        label="Sign-ins on each computer"
+        label={t("devices.signIns.label")}
         htmlFor="devices-sign-ins"
         disabled={!primary}
         description={
-          (value === "own"
-            ? "Each computer signs in by itself with your saved logins, 2FA codes and passkeys. Copying a sign-in can sign you out of Google and others."
-            : `A computer that isn't signed in to a site yet starts with ${from} sign-in. Google and others may sign you out when they see it twice.`) +
-          (primary ? "" : ` Change this on ${group.primaryName}.`)
+          value === "own"
+            ? primary
+              ? t("devices.signIns.own")
+              : t("devices.signIns.ownElsewhere", { name: group.primaryName })
+            : primary
+              ? t("devices.signIns.seedSelf", { computer: here("dat") })
+              : t("devices.signIns.seedElsewhere", { name: group.primaryName })
         }
       >
         <Select value={value} disabled={!primary} onValueChange={(v) => patch.mutate({ browserSignIns: v as BrowserSignIns })}>
           <SelectTrigger id="devices-sign-ins" className="w-60">
-            <SelectValue>{SIGN_INS[value].label}</SelectValue>
+            <SelectValue>{t(SIGN_INS[value].labelKey)}</SelectValue>
           </SelectTrigger>
           <SelectContent position="popper" align="end" className="w-80">
             {(Object.keys(SIGN_INS) as BrowserSignIns[]).map((v) => (
               <SelectItem key={v} value={v} className="py-2">
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="flex items-center gap-1.5 font-medium">
-                    {SIGN_INS[v].label}
-                    {v === "own" && <span className="text-[11px] font-normal text-brand-strong">Recommended</span>}
+                    {t(SIGN_INS[v].labelKey)}
+                    {v === "own" && <span className="text-[11px] font-normal text-brand-strong">{t("memory.backend.recommended")}</span>}
                   </span>
-                  <span className="text-xs text-muted-foreground">{SIGN_INS[v].line}</span>
+                  <span className="text-xs text-muted-foreground">{t(SIGN_INS[v].lineKey)}</span>
                 </span>
               </SelectItem>
             ))}
@@ -657,9 +677,10 @@ function BrowserSignInsGroup({ group }: { group: DeviceGroup }) {
 
 function HandoffCard({ group }: { group: DeviceGroup }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("settings");
   const { working, targets } = useHandoff();
   const secondary = group.role === "secondary";
-  const to = secondary ? group.primaryName : targets.length === 1 ? targets[0].name : "another computer";
+  const to = secondary ? group.primaryName : targets.length === 1 ? targets[0].name : t("devices.handoff.another");
   return (
     <motion.section
       initial={reduce ? false : { opacity: 0, y: 8 }}
@@ -673,17 +694,15 @@ function HandoffCard({ group }: { group: DeviceGroup }) {
             <MoonStar />
           </div>
           <div className="min-w-0">
-            <h3 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">Closing the lid?</h3>
-            <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted-foreground">
-              Hand the running work to {to}. Chats stop here and continue there with everything they did so far. Open the lid later and it's all here.
-            </p>
+            <h3 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">{t("devices.handoff.title")}</h3>
+            <p className="mt-0.5 max-w-md text-xs leading-relaxed text-muted-foreground">{t("devices.handoff.body", { to })}</p>
             <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
               <span className={cn("size-1.5 rounded-full", working > 0 ? "animate-pulse bg-brand" : "bg-muted-foreground/40")} aria-hidden />
-              {working === 0 ? `Nothing is working on ${THIS_COMPUTER_INLINE} right now.` : `${working} ${working === 1 ? "chat is" : "chats are"} working on ${THIS_COMPUTER_INLINE}.`}
+              {working === 0 ? t("devices.handoff.idle", { computer: here("dat") }) : t("devices.handoff.working", { count: working, computer: here("dat") })}
             </p>
           </div>
         </div>
-        <HandoffButton label="Hand off to" className="max-w-full shrink-0 self-start @xl:max-w-80 @xl:self-center" variant={working > 0 ? "default" : "outline"} />
+        <HandoffButton label={t("devices.handoff.label")} className="max-w-full shrink-0 self-start @xl:max-w-80 @xl:self-center" variant={working > 0 ? "default" : "outline"} />
       </div>
     </motion.section>
   );
@@ -704,6 +723,7 @@ function DeviceNote({ tone, icon, title, action, children }: { tone?: "warning";
 }
 
 function FullDiskAccessNote({ device }: { device: GroupDevice }) {
+  const { t } = useTranslation(["settings", "common"]);
   const showGuide = useMacPermissionsGuide((s) => s.show);
   const [open, setOpen] = useState(false);
   return (
@@ -711,37 +731,37 @@ function FullDiskAccessNote({ device }: { device: GroupDevice }) {
       <DeviceNote
         tone="warning"
         icon={<TriangleAlert />}
-        title="Needs Full Disk Access"
+        title={t("devices.fda.title")}
         action={
           <Button size="xs" variant="outline" onClick={() => (device.self ? showGuide("full-disk-access") : setOpen(true))}>
-            How to fix
+            {t("devices.fda.fix")}
           </Button>
         }
       >
         {device.self
-          ? "Agents here stop at a macOS “allow access to Desktop?” question until you click Allow."
-          : `Agents on ${device.name} stop at a macOS “allow access to Desktop?” question until someone clicks Allow there.`}
+          ? t("devices.fda.self")
+          : t("devices.fda.other", { name: device.name })}
       </DeviceNote>
       {!device.self && (
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="sm:max-w-[460px]">
             <DialogHeader>
-              <DialogTitle className="text-lg font-medium tracking-[-0.02em]">Allow Full Disk Access on {device.name}</DialogTitle>
-              <DialogDescription>Then agents there can open the Desktop, Documents and Downloads without macOS asking first. Do this on {device.name}:</DialogDescription>
+              <DialogTitle className="text-lg font-medium tracking-[-0.02em]">{t("devices.fda.dialogTitle", { name: device.name })}</DialogTitle>
+              <DialogDescription>{t("devices.fda.dialogDescription", { name: device.name })}</DialogDescription>
             </DialogHeader>
             <ol className="space-y-3.5 py-1">
-              <Step n={1} title="Open System Settings">
-                Apple menu → System Settings → Privacy & Security → Full Disk Access.
+              <Step n={1} title={t("devices.fda.step1")}>
+                {t("devices.fda.step1Body")}
               </Step>
-              <Step n={2} title="Turn on Godmode">
-                Not in the list? Click + and pick Godmode from Applications. macOS asks for the Mac's password.
+              <Step n={2} title={t("devices.fda.step2")}>
+                {t("devices.fda.step2Body")}
               </Step>
-              <Step n={3} title="Quit and reopen Godmode">
-                The warning here goes away by itself.
+              <Step n={3} title={t("devices.fda.step3")}>
+                {t("devices.fda.step3Body")}
               </Step>
             </ol>
             <DialogFooter>
-              <Button onClick={() => setOpen(false)}>Done</Button>
+              <Button onClick={() => setOpen(false)}>{t("common:actions.done")}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -751,53 +771,52 @@ function FullDiskAccessNote({ device }: { device: GroupDevice }) {
 }
 
 function RunnerTwinNote({ device, runnerId }: { device: GroupDevice; runnerId: string }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const { data: runners } = useRunners();
   const [confirm, setConfirm] = useState(false);
   const runner = runners?.find((r) => r.id === runnerId);
-  const name = device.self ? THIS_COMPUTER : device.name;
-  const there = device.self ? THIS_COMPUTER_INLINE : device.name;
+  const name = device.self ? here("start") : device.name;
+  const there = device.self ? here("dat") : device.name;
   const retire = useMutation({
     mutationFn: () => api.devices.retireRunner(runnerId),
     onSuccess: (result) => {
-      const chats = result.moved === 0 ? "The runner had no chats." : `${result.moved === 1 ? "1 chat" : `${result.moved} chats`} moved to the app.`;
-      toast.success(`${name} uses only the app now`, {
-        description: result.uninstalled ? `${chats} The runner is switched off there.` : `${chats} Its runner still starts there: run “godmode runner uninstall” on ${there} to switch it off.`,
+      const chats = result.moved === 0 ? t("devices.twin.noChats") : t("devices.twin.moved", { count: result.moved });
+      toast.success(t("devices.twin.toast", { name }), {
+        description: result.uninstalled ? t("devices.twin.uninstalled", { chats }) : t("devices.twin.stillStarts", { chats, there, command: "godmode runner uninstall" }),
       });
       void qc.invalidateQueries({ queryKey: qk.devices });
       void qc.invalidateQueries({ queryKey: qk.runners });
       void qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
-    onError: (e) => toastApiError(e, `Couldn't switch off the runner on ${there}`, qc),
+    onError: (e) => toastApiError(e, t("devices.twin.error", { there }), qc),
   });
   const n = runner?.conversations ?? 0;
   return (
     <>
       <DeviceNote
         icon={<Cable />}
-        title="Also paired as a runner"
+        title={t("devices.twin.title")}
         action={
           <Button size="xs" variant="outline" disabled={retire.isPending} onClick={() => setConfirm(true)}>
             {retire.isPending && <Spinner className="size-3" />}
-            Use only the app
+            {t("devices.twin.useApp")}
           </Button>
         }
       >
-        {name} also runs as a runner from an earlier setup.
+        {t("devices.twin.body", { name })}
       </DeviceNote>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Use only the app on {there}?</AlertDialogTitle>
+            <AlertDialogTitle>{t("devices.twin.confirmTitle", { there })}</AlertDialogTitle>
             <AlertDialogDescription>
-              The old runner on {there} is switched off and removed.{" "}
-              {n > 0 ? `Its ${n === 1 ? "chat moves" : `${n} chats move`} to the app there, with everything ${n === 1 ? "it" : "they"} did so far.` : "Its chats move to the app there."}{" "}
-              The app keeps working as it does now.
+              {t("devices.twin.confirmBody", { there, moves: n > 0 ? t("devices.twin.moves", { count: n }) : t("devices.twin.movesNone") })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => retire.mutate()}>Use only the app</AlertDialogAction>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={() => retire.mutate()}>{t("devices.twin.useApp")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -806,6 +825,7 @@ function RunnerTwinNote({ device, runnerId }: { device: GroupDevice; runnerId: s
 }
 
 function DeviceRow({ device, group, now, removable }: { device: GroupDevice; group: DeviceGroup; now: number; removable: boolean }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState(false);
   const remove = useMutation({
@@ -813,9 +833,9 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
     onSuccess: (next) => {
       qc.setQueryData(qk.devices, next);
       void qc.invalidateQueries({ queryKey: qk.runners });
-      toast.success(`${device.name} left the group`);
+      toast.success(t("devices.row.left", { name: device.name }));
     },
-    onError: (e) => toastApiError(e, `Couldn't remove ${device.name}`, qc),
+    onError: (e) => toastApiError(e, t("devices.row.removeError", { name: device.name }), qc),
   });
   const state = deviceState(device, group);
   const fda = needsFullDiskAccess(device);
@@ -838,7 +858,7 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
             <div className="flex min-w-0 items-center gap-1.5">
               <p className="truncate text-sm font-medium">{device.name}</p>
               {device.self && (
-                <span className="inline-flex h-5 shrink-0 items-center rounded-[5px] border px-1.5 text-[11px] font-medium whitespace-nowrap text-foreground/80">{THIS_COMPUTER}</span>
+                <span className="inline-flex h-5 shrink-0 items-center rounded-[5px] border px-1.5 text-[11px] font-medium whitespace-nowrap text-foreground/80">{here("start")}</span>
               )}
               <RoleBadge role={device.role} />
             </div>
@@ -857,14 +877,14 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
                   variant="ghost"
                   size="icon-sm"
                   className="text-muted-foreground hover:text-destructive"
-                  aria-label={`Remove ${device.name} from the group`}
+                  aria-label={t("devices.row.removeLabel", { name: device.name })}
                   disabled={remove.isPending}
                   onClick={() => setConfirm(true)}
                 >
                   {remove.isPending ? <Spinner /> : <Unlink />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Remove from group</TooltipContent>
+              <TooltipContent>{t("devices.row.removeTooltip")}</TooltipContent>
             </Tooltip>
           )}
         </div>
@@ -878,16 +898,15 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {device.name} from the group?</AlertDialogTitle>
+            <AlertDialogTitle>{t("devices.row.confirmTitle", { name: device.name })}</AlertDialogTitle>
             <AlertDialogDescription>
-              It works on its own again, with the setup it has now. The chats that live on it stay there and no longer show up on the other
-              computers.{device.activeRuns > 0 && ` ${device.activeRuns === 1 ? "1 chat is" : `${device.activeRuns} chats are`} working there right now.`}
+              {device.activeRuns > 0 ? t("devices.row.confirmBodyWorking", { count: device.activeRuns }) : t("devices.row.confirmBody")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
-              Remove
+              {t("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -902,6 +921,7 @@ function DeviceRow({ device, group, now, removable }: { device: GroupDevice; gro
 
 /** Classic runners still paired here. A computer of the group that also runs one has its own note in the list above. */
 function OlderRunners({ group }: { group: DeviceGroup }) {
+  const { t } = useTranslation("settings");
   const { data: runners = [] } = useRunners();
   const twins = new Set(group.devices.map((d) => d.runnerTwin).filter(Boolean));
   const older = runners.filter((r) => r.kind === "runner" && !twins.has(r.id));
@@ -909,9 +929,9 @@ function OlderRunners({ group }: { group: DeviceGroup }) {
 
   return (
     <SettingsGroup
-      title="Older runners"
+      title={t("devices.older.title")}
       icon={<MonitorSmartphone />}
-      description="Paired as runners before device groups. Their chats keep working here, but new chats don't start there."
+      description={t("devices.older.description")}
     >
       <AnimatePresence initial={false}>
         {older.map((r) => (
@@ -923,6 +943,7 @@ function OlderRunners({ group }: { group: DeviceGroup }) {
 }
 
 function OlderRunnerRow({ runner }: { runner: RemoteRunner }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState(false);
   const remove = useMutation({
@@ -930,9 +951,9 @@ function OlderRunnerRow({ runner }: { runner: RemoteRunner }) {
     onSuccess: () => {
       qc.setQueryData<RemoteRunner[]>(qk.runners, (old) => old?.filter((r) => r.id !== runner.id));
       void qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      toast.success(`${runner.name} removed`, { description: runner.conversations > 0 ? `Its chats stay here, as chats of ${THIS_COMPUTER_INLINE}.` : undefined });
+      toast.success(t("devices.older.removed", { name: runner.name }), { description: runner.conversations > 0 ? t("devices.older.removedDescription", { computer: here("dat") }) : undefined });
     },
-    onError: (e) => toastApiError(e, `Couldn't remove ${runner.name}`, qc),
+    onError: (e) => toastApiError(e, t("devices.row.removeError", { name: runner.name }), qc),
   });
   const chats = runner.conversations;
   const working = runner.activeRuns;
@@ -965,33 +986,35 @@ function OlderRunnerRow({ runner }: { runner: RemoteRunner }) {
               variant="ghost"
               size="icon-sm"
               className="text-muted-foreground hover:text-destructive"
-              aria-label={`Remove ${runner.name}`}
+              aria-label={t("devices.older.removeLabel", { name: runner.name })}
               disabled={remove.isPending}
               onClick={() => setConfirm(true)}
             >
               {remove.isPending ? <Spinner /> : <Trash2 />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Remove</TooltipContent>
+          <TooltipContent>{t("common:actions.remove")}</TooltipContent>
         </Tooltip>
       </div>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Remove {runner.name}?</AlertDialogTitle>
+            <AlertDialogTitle>{t("devices.older.confirmTitle", { name: runner.name })}</AlertDialogTitle>
             <AlertDialogDescription>
-              Godmode forgets this runner, and the runner forgets {THIS_COMPUTER_INLINE}.
-              {chats === 1 && ` Its chat stays here with everything in it; new messages in it are answered on ${THIS_COMPUTER_INLINE}.`}
-              {chats > 1 && ` Its ${chats} chats stay here with everything in them; new messages in them are answered on ${THIS_COMPUTER_INLINE}.`}
-              {working === 1 && " An agent is still working there — what it finishes from now on won't show up here."}
-              {working > 1 && ` ${working} agents are still working there — what they finish from now on won't show up here.`} Godmode itself stays installed on{" "}
-              {runner.hostname || "the other computer"}.
+              {[
+                t("devices.older.forget", { computer: here("acc") }),
+                chats > 0 ? t("devices.older.chats", { count: chats, computer: here("dat") }) : null,
+                working > 0 ? t("devices.older.working", { count: working }) : null,
+                t("devices.older.installed", { host: runner.hostname || t("devices.older.otherComputer") }),
+              ]
+                .filter(Boolean)
+                .join(" ")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => remove.mutate()}>
-              Remove
+              {t("common:actions.remove")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1004,13 +1027,14 @@ function OlderRunnerRow({ runner }: { runner: RemoteRunner }) {
 const HERE = "here";
 
 function RunOnGroup({ group }: { group: DeviceGroup }) {
+  const { t } = useTranslation("settings");
   const patch = useGroupPatch();
 
   const value = group.defaultRunOn ?? HERE;
   const secondary = group.role === "secondary";
   const primaryDevice = group.devices.find((d) => d.role === "primary");
-  const options: { value: string; label: string; hint?: string; device?: GroupDevice }[] = [{ value: HERE, label: THIS_COMPUTER }];
-  if (secondary && primaryDevice) options.push({ value: "primary", label: group.primaryName ?? primaryDevice.name, hint: "primary", device: primaryDevice });
+  const options: { value: string; label: string; hint?: string; device?: GroupDevice }[] = [{ value: HERE, label: here("start") }];
+  if (secondary && primaryDevice) options.push({ value: "primary", label: group.primaryName ?? primaryDevice.name, hint: t("devices.runOn.primaryHint"), device: primaryDevice });
   for (const d of group.devices) {
     if (d.self || d.role !== "secondary" || !d.id) continue;
     if (d.state === "online" || d.id === value) options.push({ value: d.id, label: d.name, device: d });
@@ -1018,11 +1042,11 @@ function RunOnGroup({ group }: { group: DeviceGroup }) {
   const gone = !options.some((o) => o.value === value);
 
   return (
-    <SettingsGroup title="Chats" icon={<MessagesSquare />} description="Where new chats work. Each chat can still move to another computer, also while it works.">
+    <SettingsGroup title={t("devices.runOn.title")} icon={<MessagesSquare />} description={t("devices.runOn.description")}>
       <SettingRow
-        label="New chats run on"
+        label={t("devices.runOn.label")}
         htmlFor="devices-run-on"
-        description={options.length === 1 ? "Other computers show up here while they're online." : "You can pick another computer for each chat as you start it."}
+        description={options.length === 1 ? t("devices.runOn.single") : t("devices.runOn.multi")}
       >
         <Select value={value} onValueChange={(v) => patch.mutate({ defaultRunOn: v === HERE ? null : v })}>
           <SelectTrigger id="devices-run-on" className="w-60">
@@ -1038,31 +1062,31 @@ function RunOnGroup({ group }: { group: DeviceGroup }) {
             ))}
             {gone && (
               <SelectItem value={value}>
-                <span className="text-muted-foreground">A computer that left</span>
+                <span className="text-muted-foreground">{t("devices.runOn.gone")}</span>
               </SelectItem>
             )}
           </SelectContent>
         </Select>
       </SettingRow>
       <SettingRow
-        label="Continue work when a computer goes away"
+        label={t("devices.runOn.failover")}
         htmlFor="devices-failover"
         description={
           group.failover
-            ? `When a computer's lid closes while it works, ${group.role === "primary" ? THIS_COMPUTER_INLINE : group.primaryName} takes the work over after a few minutes. Handing off first keeps the agent's whole session.`
-            : "Work stops while its computer sleeps and goes on when it's back."
+            ? t("devices.runOn.failoverOn", { target: group.role === "primary" ? here("inline") : group.primaryName })
+            : t("devices.runOn.failoverOff")
         }
       >
         <div className="flex items-center gap-2">
           {group.failover && (
             <Select value={String(group.failoverMinutes)} onValueChange={(v) => patch.mutate({ failoverMinutes: Number(v) })}>
-              <SelectTrigger aria-label="After" className="w-32">
+              <SelectTrigger aria-label={t("devices.after")} className="w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper" align="end">
                 {[1, 3, 5, 10, 15, 30].map((m) => (
                   <SelectItem key={m} value={String(m)}>
-                    after {m} min
+                    {t("devices.afterMinutes", { minutes: m })}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1076,6 +1100,7 @@ function RunOnGroup({ group }: { group: DeviceGroup }) {
 }
 
 function LeaveGroup({ group }: { group: DeviceGroup }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState(false);
   const primary = group.role === "primary";
@@ -1084,40 +1109,36 @@ function LeaveGroup({ group }: { group: DeviceGroup }) {
     onSuccess: (next) => {
       qc.setQueryData(qk.devices, next);
       void qc.invalidateQueries({ predicate: (q) => q.queryKey[0] !== "devices" });
-      toast.success(primary ? "The group is dissolved" : `${THIS_COMPUTER} left ${group.primaryName}'s group`);
+      toast.success(primary ? t("devices.leave.dissolved") : t("devices.leave.left", { computer: here("start"), name: group.primaryName }));
     },
-    onError: (e) => toastApiError(e, primary ? "Couldn't dissolve the group" : "Couldn't leave the group", qc),
+    onError: (e) => toastApiError(e, primary ? t("devices.leave.dissolveError") : t("devices.leave.leaveError"), qc),
   });
 
   return (
-    <SettingsGroup tone="danger" title={primary ? "Dissolve the group" : "Leave the group"} icon={<LogOut />}>
+    <SettingsGroup tone="danger" title={primary ? t("devices.leave.titleDissolve") : t("devices.leave.titleLeave")} icon={<LogOut />}>
       <SettingRow
-        label={primary ? "Every computer works on its own again" : `${THIS_COMPUTER} works on its own again`}
-        description={
-          primary
-            ? "The other computers leave and keep the setup they have now. Chats that live on them stay there."
-            : `It stops sharing with ${group.primaryName} and keeps a copy of the setup it has now, and its own chats.`
-        }
+        label={primary ? t("devices.leave.labelPrimary") : t("devices.leave.labelSelf", { computer: here("start") })}
+        description={primary ? t("devices.leave.descPrimary") : t("devices.leave.descSecondary", { name: group.primaryName })}
       >
         <Button variant="outline" className="text-destructive hover:text-destructive" disabled={leave.isPending} onClick={() => setConfirm(true)}>
           {leave.isPending && <Spinner />}
-          {primary ? "Dissolve group" : "Leave group"}
+          {primary ? t("devices.leave.buttonDissolve") : t("devices.leave.buttonLeave")}
         </Button>
       </SettingRow>
       <AlertDialog open={confirm} onOpenChange={setConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{primary ? "Dissolve the group?" : `Leave ${group.primaryName}'s group?`}</AlertDialogTitle>
+            <AlertDialogTitle>{primary ? t("devices.leave.confirmTitleDissolve") : t("devices.leave.confirmTitleLeave", { name: group.primaryName })}</AlertDialogTitle>
             <AlertDialogDescription>
               {primary
-                ? `${group.devices.length - 1 === 1 ? "The other computer leaves" : `All ${group.devices.length - 1} other computers leave`} and work on their own again, with the setup they have now. Chats that live on them stay there and no longer show up here.`
-                : `${THIS_COMPUTER} stops sharing with ${group.primaryName} and works on its own again, with a copy of the setup it has now. Its own chats stay here; chats on ${group.primaryName} stay there.`}
+                ? t("devices.leave.confirmDissolve", { count: group.devices.length - 1 })
+                : t("devices.leave.confirmLeave", { computer: here("start"), name: group.primaryName })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => leave.mutate()}>
-              {primary ? "Dissolve" : "Leave"}
+              {primary ? t("devices.leave.dissolve") : t("devices.leave.leave")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

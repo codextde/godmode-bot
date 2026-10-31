@@ -1,5 +1,6 @@
 //! Godmode Bot desktop shell: hosts the React UI, supervises the core daemon (sidecar) and lives in the tray.
 
+mod clock;
 mod commands;
 mod core;
 mod paths;
@@ -56,11 +57,13 @@ pub fn run() {
         .manage(Arc::new(Updater::new()))
         .manage(CloseToTray(AtomicBool::new(true)))
         .invoke_handler(tauri::generate_handler![
+            clock::system_clock,
             commands::core_info,
             commands::write_file,
             commands::core_logs_path,
             commands::restart_app,
             set_close_to_tray,
+            tray::set_tray_labels,
             updater::update_state,
             updater::check_for_updates,
             updater::install_update,

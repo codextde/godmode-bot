@@ -1,4 +1,4 @@
-import { INTERFACE_MODES, PALETTES, THEMES } from "@godmode/shared";
+import { APP_LANGUAGES, INTERFACE_MODES, PALETTES, THEMES, TIME_FORMATS } from "@godmode/shared";
 
 /** Ranges for the numbers a phone or an agent may set (as in the app); for text, the maximum length. */
 const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
@@ -7,6 +7,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "runner.stallMinutes": [3, 240],
   "runner.loopRepeats": [3, 50],
   "runner.autoCompactPercent": [0, 95],
+  "runner.accountSwitchPercent": [50, 100],
   "browser.keepAliveMinutes": [0, 1440],
   "computer.liveViewFps": [1, 10],
   "computer.screenshotMaxSize": [640, 1568],
@@ -21,6 +22,8 @@ export const SETTING_CHOICES: Record<string, readonly string[]> = {
   "general.theme": THEMES,
   "general.palette": PALETTES,
   "general.mode": INTERFACE_MODES,
+  "general.language": APP_LANGUAGES,
+  "general.timeFormat": TIME_FORMATS,
 };
 
 export function settingInRange(key: string, value: unknown): boolean {

@@ -31,6 +31,8 @@ export interface Workspace {
   icon: string; // emoji or lucide icon name
   /** Agent context: standing instructions for every agent in this workspace, on every run. */
   instructions: string;
+  /** Claude accounts the workspace's runs use; null = Godmode's (Settings → Claude accounts). */
+  claudeAccounts: WorkspaceClaudeAccounts | null;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
   /** The workspace's default browser profile (unless an agent pins its own). null = the global default. */
@@ -664,6 +666,7 @@ export interface ToolTask {
   lastTool?: string;
   /** A subagent's final report, from Claude Code's notification that it ended. */
   summary?: string;
+  model?: string;
 }
 
 export interface ToolTaskAgent {
@@ -1342,6 +1345,14 @@ export const THEMES: readonly Theme[] = ["light", "dark", "system"];
 export type Palette = "paper" | "graphite" | "nord" | "solarized" | "rose" | "forest" | "ocean" | "dracula";
 export const PALETTES: readonly Palette[] = ["paper", "graphite", "nord", "solarized", "rose", "forest", "ocean", "dracula"];
 
+/** The language the apps are shown in; "system" follows each device's own language. */
+export type AppLanguage = "system" | "en" | "de";
+export const APP_LANGUAGES: readonly AppLanguage[] = ["system", "en", "de"];
+
+/** How clock times read: "system" follows each device's region (24-hour in Germany, 12-hour in the US). */
+export type TimeFormat = "system" | "24h" | "12h";
+export const TIME_FORMATS: readonly TimeFormat[] = ["system", "24h", "12h"];
+
 export interface GeneralSettings {
   theme: Theme;
   palette: Palette;
@@ -1353,7 +1364,8 @@ export interface GeneralSettings {
   launchAtLogin: boolean;
   minimizeToTray: boolean;
   desktopNotifications: boolean;
-  language: string;
+  language: AppLanguage;
+  timeFormat: TimeFormat;
 }
 
 /** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */
@@ -1382,6 +1394,10 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
+  /** With more than one Claude account: move to another one when the one in use runs low or hits a limit. */
+  accountAutoSwitch: boolean;
+  /** Usage (percent of the session or weekly limit, whichever is higher) at which runs move to another account. */
+  accountSwitchPercent: number;
   /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start; so does background work the end of a turn stopped. */
   resumeAfterRestart: boolean;
   /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
@@ -1443,7 +1459,27 @@ export interface ComputerSettings {
   screenshotMaxSize: number;
 }
 
-export type SttProvider = "browser" | "openai";
+export type SttProvider = "browser" | "openai" | "hex";
+
+export const HEX_LANGUAGES = ["en", "de"] as const;
+export type HexLanguage = (typeof HEX_LANGUAGES)[number];
+
+export const HEX_MODELS = [
+  { id: "parakeet_v3", name: "Parakeet v3", sizeMb: 740 },
+  { id: "whisper_large_v3_turbo", name: "Whisper large-v3-turbo", sizeMb: 890 },
+  { id: "qwen3_asr06_b", name: "Qwen3-ASR 0.6B", sizeMb: 850 },
+  { id: "cohere_transcribe", name: "Cohere Transcribe", sizeMb: 2410 },
+] as const;
+
+export interface HexStatus {
+  path: string | null;
+  version: string | null;
+  model: string;
+  installed: boolean;
+  downloadBytes: number | null;
+  progress: { phase: "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
+  error: string | null;
+}
 export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
 export interface VoiceSettings {
@@ -1455,6 +1491,8 @@ export interface VoiceSettings {
   language: string;
   openaiBaseUrl: string;
   sttModel: string;
+  hexPath: string;
+  hexModel: string;
   ttsModel: string;
   ttsVoice: string;
   elevenlabsVoiceId: string;
@@ -1761,6 +1799,66 @@ export interface ClaudeUpdateStatus {
   channel: ClaudeReleaseChannel;
   updateAvailable: boolean;
   checkedAt: ISODate;
+}
+
+export interface ClaudeUsageWindow {
+  percent: number;
+  resetsAt: ISODate | null;
+}
+
+export interface ClaudeUsage {
+  state: "ok" | "signed_out" | "unavailable";
+  fiveHour: ClaudeUsageWindow | null;
+  week: ClaudeUsageWindow | null;
+  plan: string | null;
+  checkedAt: ISODate;
+}
+
+/** The Claude Code login on this computer: always there, never removed (its id in lists and workspace settings). */
+export const SYSTEM_CLAUDE_ACCOUNT = "system";
+
+/**
+ * A Claude subscription Godmode can run agents with. The system one is Claude Code's own login on this computer; the
+ * others were signed in from Godmode and their tokens are kept in the vault, so `claude auth login` in a terminal never
+ * logs them out.
+ */
+export interface ClaudeAccount {
+  id: ID;
+  system: boolean;
+  email: string | null;
+  name: string | null;
+  organization: string | null;
+  /** "max", "pro", "team", … as Claude reports it. */
+  plan: string | null;
+  isDefault: boolean;
+  usage: ClaudeUsage | null;
+  /** A usage limit stopped a run on this account: other accounts go first until then. */
+  limitedUntil: ISODate | null;
+  /** Its sign-in ran out or was revoked: sign in again. */
+  needsSignIn: boolean;
+  lastUsedAt: ISODate | null;
+  addedAt: ISODate | null;
+}
+
+export interface ClaudeAccountLogin {
+  state: "idle" | "waiting" | "done" | "failed";
+  url: string | null;
+  message: string | null;
+  /** The account being signed in again; null = adding a new one. */
+  accountId: ID | null;
+}
+
+export interface ClaudeAccountsState {
+  accounts: ClaudeAccount[];
+  login: ClaudeAccountLogin;
+  /** The vault is locked: the accounts signed in from Godmode can't be used until it is unlocked. */
+  locked: boolean;
+}
+
+/** A workspace's own choice of Claude accounts: runs there use only these, starting with the default. */
+export interface WorkspaceClaudeAccounts {
+  ids: ID[];
+  defaultId: ID;
 }
 
 export interface ClaudeUpdateResult {

@@ -1,6 +1,7 @@
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeInDown, FadeOutDown } from "react-native-reanimated";
 import { Glass } from "./glass";
 import { Icon } from "./icon";
@@ -13,6 +14,7 @@ import { radius, space, useColors } from "@/lib/theme";
 /** While the agent works: what it's doing and a live thumbnail of where, above the composer. */
 export function LiveStrip({ screen, activity }: { screen: LiveScreen; activity: string | null }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const stream = useStreamFrame(screen);
   const vm = useVmFrame(screen.kind === "vm" ? screen.vm : null, true, 4000);
   const frame = screen.kind === "vm" ? vm.data : stream;
@@ -47,7 +49,7 @@ export function LiveStrip({ screen, activity }: { screen: LiveScreen; activity: 
             </View>
           </View>
           <T variant="footnote" muted style={{ fontWeight: "600" }}>
-            Watch
+            {t("liveStrip.watch")}
           </T>
           <Icon name="chevron" size={12} color={c.textFaint} />
         </Glass>

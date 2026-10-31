@@ -1,5 +1,6 @@
 import { router } from "expo-router";
 import { ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, type IconName } from "@/components/icon";
@@ -8,18 +9,15 @@ import { Button, Card, T } from "@/components/ui";
 import { useSession } from "@/lib/session";
 import { space, useColors } from "@/lib/theme";
 
-const POINTS: { icon: IconName; title: string; body: string }[] = [
-  { icon: "chats", title: "Hand over work from anywhere", body: "Start a task, follow the answer as it's written, stop it with one tap." },
-  { icon: "eye", title: "Look over their shoulder", body: "Watch the browser, shared screen or VM an agent works in, live." },
-  {
-    icon: "lock",
-    title: "Your computer stays in charge",
-    body: "Your phone reaches it over Tailscale or Godmode Cloud with a key of its own, which the computer can revoke anytime. Logins stay on the computer.",
-  },
-];
+const POINTS = [
+  { icon: "chats", key: "handOver" },
+  { icon: "eye", key: "watch" },
+  { icon: "lock", key: "inCharge" },
+] as const satisfies readonly { icon: IconName; key: string }[];
 
 export default function Welcome() {
   const c = useColors();
+  const { t } = useTranslation("onboarding");
   const insets = useSafeAreaInsets();
   const removed = useSession((s) => s.endedBecause === "removed");
 
@@ -29,13 +27,13 @@ export default function Welcome() {
         <Animated.View entering={FadeInDown.duration(500)}>
           <Logo size={64} />
           <T variant="eyebrow" muted style={{ marginTop: space.xxl }}>
-            Godmode for {process.env.EXPO_OS === "ios" ? "iPhone" : "Android"}
+            {t("welcome.eyebrow", { platform: process.env.EXPO_OS === "ios" ? "iPhone" : "Android" })}
           </T>
           <T variant="largeTitle" style={{ marginTop: space.sm, fontSize: 36, lineHeight: 40 }}>
-            Your AI coworkers, in your pocket.
+            {t("welcome.title")}
           </T>
           <T variant="body" muted style={{ marginTop: space.md }}>
-            This app controls the Godmode running on your computer. Pair it once with the code on your computer's screen.
+            {t("welcome.intro")}
           </T>
         </Animated.View>
 
@@ -43,23 +41,23 @@ export default function Welcome() {
           <Card style={[styles.removed, { backgroundColor: c.warningSoft, borderColor: "transparent" }]}>
             <Icon name="warning" size={18} color={c.warning} />
             <T variant="subhead" style={{ flex: 1 }}>
-              This phone was removed on your computer. Scan a new code to connect again.
+              {t("welcome.removed")}
             </T>
           </Card>
         )}
 
         <View style={{ marginTop: 36, gap: 22 }}>
           {POINTS.map((p, i) => (
-            <Animated.View key={p.title} entering={FadeInDown.delay(120 + i * 80).duration(450)} style={styles.point}>
+            <Animated.View key={p.key} entering={FadeInDown.delay(120 + i * 80).duration(450)} style={styles.point}>
               <View style={[styles.pointIcon, { backgroundColor: c.sunken }]}>
                 <Icon name={p.icon} size={18} color={c.text} />
               </View>
               <View style={{ flex: 1, gap: 2 }}>
                 <T variant="headline" style={{ fontSize: 16 }}>
-                  {p.title}
+                  {t(`welcome.points.${p.key}.title`)}
                 </T>
                 <T variant="subhead" muted>
-                  {p.body}
+                  {t(`welcome.points.${p.key}.body`)}
                 </T>
               </View>
             </Animated.View>
@@ -70,9 +68,9 @@ export default function Welcome() {
 
       <View style={[styles.footer, { paddingBottom: insets.bottom + space.lg, backgroundColor: c.background }]}>
         <T variant="footnote" muted style={{ textAlign: "center" }}>
-          On your computer: Settings → Phone → Connect a phone.{"\n"}Tailscale on both (same account), or the computer linked to Godmode Cloud.
+          {t("welcome.howTo")}
         </T>
-        <Button title="Scan QR code" icon="scan" size="lg" onPress={() => router.push("/scan")} />
+        <Button title={t("welcome.scan")} icon="scan" size="lg" onPress={() => router.push("/scan")} />
       </View>
     </View>
   );

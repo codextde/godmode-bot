@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Plus, Puzzle } from "lucide-react";
-import { MOD_CATEGORIES, MOD_CATEGORY_LABELS, type Mod, type ModCategory, type ModOption, type ModTemplate } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { MOD_CATEGORIES, type Mod, type ModCategory, type ModOption, type ModTemplate } from "@godmode/shared";
 import { CodeBlock } from "@/components/aicss/CodeBlock";
 import { QueryError } from "@/components/integrations/query-error";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +21,7 @@ const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3";
 /** Small plugins Godmode ships: browse by category, read one through, add it. */
 export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; actions: ModActions; onOpen: (mod: Mod) => void; onAdded: (mod: Mod) => void }) {
   const reduce = useReduceAnimations();
+  const { t: tr } = useTranslation(["mods", "common"]);
   const templates = useModTemplates();
   const [category, setCategory] = useState<ModCategory | "">("");
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -52,13 +54,13 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
     <section aria-labelledby="mod-gallery-heading" className="space-y-4">
       <div>
         <h2 id="mod-gallery-heading" className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-          <Puzzle className="size-4 text-muted-foreground" /> Made by Godmode
+          <Puzzle className="size-4 text-muted-foreground" /> {tr("gallery.title")}
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">Small guardrail, privacy and workflow plugins that run inside every turn. Read the code of any of them before you add it.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{tr("gallery.description")}</p>
       </div>
 
       {categories.length > 1 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Categories">
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label={tr("gallery.categories")}>
           {(["", ...categories] as const).map((c) => {
             const active = category === c;
             return (
@@ -74,7 +76,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
                 )}
               >
                 {active && <motion.span layoutId={reduce ? undefined : "mod-cat"} className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
-                <span className="relative">{c ? MOD_CATEGORY_LABELS[c] : "All"}</span>
+                <span className="relative">{c ? tr(`categories.${c}`) : tr("common:words.all")}</span>
               </button>
             );
           })}
@@ -82,7 +84,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
       )}
 
       {templates.isError ? (
-        <QueryError error={templates.error} onRetry={() => templates.refetch()} title="Couldn't load the gallery" />
+        <QueryError error={templates.error} onRetry={() => templates.refetch()} title={tr("gallery.loadError")} />
       ) : templates.isLoading ? (
         <div className={GRID}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -90,7 +92,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <p className="rounded-xl border border-dashed bg-card/50 px-4 py-6 text-center text-sm text-muted-foreground">The gallery is empty on this version of Godmode.</p>
+        <p className="rounded-xl border border-dashed bg-card/50 px-4 py-6 text-center text-sm text-muted-foreground">{tr("gallery.empty")}</p>
       ) : (
         <div className={GRID}>
           {visible.map((t, i) => (
@@ -142,6 +144,7 @@ function TemplateCard({
   onOpen: (mod: Mod) => void;
 }) {
   const reduce = useReduceAnimations();
+  const { t: tr } = useTranslation(["mods", "common"]);
   return (
     <motion.article
       initial={reduce ? false : { opacity: 0, y: 8 }}
@@ -166,7 +169,7 @@ function TemplateCard({
             </h3>
             {installed && (
               <Badge variant="outline" className="h-5 shrink-0 gap-1 border-brand/25 bg-brand-soft px-1.5 text-[10px] text-brand-strong">
-                <CircleCheck /> Added
+                <CircleCheck /> {tr("gallery.added")}
               </Badge>
             )}
           </div>
@@ -187,15 +190,15 @@ function TemplateCard({
 
       <div className="mt-auto flex items-center justify-between gap-2 pt-3">
         <Badge variant="secondary" className="h-5 text-[10px] font-normal">
-          {MOD_CATEGORY_LABELS[t.category] ?? t.category}
+          {tr(`categories.${t.category}`, { defaultValue: t.category })}
         </Badge>
         {installed ? (
-          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={() => onOpen(installed)} aria-label={`Open ${installed.title}`}>
-            Open <ArrowUpRight />
+          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={() => onOpen(installed)} aria-label={tr("featured.openAria", { title: installed.title })}>
+            {tr("common:actions.open")} <ArrowUpRight />
           </Button>
         ) : (
-          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={onAdd} disabled={adding} aria-label={`Add ${t.title}`}>
-            {adding ? <Spinner /> : <Plus />} Add
+          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={onAdd} disabled={adding} aria-label={tr("gallery.addAria", { title: t.title })}>
+            {adding ? <Spinner /> : <Plus />} {tr("common:actions.add")}
           </Button>
         )}
       </div>
@@ -203,9 +206,9 @@ function TemplateCard({
   );
 }
 
-function defaultText(o: ModOption): string | null {
+function defaultText(o: ModOption, on: string, off: string): string | null {
   if (o.sensitive) return null;
-  if (typeof o.default === "boolean") return o.default ? "On" : "Off";
+  if (typeof o.default === "boolean") return o.default ? on : off;
   if (Array.isArray(o.default)) return o.default.length ? o.default.join("  ·  ") : null;
   if (o.default === null || o.default === "") return null;
   return String(o.default);
@@ -228,6 +231,7 @@ function TemplateDialog({
   onAdd: (template: ModTemplate) => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const { t: tr } = useTranslation(["mods", "common"]);
   const [picked, setPicked] = useState<{ template: string; path: string } | null>(null);
   if (!t) return null;
   const paths = sortedPaths(t.files);
@@ -242,7 +246,7 @@ function TemplateDialog({
             <div className="flex flex-wrap items-center gap-2">
               <DialogTitle className="leading-snug">{t.title}</DialogTitle>
               <Badge variant="secondary" className="h-5 text-[10px] font-normal">
-                {MOD_CATEGORY_LABELS[t.category] ?? t.category}
+                {tr(`categories.${t.category}`, { defaultValue: t.category })}
               </Badge>
             </div>
             <DialogDescription>{t.description}</DialogDescription>
@@ -252,7 +256,7 @@ function TemplateDialog({
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
           {t.highlights.length > 0 && (
             <section className="space-y-2">
-              <h3 className="eyebrow">What it does</h3>
+              <h3 className="eyebrow">{tr("featured.whatItDoes")}</h3>
               <ul className="space-y-1.5 text-[13px] leading-relaxed">
                 {t.highlights.map((h) => (
                   <li key={h} className="flex gap-2.5">
@@ -266,10 +270,10 @@ function TemplateDialog({
 
           {t.options.length > 0 && (
             <section className="space-y-2">
-              <h3 className="eyebrow">Options</h3>
+              <h3 className="eyebrow">{tr("card.options")}</h3>
               <dl className="divide-y rounded-lg border bg-card">
                 {t.options.map((o) => {
-                  const fallback = defaultText(o);
+                  const fallback = defaultText(o, tr("common:status.on"), tr("common:status.off"));
                   return (
                     <div key={o.key} className="px-3.5 py-3">
                       <dt className="flex flex-wrap items-baseline gap-x-2 text-[13px] font-medium">
@@ -280,13 +284,13 @@ function TemplateDialog({
                         {o.description && <p>{o.description}</p>}
                         <p>
                           {o.sensitive ? (
-                            "A secret you enter after adding the plugin."
+                            tr("gallery.secretOption")
                           ) : fallback ? (
                             <>
-                              Default <span className="font-mono text-[11.5px] break-all text-foreground/85">{fallback}</span>
+                              {tr("gallery.default")} <span className="font-mono text-[11.5px] break-all text-foreground/85">{fallback}</span>
                             </>
                           ) : (
-                            "No default."
+                            tr("gallery.noDefault")
                           )}
                         </p>
                       </dd>
@@ -299,9 +303,9 @@ function TemplateDialog({
 
           {path && (
             <section className="space-y-2">
-              <h3 className="eyebrow">Code</h3>
+              <h3 className="eyebrow">{tr("card.code")}</h3>
               {paths.length > 1 && (
-                <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Files">
+                <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={tr("contents.files")}>
                   {paths.map((p) => (
                     <button
                       key={p}
@@ -325,14 +329,14 @@ function TemplateDialog({
         </div>
 
         <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4 sm:justify-between">
-          <p className="text-xs text-muted-foreground">{installed ? "You already added this plugin." : "You set its options and who it runs for after adding it."}</p>
+          <p className="text-xs text-muted-foreground">{installed ? tr("gallery.alreadyAdded") : tr("gallery.setAfterAdding")}</p>
           {installed ? (
             <Button onClick={() => onOpen(installed)}>
-              Open <ArrowUpRight />
+              {tr("common:actions.open")} <ArrowUpRight />
             </Button>
           ) : (
             <Button onClick={() => onAdd(t)} disabled={adding}>
-              {adding ? <Spinner /> : <Plus />} Add plugin
+              {adding ? <Spinner /> : <Plus />} {tr("page.addPlugin")}
             </Button>
           )}
         </DialogFooter>

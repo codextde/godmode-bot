@@ -1,4 +1,5 @@
 import { BatteryCharging, BatteryMedium, LaptopMinimalCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { POWER_MIN_BATTERY_OPTIONS, type Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -6,10 +7,9 @@ import { lidModeLine, useLidMode } from "@/components/layout/lid-mode";
 import { cn } from "@/lib/utils";
 import { Callout, Segmented, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
-const BATTERY_OPTIONS = POWER_MIN_BATTERY_OPTIONS.map((v) => ({ value: String(v), label: v ? `${v}%` : "Never" }));
-
 /** Lid-closed mode (Settings → General). Only on a Mac with a lid. */
 export function PowerGroup({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch } = useSettingsPatch();
   const { status, visible, toggle, pending } = useLidMode();
   if (!visible || !status) return null;
@@ -18,15 +18,16 @@ export function PowerGroup({ settings }: { settings: Settings }) {
   const stuck = !on && status.state === "error";
   const tone = status.state === "error" ? "error" : !on ? "off" : status.state === "on" ? "on" : "paused";
   const battery = status.battery;
+  const batteryOptions = POWER_MIN_BATTERY_OPTIONS.map((v) => ({ value: String(v), label: v ? t("power.battery", { percent: v }) : t("power.never") }));
 
   return (
     <SettingsGroup
-      title="Lid-closed mode"
+      title={t("power.title")}
       icon={<LaptopMinimalCheck />}
-      description="Close your MacBook and Godmode keeps going: chats, automations and scheduled work run on while the lid is shut."
+      description={t("power.description")}
     >
       <SettingRow
-        label="Keep working with the lid closed"
+        label={t("power.keepWorking")}
         htmlFor="lid-closed-awake"
         description={
           <span className="flex items-center gap-2">
@@ -40,44 +41,43 @@ export function PowerGroup({ settings }: { settings: Settings }) {
                 tone === "off" && "bg-border",
               )}
             />
-            <span>{on || stuck ? lidModeLine(status) : "Also in the sidebar, next to Settings. macOS asks for your password the first time."}</span>
+            <span>{on || stuck ? lidModeLine(status) : t("power.keepWorkingHint")}</span>
           </span>
         }
       >
         {battery && (
           <span className="inline-flex items-center gap-1.5 rounded-md border bg-paper-2 px-2 py-1 text-xs text-muted-foreground tabular-nums [&_svg]:size-3.5">
             {battery.charging ? <BatteryCharging /> : <BatteryMedium />}
-            {battery.percent}%{battery.charging ? " · charging" : ""}
+            {battery.charging ? t("power.charging", { percent: battery.percent }) : t("power.battery", { percent: battery.percent })}
           </span>
         )}
         {stuck && (
           <Button size="sm" variant="outline" disabled={pending} onClick={() => toggle(false)}>
-            Let the Mac sleep
+            {t("power.letSleep")}
           </Button>
         )}
         <Switch id="lid-closed-awake" checked={on} disabled={pending} onCheckedChange={(v) => toggle(v)} />
       </SettingRow>
       <SettingRow
-        label="Only while agents work"
+        label={t("power.onlyWhileWorking")}
         htmlFor="lid-only-working"
         disabled={!on}
-        description="The Mac may sleep a few minutes after the last run ends. Scheduled automations then wait until it wakes up."
+        description={t("power.onlyWhileWorkingDescription")}
       >
         <Switch id="lid-only-working" checked={p.onlyWhileWorking} disabled={!on} onCheckedChange={(onlyWhileWorking) => patch({ power: { onlyWhileWorking } })} />
       </SettingRow>
-      <SettingRow label="Sleep on low battery" disabled={!on} description="On battery the Mac sleeps again at this charge, and keeps working once it's plugged in.">
+      <SettingRow label={t("power.lowBattery")} disabled={!on} description={t("power.lowBatteryDescription")}>
         <Segmented
-          aria-label="Sleep on low battery"
+          aria-label={t("power.lowBattery")}
           value={String(p.minBattery)}
           disabled={!on}
           onChange={(v) => patch({ power: { minBattery: Number(v) } })}
-          options={BATTERY_OPTIONS}
+          options={batteryOptions}
         />
       </SettingRow>
       <div className="py-4">
         <Callout tone="muted">
-          Keep the Mac out of a closed bag while it works, it can get warm. When you quit Godmode the Mac sleeps with the lid closed again. Browser work
-          carries on with the lid shut; controlling the screen works best with the lid open or an external display.
+          {t("power.note")}
         </Callout>
       </div>
     </SettingsGroup>

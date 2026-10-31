@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Agent, TaskPriority, TaskStatus, TaskType } from "@godmode/shared";
 import { MAX_TASK_LABELS, TASK_PRIORITIES, TASK_TYPES, cleanTaskLabel, isOverdue, localDay } from "@godmode/shared";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AgentAvatar } from "@/components/common";
@@ -28,20 +29,21 @@ export function AgentSelect({
   onChange: (agentId: string | null) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("tasks");
   return (
     <Select value={value ?? NONE} onValueChange={(v) => onChange(v === NONE ? null : v)}>
       <SelectTrigger id={id} className={cn("w-full", className)}>
-        <SelectValue placeholder="Unassigned" />
+        <SelectValue placeholder={t("card.unassigned")} />
       </SelectTrigger>
       <SelectContent position="popper">
         <SelectItem value={NONE}>
-          <span className="size-4 rounded-[4px] border border-dashed border-muted-foreground/50" /> Unassigned
+          <span className="size-4 rounded-[4px] border border-dashed border-muted-foreground/50" /> {t("card.unassigned")}
         </SelectItem>
         {agents.length > 0 && <SelectSeparator />}
         {agents.map((a) => (
           <SelectItem key={a.id} value={a.id}>
             <AgentAvatar agent={a} size="sm" still className="size-4" /> {a.name}
-            {!a.workspaceId && !a.isDefault && <span className="text-xs text-muted-foreground">· global</span>}
+            {!a.workspaceId && !a.isDefault && <span className="text-xs text-muted-foreground">· {t("fields.global")}</span>}
           </SelectItem>
         ))}
       </SelectContent>
@@ -50,9 +52,10 @@ export function AgentSelect({
 }
 
 export function StatusSelect({ value, onChange, className }: { value: TaskStatus; onChange: (s: TaskStatus) => void; className?: string }) {
+  const { t } = useTranslation("tasks");
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TaskStatus)}>
-      <SelectTrigger className={cn("w-full", className)} aria-label="Status">
+      <SelectTrigger className={cn("w-full", className)} aria-label={t("fields.status")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
@@ -68,8 +71,9 @@ export function StatusSelect({ value, onChange, className }: { value: TaskStatus
 
 /** Three tiles: what kind of work it is decides what Godmode prepares and delivers. */
 export function TypePicker({ value, onChange }: { value: TaskType; onChange: (t: TaskType) => void }) {
+  const { t: tr } = useTranslation("tasks");
   return (
-    <div role="radiogroup" aria-label="Type" className="grid grid-cols-3 gap-2">
+    <div role="radiogroup" aria-label={tr("fields.type")} className="grid grid-cols-3 gap-2">
       {TASK_TYPES.map((t) => {
         const selected = value === t;
         return (
@@ -97,9 +101,10 @@ export function TypePicker({ value, onChange }: { value: TaskType; onChange: (t:
 }
 
 export function PrioritySelect({ value, onChange, className }: { value: TaskPriority; onChange: (p: TaskPriority) => void; className?: string }) {
+  const { t } = useTranslation("tasks");
   return (
     <Select value={value} onValueChange={(v) => onChange(v as TaskPriority)}>
-      <SelectTrigger className={cn("w-full", className)} aria-label="Priority">
+      <SelectTrigger className={cn("w-full", className)} aria-label={t("fields.priority")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
@@ -125,6 +130,7 @@ export function DueDateField({
   onChange: (day: string | null) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("tasks");
   const overdue = !!value && isOverdue({ dueDate: value, status });
   const late = value ? -daysUntil(value) : 0;
   return (
@@ -134,7 +140,7 @@ export function DueDateField({
         value={value ?? ""}
         min={value && value < localDay() ? undefined : localDay()}
         onChange={(e) => onChange(e.target.value || null)}
-        aria-label="Due date"
+        aria-label={t("fields.dueDate")}
         className={cn(
           "-ml-1.5 h-8 rounded-md border border-transparent bg-transparent px-1.5 text-[13px] [color-scheme:light] hover:bg-accent/60 dark:[color-scheme:dark] focus-visible:border-ring focus-visible:outline-none [&::-webkit-calendar-picker-indicator]:opacity-60",
           value ? (overdue ? "text-rose-600 dark:text-rose-400" : "text-foreground") : "text-muted-foreground",
@@ -143,25 +149,26 @@ export function DueDateField({
       {value ? (
         <>
           <span className={cn("truncate text-xs", overdue ? "font-medium text-rose-600 dark:text-rose-400" : "text-muted-foreground")}>
-            {overdue ? `overdue by ${late} day${late === 1 ? "" : "s"}` : dueLabel(value)}
+            {overdue ? t("fields.overdueBy", { count: late }) : dueLabel(value)}
           </span>
-          <Button size="icon-xs" variant="ghost" aria-label="Remove the due date" onClick={() => onChange(null)} className="text-muted-foreground">
+          <Button size="icon-xs" variant="ghost" aria-label={t("fields.removeDueDate")} onClick={() => onChange(null)} className="text-muted-foreground">
             <X />
           </Button>
         </>
       ) : (
-        <span className="text-xs text-muted-foreground">No due date</span>
+        <span className="text-xs text-muted-foreground">{t("fields.noDueDate")}</span>
       )}
     </span>
   );
 }
 
 export function LabelChip({ label, onRemove, className }: { label: string; onRemove?: () => void; className?: string }) {
+  const { t } = useTranslation("tasks");
   return (
     <span className={cn("inline-flex h-5 max-w-40 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium", labelTone(label), className)}>
       <span className="truncate">{label}</span>
       {onRemove && (
-        <button type="button" onClick={onRemove} aria-label={`Remove label ${label}`} className="-mr-0.5 rounded-sm opacity-70 hover:opacity-100">
+        <button type="button" onClick={onRemove} aria-label={t("fields.removeLabel", { label })} className="-mr-0.5 rounded-sm opacity-70 hover:opacity-100">
           <X className="size-3" />
         </button>
       )}
@@ -171,6 +178,7 @@ export function LabelChip({ label, onRemove, className }: { label: string; onRem
 
 /** Chips with a remove button and a field: Enter or a comma adds, Backspace on an empty field removes the last. */
 export function LabelsInput({ value, onChange, suggestions = [] }: { value: string[]; onChange: (labels: string[]) => void; suggestions?: string[] }) {
+  const { t } = useTranslation("tasks");
   const [draft, setDraft] = useState("");
   const full = value.length >= MAX_TASK_LABELS;
   const add = (raw: string) => {
@@ -186,7 +194,7 @@ export function LabelsInput({ value, onChange, suggestions = [] }: { value: stri
         <LabelChip key={l} label={l} onRemove={() => onChange(value.filter((x) => x !== l))} />
       ))}
       {full ? (
-        <span className="text-xs text-muted-foreground">Up to {MAX_TASK_LABELS} labels</span>
+        <span className="text-xs text-muted-foreground">{t("fields.maxLabels", { count: MAX_TASK_LABELS })}</span>
       ) : (
         <>
           <input
@@ -204,8 +212,8 @@ export function LabelsInput({ value, onChange, suggestions = [] }: { value: stri
               } else if (e.key === "Backspace" && !draft && value.length) onChange(value.slice(0, -1));
             }}
             onBlur={() => draft.trim() && add(draft)}
-            placeholder={value.length ? "" : "Add a label…"}
-            aria-label="Add a label"
+            placeholder={value.length ? "" : t("fields.addLabelPlaceholder")}
+            aria-label={t("fields.addLabel")}
             className="h-6 min-w-24 flex-1 bg-transparent px-1 text-[13px] outline-none placeholder:text-muted-foreground"
           />
           <datalist id={listId}>

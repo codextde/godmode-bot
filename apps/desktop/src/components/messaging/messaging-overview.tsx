@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ChevronRight, Globe, Plus, ShieldCheck } from "lucide-react";
@@ -18,6 +19,7 @@ import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useReduceAnimations } from "@/lib/motion";
+import { useLocale } from "@/i18n/language";
 
 export function useMessagingConnections() {
   return useQuery({ queryKey: qk.messagingList, queryFn: api.messaging.list });
@@ -26,6 +28,7 @@ export function useMessagingConnections() {
 /** The bots people use to talk to agents, and the platforms to add one on. */
 export function MessagingOverview() {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("messaging");
   const [params, setParams] = useSearchParams();
   const connections = useMessagingConnections();
   const agents = useAllAgents();
@@ -50,7 +53,7 @@ export function MessagingOverview() {
     <div className="@container relative">
       <div className="space-y-9">
         {connections.isError ? (
-          <QueryError error={connections.error} onRetry={() => connections.refetch()} title="Couldn't load your bots" />
+          <QueryError error={connections.error} onRetry={() => connections.refetch()} title={t("overview.loadError")} />
         ) : connections.isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-[104px] rounded-xl" />
@@ -58,7 +61,7 @@ export function MessagingOverview() {
         ) : (
           list.length > 0 && (
             <section className="space-y-3">
-              <h3 className="eyebrow">Your bots</h3>
+              <h3 className="eyebrow">{t("overview.yourBots")}</h3>
               <ul className="space-y-2">
                 {list.map((c, i) => (
                   <motion.li key={c.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
@@ -71,7 +74,7 @@ export function MessagingOverview() {
         )}
 
         <section className="space-y-3">
-          <h3 className="eyebrow">{list.length ? "Add a platform" : "Platforms"}</h3>
+          <h3 className="eyebrow">{list.length ? t("overview.addPlatform") : t("overview.platforms")}</h3>
           <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
             {MESSAGING_PROVIDERS.map((p) => (
               <ProviderRow key={p} provider={p} connections={list.filter((c) => c.provider === p)} onConnect={() => setParam("connect", p)} />
@@ -80,11 +83,11 @@ export function MessagingOverview() {
           <div className="grid gap-3 pt-2 text-xs text-muted-foreground @2xl:grid-cols-2">
             <p className="flex items-start gap-2.5">
               <ShieldCheck className="mt-px size-4 shrink-0 text-foreground/70" />
-              Private by default: someone new writes, you approve them here. Tokens are sealed in your vault.
+              {t("overview.privateByDefault")}
             </p>
             <p className="flex items-start gap-2.5">
               <Globe className="mt-px size-4 shrink-0 text-foreground/70" />
-              Every chat becomes a Godmode conversation — read along in Chat, with the agent's memory and tools.
+              {t("overview.everyChat")}
             </p>
           </div>
         </section>
@@ -101,13 +104,17 @@ export function MessagingOverview() {
 }
 
 function ProviderRow({ provider, connections, onConnect }: { provider: MessagingProvider; connections: MessagingConnection[]; onConnect: () => void }) {
+  const { t } = useTranslation("messaging");
   const meta = PLATFORMS[provider];
+  const handle = connections.length === 1 ? botHandle(connections[0]!) : null;
   const status =
     connections.length === 0
-      ? "Not connected"
+      ? t("provider.notConnected")
       : connections.length === 1
-        ? `Connected${botHandle(connections[0]!) ? ` · ${botHandle(connections[0]!)}` : ""}`
-        : `${connections.length} bots connected`;
+        ? handle
+          ? t("provider.connectedAs", { handle })
+          : t("state.connected")
+        : t("provider.botsConnected", { count: connections.length });
   return (
     <li>
       <button
@@ -121,11 +128,11 @@ function ProviderRow({ provider, connections, onConnect }: { provider: Messaging
             <span className="text-[15px] font-medium tracking-[-0.01em]">{meta.label}</span>
             <span className={cn("text-xs", connections.length ? "text-brand-strong" : "text-muted-foreground")}>{status}</span>
           </span>
-          <span className="mt-0.5 block text-sm text-muted-foreground">{meta.blurb}</span>
+          <span className="mt-0.5 block text-sm text-muted-foreground">{t(meta.blurbKey)}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1 text-sm text-muted-foreground transition group-hover:text-foreground">
           {connections.length ? <Plus className="size-4" /> : null}
-          <span className="hidden @xl:inline">{connections.length ? "Add another" : "Connect"}</span>
+          <span className="hidden @xl:inline">{connections.length ? t("provider.addAnother") : t("provider.connect")}</span>
           <ChevronRight className="size-4 transition group-hover:translate-x-0.5" />
         </span>
       </button>
@@ -146,12 +153,14 @@ function AgentStack({ agents }: { agents: Agent[] }) {
 }
 
 function ConnectionCard({ connection: c, agents, onOpen }: { connection: MessagingConnection; agents: Agent[]; onOpen: () => void }) {
+  const { t } = useTranslation("messaging");
+  const { dateLocale } = useLocale();
   const update = useUpdateConnection();
   const byId = new Map(agents.map((a) => [a.id, a]));
   const own = c.agentIds.map((id) => byId.get(id)).filter((a): a is Agent => !!a);
   const names = own.map((a) => a.name);
   const handle = botHandle(c);
-  const last = c.status.lastEventAt ? formatDistanceToNowStrict(new Date(c.status.lastEventAt), { addSuffix: true }) : null;
+  const last = c.status.lastEventAt ? formatDistanceToNowStrict(new Date(c.status.lastEventAt), { addSuffix: true, locale: dateLocale }) : null;
   return (
     <div
       className={cn(
@@ -177,11 +186,10 @@ function ConnectionCard({ connection: c, agents, onOpen }: { connection: Messagi
           )}
           <span className="inline-flex items-center gap-1">
             {c.access === "approved" ? <ShieldCheck className="size-3.5" /> : <Globe className="size-3.5" />}
-            {c.access === "approved" ? "Approved people" : "Anyone"}
+            {c.access === "approved" ? t("card.approvedPeople") : t("access.anyoneTitle")}
           </span>
           <span className="tabular-nums">
-            {c.chats} {c.chats === 1 ? "chat" : "chats"}
-            {last ? ` · last message ${last}` : ""}
+            {last ? t("card.chatsLast", { count: c.chats, last }) : t("card.chats", { count: c.chats })}
           </span>
         </div>
         {c.status.state === "error" && c.status.message && <p className="line-clamp-1 text-xs text-destructive">{c.status.message}</p>}
@@ -190,16 +198,16 @@ function ConnectionCard({ connection: c, agents, onOpen }: { connection: Messagi
         {c.pendingUsers > 0 && (
           <span className="relative z-10 inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-strong">
             <span className="size-1.5 rounded-full bg-brand" />
-            {c.pendingUsers} waiting
+            {t("card.waiting", { count: c.pendingUsers })}
           </span>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="relative z-10 inline-flex">
-              <Switch checked={c.enabled} onCheckedChange={(enabled) => update.mutate({ id: c.id, patch: { enabled } })} aria-label={`${c.enabled ? "Turn off" : "Turn on"} ${c.name}`} />
+              <Switch checked={c.enabled} onCheckedChange={(enabled) => update.mutate({ id: c.id, patch: { enabled } })} aria-label={c.enabled ? t("card.turnOffName", { name: c.name }) : t("card.turnOnName", { name: c.name })} />
             </span>
           </TooltipTrigger>
-          <TooltipContent>{c.enabled ? "Answering messages" : "Turned off"}</TooltipContent>
+          <TooltipContent>{c.enabled ? t("card.answering") : t("card.turnedOff")}</TooltipContent>
         </Tooltip>
         <ChevronRight className="size-4 text-muted-foreground/60 transition group-hover:translate-x-0.5 group-hover:text-foreground" />
       </div>

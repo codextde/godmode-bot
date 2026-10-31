@@ -3,6 +3,7 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { AutomationEvent, AutomationEventSource, AutomationEventStatus, Routine, RoutineNotify } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { Group, SwitchRow } from "@/components/form";
@@ -15,6 +16,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LoadingState, Ro
 import { api, errorText } from "@/lib/api";
 import { isFailingRoutine } from "@/lib/desktop-parity";
 import { whenText } from "@/lib/format";
+import { dateLocale } from "@/lib/i18n";
 import { useAgents, useNow } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
@@ -22,32 +24,33 @@ import { radius, space, useColors } from "@/lib/theme";
 
 const EVENT_LIMIT = 50;
 
-const EVENT_SOURCES: Record<AutomationEventSource, { label: string; icon: IconName }> = {
-  schedule: { label: "Schedule", icon: "clock" },
-  app: { label: "App event", icon: "layers" },
-  webhook: { label: "Webhook", icon: "link" },
-  condition: { label: "Condition met", icon: "eye" },
-  manual: { label: "Manual", icon: "hand" },
-};
+const EVENT_SOURCES = {
+  schedule: { label: "automation.source.schedule", icon: "clock" },
+  app: { label: "automation.source.app", icon: "layers" },
+  webhook: { label: "automation.source.webhook", icon: "link" },
+  condition: { label: "automation.source.condition", icon: "eye" },
+  manual: { label: "automation.source.manual", icon: "hand" },
+} as const satisfies Record<AutomationEventSource, { label: string; icon: IconName }>;
 
-const EVENT_STATUS: Record<AutomationEventStatus, { label: string; tone: Tone }> = {
-  pending: { label: "Waiting", tone: "warning" },
-  running: { label: "Running", tone: "brand" },
-  done: { label: "Done", tone: "success" },
-  failed: { label: "Failed", tone: "danger" },
-  skipped: { label: "Skipped", tone: "neutral" },
-};
+const EVENT_STATUS = {
+  pending: { label: "automation.eventStatus.pending", tone: "warning" },
+  running: { label: "automation.eventStatus.running", tone: "brand" },
+  done: { label: "automation.eventStatus.done", tone: "success" },
+  failed: { label: "automation.eventStatus.failed", tone: "danger" },
+  skipped: { label: "automation.eventStatus.skipped", tone: "neutral" },
+} as const satisfies Record<AutomationEventStatus, { label: string; tone: Tone }>;
 
-const NOTIFY_LABELS: Record<RoutineNotify, string> = {
-  failures: "When a run fails",
-  always: "After every run",
-  never: "Never",
-};
+const NOTIFY_LABELS = {
+  failures: "notify.failures",
+  always: "notify.always",
+  never: "notify.never",
+} as const satisfies Record<RoutineNotify, string>;
 
-const ago = (iso: string) => formatDistanceToNowStrict(new Date(iso), { addSuffix: true });
+const ago = (iso: string) => formatDistanceToNowStrict(new Date(iso), { addSuffix: true, locale: dateLocale() });
 
 /** One automation, like the desktop's row and events sheet together: what starts it, when, what it does, and what happened lately. */
 export default function AutomationScreen() {
+  const { t } = useTranslation(["automations", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const list = useQuery({ queryKey: qk.allRoutines, queryFn: () => api.routines.list() });
   const routine = list.data?.find((r) => r.id === id);
@@ -55,13 +58,13 @@ export default function AutomationScreen() {
   if (!routine) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Automation</Stack.Title>
+        <Stack.Title>{t("automation.title")}</Stack.Title>
         {list.isLoading ? (
-          <LoadingState label="Loading the automation…" />
+          <LoadingState label={t("automation.loading")} />
         ) : (
           <ErrorState
-            title={list.isError ? "Couldn't load this automation" : "Automation not found"}
-            error={list.isError ? errorText(list.error) : "It may have been deleted."}
+            title={list.isError ? t("automation.loadFailed") : t("automation.notFound")}
+            error={list.isError ? errorText(list.error) : t("automation.maybeDeleted")}
             onRetry={list.isError ? () => void list.refetch() : undefined}
           />
         )}
@@ -73,6 +76,7 @@ export default function AutomationScreen() {
 
 function AutomationView({ routine, refetchList }: { routine: Routine; refetchList: () => Promise<unknown> }) {
   const c = useColors();
+  const { t } = useTranslation(["automations", "common"]);
   const id = routine.id;
   const { byId } = useAgents();
   const agent = byId.get(routine.agentId);
@@ -99,10 +103,10 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
     }, [refetchList, refetchEvents]),
   );
 
-  const t = routine.trigger;
+  const trigger = routine.trigger;
   const status = routine.triggerStatus;
   const keepsChat = routine.reuseConversation && !!routine.conversationId;
-  const editable = t.type === "schedule" || t.type === "condition";
+  const editable = trigger.type === "schedule" || trigger.type === "condition";
   const edit = () => router.push({ pathname: "/automation-edit", params: { id } });
 
   const refresh = async () => {
@@ -121,12 +125,16 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
 
   const remove = () =>
     Alert.alert(
-      `Delete “${routine.name}”?`,
-      `${t.type === "app" ? `Godmode stops listening for “${t.triggerName}” in ${appName(t.toolkit)}.` : t.type === "webhook" ? "Its webhook URL stops working." : "It won't run again."} Past runs and conversations stay in your history.`,
+      t("automation.deleteTitle", { name: routine.name }),
+      trigger.type === "app"
+        ? t("automation.deleteMessageApp", { trigger: trigger.triggerName, app: appName(trigger.toolkit) })
+        : trigger.type === "webhook"
+          ? t("automation.deleteMessageWebhook")
+          : t("automation.deleteMessage"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common:actions.cancel"), style: "cancel" },
         {
-          text: "Delete automation",
+          text: t("automation.delete"),
           style: "destructive",
           onPress: () =>
             void api.routines
@@ -135,7 +143,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
                 router.back();
                 void queryClient.invalidateQueries({ queryKey: qk.routines });
               })
-              .catch((err) => Alert.alert("Couldn't delete automation", errorText(err))),
+              .catch((err) => Alert.alert(t("automation.deleteFailed"), errorText(err))),
         },
       ],
     );
@@ -147,17 +155,17 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
     queryClient
       .fetchQuery({ queryKey: qk.run(runId), queryFn: () => api.runs.get(runId) })
       .then((r) => openChat(r.conversationId))
-      .catch((err) => Alert.alert("Couldn't open the chat", errorText(err)));
+      .catch((err) => Alert.alert(t("automation.openChatFailed"), errorText(err)));
   };
 
   const menu: HeaderMenuItem[] = [
-    ...(routine.conversationId ? [{ icon: "chats" as IconName, title: "Open chat", onPress: () => openChat(routine.conversationId!) }] : []),
-    { icon: "trash", title: "Delete", destructive: true, onPress: remove },
+    ...(routine.conversationId ? [{ icon: "chats" as IconName, title: t("automation.openChat"), onPress: () => openChat(routine.conversationId!) }] : []),
+    { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
   ];
 
-  const next = routine.enabled && routine.nextRunAt ? `${whenText(routine.nextRunAt)} · ${ago(routine.nextRunAt)}` : routine.enabled ? "—" : "Paused";
-  const last = routine.lastRunAt ? `${routine.lastStatus ? `${runStatusLabel(routine.lastStatus)} · ` : ""}${ago(routine.lastRunAt)}` : "Never";
-  const lastCheck = t.type === "condition" && (status.observation || status.lastCheckAt);
+  const next = routine.enabled && routine.nextRunAt ? `${whenText(routine.nextRunAt)} · ${ago(routine.nextRunAt)}` : routine.enabled ? "—" : t("status.paused");
+  const last = routine.lastRunAt ? `${routine.lastStatus ? `${runStatusLabel(routine.lastStatus)} · ` : ""}${ago(routine.lastRunAt)}` : t("common:words.never");
+  const lastCheck = trigger.type === "condition" && (status.observation || status.lastCheckAt);
   const shownEvents = events.data ?? [];
 
   return (
@@ -167,12 +175,12 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
     >
       <Stack.Title>{routine.name}</Stack.Title>
-      <HeaderActions actions={[{ icon: "pencil", label: "Edit", onPress: edit }]} menu={menu} />
+      <HeaderActions actions={[{ icon: "pencil", label: t("common:actions.edit"), onPress: edit }]} menu={menu} />
 
       <View style={styles.hero}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={agent ? `Open ${agent.name}` : undefined}
+          accessibilityLabel={agent ? t("automation.openAgent", { name: agent.name }) : undefined}
           disabled={!agent}
           onPress={() => {
             tap();
@@ -186,13 +194,13 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         </T>
         <Row style={{ gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
           {working ? (
-            <Badge label="Running now" tone="brand" live />
+            <Badge label={t("automation.runningNow")} tone="brand" live />
           ) : routine.enabled ? (
-            <Badge label={isFailingRoutine(routine) ? "Failing" : "Active"} tone={isFailingRoutine(routine) ? "danger" : "success"} />
+            <Badge label={isFailingRoutine(routine) ? t("status.failing") : t("status.active")} tone={isFailingRoutine(routine) ? "danger" : "success"} />
           ) : (
-            <Badge label="Paused" />
+            <Badge label={t("status.paused")} />
           )}
-          {routine.fillOnly ? <Badge label="Fill-only secrets" dot={false} /> : null}
+          {routine.fillOnly ? <Badge label={t("automation.fillOnly")} dot={false} /> : null}
         </Row>
         {agent ? (
           <T variant="subhead" muted style={{ textAlign: "center" }}>
@@ -201,7 +209,7 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         ) : null}
         <Row style={{ gap: space.sm, alignSelf: "stretch", marginTop: space.sm }}>
           <Button
-            title={runLabel(t.type)}
+            title={runLabel(trigger.type)}
             icon="play"
             variant="secondary"
             loading={starting}
@@ -210,9 +218,9 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
             style={{ flex: 1 }}
           />
           {keepsChat ? (
-            <Button title="Open chat" icon="chats" onPress={() => openChat(routine.conversationId!)} style={{ flex: 1 }} />
+            <Button title={t("automation.openChat")} icon="chats" onPress={() => openChat(routine.conversationId!)} style={{ flex: 1 }} />
           ) : (
-            <Button title="Edit" icon="pencil" onPress={edit} style={{ flex: 1 }} />
+            <Button title={t("common:actions.edit")} icon="pencil" onPress={edit} style={{ flex: 1 }} />
           )}
         </Row>
       </View>
@@ -221,30 +229,30 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         <View style={[styles.notice, { backgroundColor: status.state === "error" ? c.dangerSoft : c.surface, borderColor: status.state === "error" ? c.danger : c.border }]}>
           <Icon name={status.state === "error" ? "warning" : "clock"} size={14} color={status.state === "error" ? c.danger : c.textMuted} />
           <T variant="footnote" color={status.state === "error" ? c.danger : c.textMuted} style={{ flex: 1 }}>
-            {status.message ?? (status.state === "error" ? "The trigger isn't working." : "Setting up the trigger…")}
+            {status.message ?? (status.state === "error" ? t("automation.triggerBroken") : t("automation.triggerSettingUp"))}
           </T>
         </View>
       ) : null}
 
-      <Group title="Trigger" footer={editable ? undefined : "Change the trigger in Godmode on your computer."}>
-        <Info label={TRIGGER_TITLES[t.type]} value={triggerText(routine, false)} />
-        {t.type === "schedule" || t.type === "condition" ? <Info label={t.type === "condition" ? "Next check" : "Next run"} value={next} /> : null}
-        <Info label="Last run" value={last} tone={routine.lastStatus === "failed" ? "danger" : undefined} />
-        {routine.filter ? <Info label="Only when…" value={routine.filter} /> : null}
+      <Group title={t("automation.trigger")} footer={editable ? undefined : t("automation.changeTriggerOnComputer")}>
+        <Info label={TRIGGER_TITLES[trigger.type]} value={triggerText(routine, false)} />
+        {trigger.type === "schedule" || trigger.type === "condition" ? <Info label={trigger.type === "condition" ? t("automation.nextCheck") : t("automation.nextRun")} value={next} /> : null}
+        <Info label={t("automation.lastRun")} value={last} tone={routine.lastStatus === "failed" ? "danger" : undefined} />
+        {routine.filter ? <Info label={t("automation.onlyWhen")} value={routine.filter} /> : null}
       </Group>
 
-      {t.type === "condition" ? (
+      {trigger.type === "condition" ? (
         <View>
-          <SectionTitle title="Condition" />
+          <SectionTitle title={t("automation.condition")} />
           <Card style={styles.text}>
-            <T variant="callout">When {t.condition}</T>
+            <T variant="callout">{t("automation.when", { condition: trigger.condition })}</T>
             {lastCheck ? (
               <View style={{ gap: 2, marginTop: space.sm }}>
                 <T variant="eyebrow" muted>
-                  Last check{status.lastCheckAt ? ` · ${ago(status.lastCheckAt)}` : ""}
+                  {status.lastCheckAt ? t("automation.lastCheckAgo", { ago: ago(status.lastCheckAt) }) : t("automation.lastCheck")}
                 </T>
                 <T variant="footnote" muted>
-                  {status.observation ?? "Nothing noted yet."}
+                  {status.observation ?? t("automation.nothingNoted")}
                 </T>
               </View>
             ) : null}
@@ -253,32 +261,32 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
       ) : null}
 
       <View>
-        <SectionTitle title="What it does" />
+        <SectionTitle title={t("automation.whatItDoes")} />
         <Card style={styles.text}>
           <T variant="callout">{routine.prompt}</T>
         </Card>
       </View>
 
-      <Group title="Settings">
+      <Group title={t("common:words.settings")}>
         <SwitchRow
-          title="Enabled"
-          detail={editable ? "Paused automations keep their settings but don't run." : "Paused automations keep their settings and ignore new events."}
+          title={t("automation.enabled")}
+          detail={editable ? t("automation.enabledHint") : t("automation.enabledHintEvents")}
           value={routine.enabled}
           onChange={(enabled) => setRoutineEnabled(routine, enabled)}
         />
-        <Info label="Tell me" value={NOTIFY_LABELS[routine.notify]} />
-        <Info label="Keep one chat" value={routine.reuseConversation ? "On" : "Off"} />
-        <Info label="Logins" value={routine.fillOnly ? "Filled in, raw passwords stay hidden" : "Like its agent"} />
+        <Info label={t("automation.tellMe")} value={t(NOTIFY_LABELS[routine.notify])} />
+        <Info label={t("automation.keepOneChat")} value={routine.reuseConversation ? t("common:status.on") : t("common:status.off")} />
+        <Info label={t("automation.logins")} value={routine.fillOnly ? t("automation.loginsFillOnly") : t("automation.loginsLikeAgent")} />
       </Group>
 
       <View>
-        <SectionTitle title={shownEvents.length ? `Recent events · ${shownEvents.length}` : "Recent events"} />
+        <SectionTitle title={shownEvents.length ? t("automation.recentEventsCount", { n: shownEvents.length }) : t("automation.recentEvents")} />
         {events.isLoading ? (
           <Card>
             <SkeletonRows count={3} avatar={28} />
           </Card>
         ) : events.isError ? (
-          <ErrorState title="Couldn't load events" error={errorText(events.error)} onRetry={() => void refetchEvents()} />
+          <ErrorState title={t("automation.eventsFailed")} error={errorText(events.error)} onRetry={() => void refetchEvents()} />
         ) : shownEvents.length === 0 ? (
           <EmptyEvents routine={routine} />
         ) : (
@@ -293,12 +301,12 @@ function AutomationView({ routine, refetchList }: { routine: Routine; refetchLis
         )}
         {shownEvents.length >= EVENT_LIMIT ? (
           <T variant="footnote" muted style={{ textAlign: "center", marginTop: space.sm }}>
-            Showing the latest {EVENT_LIMIT} events.
+            {t("automation.latestEvents", { count: EVENT_LIMIT })}
           </T>
         ) : null}
       </View>
 
-      <Button title="Delete automation" icon="trash" variant="danger" onPress={remove} />
+      <Button title={t("automation.delete")} icon="trash" variant="danger" onPress={remove} />
     </ScrollView>
   );
 }
@@ -319,13 +327,14 @@ function Info({ label, value, tone }: { label: string; value: string; tone?: "da
 
 function EventRow({ event, onPress }: { event: AutomationEvent; onPress?: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("automations");
   const source = EVENT_SOURCES[event.source] ?? EVENT_SOURCES.manual;
   const status = EVENT_STATUS[event.status] ?? EVENT_STATUS.pending;
   return (
     <Pressable
       disabled={!onPress}
       accessibilityRole={onPress ? "button" : undefined}
-      accessibilityHint={onPress ? "Opens the chat of this run" : undefined}
+      accessibilityHint={onPress ? t("automation.openRunChat") : undefined}
       onPress={onPress}
       style={({ pressed }) => [styles.event, pressed && { backgroundColor: c.sunken }]}
     >
@@ -334,12 +343,12 @@ function EventRow({ event, onPress }: { event: AutomationEvent; onPress?: () => 
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <T variant="subhead" style={{ fontWeight: "500" }} numberOfLines={2}>
-          {event.title || source.label}
+          {event.title || t(source.label)}
         </T>
         <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
-          <Badge label={status.label} tone={status.tone} live={event.status === "running"} />
+          <Badge label={t(status.label)} tone={status.tone} live={event.status === "running"} />
           <T variant="caption" muted>
-            {source.label} · {ago(event.createdAt)}
+            {t(source.label)} · {ago(event.createdAt)}
           </T>
         </Row>
         {event.note ? (
@@ -354,16 +363,17 @@ function EventRow({ event, onPress }: { event: AutomationEvent; onPress?: () => 
 }
 
 function EmptyEvents({ routine }: { routine: Routine }) {
-  const t = routine.trigger;
+  const { t } = useTranslation("automations");
+  const trigger = routine.trigger;
   const next = routine.enabled && routine.nextRunAt ? ago(routine.nextRunAt) : null;
   const copy =
-    t.type === "schedule"
-      ? { title: "No runs yet", body: next ? `The first run is ${next}.` : "Runs show up here when the schedule fires." }
-      : t.type === "app"
-        ? { title: "Waiting for the first event", body: `Godmode is listening for “${t.triggerName}” in ${appName(t.toolkit)}.` }
-        : t.type === "condition"
-          ? { title: "Not met yet", body: next ? `The next check is ${next}.` : "Once a check finds the condition true, it shows up here." }
-          : { title: "No calls yet", body: "Call the webhook URL — or send a test event — and it shows up here." };
+    trigger.type === "schedule"
+      ? { title: t("automation.empty.scheduleTitle"), body: next ? t("automation.empty.scheduleNext", { when: next }) : t("automation.empty.scheduleBody") }
+      : trigger.type === "app"
+        ? { title: t("automation.empty.appTitle"), body: t("automation.empty.appBody", { trigger: trigger.triggerName, app: appName(trigger.toolkit) }) }
+        : trigger.type === "condition"
+          ? { title: t("automation.empty.conditionTitle"), body: next ? t("automation.empty.conditionNext", { when: next }) : t("automation.empty.conditionBody") }
+          : { title: t("automation.empty.webhookTitle"), body: t("automation.empty.webhookBody") };
   return <EmptyState icon="inbox" title={copy.title} body={copy.body} style={{ marginHorizontal: 0 }} />;
 }
 

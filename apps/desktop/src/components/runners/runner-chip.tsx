@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { Check, ChevronDown, Laptop, MonitorSmartphone, RefreshCw, Settings2, TriangleAlert, WifiOff } from "lucide-react";
 import type { RemoteRunner } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -10,23 +11,24 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { timeAgo } from "@/components/ssh/ssh-parts";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { api } from "@/lib/api";
 import { isOlderRunner, isRunnerPlace, placeName, usePlaces, type Place } from "@/lib/places";
 import { upsertRunner } from "@/lib/realtime";
 import { cn } from "@/lib/utils";
-import { RUNNER_STATE_LABEL, RunnerStateDot, RunnerTag, THIS_COMPUTER, THIS_COMPUTER_INLINE } from "./runner-parts";
+import { RUNNER_STATE_LABEL, RunnerStateDot, RunnerTag, thisComputer, thisComputerInline } from "./runner-parts";
 
 /** Why a runner can or can't take a chat right now, in a few words. */
 function runnerLine(runner: RemoteRunner): string {
   switch (runner.state) {
     case "online": {
-      const parts = ["Online"];
-      if (runner.activeRuns > 0) parts.push(`${runner.activeRuns} working`);
-      if (runner.health && runner.health.failing > 0) parts.push(`${runner.health.failing} to fix first`);
+      const parts = [RUNNER_STATE_LABEL.online];
+      if (runner.activeRuns > 0) parts.push(t("runners:chip.working", { count: runner.activeRuns }));
+      if (runner.health && runner.health.failing > 0) parts.push(t("runners:chip.toFix", { count: runner.health.failing }));
       return parts.join(" · ");
     }
     case "offline":
-      return runner.lastSeenAt ? `Offline · last online ${timeAgo(runner.lastSeenAt)}` : "Offline";
+      return runner.lastSeenAt ? t("runners:chip.offlineSince", { when: timeAgo(runner.lastSeenAt) }) : RUNNER_STATE_LABEL.offline;
     case "connecting":
     case "update_required":
       return RUNNER_STATE_LABEL[runner.state];
@@ -34,9 +36,9 @@ function runnerLine(runner: RemoteRunner): string {
 }
 
 function placeLine(place: Place): string {
-  if (place.here) return "Works here, with your folders, screen and VMs";
-  if (place.runner) return place.twinOf ? `${runnerLine(place.runner)} · older setup` : runnerLine(place.runner);
-  return place.state === "online" ? "Online · the primary of your group" : "Offline";
+  if (place.here) return t("runners:chip.worksHere");
+  if (place.runner) return place.twinOf ? t("runners:chip.olderSetup", { line: runnerLine(place.runner) }) : runnerLine(place.runner);
+  return place.state === "online" ? t("runners:chip.primaryOnline") : RUNNER_STATE_LABEL.offline;
 }
 
 function PlaceIcon({ place }: { place: Place }) {
@@ -48,6 +50,7 @@ function PlaceIcon({ place }: { place: Place }) {
  * while there is nowhere else. A place that isn't online is listed but can't be picked.
  */
 export function RunnerChip({ value, onChange }: { value: string | null; onChange: (runnerId: string | null) => void }) {
+  const { t } = useTranslation("runners");
   const { places, hereId } = usePlaces();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -72,7 +75,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
             {current ? (
               <button
                 type="button"
-                aria-label={`Runs on ${placeName(current)} (${RUNNER_STATE_LABEL[current.state].toLowerCase()})`}
+                aria-label={t("chip.runsOnLabel", { name: placeName(current), state: RUNNER_STATE_LABEL[current.state].toLowerCase() })}
                 className="flex h-8 max-w-[12rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />
@@ -84,26 +87,24 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
               <Button
                 type="button"
                 variant="ghost"
-                aria-label={`Runs on ${THIS_COMPUTER_INLINE} — pick another computer`}
+                aria-label={t("chip.runsHereLabel", { name: thisComputerInline() })}
                 className={cn(
                   "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                   open && "bg-accent text-foreground",
                 )}
               >
                 <Laptop />
-                <span className="@max-sm/composer:sr-only">{THIS_COMPUTER}</span>
+                <span className="@max-sm/composer:sr-only">{thisComputer()}</span>
               </Button>
             )}
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>{current ? `This chat will work on ${placeName(current)}` : "Work on another computer"}</TooltipContent>
+        <TooltipContent>{current ? t("chip.willWorkOn", { name: placeName(current) }) : t("chip.workElsewhere")}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
         <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">Run on</p>
-          <p className="text-xs text-muted-foreground">
-            The computer that does the work of this chat. You see it on every computer of your group, and it can move later — also while it works.
-          </p>
+          <p className="text-[13px] font-medium">{t("chip.runOn")}</p>
+          <p className="text-xs text-muted-foreground">{t("chip.runOnHint")}</p>
         </div>
         <Command>
           <CommandList className="max-h-72">
@@ -113,14 +114,14 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
                   <Laptop />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate">{THIS_COMPUTER}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">Works here, with your folders, screen and VMs</span>
+                  <span className="block truncate">{thisComputer()}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{t("chip.worksHere")}</span>
                 </span>
-                {!current && <Check className="size-4" aria-label="Selected" />}
+                {!current && <Check className="size-4" aria-label={t("chip.selected")} />}
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
-            <CommandGroup heading="Your devices">
+            <CommandGroup heading={t("chip.yourDevices")}>
               {others.map((place) => (
                 <PlaceItem key={place.runnerId ?? "primary"} place={place} selected={current === place} onSelect={() => pick(place.runnerId)} />
               ))}
@@ -128,7 +129,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
             <CommandSeparator />
             <CommandGroup>
               <CommandItem value="__devices" onSelect={() => go("/settings/devices")} className="text-muted-foreground">
-                <Settings2 /> Manage devices
+                <Settings2 /> {t("chip.manageDevices")}
               </CommandItem>
             </CommandGroup>
           </CommandList>
@@ -139,6 +140,7 @@ export function RunnerChip({ value, onChange }: { value: string | null; onChange
 }
 
 function PlaceItem({ place, selected, onSelect }: { place: Place; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation("runners");
   return (
     <CommandItem
       value={`place ${place.name} ${place.runnerId ?? "primary"}`}
@@ -157,24 +159,25 @@ function PlaceItem({ place, selected, onSelect }: { place: Place; selected: bool
           <span className="truncate">{placeLine(place)}</span>
         </span>
       </span>
-      {selected && <Check className="size-4" aria-label="Selected" />}
+      {selected && <Check className="size-4" aria-label={t("chip.selected")} />}
     </CommandItem>
   );
 }
 
 /** The line under a new chat's composer once another computer is picked: what happens before the work starts there. */
 export function RunnerNote({ place }: { place: Place | null }) {
-  const name = place ? placeName(place) : "another computer";
+  const { t } = useTranslation("runners");
+  const name = place ? placeName(place) : t("move.anotherComputerInline");
   if (place && place.state !== "online") {
     return (
       <p className="flex items-start gap-1.5 px-1 pt-2 text-xs text-warning" role="status">
         <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
         <span>
           {place.state === "update_required"
-            ? `${name} runs another version of Godmode. Update Godmode on both computers, or pick another one — your message stays here.`
+            ? t("note.updateRequired", { name })
             : place.state === "connecting"
-              ? `Connecting to ${name}… Your message stays here until it's there.`
-              : `${name} went offline. Pick another computer, or wait until it's back — your message stays here.`}
+              ? t("note.connecting", { name })
+              : t("note.offline", { name })}
         </span>
       </p>
     );
@@ -183,7 +186,7 @@ export function RunnerNote({ place }: { place: Place | null }) {
     <p className="flex items-start gap-1.5 px-1 pt-2 text-xs text-muted-foreground">
       <MonitorSmartphone className="mt-px size-3.5 shrink-0" aria-hidden />
       <span>
-        Runs on <span className="font-medium text-foreground">{name}</span>. It has your agents and logins too, and you can follow it from here.
+        <Trans t={t} i18nKey="note.runsOn" values={{ name }} components={{ b: <span className="font-medium text-foreground" /> }} />
       </span>
     </p>
   );
@@ -194,23 +197,24 @@ export function RunnerNote({ place }: { place: Place | null }) {
  * whether that computer is there. Its menu moves the chat to another online computer.
  */
 export function RunnerPill({ place, targets, onMove }: { place: Place | null; targets: Place[]; onMove: (to: Place) => void }) {
+  const { t } = useTranslation("runners");
   const navigate = useNavigate();
   const { inGroup } = usePlaces();
   const [open, setOpen] = useState(false);
-  const name = place?.name ?? "a runner";
-  const full = place ? placeName(place) : "a runner";
+  const name = place?.name ?? t("pill.aRunner");
+  const full = place ? placeName(place) : t("pill.aRunner");
   const tagged = isRunnerPlace(place, inGroup);
   const tooltip = !place
-    ? "This chat works on a runner"
+    ? t("pill.onRunner")
     : place.here
-      ? `This chat works on ${THIS_COMPUTER_INLINE}`
+      ? t("pill.worksOn", { name: thisComputerInline() })
       : place.state === "online"
-        ? `This chat works on ${full} — it keeps going while ${THIS_COMPUTER_INLINE} sleeps`
+        ? t("pill.worksOnOnline", { name: full, here: thisComputerInline() })
         : place.state === "connecting"
-          ? `This chat works on ${full} — connecting…`
+          ? t("pill.worksOnConnecting", { name: full })
           : place.state === "offline"
-            ? `This chat works on ${full}, which is offline`
-            : `This chat works on ${full}, which needs an update`;
+            ? t("pill.worksOnOffline", { name: full })
+            : t("pill.worksOnUpdate", { name: full });
   const act = (fn: () => void) => {
     setOpen(false);
     fn();
@@ -222,7 +226,7 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={place ? `On ${full} (${RUNNER_STATE_LABEL[place.state].toLowerCase()})` : "On a runner"}
+              aria-label={place ? t("pill.onLabel", { name: full, state: RUNNER_STATE_LABEL[place.state].toLowerCase() }) : t("pill.onARunner")}
               className={cn(
                 "flex h-8 max-w-[15rem] min-w-0 shrink items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                 open && "bg-accent",
@@ -230,7 +234,7 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
             >
               {place?.here ? <Laptop className="size-3.5 shrink-0 text-muted-foreground" /> : <MonitorSmartphone className="size-3.5 shrink-0 text-muted-foreground" />}
               <span className="truncate">
-                On <span className="font-medium">{name}</span>
+                <Trans t={t} i18nKey="pill.on" values={{ name }} components={{ b: <span className="font-medium" /> }} />
               </span>
               {tagged && <RunnerTag />}
               {place && !place.here && <RunnerStateDot state={place.state} />}
@@ -247,30 +251,30 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-[13px] font-medium">{place?.name ?? "A runner"}</span>
+              <span className="truncate text-[13px] font-medium">{place?.name ?? t("pill.aRunnerTitle")}</span>
               {tagged && <RunnerTag />}
             </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               {place && <RunnerStateDot state={place.state} />}
-              <span className="truncate">{place ? placeLine(place) : "Removed"}</span>
+              <span className="truncate">{place ? placeLine(place) : t("pill.removed")}</span>
             </span>
           </span>
         </div>
         <Command>
           <CommandList>
             {targets.length > 0 && (
-              <CommandGroup heading="Move to">
-                {targets.map((t) => (
-                  <CommandItem key={t.runnerId ?? "primary"} value={`move ${t.name} ${t.runnerId ?? "primary"}`} onSelect={() => act(() => onMove(t))} className="gap-2.5 py-2">
+              <CommandGroup heading={t("move.moveTo")}>
+                {targets.map((target) => (
+                  <CommandItem key={target.runnerId ?? "primary"} value={`move ${target.name} ${target.runnerId ?? "primary"}`} onSelect={() => act(() => onMove(target))} className="gap-2.5 py-2">
                     <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-paper-2 text-muted-foreground [&_svg]:size-3.5">
-                      <PlaceIcon place={t} />
+                      <PlaceIcon place={target} />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="flex min-w-0 items-center gap-1.5">
-                        <span className="truncate">{t.name}</span>
-                        {isRunnerPlace(t, inGroup) && <RunnerTag />}
+                        <span className="truncate">{target.name}</span>
+                        {isRunnerPlace(target, inGroup) && <RunnerTag />}
                       </span>
-                      <span className="block truncate text-[11px] text-muted-foreground">Continue there with the whole conversation</span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{t("pill.continueThere")}</span>
                     </span>
                   </CommandItem>
                 ))}
@@ -279,7 +283,7 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
             <CommandSeparator />
             <CommandGroup>
               <CommandItem value="__manage" onSelect={() => act(() => navigate("/settings/devices"))} className="text-muted-foreground">
-                <Settings2 /> Manage devices
+                <Settings2 /> {t("chip.manageDevices")}
               </CommandItem>
             </CommandGroup>
           </CommandList>
@@ -294,11 +298,12 @@ export function RunnerPill({ place, targets, onMove }: { place: Place | null; ta
  * and a way to continue on this computer instead.
  */
 export function RunnerOfflineBar({ runner, onMove }: { runner: RemoteRunner; onMove: () => void }) {
+  const { t } = useTranslation(["runners", "common"]);
   const qc = useQueryClient();
   const connect = useMutation({
     mutationFn: () => api.runners.connect(runner.id),
     onSuccess: (next) => void upsertRunner(qc, next),
-    onError: (e) => toastApiError(e, `Couldn't reach ${runner.name}`, qc),
+    onError: (e) => toastApiError(e, t("offline.unreachable", { name: runner.name }), qc),
   });
   const connecting = runner.state === "connecting" || connect.isPending;
   const update = runner.state === "update_required";
@@ -308,32 +313,26 @@ export function RunnerOfflineBar({ runner, onMove }: { runner: RemoteRunner; onM
       {connecting ? <Spinner className="size-3.5 shrink-0" aria-hidden /> : update ? <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-hidden /> : <WifiOff className="size-3.5 shrink-0" aria-hidden />}
       <span className="min-w-0 flex-1 leading-snug" title={runner.error ?? undefined}>
         {connecting ? (
-          <>
-            <span className="font-medium text-foreground">Connecting to {runner.name}…</span> Messages can be sent again when it's there.
-          </>
+          <Trans t={t} i18nKey="offline.connecting" values={{ name: runner.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
         ) : update ? (
-          <>
-            <span className="font-medium text-foreground">{runner.name} needs an update</span> — messages can be sent again once it runs the same Godmode as this computer.
-          </>
+          <Trans t={t} i18nKey="offline.update" values={{ name: runner.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
         ) : (
-          <>
-            <span className="font-medium text-foreground">{runner.name} is offline</span> — messages can be sent again when it's back.
-          </>
+          <Trans t={t} i18nKey="offline.offline" values={{ name: runner.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
         )}
       </span>
       {update ? (
         <Button size="xs" variant="ghost" asChild>
-          <Link to="/settings/devices">Open devices</Link>
+          <Link to="/settings/devices">{t("offline.openDevices")}</Link>
         </Button>
       ) : (
         <Button size="xs" variant="ghost" disabled={connecting} onClick={() => connect.mutate()}>
-          <RefreshCw /> Try again
+          <RefreshCw /> {t("common:actions.tryAgain")}
         </Button>
       )}
       <Button size="xs" variant="outline" onClick={onMove}>
         <Laptop />
-        <span className="@lg:hidden">Move here</span>
-        <span className="hidden @lg:inline">Continue on {THIS_COMPUTER_INLINE}</span>
+        <span className="@lg:hidden">{t("offline.moveHere")}</span>
+        <span className="hidden @lg:inline">{t("offline.continueOn", { name: thisComputerInline() })}</span>
       </Button>
     </div>
   );

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { CircleAlert, CircleCheck, CircleX, KeyRound, RefreshCw, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { FixResult, PermissionId, PermissionReport, PermissionStatus } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { InlineCode } from "@/components/onboarding/doctor-checklist";
 import { isPrivacyPermission, useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { api, errorMessage } from "@/lib/api";
+import { t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useReduceAnimations } from "@/lib/motion";
@@ -25,10 +27,10 @@ export function usePermissions(watch = false, idleMs?: number) {
 
 /** Tell the human what a repair did (shared by single repairs and "Fix all"). */
 export function toastFix(result: FixResult) {
-  if (result.outcome === "fixed") toast.success(`${result.name} fixed`);
-  else if (result.outcome === "pending") toast.info(`Allow ${result.name} for Godmode`, { description: result.output });
-  else if (result.outcome === "manual") toast.info(`${result.name} needs you`, { description: <span className="whitespace-pre-line">{result.output}</span> });
-  else toast.error(`Couldn't fix ${result.name}`, { description: <span className="whitespace-pre-line">{result.output}</span> });
+  if (result.outcome === "fixed") toast.success(translate("settings:system.perm.fixed", { name: result.name }));
+  else if (result.outcome === "pending") toast.info(translate("settings:system.perm.allowFor", { name: result.name }), { description: result.output });
+  else if (result.outcome === "manual") toast.info(translate("settings:system.perm.needsYou", { name: result.name }), { description: <span className="whitespace-pre-line">{result.output}</span> });
+  else toast.error(translate("settings:system.perm.fixError", { name: result.name }), { description: <span className="whitespace-pre-line">{result.output}</span> });
 }
 
 /**
@@ -37,6 +39,7 @@ export function toastFix(result: FixResult) {
  */
 export function PermissionsChecklist({ className }: { className?: string }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   // The permission the human was just asked for in a system dialog.
   const [asked, setAsked] = useState<{ id: PermissionId; at: number } | null>(null);
@@ -61,10 +64,10 @@ export function PermissionsChecklist({ className }: { className?: string }) {
   if (isError || !data)
     return (
       <div className={cn("rounded-lg border border-destructive/25 bg-destructive/[0.05] p-4 text-sm", className)}>
-        <p className="font-medium text-destructive">Could not check the permissions</p>
+        <p className="font-medium text-destructive">{t("system.perm.loadError")}</p>
         <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
         <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
-          <RefreshCw /> Try again
+          <RefreshCw /> {t("common:actions.tryAgain")}
         </Button>
       </div>
     );
@@ -73,9 +76,9 @@ export function PermissionsChecklist({ className }: { className?: string }) {
   return (
     <div className={cn("space-y-2", className)}>
       <div className="flex items-center justify-between gap-2 pb-1 text-xs text-muted-foreground">
-        <span>{open ? `${open} ${open === 1 ? "permission needs" : "permissions need"} attention` : "Everything is allowed"}</span>
+        <span>{open ? t("system.perm.needAttention", { count: open }) : t("system.perm.allAllowed")}</span>
         <Button size="xs" variant="ghost" onClick={() => refetch()} disabled={isFetching}>
-          {isFetching ? <Spinner className="size-3" /> : <RefreshCw />} Re-check
+          {isFetching ? <Spinner className="size-3" /> : <RefreshCw />} {t("system.perm.recheck")}
         </Button>
       </div>
       {data.permissions.map((permission, i) => (
@@ -96,13 +99,14 @@ export function PermissionsChecklist({ className }: { className?: string }) {
 }
 
 function PermissionRow({ permission, onFixed }: { permission: PermissionStatus; onFixed: (result: FixResult) => void }) {
+  const { t } = useTranslation("settings");
   const fix = useMutation({
     mutationFn: () => api.doctor.fixPermission(permission.id),
     onSuccess: (result) => {
       toastFix(result);
       onFixed(result);
     },
-    onError: (e) => toast.error(`Couldn't fix ${permission.name}`, { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("system.perm.fixError", { name: permission.name }), { description: errorMessage(e) }),
   });
 
   const showGuide = useMacPermissionsGuide((s) => s.show);
@@ -116,14 +120,14 @@ function PermissionRow({ permission, onFixed }: { permission: PermissionStatus; 
       <div className="flex items-start gap-3">
         <Icon
           className={cn("mt-0.5 size-5 shrink-0", state === "ok" && "text-success", state === "warn" && "text-warning", state === "error" && "text-destructive")}
-          aria-label={state === "ok" ? "Allowed" : "Not allowed"}
+          aria-label={state === "ok" ? t("computer.permissions.allowed") : t("computer.permissions.notAllowed")}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">{permission.name}</span>
             {!permission.required && (
               <Badge variant="outline" className="h-5 rounded-[5px] text-[10px] font-normal text-muted-foreground">
-                optional
+                {t("system.perm.optional")}
               </Badge>
             )}
           </div>
@@ -137,12 +141,12 @@ function PermissionRow({ permission, onFixed }: { permission: PermissionStatus; 
         </div>
         {guided ? (
           <Button size="sm" variant={permission.ok && !permission.privacy?.restartNeeded ? "ghost" : "outline"} onClick={() => showGuide(permission.id)}>
-            {permission.ok && !permission.privacy?.restartNeeded ? "Details" : "Set up"}
+            {permission.ok && !permission.privacy?.restartNeeded ? t("logs.detail.details") : t("computer.permissions.setUp")}
           </Button>
         ) : !permission.ok && permission.fix !== "manual" && (
           <Button size="sm" variant={permission.required ? "default" : "outline"} onClick={() => fix.mutate()} disabled={fix.isPending}>
             {fix.isPending ? <Spinner /> : request ? <KeyRound /> : <Wrench />}
-            {request ? "Allow" : fix.isPending ? "Fixing…" : "Fix"}
+            {request ? t("system.perm.allow") : fix.isPending ? t("system.check.fixing") : t("system.perm.fix")}
           </Button>
         )}
       </div>

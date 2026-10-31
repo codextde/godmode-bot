@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, FilePlus2, FolderInput, Plus, Puzzle, RefreshCw, WandSparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { modState, modUpdateAvailable, type Mod } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,18 +20,16 @@ import { errorMessage } from "@/lib/api";
 import { useMods } from "@/lib/hooks";
 import { useReduceAnimations } from "@/lib/motion";
 
-/** The sentence the human finishes in a new chat. */
-const ASK_PROMPT = "Write a Claude Code plugin for Godmode that ";
-
 const STEPS = [
-  { title: "Install one", text: "Pick a featured plugin, paste any GitHub repository, or add a small one Godmode made." },
-  { title: "Godmode checks it with Claude Code", text: "You see what it brings and what it can reach before it runs anywhere." },
-  { title: "Your agents use it", text: "Switched on, it loads into each run of the agents you choose. Updates are one click." },
-];
+  { title: "page.steps.install.title", text: "page.steps.install.text" },
+  { title: "page.steps.check.title", text: "page.steps.check.text" },
+  { title: "page.steps.use.title", text: "page.steps.use.text" },
+] as const;
 
 /** Claude Code plugins: install from GitHub or the gallery, switch on and off, update, set options, choose who runs them. */
 export default function PluginsPage() {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["mods", "common"]);
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const list = useMods();
@@ -78,29 +77,29 @@ export default function PluginsPage() {
     <div className="relative">
       <PageHeader
         icon={<Puzzle />}
-        title="Plugins"
-        description="Give your agents new skills, subagents, commands and guardrails. These are Claude Code plugins: install them from GitHub, add one Godmode made, or write your own — and switch them off, update or remove them any time."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <>
-            <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(ASK_PROMPT)}`)}>
-              <WandSparkles /> Ask Godmode to write one
+            <Button variant="outline" onClick={() => navigate(`/?prompt=${encodeURIComponent(t("page.askPrompt"))}`)}>
+              <WandSparkles /> {t("page.askGodmode")}
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button>
-                  <Plus /> Add plugin <ChevronDown className="-mr-1 opacity-60" />
+                  <Plus /> {t("page.addPlugin")} <ChevronDown className="-mr-1 opacity-60" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-60">
                 <DropdownMenuItem onClick={() => setInstallOpen(true)}>
-                  <GitHubMark className="size-4" /> Install from GitHub…
+                  <GitHubMark className="size-4" /> {t("page.installFromGitHub")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setNewOpen(true)}>
-                  <FilePlus2 /> Write one from scratch
+                  <FilePlus2 /> {t("page.writeFromScratch")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setImportOpen(true)}>
-                  <FolderInput /> Import a plugin folder…
+                  <FolderInput /> {t("page.importFolder")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -112,19 +111,19 @@ export default function PluginsPage() {
           <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
             <div>
               <h2 id="plugins-installed-heading" className="text-[17px] font-medium tracking-[-0.02em]">
-                Installed
+                {t("page.installed")}
               </h2>
               {mods.length > 0 && (
                 <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                  {mods.length === 1 ? "1 plugin" : `${mods.length} plugins`} · {on} on
-                  {updates > 0 && <span className="text-brand-strong"> · {updates === 1 ? "1 update ready" : `${updates} updates ready`}</span>}
-                  {waiting > 0 && <span className="text-warning"> · {waiting === 1 ? "1 needs a look" : `${waiting} need a look`}</span>}
+                  {t("page.pluginCount", { count: mods.length })} · {t("page.onCount", { n: on })}
+                  {updates > 0 && <span className="text-brand-strong"> · {t("page.updatesReady", { count: updates })}</span>}
+                  {waiting > 0 && <span className="text-warning"> · {t("page.needLook", { count: waiting })}</span>}
                 </p>
               )}
             </div>
             {fromGit.length > 0 && (
               <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={actions.checkUpdates.isPending} onClick={() => actions.checkUpdates.mutate(undefined)}>
-                {lookingAll ? <Spinner /> : <RefreshCw />} Check for updates
+                {lookingAll ? <Spinner /> : <RefreshCw />} {t("page.checkUpdates")}
               </Button>
             )}
           </div>
@@ -138,11 +137,11 @@ export default function PluginsPage() {
           ) : list.isError ? (
             <EmptyState
               icon={<Puzzle />}
-              title="Couldn't load your plugins"
+              title={t("page.loadError")}
               description={errorMessage(list.error)}
               action={
                 <Button variant="outline" onClick={() => list.refetch()}>
-                  <RefreshCw /> Try again
+                  <RefreshCw /> {t("common:actions.tryAgain")}
                 </Button>
               }
             />
@@ -150,7 +149,7 @@ export default function PluginsPage() {
             <motion.ol
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              aria-label="How plugins work"
+              aria-label={t("page.howItWorks")}
               className="grid grid-cols-1 divide-y rounded-xl border bg-card shadow-card @3xl:grid-cols-3 @3xl:divide-x @3xl:divide-y-0"
             >
               {STEPS.map((step, i) => (
@@ -159,8 +158,8 @@ export default function PluginsPage() {
                     {i + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className="text-sm leading-6 font-medium tracking-[-0.01em]">{step.title}</p>
-                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{step.text}</p>
+                    <p className="text-sm leading-6 font-medium tracking-[-0.01em]">{t(step.title)}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{t(step.text)}</p>
                   </div>
                 </li>
               ))}

@@ -1,6 +1,7 @@
 import { useIsMutating, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LaptopMinimal, LaptopMinimalCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { PowerStatus } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,6 +12,7 @@ import { cloudContext } from "@/lib/core";
 import { usePower } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { t as translate } from "@/i18n";
 
 const ASKING_TOAST = "lid-mode-password";
 /** Shared by the footer button and the settings switch: one switch at a time, one password dialog. */
@@ -20,20 +22,21 @@ const LID_MUTATION = ["power", "lid"];
 export function lidModeLine(status: PowerStatus): string {
   switch (status.state) {
     case "on":
-      return status.lidClosed ? "The lid is closed and agents keep working." : "Close the lid: agents keep working.";
+      return status.lidClosed ? translate("layout:lidMode.line.closed") : translate("layout:lidMode.line.open");
     case "idle":
-      return "No agent is working, so the Mac may sleep. It stays awake again as soon as one starts.";
+      return translate("layout:lidMode.line.idle");
     case "low_battery":
-      return `Paused at ${status.battery?.percent ?? "low"}% battery. Plug in the Mac to continue.`;
+      return status.battery?.percent != null ? translate("layout:lidMode.line.lowBattery", { percent: status.battery.percent }) : translate("layout:lidMode.line.lowBatteryUnknown");
     case "error":
-      return status.error ?? "macOS refused the change.";
+      return status.error ?? translate("layout:lidMode.line.error");
     default:
-      return "Closing the lid puts the Mac to sleep.";
+      return translate("layout:lidMode.line.off");
   }
 }
 
 /** Switches lid-closed mode. The first time macOS asks for the password on the Mac, so the request may wait for a human. */
 export function useLidMode() {
+  const { t } = useTranslation("layout");
   const qc = useQueryClient();
   const power = usePower();
   const toggle = useMutation({
@@ -41,20 +44,20 @@ export function useLidMode() {
     mutationFn: (enabled: boolean) => api.power.setLid(enabled),
     onMutate: (enabled) => {
       if (enabled && power.data && !power.data.permission) {
-        toast.loading("Enter your Mac password", { id: ASKING_TOAST, description: "macOS asks once so Godmode can keep the Mac awake with the lid closed." });
+        toast.loading(t("lidMode.passwordTitle"), { id: ASKING_TOAST, description: t("lidMode.passwordDescription") });
       }
     },
     onSuccess: (status) => {
       toast.dismiss(ASKING_TOAST);
       qc.setQueryData(qk.power, status);
-      if (!status.enabled) toast.success("Lid-closed mode off", { description: "Your Mac sleeps again when you close the lid." });
-      else if (status.state === "on") toast.success("Lid-closed mode on", { description: "Close the lid whenever you like. Your agents keep working." });
-      else toast.info("Lid-closed mode on", { description: lidModeLine(status) });
+      if (!status.enabled) toast.success(t("lidMode.state.off"), { description: t("lidMode.offDescription") });
+      else if (status.state === "on") toast.success(t("lidMode.state.on"), { description: t("lidMode.onDescription") });
+      else toast.info(t("lidMode.state.on"), { description: lidModeLine(status) });
     },
     onError: (err) => {
       toast.dismiss(ASKING_TOAST);
-      if (err instanceof ApiRequestError && err.code === "power_cancelled") toast.info("Nothing changed", { description: "The Mac password wasn't entered." });
-      else toastApiError(err, "Could not switch lid-closed mode", qc);
+      if (err instanceof ApiRequestError && err.code === "power_cancelled") toast.info(t("lidMode.cancelledTitle"), { description: t("lidMode.cancelledDescription") });
+      else toastApiError(err, t("lidMode.switchError"), qc);
       void qc.invalidateQueries({ queryKey: qk.power });
     },
   });
@@ -66,6 +69,7 @@ export function useLidMode() {
 
 /** Footer switch next to Settings: only on a Mac with a lid, and only on the computer itself. */
 export function LidModeButton() {
+  const { t } = useTranslation("layout");
   const { status, visible, toggle, pending } = useLidMode();
   if (!visible || !status) return null;
   const on = status.enabled;
@@ -80,7 +84,7 @@ export function LidModeButton() {
           variant="ghost"
           size="icon"
           aria-pressed={on}
-          aria-label={broken && !on ? "Let the Mac sleep" : on ? "Turn off lid-closed mode" : "Keep working with the lid closed"}
+          aria-label={broken && !on ? t("lidMode.letSleep") : on ? t("lidMode.turnOff") : t("lidMode.turnOn")}
           disabled={pending}
           onClick={() => toggle(broken ? false : !on)}
           className={cn(
@@ -103,8 +107,8 @@ export function LidModeButton() {
         </Button>
       </TooltipTrigger>
       <TooltipContent className="max-w-64">
-        <p className="font-medium">Lid-closed mode {broken ? "needs attention" : on ? (paused ? "paused" : "on") : "off"}</p>
-        <p className="opacity-80">{on || broken ? lidModeLine(status) : "Click to keep agents working when you close the lid."}</p>
+        <p className="font-medium">{t(`lidMode.state.${broken ? "attention" : on ? (paused ? "paused" : "on") : "off"}`)}</p>
+        <p className="opacity-80">{on || broken ? lidModeLine(status) : t("lidMode.clickHint")}</p>
       </TooltipContent>
     </Tooltip>
   );

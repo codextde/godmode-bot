@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { motion } from "motion/react";
 import type { Agent, Followup } from "@godmode/shared";
 import { AlarmClock, CalendarClock, Play, X } from "lucide-react";
@@ -14,6 +15,7 @@ import { useReduceAnimations } from "@/lib/motion";
 /** Chats agents will pick up again on their own (followup_schedule), soonest first. */
 export function FollowupsSection({ followups, agentById }: { followups: Followup[]; agentById: Map<string, Agent> }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["automations", "common"]);
   const now = useNow(30_000);
   const actions = useFollowupActions();
   const liveRuns = useLive((s) => s.runs);
@@ -24,9 +26,9 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
     <section aria-labelledby="followups-heading" className="space-y-2.5">
       <div className="flex items-baseline gap-2">
         <h2 id="followups-heading" className="eyebrow flex items-center gap-2 [&_svg]:size-3.5">
-          <AlarmClock /> Follow-ups
+          <AlarmClock /> {t("followups.title")}
         </h2>
-        <span className="text-xs text-muted-foreground">Chats your agents will pick up again on their own</span>
+        <span className="text-xs text-muted-foreground">{t("followups.subtitle")}</span>
       </div>
       <ul className="overflow-hidden rounded-xl border bg-card shadow-card">
         {followups.map((f, i) => {
@@ -65,7 +67,7 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
                       <Button
                         size="icon-sm"
                         variant="ghost"
-                        aria-label={`Continue “${f.title}” now`}
+                        aria-label={t("followups.continueNamed", { title: f.title })}
                         disabled={working || (actions.runNow.isPending && actions.runNow.variables === f.conversationId)}
                         onClick={() => actions.runNow.mutate(f.conversationId)}
                       >
@@ -73,10 +75,10 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
                       </Button>
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>{working ? "Working in this chat right now" : "Continue now"}</TooltipContent>
+                  <TooltipContent>{working ? t("followups.working") : t("followups.continueNow")}</TooltipContent>
                 </Tooltip>
                 <FollowupTimePicker dueAt={f.dueAt} onPick={(dueAt) => actions.move.mutateAsync({ conversationId: f.conversationId, dueAt })}>
-                  <Button size="icon-sm" variant="ghost" aria-label={`Change when “${f.title}” continues`}>
+                  <Button size="icon-sm" variant="ghost" aria-label={t("followups.changeWhen", { title: f.title })}>
                     <CalendarClock />
                   </Button>
                 </FollowupTimePicker>
@@ -85,14 +87,14 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
                     <Button
                       size="icon-sm"
                       variant="ghost"
-                      aria-label={`Cancel the follow-up of “${f.title}”`}
+                      aria-label={t("followups.cancelNamed", { title: f.title })}
                       disabled={cancelling}
                       onClick={() => actions.cancel.mutate(f.conversationId)}
                     >
                       {cancelling ? <Spinner /> : <X />}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Cancel</TooltipContent>
+                  <TooltipContent>{t("common:actions.cancel")}</TooltipContent>
                 </Tooltip>
               </div>
             </motion.li>

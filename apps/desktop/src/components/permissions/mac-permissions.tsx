@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, ChevronDown, FolderOpen, HardDrive, MonitorPlay, MousePointerClick, RotateCcw, RotateCw, Settings2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { create } from "zustand";
@@ -19,45 +20,49 @@ import { restartApp } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
+import { t } from "@/i18n";
 
 type PrivacyId = Extract<PermissionId, "accessibility" | "screen-recording" | "full-disk-access">;
 type Privacy = PermissionStatus & { id: PrivacyId; privacy: NonNullable<PermissionStatus["privacy"]> };
 
 const ORDER: PrivacyId[] = ["accessibility", "screen-recording", "full-disk-access"];
 
-const COPY: Record<PrivacyId, { label: string; title: string; purpose: string; icon: typeof MousePointerClick }> = {
+const COPY = {
   accessibility: {
-    label: "Device control",
-    title: "Let agents click and type",
-    purpose: "Agents move the pointer, type and press buttons in the windows you share. macOS calls this Accessibility.",
+    name: "Device control",
+    labelKey: "copy.accessibility.label",
+    titleKey: "copy.accessibility.title",
+    purposeKey: "copy.accessibility.purpose",
     icon: MousePointerClick,
   },
   "screen-recording": {
-    label: "Screen Recording",
-    title: "Let agents see your screen",
-    purpose: "Agents see the windows and screens you share in a chat — nothing else, and only while it is shared.",
+    name: "Screen Recording",
+    labelKey: "copy.screenRecording.label",
+    titleKey: "copy.screenRecording.title",
+    purposeKey: "copy.screenRecording.purpose",
     icon: MonitorPlay,
   },
   "full-disk-access": {
-    label: "Full Disk Access",
-    title: "Let agents open protected folders",
-    purpose: "Imports sign-ins from your browser profiles and lets agents read Mail, Messages and other folders macOS locks away, when a task needs it.",
+    name: "Full Disk Access",
+    labelKey: "copy.fullDiskAccess.label",
+    titleKey: "copy.fullDiskAccess.title",
+    purposeKey: "copy.fullDiskAccess.purpose",
     icon: HardDrive,
   },
-};
+} as const satisfies Record<PrivacyId, { name: string; labelKey: string; titleKey: string; purposeKey: string; icon: typeof MousePointerClick }>;
 
 function steps(p: Privacy): string[] {
   const app = p.privacy.appName;
   if (p.id === "full-disk-access")
     return [
-      "Click Open System Settings. Godmode also shows its app in the Finder.",
-      `Drag ${app} from the Finder into the list, or click + and pick it from Applications.`,
-      `Switch ${app} on, then restart Godmode once.`,
+      t("permissions:steps.fullDisk1"),
+      t("permissions:steps.fullDisk2", { app }),
+      t("permissions:steps.fullDisk3", { app }),
     ];
   return [
-    "Click Allow. If macOS shows a dialog, choose Open System Settings.",
-    `Switch ${app} on under ${p.privacy.pane}. macOS asks for your Mac password.`,
-    p.id === "screen-recording" ? "If macOS offers Quit & Reopen, choose Later — Godmode picks it up by itself." : "Done. This page notices on its own.",
+    t("permissions:steps.allow1"),
+    t("permissions:steps.allow2", { app, pane: p.privacy.pane }),
+    p.id === "screen-recording" ? t("permissions:steps.screenRecording3") : t("permissions:steps.allow3"),
   ];
 }
 
@@ -78,6 +83,7 @@ export const isPrivacyPermission = (id: PermissionId): id is PrivacyId => (ORDER
 
 /** The step-by-step guide for macOS privacy permissions; mounted once, opened from anywhere with `useMacPermissionsGuide`. */
 export function MacPermissionsGuide() {
+  const { t } = useTranslation("permissions");
   const { open, focus, close } = useMacPermissionsGuide();
   const { data } = usePermissions(open);
   const list = useMemo(() => privacyOf(data), [data]);
@@ -110,11 +116,11 @@ export function MacPermissionsGuide() {
   }, [open, list, current]);
   useEffect(() => {
     if (!advanceTo) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       setCurrent(advanceTo);
       setAdvanceTo(null);
     }, 1_200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [advanceTo]);
 
   return (
@@ -127,9 +133,9 @@ export function MacPermissionsGuide() {
                 <ShieldCheck className="size-4" />
               </span>
               <div className="leading-tight">
-                <DialogTitle className="text-sm font-medium">Mac permissions</DialogTitle>
+                <DialogTitle className="text-sm font-medium">{t("title")}</DialogTitle>
                 <DialogDescription className="text-[11.5px]">
-                  {list.length ? `${done} of ${list.length} allowed` : "Checking…"}
+                  {list.length ? t("guide.allowedCount", { done, total: list.length }) : t("guide.checking")}
                 </DialogDescription>
               </div>
             </div>
@@ -151,7 +157,7 @@ export function MacPermissionsGuide() {
               ))}
             </nav>
             <p className="mt-auto flex items-center gap-2 pt-4 text-[11px] text-muted-foreground">
-              <LiveDot className="size-1.5" /> Checks again every few seconds
+              <LiveDot className="size-1.5" /> {t("guide.checksAgain")}
             </p>
           </aside>
           <section className="relative flex min-w-0 flex-col p-6">
@@ -179,7 +185,7 @@ export function MacPermissionsGuide() {
                 </motion.div>
               ) : (
                 <div className="grid flex-1 place-items-center text-sm text-muted-foreground">
-                  {data ? "Nothing to set up on this computer." : <Spinner />}
+                  {data ? t("guide.nothingToSetUp") : <Spinner />}
                 </div>
               )}
             </AnimatePresence>
@@ -191,14 +197,15 @@ export function MacPermissionsGuide() {
 }
 
 function StatusPill({ permission }: { permission: Privacy }) {
+  const { t } = useTranslation("permissions");
   const { ok, privacy } = permission;
   const [text, tone] = privacy.restartNeeded
-    ? ["Restart", "warn"]
+    ? [t("pill.restart"), "warn"]
     : ok
-      ? ["Allowed", "ok"]
+      ? [t("pill.allowed"), "ok"]
       : privacy.inUse
-        ? ["Needed", "warn"]
-        : ["Off", "muted"];
+        ? [t("pill.needed"), "warn"]
+        : [t("pill.off"), "muted"];
   return (
     <span
       className={cn(
@@ -214,6 +221,7 @@ function StatusPill({ permission }: { permission: Privacy }) {
 }
 
 function StepButton({ permission, index, active, onClick }: { permission: Privacy; index: number; active: boolean; onClick: () => void }) {
+  const { t } = useTranslation("permissions");
   const copy = COPY[permission.id];
   return (
     <button
@@ -233,8 +241,8 @@ function StepButton({ permission, index, active, onClick }: { permission: Privac
         {permission.ok ? <DrawCheck className="size-3.5" /> : index + 1}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-medium">{copy.label}</span>
-        <span className="block truncate text-[11px] text-muted-foreground">{permission.privacy.pane === copy.label ? "Privacy & Security" : permission.privacy.pane}</span>
+        <span className="block truncate text-[12.5px] font-medium">{t(copy.labelKey)}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">{permission.privacy.pane === copy.name ? t("mock.privacy") : permission.privacy.pane}</span>
       </span>
       <StatusPill permission={permission} />
     </button>
@@ -256,6 +264,7 @@ function StepPane({
   onNavigate: (id: PrivacyId) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation(["permissions", "common"]);
   const qc = useQueryClient();
   const copy = COPY[p.id];
   const Icon = copy.icon;
@@ -269,17 +278,17 @@ function StepPane({
       return api.doctor.fixPermission(p.id);
     },
     onSuccess: (r) => {
-      if (r.outcome === "failed") toast.error("System Settings didn't open", { description: r.output });
+      if (r.outcome === "failed") toast.error(t("toast.settingsDidntOpen"), { description: r.output });
       else setWaiting(true);
       refresh();
       void qc.invalidateQueries({ queryKey: qk.computer });
     },
-    onError: (e) => toast.error(`Couldn't ask for ${p.name}`, { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("toast.askError", { name: p.name }), { description: errorMessage(e) }),
   });
   const openPane = useMutation({
     mutationFn: (reveal: boolean) => api.doctor.openPrivacySettings(p.id, reveal),
-    onSuccess: (r) => (r.ok ? setWaiting(true) : toast.error("System Settings didn't open", { description: r.output })),
-    onError: (e) => toast.error("System Settings didn't open", { description: errorMessage(e) }),
+    onSuccess: (r) => (r.ok ? setWaiting(true) : toast.error(t("toast.settingsDidntOpen"), { description: r.output })),
+    onError: (e) => toast.error(t("toast.settingsDidntOpen"), { description: errorMessage(e) }),
   });
   const reset = useMutation({
     mutationFn: () => api.doctor.resetPrivacy(p.id),
@@ -288,7 +297,7 @@ function StepPane({
       setWaiting(true);
       refresh();
     },
-    onError: (e) => toast.error(`Couldn't reset ${p.name}`, { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("toast.resetError", { name: p.name }), { description: errorMessage(e) }),
   });
 
   const prev = list[index - 1];
@@ -304,10 +313,10 @@ function StepPane({
         </span>
         <div className="min-w-0">
           <p className="text-[11px] font-medium tracking-[0.12em] text-muted-foreground uppercase">
-            Step {index + 1} of {total} · {p.privacy.pane}
+            {t("pane.step", { step: index + 1, total, pane: p.privacy.pane })}
           </p>
-          <h2 className="mt-0.5 text-[17px] font-medium tracking-[-0.01em]">{copy.title}</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{copy.purpose}</p>
+          <h2 className="mt-0.5 text-[17px] font-medium tracking-[-0.01em]">{t(copy.titleKey)}</h2>
+          <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{t(copy.purposeKey)}</p>
         </div>
       </div>
 
@@ -324,7 +333,7 @@ function StepPane({
         >
           {p.privacy.restartNeeded ? <RotateCw className="mt-0.5 size-4 shrink-0 text-warning" /> : <DrawCheck className="mt-0.5 size-4 shrink-0 text-success" />}
           <div className="min-w-0 flex-1">
-            <p className="font-medium">{p.privacy.restartNeeded ? "Allowed — one restart to go" : `${copy.label} is allowed`}</p>
+            <p className="font-medium">{p.privacy.restartNeeded ? t("pane.restartToGo") : t("pane.isAllowed", { label: t(copy.labelKey) })}</p>
             <p className="mt-0.5 text-xs text-muted-foreground">{p.detail}</p>
           </div>
           {p.privacy.restartNeeded && <RestartButton />}
@@ -341,27 +350,27 @@ function StepPane({
           </ol>
           {!p.privacy.canReset && (
             <p className="mt-3 rounded-md bg-paper-2 px-3 py-2 text-xs text-muted-foreground">
-              Godmode runs from {p.privacy.appName} right now, so macOS asks about {p.privacy.appName}. Switch that on, or start the Godmode app instead.
+              {t("pane.runsFrom", { app: p.privacy.appName })}
             </p>
           )}
           <div className="mt-5 flex flex-wrap items-center gap-2">
             <Button onClick={() => allow.mutate()} disabled={busy}>
               {allow.isPending ? <Spinner /> : p.id === "full-disk-access" ? <Settings2 /> : <ShieldCheck />}
-              {p.id === "full-disk-access" ? "Open System Settings" : "Allow"}
+              {p.id === "full-disk-access" ? t("pane.openSettings") : t("pane.allow")}
             </Button>
             {p.privacy.addManually && p.privacy.appPath ? (
               <Button variant="outline" onClick={() => openPane.mutate(true)} disabled={busy}>
-                <FolderOpen /> Show {p.privacy.appName} in Finder
+                <FolderOpen /> {t("pane.showInFinder", { app: p.privacy.appName })}
               </Button>
             ) : (
               <Button variant="ghost" onClick={() => openPane.mutate(false)} disabled={busy}>
-                <Settings2 /> Open the pane
+                <Settings2 /> {t("pane.openPane")}
               </Button>
             )}
             <AnimatePresence>
               {waiting && (
                 <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="ml-1 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Spinner className="size-3" /> Waiting for the switch…
+                  <Spinner className="size-3" /> {t("pane.waiting")}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -373,20 +382,19 @@ function StepPane({
               className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
               aria-expanded={help}
             >
-              <ChevronDown className={cn("size-3.5 transition-transform", help && "rotate-180")} /> Switched on, but still not allowed?
+              <ChevronDown className={cn("size-3.5 transition-transform", help && "rotate-180")} /> {t("pane.helpToggle")}
             </button>
             <AnimatePresence initial={false}>
               {help && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                   <div className="mt-2 space-y-2 rounded-lg border bg-paper-2 p-3 text-xs leading-relaxed text-muted-foreground">
                     <p>
-                      After an update macOS can keep an old entry: the switch shows on, but no longer counts.{" "}
-                      {p.privacy.canReset ? "Reset it and switch it on again." : `Remove ${p.privacy.appName} with −, add it again with +, and switch it on.`}
+                      {p.privacy.canReset ? t("pane.helpReset") : t("pane.helpManual", { app: p.privacy.appName })}
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {p.privacy.canReset && (
                         <Button size="xs" variant="outline" onClick={() => reset.mutate()} disabled={busy}>
-                          {reset.isPending ? <Spinner className="size-3" /> : <RotateCcw />} Reset and ask again
+                          {reset.isPending ? <Spinner className="size-3" /> : <RotateCcw />} {t("pane.resetAndAsk")}
                         </Button>
                       )}
                       {isTauri && <RestartButton size="xs" variant="ghost" />}
@@ -401,15 +409,15 @@ function StepPane({
 
       <div className="mt-auto flex items-center justify-between pt-6">
         <Button variant="ghost" size="sm" onClick={() => prev && onNavigate(prev.id)} disabled={!prev}>
-          <ArrowLeft /> Back
+          <ArrowLeft /> {t("common:actions.back")}
         </Button>
         {next ? (
           <Button variant={p.ok ? "default" : "outline"} size="sm" onClick={() => onNavigate(next.id)}>
-            {p.ok ? "Next" : "Skip for now"} <ArrowRight />
+            {p.ok ? t("common:actions.next") : t("pane.skipForNow")} <ArrowRight />
           </Button>
         ) : (
           <Button variant={list.every((q) => q.ok) ? "default" : "outline"} size="sm" onClick={onClose}>
-            Done
+            {t("common:actions.done")}
           </Button>
         )}
       </div>
@@ -418,6 +426,7 @@ function StepPane({
 }
 
 function RestartButton({ size = "sm", variant = "default" }: { size?: "sm" | "xs"; variant?: "default" | "ghost" }) {
+  const { t } = useTranslation("permissions");
   const running = useLive((s) => Object.keys(s.runs).length);
   const [confirming, setConfirming] = useState(false);
   const [restarting, setRestarting] = useState(false);
@@ -428,21 +437,21 @@ function RestartButton({ size = "sm", variant = "default" }: { size?: "sm" | "xs
       await restartApp();
     } catch (e) {
       setRestarting(false);
-      toast.error("Couldn't restart Godmode", { description: errorMessage(e) });
+      toast.error(t("restart.error"), { description: errorMessage(e) });
     }
   };
   return (
     <>
       <Button size={size} variant={variant} onClick={() => (running > 0 ? setConfirming(true) : void restart())} disabled={restarting}>
-        {restarting ? <Spinner className="size-3" /> : <RotateCw />} Restart Godmode
+        {restarting ? <Spinner className="size-3" /> : <RotateCw />} {t("restart.button")}
       </Button>
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
         destructive={false}
-        title="Restart Godmode?"
-        description={`${running === 1 ? "1 agent is" : `${running} agents are`} still working. Restarting stops ${running === 1 ? "it" : "them"} — you can pick up where you left off once Godmode is back.`}
-        confirmLabel="Restart now"
+        title={t("restart.confirmTitle")}
+        description={t("restart.confirmDescription", { count: running })}
+        confirmLabel={t("restart.confirm")}
         onConfirm={() => void restart()}
       />
     </>
@@ -450,7 +459,16 @@ function RestartButton({ size = "sm", variant = "default" }: { size?: "sm" | "xs
 }
 
 /** A small System Settings window: where the switch is, and that it is Godmode's. */
+const MOCK_ITEMS = [
+  { id: "wifi", labelKey: "mock.wifi" },
+  { id: "bluetooth", labelKey: "mock.bluetooth" },
+  { id: "notifications", labelKey: "mock.notifications" },
+  { id: "privacy", labelKey: "mock.privacy" },
+  { id: "desktop", labelKey: "mock.desktop" },
+] as const;
+
 function SettingsMock({ permission: p, className }: { permission: Privacy; className?: string }) {
+  const { t } = useTranslation("permissions");
   const on = p.ok;
   return (
     <div className={cn("overflow-hidden rounded-xl border bg-card shadow-card select-none", className)} aria-hidden>
@@ -458,22 +476,22 @@ function SettingsMock({ permission: p, className }: { permission: Privacy; class
         <span className="size-2.5 rounded-full bg-[#ff5f57]" />
         <span className="size-2.5 rounded-full bg-[#febc2e]" />
         <span className="size-2.5 rounded-full bg-[#28c840]" />
-        <span className="ml-3 text-[10.5px] text-muted-foreground">System Settings</span>
+        <span className="ml-3 text-[10.5px] text-muted-foreground">{t("mock.systemSettings")}</span>
       </div>
       <div className="flex">
         <div className="hidden w-36 shrink-0 space-y-1 border-r bg-paper-2/60 p-2 sm:block">
-          {["Wi-Fi", "Bluetooth", "Notifications", "Privacy & Security", "Desktop & Dock"].map((item) => (
+          {MOCK_ITEMS.map((item) => (
             <div
-              key={item}
-              className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10.5px] text-muted-foreground", item === "Privacy & Security" && "bg-[#0a84ff] text-white")}
+              key={item.id}
+              className={cn("flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[10.5px] text-muted-foreground", item.id === "privacy" && "bg-[#0a84ff] text-white")}
             >
-              <span className={cn("size-3 rounded-[4px]", item === "Privacy & Security" ? "bg-white/30" : "bg-border")} />
-              {item}
+              <span className={cn("size-3 rounded-[4px]", item.id === "privacy" ? "bg-white/30" : "bg-border")} />
+              {t(item.labelKey)}
             </div>
           ))}
         </div>
         <div className="min-w-0 flex-1 p-3">
-          <p className="text-[10px] text-muted-foreground">‹ Privacy & Security</p>
+          <p className="text-[10px] text-muted-foreground">‹ {t("mock.privacy")}</p>
           <p className="mt-0.5 text-[12.5px] font-medium">{p.privacy.pane}</p>
           <div className="mt-2 divide-y rounded-lg border">
             <MockRow name="Finder" on dim />
@@ -510,6 +528,7 @@ function MockRow({ name, on, dim, highlight, own }: { name: string; on: boolean;
 
 /** Sidebar notice while a permission an enabled feature needs is missing (macOS only). */
 export function MacPermissionsButton() {
+  const { t } = useTranslation("permissions");
   const { data } = usePermissions(false, 60_000);
   const show = useMacPermissionsGuide((s) => s.show);
   const attention = privacyAttention(privacyOf(data));
@@ -528,9 +547,9 @@ export function MacPermissionsButton() {
               <LiveDot className="absolute -top-0.5 -right-0.5 size-1.5" />
             </span>
             <span className="min-w-0 flex-1 leading-tight">
-              <span className="block text-[12.5px] font-medium">Mac permissions</span>
+              <span className="block text-[12.5px] font-medium">{t("title")}</span>
               <span className="block truncate text-[11px] text-muted-foreground">
-                {first.privacy.restartNeeded && attention.length === 1 ? "Restart Godmode to finish" : `${attention.length} to allow · ${attention.map((p) => COPY[p.id].label).join(", ")}`}
+                {first.privacy.restartNeeded && attention.length === 1 ? t("button.restartToFinish") : t("button.toAllowList", { count: attention.length, list: attention.map((p) => t(COPY[p.id].labelKey)).join(", ") })}
               </span>
             </span>
             <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" />
@@ -538,12 +557,12 @@ export function MacPermissionsButton() {
           <div className="hidden flex-col items-center rounded-lg border bg-card p-1 shadow-card group-data-[collapsible=icon]:flex">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="relative size-8" onClick={() => show(first.id)} aria-label="Set up Mac permissions">
+                <Button variant="ghost" size="icon" className="relative size-8" onClick={() => show(first.id)} aria-label={t("button.setUpLabel")}>
                   <ShieldCheck />
                   <LiveDot className="absolute top-1 right-1" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="right">Mac permissions: {attention.length} to allow</TooltipContent>
+              <TooltipContent side="right">{t("button.tooltip", { count: attention.length })}</TooltipContent>
             </Tooltip>
           </div>
         </motion.div>
@@ -554,6 +573,7 @@ export function MacPermissionsButton() {
 
 /** A compact overview with a button into the guide (onboarding, Settings → Computer). */
 export function MacPermissionsSummary({ className }: { className?: string }) {
+  const { t } = useTranslation("permissions");
   const { data } = usePermissions();
   const show = useMacPermissionsGuide((s) => s.show);
   const list = privacyOf(data);
@@ -563,11 +583,11 @@ export function MacPermissionsSummary({ className }: { className?: string }) {
     <div className={cn("rounded-lg border bg-card p-3.5", className)}>
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Mac permissions</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{missing.length ? `${list.length - missing.length} of ${list.length} allowed — a short guide shows where to switch them on.` : "Everything is allowed."}</p>
+          <p className="text-sm font-medium">{t("title")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{missing.length ? t("summary.partial", { done: list.length - missing.length, total: list.length }) : t("summary.all")}</p>
         </div>
         <Button size="sm" variant={missing.length ? "default" : "outline"} onClick={() => show(missing[0]?.id)}>
-          {missing.length ? "Set up" : "Review"} <ArrowRight />
+          {missing.length ? t("summary.setUp") : t("summary.review")} <ArrowRight />
         </Button>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
@@ -581,7 +601,7 @@ export function MacPermissionsSummary({ className }: { className?: string }) {
               className="flex items-center gap-2 rounded-md border bg-paper-2 px-2.5 py-2 text-left transition-colors hover:bg-card"
             >
               <Icon className={cn("size-4 shrink-0", p.ok ? "text-success" : "text-muted-foreground")} />
-              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{COPY[p.id].label}</span>
+              <span className="min-w-0 flex-1 truncate text-[12px] font-medium">{t(COPY[p.id].labelKey)}</span>
               <StatusPill permission={p} />
             </button>
           );

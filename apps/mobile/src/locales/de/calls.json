@@ -1,0 +1,43 @@
+{
+  "unavailableTitle": "Anrufe sind noch nicht verfügbar",
+  "unavailableBody": "Aktualisiere Godmode auf deinem Computer, um Anrufe hier zu sehen.",
+  "list": {
+    "title": "Anrufe",
+    "live_one": "{{count}} Anruf läuft gerade. Transkript und Zusammenfassung kommen, sobald er endet.",
+    "live_other": "{{count}} Anrufe laufen gerade. Transkripte und Zusammenfassungen kommen, sobald sie enden.",
+    "loadFailed": "Deine Anrufe konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Anrufe",
+    "emptyBody": "Agenten können ein Unternehmen anrufen, um einen Termin zu buchen, bei einem Lead nachzuhaken oder dich anrufen, wenn eine Frage nicht warten kann. Anrufe richtest du in Godmode auf deinem Computer ein.",
+    "incomingWith": "Eingehender Anruf von {{name}}",
+    "outgoingWith": "Ausgehender Anruf an {{name}}",
+    "incomingCall": "Eingehender Anruf",
+    "noGoal": "Kein Ziel angegeben"
+  },
+  "detail": {
+    "title": "Anruf",
+    "openFailed": "Anruf konnte nicht geöffnet werden",
+    "loading": "Anruf wird geladen…",
+    "goal": {
+      "task": "Ziel",
+      "question": "Frage an dich",
+      "inform": "Neuigkeiten für dich",
+      "inbound": "Was der Anrufer wollte"
+    },
+    "incoming": "Eingehend",
+    "outgoing": "Ausgehend",
+    "dateFormat": "EEE, d. MMM · p",
+    "ownerCall": "Von deiner Nummer",
+    "duration": "Dauer",
+    "openChat": "Chat öffnen",
+    "outcome": "Ergebnis",
+    "outcomeMissed": "Ergebnis · Ziel nicht erreicht",
+    "yourAnswer": "Deine Antwort",
+    "summary": "Zusammenfassung",
+    "processing": "Der Anruf ist beendet. Godmode schreibt die Zusammenfassung.",
+    "waiting": "Transkript und Zusammenfassung erscheinen hier, wenn der Anruf endet.",
+    "recording": "Die Aufnahme läuft in Godmode auf deinem Computer.",
+    "caller": "Anrufer",
+    "them": "Gegenüber",
+    "transcript": "Transkript"
+  }
+}

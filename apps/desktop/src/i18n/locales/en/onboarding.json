@@ -1,0 +1,245 @@
+{
+  "kit": {
+    "steps": "Setup steps",
+    "stepOf": "Step {{current}} of {{total}}",
+    "atLeast_one": "At least {{count}} character",
+    "atLeast_other": "At least {{count}} characters",
+    "useAtLeast_one": "Use at least {{count}} character.",
+    "useAtLeast_other": "Use at least {{count}} characters.",
+    "confirm": "Confirm",
+    "typeAgain": "Type it again",
+    "matches": "Matches",
+    "mismatch": "Doesn't match yet."
+  },
+  "unlock": {
+    "tooMany": "Too many attempts — wait a minute and try again.",
+    "wrong": "That passphrase isn't right."
+  },
+  "remote": {
+    "eyebrow": "Remote dashboard",
+    "title": "Protect your dashboard.",
+    "description": "Godmode is running as a server. Set a password so you can sign in from a browser without copying access tokens around.",
+    "warningTitle": "Anyone with this password controls your agents and their logins.",
+    "warning": "Use a long, unique password, and only expose the dashboard through a reverse proxy with TLS.",
+    "passwordLabel": "Dashboard password",
+    "alreadySet": "A dashboard password is already set.",
+    "change": "Change it",
+    "keep": "Keep current",
+    "skip": "Skip — use tokens only",
+    "set": "Set password"
+  },
+  "claude": {
+    "startFailed": "Could not start the sign-in",
+    "codeFailed": "Could not send the code",
+    "signedIn": "Signed in to Claude",
+    "signedInDescription": "Your agents can work again.",
+    "linkCopiedToast": "Sign-in link copied",
+    "copyFailed": "Could not copy the link",
+    "copyFailedHint": "Open the sign-in page instead.",
+    "signInHere": "Sign in on this device",
+    "finishInBrowser": "Finish signing in in your browser",
+    "stepsAfar": "Open the sign-in page, sign in with your Claude account and click <b>Authorize</b>. Then paste the code it shows below.",
+    "steps": "Sign in with your Claude account and click <b>Authorize</b>. This updates by itself.",
+    "gettingLink": "Getting the sign-in link…",
+    "linkCopied": "Sign-in link copied.",
+    "pasteAfar": "Paste it into a browser on this device if the page did not open.",
+    "pasteHere": "No browser window opened? Paste it into your browser.",
+    "openAfar": "Open the page here, or copy the link into another browser.",
+    "openHere": "No browser window opened? Open the page, or copy the link into your browser.",
+    "openPage": "Open sign-in page",
+    "copyAgain": "Copy again",
+    "copyLink": "Copy link",
+    "codeLabelAfar": "Code from the sign-in page",
+    "codeLabel": "Got a code from the sign-in page? Paste it here.",
+    "codePlaceholder": "Paste the code"
+  },
+  "vault": {
+    "guarantees": {
+      "key": "Your passphrase derives the encryption key (scrypt). It is never stored or sent anywhere.",
+      "encryption": "Every password, 2FA secret and API key is encrypted individually with AES-256-GCM.",
+      "fill": "Agents fill secrets straight into the browser — the AI model never sees them unless you allow it."
+    },
+    "eyebrow": "Vault",
+    "readyTitle": "Your vault is ready.",
+    "readyDescription": "It's unlocked and encrypted on this machine.",
+    "readyBody": "Logins, 2FA codes and API keys you add are encrypted with your passphrase.",
+    "createTitle": "Create your vault.",
+    "createSubtitle": "Sealed on this machine.",
+    "createDescription": "The vault holds website logins, 2FA secrets and API keys so your agents can sign in without interrupting you.",
+    "passphrase": "Vault passphrase",
+    "noRecovery": "It can't be recovered.",
+    "noRecoveryHint": "Store it in your password manager — without it, the vault can only be reset.",
+    "remember": "Remember on this device",
+    "rememberHint": "Recommended so automations run unattended. The vault key is kept in your operating system's keychain and the vault unlocks automatically on this machine. Turn off to type the passphrase after every restart.",
+    "create": "Create vault",
+    "unlockTitle": "Unlock your vault.",
+    "unlockDescription": "A vault already exists on this machine. Enter its passphrase to continue setting up.",
+    "unlock": "Unlock"
+  },
+  "doctor": {
+    "fix": {
+      "browserUse": "Install it with uv: `uv tool install browser-use`."
+    },
+    "hints": {
+      "claudeAuth": "Prefer an API key? Add an Anthropic key later in Integrations → API keys.",
+      "browserUse": "Gives agents a real browser to work in.",
+      "chrome": "Used to import your existing sign-ins into Godmode's browser.",
+      "git": "Optional — agent memory is versioned with a built-in git implementation."
+    },
+    "checkFailed": "Check failed",
+    "runFailed": "Could not run the system check",
+    "recheck": "Re-check",
+    "installed": "{{name}} installed",
+    "installFailed": "Installing {{name}} failed",
+    "seeLog": "See the log for details.",
+    "ok": "OK",
+    "missing": "Missing",
+    "installing": "Installing…",
+    "install": "Install",
+    "installLog": "Install log",
+    "installFailedShowLog": "Install failed — show log",
+    "noOutput": "(no output)",
+    "signedInChecking": "Signed in. Checking…",
+    "ownerOnly": "Only the owner of this computer can sign Claude in.",
+    "signInAgain": "Sign in again",
+    "signIn": "Sign in to Claude",
+    "opensHere": "Opens the sign-in page here. Works with a Claude Pro or Max plan.",
+    "opensBrowser": "Opens your browser. Works with a Claude Pro or Max plan."
+  },
+  "done": {
+    "next": {
+      "agent": {
+        "title": "Hire your first agent",
+        "body": "Pick a template or describe the job."
+      },
+      "logins": {
+        "title": "Save your logins",
+        "body": "Agents sign in like you, 2FA included."
+      },
+      "totp": {
+        "title": "Import 2FA codes",
+        "body": "Scan Google Authenticator exports."
+      },
+      "memory": {
+        "title": "Bring your memory",
+        "body": "From ChatGPT, Claude or Gemini."
+      }
+    },
+    "shortDate": "MMM d",
+    "trialUntil": "Free trial until {{date}}",
+    "activated": "Activated",
+    "freeUntil": "Free until {{date}}",
+    "freeBuild": "Free in this build",
+    "needsKey": "Needs a licence key",
+    "notActivated": "Not activated yet",
+    "allSetNamed": "You're all set, {{name}}.",
+    "allSet": "You're all set.",
+    "ready": "Your coworker is ready.",
+    "intro": "Tell it what you need in plain words. It signs in, browses and reports back.",
+    "setup": "Set up on this computer",
+    "setupMissing": "Something is still missing. See Settings, System.",
+    "setupOk": "Installed and signed in",
+    "vault": "Encrypted vault",
+    "vaultCreated": "Created",
+    "vaultUnlocked": "Unlocked",
+    "activate": "Activate",
+    "passwordSet": "Set",
+    "passwordNotSet": "Not set. Sign in with access tokens.",
+    "nextUp": "Next up",
+    "activateToStart": "Activate Godmode to start working.",
+    "start": "Start working",
+    "chrome": {
+      "noProfile": "No Godmode browser profile exists yet. Import from the Browser page later.",
+      "label": "Chrome sign-ins",
+      "imported_one": "Imported from {{formatted}} site",
+      "imported_other": "Imported from {{formatted}} sites",
+      "looking": "Looking for Chrome…",
+      "none": "No Chrome profile found. Import later from Browser.",
+      "hint": "Optional. Agents start already logged in to the sites you use.",
+      "profile": "Chrome profile",
+      "importing": "Importing…",
+      "import": "Import",
+      "importFrom": "Import from {{name}}",
+      "keychain": "macOS may ask for Keychain access. Allow it so Chrome's cookies can be read."
+    }
+  },
+  "setup": {
+    "noReason": "The installer stopped without saying why.",
+    "bubble": {
+      "ready": "All set. I'm ready to work.",
+      "working": "Getting myself ready. This takes a few minutes.",
+      "hiNamed": "Hi {{name}}, I'm Godmode, your new coworker.",
+      "hi": "Hi, I'm Godmode, your new coworker."
+    },
+    "title": "Let's get Godmode ready.",
+    "subtitle": "One click, a few minutes.",
+    "introReady": "Everything Godmode needs is already on this computer. Pick how it should look and carry on.",
+    "intro": "Godmode sets up everything it needs on this computer by itself. You only approve the Claude sign-in in your browser.",
+    "nameLabel": "What should Godmode call you?",
+    "namePlaceholder": "Your first name",
+    "checkFailed": "Could not look at this computer",
+    "status": {
+      "ready": "Godmode is ready to work.",
+      "almost": "Almost there.",
+      "working": "Setting things up…"
+    },
+    "progress": "{{done}} of {{total}}",
+    "installed": "Installed",
+    "installedVersion": "Installed · {{version}}",
+    "signedIn": "Signed in",
+    "rows": {
+      "claude": {
+        "body": "The AI that does the work."
+      },
+      "account": {
+        "title": "Your Claude account",
+        "body": "Sign in with a Claude Pro or Max plan.",
+        "active": "Waiting for you in the browser",
+        "starting": "Starting the sign-in…",
+        "waitsForClaude": "Starts once Claude Code is installed",
+        "action": "Not signed in yet. It opens in your browser.",
+        "unfinished": "The sign-in did not finish.",
+        "needsClaude": "Needs Claude Code first.",
+        "signIn": "Sign in"
+      },
+      "browser": {
+        "title": "Web browser",
+        "body": "So your agents can open websites and sign in.",
+        "downloading": "Downloading the browser…"
+      }
+    },
+    "hideDetails": "Hide details",
+    "showDetails": "Show details",
+    "lookWhileWaiting": "While you wait: how should Godmode look?",
+    "look": "How should Godmode look?",
+    "lookHint": "Same features either way. You can switch any time in Settings.",
+    "start": "Set up Godmode",
+    "startHint": "Installs everything by itself, then opens the Claude sign-in.",
+    "continueAnyway": "Continue anyway",
+    "keepOpen": "You can keep this window open, it finishes by itself.",
+    "finishLater": "Agents start working once everything above is green. You can finish this later in Settings, System.",
+    "waiting": "Waiting",
+    "didNotInstall": "Did not install.",
+    "byHand": "To install it by hand:",
+    "optionalSuffix": "(optional)"
+  },
+  "steps": {
+    "setup": {
+      "title": "Set up",
+      "hint": "Installs and signs in by itself"
+    },
+    "vault": {
+      "title": "Vault",
+      "hint": "Keeps your logins safe"
+    },
+    "remote": {
+      "title": "Remote dashboard",
+      "hint": "Password for web access"
+    },
+    "done": {
+      "title": "Done",
+      "hint": "Start working"
+    }
+  },
+  "staysHere": "Everything stays on this machine. You can change any of this later in Settings."
+}

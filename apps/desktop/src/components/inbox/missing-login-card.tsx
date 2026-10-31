@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import { Archive, CircleAlert, Check, ExternalLink, KeyRound, RotateCcw, ShieldAlert, ShieldPlus, UserX, X } from "lucide-react";
 import type { Agent, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
@@ -15,18 +16,20 @@ import { api } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { LinkTotpDialog } from "./link-totp-dialog";
 
-export const KIND_META: Record<MissingLoginKind, { label: string; icon: typeof KeyRound; className: string }> = {
-  missing_credential: { label: "Missing login", icon: KeyRound, className: "bg-warning/12 text-warning" },
-  invalid_credential: { label: "Login failed", icon: ShieldAlert, className: "bg-destructive/10 text-destructive" },
-  missing_totp: { label: "Missing 2FA", icon: ShieldPlus, className: "bg-warning/12 text-warning" },
-  missing_account: { label: "No account", icon: UserX, className: "bg-secondary text-foreground" },
-  other: { label: "Needs attention", icon: CircleAlert, className: "bg-secondary text-muted-foreground" },
-};
+export const KIND_META = {
+  missing_credential: { labelKey: "missingLogin.kinds.missingCredential", icon: KeyRound, className: "bg-warning/12 text-warning" },
+  invalid_credential: { labelKey: "missingLogin.kinds.invalidCredential", icon: ShieldAlert, className: "bg-destructive/10 text-destructive" },
+  missing_totp: { labelKey: "missingLogin.kinds.missingTotp", icon: ShieldPlus, className: "bg-warning/12 text-warning" },
+  missing_account: { labelKey: "missingLogin.kinds.missingAccount", icon: UserX, className: "bg-secondary text-foreground" },
+  other: { labelKey: "missingLogin.kinds.other", icon: CircleAlert, className: "bg-secondary text-muted-foreground" },
+} as const satisfies Record<MissingLoginKind, { labelKey: string; icon: typeof KeyRound; className: string }>;
 
 /** Status change with optimistic removal from the current tab's list. */
 export function useMissingLoginStatus(currentStatus: MissingLoginStatus) {
+  const { t } = useTranslation("inbox");
   const qc = useQueryClient();
   const listKey = [...qk.missingLogins, currentStatus];
   return useMutation({
@@ -38,12 +41,12 @@ export function useMissingLoginStatus(currentStatus: MissingLoginStatus) {
       return { previous };
     },
     onSuccess: (_res, { status }) => {
-      const msg = status === "resolved" ? "Marked as resolved" : status === "dismissed" ? "Dismissed" : "Moved back to open";
+      const msg = status === "resolved" ? t("missingLogin.markedResolved") : status === "dismissed" ? t("missingLogin.dismissed") : t("missingLogin.reopened");
       toast.success(msg);
     },
     onError: (e, _vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(listKey, ctx.previous);
-      toastApiError(e, "Could not update the request", qc);
+      toastApiError(e, t("missingLogin.updateError"), qc);
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.missingLogins });
@@ -69,6 +72,8 @@ export function MissingLoginCard({
   pending: boolean;
   autoOpenLink?: boolean;
 }) {
+  const { t } = useTranslation("inbox");
+  const { dateLocale } = useLocale();
   const navigate = useNavigate();
   const [linkOpen, setLinkOpen] = useState(autoOpenLink && item.kind === "missing_totp" && item.status === "open");
   const meta = KIND_META[item.kind] ?? KIND_META.other;
@@ -76,7 +81,7 @@ export function MissingLoginCard({
   const domain = domainFromUrl(item.url);
   const when = (() => {
     try {
-      return formatDistanceToNow(new Date(item.updatedAt || item.createdAt), { addSuffix: true });
+      return formatDistanceToNow(new Date(item.updatedAt || item.createdAt), { addSuffix: true, locale: dateLocale });
     } catch {
       return "";
     }
@@ -96,23 +101,23 @@ export function MissingLoginCard({
         "group relative overflow-hidden rounded-xl border bg-card p-4 shadow-card transition hover:shadow-float",
         open && (failed ? "border-destructive/25" : "border-warning/30"),
       )}
-      aria-label={`${meta.label}: ${item.service}`}
+      aria-label={`${t(meta.labelKey)}: ${item.service}`}
     >
       {open && <span aria-hidden className={cn("absolute inset-y-0 left-0 w-[3px]", failed ? "bg-destructive" : "bg-warning")} />}
       <div className="flex items-start gap-3.5">
         <Favicon domain={domain} name={item.service} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{item.service || domain || "Unknown service"}</h3>
+            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{item.service || domain || t("missingLogin.unknownService")}</h3>
             <Badge variant="secondary" className={cn("h-5 gap-1 border-0 px-1.5 text-[11px]", meta.className)}>
-              <KindIcon className="size-3" /> {meta.label}
+              <KindIcon className="size-3" /> {t(meta.labelKey)}
             </Badge>
             {item.occurrences > 1 && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="rounded-[5px] bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground tabular-nums">×{item.occurrences}</span>
                 </TooltipTrigger>
-                <TooltipContent>Reported {item.occurrences} times</TooltipContent>
+                <TooltipContent>{t("missingLogin.reportedTimes", { count: item.occurrences })}</TooltipContent>
               </Tooltip>
             )}
             <span className="ml-auto shrink-0 text-xs text-muted-foreground">{when}</span>
@@ -127,7 +132,7 @@ export function MissingLoginCard({
                   type="button"
                   onClick={() => void openExternal(item.url)}
                   className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition group-hover:opacity-100 hover:text-foreground focus-visible:opacity-100"
-                  aria-label={`Open ${item.url} in your browser`}
+                  aria-label={t("missingLogin.openInBrowser", { url: item.url })}
                 >
                   <ExternalLink className="size-3" />
                 </button>
@@ -144,28 +149,28 @@ export function MissingLoginCard({
               >
                 <AgentAvatar agent={agent} size="sm" mood={open ? "attention" : "idle"} />
                 <span className="truncate">
-                  Reported by <span className="font-medium text-foreground">{agent.name}</span>
+                  <Trans t={t} i18nKey="missingLogin.reportedBy" values={{ name: agent.name }} components={{ b: <span className="font-medium text-foreground" /> }} />
                 </span>
               </Link>
             ) : (
-              <span className="mr-auto text-xs text-muted-foreground">{item.agentId ? "Reported by an agent" : "Reported by Godmode"}</span>
+              <span className="mr-auto text-xs text-muted-foreground">{item.agentId ? t("missingLogin.reportedByAgent") : t("missingLogin.reportedByGodmode")}</span>
             )}
 
             {open ? (
               <>
                 <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => onStatus("dismissed")} disabled={pending}>
-                  <X /> Dismiss
+                  <X /> {t("missingLogin.dismiss")}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => onStatus("resolved")} disabled={pending}>
-                  <Check /> Mark resolved
+                  <Check /> {t("missingLogin.markResolved")}
                 </Button>
                 {item.kind === "missing_totp" ? (
                   <Button size="sm" onClick={() => setLinkOpen(true)}>
-                    <ShieldPlus /> Add 2FA
+                    <ShieldPlus /> {t("missingLogin.add2fa")}
                   </Button>
                 ) : (
                   <Button size="sm" onClick={addLogin}>
-                    <KeyRound /> {item.kind === "invalid_credential" ? "Update login" : "Add login"}
+                    <KeyRound /> {item.kind === "invalid_credential" ? t("missingLogin.updateLogin") : t("missingLogin.addLogin")}
                   </Button>
                 )}
               </>
@@ -173,10 +178,10 @@ export function MissingLoginCard({
               <>
                 <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                   {item.status === "resolved" ? <Check className="size-3.5 text-success" /> : <Archive className="size-3.5" />}
-                  {item.status === "resolved" ? (item.credentialId ? "Resolved with a saved login" : "Resolved") : "Dismissed"}
+                  {item.status === "resolved" ? (item.credentialId ? t("missingLogin.resolvedWithLogin") : t("missingLogin.resolved")) : t("missingLogin.dismissed")}
                 </span>
                 <Button size="sm" variant="outline" onClick={() => onStatus("open")} disabled={pending}>
-                  <RotateCcw /> Reopen
+                  <RotateCcw /> {t("missingLogin.reopen")}
                 </Button>
               </>
             )}

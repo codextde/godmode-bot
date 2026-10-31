@@ -1,5 +1,7 @@
 import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
+  SearchResults,
+  HexStatus,
   AndroidConnectInput,
   AndroidConnectResult,
   AndroidDevice,
@@ -12,6 +14,8 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   CardPurchase,
   CardPurchasePatch,
   PaymentCard,
+  PullRequestView,
+  PullRequestMergeInput,
   PaymentCardInput,
   PaymentCardSecrets,
   AttentionItem,
@@ -68,6 +72,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   ClaudeUpdateResult,
   ClaudeLoginStatus,
   ClaudeUpdateStatus,
+  ClaudeUsage,
   CleanupId,
   CleanupReport,
   CleanupRun,
@@ -218,8 +223,12 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   Offer,
   AcceptOfferResult,
   ImportMemoryInput,
+  ClaudeAccount,
+  ClaudeAccountLogin,
+  ClaudeAccountsState,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
+import { t } from "@/i18n";
 import { cloudContext, getCoreInfo, goToCloudLogin } from "./core";
 
 export class ApiRequestError extends Error {
@@ -335,7 +344,7 @@ export async function fetchBlob(path: string): Promise<Blob> {
   const res = await fetch(`${baseUrl}${path}`, { headers, credentials: "same-origin" });
   if (!res.ok) {
     if (res.status === 401) onUnauthorized?.();
-    throw new ApiRequestError(res.status, res.status === 404 ? "The file doesn't exist anymore" : res.statusText || `HTTP ${res.status}`);
+    throw new ApiRequestError(res.status, res.status === 404 ? t("system:api.fileGone") : res.statusText || `HTTP ${res.status}`);
   }
   return res.blob();
 }
@@ -400,6 +409,16 @@ export const api = {
     get: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
   },
 
+  claudeAccounts: {
+    list: () => get<ClaudeAccountsState>("/api/claude-accounts"),
+    refresh: () => post<ClaudeAccountsState>("/api/claude-accounts/refresh"),
+    startLogin: (accountId: string | null = null) => post<ClaudeAccountLogin>("/api/claude-accounts/login", { accountId }),
+    submitCode: (code: string) => post<ClaudeAccountLogin>("/api/claude-accounts/login/code", { code }),
+    cancelLogin: () => del<ClaudeAccountLogin>("/api/claude-accounts/login"),
+    setDefault: (id: string) => post<ClaudeAccount[]>(`/api/claude-accounts/${encodeURIComponent(id)}/default`),
+    remove: (id: string) => del<ClaudeAccount[]>(`/api/claude-accounts/${encodeURIComponent(id)}`),
+  },
+
   doctor: {
     get: (refresh = false) => get<DoctorReport>("/api/doctor", { refresh: refresh ? 1 : undefined }),
     install: (id: DependencyId) => post<{ ok: boolean; output: string }>("/api/doctor/install", { id }),
@@ -408,6 +427,7 @@ export const api = {
     submitClaudeLoginCode: (code: string) => post<ClaudeLoginStatus>("/api/doctor/claude-login/code", { code }),
     cancelClaudeLogin: () => del<ClaudeLoginStatus>("/api/doctor/claude-login"),
     copyClaudeLoginLink: () => post<{ ok: boolean }>("/api/doctor/claude-login/copy"),
+    claudeUsage: (refresh = false) => get<ClaudeUsage>("/api/doctor/claude-usage", { refresh: refresh ? 1 : undefined }),
     claudeUpdate: (refresh = false) => get<ClaudeUpdateStatus>("/api/doctor/claude-update", { refresh: refresh ? 1 : undefined }),
     updateClaude: () => post<ClaudeUpdateResult>("/api/doctor/claude-update"),
     permissions: () => get<PermissionReport>("/api/doctor/permissions"),
@@ -513,6 +533,12 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/projects/${id}/sources/${sourceId}/sync`),
     move: (id: string, input: ProjectMoveInput, grant?: string) => request<ScopeMoveResult>("POST", `/api/projects/${id}/move`, input, withGrant(grant)),
+  },
+
+  github: {
+    pull: (url: string, opts: { background?: boolean; refresh?: boolean } = {}) =>
+      get<PullRequestView>("/api/github/pull", { url, background: opts.background ? 1 : undefined, refresh: opts.refresh ? 1 : undefined }),
+    merge: (input: PullRequestMergeInput) => post<PullRequestView>("/api/github/pull/merge", input),
   },
 
   tasks: {
@@ -641,9 +667,12 @@ export const api = {
     list: (q: { limit?: number; routineId?: string } = {}) => get<AutomationEvent[]>("/api/automation-events", q),
   },
 
+  search: (q: string, opts: { limit?: number } = {}) => get<SearchResults>("/api/search", { q, ...opts }),
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
+    /** Show these chats as new again until they are opened. */
+    unread: (ids: string[]) => post<{ unread: number }>("/api/conversations/unread", { ids }),
     /** `ongoing`: only chats with work ahead (working, standing still, or continuing by themselves later). */
     list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
@@ -1034,6 +1063,8 @@ export const api = {
       return request<{ text: string }>("POST", "/api/voice/transcribe", form);
     },
     speak: (text: string) => request<Blob>("POST", "/api/voice/speak", { text }),
+    hex: () => get<HexStatus>("/api/voice/hex"),
+    prepareHex: (language?: string) => post<HexStatus>("/api/voice/hex/prepare", { language }),
   },
 
   calls: {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TotpCode } from "@godmode/shared";
+import { t } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isVaultLocked, toastApiError } from "./vault-utils";
@@ -54,7 +55,7 @@ export function useTotpCodes(enabled = true) {
       reported.current = error;
       // The page's list query already reports a locked vault.
       if (isVaultLocked(error)) void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      else toastApiError(error, "Could not load 2FA codes", qc);
+      else toastApiError(error, t("vault:totp.loadFailed"), qc);
     }
   }, [error, qc]);
 

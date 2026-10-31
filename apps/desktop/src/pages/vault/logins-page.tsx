@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { defaultRangeExtractor, useVirtualizer, type Range } from "@tanstack/react-virtual";
 import { Bot, FileKey, KeyRound, Lock, Plus, ScrollText, Search, SearchX, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { Credential, TotpEntry } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,6 +18,7 @@ import { PasswordsHeader } from "@/components/vault/passwords-header";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
+import { t as tg } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
@@ -27,6 +29,7 @@ const PREFILL_PARAMS = ["new", "domain", "service", "missingLoginId"];
 const byName = new Intl.Collator(undefined, { sensitivity: "base" });
 
 export default function LoginsPage() {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const sidebarScope = useUi((s) => s.workspace);
   const [scope, setScope] = useState(sidebarScope);
@@ -45,7 +48,7 @@ export default function LoginsPage() {
   const totpById = useMemo(() => new Map((totps.data ?? []).map((t) => [t.id, t])), [totps.data]);
 
   useEffect(() => {
-    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, "Vault locked", qc);
+    if (list.error && isVaultLocked(list.error)) toastApiError(list.error, tg("vault:passwordImport.vaultLocked"), qc);
   }, [list.error, qc]);
 
   const credentials = useMemo(() => [...(list.data ?? [])].sort((a, b) => byName.compare(a.name, b.name)), [list.data]);
@@ -94,10 +97,10 @@ export default function LoginsPage() {
       void qc.invalidateQueries({ queryKey: qk.credentials });
       void qc.invalidateQueries({ queryKey: qk.totp });
       void qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success("Login deleted");
+      toast.success(t("loginsPage.deleted"));
       setToDelete(null);
     },
-    onError: (e) => toastApiError(e, "Could not delete login", qc),
+    onError: (e) => toastApiError(e, t("loginsPage.deleteFailed"), qc),
   });
 
   // "/" focuses search
@@ -123,10 +126,10 @@ export default function LoginsPage() {
         actions={
           <>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <FileKey /> Import
+              <FileKey /> {t("totpImport.import")}
             </Button>
             <Button onClick={openCreate}>
-              <Plus /> Add login
+              <Plus /> {t("credential.addTitle")}
             </Button>
           </>
         }
@@ -139,10 +142,10 @@ export default function LoginsPage() {
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
-            <InputGroupInput ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search logins, usernames, domains…" aria-label="Search logins" />
+            <InputGroupInput ref={searchRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("loginsPage.searchPlaceholder")} aria-label={t("loginsPage.searchLabel")} />
             <InputGroupAddon align="inline-end">
               {search ? (
-                <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setSearch("")}>
+                <InputGroupButton size="icon-xs" aria-label={t("passwordImport.clearSearch")} onClick={() => setSearch("")}>
                   <X />
                 </InputGroupButton>
               ) : (
@@ -153,7 +156,7 @@ export default function LoginsPage() {
           <ScopeFilterSelect value={scope} onChange={setScope} />
           {list.data && (
             <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-              {credentials.length} {credentials.length === 1 ? "login" : "logins"}
+              {t("loginsPage.count", { count: credentials.length })}
             </span>
           )}
         </div>
@@ -163,11 +166,11 @@ export default function LoginsPage() {
         ) : list.isError && !list.data ? (
           <EmptyState
             icon={<Lock />}
-            title={isVaultLocked(list.error) ? "The vault is locked" : "Couldn't load logins"}
-            description={isVaultLocked(list.error) ? "Unlock the vault to see your logins." : errorMessage(list.error)}
+            title={isVaultLocked(list.error) ? t("cardsPage.lockedTitle") : t("loginsPage.loadFailed")}
+            description={isVaultLocked(list.error) ? t("loginsPage.lockedDescription") : errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -175,17 +178,17 @@ export default function LoginsPage() {
           isFiltered ? (
             <EmptyState
               icon={<SearchX />}
-              title={q ? `No logins match “${q}”` : "No logins in this scope"}
-              description={q ? "Try another name, username or domain." : "Logins saved as Global are available everywhere — switch the scope filter to see them."}
+              title={q ? t("loginsPage.noMatch", { query: q }) : t("loginsPage.emptyScopeTitle")}
+              description={q ? t("loginsPage.noMatchDescription") : t("loginsPage.emptyScopeDescription")}
               action={
                 <div className="flex gap-2">
                   {q && (
                     <Button variant="outline" onClick={() => setSearch("")}>
-                      Clear search
+                      {t("passwordImport.clearSearch")}
                     </Button>
                   )}
                   <Button onClick={openCreate}>
-                    <Plus /> Add login
+                    <Plus /> {t("credential.addTitle")}
                   </Button>
                 </div>
               }
@@ -193,24 +196,24 @@ export default function LoginsPage() {
           ) : (
             <EmptyState
               icon={<KeyRound />}
-              title="Your vault is ready for logins"
-              description="Add the website logins your agents need. They're encrypted on this device and typed into the browser for the agent — the AI never sees them."
+              title={t("loginsPage.emptyTitle")}
+              description={t("loginsPage.emptyDescription")}
               action={
                 <div className="flex flex-col items-center gap-3">
                   <div className="flex flex-wrap justify-center gap-2">
                     <Button onClick={() => setImportOpen(true)}>
-                      <FileKey /> Import from Chrome, 1Password or Dashlane
+                      <FileKey /> {t("loginsPage.importFrom")}
                     </Button>
                     <Button variant="outline" onClick={openCreate}>
-                      <Plus /> Add a login
+                      <Plus /> {t("loginsPage.addFirst")}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    When an agent hits a login it doesn't have, it lands in{" "}
-                    <Link to="/inbox" className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground">
-                      Needs you
-                    </Link>
-                    .
+                    <Trans
+                      t={t}
+                      i18nKey="loginsPage.missingHint"
+                      components={{ link: <Link to="/inbox" className="text-foreground underline decoration-foreground/25 underline-offset-2 hover:decoration-foreground" /> }}
+                    />
                   </p>
                 </div>
               }
@@ -219,10 +222,10 @@ export default function LoginsPage() {
         ) : (
           <div className={cn("@container full-motion:animate-in overflow-hidden rounded-xl border bg-card shadow-card transition-opacity full-motion:fade-in-0", list.isFetching && list.isPlaceholderData && "opacity-70")}>
             <div className={cn(CREDENTIAL_GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
-              <span className="pl-12">Login</span>
-              <span>Username</span>
-              <span>Password</span>
-              <span>Scope</span>
+              <span className="pl-12">{t("passwordImport.columns.login")}</span>
+              <span>{t("passwordImport.columns.username")}</span>
+              <span>{t("credential.password")}</span>
+              <span>{t("passkeysPage.columns.scope")}</span>
               <span className="w-8" />
             </div>
             <CredentialList credentials={credentials} totpById={totpById} onEdit={openEdit} onDelete={setToDelete} />
@@ -236,8 +239,8 @@ export default function LoginsPage() {
       <ConfirmDeleteDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
-        title={`Delete “${toDelete?.name}”?`}
-        description="The login is removed from the vault. Agents that rely on it will report a missing login in Needs you the next time they need it."
+        title={t("deleteTitle", { name: toDelete?.name })}
+        description={t("loginsPage.deleteDescription")}
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}
       />
@@ -326,10 +329,11 @@ function CredentialList({
 }
 
 function TrustStrip() {
+  const { t } = useTranslation("vault");
   const items = [
-    { icon: <Lock />, title: "Encrypted on this device", text: "AES-256-GCM, unlocked by your vault passphrase." },
-    { icon: <Bot />, title: "Agents never see passwords", text: "Godmode types them into the browser for the agent." },
-    { icon: <ScrollText />, title: "Every use is audited", text: "See who used what in Settings → Security." },
+    { icon: <Lock />, title: t("cardsPage.trust.encryptedTitle"), text: t("cardsPage.trust.encryptedText") },
+    { icon: <Bot />, title: t("loginsPage.trust.hiddenTitle"), text: t("loginsPage.trust.hiddenText") },
+    { icon: <ScrollText />, title: t("loginsPage.trust.auditedTitle"), text: t("loginsPage.trust.auditedText") },
   ];
   return (
     <div className="grid grid-cols-1 gap-px overflow-hidden rounded-xl border bg-border shadow-card @3xl:grid-cols-3">

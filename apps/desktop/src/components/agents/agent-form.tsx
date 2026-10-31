@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ArrowRight,
@@ -30,19 +31,21 @@ import {
 import type { Agent, AgentCharacter, AgentInput, Effort, SecretAccessMode, SubagentDefinition } from "@godmode/shared";
 import {
   DEFAULT_MODEL,
-  EFFORT_LABELS,
   EFFORT_OPTIONS,
   MAX_AGENT_ROLE_LENGTH,
-  ULTRACODE_HINT,
   characterGreeting,
   defaultCharacter,
   effortForModel,
+  effortLabel,
   findModel,
   leadProblem,
   normalizeRole,
   reportsOf,
+  ULTRACODE_HINT,
+  ULTRACODE_HINT_DE,
   withinReach,
 } from "@godmode/shared";
+import { currentLanguage, intlLocale, t as translate } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
@@ -205,42 +208,42 @@ function slugify(s: string) {
 
 function validate(v: AgentFormValues): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!v.name.trim()) errors.name = "Give your agent a name";
+  if (!v.name.trim()) errors.name = translate("agents:agentForm.errors.name");
   const names = new Set<string>();
   v.subagents.forEach((s, i) => {
     const n = slugify(s.name);
-    if (!n) errors[`subagent-${i}`] = "Subagents need a name";
-    else if (names.has(n)) errors[`subagent-${i}`] = "Subagent names must be unique";
-    else if (!s.prompt.trim()) errors[`subagent-${i}`] = "Tell the subagent what it does";
+    if (!n) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentName");
+    else if (names.has(n)) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentUnique");
+    else if (!s.prompt.trim()) errors[`subagent-${i}`] = translate("agents:agentForm.errors.subagentPrompt");
     names.add(n);
   });
   return errors;
 }
 
 const SECTIONS = [
-  { id: "identity", label: "Identity" },
-  { id: "team", label: "Team" },
-  { id: "personality", label: "Personality" },
-  { id: "instructions", label: "Instructions" },
-  { id: "brain", label: "Model" },
-  { id: "folder", label: "Folder" },
-  { id: "permissions", label: "Permissions" },
-  { id: "browser", label: "Browser" },
-  { id: "computer", label: "Computer" },
-  { id: "vm", label: "Virtual machine" },
-  { id: "ssh", label: "SSH servers" },
-  { id: "android", label: "Android phones" },
-  { id: "tools", label: "Tools" },
-  { id: "subagents", label: "Subagents" },
-];
+  { id: "identity", labelKey: "agentForm.nav.identity" },
+  { id: "team", labelKey: "agentForm.nav.team" },
+  { id: "personality", labelKey: "agentForm.nav.personality" },
+  { id: "instructions", labelKey: "agentForm.nav.instructions" },
+  { id: "brain", labelKey: "agentForm.nav.brain" },
+  { id: "folder", labelKey: "agentForm.nav.folder" },
+  { id: "permissions", labelKey: "agentForm.nav.permissions" },
+  { id: "browser", labelKey: "agentForm.nav.browser" },
+  { id: "computer", labelKey: "agentForm.nav.computer" },
+  { id: "vm", labelKey: "agentForm.nav.vm" },
+  { id: "ssh", labelKey: "agentForm.nav.ssh" },
+  { id: "android", labelKey: "agentForm.nav.android" },
+  { id: "tools", labelKey: "agentForm.nav.tools" },
+  { id: "subagents", labelKey: "agentForm.nav.subagents" },
+] as const;
 
 // Easy mode shows these up front; every other section waits behind "Advanced options".
 const EASY_SECTIONS = [
-  { id: "identity", label: "About" },
-  { id: "instructions", label: "What it does" },
-  { id: "personality", label: "Personality" },
-  { id: "team", label: "Team" },
-];
+  { id: "identity", labelKey: "agentForm.navEasy.identity" },
+  { id: "instructions", labelKey: "agentForm.navEasy.instructions" },
+  { id: "personality", labelKey: "agentForm.nav.personality" },
+  { id: "team", labelKey: "agentForm.nav.team" },
+] as const;
 const ADVANCED_ID = "advanced";
 const isAdvancedSection = (id: string) => SECTIONS.some((s) => s.id === id) && !EASY_SECTIONS.some((s) => s.id === id);
 
@@ -269,6 +272,7 @@ export function AgentForm({
   /** Keep unsaved values as a draft under this key; clear it with `clearDraft` once saved. */
   draftKey?: string;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const { data: boot } = useBootstrap();
   const { catalog } = useModelCatalog();
   const scope = useUi((s) => s.workspace);
@@ -369,17 +373,13 @@ export function AgentForm({
     } else requestAnimationFrame(scroll);
   }, [hash, vmChoices.available, androidOn, easy]);
   const advancedError = showErrors && Object.keys(errors).some((k) => k !== "name");
-  const navItems = easy ? [...EASY_SECTIONS, { id: ADVANCED_ID, label: "Advanced options" }] : sections;
+  const navItems = easy ? [...EASY_SECTIONS, { id: ADVANCED_ID, labelKey: "agentForm.nav.advanced" as const }] : sections;
 
   const teamSection = (
     <FormSection
       id="team"
-      title="Team"
-      description={
-        easy
-          ? "Who it reports to. Every agent knows who leads it and who does what, so work goes to the right one."
-          : "Where it sits on your team. Every agent is told who leads it and who does what, so work goes to the right one."
-      }
+      title={t("agentForm.team.title")}
+      description={easy ? t("agentForm.team.descriptionEasy") : t("agentForm.team.description")}
     >
       <TeamField
         agentId={agentId}
@@ -394,8 +394,8 @@ export function AgentForm({
   const personalitySection = (
     <FormSection
       id="personality"
-      title="Personality"
-      description={easy ? "How it talks to you in greetings, updates and reports." : "How it talks to you — greetings, updates and reports. Goes into the agent's CLAUDE.md."}
+      title={t("agentForm.personality.title")}
+      description={easy ? t("agentForm.personality.descriptionEasy") : t("agentForm.personality.description")}
     >
       <PersonalityPicker value={values.personality} onChange={(p) => set("personality", p)} />
     </FormSection>
@@ -403,35 +403,27 @@ export function AgentForm({
   const instructionsSection = (
     <FormSection
       id="instructions"
-      title={easy ? "What should it do?" : "Instructions"}
-      description={
-        easy
-          ? "Describe the job in your own words: what to do, where to keep things and when to check with you."
-          : "Standing orders: how it should work, what to always or never do. Goes into the agent's CLAUDE.md."
-      }
+      title={easy ? t("agentForm.instructions.titleEasy") : t("agentForm.instructions.title")}
+      description={easy ? t("agentForm.instructions.descriptionEasy") : t("agentForm.instructions.description")}
     >
       <Textarea
         id="agent-instructions"
         value={values.instructions}
         onChange={(e) => set("instructions", e.target.value)}
-        placeholder={
-          "You are my finance assistant.\n\n- Log into the vendor portals I use and download new invoices as PDF.\n- Save them to workspace/invoices/YYYY-MM/.\n- Summarize totals at the end and tell me about anything unusual.\n- Never pay anything without asking me first."
-        }
-        aria-label="Instructions"
+        placeholder={t("agentForm.instructions.placeholder")}
+        aria-label={t("agentForm.instructions.title")}
         className="min-h-64 resize-y text-[14px] leading-relaxed"
       />
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <Sparkles className="size-3.5" />
-          {easy
-            ? "Tip: be specific about goals, where to save files and when to ask you. It remembers what it learns along the way."
-            : "Tip: be specific about goals, where to save files and when to ask you. The agent keeps its own learnings in MEMORY.md."}
+          {easy ? t("agentForm.instructions.tipEasy") : t("agentForm.instructions.tip")}
         </span>
-        <span className="tabular-nums">{values.instructions.length.toLocaleString()} chars</span>
+        <span className="tabular-nums">{t("agentForm.instructions.chars", { count: values.instructions.length, formatted: values.instructions.length.toLocaleString(intlLocale()) })}</span>
       </div>
       {inherited.length > 0 && (
         <div className="mt-4 rounded-lg border bg-paper-2 p-1.5">
-          <p className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">Also given to this agent on every run</p>
+          <p className="px-2 pt-1 pb-0.5 text-[11px] font-medium text-muted-foreground">{t("agentForm.instructions.inherited")}</p>
           <InheritedInstructions layers={inherited} />
         </div>
       )}
@@ -439,10 +431,10 @@ export function AgentForm({
   );
   const advanced = (
     <>
-      <FormSection id="brain" title="Model & workspace" description="Which Claude model powers it, how hard it thinks, and where it lives.">
+      <FormSection id="brain" title={t("agentForm.brain.title")} description={t("agentForm.brain.description")}>
         <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="agent-model">Model</Label>
+            <Label htmlFor="agent-model">{t("agentForm.brain.model")}</Label>
             <Select
               value={findModel(catalog.models, values.model)?.id ?? (values.model || "__default")}
               onValueChange={(v) => set("model", v === "__default" ? "" : v)}
@@ -451,7 +443,7 @@ export function AgentForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
-                <SelectItem value="__default">Default (from settings)</SelectItem>
+                <SelectItem value="__default">{t("agentForm.brain.defaultFromSettings")}</SelectItem>
                 <SelectSeparator />
                 <ModelOptions models={catalog.models} current={values.model} />
               </SelectContent>
@@ -469,7 +461,7 @@ export function AgentForm({
         </div>
         <div className="mt-4 space-y-1.5">
           <span id="agent-effort-label" className="flex items-center gap-1.5 text-sm font-medium">
-            <BrainCircuit className="size-4 text-muted-foreground" /> Reasoning effort
+            <BrainCircuit className="size-4 text-muted-foreground" /> {t("agentForm.brain.effort")}
           </span>
           <ToggleGroup
             type="single"
@@ -480,18 +472,18 @@ export function AgentForm({
             className="w-full flex-wrap @xl:flex-nowrap"
           >
             <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              Default
+              {t("agentForm.default")}
             </ToggleGroupItem>
             {efforts.map((e) => (
               <ToggleGroupItem key={e} value={e} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                {EFFORT_LABELS[e]}
+                {effortLabel(e, currentLanguage())}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
           <p className="text-xs text-muted-foreground">
             {efforts.length
-              ? "Higher effort thinks longer — better for tricky multi-step work, slower and pricier."
-              : `${effectiveModel?.label ?? "This model"} doesn't use effort levels.`}
+              ? t("agentForm.brain.effortHint")
+              : t("agentForm.brain.noEffort", { model: effectiveModel?.label ?? t("agentForm.brain.thisModel") })}
           </p>
         </div>
         <div className="mt-4 space-y-1.5">
@@ -507,38 +499,38 @@ export function AgentForm({
             className="w-full"
           >
             <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              Default
+              {t("agentForm.default")}
             </ToggleGroupItem>
             <ToggleGroupItem value="on" disabled={!ultracodeAvailable} className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              On
+              {t("common:status.on")}
             </ToggleGroupItem>
             <ToggleGroupItem value="off" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-              Off
+              {t("common:status.off")}
             </ToggleGroupItem>
           </ToggleGroup>
           <p className="text-xs text-muted-foreground">
             {ultracodeAvailable
-              ? ULTRACODE_HINT
+              ? (currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT)
               : anyUltracode
-                ? `${effectiveModel?.label ?? "This model"} doesn't support Ultracode.`
-                : "The installed Claude Code doesn't offer Ultracode."}
+                ? t("agentForm.brain.noUltracode", { model: effectiveModel?.label ?? t("agentForm.brain.thisModel") })
+                : t("agentForm.brain.noUltracodeInstalled")}
           </p>
         </div>
       </FormSection>
 
       <FormSection
         id="folder"
-        title="Working folder"
-        description="Optional. Its chats and automations run inside this folder and can read and edit the files there. Memory stays in the agent's own repository."
+        title={t("agentForm.folder.title")}
+        description={t("agentForm.folder.description")}
       >
         <FolderField value={values.workingDirectory} onChange={(v) => set("workingDirectory", v)} />
       </FormSection>
 
-      <FormSection id="permissions" title="Permissions" description="What this agent is allowed to do on your behalf.">
+      <FormSection id="permissions" title={t("agentForm.permissions.title")} description={t("agentForm.permissions.description")}>
         <div className="space-y-5">
           <div className="space-y-2">
             <span id="secret-access-label" className="flex items-center gap-1.5 text-sm font-medium">
-              <KeyRound className="size-4 text-muted-foreground" /> Passwords & 2FA codes
+              <KeyRound className="size-4 text-muted-foreground" /> {t("agentForm.permissions.secrets")}
             </span>
             <RadioGroup
               value={values.secretAccess}
@@ -550,16 +542,16 @@ export function AgentForm({
                 value="fill"
                 current={values.secretAccess}
                 icon={<ShieldCheck className="size-4 text-success" />}
-                title="Fill into browser"
-                badge="Recommended"
-                description="Godmode types secrets straight into the page. The AI never sees them."
+                title={t("agentForm.permissions.fill")}
+                badge={t("agentForm.permissions.recommended")}
+                description={t("agentForm.permissions.fillDescription")}
               />
               <RadioCard
                 value="reveal"
                 current={values.secretAccess}
                 icon={<Eye className="size-4 text-warning" />}
-                title="Reveal to AI"
-                description="The model can read raw passwords and codes (needed for API-only tools). Every reveal is audited."
+                title={t("agentForm.permissions.reveal")}
+                description={t("agentForm.permissions.revealDescription")}
               />
             </RadioGroup>
             <AnimatePresence>
@@ -570,7 +562,7 @@ export function AgentForm({
                   exit={{ opacity: 0, height: 0 }}
                   className="flex items-center gap-1.5 overflow-hidden text-xs text-warning"
                 >
-                  <TriangleAlert className="size-3.5 shrink-0" /> Secrets may appear in the model's context. Only use this for agents you trust.
+                  <TriangleAlert className="size-3.5 shrink-0" /> {t("agentForm.permissions.revealWarning")}
                 </motion.p>
               )}
             </AnimatePresence>
@@ -579,8 +571,8 @@ export function AgentForm({
           <ToggleRow
             id="agent-delegation"
             icon={<Users className="size-4" />}
-            title="Can hand work to teammates"
-            description="Hand parts of a task to other agents and use their results."
+            title={t("agentForm.permissions.delegation")}
+            description={t("agentForm.permissions.delegationDescription")}
             checked={values.allowDelegation}
             onChange={(v) => set("allowDelegation", v)}
           />
@@ -606,8 +598,8 @@ export function AgentForm({
           <ToggleRow
             id="agent-manage"
             icon={<Bot className="size-4" />}
-            title="Can manage agents & automations"
-            description="Create, change and delete agents and schedules — like the built-in Godmode orchestrator."
+            title={t("agentForm.permissions.manage")}
+            description={t("agentForm.permissions.manageDescription")}
             checked={values.canManageAgents}
             onChange={(v) => set("canManageAgents", v)}
           />
@@ -615,13 +607,13 @@ export function AgentForm({
         </div>
       </FormSection>
 
-      <FormSection id="browser" title="Browser" description="A real Chromium the agent drives to use websites for you.">
+      <FormSection id="browser" title={t("agentForm.browser.title")} description={t("agentForm.browser.description")}>
         <div className="space-y-5">
           <ToggleRow
             id="agent-browser"
             icon={<Globe className="size-4" />}
-            title="Browser access"
-            description="Navigate, click, type and read web pages."
+            title={t("agentForm.browser.access")}
+            description={t("agentForm.browser.accessDescription")}
             checked={values.browserEnabled}
             onChange={(v) => set("browserEnabled", v)}
           />
@@ -634,7 +626,7 @@ export function AgentForm({
             />
             <div className="space-y-1.5">
               <span id="agent-headless-label" className="text-sm font-medium">
-                Window
+                {t("agentForm.browser.window")}
               </span>
               <ToggleGroup
                 type="single"
@@ -646,13 +638,13 @@ export function AgentForm({
                 className="w-full"
               >
                 <ToggleGroupItem value="default" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  Default
+                  {t("agentForm.default")}
                 </ToggleGroupItem>
                 <ToggleGroupItem value="visible" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  Visible
+                  {t("agentForm.browser.visible")}
                 </ToggleGroupItem>
                 <ToggleGroupItem value="headless" className="flex-1 data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset">
-                  Headless
+                  {t("agentForm.browser.headless")}
                 </ToggleGroupItem>
               </ToggleGroup>
             </div>
@@ -662,15 +654,15 @@ export function AgentForm({
 
       <FormSection
         id="computer"
-        title="Computer"
-        description="In chats you share a window or screen yourself. Here you can let this agent use the computer on its own — for automations and delegated tasks."
+        title={t("agentForm.computer.title")}
+        description={t("agentForm.computer.description")}
       >
         <div className="space-y-5">
           <ToggleRow
             id="agent-computer"
             icon={<MonitorUp className="size-4" />}
-            title="Use the computer without a share"
-            description="Controls the real mouse and keyboard when it runs on its own. Only turn this on for agents you trust with your desktop."
+            title={t("agentForm.computer.unattended")}
+            description={t("agentForm.computer.unattendedDescription")}
             checked={values.computerEnabled}
             onChange={(v) => set("computerEnabled", v)}
           />
@@ -681,15 +673,15 @@ export function AgentForm({
       {vmChoices.available && (
         <FormSection
           id="vm"
-          title="Virtual machine"
-          description="Let this agent work in its own macOS VM: it installs tools, runs builds and uses apps there instead of on this Mac. A single chat can still pick another VM."
+          title={t("agentForm.vm.title")}
+          description={t("agentForm.vm.description")}
         >
           <VmField value={values.vmId} workspaceId={values.workspaceId} onChange={(v) => set("vmId", v)} />
         </FormSection>
       )}
 
       {sshOn && (
-        <FormSection id="ssh" title="SSH servers" description="Remote machines this agent can sign in to and control. Godmode types the password or key — the AI never sees it.">
+        <FormSection id="ssh" title={t("agentForm.ssh.title")} description={t("agentForm.ssh.description")}>
           <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
         </FormSection>
       )}
@@ -697,21 +689,21 @@ export function AgentForm({
       {androidOn && (
         <FormSection
           id="android"
-          title="Android phones"
-          description="Phones this agent can see and control in every run. They are real phones with real accounts — only give it the ones its job needs."
+          title={t("agentForm.android.title")}
+          description={t("agentForm.android.description")}
         >
           <AndroidField value={values.androidDeviceIds} onChange={(v) => set("androidDeviceIds", v)} />
         </FormSection>
       )}
 
       {integrationsOn && (
-        <FormSection id="tools" title="Tools & integrations" description="APIs, MCP servers and connected apps this agent can use.">
+        <FormSection id="tools" title={t("agentForm.tools.title")} description={t("agentForm.tools.description")}>
           <div className="space-y-5">
             <ToggleRow
               id="agent-inherit-mcp"
               icon={<Plug className="size-4" />}
-              title="Inherit shared integrations"
-              description="Also use the global and workspace tools, MCP servers and Composio apps."
+              title={t("agentForm.tools.inherit")}
+              description={t("agentForm.tools.inheritDescription")}
               checked={values.inheritMcp}
               onChange={(v) => set("inheritMcp", v)}
             />
@@ -723,8 +715,8 @@ export function AgentForm({
 
       <FormSection
         id="subagents"
-        title="Subagents"
-        description="Specialists this agent can spin up for focused sub-tasks within a run."
+        title={t("agentForm.subagents.title")}
+        description={t("agentForm.subagents.description")}
         actions={
           <Button
             type="button"
@@ -732,7 +724,7 @@ export function AgentForm({
             size="sm"
             onClick={() => set("subagents", [...values.subagents, { name: "", description: "", prompt: "" }])}
           >
-            <Plus /> Add subagent
+            <Plus /> {t("agentForm.subagents.add")}
           </Button>
         }
       >
@@ -758,8 +750,8 @@ export function AgentForm({
         <div className="min-w-0 space-y-5">
           <FormSection
             id="identity"
-            title={easy ? "About" : "Identity"}
-            description={easy ? "Its name, its look and what it does in one line." : "What this agent looks like and how it shows up across Godmode."}
+            title={easy ? t("agentForm.identity.titleEasy") : t("agentForm.identity.title")}
+            description={easy ? t("agentForm.identity.descriptionEasy") : t("agentForm.identity.description")}
           >
             <div className="grid grid-cols-1 gap-5 @2xl:grid-cols-[15rem_minmax(0,1fr)]">
               <CharacterStage
@@ -773,12 +765,12 @@ export function AgentForm({
               />
               <div className="min-w-0 space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="agent-name">Name</Label>
+                  <Label htmlFor="agent-name">{t("common:words.name")}</Label>
                   <Input
                     id="agent-name"
                     value={values.name}
                     onChange={(e) => set("name", e.target.value)}
-                    placeholder="e.g. Invoice Hunter"
+                    placeholder={t("agentForm.identity.namePlaceholder")}
                     aria-invalid={!!err("name")}
                     maxLength={60}
                     autoFocus={mode === "create"}
@@ -786,38 +778,38 @@ export function AgentForm({
                   {err("name") && <p className="text-xs text-destructive">{err("name")}</p>}
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="agent-role">{easy ? "Job title" : "Role"}</Label>
+                  <Label htmlFor="agent-role">{easy ? t("agentForm.identity.jobTitle") : t("agentForm.identity.role")}</Label>
                   <Input
                     id="agent-role"
                     value={values.role}
                     onChange={(e) => set("role", e.target.value)}
-                    placeholder={isDefault ? "e.g. Chief of staff" : "e.g. Bookkeeper"}
+                    placeholder={isDefault ? t("agentForm.identity.rolePlaceholderDefault") : t("agentForm.identity.rolePlaceholder")}
                     maxLength={MAX_AGENT_ROLE_LENGTH}
                     aria-describedby="agent-role-hint"
                   />
                   <p id="agent-role-hint" className="text-xs text-muted-foreground">
-                    Its job title — shown under its name and told to its teammates.
+                    {t("agentForm.identity.roleHint")}
                   </p>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="agent-description">Short description</Label>
+                  <Label htmlFor="agent-description">{t("agentForm.identity.shortDescription")}</Label>
                   <Input
                     id="agent-description"
                     value={values.description}
                     onChange={(e) => set("description", e.target.value)}
-                    placeholder="Downloads my invoices every month and files them"
+                    placeholder={t("agentForm.identity.descriptionPlaceholder")}
                     maxLength={160}
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <span className="text-sm font-medium">Color</span>
+                  <span className="text-sm font-medium">{t("agentForm.identity.color")}</span>
                   <ColorSwatches value={values.color} onChange={(c) => set("color", c)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="agent-avatar">Emoji in chat apps</Label>
+                  <Label htmlFor="agent-avatar">{t("agentForm.identity.emoji")}</Label>
                   <div className="flex items-center gap-3">
                     <AvatarPicker id="agent-avatar" avatar={values.avatar} color={values.color} onChange={(v) => set("avatar", v)} />
-                    <p className="text-xs text-muted-foreground">Signs its messages where only text fits — Slack, Telegram, Teams.</p>
+                    <p className="text-xs text-muted-foreground">{t("agentForm.identity.emojiHint")}</p>
                   </div>
                 </div>
               </div>
@@ -848,11 +840,9 @@ export function AgentForm({
                   <SlidersHorizontal className="size-4" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">Advanced options</span>
+                  <span className="block text-sm font-medium">{t("agentForm.nav.advanced")}</span>
                   <span className={cn("mt-0.5 block text-xs", advancedError ? "text-destructive" : "text-muted-foreground")}>
-                    {advancedError
-                      ? "Something in here needs a fix before you can save."
-                      : "Model, folder, permissions, browser, computer, servers, tools and subagents. The defaults work well."}
+                    {advancedError ? t("agentForm.advanced.error") : t("agentForm.advanced.summary")}
                   </span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
@@ -870,22 +860,22 @@ export function AgentForm({
         <aside className="hidden @5xl:block">
           <div className="sticky top-6 space-y-4">
             <div className="rounded-xl border bg-card p-4 shadow-card">
-              <div className="eyebrow mb-3">Preview</div>
+              <div className="eyebrow mb-3">{t("agentForm.preview.title")}</div>
               <div className="flex items-center gap-3">
                 <AgentAvatar agent={preview} size="lg" follow />
                 <div className="min-w-0">
-                  <div className="truncate font-medium tracking-[-0.01em]">{values.name || "Unnamed agent"}</div>
-                  <div className="line-clamp-2 text-xs text-muted-foreground">{values.description || "No description yet"}</div>
+                  <div className="truncate font-medium tracking-[-0.01em]">{values.name || t("agentForm.preview.unnamed")}</div>
+                  <div className="line-clamp-2 text-xs text-muted-foreground">{values.description || t("agentForm.preview.noDescription")}</div>
                 </div>
               </div>
               <p className="mt-3 rounded-lg rounded-tl-sm border bg-paper-2 px-3 py-2 text-xs leading-relaxed text-foreground/85">
-                {characterGreeting({ name: values.name.trim() || "Your agent", personality: values.personality, human, seed: "studio" })}
+                {characterGreeting({ name: values.name.trim() || t("agentForm.preview.yourAgent"), personality: values.personality, human, seed: "studio", lang: currentLanguage() })}
               </p>
               {!easy && (
                 <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-muted-foreground">
-                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || "Default model")}</span>
-                  {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Browser</span>}
-                  {values.computerEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">Computer</span>}
+                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{findModel(catalog.models, values.model)?.label ?? (values.model || t("agentForm.preview.defaultModel"))}</span>
+                  {values.browserEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{t("agentForm.preview.browser")}</span>}
+                  {values.computerEnabled && <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{t("agentForm.preview.computer")}</span>}
                   {vmChoices.available && values.vmId && (
                     <span className="flex max-w-full items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                       <Box className="size-3 shrink-0" />
@@ -895,13 +885,13 @@ export function AgentForm({
                   {values.sshServerIds.length > 0 && (
                     <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                       <Server className="size-3 shrink-0" />
-                      {values.sshServerIds.length === 1 ? "1 server" : `${values.sshServerIds.length} servers`}
+                      {t("agentForm.preview.servers", { count: values.sshServerIds.length })}
                     </span>
                   )}
                   {androidOn && values.androidDeviceIds.length > 0 && (
                     <span className="flex items-center gap-1 rounded-[5px] border bg-secondary px-1.5 py-0.5">
                       <Smartphone className="size-3 shrink-0" />
-                      {values.androidDeviceIds.length === 1 ? "1 phone" : `${values.androidDeviceIds.length} phones`}
+                      {t("agentForm.preview.phones", { count: values.androidDeviceIds.length })}
                     </span>
                   )}
                   {values.workingDirectory && (
@@ -910,11 +900,11 @@ export function AgentForm({
                       <span className="truncate">{folderName(values.workingDirectory)}</span>
                     </span>
                   )}
-                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{values.secretAccess === "fill" ? "Fill-only secrets" : "Reveals secrets"}</span>
+                  <span className="rounded-[5px] border bg-secondary px-1.5 py-0.5">{values.secretAccess === "fill" ? t("agentForm.preview.fillOnly") : t("agentForm.preview.reveals")}</span>
                 </div>
               )}
             </div>
-            <nav aria-label="Form sections" className="space-y-0.5">
+            <nav aria-label={t("agentForm.preview.sections")} className="space-y-0.5">
               {navItems.map((s) => (
                 <a
                   key={s.id}
@@ -926,7 +916,7 @@ export function AgentForm({
                   }}
                   className="block rounded-md px-3 py-1.5 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
                 >
-                  {s.label}
+                  {t(s.labelKey)}
                 </a>
               ))}
             </nav>
@@ -940,7 +930,7 @@ export function AgentForm({
           <div className="min-w-0 flex-1">
             {footerExtra ?? (
               <span className="text-sm text-muted-foreground">
-                {mode === "edit" ? (dirty ? "You have unsaved changes" : "All changes saved") : "You can change everything later."}
+                {mode === "edit" ? (dirty ? t("agentForm.footer.unsaved") : t("agentForm.footer.allSaved")) : t("agentForm.footer.changeLater")}
               </span>
             )}
           </div>
@@ -950,12 +940,12 @@ export function AgentForm({
           </span>
           {onCancel && (
             <Button type="button" variant="ghost" onClick={onCancel}>
-              {mode === "edit" && dirty ? "Discard" : "Cancel"}
+              {mode === "edit" && dirty ? t("agentForm.footer.discard") : t("common:actions.cancel")}
             </Button>
           )}
           {mode === "edit" && dirty && !onCancel && (
             <Button type="button" variant="ghost" onClick={draft.discard}>
-              Discard
+              {t("agentForm.footer.discard")}
             </Button>
           )}
           <Button
@@ -1048,6 +1038,7 @@ function RadioCard({
 }
 
 function FolderField({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const { t } = useTranslation("agents");
   const [open, setOpen] = useState(false);
   const short = useShortPath();
   return (
@@ -1064,13 +1055,13 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
             </div>
           </div>
           <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Change
+            {t("agentForm.folder.change")}
           </Button>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label="Remove folder"
+            aria-label={t("agentForm.folder.remove")}
             onClick={() => onChange(null)}
             className="text-muted-foreground hover:text-destructive"
           >
@@ -1080,9 +1071,9 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
       ) : (
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-4">
           <FolderOpen className="size-5 shrink-0 text-muted-foreground" />
-          <p className="min-w-0 flex-1 text-sm text-muted-foreground">No folder — the agent works in its own repository. A single chat can still pick a folder.</p>
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">{t("agentForm.folder.none")}</p>
           <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-            Choose folder…
+            {t("agentForm.folder.choose")}
           </Button>
         </div>
       )}
@@ -1091,14 +1082,15 @@ function FolderField({ value, onChange }: { value: string | null; onChange: (v: 
         onOpenChange={setOpen}
         value={value}
         onPick={onChange}
-        title="Default folder"
-        description="New chats and automations of this agent run inside this folder. Each chat can still switch to another one."
+        title={t("agentForm.folder.dialogTitle")}
+        description={t("agentForm.folder.dialogDescription")}
       />
     </>
   );
 }
 
 function VmField({ value, workspaceId, onChange }: { value: string | null; workspaceId: string | null; onChange: (v: string | null) => void }) {
+  const { t } = useTranslation("agents");
   const { data: workspaces = [] } = useWorkspaces();
   const { vms } = useVmChoices();
   const workspace = workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
@@ -1107,16 +1099,16 @@ function VmField({ value, workspaceId, onChange }: { value: string | null; works
     <div className="@xl:max-w-md">
       <VmSelectField
         id="agent-vm"
-        label="Works in"
+        label={t("agentForm.vm.worksIn")}
         value={value}
         onChange={onChange}
-        noneLabel={workspaceVm ? `None — use the workspace's VM (${workspaceVm.name})` : "None — use the workspace's VM"}
+        noneLabel={workspaceVm ? t("agentForm.vm.noneWithVm", { vm: workspaceVm.name }) : t("agentForm.vm.none")}
         hint={
           value
-            ? "Its runs start the VM when they need it."
+            ? t("agentForm.vm.hintSelected")
             : workspaceVm
-              ? `Runs work in ${workspaceVm.name}, the VM of ${workspace?.name}.`
-              : "Runs work on this Mac, unless its workspace or a chat has a VM."
+              ? t("agentForm.vm.hintWorkspace", { vm: workspaceVm.name, workspace: workspace?.name })
+              : t("agentForm.vm.hintLocal")
         }
       />
     </div>
@@ -1124,15 +1116,16 @@ function VmField({ value, workspaceId, onChange }: { value: string | null; works
 }
 
 function SshField({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const { t } = useTranslation("agents");
   const { data: servers = [], isLoading } = useSshServers();
   if (!isLoading && servers.length === 0) {
     return (
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed px-4 py-3.5">
         <Server className="size-5 shrink-0 text-muted-foreground" />
-        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">No SSH servers yet — add one and this agent can work on it.</p>
+        <p className="min-w-0 flex-1 basis-48 text-sm text-muted-foreground">{t("agentForm.ssh.empty")}</p>
         <Button type="button" variant="outline" size="sm" asChild>
           <Link to="/ssh?new=1">
-            <Plus /> Add a server
+            <Plus /> {t("agentForm.ssh.add")}
           </Link>
         </Button>
       </div>
@@ -1143,10 +1136,10 @@ function SshField({ value, onChange }: { value: string[]; onChange: (v: string[]
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <span id="agent-ssh-label" className="text-sm font-medium">
-          Can sign in to
+          {t("agentForm.ssh.canSignIn")}
         </span>
         <Link to="/ssh" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          Manage servers <ArrowRight className="size-3" />
+          {t("agentForm.ssh.manage")} <ArrowRight className="size-3" />
         </Link>
       </div>
       <div role="group" aria-labelledby="agent-ssh-label" className="divide-y overflow-hidden rounded-lg border">
@@ -1169,22 +1162,23 @@ function SshField({ value, onChange }: { value: string[]; onChange: (v: string[]
               );
             })}
       </div>
-      <p className="text-xs text-muted-foreground">Every run of this agent can sign in to these. A single chat can add more with the SSH button in its message box.</p>
+      <p className="text-xs text-muted-foreground">{t("agentForm.ssh.hint")}</p>
     </div>
   );
 }
 
 function WorkspaceField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+  const { t } = useTranslation("agents");
   const { data: workspaces = [] } = useWorkspaces();
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-workspace">Workspace</Label>
+      <Label htmlFor="agent-workspace">{t("agentForm.workspace.label")}</Label>
       <Select value={value ?? "__global"} onValueChange={(v) => onChange(v === "__global" ? null : v)} disabled={disabled}>
         <SelectTrigger id="agent-workspace" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper">
-          <SelectItem value="__global">🌐 Global — sees only global logins & tools</SelectItem>
+          <SelectItem value="__global">🌐 {t("agentForm.workspace.global")}</SelectItem>
           {workspaces.length > 0 && <SelectSeparator />}
           {workspaces.map((w) => (
             <SelectItem key={w.id} value={w.id}>
@@ -1198,20 +1192,21 @@ function WorkspaceField({ value, onChange, disabled }: { value: string | null; o
 }
 
 function ProjectField({ workspaceId, value, onChange }: { workspaceId: string | null; value: string | null; onChange: (v: string | null) => void }) {
+  const { t } = useTranslation(["agents", "common"]);
   const { data: workspaces = [] } = useWorkspaces();
   const projects = workspaces.find((w) => w.id === workspaceId)?.projects ?? [];
   if (!projects.length) return null;
   return (
     <div className="space-y-1.5">
       <Label htmlFor="agent-project">
-        Project <span className="font-normal text-muted-foreground">(optional)</span>
+        {t("agentForm.project.label")} <span className="font-normal text-muted-foreground">({t("common:words.optional")})</span>
       </Label>
       <Select value={value && projects.some((p) => p.id === value) ? value : "__none"} onValueChange={(v) => onChange(v === "__none" ? null : v)}>
         <SelectTrigger id="agent-project" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper">
-          <SelectItem value="__none">No project — the whole workspace</SelectItem>
+          <SelectItem value="__none">{t("agentForm.project.none")}</SelectItem>
           <SelectSeparator />
           {projects.map((p) => (
             <SelectItem key={p.id} value={p.id}>
@@ -1220,7 +1215,7 @@ function ProjectField({ workspaceId, value, onChange }: { workspaceId: string | 
           ))}
         </SelectContent>
       </Select>
-      <p className="text-xs text-muted-foreground">Its chats work on this project unless a chat picks another.</p>
+      <p className="text-xs text-muted-foreground">{t("agentForm.project.hint")}</p>
     </div>
   );
 }
@@ -1238,6 +1233,7 @@ function DelegateField({
   value: string[];
   onChange: (v: string[]) => void;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const { data: agents = [] } = useAllAgents();
   // The core's own rule (withinReach): global agents and its workspace; a manager reaches everyone.
   const reach = { id: agentId ?? "", workspaceId, canManageAgents };
@@ -1246,42 +1242,45 @@ function DelegateField({
     value: a.id,
     label: a.name,
     icon: <AgentAvatar agent={a} size="sm" still className="size-5" />,
-    hint: [a.role, a.enabled ? "" : "switched off", a.description].filter(Boolean).join(" · "),
+    hint: [a.role, a.enabled ? "" : t("agentForm.switchedOff"), a.description].filter(Boolean).join(" · "),
   }));
   const outOfReach = value.flatMap((id) => {
     const a = agents.find((x) => x.id === id);
     return a && !withinReach(reach, a) ? [a] : [];
   });
   const listed = value.flatMap((id) => inReach.filter((a) => a.id === id));
-  const names = (list: Agent[]) => (list.length > 4 ? `${list.slice(0, 4).map((a) => a.name).join(", ")} and ${list.length - 4} more` : list.map((a) => a.name).join(", "));
+  const names = (list: Agent[]) =>
+    list.length > 4
+      ? t("agentForm.delegate.namesMore", { names: list.slice(0, 4).map((a) => a.name).join(", "), count: list.length - 4 })
+      : list.map((a) => a.name).join(", ");
   return (
     <div className="space-y-1.5 pl-11">
       <Label htmlFor="agent-delegate-to" className="text-xs text-muted-foreground">
-        Can hand work to <span className="font-normal">(empty = any teammate in reach)</span>
+        <Trans t={t} i18nKey="agentForm.delegate.label" components={{ muted: <span className="font-normal" /> }} />
       </Label>
       <MultiSelect
         id="agent-delegate-to"
         options={options}
         value={value.filter((id) => inReach.some((a) => a.id === id))}
         onChange={(next) => onChange([...next, ...outOfReach.map((a) => a.id)])}
-        placeholder="Any teammate in reach"
-        emptyText="No other agents in reach yet."
+        placeholder={t("agentForm.delegate.placeholder")}
+        emptyText={t("agentForm.delegate.noneInReach")}
       />
       <p className="text-xs text-muted-foreground">
         {value.length === 0
           ? inReach.length
-            ? `Reaches ${inReach.length} agent${inReach.length === 1 ? "" : "s"}: ${names(inReach)}.`
-            : "No other agents in reach yet."
+            ? t("agentForm.delegate.reaches", { count: inReach.length, names: names(inReach) })
+            : t("agentForm.delegate.noneInReach")
           : listed.length
-            ? `Hands work to: ${names(listed)}.`
-            : "Nobody on this list is in reach, so it can't hand work to anyone."}
+            ? t("agentForm.delegate.handsTo", { names: names(listed) })
+            : t("agentForm.delegate.nobodyInReach")}
       </p>
       {outOfReach.map((a) => (
         <p key={a.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md bg-warning/10 px-2 py-1 text-xs text-foreground">
           <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-hidden />
-          <span className="min-w-0 flex-1">{a.name} works in another workspace, so it can't be reached.</span>
+          <span className="min-w-0 flex-1">{t("agentForm.delegate.outOfReach", { name: a.name })}</span>
           <Button type="button" size="xs" variant="ghost" onClick={() => onChange(value.filter((id) => id !== a.id))}>
-            Remove
+            {t("common:actions.remove")}
           </Button>
         </p>
       ))}
@@ -1305,6 +1304,7 @@ function TeamField({
   value: string | null;
   onChange: (v: string | null) => void;
 }) {
+  const { t } = useTranslation("agents");
   const { data: agents = [] } = useAllAgents();
   const builtin = agents.find((a) => a.isDefault);
   const self = { id: agentId ?? "__new", workspaceId, isDefault, reportsTo: value };
@@ -1318,7 +1318,7 @@ function TeamField({
   useEffect(() => {
     if (!current) return;
     if (leadProblem(self, current, team) === "workspace") {
-      setResetNote(`Reset to ${builtin?.name ?? "Godmode"}: ${current.name} works in another workspace.`);
+      setResetNote(t("agentForm.team.resetNote", { lead: builtin?.name ?? "Godmode", name: current.name }));
       onChange(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1327,7 +1327,7 @@ function TeamField({
   if (isDefault) {
     return (
       <div className="space-y-3 text-sm">
-        <p className="text-muted-foreground">{builtin?.name ?? "Godmode"} leads the team and reports to you. Every agent without a lead of its own reports to it.</p>
+        <p className="text-muted-foreground">{t("agentForm.team.builtinLeads", { name: builtin?.name ?? "Godmode" })}</p>
         <LedBy agents={reportsOf({ ...self, isDefault: true }, agents)} />
       </div>
     );
@@ -1335,7 +1335,7 @@ function TeamField({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5 @md:max-w-sm">
-        <Label htmlFor="agent-reports-to">Reports to</Label>
+        <Label htmlFor="agent-reports-to">{t("agentForm.team.reportsTo")}</Label>
         <Select
           value={value ?? "__builtin"}
           onValueChange={(v) => {
@@ -1350,7 +1350,7 @@ function TeamField({
             <SelectItem value="__builtin">
               <span className="flex items-center gap-2">
                 {builtin && <AgentAvatar agent={builtin} size="sm" still className="size-5" />}
-                {builtin?.name ?? "Godmode"} <span className="text-muted-foreground">— built-in</span>
+                {builtin?.name ?? "Godmode"} <span className="text-muted-foreground">{t("agentForm.team.builtIn")}</span>
               </span>
             </SelectItem>
             {leads.length > 0 && <SelectSeparator />}
@@ -1359,7 +1359,7 @@ function TeamField({
                 <span className="flex min-w-0 items-center gap-2">
                   <AgentAvatar agent={a} size="sm" still className="size-5" />
                   <span className="truncate">{a.name}</span>
-                  {(a.role || !a.enabled) && <span className="truncate text-muted-foreground">{[a.role, a.enabled ? "" : "switched off"].filter(Boolean).join(" · ")}</span>}
+                  {(a.role || !a.enabled) && <span className="truncate text-muted-foreground">{[a.role, a.enabled ? "" : t("agentForm.switchedOff")].filter(Boolean).join(" · ")}</span>}
                 </span>
               </SelectItem>
             ))}
@@ -1371,7 +1371,7 @@ function TeamField({
           </SelectContent>
         </Select>
         <p id="agent-reports-to-hint" className="text-xs text-muted-foreground">
-          {resetNote ?? `Its lead on the org chart${name.trim() ? ` — ${name.trim()} hears who that is` : ""}. This doesn't change what it is allowed to do.`}
+          {resetNote ?? (name.trim() ? t("agentForm.team.leadHintNamed", { name: name.trim() }) : t("agentForm.team.leadHint"))}
         </p>
       </div>
       <LedBy agents={reports} />
@@ -1380,10 +1380,11 @@ function TeamField({
 }
 
 function LedBy({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("agents");
   if (!agents.length) return null;
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <span>Leads</span>
+      <span>{t("agentForm.team.leads")}</span>
       {agents.slice(0, 12).map((a) => (
         <Link key={a.id} to={`/agents/${a.id}`} title={[a.name, a.role].filter(Boolean).join(" · ")} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
           <AgentAvatar agent={a} size="sm" still className="size-6" />
@@ -1391,32 +1392,32 @@ function LedBy({ agents }: { agents: Agent[] }) {
       ))}
       {agents.length > 12 && <span>+{agents.length - 12}</span>}
       <Link to="/agents?view=chart" className="ml-1 underline-offset-2 hover:underline">
-        Org chart
+        {t("agentForm.team.orgChart")}
       </Link>
     </div>
   );
 }
 
 function ComputerDisplayField({ value, onChange, disabled }: { value: string | null; onChange: (v: string | null) => void; disabled?: boolean }) {
+  const { t } = useTranslation("agents");
   const { data } = useQuery({ queryKey: qk.computerSources, queryFn: api.computer.sources, enabled: !disabled, staleTime: 30_000, retry: false });
   const displays = data?.displays ?? [];
   const known = value === null || displays.some((d) => d.id === value);
   return (
     <div className={cn("space-y-1.5 sm:max-w-sm", disabled && "pointer-events-none opacity-50")}>
-      <Label htmlFor="agent-computer-display">Screen</Label>
+      <Label htmlFor="agent-computer-display">{t("agentForm.computer.screen")}</Label>
       <Select value={value ?? "desktop"} onValueChange={(v) => onChange(v === "desktop" ? null : v)} disabled={disabled}>
         <SelectTrigger id="agent-computer-display" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="desktop">Entire desktop{displays.length > 1 ? ` (${displays.length} displays)` : ""}</SelectItem>
+          <SelectItem value="desktop">{displays.length > 1 ? t("agentForm.computer.entireDesktopCount", { count: displays.length }) : t("agentForm.computer.entireDesktop")}</SelectItem>
           {displays.map((d) => (
             <SelectItem key={d.id} value={d.id}>
-              {d.name}
-              {d.primary ? " (primary)" : ""}
+              {d.primary ? t("agentForm.computer.primary", { name: d.name }) : d.name}
             </SelectItem>
           ))}
-          {!known && value && <SelectItem value={value}>Display {value} (not connected)</SelectItem>}
+          {!known && value && <SelectItem value={value}>{t("agentForm.computer.disconnected", { id: value })}</SelectItem>}
         </SelectContent>
       </Select>
     </div>
@@ -1434,23 +1435,24 @@ function BrowserProfileField({
   onChange: (v: string | null) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation("agents");
   const { data: profiles = [], isLoading } = useQuery({ queryKey: [...qk.browserProfiles, "list"], queryFn: api.browser.profiles });
   const defaultId = defaultProfileFor(profiles, workspaceId)?.id;
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-browser-profile">Profile</Label>
+      <Label htmlFor="agent-browser-profile">{t("agentForm.browser.profile")}</Label>
       <Select value={value ?? "__default"} onValueChange={(v) => onChange(v === "__default" ? null : v)} disabled={disabled || isLoading}>
         <SelectTrigger id="agent-browser-profile" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent position="popper">
-          <SelectItem value="__default">Default profile (workspace / global)</SelectItem>
+          <SelectItem value="__default">{t("agentForm.browser.defaultProfile")}</SelectItem>
           {profiles.length > 0 && <SelectSeparator />}
           {profiles.map((p) => (
             <SelectItem key={p.id} value={p.id}>
               {p.name}
-              {p.id === defaultId && <span className="text-xs text-muted-foreground">default</span>}
-              {p.cookieCount > 0 && <span className="text-xs text-muted-foreground">{p.cookieCount} cookies</span>}
+              {p.id === defaultId && <span className="text-xs text-muted-foreground">{t("agentForm.browser.defaultTag")}</span>}
+              {p.cookieCount > 0 && <span className="text-xs text-muted-foreground">{t("agentForm.browser.cookies", { count: p.cookieCount })}</span>}
             </SelectItem>
           ))}
         </SelectContent>
@@ -1471,6 +1473,7 @@ function ApiToolsField({
   savedWorkspaceId: string | null;
   inherit: boolean;
 }) {
+  const { t: tr } = useTranslation("agents");
   const { data: tools = [], isLoading } = useApiTools();
   const [dialog, setDialog] = useState<ApiToolDialogState>(null);
   const available = tools.filter(
@@ -1479,9 +1482,9 @@ function ApiToolsField({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
-        <Label>API tools</Label>
+        <Label>{tr("agentForm.tools.apiTools")}</Label>
         <Link to="/settings/integrations?tab=tools" className="text-xs font-medium text-muted-foreground underline-offset-[3px] hover:text-foreground hover:underline">
-          Manage tools
+          {tr("agentForm.tools.manage")}
         </Link>
       </div>
       {isLoading ? (
@@ -1504,12 +1507,12 @@ function ApiToolsField({
         </ul>
       ) : (
         <p className="rounded-lg border border-dashed px-3 py-2.5 text-xs text-muted-foreground">
-          No API tools {inherit ? "yet" : "of its own"}. Add one to let it generate images, speak, search or call your own APIs.
+          {inherit ? tr("agentForm.tools.emptyInherit") : tr("agentForm.tools.emptyOwn")}
         </p>
       )}
       {agentId && (
         <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ mode: "create", preset: null, scope: { workspaceId: savedWorkspaceId, agentId } })}>
-          <Wrench /> Add a tool only for this agent
+          <Wrench /> {tr("agentForm.tools.addOwn")}
         </Button>
       )}
       {/* Keep the dialog's submit from reaching this form (React events bubble through portals). */}
@@ -1521,6 +1524,7 @@ function ApiToolsField({
 }
 
 function McpField({ agentId, value, onChange }: { agentId?: string; value: string[]; onChange: (v: string[]) => void }) {
+  const { t } = useTranslation("agents");
   const { data: servers = [] } = useQuery({
     queryKey: [...qk.mcpServers, "list", "all"],
     queryFn: () => api.mcpServers.list({ workspaceId: "all" }),
@@ -1535,14 +1539,14 @@ function McpField({ agentId, value, onChange }: { agentId?: string; value: strin
     }));
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="agent-mcp">Attached servers</Label>
+      <Label htmlFor="agent-mcp">{t("agentForm.tools.mcpLabel")}</Label>
       <MultiSelect
         id="agent-mcp"
         options={options}
         value={value}
         onChange={onChange}
-        placeholder={options.length ? "Attach MCP servers…" : "No MCP servers yet — add them in Integrations"}
-        emptyText="No MCP servers configured."
+        placeholder={options.length ? t("agentForm.tools.mcpPlaceholder") : t("agentForm.tools.mcpNone")}
+        emptyText={t("agentForm.tools.mcpEmpty")}
       />
     </div>
   );
@@ -1557,13 +1561,14 @@ function SubagentsEditor({
   onChange: (v: SubagentDefinition[]) => void;
   errors: Record<string, string>;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const { catalog } = useModelCatalog();
   const update = (i: number, patch: Partial<SubagentDefinition>) => onChange(value.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   if (value.length === 0) {
     return (
       <div className="flex items-center gap-3 rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
         <UserRound className="size-5 shrink-0" />
-        No subagents. Add one for recurring specialist work, e.g. a “researcher” that only searches and summarizes.
+        {t("agentForm.subagents.empty")}
       </div>
     );
   }
@@ -1583,7 +1588,7 @@ function SubagentsEditor({
               <div className="grid flex-1 grid-cols-1 gap-3 @xl:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor={`sub-name-${i}`} className="text-xs">
-                    Name
+                    {t("common:words.name")}
                   </Label>
                   <Input
                     id={`sub-name-${i}`}
@@ -1596,7 +1601,7 @@ function SubagentsEditor({
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor={`sub-model-${i}`} className="text-xs">
-                    Model
+                    {t("agentForm.brain.model")}
                   </Label>
                   <Select
                     value={findModel(catalog.models, s.model)?.id ?? (s.model || "__inherit")}
@@ -1606,32 +1611,32 @@ function SubagentsEditor({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent position="popper">
-                      <SelectItem value="__inherit">Same as agent</SelectItem>
+                      <SelectItem value="__inherit">{t("agentForm.subagents.sameModel")}</SelectItem>
                       <ModelOptions models={catalog.models} current={s.model} claudeOnly />
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1.5 @xl:col-span-2">
                   <Label htmlFor={`sub-desc-${i}`} className="text-xs">
-                    When to use it
+                    {t("agentForm.subagents.whenToUse")}
                   </Label>
                   <Input
                     id={`sub-desc-${i}`}
                     value={s.description}
                     onChange={(e) => update(i, { description: e.target.value })}
-                    placeholder="Use for web research and source gathering"
+                    placeholder={t("agentForm.subagents.whenPlaceholder")}
                     className="h-8 text-sm"
                   />
                 </div>
                 <div className="space-y-1.5 @xl:col-span-2">
                   <Label htmlFor={`sub-prompt-${i}`} className="text-xs">
-                    Prompt
+                    {t("agentForm.subagents.prompt")}
                   </Label>
                   <Textarea
                     id={`sub-prompt-${i}`}
                     value={s.prompt}
                     onChange={(e) => update(i, { prompt: e.target.value })}
-                    placeholder="You are a meticulous researcher. Find primary sources, cite URLs, summarize in bullet points."
+                    placeholder={t("agentForm.subagents.promptPlaceholder")}
                     className="min-h-20 text-sm"
                   />
                 </div>
@@ -1640,7 +1645,7 @@ function SubagentsEditor({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label={`Remove subagent ${s.name || i + 1}`}
+                aria-label={t("agentForm.subagents.remove", { name: s.name || i + 1 })}
                 onClick={() => onChange(value.filter((_, j) => j !== i))}
                 className="text-muted-foreground hover:text-destructive"
               >

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Check, SmilePlus } from "lucide-react";
 import { AGENT_COLORS } from "@godmode/shared";
 import { colorSwatch } from "@/components/common";
@@ -27,6 +28,7 @@ export function IconPicker({
   onChange: (icon: string) => void;
   size?: "lg" | "xl";
 }) {
+  const { t } = useTranslation("workspaces");
   const [open, setOpen] = useState(false);
   const [custom, setCustom] = useState("");
   useEffect(() => {
@@ -40,7 +42,7 @@ export function IconPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" aria-label="Choose icon" className="group relative rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <button type="button" aria-label={t("iconPicker.choose")} className="group relative rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
           <WorkspaceTile icon={icon} color={color} size={size} />
           <span className="absolute -right-1 -bottom-1 grid size-6 place-items-center rounded-md border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground">
             <SmilePlus className="size-3.5" />
@@ -48,7 +50,7 @@ export function IconPicker({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[20.5rem] rounded-xl p-3">
-        <div className="grid grid-cols-8 gap-1" role="listbox" aria-label="Icons">
+        <div className="grid grid-cols-8 gap-1" role="listbox" aria-label={t("iconPicker.icons")}>
           {ICONS.map((e) => (
             <button
               key={e}
@@ -64,8 +66,8 @@ export function IconPicker({
         </div>
         <div className="mt-3 flex gap-2 border-t pt-3">
           <Input
-            aria-label="Custom emoji"
-            placeholder="Or paste any emoji…"
+            aria-label={t("iconPicker.custom")}
+            placeholder={t("iconPicker.customPlaceholder")}
             value={custom}
             maxLength={16}
             onChange={(e) => setCustom(e.target.value)}
@@ -76,7 +78,7 @@ export function IconPicker({
               }
             }}
           />
-          <Button type="button" size="icon" variant="secondary" aria-label="Use emoji" disabled={!custom.trim()} onClick={() => pick(custom.trim())}>
+          <Button type="button" size="icon" variant="secondary" aria-label={t("iconPicker.use")} disabled={!custom.trim()} onClick={() => pick(custom.trim())}>
             <Check />
           </Button>
         </div>

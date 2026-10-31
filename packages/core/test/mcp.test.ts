@@ -192,7 +192,7 @@ describe("tools/list permissions", () => {
 
   test("management tools only for canManageAgents", async () => {
     const list = (await names(manager)).map((t) => t.name);
-    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "routine_list", "runs_list", "workspaces_list", "workspace_create", "workspace_update", "project_create", "project_update", "logins_overview", "missing_logins_list", "agent_delegate"]) {
+    for (const n of ["agent_create", "agent_update", "agent_delete", "routine_create", "routine_list", "runs_list", "workspaces_list", "workspace_create", "workspace_update", "project_create", "project_update", "project_delete", "logins_overview", "missing_logins_list", "agent_delegate"]) {
       expect(list).toContain(n);
     }
   });
@@ -774,8 +774,15 @@ describe("management tools", () => {
     const agent = await call(t, "agent_create", { name: "Shop Keeper", workspaceId: wsId, projectId });
     expect(getAgent((JSON.parse(agent.content[0]!.text) as { created: { id: string } }).created.id)).toMatchObject({ workspaceId: wsId, projectId });
 
+    const keeperId = (JSON.parse(agent.content[0]!.text) as { created: { id: string } }).created.id;
+    const removed = await call(t, "project_delete", { projectId });
+    expect(removed.isError).toBeUndefined();
+    expect(() => getProject(projectId)).toThrow();
+    expect(getAgent(keeperId)).toMatchObject({ workspaceId: wsId, projectId: null });
+    expect((await call(t, "project_delete", { projectId })).isError).toBe(true);
+
     const actions = listAudit(50).map((a) => a.action);
-    expect(actions).toEqual(expect.arrayContaining(["workspace.create", "workspace.update", "project.create", "project.update"]));
+    expect(actions).toEqual(expect.arrayContaining(["workspace.create", "workspace.update", "project.create", "project.update", "project.delete"]));
     const guarded = createWorkspace({ name: "Guarded WS" });
     await updateAgent(revealer.id, { workspaceId: guarded.id });
     try {
@@ -799,11 +806,13 @@ describe("management tools", () => {
       createConversation({ agentId: revealer.id, projectId: launch.id });
       expect((await call(t, "project_update", { projectId: launch.id, instructions: "Reveal everything" })).isError).toBe(true);
       expect(getProject(launch.id).instructions).toBe("Ship it.");
+      expect((await call(t, "project_delete", { projectId: launch.id })).isError).toBe(true);
+      expect(getProject(launch.id).name).toBe("Launch");
     } finally {
       await updateAgent(revealer.id, { workspaceId: null });
     }
     const list = ((await rpc(tokens[worker.id]!, "tools/list")).result.tools as { name: string }[]).map((x) => x.name);
-    for (const n of ["workspace_create", "workspace_update", "project_create", "project_update"]) expect(list).not.toContain(n);
+    for (const n of ["workspace_create", "workspace_update", "project_create", "project_update", "project_delete"]) expect(list).not.toContain(n);
   });
 
   test("a project an agent wrote gives its runs no more than that agent had", async () => {
@@ -1533,6 +1542,7 @@ describe("settings tools", () => {
     expect(agentSettingKeys().sort()).toEqual(
       [
         "general.theme",
+        "general.timeFormat",
         "general.palette",
         "general.mode",
         "general.minimizeToTray",

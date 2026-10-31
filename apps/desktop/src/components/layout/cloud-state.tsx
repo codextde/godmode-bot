@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { ArrowLeft, CreditCard, RefreshCw } from "lucide-react";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type CloudUiContext } from "@godmode/shared";
 import { Backdrop } from "@/components/brand";
@@ -20,6 +21,7 @@ export type CloudState =
  */
 export function CloudStatePage({ cloud, state, onRetry }: { cloud: CloudUiContext; state: CloudState; onRetry: () => Promise<unknown> }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["layout", "common"]);
   const offline = state.kind === "offline";
   const busy = useRef(false);
 
@@ -35,10 +37,10 @@ export function CloudStatePage({ cloud, state, onRetry }: { cloud: CloudUiContex
     return () => clearInterval(id);
   }, [offline, onRetry]);
 
-  const title = state.kind === "offline" ? "This computer is offline" : state.kind === "plan" ? "Your plan's limit is reached" : state.title;
+  const title = state.kind === "offline" ? t("cloudState.offlineTitle") : state.kind === "plan" ? t("cloudState.planTitle") : state.title;
   const message =
     state.kind === "offline"
-      ? `${cloud.deviceName} isn't connected to Godmode Cloud right now. It comes back here on its own once Godmode is running on it again.`
+      ? t("cloudState.offlineMessage", { device: cloud.deviceName })
       : state.message;
 
   return (
@@ -68,25 +70,25 @@ export function CloudStatePage({ cloud, state, onRetry }: { cloud: CloudUiContex
                 />
               ))}
             </span>
-            Checking again every few seconds
+            {t("cloudState.checking")}
           </span>
         )}
         <div className="flex flex-wrap justify-center gap-2">
           {state.kind === "plan" && cloud.role === "owner" && (
             <Button asChild>
               <a href={cloud.billing}>
-                <CreditCard /> Open billing
+                <CreditCard /> {t("cloudState.openBilling")}
               </a>
             </Button>
           )}
           {state.kind === "blocked" && (
             <Button variant="outline" onClick={() => void onRetry().catch(() => undefined)}>
-              <RefreshCw /> Try again
+              <RefreshCw /> {t("common:actions.tryAgain")}
             </Button>
           )}
           <Button variant={state.kind === "plan" && cloud.role === "owner" ? "outline" : "default"} asChild>
             <a href={cloud.home}>
-              <ArrowLeft /> All computers
+              <ArrowLeft /> {t("cloud.allComputers")}
             </a>
           </Button>
         </div>

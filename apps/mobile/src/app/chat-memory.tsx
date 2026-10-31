@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { tokensLabel } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { toneColor } from "@/components/context-ring";
@@ -17,10 +18,11 @@ import { radius, space, useColors } from "@/lib/theme";
 /** How full a chat's memory is, and Compress: Claude Code turns the conversation so far into a summary. */
 export default function ChatMemorySheet() {
   const c = useColors();
+  const { t } = useTranslation("memory");
   const { conversationId = "" } = useLocalSearchParams<{ conversationId: string }>();
   const conversation = useQuery({ queryKey: qk.conversation(conversationId), queryFn: () => fetchConversation(conversationId), enabled: !!conversationId });
   const { byId } = useAgents();
-  const agentName = byId.get(conversation.data?.agentId ?? "")?.name ?? "The agent";
+  const agentName = byId.get(conversation.data?.agentId ?? "")?.name ?? t("chatMemory.theAgent");
   const run = useChatRun(conversationId);
   const gauge = useContextGauge(conversation.data?.context);
   const [busy, setBusy] = useState(false);
@@ -32,7 +34,7 @@ export default function ChatMemorySheet() {
       await compressChat(conversationId);
       router.back();
     } catch (err) {
-      Alert.alert("Couldn't compress the chat", errorText(err));
+      Alert.alert(t("chatMemory.compressFailed"), errorText(err));
     } finally {
       setBusy(false);
     }
@@ -44,9 +46,9 @@ export default function ChatMemorySheet() {
   return (
     <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: c.background }}>
       <View style={{ gap: 4 }}>
-        <T variant="title">Chat memory</T>
+        <T variant="title">{t("chatMemory.title")}</T>
         <T variant="subhead" muted>
-          What {agentName} carries along with every step of this chat.
+          {t("chatMemory.subtitle", { name: agentName })}
         </T>
       </View>
 
@@ -59,7 +61,7 @@ export default function ChatMemorySheet() {
                   {tokensLabel(gauge.tokens)}
                 </T>
                 <T variant="footnote" muted>
-                  {gauge.window ? `of ${tokensLabel(gauge.window)} tokens` : "tokens"}
+                  {gauge.window ? t("chatMemory.ofTokens", { tokens: tokensLabel(gauge.window) }) : t("chatMemory.tokens")}
                 </T>
               </View>
               {pct !== null ? (
@@ -75,22 +77,22 @@ export default function ChatMemorySheet() {
               </View>
             ) : null}
             <T variant="footnote" muted>
-              {gauge.autoAt === null ? "Auto-compress is off." : `Compresses by itself at ${Math.round(gauge.autoAt * 100)}%.`}
+              {gauge.autoAt === null ? t("chatMemory.autoOff") : t("chatMemory.autoAt", { pct: Math.round(gauge.autoAt * 100) })}
             </T>
           </>
         ) : (
           <T variant="subhead" muted>
-            Known after {agentName}'s next answer in this chat.
+            {t("chatMemory.unknown", { name: agentName })}
           </T>
         )}
       </Card>
 
       <T variant="subhead" muted>
-        Compress turns the conversation so far into a short summary. {agentName} keeps the gist, your instructions and its files, and every next step gets faster and cheaper.
+        {t("chatMemory.explain", { name: agentName })}
       </T>
 
       <Button
-        title={queued ? "Compress is queued" : !gauge?.compressible ? "Nothing to compress yet" : run ? "Compress after this step" : "Compress now"}
+        title={queued ? t("chatMemory.queued") : !gauge?.compressible ? t("chatMemory.nothing") : run ? t("chatMemory.afterStep") : t("chatMemory.now")}
         icon="layers"
         loading={busy}
         disabled={!gauge?.compressible || queued}
@@ -106,7 +108,7 @@ export default function ChatMemorySheet() {
         style={({ pressed }) => [styles.link, { opacity: pressed ? 0.6 : 1 }]}
       >
         <T variant="footnote" muted style={{ flex: 1 }}>
-          Auto-compress setting
+          {t("chatMemory.setting")}
         </T>
         <Icon name="chevron" size={12} weight="semibold" color={c.textFaint} />
       </Pressable>

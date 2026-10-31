@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { KeyRound, LogIn } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ClaudeSignInSteps, maySignIn, signsInFromAfar, useClaudeLogin } from "@/components/onboarding/claude-sign-in";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -11,6 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
  * it works (a sign-in, or a run that got an answer).
  */
 export function ClaudeSignedOutBanner() {
+  const { t } = useTranslation(["layout", "common"]);
   const { pathname } = useLocation();
   const login = useClaudeLogin();
   const { status, state, start } = login;
@@ -41,42 +43,43 @@ export function ClaudeSignedOutBanner() {
                 <p className="min-w-0 flex-1 leading-snug">
                   {out.apiKey ? (
                     <>
-                      <span className="font-medium">Claude refused your Anthropic API key.</span>
-                      <span className="text-muted-foreground"> Your agents can't work until it works again.</span>
+                      <span className="font-medium">{t("claudeSignedOut.keyRefused")}</span>
+                      <span className="text-muted-foreground"> {t("claudeSignedOut.keyRefusedHint")}</span>
                     </>
                   ) : state === "waiting" ? (
                     <>
-                      <span className="font-medium">Signing in to Claude…</span>
-                      {!login.mine && !signsInFromAfar && <span className="text-muted-foreground"> Finish it in your browser.</span>}
+                      <span className="font-medium">{t("claudeSignedOut.signingIn")}</span>
+                      {!login.mine && !signsInFromAfar && <span className="text-muted-foreground"> {t("claudeSignedOut.finishInBrowser")}</span>}
                     </>
                   ) : state === "failed" && status?.message ? (
                     <>
-                      <span className="font-medium">The sign-in didn't finish.</span>
+                      <span className="font-medium">{t("claudeSignedOut.failed")}</span>
                       <span className="text-muted-foreground"> {status.message}</span>
                     </>
                   ) : (
                     <>
-                      <span className="font-medium">Claude is signed out.</span>
+                      <span className="font-medium">{t("claudeSignedOut.signedOut")}</span>
                       <span className="text-muted-foreground">
-                        {maySignIn ? " Your agents can't work until you sign in again." : " Your agents can't work until the owner of this computer signs in again."}
+                        {" "}
+                        {maySignIn ? t("claudeSignedOut.signInAgainHint") : t("claudeSignedOut.ownerSignInHint")}
                       </span>
                     </>
                   )}
                 </p>
                 {out.apiKey ? (
                   <Button size="sm" variant="outline" className="h-7 shrink-0 bg-card" asChild>
-                    <Link to="/settings/api-keys">Check the key</Link>
+                    <Link to="/settings/api-keys">{t("claudeSignedOut.checkKey")}</Link>
                   </Button>
                 ) : !maySignIn ? null : state !== "waiting" ? (
                   <Button size="sm" className="h-7 shrink-0" onClick={() => start.mutate()} disabled={start.isPending}>
                     {start.isPending ? <Spinner /> : <LogIn />}
-                    {state === "failed" ? "Try again" : "Sign in again"}
+                    {state === "failed" ? t("common:actions.tryAgain") : t("claudeSignedOut.signInAgain")}
                   </Button>
                 ) : (
                   !login.mine &&
                   !expanded && (
                     <Button size="sm" variant="ghost" className="h-7 shrink-0" onClick={() => setExpanded(true)}>
-                      Show steps
+                      {t("claudeSignedOut.showSteps")}
                     </Button>
                   )
                 )}

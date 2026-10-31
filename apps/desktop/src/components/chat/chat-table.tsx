@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { Copy, FileText, Maximize2, Table2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -61,32 +62,33 @@ function ToolButton({ label, onClick, disabled, children }: { label: string; onC
 }
 
 function CopyMenu({ tableRef }: { tableRef: RefObject<HTMLTableElement | null> }) {
+  const { t } = useTranslation(["chat", "common"]);
   // Clipboard writes must start inside the click in WebKit (the desktop app): nothing is awaited before them.
   const copy = async (markdown: boolean) => {
     const table = tableRef.current;
     if (!table) return;
-    if (await (markdown ? copyText(markdownOf(table)) : copyTable(table))) toast.success(markdown ? "Copied as Markdown" : "Table copied");
-    else toast.error("Couldn't copy the table");
+    if (await (markdown ? copyText(markdownOf(table)) : copyTable(table))) toast.success(markdown ? t("table.copiedMarkdown") : t("table.copied"));
+    else toast.error(t("table.copyError"));
   };
   return (
     <DropdownMenu>
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="ghost" size="icon-xs" aria-label="Copy table" className="text-muted-foreground hover:text-foreground">
+            <Button type="button" variant="ghost" size="icon-xs" aria-label={t("table.copy")} className="text-muted-foreground hover:text-foreground">
               <Copy />
             </Button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent>Copy table</TooltipContent>
+        <TooltipContent>{t("table.copy")}</TooltipContent>
       </Tooltip>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuItem onClick={() => void copy(false)}>
-          <Table2 /> Copy table
+          <Table2 /> {t("table.copy")}
           <span className="ml-auto text-xs text-muted-foreground">Slack, Sheets</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void copy(true)}>
-          <FileText /> Copy as Markdown
+          <FileText /> {t("table.copyMarkdown")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -95,6 +97,7 @@ function CopyMenu({ tableRef }: { tableRef: RefObject<HTMLTableElement | null> }
 
 /** The same table full screen, scrollable both ways, with zoom. */
 function TableDialog({ open, onOpenChange, children }: { open: boolean; onOpenChange: (open: boolean) => void; children: ReactNode }) {
+  const { t } = useTranslation(["chat", "common"]);
   const tableRef = useRef<HTMLTableElement>(null);
   const [zoom, setZoom] = useState(1);
   return (
@@ -105,26 +108,26 @@ function TableDialog({ open, onOpenChange, children }: { open: boolean; onOpenCh
         className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,1600px)]"
       >
         <header className="flex items-center gap-2 border-b py-2 pr-2 pl-5">
-          <DialogTitle className="text-sm font-medium">Table</DialogTitle>
+          <DialogTitle className="text-sm font-medium">{t("table.title")}</DialogTitle>
           <div className="ml-auto flex items-center gap-0.5">
-            <ToolButton label="Zoom out" disabled={zoom <= ZOOMS[0]} onClick={() => setZoom((z) => ZOOMS.findLast((s) => s < z) ?? z)}>
+            <ToolButton label={t("table.zoomOut")} disabled={zoom <= ZOOMS[0]} onClick={() => setZoom((z) => ZOOMS.findLast((s) => s < z) ?? z)}>
               <ZoomOut />
             </ToolButton>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button type="button" variant="ghost" size="xs" aria-label={`Reset zoom (${Math.round(zoom * 100)}%)`} onClick={() => setZoom(1)} className="w-12 text-muted-foreground tabular-nums hover:text-foreground">
+                <Button type="button" variant="ghost" size="xs" aria-label={t("table.resetZoom", { percent: Math.round(zoom * 100) })} onClick={() => setZoom(1)} className="w-12 text-muted-foreground tabular-nums hover:text-foreground">
                   {Math.round(zoom * 100)}%
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Reset to 100%</TooltipContent>
+              <TooltipContent>{t("table.resetTo100")}</TooltipContent>
             </Tooltip>
-            <ToolButton label="Zoom in" disabled={zoom >= ZOOMS[ZOOMS.length - 1]} onClick={() => setZoom((z) => ZOOMS.find((s) => s > z) ?? z)}>
+            <ToolButton label={t("table.zoomIn")} disabled={zoom >= ZOOMS[ZOOMS.length - 1]} onClick={() => setZoom((z) => ZOOMS.find((s) => s > z) ?? z)}>
               <ZoomIn />
             </ToolButton>
             <span className="mx-1 h-4 w-px bg-border" aria-hidden />
             <CopyMenu tableRef={tableRef} />
             <DialogClose asChild>
-              <Button type="button" variant="ghost" size="icon-xs" aria-label="Close" className="text-muted-foreground hover:text-foreground">
+              <Button type="button" variant="ghost" size="icon-xs" aria-label={t("common:actions.close")} className="text-muted-foreground hover:text-foreground">
                 <X />
               </Button>
             </DialogClose>
@@ -144,6 +147,7 @@ function TableDialog({ open, onOpenChange, children }: { open: boolean; onOpenCh
 
 /** A table in chat: on hover, copy it (for Slack and spreadsheets, or as Markdown) or open it full screen. */
 export function ChatTable({ children }: { children?: ReactNode }) {
+  const { t } = useTranslation("chat");
   const tableRef = useRef<HTMLTableElement>(null);
   const [open, setOpen] = useState(false);
   return (
@@ -157,7 +161,7 @@ export function ChatTable({ children }: { children?: ReactNode }) {
         className="absolute -top-3.5 right-2 z-10 flex items-center gap-0.5 rounded-md border bg-popover p-0.5 opacity-0 shadow-card transition pointer-events-none group-focus-within/table:pointer-events-auto group-focus-within/table:opacity-100 group-hover/table:pointer-events-auto group-hover/table:opacity-100 has-[[aria-expanded=true]]:pointer-events-auto has-[[aria-expanded=true]]:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
       >
         <CopyMenu tableRef={tableRef} />
-        <ToolButton label="Full screen" onClick={() => setOpen(true)}>
+        <ToolButton label={t("table.fullScreen")} onClick={() => setOpen(true)}>
           <Maximize2 />
         </ToolButton>
         <TableDialog open={open} onOpenChange={setOpen}>

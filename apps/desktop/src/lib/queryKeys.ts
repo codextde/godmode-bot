@@ -1,6 +1,7 @@
 /** Central React Query keys. Prefix-based invalidation: invalidating `qk.agents` also hits `qk.agent(id)`. */
 export const qk = {
   bootstrap: ["bootstrap"] as unknown[],
+  search: (q: string) => ["search", q],
   /** "Needs you" — under `bootstrap`, so whatever refreshes the counts refreshes the list. */
   attention: ["bootstrap", "attention"] as unknown[],
   away: (since: string, until: string) => ["away", since, until],
@@ -14,6 +15,8 @@ export const qk = {
   doctor: ["doctor"] as unknown[],
   claudeUpdate: ["doctor", "claude-update"] as unknown[],
   claudeLogin: ["doctor", "claude-login"] as unknown[],
+  claudeUsage: ["doctor", "claude-usage"] as unknown[],
+  claudeAccounts: ["claude-accounts"] as unknown[],
   permissions: ["doctor", "permissions"] as unknown[],
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],
@@ -96,6 +99,7 @@ export const qk = {
   artifactList: (workspaceId: string) => ["artifacts", "list", workspaceId],
   chatArtifacts: (conversationId: string) => ["artifacts", "chat", conversationId],
   artifact: (id: string) => ["artifacts", "one", id],
+  pullRequest: (url: string) => ["github", "pull", url],
   artifactVersions: (id: string) => ["artifacts", "versions", id],
   artifactVersion: (id: string, version: number) => ["artifacts", "version", id, version],
   mcpServers: ["mcp-servers"] as unknown[],

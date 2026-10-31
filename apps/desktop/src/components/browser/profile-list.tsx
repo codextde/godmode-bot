@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { Bot, Cookie, Download, Ellipsis, Globe, Layers, Pencil, Play, Plus, Square, Star, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { BrowserProfile, Workspace } from "@godmode/shared";
 import {
@@ -37,6 +38,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
+import { dateLocale, intlLocale } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { ProfileActions } from "./use-profile-actions";
 import { AssignWorkspaceDialog } from "./assign-workspace-dialog";
@@ -45,7 +47,7 @@ import { useReduceAnimations } from "@/lib/motion";
 function relative(iso: string | null) {
   if (!iso) return null;
   try {
-    return formatDistanceToNow(new Date(iso), { addSuffix: true });
+    return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: dateLocale() });
   } catch {
     return null;
   }
@@ -71,6 +73,7 @@ export function ProfileList({
   actions: ProfileActions;
 }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["browser", "common"]);
   const [renameTarget, setRenameTarget] = useState<BrowserProfile | null>(null);
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<BrowserProfile | null>(null);
@@ -87,7 +90,7 @@ export function ProfileList({
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-1" role="listbox" aria-label="Browser profiles">
+      <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-1" role="listbox" aria-label={t("list.aria")}>
         <AnimatePresence initial={false}>
           {profiles.map((p, i) => (
             <motion.div
@@ -120,14 +123,11 @@ export function ProfileList({
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete “{deleteTarget?.name}”?</AlertDialogTitle>
-            <AlertDialogDescription>
-              The browser profile and everything in it — cookies, sessions, history, local storage — is removed from this machine.
-              Agents assigned to this profile will need another one. This can't be undone.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t("list.deleteTitle", { name: deleteTarget?.name })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("list.deleteBody")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -135,7 +135,7 @@ export function ProfileList({
                 setDeleteTarget(null);
               }}
             >
-              <Trash2 /> Delete profile
+              <Trash2 /> {t("list.deleteConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -165,12 +165,17 @@ function ProfileCard({
   onAssign: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation(["browser", "common"]);
   const launching = actions.launch.isPending && actions.launch.variables?.id === p.id;
   const stopping = actions.stop.isPending && actions.stop.variables?.id === p.id;
   const imported = relative(p.importedAt);
   const globalDefault = p.isDefault && !p.workspaceId;
   const canMakeDefault = !isDefault && (!p.workspaceId || p.workspaceId === workspace?.id);
-  const makeDefaultLabel = !workspace ? "Set as default" : p.workspaceId || globalDefault ? `Make default in ${workspace.name}` : `Move to ${workspace.name} as default`;
+  const makeDefaultLabel = !workspace
+    ? t("list.setDefault")
+    : p.workspaceId || globalDefault
+      ? t("list.makeDefaultIn", { workspace: workspace.name })
+      : t("list.moveAsDefault", { workspace: workspace.name });
 
   return (
     <div
@@ -212,30 +217,30 @@ function ProfileCard({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge variant="secondary" className="h-5 gap-1 px-1.5 text-[10px]">
-                  <Star className="size-2.5 fill-current" /> Default
+                  <Star className="size-2.5 fill-current" /> {t("list.default")}
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent>{workspace ? `New chats in ${workspace.name} browse here` : "New chats browse here unless their workspace has its own default"}</TooltipContent>
+              <TooltipContent>{workspace ? t("list.defaultTooltipWs", { workspace: workspace.name }) : t("list.defaultTooltip")}</TooltipContent>
             </Tooltip>
           )}
           {p.createdByAgentId && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Badge variant="outline" className="h-5 gap-1 px-1.5 text-[10px]">
-                  <Bot className="size-2.5" /> Agent
+                  <Bot className="size-2.5" /> {t("common:words.agent")}
                 </Badge>
               </TooltipTrigger>
-              <TooltipContent>Created empty by an agent for itself or its team; agents may assign it</TooltipContent>
+              <TooltipContent>{t("list.agentTooltip")}</TooltipContent>
             </Tooltip>
           )}
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <ScopeBadge workspaceId={p.workspaceId} className="h-5 text-[10px]" />
-          <span className="inline-flex items-center gap-1" title={`${p.cookieCount} cookies`}>
-            <Cookie className="size-3" /> {p.cookieCount.toLocaleString()}
+          <span className="inline-flex items-center gap-1" title={t("cookies", { count: p.cookieCount, n: String(p.cookieCount) })}>
+            <Cookie className="size-3" /> {p.cookieCount.toLocaleString(intlLocale())}
           </span>
           <span className={cn("inline-flex items-center gap-1", p.running && "text-brand-strong")}>
-            {p.running ? (p.chats.length ? `${p.chats.length} ${p.chats.length === 1 ? "chat" : "chats"}` : "Running") : "Stopped"}
+            {p.running ? (p.chats.length ? t("list.chats", { count: p.chats.length }) : t("list.running")) : t("list.stopped")}
           </span>
         </div>
         {p.importedFrom && (
@@ -253,7 +258,7 @@ function ProfileCard({
             variant="ghost"
             size="icon-sm"
             className="-mt-1 -mr-1 text-muted-foreground opacity-70 group-hover:opacity-100"
-            aria-label={`Actions for ${p.name}`}
+            aria-label={t("list.actionsFor", { name: p.name })}
             onClick={(e) => e.stopPropagation()}
           >
             {launching || stopping ? <Spinner /> : <Ellipsis />}
@@ -262,11 +267,11 @@ function ProfileCard({
         <DropdownMenuContent align="end" className="w-64" onClick={(e) => e.stopPropagation()}>
           {p.running ? (
             <DropdownMenuItem onClick={() => actions.stop.mutate(p)} disabled={stopping}>
-              <Square /> Stop browser
+              <Square /> {t("list.stopBrowser")}
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={() => actions.launch.mutate(p)} disabled={launching}>
-              <Play /> Launch browser
+              <Play /> {t("list.launchBrowser")}
             </DropdownMenuItem>
           )}
           {canMakeDefault && (
@@ -275,14 +280,14 @@ function ProfileCard({
             </DropdownMenuItem>
           )}
           <DropdownMenuItem onClick={onRename}>
-            <Pencil /> Rename
+            <Pencil /> {t("common:actions.rename")}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onAssign} disabled={globalDefault}>
-            <Layers /> {globalDefault ? "Global default stays global" : "Assign to workspace…"}
+            <Layers /> {globalDefault ? t("list.globalStays") : t("list.assignTo")}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" disabled={globalDefault} onClick={onDelete}>
-            <Trash2 /> {globalDefault ? "Global default can't be deleted" : "Delete"}
+            <Trash2 /> {globalDefault ? t("list.cantDelete") : t("common:actions.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -291,6 +296,7 @@ function ProfileCard({
 }
 
 function RenameProfileDialog({ profile, onClose, actions }: { profile: BrowserProfile | null; onClose: () => void; actions: ProfileActions }) {
+  const { t } = useTranslation(["browser", "common"]);
   const [name, setName] = useState("");
   useEffect(() => {
     if (profile) setName(profile.name);
@@ -305,18 +311,18 @@ function RenameProfileDialog({ profile, onClose, actions }: { profile: BrowserPr
       <DialogContent className="sm:max-w-md">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Rename profile</DialogTitle>
+            <DialogTitle>{t("list.renameTitle")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="rename-profile">Name</Label>
+            <Label htmlFor="rename-profile">{t("common:words.name")}</Label>
             <Input id="rename-profile" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={60} />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || actions.rename.isPending}>
-              {actions.rename.isPending && <Spinner />} Save
+              {actions.rename.isPending && <Spinner />} {t("common:actions.save")}
             </Button>
           </DialogFooter>
         </form>
@@ -334,6 +340,7 @@ export function CreateProfileDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (profile: BrowserProfile) => void;
 }) {
+  const { t } = useTranslation(["browser", "common"]);
   const qc = useQueryClient();
   const scope = useUi((s) => s.workspace);
   const [name, setName] = useState("");
@@ -348,12 +355,12 @@ export function CreateProfileDialog({
   const create = useMutation({
     mutationFn: () => api.browser.createProfile({ name: name.trim(), workspaceId }),
     onSuccess: (profile) => {
-      toast.success(`${profile.name} created`, { description: "Launch it or import your Chrome sessions next." });
+      toast.success(t("list.created", { name: profile.name }), { description: t("list.createdDescription") });
       void qc.invalidateQueries({ queryKey: qk.browserProfiles });
       onCreated(profile);
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Could not create the profile", qc),
+    onError: (e) => toastApiError(e, t("list.createFailed"), qc),
   });
 
   return (
@@ -367,33 +374,31 @@ export function CreateProfileDialog({
           }}
         >
           <DialogHeader>
-            <DialogTitle>New browser profile</DialogTitle>
-            <DialogDescription>
-              A separate Chromium with its own cookies and logins — e.g. one per client or workspace, so sessions never mix.
-            </DialogDescription>
+            <DialogTitle>{t("list.newTitle")}</DialogTitle>
+            <DialogDescription>{t("list.newDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <Label htmlFor="new-profile-name">Name</Label>
+            <Label htmlFor="new-profile-name">{t("common:words.name")}</Label>
             <Input
               id="new-profile-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Marketing accounts"
+              placeholder={t("list.namePlaceholder")}
               autoFocus
               maxLength={60}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-profile-scope">Available to</Label>
+            <Label htmlFor="new-profile-scope">{t("list.availableTo")}</Label>
             <WorkspaceSelect id="new-profile-scope" value={workspaceId} onChange={setWorkspaceId} />
-            <p className="text-xs text-muted-foreground">Agents pick their profile in their settings; workspace profiles are offered to that workspace's agents.</p>
+            <p className="text-xs text-muted-foreground">{t("list.availableHint")}</p>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" disabled={!name.trim() || create.isPending}>
-              {create.isPending ? <Spinner /> : <Plus />} Create profile
+              {create.isPending ? <Spinner /> : <Plus />} {t("page.createProfile")}
             </Button>
           </DialogFooter>
         </form>

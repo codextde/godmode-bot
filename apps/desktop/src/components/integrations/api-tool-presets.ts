@@ -1,3 +1,4 @@
+import type { ParseKeys } from "i18next";
 import type { LucideIcon } from "lucide-react";
 import { AudioLines, Banana, Layers, Search, Sparkles, Wrench } from "lucide-react";
 import type { ApiToolAuth } from "@godmode/shared";
@@ -5,8 +6,8 @@ import type { ApiToolAuth } from "@godmode/shared";
 export interface ApiToolPreset {
   id: string;
   name: string;
-  tagline: string;
-  description: string;
+  tagline: ParseKeys<"integrations">;
+  description: ParseKeys<"integrations">;
   icon: LucideIcon;
   baseUrl: string;
   auth: ApiToolAuth;
@@ -24,8 +25,8 @@ export const API_TOOL_PRESETS: ApiToolPreset[] = [
   {
     id: "gemini",
     name: "Nano Banana",
-    tagline: "Images with Google Gemini",
-    description: "Generate and edit images with Nano Banana (Google's Gemini image models): illustrations, product shots, photo edits, images with text.",
+    tagline: "toolPresets.gemini.tagline",
+    description: "toolPresets.gemini.description",
     icon: Banana,
     baseUrl: "https://generativelanguage.googleapis.com",
     auth: { in: "header", name: "x-goog-api-key", prefix: "" },
@@ -67,8 +68,8 @@ Send the pictures next to the instruction:
   {
     id: "openai",
     name: "OpenAI",
-    tagline: "GPT Image, GPT, speech",
-    description: "Images with GPT Image (generate and edit), plus OpenAI's GPT models for text and vision, text-to-speech and transcription.",
+    tagline: "toolPresets.openai.tagline",
+    description: "toolPresets.openai.description",
     icon: Sparkles,
     baseUrl: "https://api.openai.com",
     auth: BEARER,
@@ -104,8 +105,8 @@ POST /v1/audio/transcriptions as a form: { "model": "gpt-4o-transcribe", "file":
   {
     id: "elevenlabs",
     name: "ElevenLabs",
-    tagline: "Voices and sound effects",
-    description: "Lifelike speech in many voices and languages, sound effects from a description, and speech-to-text.",
+    tagline: "toolPresets.elevenlabs.tagline",
+    description: "toolPresets.elevenlabs.description",
     icon: AudioLines,
     baseUrl: "https://api.elevenlabs.io",
     auth: { in: "header", name: "xi-api-key", prefix: "" },
@@ -133,8 +134,8 @@ POST /v1/speech-to-text as a form: { "model_id": "scribe_v1", "file": { "$file":
   {
     id: "replicate",
     name: "Replicate",
-    tagline: "Thousands of open models",
-    description: "Run open models for images (FLUX), video, audio, upscaling and background removal.",
+    tagline: "toolPresets.replicate.tagline",
+    description: "toolPresets.replicate.description",
     icon: Layers,
     baseUrl: "https://api.replicate.com",
     auth: BEARER,
@@ -159,8 +160,8 @@ Files as input: a public URL, or { "$file": "/path/to/image.png", "as": "dataUrl
   {
     id: "perplexity",
     name: "Perplexity",
-    tagline: "Web search with sources",
-    description: "Up-to-date answers from the web with cited sources — research, news, fact checks.",
+    tagline: "toolPresets.perplexity.tagline",
+    description: "toolPresets.perplexity.description",
     icon: Search,
     baseUrl: "https://api.perplexity.ai",
     auth: BEARER,

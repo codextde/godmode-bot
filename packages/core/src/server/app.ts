@@ -7,6 +7,7 @@ import { logger } from "../log";
 import { hostGuard, isAllowedOrigin, isMobileChannel, isRelayed, requireAuth } from "./auth";
 import { registerAuthRoutes } from "./routes/auth";
 import { registerSystemRoutes } from "./routes/system";
+import { registerClaudeAccountRoutes } from "./routes/claudeAccounts";
 import { registerVaultRoutes } from "./routes/vault";
 import { registerCardRoutes } from "./routes/cards";
 import { registerWorkspaceRoutes } from "./routes/workspaces";
@@ -33,6 +34,7 @@ import { registerAndroidRoutes } from "./routes/android";
 import { registerModRoutes } from "./routes/mods";
 import { registerLogRoutes } from "./routes/logs";
 import { registerTaskRoutes } from "./routes/tasks";
+import { registerGithubRoutes } from "./routes/github";
 import { serveStatic } from "./static";
 import { handleWebhook } from "../automations/webhooks";
 import { registerMessagingRoutes } from "./routes/messaging";
@@ -179,6 +181,7 @@ export function createApp() {
   app.use("/api/*", remoteRouting);
 
   registerSystemRoutes(app);
+  registerClaudeAccountRoutes(app);
   registerVaultRoutes(app);
   registerCardRoutes(app);
   registerWorkspaceRoutes(app);
@@ -195,6 +198,7 @@ export function createApp() {
   registerComputerRoutes(app);
   registerVmRoutes(app);
   registerTaskRoutes(app);
+  registerGithubRoutes(app);
   registerSshRoutes(app);
   registerAndroidRoutes(app);
   registerModRoutes(app);

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { ChevronDown, CircleCheck, CircleDashed, CircleX, FileText, FlaskConical, Globe, MoreHorizontal, Pencil, Plus, ShieldCheck, Terminal, Trash2, Wrench, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ApiTool, ApiToolTestResult } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { useLocale } from "@/i18n/language";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,7 @@ function hostOf(url: string): string {
 /** APIs agents may call with a stored key: add from a preset or from scratch, test, scope, enable. */
 export function ApiToolsTab() {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["integrations", "common"]);
   const qc = useQueryClient();
   const tools = useApiTools();
   const [dialog, setDialog] = useState<ApiToolDialogState>(null);
@@ -58,14 +61,17 @@ export function ApiToolsTab() {
     onMutate: async ({ id, enabled }) => {
       await qc.cancelQueries({ queryKey: qk.apiTools });
       const prev = qc.getQueryData<ApiTool[]>(qk.apiTools);
-      qc.setQueryData<ApiTool[]>(qk.apiTools, (list) => list?.map((t) => (t.id === id ? { ...t, enabled } : t)));
+      qc.setQueryData<ApiTool[]>(qk.apiTools, (list) => list?.map((tool) => (tool.id === id ? { ...tool, enabled } : tool)));
       return { prev };
     },
     onError: (e, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.apiTools, ctx.prev);
-      toastApiError(e, "Couldn't update the tool", qc);
+      toastApiError(e, t("tools.updateFailed"), qc);
     },
-    onSuccess: (t) => toast.success(t.enabled ? `${t.name} is on` : `${t.name} is off`, { description: t.enabled ? "Agents in scope can use it again." : "Agents won't see it until you turn it back on." }),
+    onSuccess: (tool) =>
+      toast.success(tool.enabled ? t("tools.isOn", { name: tool.name }) : t("tools.isOff", { name: tool.name }), {
+        description: tool.enabled ? t("tools.isOnHint") : t("tools.isOffHint"),
+      }),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.apiTools }),
   });
 
@@ -74,14 +80,14 @@ export function ApiToolsTab() {
     onMutate: async (id) => {
       await qc.cancelQueries({ queryKey: qk.apiTools });
       const prev = qc.getQueryData<ApiTool[]>(qk.apiTools);
-      qc.setQueryData<ApiTool[]>(qk.apiTools, (list) => list?.filter((t) => t.id !== id));
+      qc.setQueryData<ApiTool[]>(qk.apiTools, (list) => list?.filter((tool) => tool.id !== id));
       return { prev };
     },
     onError: (e, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.apiTools, ctx.prev);
-      toastApiError(e, "Couldn't remove the tool", qc);
+      toastApiError(e, t("tools.removeFailed"), qc);
     },
-    onSuccess: () => toast.success("Tool removed"),
+    onSuccess: () => toast.success(t("tools.removed")),
     onSettled: () => void qc.invalidateQueries({ queryKey: qk.apiTools }),
   });
 
@@ -93,38 +99,38 @@ export function ApiToolsTab() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-            <Wrench className="size-4 text-muted-foreground" /> Tools
+            <Wrench className="size-4 text-muted-foreground" /> {t("tabs.tools")}
           </h2>
           <p className="mt-0.5 max-w-xl text-xs text-muted-foreground">
-            Give agents any API with your key — image generation, voices, search, your own services. Say what it's for; they work out the calls.
+            {t("tools.description")}
           </p>
         </div>
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
-                <Zap /> Quick add <ChevronDown className="opacity-60" />
+                <Zap /> {t("mcp.quickAdd")} <ChevronDown className="opacity-60" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-72">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Ready to go — just add your key</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-xs text-muted-foreground">{t("tools.readyToGo")}</DropdownMenuLabel>
               {API_TOOL_PRESETS.map((p) => (
                 <DropdownMenuItem key={p.id} onClick={() => openPreset(p)} className="items-start gap-2.5 py-2">
                   <p.icon className="mt-0.5" />
                   <span className="min-w-0">
                     <span className="block text-sm font-medium">{p.name}</span>
-                    <span className="block text-xs text-muted-foreground">{p.tagline}</span>
+                    <span className="block text-xs text-muted-foreground">{t(p.tagline)}</span>
                   </span>
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => openPreset(null)}>
-                <Plus /> Any other API…
+                <Plus /> {t("tools.anyOtherMenu")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button onClick={() => openPreset(null)}>
-            <Plus /> Add tool
+            <Plus /> {t("tools.addTool")}
           </Button>
         </div>
       </div>
@@ -132,15 +138,13 @@ export function ApiToolsTab() {
       <div className="flex items-start gap-3 rounded-xl border border-brand/25 bg-brand-soft p-4">
         <ShieldCheck className="mt-0.5 size-5 shrink-0 text-brand-strong" />
         <div className="text-sm">
-          <p className="font-medium">Agents use the key, they never see it</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Keys are sealed in your vault. Godmode adds them to each request and only sends them to the tool's own address; every call is in the audit log.
-          </p>
+          <p className="font-medium">{t("tools.keyHiddenTitle")}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("tools.keyHiddenDescription")}</p>
         </div>
       </div>
 
       {tools.isError ? (
-        <QueryError error={tools.error} onRetry={() => tools.refetch()} title="Couldn't load tools" />
+        <QueryError error={tools.error} onRetry={() => tools.refetch()} title={t("tools.loadError")} />
       ) : tools.isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -178,9 +182,9 @@ export function ApiToolsTab() {
       <ConfirmDialog
         open={!!deleting}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Remove ${deleting?.name ?? "tool"}?`}
-        description="Agents lose it from their next message, and its key is deleted from the vault."
-        confirmLabel="Remove"
+        title={deleting ? t("mcp.removeTitle", { name: deleting.name }) : t("tools.removeToolTitle")}
+        description={t("tools.removeDescription")}
+        confirmLabel={t("common:actions.remove")}
         onConfirm={() => deleting && remove.mutate(deleting.id)}
       />
     </div>
@@ -188,12 +192,16 @@ export function ApiToolsTab() {
 }
 
 function PresetGallery({ onPick }: { onPick: (p: ApiToolPreset | null) => void }) {
-  const cards = [...API_TOOL_PRESETS.map((p) => ({ key: p.id, preset: p as ApiToolPreset | null, icon: p.icon, name: p.name, tagline: p.tagline })), { key: "custom", preset: null, icon: CUSTOM_ICON, name: "Any other API", tagline: "Your key, its address and docs" }];
+  const { t } = useTranslation("integrations");
+  const cards = [
+    ...API_TOOL_PRESETS.map((p) => ({ key: p.id, preset: p as ApiToolPreset | null, icon: p.icon, name: p.name, tagline: t(p.tagline) })),
+    { key: "custom", preset: null, icon: CUSTOM_ICON, name: t("tools.anyOther"), tagline: t("tools.anyOtherTagline") },
+  ];
   return (
     <div className="space-y-4">
       <div className="px-1">
-        <h3 className="text-base font-medium tracking-[-0.01em]">No tools yet</h3>
-        <p className="mt-1 max-w-lg text-sm text-muted-foreground">Start with one of these — they come with the address and docs filled in, so all you add is the key.</p>
+        <h3 className="text-base font-medium tracking-[-0.01em]">{t("tools.emptyTitle")}</h3>
+        <p className="mt-1 max-w-lg text-sm text-muted-foreground">{t("tools.emptyDescription")}</p>
       </div>
       <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
         {cards.map((c, i) => (
@@ -225,7 +233,7 @@ function PresetGallery({ onPick }: { onPick: (p: ApiToolPreset | null) => void }
 }
 
 function ToolRow({
-  tool: t,
+  tool,
   result,
   onTested,
   onToggle,
@@ -239,91 +247,93 @@ function ToolRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation(["integrations", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
-  const Icon = toolIcon(t.preset);
+  const Icon = toolIcon(tool.preset);
   const test = useMutation({
-    mutationFn: () => api.apiTools.test(t.id),
+    mutationFn: () => api.apiTools.test(tool.id),
     onSuccess: onTested,
-    onError: (e) => toastApiError(e, `Couldn't test ${t.name}`, qc),
+    onError: (e) => toastApiError(e, t("tools.testFailedToast", { name: tool.name }), qc),
   });
 
   return (
-    <div className={cn("group rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float", !t.enabled && "opacity-70")}>
+    <div className={cn("group rounded-xl border bg-card p-4 shadow-card transition hover:border-foreground/15 hover:shadow-float", !tool.enabled && "opacity-70")}>
       <div className="flex items-start gap-3.5">
-        <button type="button" onClick={onEdit} aria-label={`Edit ${t.name}`} className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground transition hover:bg-card hover:shadow-card">
+        <button type="button" onClick={onEdit} aria-label={t("mcpDialog.editTitle", { name: tool.name })} className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 text-foreground transition hover:bg-card hover:shadow-card">
           <Icon className="size-5" />
         </button>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={onEdit} className="truncate text-sm font-medium tracking-[-0.01em] hover:underline hover:decoration-foreground/30 hover:underline-offset-[3px]">
-              {t.name}
+              {tool.name}
             </button>
-            {t.hasKey ? (
+            {tool.hasKey ? (
               <Badge variant="outline" className="h-5 gap-1 border-brand/25 bg-brand-soft text-[10px] text-brand-strong">
-                <CircleCheck /> Key saved
+                <CircleCheck /> {t("tools.keySaved")}
               </Badge>
             ) : (
               <Badge variant="outline" className="h-5 gap-1 text-[10px] font-normal text-muted-foreground">
-                <CircleDashed /> No key
+                <CircleDashed /> {t("tools.noKey")}
               </Badge>
             )}
-            {t.envVar && (
+            {tool.envVar && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="h-5 gap-1 font-mono text-[10px] font-normal">
-                    <Terminal /> ${t.envVar}
+                    <Terminal /> ${tool.envVar}
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>Runs also get the key in this environment variable</TooltipContent>
+                <TooltipContent>{t("tools.envVarHint")}</TooltipContent>
               </Tooltip>
             )}
           </div>
-          {t.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description}</p>}
+          {tool.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{tool.description}</p>}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <ScopeChip workspaceId={t.workspaceId} agentId={t.agentId} />
-            {t.baseUrl && (
+            <ScopeChip workspaceId={tool.workspaceId} agentId={tool.agentId} />
+            {tool.baseUrl && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="inline-flex min-w-0 items-center gap-1 font-mono text-[11px]">
-                    <Globe className="size-3 shrink-0" /> <span className="truncate">{hostOf(t.baseUrl)}</span>
+                    <Globe className="size-3 shrink-0" /> <span className="truncate">{hostOf(tool.baseUrl)}</span>
                   </span>
                 </TooltipTrigger>
-                <TooltipContent className="font-mono text-[11px]">The key is only sent to {t.baseUrl}</TooltipContent>
+                <TooltipContent className="font-mono text-[11px]">{t("tools.onlySentTo", { url: tool.baseUrl })}</TooltipContent>
               </Tooltip>
             )}
-            <span className={cn("inline-flex items-center gap-1", !t.docs && !t.docsUrl && "text-warning")}>
-              <FileText className="size-3" /> {t.docs ? "Docs" : t.docsUrl ? "Docs link" : "No docs"}
+            <span className={cn("inline-flex items-center gap-1", !tool.docs && !tool.docsUrl && "text-warning")}>
+              <FileText className="size-3" /> {tool.docs ? t("tools.docs") : tool.docsUrl ? t("tools.docsLink") : t("tools.noDocs")}
             </span>
-            <span>{t.lastUsedAt ? `Used ${formatDistanceToNow(new Date(t.lastUsedAt), { addSuffix: true })}` : "Not used yet"}</span>
+            <span>{tool.lastUsedAt ? t("tools.usedAgo", { ago: formatDistanceToNow(new Date(tool.lastUsedAt), { addSuffix: true, locale: dateLocale }) }) : t("tools.notUsed")}</span>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <span className="mr-1 inline-flex">
-                <Switch checked={t.enabled} onCheckedChange={onToggle} aria-label={`${t.enabled ? "Turn off" : "Turn on"} ${t.name}`} />
+                <Switch checked={tool.enabled} onCheckedChange={onToggle} aria-label={tool.enabled ? t("tools.turnOffAria", { name: tool.name }) : t("tools.turnOnAria", { name: tool.name })} />
               </span>
             </TooltipTrigger>
-            <TooltipContent>{t.enabled ? "On — agents can use it" : "Off"}</TooltipContent>
+            <TooltipContent>{tool.enabled ? t("tools.onHint") : t("common:status.off")}</TooltipContent>
           </Tooltip>
-          {t.testPath && t.baseUrl && (
-            <Button size="sm" variant="ghost" onClick={() => test.mutate()} disabled={test.isPending} aria-label={`Test ${t.name}`}>
-              {test.isPending ? <Spinner /> : <FlaskConical />} <span className="hidden @xl:inline">Test</span>
+          {tool.testPath && tool.baseUrl && (
+            <Button size="sm" variant="ghost" onClick={() => test.mutate()} disabled={test.isPending} aria-label={t("mcpTest.title", { name: tool.name })}>
+              {test.isPending ? <Spinner /> : <FlaskConical />} <span className="hidden @xl:inline">{t("mcp.test")}</span>
             </Button>
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button size="icon-sm" variant="ghost" aria-label={`More actions for ${t.name}`}>
+              <Button size="icon-sm" variant="ghost" aria-label={t("mcp.moreActionsAria", { name: tool.name })}>
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={onEdit}>
-                <Pencil /> Edit
+                <Pencil /> {t("common:actions.edit")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={onDelete}>
-                <Trash2 /> Remove
+                <Trash2 /> {t("common:actions.remove")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -341,7 +351,7 @@ function ToolRow({
             >
               {result.ok ? <CircleCheck className="mt-px size-3.5 shrink-0 text-brand-strong" /> : <CircleX className="mt-px size-3.5 shrink-0 text-destructive" />}
               <span className="min-w-0 break-words">
-                <span className="font-medium">{result.ok ? "The key works" : "Test failed"}</span>
+                <span className="font-medium">{result.ok ? t("tools.keyWorks") : t("tools.testFailed")}</span>
                 <span className="text-muted-foreground"> — {result.message}</span>
               </span>
             </div>

@@ -1,12 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, ImageOff, Maximize2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { fetchBlob } from "@/lib/api";
 import { saveBlob } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 import { fileIcon } from "./attachments";
 import { Lightbox } from "./lightbox";
 
@@ -55,13 +57,14 @@ export function useCoreFileUrl(url: string | undefined, trusted = false): { src:
 
 /** A picture the core serves: click shows it at full size, to save it from there. */
 export function CoreImage({ src, alt, className }: { src: string; alt?: string; className?: string }) {
+  const { t } = useTranslation("chat");
   const file = useCoreFileUrl(src);
   const [zoom, setZoom] = useState(false);
   const name = alt || fileName(src);
   if (file.failed) {
     return (
       <span className={cn("inline-flex items-center gap-1.5 rounded-lg border border-dashed px-2.5 py-1.5 text-xs text-muted-foreground", className)}>
-        <ImageOff className="size-3.5" /> {name} isn't available anymore
+        <ImageOff className="size-3.5" /> {t("files.unavailable", { name })}
       </span>
     );
   }
@@ -71,7 +74,7 @@ export function CoreImage({ src, alt, className }: { src: string; alt?: string; 
       <button
         type="button"
         onClick={() => setZoom(true)}
-        aria-label={`Enlarge ${name}`}
+        aria-label={t("files.enlarge", { name })}
         className={cn(
           "group/img relative my-0.5 inline-block max-w-full cursor-zoom-in overflow-hidden rounded-lg border bg-muted/30 align-top shadow-card transition full-motion:hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
           className,
@@ -94,7 +97,7 @@ export function CoreImage({ src, alt, className }: { src: string; alt?: string; 
           <div className="flex min-w-0 items-center gap-2 pr-1 pl-2">
             <span className="truncate text-[13px] text-muted-foreground">{name}</span>
             <Button variant="ghost" size="sm" className="ml-auto h-7 shrink-0 gap-1.5 px-2.5 text-xs" onClick={() => void downloadCoreFile(src)}>
-              <Download className="size-3.5" /> Save
+              <Download className="size-3.5" /> {t("files.save")}
             </Button>
           </div>
         }
@@ -107,12 +110,13 @@ export async function downloadCoreFile(url: string, name = fileName(url)) {
   try {
     await saveBlob(await fetchBlob(url), name);
   } catch (err) {
-    toast.error(`Could not download ${name}`, { description: err instanceof Error ? err.message : String(err) });
+    toast.error(t("chat:files.downloadError", { name }), { description: err instanceof Error ? err.message : String(err) });
   }
 }
 
 /** A linked file (PDF, document…) as a card: click saves it. */
 export function CoreFileLink({ href, children, className }: { href: string; children?: ReactNode; className?: string }) {
+  const { t } = useTranslation("chat");
   const name = fileName(href);
   const Icon = fileIcon("", name);
   return (
@@ -123,7 +127,7 @@ export function CoreFileLink({ href, children, className }: { href: string; chil
         e.stopPropagation();
         void downloadCoreFile(href, name);
       }}
-      title={`Download ${name}`}
+      title={t("files.download", { name })}
       className={cn(
         "not-prose inline-flex max-w-full items-center gap-2 rounded-lg border bg-card py-1 pr-2 pl-1.5 align-middle text-[13px] no-underline shadow-xs transition hover:bg-accent",
         className,

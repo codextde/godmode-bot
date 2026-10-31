@@ -8,11 +8,12 @@ import { qk } from "@/lib/queryKeys";
 import { cloudContext, isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { copyText } from "@/components/chat/copy-button";
+import { intlLocale, t } from "@/i18n";
 import { nameOf } from "./file-editor";
 
 /** The core runs on this machine: its file manager can show a path. */
 export const canReveal = isTauri && !cloudContext;
-export const REVEAL_LABEL = canReveal ? (isMac ? "Show in Finder" : "Show in folder") : "Copy path";
+export const revealLabel = () => (canReveal ? (isMac ? t("files:reveal.finder") : t("files:reveal.folder")) : t("files:reveal.copyPath"));
 
 export function joinPath(dir: string, name: string) {
   return dir ? `${dir}/${name}` : name;
@@ -34,8 +35,8 @@ export function pinsAmong(names: string[]) {
   return names.filter((n) => /^(the instructions|the automation |a follow-up)/.test(n));
 }
 
-export function plural(n: number, one: string, many = `${one}s`) {
-  return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+export function plural(n: number, noun: "item" | "file" | "note" | "memoryNote" | "agent" | "thing") {
+  return t(`files:count.${noun}`, { count: n, n: n.toLocaleString(intlLocale()) });
 }
 
 /** Everything the Files page shows about an agent goes stale after a change. */
@@ -56,10 +57,10 @@ export function useReveal(repoPath: string) {
     (rel: string) => {
       const abs = rel ? `${repoPath}/${rel}` : repoPath;
       if (!canReveal) {
-        void copyText(abs).then((ok) => ok && toast.success("Path copied"));
+        void copyText(abs).then((ok) => ok && toast.success(t("files:toast.pathCopied")));
         return;
       }
-      api.files.reveal(abs).catch((err) => toast.error(`Couldn't open ${isMac ? "Finder" : "the file manager"}`, { description: errorMessage(err) }));
+      api.files.reveal(abs).catch((err) => toast.error(isMac ? t("files:toast.revealFailedFinder") : t("files:toast.revealFailedOther"), { description: errorMessage(err) }));
     },
     [repoPath],
   );
@@ -74,11 +75,11 @@ export function useDeleteFiles(agentId: string, onDone?: (result: AgentFilesDele
     },
     onSuccess: (_, ids) => {
       refresh();
-      toast.success(ids.length === 1 ? "Put back" : `Put ${ids.length} back`);
+      toast.success(ids.length === 1 ? t("files:toast.putBackOne") : t("files:toast.putBackMany", { n: ids.length }));
     },
     onError: (err) => {
       refresh();
-      toast.error("Couldn't put everything back", { description: `${errorMessage(err)} — the rest is in the bin.` });
+      toast.error(t("files:toast.putBackFailed"), { description: t("files:toast.putBackFailedDescription", { error: errorMessage(err) }) });
     },
   });
   return useMutation({
@@ -89,15 +90,15 @@ export function useDeleteFiles(agentId: string, onDone?: (result: AgentFilesDele
       const { deleted, refused } = result;
       if (deleted.length) {
         const bytes = deleted.reduce((n, d) => n + d.bytes, 0);
-        toast.success(deleted.length === 1 ? `Deleted ${nameOf(deleted[0]!.path)}` : `Deleted ${deleted.length} items`, {
-          description: `${formatBytes(bytes)} moved to the bin.${refused.length ? ` ${plural(refused.length, "item")} stayed.` : ""}`,
-          action: { label: "Undo", onClick: () => restore.mutate(deleted.map((d) => d.id)) },
+        toast.success(deleted.length === 1 ? t("files:toast.deletedOne", { name: nameOf(deleted[0]!.path) }) : t("files:toast.deletedMany", { n: deleted.length }), {
+          description: `${t("files:toast.movedToBin", { size: formatBytes(bytes) })}${refused.length ? ` ${t("files:toast.stayed", { items: plural(refused.length, "item") })}` : ""}`,
+          action: { label: t("common:actions.undo"), onClick: () => restore.mutate(deleted.map((d) => d.id)) },
         });
       } else if (refused.length) {
-        toast.error(refused.length === 1 ? `${nameOf(refused[0]!.path)} stays` : "Nothing was deleted", { description: refused[0]!.reason });
+        toast.error(refused.length === 1 ? t("files:toast.stays", { name: nameOf(refused[0]!.path) }) : t("files:toast.nothingDeleted"), { description: refused[0]!.reason });
       }
     },
-    onError: (err) => toast.error("Couldn't delete", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("files:toast.deleteFailed"), { description: errorMessage(err) }),
   });
 }
 
@@ -125,13 +126,14 @@ export function useMoveFiles(agentId: string, onMoved?: (moves: { from: string; 
       onMoved?.(done);
       const one = done.length === 1 ? done[0]! : null;
       const renamed = one && one.from.slice(0, one.from.lastIndexOf("/")) === one.to.slice(0, one.to.lastIndexOf("/"));
-      toast.success(one ? (renamed ? `Renamed to ${nameOf(one.to)}` : `Moved ${nameOf(one.to)}`) : `Moved ${done.length} items`, {
-        description: rewritten.length ? `Updated the path in ${rewritten.join(", ")}.` : undefined,
-      });
+      toast.success(
+        one ? (renamed ? t("files:toast.renamedTo", { name: nameOf(one.to) }) : t("files:toast.moved", { name: nameOf(one.to) })) : t("files:toast.movedMany", { n: done.length }),
+        { description: rewritten.length ? t("files:toast.pathUpdated", { files: rewritten.join(", ") }) : undefined },
+      );
     },
     onError: (err) => {
       refresh();
-      toast.error("Couldn't move", { description: errorMessage(err) });
+      toast.error(t("files:toast.moveFailed"), { description: errorMessage(err) });
     },
   });
 }

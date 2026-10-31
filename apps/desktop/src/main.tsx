@@ -1,3 +1,4 @@
+import "@/i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
@@ -6,6 +7,7 @@ import { BrowserRouter } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { LanguageProvider } from "@/i18n/language";
 import { VaultGrantDialog } from "@/components/vault/grant";
 import { MacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { isCloudError } from "@/lib/api";
@@ -51,14 +53,16 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
     <MotionConfig reducedMotion="user">
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <TooltipProvider delayDuration={250}>
-            <BrowserRouter basename={cloudContext?.base}>
-              <App />
-            </BrowserRouter>
-            <Toaster richColors position="bottom-right" />
-            <VaultGrantDialog />
-            <MacPermissionsGuide />
-          </TooltipProvider>
+          <LanguageProvider>
+            <TooltipProvider delayDuration={250}>
+              <BrowserRouter basename={cloudContext?.base}>
+                <App />
+              </BrowserRouter>
+              <Toaster richColors position="bottom-right" />
+              <VaultGrantDialog />
+              <MacPermissionsGuide />
+            </TooltipProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </MotionConfig>

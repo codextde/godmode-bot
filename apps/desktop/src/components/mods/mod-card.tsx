@@ -1,4 +1,5 @@
 import { ArrowUp, Braces, Ellipsis, ExternalLink, FolderTree, Pencil, RefreshCw, ShieldCheck, SlidersHorizontal, Trash2, TriangleAlert } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { modState, modUpdateAvailable, type Mod } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -28,6 +29,7 @@ import type { ModActions } from "./use-mod-actions";
 const FOOTER_BUTTON = "h-7 gap-1.5 px-2 text-[12.5px] font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3.5";
 
 export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions: ModActions; onOpen: (tab: ModTab) => void; onDelete: () => void }) {
+  const { t } = useTranslation("mods");
   const { data: agents = [] } = useAllAgents();
   const state = modState(mod);
   const checking = actions.checking.has(mod.id);
@@ -88,7 +90,7 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
         <Switch
           checked={mod.enabled}
           onCheckedChange={(on) => actions.toggle(mod, on)}
-          aria-label={`Switch on ${mod.title}`}
+          aria-label={t("card.switchOnAria", { title: mod.title })}
           className="mt-1 shrink-0"
         />
       </div>
@@ -102,10 +104,10 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
             <p className="line-clamp-3" title={firstError.message}>
               <span className="font-mono text-[11.5px]">{firstError.where}</span> <span className="text-destructive/85">{firstError.message}</span>
             </p>
-            {moreErrors > 0 && <p className="mt-0.5 whitespace-nowrap text-destructive/70">and {moreErrors} more</p>}
+            {moreErrors > 0 && <p className="mt-0.5 whitespace-nowrap text-destructive/70">{t("card.moreErrors", { n: moreErrors })}</p>}
           </div>
           <Button size="xs" variant="outline" onClick={() => onOpen(source ? "overview" : "code")}>
-            {source ? <ShieldCheck /> : <Braces />} {source ? "Details" : "Fix"}
+            {source ? <ShieldCheck /> : <Braces />} {source ? t("card.details") : t("card.fix")}
           </Button>
         </div>
       )}
@@ -114,11 +116,16 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
         <div className="mx-4 mb-4 flex flex-wrap items-start gap-x-2.5 gap-y-2 rounded-lg border border-warning/30 bg-warning/[0.07] px-3 py-2.5 text-xs" role="status">
           <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" aria-hidden />
           <p className="min-w-0 flex-1 basis-48 leading-relaxed text-foreground/85">
-            {source ? "Installed" : "Drafted"} by <span className="font-medium text-foreground">{modAuthor(mod, agents)?.name ?? "an agent"}</span>.{" "}
-            {source ? "Look at what it brings before you switch it on." : "Read the code before you switch it on."}
+            <Trans
+              t={t}
+              i18nKey={source ? "card.installedBy" : "card.draftedBy"}
+              values={{ name: modAuthor(mod, agents)?.name ?? t("card.anAgent") }}
+              components={{ b: <span className="font-medium text-foreground" /> }}
+            />{" "}
+            {source ? t("card.reviewContents") : t("card.reviewCode")}
           </p>
           <Button size="xs" variant="outline" onClick={() => onOpen(codeTab)}>
-            {source ? <FolderTree /> : <Braces />} Review
+            {source ? <FolderTree /> : <Braces />} {t("card.review")}
           </Button>
         </div>
       )}
@@ -127,18 +134,18 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
         <div className="mx-4 mb-4 flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg border border-brand/25 bg-brand-soft/60 px-3 py-2 text-xs" role="status">
           <ArrowUp className="size-3.5 shrink-0 text-brand-strong" aria-hidden />
           <p className="min-w-0 flex-1 basis-40 leading-relaxed text-foreground/85">
-            <span className="font-medium text-foreground">Update ready</span>
+            <span className="font-medium text-foreground">{t("card.updateReady")}</span>
             {source.latestVersion && source.latestVersion !== source.version ? (
               <span className="font-mono text-[11.5px] tabular-nums">
                 {" "}
                 {source.version ?? "?"} → {source.latestVersion}
               </span>
             ) : (
-              <span className="text-muted-foreground"> · newer code on {source.ref ?? "the default branch"}</span>
+              <span className="text-muted-foreground"> · {source.ref ? t("card.newerCodeOn", { ref: source.ref }) : t("card.newerCodeDefault")}</span>
             )}
           </p>
           <Button size="xs" disabled={upgrading} onClick={() => actions.upgrade.mutate(mod)}>
-            {upgrading ? <Spinner className="size-3" /> : <ArrowUp />} {upgrading ? "Updating…" : "Update"}
+            {upgrading ? <Spinner className="size-3" /> : <ArrowUp />} {upgrading ? t("card.updating") : t("card.update")}
           </Button>
         </div>
       )}
@@ -146,7 +153,7 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
       <div className="flex flex-wrap items-center gap-1.5 px-4 pb-4">
         {source ? (
           <>
-            <span className="eyebrow mr-1 text-[10.5px]">Brings</span>
+            <span className="eyebrow mr-1 text-[10.5px]">{t("card.brings")}</span>
             {contentsSummary(mod.contents).map((label) => (
               <span key={label} className={cn(CHIP, "bg-paper-2 text-foreground/80 tabular-nums")}>
                 {label}
@@ -159,7 +166,7 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
                     {formatTokens(mod.contents.alwaysOnTokens)}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent className="max-w-64">Added to the context of every run that loads it, Claude Code estimates.</TooltipContent>
+                <TooltipContent className="max-w-64">{t("card.tokensHint")}</TooltipContent>
               </Tooltip>
             )}
             {sensitive.map((a) => (
@@ -168,22 +175,22 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
           </>
         ) : mod.check ? (
           <>
-            <span className="eyebrow mr-1 text-[10.5px]">Hooks into</span>
-            {mod.check.hooks.length ? <HookChips hooks={mod.check.hooks} /> : <span className="text-xs text-muted-foreground">Nothing yet</span>}
+            <span className="eyebrow mr-1 text-[10.5px]">{t("card.hooksInto")}</span>
+            {mod.check.hooks.length ? <HookChips hooks={mod.check.hooks} /> : <span className="text-xs text-muted-foreground">{t("card.nothingYet")}</span>}
             {sensitive.map((a) => (
               <AbilityChip key={a.id} ability={a} />
             ))}
           </>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Not checked yet.{" "}
+            {t("card.notChecked")}{" "}
             <button
               type="button"
               disabled={checking}
               onClick={() => actions.check.mutate({ mod })}
               className="rounded-sm font-medium text-foreground/80 underline decoration-foreground/25 underline-offset-[3px] outline-none hover:text-foreground hover:decoration-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-60"
             >
-              {checking ? "Checking…" : "Check now"}
+              {checking ? t("card.checking") : t("card.checkNow")}
             </button>
           </p>
         )}
@@ -196,40 +203,40 @@ export function ModCard({ mod, actions, onOpen, onDelete }: { mod: Mod; actions:
       <div className="flex flex-wrap items-center gap-0.5 rounded-b-xl border-t bg-paper-2/70 px-2 py-1.5">
         {mod.options.length > 0 && (
           <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={() => onOpen("options")}>
-            <SlidersHorizontal /> Options
+            <SlidersHorizontal /> {t("card.options")}
           </Button>
         )}
         <Button variant="ghost" size="sm" className={FOOTER_BUTTON} onClick={() => onOpen(codeTab)}>
-          {source ? <FolderTree /> : <Braces />} {source ? "Contents" : "Code"}
+          {source ? <FolderTree /> : <Braces />} {source ? t("card.contents") : t("card.code")}
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="ml-auto size-7 text-muted-foreground" aria-label={`More actions for ${mod.title}`}>
+            <Button variant="ghost" size="icon-sm" className="ml-auto size-7 text-muted-foreground" aria-label={t("card.moreActionsAria", { title: mod.title })}>
               {checking || upgrading ? <Spinner className="size-3.5" /> : <Ellipsis />}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={() => onOpen("overview")}>
-              <Pencil /> {source ? "Open…" : "Edit…"}
+              <Pencil /> {source ? t("card.open") : t("card.edit")}
             </DropdownMenuItem>
             {source && (
               <DropdownMenuItem disabled={upgrading || actions.checkUpdates.isPending} onClick={() => actions.checkUpdates.mutate([mod])}>
-                <RefreshCw /> Check for updates
+                <RefreshCw /> {t("card.checkUpdates")}
               </DropdownMenuItem>
             )}
             <DropdownMenuItem disabled={checking} onClick={() => actions.check.mutate({ mod })}>
-              <ShieldCheck /> Check with Claude Code
+              <ShieldCheck /> {t("card.checkWithClaude")}
             </DropdownMenuItem>
             {source?.web && (
               <DropdownMenuItem asChild>
                 <a href={source.web} target="_blank" rel="noreferrer">
-                  <ExternalLink /> View repository
+                  <ExternalLink /> {t("card.viewRepo")}
                 </a>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onClick={onDelete}>
-              <Trash2 /> {source ? "Uninstall…" : "Delete…"}
+              <Trash2 /> {source ? t("card.uninstall") : t("card.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

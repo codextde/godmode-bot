@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 import { Boxes, Layers, ShieldCheck } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { ToolkitLogo, toolkitLogoUrl } from "./toolkit-logo";
 import { EASE_OUT } from "@/lib/motion";
 
@@ -18,22 +19,22 @@ const NAMES: Record<string, string> = {
 };
 
 const POINTS = [
-  { icon: Boxes, title: "Hundreds of apps", body: "Gmail, Slack, GitHub, Notion, CRMs, calendars — each becomes a set of tools your agents can call." },
-  { icon: ShieldCheck, title: "OAuth sign-in", body: "You sign in on the app's own page. Tokens live in Composio; Godmode only keeps your API key, encrypted." },
-  { icon: Layers, title: "Scoped accounts", body: "Connect an account for everyone, one workspace, or a single agent — e.g. work vs. personal Gmail." },
-];
+  { icon: Boxes, title: "explainer.apps.title", body: "explainer.apps.body" },
+  { icon: ShieldCheck, title: "explainer.oauth.title", body: "explainer.oauth.body" },
+  { icon: Layers, title: "explainer.scoped.title", body: "explainer.scoped.body" },
+] as const;
 
 /** Shown while Composio isn't configured: what it is and why it's worth two minutes. */
 export function ComposioExplainer() {
+  const { t } = useTranslation("integrations");
   return (
     <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-card @2xl:p-8">
       <div className="relative grid grid-cols-1 items-center gap-8 @5xl:grid-cols-[1fr_minmax(0,300px)]">
         <div>
           <p className="eyebrow">Composio</p>
-          <h3 className="mt-2 text-[22px] leading-tight font-medium tracking-[-0.025em]">React the moment something arrives</h3>
+          <h3 className="mt-2 text-[22px] leading-tight font-medium tracking-[-0.025em]">{t("explainer.title")}</h3>
           <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-            Optional. Connect an account when an automation should start on a new email or Slack message, or when an agent should call
-            the app's API directly.
+            {t("explainer.description")}
           </p>
           <div className="mt-6 grid grid-cols-1 gap-3 @3xl:grid-cols-3">
             {POINTS.map((p, i) => (
@@ -45,8 +46,8 @@ export function ComposioExplainer() {
                 className="rounded-lg border bg-paper-2 p-3.5"
               >
                 <p.icon className="size-4 text-foreground" />
-                <p className="mt-2 text-sm font-medium">{p.title}</p>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{p.body}</p>
+                <p className="mt-2 text-sm font-medium">{t(p.title)}</p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{t(p.body)}</p>
               </motion.div>
             ))}
           </div>

@@ -4,6 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { motion } from "motion/react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Ban, Bot, Check, CircleCheck, MessageSquare, MoreHorizontal, RotateCcw, Square, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cardLabel, formatMoney, type CardPurchase, type CardPurchasePatch, type PaymentCard } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -18,6 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AgentAvatar } from "@/components/common";
+import { t as tg } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useAllAgents } from "@/lib/hooks";
@@ -27,7 +30,6 @@ import { isGrantCancelled, withGrant } from "./grant";
 import { toastApiError } from "./vault-utils";
 import { useReduceAnimations } from "@/lib/motion";
 
-const FREES_ROOM = "Confirm with your vault passphrase: this frees room under the card's limits.";
 const ALL = "all";
 
 const TONES = {
@@ -40,29 +42,30 @@ const TONES = {
 function statusOf(p: CardPurchase): { label: string; tone: keyof typeof TONES; hint?: string } {
   switch (p.status) {
     case "pending":
-      return { label: "Waiting for your OK", tone: "warning", hint: "The agent asked before paying. Approve or decline here or in the chat." };
+      return { label: tg("vault:purchases.status.pending"), tone: "warning", hint: tg("vault:purchases.status.pendingHint") };
     case "approved":
       return p.filledAt
-        ? { label: "Card entered", tone: "brand", hint: "Godmode typed the card into the checkout. The agent hasn't reported the result yet." }
-        : { label: "Approved", tone: "brand", hint: p.approvedBy === "human" ? "You approved it." : "Within the card's limits." };
+        ? { label: tg("vault:purchases.status.filled"), tone: "brand", hint: tg("vault:purchases.status.filledHint") }
+        : { label: tg("vault:purchases.status.approved"), tone: "brand", hint: p.approvedBy === "human" ? tg("vault:purchases.status.approvedByYou") : tg("vault:purchases.status.approvedWithinLimits") };
     case "paid":
-      return { label: "Paid", tone: "success" };
+      return { label: tg("vault:purchases.status.paid"), tone: "success" };
     case "failed":
       return p.settledBy === "agent" && p.filledAt
-        ? { label: "Reported failed · still counted", tone: "warning", hint: "The card was typed in, so it counts toward the limits until you confirm nothing was charged." }
-        : { label: "Not charged", tone: "muted" };
+        ? { label: tg("vault:purchases.status.reportedFailed"), tone: "warning", hint: tg("vault:purchases.status.reportedFailedHint") }
+        : { label: tg("vault:purchases.status.notCharged"), tone: "muted" };
     case "declined":
-      return { label: "Declined", tone: "muted" };
+      return { label: tg("vault:purchases.status.declined"), tone: "muted" };
     case "expired":
-      return { label: "Approval expired", tone: "muted", hint: "Approved, but the card was never used." };
+      return { label: tg("vault:purchases.status.expired"), tone: "muted", hint: tg("vault:purchases.status.expiredHint") };
     case "cancelled":
-      return { label: "Withdrawn", tone: "muted" };
+      return { label: tg("vault:purchases.status.cancelled"), tone: "muted" };
   }
 }
 
 /** The ledger: every purchase an agent made or asked to make with a card, newest first. */
 export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[]; cardById: Map<string, PaymentCard>; scoped: boolean }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const [cardFilter, setCardFilter] = useState(ALL);
   useEffect(() => {
@@ -84,15 +87,15 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
 
   const update = useMutation({
     mutationFn: ({ purchase, patch }: { purchase: CardPurchase; patch: CardPurchasePatch }) =>
-      withGrant((grant) => api.cards.updatePurchase(purchase.id, patch, grant), FREES_ROOM),
+      withGrant((grant) => api.cards.updatePurchase(purchase.id, patch, grant), tg("vault:purchases.freesRoom")),
     onSuccess: (_r, { patch }) => {
       void qc.invalidateQueries({ queryKey: qk.cards });
-      if (patch.status === "paid") toast.success("Marked as paid");
-      else if (patch.status === "failed") toast.success("Marked as not charged", { description: "It no longer counts toward the card's limits." });
-      else if (patch.ended) toast.success("Subscription ended", { description: "It no longer counts toward later months." });
-      else toast.success("Subscription active again", { description: "It counts toward the monthly limit again." });
+      if (patch.status === "paid") toast.success(t("purchases.toast.paid"));
+      else if (patch.status === "failed") toast.success(t("purchases.toast.notCharged"), { description: t("purchases.toast.notChargedDescription") });
+      else if (patch.ended) toast.success(t("purchases.toast.ended"), { description: t("purchases.toast.endedDescription") });
+      else toast.success(t("purchases.toast.active"), { description: t("purchases.toast.activeDescription") });
     },
-    onError: (e) => !isGrantCancelled(e) && toastApiError(e, "Could not update the purchase", qc),
+    onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("purchases.toast.updateFailed"), qc),
   });
   const pendingId = update.isPending ? update.variables?.purchase.id : undefined;
 
@@ -101,11 +104,11 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
     onSuccess: (_r, { decision }) => {
       void qc.invalidateQueries({ queryKey: qk.cards });
       void qc.invalidateQueries({ queryKey: qk.questions });
-      toast.success(decision === "approve" ? "Purchase approved" : "Purchase declined", {
-        description: decision === "approve" ? "The agent continues and types the card in." : "The agent won't buy it.",
+      toast.success(decision === "approve" ? t("purchases.toast.approved") : t("purchases.toast.declined"), {
+        description: decision === "approve" ? t("purchases.toast.approvedDescription") : t("purchases.toast.declinedDescription"),
       });
     },
-    onError: (e) => toastApiError(e, "Could not answer", qc),
+    onError: (e) => toastApiError(e, t("purchases.toast.answerFailed"), qc),
   });
   const decidingId = decide.isPending ? decide.variables?.purchase.id : undefined;
 
@@ -113,15 +116,15 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
     <section className="space-y-3" aria-labelledby="card-purchases-heading">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id="card-purchases-heading" className="eyebrow">
-          Purchases
+          {t("purchases.title")}
         </h2>
         {cards.length > 1 && (
           <Select value={cardFilter} onValueChange={setCardFilter}>
-            <SelectTrigger size="sm" className="w-52" aria-label="Filter purchases by card">
+            <SelectTrigger size="sm" className="w-52" aria-label={t("purchases.filter")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All cards</SelectItem>
+              <SelectItem value={ALL}>{t("purchases.allCards")}</SelectItem>
               <SelectSeparator />
               {cards.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
@@ -152,14 +155,14 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
         </div>
       ) : list.isError && !list.data ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed bg-card/50 px-4 py-6 text-sm text-muted-foreground">
-          <span>Couldn't load purchases. {errorMessage(list.error)}</span>
+          <span>{t("purchases.loadFailed")} {errorMessage(list.error)}</span>
           <Button variant="outline" size="sm" onClick={() => list.refetch()}>
-            Try again
+            {t("common:actions.tryAgain")}
           </Button>
         </div>
       ) : purchases.length === 0 ? (
         <p className="rounded-xl border border-dashed bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-          No purchases yet. When an agent pays with a card, it shows up here.
+          {t("purchases.empty")}
         </p>
       ) : (
         <ul className={cn("divide-y overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
@@ -170,9 +173,9 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
               <motion.li key={p.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1, transition: { delay: Math.min(i, 10) * 0.02 } }}>
                 <PurchaseRow
                   purchase={p}
-                  agentName={agent?.name ?? "Deleted agent"}
+                  agentName={agent?.name ?? t("deletedAgent")}
                   agentAvatar={agent ? <AgentAvatar agent={agent} size="md" /> : null}
-                  cardText={card ? cardLabel(card) : "Removed card"}
+                  cardText={card ? cardLabel(card) : t("purchases.removedCard")}
                   pending={pendingId === p.id}
                   onUpdate={(patch) => update.mutate({ purchase: p, patch })}
                   deciding={decidingId === p.id}
@@ -206,17 +209,19 @@ function PurchaseRow({
   deciding: boolean;
   onDecide: (decision: "approve" | "decline") => void;
 }) {
+  const { t } = useTranslation("vault");
+  const { dateLocale } = useLocale();
   const created = new Date(p.createdAt);
   const status = statusOf(p);
   const subscription = p.recurrence !== "once";
   const canSettle = p.status === "approved" || (p.status === "failed" && p.settledBy === "agent");
   const canEnd = p.status === "paid" && subscription;
-  const title = p.merchant || p.site || "Purchase";
+  const title = p.merchant || p.site || t("purchases.purchase");
 
   const meta = [
     <span key="agent" className="truncate">{agentName}</span>,
-    <time key="date" dateTime={p.createdAt} title={format(created, "PPpp")} className="whitespace-nowrap">
-      {formatDistanceToNow(created, { addSuffix: true })}
+    <time key="date" dateTime={p.createdAt} title={format(created, "PPpp", { locale: dateLocale })} className="whitespace-nowrap">
+      {formatDistanceToNow(created, { addSuffix: true, locale: dateLocale })}
     </time>,
     p.site && p.site !== title ? <span key="site" className="truncate">{p.site}</span> : null,
     <span key="card" className="whitespace-nowrap">{cardText}</span>,
@@ -259,10 +264,10 @@ function PurchaseRow({
         {p.status === "pending" && p.questionId && (
           <div className="mt-2 flex items-center gap-1.5">
             <Button size="xs" onClick={() => onDecide("approve")} disabled={deciding}>
-              {deciding ? <Spinner className="size-3" /> : <Check />} Approve {formatMoney(p.amount, p.currency)}
+              {deciding ? <Spinner className="size-3" /> : <Check />} {t("purchases.approve", { amount: formatMoney(p.amount, p.currency) })}
             </Button>
             <Button size="xs" variant="ghost" onClick={() => onDecide("decline")} disabled={deciding}>
-              <X /> Decline
+              <X /> {t("purchases.decline")}
             </Button>
           </div>
         )}
@@ -276,10 +281,10 @@ function PurchaseRow({
                 "inline-flex h-[18px] items-center rounded-[4px] border px-1 text-[10px] font-medium",
                 p.endedAt ? "border-dashed text-muted-foreground" : "text-foreground/70",
               )}
-              title={p.endedAt ? `Ended ${format(new Date(p.endedAt), "PP")}` : undefined}
+              title={p.endedAt ? t("purchases.endedOn", { date: format(new Date(p.endedAt), "PP", { locale: dateLocale }) }) : undefined}
             >
-              {p.recurrence}
-              {p.endedAt && " · ended"}
+              {t(`purchases.recurrence.${p.recurrence}`)}
+              {p.endedAt && ` · ${t("purchases.ended")}`}
             </span>
           )}
           <span className={cn("text-sm font-medium tabular-nums", (p.endedAt || status.tone === "muted") && "text-muted-foreground")}>{formatMoney(p.amount, p.currency)}</span>
@@ -299,18 +304,18 @@ function PurchaseRow({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button asChild variant="ghost" size="icon-sm" className="text-muted-foreground">
-                <Link to={`/chat/${p.conversationId}`} aria-label="Open the chat">
+                <Link to={`/chat/${p.conversationId}`} aria-label={t("purchases.openChat")}>
                   <MessageSquare />
                 </Link>
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Open the chat</TooltipContent>
+            <TooltipContent>{t("purchases.openChat")}</TooltipContent>
           </Tooltip>
         )}
         {(canSettle || canEnd) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`Actions for ${title}`} disabled={pending}>
+              <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={t("actionsFor", { name: title })} disabled={pending}>
                 {pending ? <Spinner /> : <MoreHorizontal />}
               </Button>
             </DropdownMenuTrigger>
@@ -318,10 +323,10 @@ function PurchaseRow({
               {canSettle && (
                 <>
                   <DropdownMenuItem onClick={() => onUpdate({ status: "paid" })}>
-                    <CircleCheck /> Mark as paid
+                    <CircleCheck /> {t("purchases.markPaid")}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => onUpdate({ status: "failed" })}>
-                    <Ban /> Not charged
+                    <Ban /> {t("purchases.status.notCharged")}
                   </DropdownMenuItem>
                 </>
               )}
@@ -329,11 +334,11 @@ function PurchaseRow({
               {canEnd &&
                 (p.endedAt ? (
                   <DropdownMenuItem onClick={() => onUpdate({ ended: false })}>
-                    <RotateCcw /> Mark active again
+                    <RotateCcw /> {t("purchases.markActive")}
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem onClick={() => onUpdate({ ended: true })}>
-                    <Square /> End subscription
+                    <Square /> {t("purchases.endSubscription")}
                   </DropdownMenuItem>
                 ))}
             </DropdownMenuContent>

@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useAnimationControls } from "motion/react";
 import { ArchiveRestore, ChevronDown, FileArchive, Lock, ShieldCheck, Upload } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -14,9 +15,11 @@ import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { useBootstrap } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 
 /** Shown when the vault is initialized but locked (auto-lock, manual lock or restart without "remember device"). */
 export function UnlockPage() {
+  const { t } = useTranslation("auth");
   const qc = useQueryClient();
   const { data: boot } = useBootstrap();
   const controls = useAnimationControls();
@@ -36,7 +39,7 @@ export function UnlockPage() {
       qc.setQueryData(qk.vaultStatus, status);
       setPassphrase("");
       await qc.invalidateQueries({ queryKey: qk.bootstrap });
-      toast.success("Vault unlocked", { description: "Your agents can sign in again." });
+      toast.success(t("unlock.unlockedToast"), { description: t("unlock.unlockedToastDescription") });
     } catch (err) {
       setError(unlockError(err));
       void controls.start(shake);
@@ -52,21 +55,21 @@ export function UnlockPage() {
       badge={<Lock />}
       title={
         <>
-          Your vault is locked.
-          <span className="block text-foreground/35">Unlock to get back to work.</span>
+          {t("unlock.title")}
+          <span className="block text-foreground/35">{t("unlock.subtitle")}</span>
         </>
       }
-      description="Enter your vault passphrase to unlock logins, 2FA codes and API keys for you and your agents."
+      description={t("unlock.description")}
       footer={
         <span className="inline-flex items-center gap-1.5">
           <ShieldCheck className="size-3.5 text-brand-strong" />
-          Secrets stay encrypted with AES-256-GCM until you unlock.
+          {t("unlock.footer")}
         </span>
       }
     >
       <form onSubmit={submit} className="space-y-4">
         <motion.div animate={controls} className="space-y-2">
-          <Label htmlFor="unlock-passphrase">Vault passphrase</Label>
+          <Label htmlFor="unlock-passphrase">{t("unlock.passphraseLabel")}</Label>
           <PasswordInput
             id="unlock-passphrase"
             autoFocus
@@ -77,12 +80,12 @@ export function UnlockPage() {
               setError(null);
             }}
             aria-invalid={!!error}
-            placeholder="Your passphrase"
+            placeholder={t("unlock.passphrasePlaceholder")}
           />
         </motion.div>
         <FormError message={error} />
         <SubmitButton busy={busy} disabled={!passphrase}>
-          Unlock
+          {t("unlock.unlock")}
         </SubmitButton>
       </form>
 
@@ -93,7 +96,7 @@ export function UnlockPage() {
           aria-expanded={forgotOpen}
           className="flex w-full items-center justify-between text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          Forgot your passphrase?
+          {t("unlock.forgot")}
           <ChevronDown className={cn("size-4 transition-transform", forgotOpen && "rotate-180")} />
         </button>
         <AnimatePresence initial={false}>
@@ -101,20 +104,19 @@ export function UnlockPage() {
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
               <div className="space-y-3 pt-3 text-sm text-muted-foreground">
                 <p>
-                  Secrets can't be recovered — your passphrase is the only key and it never leaves this machine. You can
-                  restore a backup (then unlock with that backup's passphrase) or start over.
+                  {t("unlock.forgotDescription")}
                 </p>
                 <Button variant="outline" size="sm" className="w-full" onClick={() => setRestoreOpen(true)}>
-                  <ArchiveRestore /> Restore a backup…
+                  <ArchiveRestore /> {t("unlock.restoreBackupMenu")}
                 </Button>
                 {dataDir && (
                   <div className="rounded-lg border bg-paper-2 p-3 text-xs">
-                    <p>To reset, quit Godmode and delete its data directory. This permanently removes all agents, logins and 2FA codes.</p>
+                    <p>{t("unlock.resetHint")}</p>
                     <div className="mt-2 flex items-center gap-1 rounded-md border bg-card pl-2 font-mono">
                       <span className="min-w-0 flex-1 truncate" title={dataDir}>
                         {dataDir}
                       </span>
-                      <CopyButton value={dataDir} label="Copy path" size="icon-xs" />
+                      <CopyButton value={dataDir} label={t("unlock.copyPath")} size="icon-xs" />
                     </div>
                   </div>
                 )}
@@ -129,6 +131,8 @@ export function UnlockPage() {
 }
 
 function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation(["auth", "common"]);
+  const { intlLocale } = useLocale();
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -149,12 +153,12 @@ function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     setError(null);
     try {
       await api.backup.import(file, passphrase);
-      toast.success("Backup restored", { description: "Vault restored and locked — unlock with the vault passphrase of the backup." });
+      toast.success(t("restore.restoredToast"), { description: t("restore.restoredToastDescription") });
       onOpenChange(false);
       reset();
       await qc.invalidateQueries();
     } catch (err) {
-      setError(err instanceof ApiRequestError && (err.status === 400 || err.status === 401) ? "Wrong backup passphrase or damaged file." : errorMessage(err));
+      setError(err instanceof ApiRequestError && (err.status === 400 || err.status === 401) ? t("restore.wrongPassphrase") : errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -171,11 +175,8 @@ function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       <DialogContent className="rounded-2xl sm:max-w-md">
         <form onSubmit={restore} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Restore a backup</DialogTitle>
-            <DialogDescription>
-              Replaces everything on this machine with the backup's contents. Afterwards, unlock with the vault passphrase that was active
-              when the backup was made.
-            </DialogDescription>
+            <DialogTitle>{t("restore.title")}</DialogTitle>
+            <DialogDescription>{t("restore.description")}</DialogDescription>
           </DialogHeader>
           <input
             ref={inputRef}
@@ -196,21 +197,21 @@ function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               {file ? <FileArchive className="size-5" /> : <Upload className="size-5" />}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-medium">{file ? file.name : "Choose a .godmode-backup file"}</p>
-              <p className="text-xs text-muted-foreground">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "Created in Settings → Backup"}</p>
+              <p className="truncate font-medium">{file ? file.name : t("restore.chooseFile")}</p>
+              <p className="text-xs text-muted-foreground">{file ? t("restore.size", { size: (file.size / 1024 / 1024).toLocaleString(intlLocale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }) : t("restore.createdIn")}</p>
             </div>
           </button>
           <div className="space-y-2">
-            <Label htmlFor="restore-passphrase">Backup passphrase</Label>
+            <Label htmlFor="restore-passphrase">{t("restore.passphraseLabel")}</Label>
             <PasswordInput id="restore-passphrase" value={passphrase} onChange={(e) => setPassphrase(e.target.value)} autoComplete="off" />
           </div>
           <FormError message={error} />
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("common:actions.cancel")}
             </Button>
             <Button type="submit" variant="destructive" disabled={!file || !passphrase || busy}>
-              {busy ? <Spinner /> : <ArchiveRestore />} Replace & restore
+              {busy ? <Spinner /> : <ArchiveRestore />} {t("restore.submit")}
             </Button>
           </DialogFooter>
         </form>

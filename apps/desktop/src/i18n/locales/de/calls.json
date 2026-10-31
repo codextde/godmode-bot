@@ -1,0 +1,83 @@
+{
+  "unknownCaller": "Unbekannter Anrufer",
+  "unknownNumber": "Unbekannte Nummer",
+  "incoming": "Eingehend",
+  "outgoing": "Ausgehend",
+  "status": {
+    "calling": "Klingelt",
+    "inProgress": "Im Gespräch",
+    "processing": "Wird abgeschlossen",
+    "done": "Fertig",
+    "noAnswer": "Keine Antwort",
+    "voicemail": "Auf Mailbox gesprochen",
+    "failed": "Fehlgeschlagen"
+  },
+  "ownerCall": {
+    "title": "Kam von deiner eigenen Nummer: Anliegen gehen als deine an deinen Agenten",
+    "label": "Eigener Anruf"
+  },
+  "marker": {
+    "ended": "Anruf mit {{name}} beendet"
+  },
+  "newCall": {
+    "calling": "Rufe {{name}} an",
+    "callingDescription": "Transkript und Zusammenfassung erscheinen hier, sobald der Anruf endet.",
+    "placeError": "Anruf konnte nicht gestartet werden",
+    "title": "Neuer Anruf",
+    "description": "Die Stimme von Godmode ruft für dich an und arbeitet aufs Ziel hin. Danach bekommst du Transkript, Zusammenfassung und Ergebnis.",
+    "number": "Nummer",
+    "badNumber": "Füg die Ländervorwahl hinzu, z. B. +49.",
+    "numberHint": "Mit Ländervorwahl.",
+    "who": "Wer",
+    "goal": "Ziel",
+    "goalPlaceholder": "Einen Haarschnitt für nächste Woche buchen, am liebsten Dienstag oder Mittwoch nach 17 Uhr.",
+    "context": "Gut zu wissen",
+    "contextPlaceholder": "Kundennummer, was vorher vereinbart wurde, wozu du nicht Ja sagen willst.",
+    "language": "Sprache",
+    "callNow": "Jetzt anrufen"
+  },
+  "goalLabel": {
+    "task": "Ziel",
+    "question": "Frage an dich",
+    "inform": "Neuigkeiten für dich",
+    "inbound": "Was der Anrufer wollte"
+  },
+  "page": {
+    "title": "Anrufe",
+    "newCall": "Neuer Anruf",
+    "turnOnFirst": "Schalte zuerst Anrufe in den Einstellungen ein",
+    "live_one": "{{count}} Anruf läuft gerade. Transkript und Zusammenfassung kommen, sobald er endet.",
+    "live_other": "{{count}} Anrufe laufen gerade. Transkript und Zusammenfassung kommen, sobald sie enden.",
+    "description": "Anrufe, die deine Agenten geführt und angenommen haben: mit wem sie gesprochen haben, was dabei herauskam, und jedes Wort.",
+    "loadError": "Deine Anrufe konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Anrufe",
+    "emptyDescription": "Agenten können bei einem Unternehmen anrufen, um einen Termin zu buchen, bei einem Lead nachzuhaken oder dich anzurufen, wenn eine Frage nicht warten kann. Auch deine Nummer nimmt ab: Jeder eingehende Anruf wird zu einem Chat für einen Agenten. Läuft über ElevenLabs mit einer Twilio- oder SIP-Nummer.",
+    "placeCall": "Anruf starten",
+    "setUp": "Anrufe einrichten",
+    "openError": "Dieser Anruf konnte nicht geöffnet werden"
+  },
+  "row": {
+    "incomingCall": "Eingehender Anruf",
+    "noGoal": "Kein Ziel angegeben"
+  },
+  "detail": {
+    "dateFormat": "EEE, d. MMM · p",
+    "openChat": "Chat öffnen",
+    "status": "Status",
+    "duration": "Dauer",
+    "cost": "Kosten",
+    "yourAnswer": "Deine Antwort",
+    "summary": "Zusammenfassung",
+    "processing": "Der Anruf ist beendet. Godmode schreibt die Zusammenfassung.",
+    "active": "Transkript, Zusammenfassung und Aufnahme erscheinen hier, sobald der Anruf endet.",
+    "outcome": "Ergebnis",
+    "outcomeMissed": "Ergebnis · Ziel nicht erreicht",
+    "recording": "Aufnahme",
+    "recordingError": "Aufnahme konnte nicht geladen werden: {{error}}"
+  },
+  "transcript": {
+    "label": "Transkript",
+    "caller": "Anrufer",
+    "them": "Gegenüber"
+  }
+}

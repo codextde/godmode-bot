@@ -1,0 +1,759 @@
+{
+  "status": {
+    "backlog": {
+      "label": "Backlog",
+      "hint": "Geparkt. Ein zugewiesener Agent startet hier nie."
+    },
+    "todo": {
+      "label": "Zu erledigen",
+      "hint": "In der Warteschlange. Eine Aufgabe hier mit Agent startet diesen Agenten – die dringendste zuerst."
+    },
+    "in_progress": {
+      "label": "In Arbeit",
+      "hint": "Der Agent arbeitet daran."
+    },
+    "in_review": {
+      "label": "Im Review",
+      "hint": "Geliefert – wartet auf dein Review."
+    },
+    "blocked": {
+      "label": "Blockiert",
+      "hint": "Steckt fest: Der Agent braucht etwas, der Lauf ist fehlgeschlagen oder wurde gestoppt, oder das Veröffentlichen hat nicht geklappt."
+    },
+    "done": {
+      "label": "Erledigt",
+      "hint": "Abgeschlossen. Wird automatisch gesetzt, wenn der Pull Request gemergt wird."
+    },
+    "cancelled": {
+      "label": "Abgebrochen",
+      "hint": "Entschieden, es nicht zu machen."
+    }
+  },
+  "type": {
+    "general": {
+      "label": "Aufgabe",
+      "hint": "Der Agent erledigt sie und berichtet dir."
+    },
+    "coding": {
+      "label": "Coding",
+      "hint": "Arbeitet in einem eigenen Branch und Worktree und öffnet einen Pull Request."
+    },
+    "research": {
+      "label": "Recherche",
+      "hint": "Der Agent recherchiert und schreibt einen Bericht."
+    }
+  },
+  "pause": {
+    "needsOk": "Braucht deine Freigabe",
+    "needsOkTitle": "Braucht deine Freigabe: {{title}}",
+    "needsAnswer": "Braucht deine Antwort",
+    "needsAnswerTitle": "Braucht deine Antwort: {{title}}",
+    "limit": "Wartet – Claudes {{limit}} ist erreicht",
+    "usageLimit": "Nutzungslimit",
+    "paused": "Pausiert"
+  },
+  "priority": {
+    "urgent": "Dringend",
+    "high": "Hoch",
+    "medium": "Mittel",
+    "low": "Niedrig",
+    "none": "Keine Priorität"
+  },
+  "blocked": {
+    "needs_input": {
+      "title": "{{agent}} braucht etwas von dir",
+      "cardPrefix": "Braucht dich:"
+    },
+    "failed": {
+      "title": "Der Lauf ist fehlgeschlagen",
+      "cardPrefix": "Fehlgeschlagen:"
+    },
+    "stopped": {
+      "title": "Gestoppt",
+      "cardPrefix": "Gestoppt:"
+    },
+    "interrupted": {
+      "title": "Durch einen Neustart unterbrochen",
+      "cardPrefix": "Unterbrochen:"
+    },
+    "publish": {
+      "title": "Die Arbeit konnte nicht veröffentlicht werden",
+      "cardPrefix": "Veröffentlichen fehlgeschlagen:"
+    },
+    "setup": {
+      "title": "Einrichtung fehlgeschlagen",
+      "cardPrefix": "Einrichtung:"
+    },
+    "manual": {
+      "title": "Blockiert"
+    }
+  },
+  "waiting": {
+    "parts_one": "Wartet auf {{count}} Teil",
+    "parts_other": "Wartet auf {{count}} Teile",
+    "partsBlocked_one": "Wartet auf {{count}} Teil · {{blocked}} blockiert",
+    "partsBlocked_other": "Wartet auf {{count}} Teile · {{blocked}} blockiert",
+    "continues": "Wartet – geht {{when}} weiter"
+  },
+  "due": {
+    "tomorrow": "Morgen"
+  },
+  "work": {
+    "seconds": "{{n}} s",
+    "minutes": "{{n}} Min.",
+    "hours": "{{h}} Std. {{m}} Min.",
+    "needsOk": "{{name}} braucht deine Freigabe",
+    "waitingAnswer": "{{name}} wartet auf deine Antwort",
+    "limitReached": "Claudes {{limit}} ist erreicht",
+    "pausedUser": "{{name}} macht dort weiter, wo die Arbeit gestoppt hat.",
+    "pausedAuto": "{{name}} macht {{when}} von selbst dort weiter, wo es gestoppt hat.",
+    "limitResets": "Das Limit wird {{when}} zurückgesetzt – mach dann weiter.",
+    "continueWhenReset": "Mach weiter, sobald das Limit zurückgesetzt ist.",
+    "continueNow": "Jetzt fortsetzen",
+    "workingOnIt": "{{name}} arbeitet daran",
+    "working": "Wird bearbeitet",
+    "watchLive": "Live ansehen",
+    "plan": "{{name}} plant: {{note}}",
+    "cancelFollowup": "Follow-up abbrechen",
+    "cancelFollowupHint": "{{name}} macht nicht von selbst weiter – die Aufgabe geht ins Review",
+    "needsAttention": "Etwas braucht deine Aufmerksamkeit.",
+    "timedOut": "Das Zeitlimit des Laufs wurde erreicht. Versuch es erneut oder teil die Aufgabe in kleinere auf.",
+    "interrupted": "Godmode wurde neu gestartet, während {{name}} gearbeitet hat. Es geht im selben Chat weiter, mit dem bisherigen Stand.",
+    "assignToGoOn": "Weise einen Agenten zu, um weiterzumachen.",
+    "answer": "Antworten",
+    "publishing": "Wird veröffentlicht…",
+    "publishAgain": "Erneut veröffentlichen",
+    "delivered": "Geliefert – bereit für dein Review",
+    "branchPushed": "Branch gepusht – öffne den Pull Request auf {{host}}",
+    "review": "Review",
+    "merging": "Wird gemergt…",
+    "requestChanges": "Änderungen anfordern",
+    "mergesInto": "Mergt #{{number}} in <code>{{branch}}</code> auf {{host}} und verschiebt die Aufgabe nach „Erledigt“.",
+    "waitsFor_one": "Wartet auf {{list}} – {{name}} startet von selbst, sobald es geliefert ist, mit dessen Ergebnis.",
+    "waitsFor_other": "Wartet auf {{list}} – {{name}} startet von selbst, sobald sie geliefert sind, mit deren Ergebnissen.",
+    "startWithoutWaiting": "Ohne Warten starten",
+    "readyFor": "Bereit für {{name}}.",
+    "assignStarts": "Weise einen Agenten zu – er startet sofort.",
+    "assignAndMove": "Weise einen Agenten zu und verschieb die Aufgabe nach „Zu erledigen“, um sie zu starten.",
+    "reasonPlaceholder": "Grund hinzufügen…",
+    "reasonLabel": "Warum es blockiert ist"
+  },
+  "archive": {
+    "oneArchived": "#{{number}} archiviert",
+    "oneRestored": "#{{number}} wieder auf dem Board",
+    "manyArchived_one": "{{count}} Aufgabe archiviert",
+    "manyArchived_other": "{{count}} Aufgaben archiviert",
+    "manyRestored_one": "{{count}} Aufgabe wieder auf dem Board",
+    "manyRestored_other": "{{count}} Aufgaben wieder auf dem Board",
+    "archiveError": "Archivieren fehlgeschlagen",
+    "restoreError": "Wiederherstellen fehlgeschlagen"
+  },
+  "card": {
+    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "working": "Arbeitet…",
+    "overdueDays": "Überfällig · {{n}} T.",
+    "aria": {
+      "due": "fällig {{date}}",
+      "overdue": "überfällig",
+      "partOf": "Teil von #{{number}}",
+      "waitsFor": "wartet auf {{list}}"
+    },
+    "partsFinished": "{{done}} von {{total}} Teilen fertig",
+    "partOf": "Teil von #{{number}}",
+    "global": "Global",
+    "waitsFor": "Wartet auf {{list}}",
+    "restartedMidRun": "Godmode wurde während des Laufs neu gestartet.",
+    "unassigned": "Nicht zugewiesen",
+    "due": "Fällig am {{date}}",
+    "files_one": "{{count}} angehängte Datei",
+    "files_other": "{{count}} angehängte Dateien",
+    "elapsedMinutes": "{{m}} Min. {{s}} s",
+    "elapsedHours": "{{h}} Std. {{m}} Min."
+  },
+  "pr": {
+    "openNew": "Pull Request öffnen",
+    "merged": "#{{number}} gemergt",
+    "closed": "#{{number}} geschlossen",
+    "open": "#{{number}} offen"
+  },
+  "event": {
+    "approved": {
+      "you": "{{a}} hast es freigegeben",
+      "other": "{{a}} hat es freigegeben"
+    },
+    "markedDone": {
+      "you": "{{a}} hast es als erledigt markiert",
+      "other": "{{a}} hat es als erledigt markiert"
+    },
+    "cancelled": {
+      "you": "{{a}} hast es abgebrochen",
+      "other": "{{a}} hat es abgebrochen"
+    },
+    "reopened": {
+      "you": "{{a}} hast es wieder geöffnet",
+      "other": "{{a}} hat es wieder geöffnet"
+    },
+    "movedBlocked": {
+      "you": "{{a}} hast es auf „Blockiert“ gesetzt",
+      "other": "{{a}} hat es auf „Blockiert“ gesetzt"
+    },
+    "restarted": {
+      "you": "{{a}} hast es neu gestartet",
+      "other": "{{a}} hat es neu gestartet"
+    },
+    "stopped": {
+      "you": "{{a}} hast es gestoppt",
+      "other": "{{a}} hat es gestoppt"
+    },
+    "moved": {
+      "you": "{{a}} hast es von „{{from}}“ nach „{{to}}“ verschoben",
+      "other": "{{a}} hat es von „{{from}}“ nach „{{to}}“ verschoben"
+    },
+    "assignedTo": {
+      "you": "{{a}} hast es {{name}} zugewiesen",
+      "other": "{{a}} hat es {{name}} zugewiesen"
+    },
+    "tookOff": {
+      "you": "{{a}} hast {{name}} davon abgezogen",
+      "other": "{{a}} hat {{name}} davon abgezogen"
+    },
+    "handed": {
+      "you": "{{a}} hast es von {{from}} an {{to}} übergeben",
+      "other": "{{a}} hat es von {{from}} an {{to}} übergeben"
+    },
+    "archived": {
+      "you": "{{a}} hast es archiviert",
+      "other": "{{a}} hat es archiviert"
+    },
+    "restored": {
+      "you": "{{a}} hast es zurück aufs Board gelegt",
+      "other": "{{a}} hat es zurück aufs Board gelegt"
+    },
+    "retryMore": {
+      "you": "{{a}} hast es noch einmal versucht",
+      "other": "{{a}} hat es von selbst noch einmal versucht"
+    },
+    "retry": {
+      "you": "{{a}} hast es nach dem fehlgeschlagenen Lauf erneut versucht",
+      "other": "{{a}} hat es nach dem fehlgeschlagenen Lauf von selbst erneut versucht"
+    },
+    "started": {
+      "you": "{{a}} hast mit der Arbeit begonnen",
+      "other": "{{a}} hat mit der Arbeit begonnen"
+    },
+    "continuedPlanned": {
+      "you": "{{a}} hast wie geplant weitergemacht",
+      "other": "{{a}} hat wie geplant weitergemacht"
+    },
+    "heartbeat": {
+      "you": "{{a}} hast es beim Heartbeat aufgegriffen",
+      "other": "{{a}} hat es beim Heartbeat aufgegriffen"
+    },
+    "startedOver": {
+      "you": "{{a}} hast von vorn begonnen",
+      "other": "{{a}} hat von vorn begonnen"
+    },
+    "pickedUp": {
+      "you": "{{a}} hast es wieder aufgegriffen",
+      "other": "{{a}} hat es wieder aufgegriffen"
+    },
+    "waitingFor": {
+      "you": "{{a}} wartest auf {{list}}",
+      "other": "{{a}} wartet auf {{list}}"
+    },
+    "waitingContinues": {
+      "you": "{{a}} wartest – geht {{when}} weiter",
+      "other": "{{a}} wartet – geht {{when}} weiter"
+    },
+    "delivered": {
+      "you": "{{a}} hast geliefert",
+      "other": "{{a}} hat geliefert"
+    },
+    "deliveredPr": {
+      "you": "{{a}} hast geliefert – Pull Request #{{number}}",
+      "other": "{{a}} hat geliefert – Pull Request #{{number}}"
+    },
+    "needsInput": {
+      "you": "{{a}} brauchst etwas",
+      "other": "{{a}} braucht etwas von dir"
+    },
+    "requestedChanges": {
+      "you": "{{a}} hast Änderungen angefordert",
+      "other": "{{a}} hat Änderungen angefordert"
+    },
+    "answered": {
+      "you": "{{a}} hast geantwortet",
+      "other": "{{a}} hat geantwortet"
+    },
+    "reopenedMessage": {
+      "you": "{{a}} hast es mit einer Nachricht wieder geöffnet",
+      "other": "{{a}} hat es mit einer Nachricht wieder geöffnet"
+    },
+    "wrote": {
+      "you": "{{a}} hast geschrieben",
+      "other": "{{a}} hat geschrieben"
+    },
+    "noted": {
+      "you": "{{a}} hast notiert",
+      "other": "{{a}} hat notiert"
+    },
+    "mergedPr": {
+      "you": "{{a}} hast Pull Request #{{number}} gemergt",
+      "other": "{{a}} hat Pull Request #{{number}} gemergt"
+    },
+    "askedTask": {
+      "you": "{{a}} hast dir ein To-do gegeben",
+      "other": "{{a}} hat dir ein To-do gegeben"
+    },
+    "askedOk": {
+      "you": "{{a}} hast um Freigabe gebeten",
+      "other": "{{a}} bittet dich um Freigabe"
+    },
+    "asked": {
+      "you": "{{a}} hast gefragt",
+      "other": "{{a}} hat dich gefragt"
+    },
+    "taskDeclined": {
+      "you": "{{a}} konntest das To-do nicht erledigen",
+      "other": "{{a}} konnte das To-do nicht erledigen"
+    },
+    "taskDone": {
+      "you": "{{a}} hast das To-do erledigt",
+      "other": "{{a}} hat das To-do erledigt"
+    },
+    "approvedPlain": {
+      "you": "{{a}} hast freigegeben",
+      "other": "{{a}} hat freigegeben"
+    },
+    "declined": {
+      "you": "{{a}} hast abgelehnt",
+      "other": "{{a}} hat abgelehnt"
+    },
+    "pickedUpSubtasks": {
+      "you_one": "{{a}} hast es wieder aufgegriffen – {{list}} ist fertig",
+      "you_other": "{{a}} hast es wieder aufgegriffen – {{list}} sind fertig",
+      "other_one": "{{a}} hat es wieder aufgegriffen – {{list}} ist fertig",
+      "other_other": "{{a}} hat es wieder aufgegriffen – {{list}} sind fertig"
+    },
+    "actor": {
+      "you": "Du",
+      "agent": "Ein Agent"
+    },
+    "fallback": {
+      "anAgent": "einem Agenten",
+      "theAgent": "den Agenten",
+      "anotherAgent": "einen anderen Agenten"
+    },
+    "later": "später",
+    "stoppedEarly": "Gestoppt, bevor es fertig war",
+    "prOpened": "Pull Request #{{number}} geöffnet",
+    "branchPushed": "Branch gepusht – der Pull Request muss noch geöffnet werden",
+    "prMergedAuto": "Pull Request #{{number}} automatisch gemergt",
+    "prMerged": "Pull Request #{{number}} gemergt",
+    "prClosed": "Pull Request #{{number}} ohne Merge geschlossen"
+  },
+  "timeline": {
+    "goneAgent": "Ein Agent, den es nicht mehr gibt",
+    "title": "Aktivität",
+    "loadError": "Aktivität konnte nicht geladen werden.",
+    "youFiled": "Du hast das angelegt",
+    "filed": "{{name}} hat das angelegt",
+    "showEarlier_one": "Frühere Aktivität anzeigen ({{count}})",
+    "showEarlier_other": "Frühere Aktivität anzeigen ({{count}})",
+    "sending": "Wird gesendet…",
+    "resultAbove": "– das Ergebnis oben",
+    "hideResult": "Ergebnis ausblenden",
+    "showResult": "Ergebnis anzeigen",
+    "files": "Dateien: {{list}}"
+  },
+  "fields": {
+    "global": "global",
+    "status": "Status",
+    "type": "Typ",
+    "priority": "Priorität",
+    "dueDate": "Fälligkeitsdatum",
+    "overdueBy_one": "{{count}} Tag überfällig",
+    "overdueBy_other": "{{count}} Tage überfällig",
+    "removeDueDate": "Fälligkeitsdatum entfernen",
+    "noDueDate": "Kein Fälligkeitsdatum",
+    "removeLabel": "Label {{label}} entfernen",
+    "maxLabels_one": "Bis zu {{count}} Label",
+    "maxLabels_other": "Bis zu {{count}} Labels",
+    "addLabelPlaceholder": "Label hinzufügen…",
+    "addLabel": "Label hinzufügen"
+  },
+  "archived": {
+    "previous7": "Letzte 7 Tage",
+    "previous30": "Letzte 30 Tage",
+    "noMatch": "Keine archivierten Aufgaben gefunden",
+    "emptyTitle": "Noch nichts archiviert",
+    "tryAnotherFilter": "Probier einen anderen Filter.",
+    "emptyDescription": "Archiviere erledigte Arbeit, damit das Board übersichtlich bleibt: Rechtsklick auf eine Karte oder eine ganze „Erledigt“-Spalte über ihren Kopf leeren. Archivierte Aufgaben behalten alles und sind mit einem Klick zurück.",
+    "clearFilters": "Filter zurücksetzen",
+    "archivedAt": "Archiviert am {{date}}",
+    "restore": "Wiederherstellen",
+    "deleteNumber": "#{{number}} löschen",
+    "deleteForever": "Endgültig löschen"
+  },
+  "goals": {
+    "label": "Ziele",
+    "goal": "Ziel",
+    "add": "Ziel hinzufügen",
+    "hideFinished": "Abgeschlossene ausblenden",
+    "finished_one": "{{count}} abgeschlossen",
+    "finished_other": "{{count}} abgeschlossen",
+    "intro": "Ziele sagen, wofür die Arbeit ist – Aufgaben, die einem Ziel dienen, sagen ihrem Agenten warum, und du siehst, wie weit es ist.",
+    "changeError": "Ziel konnte nicht geändert werden",
+    "deleted": "„{{title}}“ gelöscht",
+    "deletedDescription": "Die Aufgaben bleiben, ohne Ziel.",
+    "deleteError": "Ziel konnte nicht gelöscht werden",
+    "progress": "{{done}} von {{total}} erledigt",
+    "noTickets": "Noch keine Aufgaben",
+    "moreFor": "Mehr zu {{title}}",
+    "markAchieved": "Als erreicht markieren",
+    "drop": "Verwerfen",
+    "reactivate": "Wieder aktivieren",
+    "deleteTitle": "„{{title}}“ löschen?",
+    "deleteDescription_one": "Die Aufgabe bleibt, ohne Ziel. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+    "deleteDescription_other": "Die {{count}} Aufgaben bleiben, ohne Ziel. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+    "deleteDescriptionEmpty": "Noch keine Aufgabe dient diesem Ziel. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+    "keep": "Behalten",
+    "saved": "Ziel gespeichert",
+    "added": "Ziel „{{title}}“ hinzugefügt",
+    "addedDescription": "Leg Aufgaben darunter an – ihre Agenten erfahren, warum.",
+    "saveError": "Ziel konnte nicht gespeichert werden",
+    "editTitle": "Ziel bearbeiten",
+    "newTitle": "Neues Ziel",
+    "dialogDescription": "Wofür die Arbeit ist. Aufgaben, die dem Ziel dienen, sagen ihrem Agenten warum.",
+    "titlePlaceholder": "Neue Preise starten",
+    "why": "Warum es wichtig ist",
+    "whyPlaceholder": "Umsatz pro Kunde in diesem Quartal um 20 % steigern – die Agenten bekommen das mit jeder Aufgabe.",
+    "targetDate": "Zieldatum",
+    "addGoal": "Ziel hinzufügen"
+  },
+  "fix": {
+    "filed": "Aufgabe #{{number}} angelegt",
+    "filedMerge": "Der Fix landet in {{branch}}, sobald er fertig ist.",
+    "filedReview": "Du prüfst den Pull Request, wenn er fertig ist.",
+    "fileError": "Fix konnte nicht angelegt werden",
+    "anAgent": "Ein Agent",
+    "title": "Im Code beheben",
+    "description": "{{who}} bekommt das Log dieses Computers als Aufgabe, findet die Ursachen im Code von Godmode und behebt sie, mit Tests.",
+    "noRepo": "<b>Welches Repository?</b> Füge zuerst das Quell-Repository von Godmode (oder deinen Fork) unter Selbstreparatur hinzu.",
+    "openSettings": "Einstellungen öffnen",
+    "moreInLog_one": "und {{count}} weiterer im Log",
+    "moreInLog_other": "und {{count}} weitere im Log",
+    "noteLabel": "Was ist dir aufgefallen?",
+    "notePlaceholder": "Optional, z. B. „Chats brechen nach ein paar Minuten ab“",
+    "mergeLabel": "Nach Abschluss in {{branch}} mergen",
+    "mergeOn": "Kein Review: Der Pull Request wird gemergt, sobald der Fix geliefert ist.",
+    "mergeOff": "Der Pull Request wartet auf dein Review.",
+    "filing": "Wird angelegt…",
+    "submit": "Fix anlegen"
+  },
+  "board": {
+    "continuing_one": "{{count}} Aufgabe wird fortgesetzt",
+    "continuing_other": "{{count}} Aufgaben werden fortgesetzt",
+    "continueAll_one": "{{count}} unterbrochene Aufgabe fortsetzen",
+    "continueAll_other": "Alle {{count}} unterbrochenen Aufgaben fortsetzen",
+    "archiveAllLabel": "Alle Aufgaben in „{{label}}“ archivieren",
+    "archiveAll_one": "{{count}} archivieren – runter vom Board, nie gelöscht",
+    "archiveAll_other": "Alle {{count}} archivieren – runter vom Board, nie gelöscht",
+    "fold": "„{{label}}“ einklappen",
+    "addTo": "Aufgabe zu „{{label}}“ hinzufügen",
+    "dropHere": "Hier ablegen",
+    "addTask": "Aufgabe hinzufügen",
+    "showColumn": "„{{label}}“ anzeigen ({{count}})",
+    "quickAddPlaceholder": "Was muss erledigt werden?",
+    "quickAddHint": "Enter zum Hinzufügen · Esc zum Schließen"
+  },
+  "actions": {
+    "continue": "Fortsetzen",
+    "startAgain": "Neu starten",
+    "openChat": "Chat öffnen",
+    "approveMerge": "Freigeben & mergen",
+    "approve": "Freigeben",
+    "requestChangesMenu": "Änderungen anfordern…",
+    "answerMenu": "Antworten…",
+    "reopen": "Wieder öffnen",
+    "start": "Starten",
+    "archive": "Archivieren",
+    "deleteMenu": "Löschen…"
+  },
+  "dialog": {
+    "onIt": "{{name}} ist dran",
+    "created": "#{{number}} erstellt",
+    "createError": "Aufgabe konnte nicht erstellt werden",
+    "waitUpload": "Warte, bis der Upload fertig ist",
+    "waitUploadDescription": "Dann schließen – die Aufgabe bleibt als Entwurf erhalten.",
+    "newPart": "Neuer Teil von #{{number}}",
+    "newTask": "Neue Aufgabe",
+    "srDescription": "Gib der Aufgabe einen Titel und eine Beschreibung – füge Bilder, PDFs und Dateien ein oder zieh sie hinein.",
+    "smaller": "Kleiner",
+    "larger": "Größer",
+    "title": "Titel",
+    "titlePlaceholder": "Titel der Aufgabe",
+    "descriptionPlaceholder": "Beschreibung hinzufügen… Screenshots und Dateien einfügen oder hineinziehen, - für eine Liste oder [] für eine Checkliste tippen.",
+    "repository": "Repository",
+    "anotherRepo": "Anderes Repository…",
+    "repoUrl": "Repository-URL",
+    "baseBranch": "Basis-Branch",
+    "defaultBranch": "Standard",
+    "repoHint": "Die Aufgabe bekommt einen eigenen Git-Worktree auf einem neuen Branch. Godmode öffnet einen Pull Request, wenn der Agent fertig ist – mit deinem eigenen Git- und GitHub-CLI-Login.",
+    "repoHintWithTip": "Tipp: Füge dem Workspace Repositorys hinzu, um sie hier auszuwählen. Die Aufgabe bekommt einen eigenen Git-Worktree auf einem neuen Branch. Godmode öffnet einen Pull Request, wenn der Agent fertig ist – mit deinem eigenen Git- und GitHub-CLI-Login.",
+    "willStart": "{{name}} legt direkt nach dem Erstellen los.",
+    "noAgent": "Kein Agent",
+    "removeGoal": "Nicht unter „{{title}}“ ablegen",
+    "workspace": "Workspace",
+    "project": "Projekt",
+    "noProject": "Kein Projekt",
+    "attach": "Dateien anhängen",
+    "attachTitle": "Bilder, PDFs oder andere Dateien anhängen",
+    "createAnother": "Weitere erstellen",
+    "uploading": "Wird hochgeladen…",
+    "createStart": "Erstellen & starten",
+    "create": "Aufgabe erstellen"
+  },
+  "editor": {
+    "tooLarge": "{{name}} ist zu groß",
+    "maxSize": "Dateien dürfen bis zu {{size}} groß sein.",
+    "attachError": "{{name}} konnte nicht angehängt werden",
+    "removeName": "{{name}} entfernen",
+    "unavailable": "{{name}} ist nicht mehr verfügbar",
+    "imageUnavailable": "Bild ist nicht mehr verfügbar",
+    "image": "Bild",
+    "doubleClickDownload": "{{name}} – Doppelklick zum Herunterladen",
+    "uploadingName": "{{name}} wird hochgeladen…",
+    "heading": "Überschrift",
+    "bold": "Fett",
+    "italic": "Kursiv",
+    "strikethrough": "Durchgestrichen",
+    "inlineCode": "Inline-Code",
+    "bulletList": "Aufzählung",
+    "numberedList": "Nummerierte Liste",
+    "checklist": "Checkliste",
+    "quote": "Zitat",
+    "codeBlock": "Codeblock",
+    "attachHint": "oder in den Text einfügen / hineinziehen",
+    "link": "Link",
+    "linkAddress": "Linkadresse",
+    "dropToAttach": "Zum Anhängen ablegen"
+  },
+  "sheet": {
+    "uploadPending": "Die Datei ist noch auf dem Weg in die Beschreibung.",
+    "updateError": "Aufgabe konnte nicht aktualisiert werden",
+    "more": "Mehr",
+    "restoreToBoard": "Zurück aufs Board",
+    "archiveTask": "Aufgabe archivieren",
+    "deleteTask": "Aufgabe löschen",
+    "archivedBanner": "<b>Archiviert</b> {{when}} – runter vom Board, nichts geht verloren.",
+    "srDescription": "Details der Aufgabe",
+    "waitsFor": "Wartet auf",
+    "labels": "Labels",
+    "branch": "Branch",
+    "copyBranch": "Branch-Namen kopieren",
+    "defaultBranch": "Standard-Branch",
+    "merge": "Merge",
+    "autoMergeLabel": "Pull Request nach der Lieferung automatisch mergen",
+    "autoMergeOn": "Automatisch in <code>{{branch}}</code>, sobald geliefert",
+    "theDefaultBranch": "den Standard-Branch",
+    "afterReview": "Nach deinem Review",
+    "worktree": "Worktree",
+    "copyWorktree": "Pfad des Worktrees kopieren",
+    "theAgent": "Der Agent",
+    "theAgentLower": "den Agenten",
+    "anAgent": "einem Agenten",
+    "previousResult": "Vorheriges Ergebnis",
+    "report": "Bericht",
+    "result": "Ergebnis",
+    "dateFormat": "d. MMM yyyy, p",
+    "filedByYou": "Von dir angelegt am {{date}}",
+    "filedBy": "Von {{name}} angelegt am {{date}}",
+    "worked_one": "{{name}} hat {{time}} in {{count}} Lauf gearbeitet",
+    "worked_other": "{{name}} hat {{time}} in {{count}} Läufen gearbeitet",
+    "workedSoFar_one": "{{name}} hat bisher {{time}} in {{count}} Lauf gearbeitet",
+    "workedSoFar_other": "{{name}} hat bisher {{time}} in {{count}} Läufen gearbeitet",
+    "closedAgo": "geschlossen {{when}}",
+    "stopWaiting": "Nicht mehr auf #{{number}} warten",
+    "waitForAnother": "Auf eine weitere Aufgabe warten",
+    "alsoWaitFor": "Auch warten auf…",
+    "waitForTicket": "Auf eine Aufgabe warten…",
+    "nothing": "Nichts",
+    "partGoal": "Ein Teil dient dem Ziel seiner Aufgabe",
+    "noGoal": "Kein Ziel",
+    "publishError": "Veröffentlichen fehlgeschlagen",
+    "approvedToast": "#{{number}} freigegeben",
+    "reopenedToast": "#{{number}} wieder geöffnet",
+    "addDescription": "Beschreibung hinzufügen",
+    "editDescription": "Beschreibung bearbeiten",
+    "addDescriptionPlaceholder": "Beschreibung hinzufügen…",
+    "descriptionKinds": "Text, Checklisten, Screenshots, Dateien",
+    "descriptionPlaceholder": "Details, Akzeptanzkriterien, Links… # für eine Überschrift, - für eine Liste, [] für eine Checkliste.",
+    "notSaved": "Nicht gespeichert",
+    "savesAsYouType": "Speichert beim Tippen · Screenshots und Dateien einfügen oder hineinziehen"
+  },
+  "parts": {
+    "title": "Teile",
+    "titleCount": "Teile · {{done}} von {{total}} fertig",
+    "add": "Teil hinzufügen",
+    "partOf": "Teil von <link>#{{number}} {{title}}</link>",
+    "archived_one": "{{count}} weiterer Teil ist archiviert.",
+    "archived_other": "{{count}} weitere Teile sind archiviert.",
+    "hint": "Teil die Arbeit auf: Jeder Teil ist eine eigene Aufgabe, und diese wartet, bis sie fertig sind."
+  },
+  "github": {
+    "pushError": "Branch konnte nicht gepusht werden",
+    "prOpen": "Pull Request #{{number}} ist offen",
+    "view": "Ansehen",
+    "createError": "Pull Request konnte nicht erstellt werden",
+    "openBranch": "Branch auf GitHub öffnen",
+    "openOnGithub": "Auf GitHub öffnen",
+    "pushAndOpenLabel": "Branch pushen und auf GitHub öffnen",
+    "pushAndOpen": "Zu GitHub pushen und öffnen",
+    "creating": "Wird erstellt…",
+    "createPr": "PR erstellen",
+    "pushChangesHint": "Neueste Änderungen pushen und einen Pull Request nach {{branch}} öffnen",
+    "pushBranchHint": "Branch pushen und einen Pull Request nach {{branch}} öffnen"
+  },
+  "reply": {
+    "sendError": "Senden fehlgeschlagen",
+    "answer": "Antwort an {{name}}…",
+    "changePr": "Änderungswunsch an {{name}}? Der Pull Request wird aktualisiert.",
+    "change": "Änderungswunsch an {{name}}…",
+    "howToGoOn": "Nachricht an {{name}}: Wie soll es weitergehen…",
+    "continuesNow": "Nachricht an {{name}} – geht sofort weiter",
+    "readsLater": "Nachricht an {{name}} – wird nach diesem Lauf gelesen",
+    "reopens": "Fehlt noch etwas? Nachricht an {{name}} – die Aufgabe wird wieder geöffnet.",
+    "message": "Nachricht an {{name}}…"
+  },
+  "page": {
+    "assignToStart": "Weise einen Agenten zu, um sie zu starten",
+    "assign": "Zuweisen",
+    "movedToBlocked": "#{{number}} nach „Blockiert“ verschoben",
+    "addReason": "Grund hinzufügen",
+    "moveError": "Aufgabe konnte nicht verschoben werden",
+    "mergedInto": "#{{number}} in {{branch}} gemergt",
+    "prMergedDone": "Pull Request #{{number}} ist gemergt und die Aufgabe erledigt.",
+    "prMerged": "Pull Request #{{number}} ist gemergt.",
+    "queuedToMerge": "#{{number}} wartet auf den Merge",
+    "queuedToMergeDescription": "Die Aufgabe wandert nach „Erledigt“, sobald GitHub sie mergt.",
+    "approveError": "Aufgabe konnte nicht freigegeben werden",
+    "mergeError": "#{{number}} konnte nicht gemergt werden",
+    "markDoneAnyway": "Trotzdem erledigen",
+    "reassignError": "Agent konnte nicht geändert werden",
+    "addError": "Aufgabe konnte nicht hinzugefügt werden",
+    "deleted": "#{{number}} gelöscht",
+    "deleteError": "Aufgabe konnte nicht gelöscht werden",
+    "title": "Agenten-Aufgaben",
+    "descriptionScoped": "{{scope}} – Aufgaben, die du deinen Agenten gibst.",
+    "descriptionGlobal": "Globale Aufgaben – Aufgaben, die du deinen Agenten gibst.",
+    "descriptionAll": "Die Boards aller Workspaces mit Aufgaben, die du deinen Agenten gibst.",
+    "connectRepo": "Repository verbinden",
+    "board": "Board",
+    "archived": "Archiviert",
+    "filterPlaceholder": "Aufgaben filtern…",
+    "filterLabel": "Aufgaben filtern",
+    "allAgents": "Alle Agenten",
+    "filter": "Filter",
+    "due": {
+      "label": "Fällig",
+      "overdue": "Überfällig",
+      "week": "In 7 Tagen fällig",
+      "none": "Kein Fälligkeitsdatum"
+    },
+    "noLabels": "Noch keine Labels",
+    "archivedInfo_one": "<n>{{count}}</n> archiviert · Wiederherstellen legt eine Aufgabe oben in ihre Spalte",
+    "archivedInfo_other": "<n>{{count}}</n> archiviert · Wiederherstellen legt eine Aufgabe oben in ihre Spalte",
+    "showing": "<n>{{visible}}</n> von <n>{{total}}</n>",
+    "stats": {
+      "overdue_one": "{{count}} überfällig",
+      "overdue_other": "{{count}} überfällig",
+      "running_one": "{{count}} läuft",
+      "running_other": "{{count}} laufen",
+      "inReview_one": "{{count}} im Review",
+      "inReview_other": "{{count}} im Review",
+      "blocked_one": "{{count}} blockiert",
+      "blocked_other": "{{count}} blockiert",
+      "total_one": "{{count}} gesamt",
+      "total_other": "{{count}} gesamt"
+    },
+    "loadError": "Board konnte nicht geladen werden",
+    "noMatch": "Keine passenden Aufgaben",
+    "noMatchDescription": "Nichts auf diesem Board passt zu den Filtern.",
+    "deleteTitle": "#{{number}} löschen?",
+    "deleteText": "Die Aufgabe ist endgültig weg. Die Unterhaltung des Agenten bleibt erhalten.",
+    "deleteTextBranch": "Die Aufgabe ist endgültig weg und ihr Worktree wird entfernt (ein gepushter Branch und Pull Request bleiben). Die Unterhaltung des Agenten bleibt erhalten.",
+    "deleteArchiveHint": "Um sie nur vom Board zu nehmen, archiviere sie – du kannst sie jederzeit wiederherstellen.",
+    "archiveInstead": "Stattdessen archivieren"
+  },
+  "stop": {
+    "keepAgent": "{{who}} behalten",
+    "keepWaiting": "Weiter warten",
+    "takeOff": {
+      "title": "{{who}} von #{{number}} abziehen?",
+      "text": "Der Lauf stoppt und die Aufgabe wird im Backlog geparkt.",
+      "confirm": "Abziehen"
+    },
+    "handOver": {
+      "title": "#{{number}} an {{next}} übergeben?",
+      "text": "{{who}} ist noch dran. {{ends}} und {{next}} fängt neu an.",
+      "confirm": "Übergeben",
+      "runStops": "Der Lauf von {{who}} stoppt",
+      "followupCancelled": "Das Follow-up von {{who}} wird abgebrochen",
+      "runEnds": "Der Lauf von {{who}} endet"
+    },
+    "endConfirm": {
+      "archive": "Beenden und archivieren",
+      "move": "Beenden und verschieben"
+    },
+    "working": {
+      "title": "Agent stoppen?",
+      "keep": "Weiterarbeiten lassen",
+      "text": {
+        "archive": "{{who}} arbeitet noch an #{{number}}. Archivieren stoppt den Lauf und parkt die Aufgabe im Backlog.",
+        "move": "{{who}} arbeitet noch an #{{number}}. Das Verschieben nach „{{status}}“ stoppt den Lauf."
+      },
+      "confirm": {
+        "archive": "Stoppen und archivieren",
+        "move": "Stoppen und verschieben"
+      }
+    },
+    "question": {
+      "title": "Frage verwerfen?",
+      "text": {
+        "archive": "{{who}} wartet auf deine Antwort zu #{{number}}. Archivieren beendet den Lauf und parkt die Aufgabe im Backlog – er lässt sich danach nicht fortsetzen.",
+        "move": "{{who}} wartet auf deine Antwort zu #{{number}}. Das Verschieben nach „{{status}}“ beendet den Lauf – er lässt sich danach nicht fortsetzen."
+      }
+    },
+    "limit": {
+      "title": "Wartenden Lauf beenden?",
+      "text": {
+        "archive": "#{{number}} wartet, bis Claudes {{limit}} zurückgesetzt wird. Archivieren beendet den Lauf und parkt die Aufgabe im Backlog – er lässt sich danach nicht fortsetzen.",
+        "move": "#{{number}} wartet, bis Claudes {{limit}} zurückgesetzt wird. Das Verschieben nach „{{status}}“ beendet den Lauf – er lässt sich danach nicht fortsetzen."
+      }
+    },
+    "paused": {
+      "title": "Pausierten Lauf beenden?",
+      "keep": "Pausiert lassen",
+      "text": {
+        "archive": "#{{number}} ist pausiert. Archivieren beendet den Lauf und parkt die Aufgabe im Backlog – er lässt sich danach nicht fortsetzen.",
+        "move": "#{{number}} ist pausiert. Das Verschieben nach „{{status}}“ beendet den Lauf – er lässt sich danach nicht fortsetzen."
+      }
+    },
+    "followup": {
+      "title": "Follow-up abbrechen?",
+      "text": {
+        "archive": "{{who}} will mit #{{number}} weitermachen. Archivieren bricht das ab und parkt die Aufgabe im Backlog.",
+        "move": "{{who}} will mit #{{number}} weitermachen. Das Verschieben nach „{{status}}“ bricht das ab."
+      },
+      "textWhen": {
+        "archive": "{{who}} will {{when}} mit #{{number}} weitermachen. Archivieren bricht das ab und parkt die Aufgabe im Backlog.",
+        "move": "{{who}} will {{when}} mit #{{number}} weitermachen. Das Verschieben nach „{{status}}“ bricht das ab."
+      },
+      "confirm": {
+        "archive": "Abbrechen und archivieren",
+        "move": "Abbrechen und verschieben"
+      }
+    }
+  }
+}

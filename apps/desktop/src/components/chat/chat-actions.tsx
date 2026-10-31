@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Conversation, ConversationWithMessages } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -30,6 +31,7 @@ interface ArchiveVars {
  * it still has ahead goes on, and the toast says so.
  */
 export function useArchiveChat() {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const mutation = useMutation({
     mutationFn: ({ chat, archived }: ArchiveVars) => api.conversations.update(chat.id, { archived }),
@@ -44,15 +46,15 @@ export function useArchiveChat() {
     onError: (err, { chat, archived }, ctx) => {
       for (const [key, data] of ctx?.snapshot ?? []) qc.setQueryData(key, data);
       qc.setQueryData<ConversationWithMessages>(qk.conversation(chat.id), (c) => (c ? { ...c, archived: !archived } : c));
-      toast.error(archived ? "Couldn't archive the chat" : "Couldn't restore the chat", { description: errorMessage(err) });
+      toast.error(archived ? t("actions.archiveError") : t("actions.restoreError"), { description: errorMessage(err) });
     },
     onSuccess: (_res, { chat, archived, undo }) => {
       if (undo) return;
       const working = !!chat.running || Object.values(useLive.getState().runs).some((r) => r.conversationId === chat.id && (r.status === "running" || r.status === "queued"));
       const ahead = archived ? stillAhead({ paused: chat.paused ?? null, followup: chat.followup ?? null }, working) : null;
-      toast.success(archived ? (ahead ? `Archived · ${ahead}` : "Chat archived") : "Chat restored", {
-        description: chat.title || "New chat",
-        action: { label: "Undo", onClick: () => mutation.mutate({ chat, archived: !archived, undo: true }) },
+      toast.success(archived ? (ahead ? t("actions.archivedAhead", { ahead }) : t("actions.archived")) : t("actions.restored"), {
+        description: chat.title || t("header.newChat"),
+        action: { label: t("common:actions.undo"), onClick: () => mutation.mutate({ chat, archived: !archived, undo: true }) },
       });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: qk.conversationsAll }),
@@ -85,6 +87,7 @@ export function DeleteChatDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: (id: string) => void;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const remove = useMutation({
     mutationFn: (chat: ChatRef) => api.conversations.delete(chat.id),
@@ -96,13 +99,13 @@ export function DeleteChatDialog({
       return { snapshot };
     },
     onSuccess: (_res, chat) => {
-      toast.success("Chat deleted", { description: chat.title || "New chat" });
+      toast.success(t("actions.deleted"), { description: chat.title || t("header.newChat") });
       onDeleted?.(chat.id);
       qc.removeQueries({ queryKey: qk.conversation(chat.id) });
     },
     onError: (err, _chat, ctx) => {
       for (const [key, data] of ctx?.snapshot ?? []) qc.setQueryData(key, data);
-      toast.error("Couldn't delete the chat", { description: errorMessage(err) });
+      toast.error(t("actions.deleteError"), { description: errorMessage(err) });
     },
     onSettled: () => qc.invalidateQueries({ queryKey: qk.conversationsAll }),
   });
@@ -111,15 +114,15 @@ export function DeleteChatDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete this chat?</AlertDialogTitle>
+          <AlertDialogTitle>{t("actions.deleteTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            “{chat?.title || "New chat"}” and its messages will be removed. The agent keeps its memory and the transcript in its history.
+            {t("actions.deleteDescription", { title: chat?.title || t("header.newChat") })}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction variant="destructive" onClick={() => chat && remove.mutate(chat)} disabled={remove.isPending && remove.variables?.id === chat?.id}>
-            Delete
+            {t("common:actions.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

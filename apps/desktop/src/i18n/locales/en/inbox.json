@@ -1,0 +1,142 @@
+{
+  "header": {
+    "title": "Needs you",
+    "descriptionCount_one": "{{count}} thing needs you — answer what your agents ask, do what they hand you, add the access they miss.",
+    "descriptionCount_other": "{{count}} things need you — answer what your agents ask, do what they hand you, add the access they miss.",
+    "description": "What your agents need from you — questions, to-dos, approvals, missing logins, 2FA codes — plus updates from their work.",
+    "newTodo": "New to-do"
+  },
+  "views": {
+    "label": "View",
+    "list": "List",
+    "board": "Board"
+  },
+  "board": {
+    "waiting": "{{facts}}. Drag to plan, drop on Done and its agent picks up where it left off.",
+    "toDo_one": "{{count}} to do",
+    "toDo_other": "{{count}} to do",
+    "onHold_one": "{{count}} agent on hold until you're done",
+    "onHold_other": "{{count}} agents on hold until you're done",
+    "inBacklog_one": "{{count}} in the backlog",
+    "inBacklog_other": "{{count}} in the backlog",
+    "onlyBacklog_one": "Nothing to do right now · {{count}} in the backlog for later.",
+    "onlyBacklog_other": "Nothing to do right now · {{count}} in the backlog for later.",
+    "empty": "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off."
+  },
+  "list": {
+    "title": "Needs your attention",
+    "vaultLocked": "Vault is locked",
+    "loadError": "Couldn't load requests"
+  },
+  "tabs": {
+    "open": "Open",
+    "resolved": "Resolved",
+    "dismissed": "Dismissed"
+  },
+  "empty": {
+    "open": {
+      "title": "All clear — your agents have everything they need",
+      "description": "When an agent needs a decision, your OK, a login it doesn't have or a 2FA code, it lands here instead of getting lost in a chat."
+    },
+    "resolved": {
+      "title": "Nothing resolved yet",
+      "description": "Requests you fix — by adding a login or 2FA code, or marking them resolved — are kept here for reference."
+    },
+    "dismissed": {
+      "title": "Nothing dismissed",
+      "description": "Requests you dismiss are parked here. Reopen them any time."
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "new_one": "{{count}} new",
+    "new_other": "{{count}} new",
+    "markAllRead": "Mark all read",
+    "markReadError": "Could not mark as read",
+    "clear": "Clear notifications",
+    "clearAll": "Clear all",
+    "cleared": "Notifications cleared",
+    "clearError": "Could not clear notifications",
+    "clearTitle": "Clear all notifications?",
+    "clearDescription_one": "This removes {{count}} notification. Agent runs and their results are not affected.",
+    "clearDescription_other": "This removes {{count}} notifications. Agent runs and their results are not affected.",
+    "loadError": "Couldn't load notifications",
+    "emptyTitle": "No notifications",
+    "emptyDescription": "Agents post updates here when they finish work, need something, or hit a problem.",
+    "showMore_one": "Show {{count}} more",
+    "showMore_other": "Show {{count}} more",
+    "unread": "Unread: {{title}}"
+  },
+  "question": {
+    "task": "Task",
+    "taskNumber": "Task #{{number}}",
+    "openTask": "Open task",
+    "automation": "Automation · {{name}}",
+    "openChat": "Open chat",
+    "chat": "Chat",
+    "anAgent": "An agent",
+    "stopped": "Stopped — the question is withdrawn",
+    "stopError": "Couldn't stop the run",
+    "asks": "<b>{{name}}</b> <m>asks</m>",
+    "needsOk": "<b>{{name}}</b> <m>needs your OK</m>",
+    "stopTitle": "Stop the run — the question is withdrawn"
+  },
+  "missingLogin": {
+    "kinds": {
+      "missingCredential": "Missing login",
+      "invalidCredential": "Login failed",
+      "missingTotp": "Missing 2FA",
+      "missingAccount": "No account",
+      "other": "Needs attention"
+    },
+    "markedResolved": "Marked as resolved",
+    "dismissed": "Dismissed",
+    "reopened": "Moved back to open",
+    "updateError": "Could not update the request",
+    "unknownService": "Unknown service",
+    "reportedTimes_one": "Reported {{count}} time",
+    "reportedTimes_other": "Reported {{count}} times",
+    "openInBrowser": "Open {{url}} in your browser",
+    "reportedBy": "Reported by <b>{{name}}</b>",
+    "reportedByAgent": "Reported by an agent",
+    "reportedByGodmode": "Reported by Godmode",
+    "dismiss": "Dismiss",
+    "markResolved": "Mark resolved",
+    "add2fa": "Add 2FA",
+    "updateLogin": "Update login",
+    "addLogin": "Add login",
+    "resolvedWithLogin": "Resolved with a saved login",
+    "resolved": "Resolved",
+    "reopen": "Reopen"
+  },
+  "linkTotp": {
+    "readyFor": "2FA ready for {{host}}",
+    "linkedTo": "2FA linked to {{name}}",
+    "readyDescription": "Agents type this code in on their next sign-in.",
+    "linkError": "Could not link the 2FA code",
+    "title": "Use a saved 2FA code",
+    "description": "Pick the code for <b>{{host}}</b>. Godmode links it to the right login, so agents fill it in by themselves next time.",
+    "loginFor": "Login for {{host}}",
+    "noLogin": "No login is saved for {{host}} yet. Add the login first, then link its 2FA here.",
+    "searchPlaceholder": "Search 2FA codes by service, account or login…",
+    "codes": "2FA codes",
+    "loading": "Loading 2FA codes…",
+    "noMatch": "No 2FA code matches “{{query}}”.",
+    "noCodes": "Your vault has no 2FA codes yet.",
+    "suggestedFor": "Suggested for {{host}}",
+    "allCodes": "All 2FA codes",
+    "matches": "Matches",
+    "hiddenMore_one": "{{count}} more. Keep typing to narrow it down.",
+    "hiddenMore_other": "{{count}} more. Keep typing to narrow it down.",
+    "importNew": "Not there? Import a new code",
+    "link": "Link 2FA",
+    "notLinked": "Not linked",
+    "outcome": {
+      "alreadyLinked": "Already linked to {{who}}. This closes the request.",
+      "links": "Links it to {{who}}.",
+      "staysCovered": "It stays with {{owner}}, which already covers {{host}}.",
+      "sameAccount": "Same account: it stays with {{owner}} ({{domain}}) and {{host}} is added to that login, so both sign-ins get the code.",
+      "moves": "Moves it from {{from}} to {{who}}."
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { useMutation } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -49,6 +50,7 @@ import { SshStatusBadge, keyTypeLabel, sshAddress, sshStatus } from "./ssh-parts
 import type { SshActions } from "./use-ssh-actions";
 
 export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshServer; actions: SshActions; onEdit: () => void; onDelete: () => void }) {
+  const { t } = useTranslation("ssh");
   const [commandOpen, setCommandOpen] = useState(false);
   const status = sshStatus(server);
   const testing = actions.testing.has(server.id);
@@ -84,17 +86,17 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
             <span className="truncate font-mono text-foreground/80" title={sshAddress(server)}>
               {sshAddress(server)}
             </span>
-            <CopyButton text={sshCommand(server)} label="Copy ssh command" className="size-5" />
+            <CopyButton text={sshCommand(server)} label={t("card.copySshCommand")} className="size-5" />
           </p>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground [&_svg]:size-3 [&_svg]:shrink-0">
             {server.auth === "key" ? (
               <span className="inline-flex items-center gap-1">
-                <KeyRound aria-hidden /> SSH key{server.key ? ` · ${keyTypeLabel(server.key.type)}` : ""}
-                {server.hasPassword && " · sudo password saved"}
+                <KeyRound aria-hidden /> {t("card.sshKey")}{server.key ? ` · ${keyTypeLabel(server.key.type)}` : ""}
+                {server.hasPassword && ` · ${t("card.sudoSaved")}`}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1">
-                <RectangleEllipsis aria-hidden /> Password
+                <RectangleEllipsis aria-hidden /> {t("card.password")}
               </span>
             )}
             {osName && (
@@ -116,7 +118,7 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
           <TriangleAlert className="mt-px size-3.5 shrink-0 text-destructive" aria-hidden />
           <p className="min-w-0 flex-1 basis-48 leading-relaxed break-words text-destructive">{server.lastError}</p>
           <Button size="xs" variant="outline" onClick={() => actions.test.mutate({ server })}>
-            <RefreshCw /> Test again
+            <RefreshCw /> {t("card.testAgain")}
           </Button>
         </div>
       )}
@@ -136,10 +138,10 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
               className="h-7 gap-1.5 px-2 text-[12.5px] font-normal text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
             >
               {testing ? <Spinner className="size-3.5" /> : <ShieldCheck />}
-              {testing ? "Testing…" : "Test connection"}
+              {testing ? t("status.testing") : t("card.testConnection")}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>{server.hostKey ? "Sign in and check the host key" : "Sign in and pin the server's host key"}</TooltipContent>
+          <TooltipContent>{server.hostKey ? t("card.testTooltipPinned") : t("card.testTooltipPin")}</TooltipContent>
         </Tooltip>
         <Button
           variant="ghost"
@@ -149,7 +151,7 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
           aria-controls={`ssh-command-${server.id}`}
           onClick={() => setCommandOpen((o) => !o)}
         >
-          <Terminal className="size-3.5" /> Run command
+          <Terminal className="size-3.5" /> {t("card.runCommand")}
           <ChevronDown className={cn("size-3.5 opacity-60 transition-transform", commandOpen && "rotate-180")} />
         </Button>
       </div>
@@ -173,6 +175,7 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
 }
 
 function HostKeyLine({ server }: { server: SshServer }) {
+  const { t } = useTranslation("ssh");
   const key = server.hostKey!;
   return (
     <Tooltip>
@@ -182,7 +185,7 @@ function HostKeyLine({ server }: { server: SshServer }) {
           className="mt-1 flex max-w-full min-w-0 items-center gap-1 rounded-sm text-[11px] text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ShieldCheck className="size-3 shrink-0 text-muted-foreground/80" aria-hidden />
-          <span className="sr-only">Pinned host key:</span>
+          <span className="sr-only">{t("card.pinnedHostKeySr")}</span>
           <span className="shrink-0">{keyTypeLabel(key.type)}</span>
           <span className="truncate font-mono">{key.fingerprint}</span>
         </p>
@@ -191,39 +194,40 @@ function HostKeyLine({ server }: { server: SshServer }) {
         <span className="block font-mono text-[11px] break-all">
           {key.type} {key.fingerprint}
         </span>
-        <span className="mt-1 block opacity-80">Pinned host key — Godmode refuses the server if it presents another one.</span>
+        <span className="mt-1 block opacity-80">{t("card.pinnedHostKeyTooltip")}</span>
       </TooltipContent>
     </Tooltip>
   );
 }
 
 function ServerMenu({ server, actions, onEdit, onDelete }: { server: SshServer; actions: SshActions; onEdit: () => void; onDelete: () => void }) {
+  const { t } = useTranslation("ssh");
   const pending =
     (actions.forgetHostKey.isPending && actions.forgetHostKey.variables?.id === server.id) || (actions.remove.isPending && actions.remove.variables?.id === server.id);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground" aria-label={`More actions for ${server.name}`}>
+        <Button variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground" aria-label={t("card.moreActions", { name: server.name })}>
           {pending ? <Spinner /> : <Ellipsis />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem onClick={onEdit}>
-          <Pencil /> Edit…
+          <Pencil /> {t("card.edit")}
         </DropdownMenuItem>
         {server.auth === "key" && server.key && (
           <DropdownMenuItem onClick={() => void actions.copyPublicKey(server)}>
-            <Copy /> Copy public key
+            <Copy /> {t("card.copyPublicKey")}
           </DropdownMenuItem>
         )}
         {server.hostKey && (
           <DropdownMenuItem onClick={() => actions.forgetHostKey.mutate(server)}>
-            <ShieldOff /> Forget host key
+            <ShieldOff /> {t("card.forgetHostKey")}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={onDelete}>
-          <Trash2 /> Delete…
+          <Trash2 /> {t("card.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -239,23 +243,24 @@ function assignmentHref(a: SshAssignment): string {
 }
 
 function UsedBy({ server, actions }: { server: SshServer; actions: SshActions }) {
+  const { t } = useTranslation(["ssh", "common"]);
   const { data: agents = [] } = useAllAgents();
   const removing = (a: SshAssignment) =>
     actions.assign.isPending && actions.assign.variables?.server.id === server.id && actions.assign.variables.id === a.id && !actions.assign.variables.assigned;
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="eyebrow mr-1 text-[10.5px]">Used by</span>
-      {server.assignments.length === 0 && <span className="mr-1 text-xs text-muted-foreground">No one yet</span>}
+      <span className="eyebrow mr-1 text-[10.5px]">{t("card.usedBy")}</span>
+      {server.assignments.length === 0 && <span className="mr-1 text-xs text-muted-foreground">{t("card.noOneYet")}</span>}
       {server.assignments.map((a) => {
         const agent = a.kind === "agent" ? agents.find((x) => x.id === a.id) : undefined;
-        const kind = a.kind === "agent" ? "Agent" : "Chat";
-        const label = a.name || (a.kind === "conversation" ? "Untitled chat" : kind);
+        const kind = a.kind === "agent" ? t("common:words.agent") : t("card.chat");
+        const label = a.name || (a.kind === "conversation" ? t("card.untitledChat") : kind);
         return (
           <span key={`${a.kind}:${a.id}`} className="inline-flex h-6 max-w-[14rem] min-w-0 items-center rounded-md border bg-card text-xs shadow-xs">
             <Link
               to={assignmentHref(a)}
-              title={`${kind}: ${label}`}
+              title={t("card.assignmentTitle", { kind, label })}
               className="flex h-full min-w-0 items-center gap-1.5 rounded-l-md pr-1 pl-1.5 transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               {agent ? (
@@ -269,7 +274,7 @@ function UsedBy({ server, actions }: { server: SshServer; actions: SshActions })
             </Link>
             <button
               type="button"
-              aria-label={`Stop using ${server.name} for ${label}`}
+              aria-label={t("card.stopUsing", { server: server.name, label })}
               disabled={removing(a)}
               onClick={() => actions.assign.mutate({ server, kind: a.kind, id: a.id, name: label, assigned: false })}
               className="grid h-full w-5 shrink-0 place-items-center rounded-r-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -285,6 +290,7 @@ function UsedBy({ server, actions }: { server: SshServer; actions: SshActions })
 }
 
 function AssignPopover({ server, actions }: { server: SshServer; actions: SshActions }) {
+  const { t } = useTranslation(["ssh", "common"]);
   const { data: agents = [] } = useAllAgents();
   const sorted = [...agents].sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || a.name.localeCompare(b.name));
   const assigned = new Set(server.assignments.filter((a) => a.kind === "agent").map((a) => a.id));
@@ -293,16 +299,16 @@ function AssignPopover({ server, actions }: { server: SshServer; actions: SshAct
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="xs" className="h-6 text-muted-foreground hover:text-foreground" aria-label={`Assign ${server.name} to an agent`}>
-          <Plus /> Assign
+        <Button variant="ghost" size="xs" className="h-6 text-muted-foreground hover:text-foreground" aria-label={t("card.assignAria", { name: server.name })}>
+          <Plus /> {t("card.assign")}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 overflow-hidden p-0">
         <Command>
-          {sorted.length > 6 && <CommandInput placeholder="Search agents…" />}
+          {sorted.length > 6 && <CommandInput placeholder={t("card.searchAgents")} />}
           <CommandList className="max-h-72">
-            <CommandEmpty>No agents found.</CommandEmpty>
-            <CommandGroup heading="Agents">
+            <CommandEmpty>{t("card.noAgents")}</CommandEmpty>
+            <CommandGroup heading={t("common:words.agents")}>
               {sorted.map((a) => {
                 const on = assigned.has(a.id);
                 return (
@@ -315,7 +321,7 @@ function AssignPopover({ server, actions }: { server: SshServer; actions: SshAct
                   >
                     <AgentAvatar agent={a} size="sm" />
                     <span className="min-w-0 flex-1 truncate">{a.name}</span>
-                    {pendingId === a.id ? <Spinner className="size-4" /> : on && <Check className="size-4" aria-label="Assigned" />}
+                    {pendingId === a.id ? <Spinner className="size-4" /> : on && <Check className="size-4" aria-label={t("card.assigned")} />}
                   </CommandItem>
                 );
               })}
@@ -323,7 +329,7 @@ function AssignPopover({ server, actions }: { server: SshServer; actions: SshAct
           </CommandList>
         </Command>
         <p className="border-t bg-paper-2 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-          For a single chat, pick the server with the <span className="font-medium text-foreground">SSH</span> button in its message box.
+          <Trans t={t} i18nKey="card.singleChatHint" components={{ b: <span className="font-medium text-foreground" /> }} />
         </p>
       </PopoverContent>
     </Popover>
@@ -335,6 +341,7 @@ function AssignPopover({ server, actions }: { server: SshServer; actions: SshAct
 /* ------------------------------------------------------------------ */
 
 function CommandPanel({ server }: { server: SshServer }) {
+  const { t } = useTranslation("ssh");
   const [command, setCommand] = useState("");
   const exec = useMutation({
     mutationFn: (cmd: string) => api.ssh.exec(server.id, { command: cmd, timeoutSeconds: 120 }),
@@ -358,19 +365,18 @@ function CommandPanel({ server }: { server: SshServer }) {
             value={command}
             onChange={(e) => setCommand(e.target.value)}
             placeholder="uptime && df -h /"
-            aria-label={`Command to run on ${server.name}`}
+            aria-label={t("card.commandAria", { name: server.name })}
             autoComplete="off"
             spellCheck={false}
             className="h-8 pl-7 font-mono text-[12.5px]"
           />
         </div>
         <Button type="submit" size="sm" variant="outline" disabled={!command.trim() || exec.isPending}>
-          {exec.isPending ? <Spinner /> : <Play />} Run
+          {exec.isPending ? <Spinner /> : <Play />} {t("card.run")}
         </Button>
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Runs as <span className="font-mono">{server.username}</span> on <span className="font-mono">{server.host}</span> — stops after 2 minutes. Agents use the same
-        connection.
+        <Trans t={t} i18nKey="card.runsAs" values={{ user: server.username, host: server.host }} components={{ mono: <span className="font-mono" /> }} />
       </p>
       {exec.isError && (
         <p className="rounded-lg border border-destructive/25 bg-destructive/[0.05] px-3 py-2 text-xs text-destructive" role="alert">
@@ -388,14 +394,14 @@ function CommandPanel({ server }: { server: SshServer }) {
             >
               exit {result.exitCode ?? "–"}
             </span>
-            {result.timedOut && <span className="font-medium text-warning">Timed out</span>}
+            {result.timedOut && <span className="font-medium text-warning">{t("card.timedOut")}</span>}
             <span className="tabular-nums">{result.durationMs < 1000 ? `${result.durationMs} ms` : `${(result.durationMs / 1000).toFixed(1)} s`}</span>
             <span className="ml-auto truncate font-mono">{exec.variables}</span>
           </div>
           <pre className="max-h-64 overflow-auto p-3 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap text-foreground">
             {result.stdout}
             {result.stderr && <span className="text-destructive">{result.stderr}</span>}
-            {!result.stdout && !result.stderr && <span className="text-muted-foreground">(no output)</span>}
+            {!result.stdout && !result.stderr && <span className="text-muted-foreground">{t("card.noOutput")}</span>}
           </pre>
         </div>
       )}

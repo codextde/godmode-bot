@@ -1,6 +1,7 @@
 import { memo, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { Bot, Eye, Globe, Hand, MoreHorizontal, Pencil, Receipt, Snowflake, Sun, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { CARD_BRAND_LABELS, cardExpired, formatMoney, type Agent, type PaymentCard } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,8 +42,16 @@ export const CardTile = memo(function CardTile({
   onDelete: (card: PaymentCard) => void;
 }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["vault", "common"]);
   const expired = cardExpired(card);
-  const agentNames = (card.agentIds ?? []).map((id) => agentsById.get(id)?.name ?? "Deleted agent");
+  const agentNames = (card.agentIds ?? []).map((id) => agentsById.get(id)?.name ?? t("deletedAgent"));
+  const cardSummary = [
+    t("cardFace.endingIn", { brand: CARD_BRAND_LABELS[card.brand], last4: card.last4 }),
+    card.frozen && t("cardFace.frozenLower"),
+    expired && t("cardFace.expiredLower"),
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   return (
     <motion.div
@@ -61,7 +70,7 @@ export const CardTile = memo(function CardTile({
       <button
         type="button"
         onClick={() => onEdit(card)}
-        aria-label={`Edit ${card.name}: ${CARD_BRAND_LABELS[card.brand]} ending in ${card.last4}${card.frozen ? ", frozen" : ""}${expired ? ", expired" : ""}`}
+        aria-label={t("cardTile.editLabel", { name: card.name, summary: cardSummary })}
         className="rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <PaymentCardFace
@@ -82,31 +91,31 @@ export const CardTile = memo(function CardTile({
           <SpendMeter card={card} className="min-w-0 flex-1" />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-sm" className="-mt-1.5 -mr-1 text-muted-foreground" aria-label={`Actions for ${card.name}`} disabled={busy}>
+              <Button variant="ghost" size="icon-sm" className="-mt-1.5 -mr-1 text-muted-foreground" aria-label={t("actionsFor", { name: card.name })} disabled={busy}>
                 {busy ? <Spinner /> : <MoreHorizontal />}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem onClick={() => onEdit(card)}>
-                <Pencil /> Edit
+                <Pencil /> {t("common:actions.edit")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onShowDetails(card)}>
-                <Eye /> Show card details
+                <Eye /> {t("cardTile.showDetails")}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onToggleFreeze(card)}>
                 {card.frozen ? (
                   <>
-                    <Sun /> Unfreeze
+                    <Sun /> {t("cardTile.unfreeze")}
                   </>
                 ) : (
                   <>
-                    <Snowflake /> Freeze
+                    <Snowflake /> {t("cardTile.freeze")}
                   </>
                 )}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(card)}>
-                <Trash2 /> Delete
+                <Trash2 /> {t("common:actions.delete")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -114,15 +123,15 @@ export const CardTile = memo(function CardTile({
 
         <div className="flex flex-wrap items-center gap-1.5">
           <RuleChip icon={<Receipt />}>
-            {card.limitPerPurchase === null ? "No per-purchase limit" : `${formatMoney(card.limitPerPurchase, card.currency)} per purchase`}
+            {card.limitPerPurchase === null ? t("cardTile.noPerPurchase") : t("cardTile.perPurchase", { amount: formatMoney(card.limitPerPurchase, card.currency) })}
           </RuleChip>
           <RuleChip icon={<Hand />}>{approvalText(card)}</RuleChip>
           <RuleChip icon={<Bot />} tooltip={agentNames.length ? agentNames.join(", ") : undefined}>
-            {card.agentIds === null ? "All agents" : card.agentIds.length === 1 ? "1 agent" : `${card.agentIds.length} agents`}
+            {card.agentIds === null ? t("cardTile.allAgents") : t("cardTile.agents", { count: card.agentIds.length })}
           </RuleChip>
           {card.allowedSites.length > 0 && (
             <RuleChip icon={<Globe />} tooltip={card.allowedSites.length > 1 ? card.allowedSites.join(", ") : undefined}>
-              {card.allowedSites.length === 1 ? card.allowedSites[0] : `${card.allowedSites.length} sites`}
+              {card.allowedSites.length === 1 ? card.allowedSites[0] : t("cardTile.sites", { count: card.allowedSites.length })}
             </RuleChip>
           )}
           <ScopeBadge workspaceId={card.workspaceId} className="max-w-full truncate" />
@@ -134,31 +143,32 @@ export const CardTile = memo(function CardTile({
 
 /** "EUR 41.00 of EUR 200.00 this month" with a bar; warning tone above 80 %. */
 function SpendMeter({ card, className }: { card: PaymentCard; className?: string }) {
+  const { t } = useTranslation("vault");
   const spent = formatMoney(card.spentThisMonth, card.currency);
   if (card.limitMonthly === null) {
     return (
       <p className={cn("pt-0.5 text-[13px] tabular-nums", className)}>
-        <span className="font-medium">{spent}</span> <span className="text-muted-foreground">this month · no monthly limit</span>
+        <span className="font-medium">{spent}</span> <span className="text-muted-foreground">{t("spend.noLimit")}</span>
       </p>
     );
   }
   const limit = card.limitMonthly;
   const share = limit > 0 ? Math.min(1, card.spentThisMonth / limit) : 1;
   const state = card.spentThisMonth >= limit ? "full" : share > 0.8 ? "warning" : "ok";
-  const sentence = `${spent} of ${formatMoney(limit, card.currency)} this month`;
+  const sentence = t("spend.sentence", { spent, limit: formatMoney(limit, card.currency) });
   return (
     <div className={cn("space-y-1.5 pt-0.5", className)}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[13px]">
         <span className="tabular-nums">
-          <span className="font-medium">{spent}</span> <span className="text-muted-foreground">of {formatMoney(limit, card.currency)} this month</span>
+          <span className="font-medium">{spent}</span> <span className="text-muted-foreground">{t("spend.ofLimit", { limit: formatMoney(limit, card.currency) })}</span>
         </span>
         {state !== "ok" && (
           <span className={cn("ml-auto shrink-0 rounded-[4px] px-1.5 text-[11px] font-medium tabular-nums", state === "full" ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning")}>
-            {state === "full" ? "Limit reached" : `${Math.floor(share * 100)}% used`}
+            {state === "full" ? t("spend.limitReached") : t("spend.used", { percent: Math.floor(share * 100) })}
           </span>
         )}
       </div>
-      <div role="meter" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={Math.min(card.spentThisMonth, limit)} aria-valuetext={sentence} aria-label="Spent this month" className="h-1.5 overflow-hidden rounded-full bg-muted">
+      <div role="meter" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={Math.min(card.spentThisMonth, limit)} aria-valuetext={sentence} aria-label={t("spend.label")} className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
           className={cn("h-full rounded-full transition-[width] duration-500 calm-motion:duration-250", state === "full" ? "bg-destructive" : state === "warning" ? "bg-warning" : "bg-foreground/60")}
           style={{ width: `${card.spentThisMonth > 0 ? Math.max(2, share * 100) : 0}%` }}

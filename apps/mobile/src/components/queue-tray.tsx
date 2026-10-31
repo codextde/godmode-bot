@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut, LinearTransition } from "react-native-reanimated";
 import type { PauseReason, QueuedMessage } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
@@ -33,6 +34,7 @@ export function QueueTray({
   onLost: (text: string) => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const [editing, setEditing] = useState<{ id: string; text: string; from: string } | null>(null);
   const [sendingNow, setSendingNow] = useState(false);
   const refresh = () => void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
@@ -47,8 +49,8 @@ export function QueueTray({
       refresh();
       if (gone(err)) {
         onLost(content);
-        Alert.alert(`${agentName} already has that message`, "Your new wording is in the message field — send it as a follow-up.");
-      } else Alert.alert("Couldn't change the message", errorText(err));
+        Alert.alert(t("queueTray.alreadyHas", { name: agentName }), t("queueTray.wordingKept"));
+      } else Alert.alert(t("queueTray.editFailed"), errorText(err));
     });
   };
 
@@ -58,7 +60,7 @@ export function QueueTray({
     setQueue(conversationId, (q) => q.filter((x) => x.id !== m.id));
     api.conversations.queue.remove(conversationId, m.id).catch((err) => {
       refresh();
-      if (!gone(err)) Alert.alert("Couldn't remove the message", errorText(err));
+      if (!gone(err)) Alert.alert(t("queueTray.removeFailed"), errorText(err));
     });
   };
 
@@ -69,7 +71,7 @@ export function QueueTray({
       .sendNow(conversationId)
       .catch((err) => {
         refresh();
-        if (!gone(err)) Alert.alert("Couldn't send the queue", errorText(err));
+        if (!gone(err)) Alert.alert(t("queueTray.sendFailed"), errorText(err));
       })
       .finally(() => setSendingNow(false));
   };
@@ -89,21 +91,23 @@ export function QueueTray({
   if (queue.length === 0) return null;
 
   const first = queue[0];
-  const many = queue.length > 1;
+  const count = queue.length;
   const live = running || !!paused;
   const hint = sendingNow
     ? running
-      ? "Stopping the current step…"
-      : "Sending…"
+      ? t("queueTray.hint.stopping")
+      : t("queueTray.hint.sending")
     : paused
       ? paused === "question"
-        ? `${many ? "Go" : "Goes"} along with your answer`
-        : `${many ? "Go" : "Goes"} along when ${paused === "limit" ? "the limit resets" : "you continue"}`
+        ? t("queueTray.hint.withAnswer", { count })
+        : paused === "limit"
+          ? t("queueTray.hint.whenLimitResets", { count })
+          : t("queueTray.hint.whenYouContinue", { count })
       : !running
-        ? "Not sent yet"
+        ? t("queueTray.hint.notSent")
         : first && parseSlashCommand(first.content)
-          ? `Runs when ${agentName} is done`
-          : `${agentName} picks ${many ? "these" : "this"} up at its next step`;
+          ? t("queueTray.hint.runsWhenDone", { name: agentName })
+          : t("queueTray.hint.nextStep", { count, name: agentName });
 
   return (
     <Animated.View
@@ -111,11 +115,11 @@ export function QueueTray({
       exiting={FadeOut.duration(140)}
       layout={LinearTransition.duration(180)}
       style={[styles.tray, { backgroundColor: c.surface, borderColor: c.border }]}
-      accessibilityLabel="Queued messages"
+      accessibilityLabel={t("queueTray.label")}
     >
       <View style={styles.head}>
         <T variant="eyebrow" muted style={{ fontSize: 10 }}>
-          Queued
+          {t("queueTray.queued")}
         </T>
         <View style={[styles.count, { backgroundColor: c.sunken }]}>
           <T variant="caption" style={{ fontWeight: "600", fontVariant: ["tabular-nums"] }}>
@@ -128,7 +132,7 @@ export function QueueTray({
         {/* A run that waits for an answer only continues with that answer. */}
         {paused === "question" ? null : <Pressable
           accessibilityRole="button"
-          accessibilityLabel={live ? `Send now: stop what ${agentName} is doing and start on the queue` : "Send"}
+          accessibilityLabel={live ? t("queueTray.sendNowLabel", { name: agentName }) : t("common:actions.send")}
           disabled={sendingNow || queue.every((m) => pendingQueued.has(m.id))}
           onPress={sendNow}
           hitSlop={8}
@@ -140,7 +144,7 @@ export function QueueTray({
             <Icon name={live ? "bolt" : "send"} size={12} weight="bold" color={live ? c.text : c.onPrimary} />
           )}
           <T variant="footnote" color={live ? c.text : c.onPrimary} style={{ fontWeight: "600" }}>
-            {live ? "Send now" : "Send"}
+            {live ? t("queueTray.sendNow") : t("common:actions.send")}
           </T>
         </Pressable>}
       </View>
@@ -183,6 +187,7 @@ function Row({
   onRemove: () => void;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const pending = pendingQueued.has(message.id);
   const editing = draft !== null;
   const files = message.attachments.length;
@@ -206,14 +211,14 @@ function Row({
           submitBehavior="blurAndSubmit"
           returnKeyType="done"
           onBlur={() => onSave(draft)}
-          accessibilityLabel="Queued message"
+          accessibilityLabel={t("queueTray.message")}
           style={[styles.editor, { color: c.text }]}
         />
       ) : (
-        <Pressable accessibilityRole="button" accessibilityHint="Edit message" disabled={pending} onPress={onEdit} style={{ flex: 1, opacity: pending ? 0.55 : 1 }}>
+        <Pressable accessibilityRole="button" accessibilityHint={t("queueTray.editHint")} disabled={pending} onPress={onEdit} style={{ flex: 1, opacity: pending ? 0.55 : 1 }}>
           <T variant="subhead" numberOfLines={2}>
             {command ? <T style={[type.mono, { fontWeight: "600", color: c.text, fontSize: 13 }]}>/{command.name} </T> : null}
-            {command ? command.args : message.content || <T muted>{files > 1 ? `${files} files` : message.attachments[0]?.name}</T>}
+            {command ? command.args : message.content || <T muted>{files > 1 ? t("queueTray.files", { count: files }) : message.attachments[0]?.name}</T>}
           </T>
         </Pressable>
       )}
@@ -228,7 +233,7 @@ function Row({
       {pending ? (
         <ActivityIndicator size="small" color={c.textFaint} style={styles.action} />
       ) : (
-        <Pressable accessibilityRole="button" accessibilityLabel="Remove from the queue" hitSlop={8} onPress={onRemove} style={styles.action}>
+        <Pressable accessibilityRole="button" accessibilityLabel={t("queueTray.remove")} hitSlop={8} onPress={onRemove} style={styles.action}>
           <Icon name="close" size={12} weight="semibold" color={c.textMuted} />
         </Pressable>
       )}

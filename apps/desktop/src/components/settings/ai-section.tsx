@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Cpu, Gauge, ShieldAlert, SlidersHorizontal, Sparkles, TerminalSquare } from "lucide-react";
 import { toast } from "sonner";
-import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_LABELS, EFFORT_OPTIONS, ULTRACODE_HINT, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
+import { Trans, useTranslation } from "react-i18next";
+import { DEFAULT_AUTO_COMPACT_PERCENT, DEFAULT_LOOP_REPEATS, DEFAULT_STALL_MINUTES, EFFORT_OPTIONS, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortLabel, findModel, type ClaudeModel, type Effort, type Settings } from "@godmode/shared";
 import { ReasoningEffort } from "@/components/aicss/ReasoningEffort";
 import {
   AlertDialog,
@@ -29,6 +30,7 @@ import {
   SettingsGroup,
   useSettingsPatch,
 } from "./settings-kit";
+import { currentLanguage } from "@/i18n";
 
 const CUSTOM = "__custom__";
 const NONE = "__none__";
@@ -50,7 +52,7 @@ export function ModelSelect({
   value,
   onChange,
   allowNone = false,
-  noneLabel = "None",
+  noneLabel,
   disabled,
 }: {
   id: string;
@@ -61,6 +63,7 @@ export function ModelSelect({
   noneLabel?: string;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { catalog: full, isPending } = useModelCatalog();
   // Defaults and the fallback are Claude only: GLM is picked per agent or chat.
   const catalog = { ...full, models: full.models.filter((m) => !m.provider) };
@@ -68,7 +71,8 @@ export function ModelSelect({
   const [customMode, setCustom] = useState(false);
   const custom = customMode || (!isPending && !known && !(allowNone && !value));
   const selectValue = custom ? CUSTOM : allowNone && !value ? NONE : (known?.id ?? value);
-  const display = custom ? "Custom model id" : selectValue === NONE ? noneLabel : (known?.label ?? value);
+  const none = noneLabel ?? t("common:status.none");
+  const display = custom ? t("ai.modelSelect.custom") : selectValue === NONE ? none : (known?.label ?? value);
   const older = catalog.models.filter((m) => !m.latest);
 
   return (
@@ -91,7 +95,7 @@ export function ModelSelect({
         <SelectContent>
           {allowNone && (
             <>
-              <SelectItem value={NONE}>{noneLabel}</SelectItem>
+              <SelectItem value={NONE}>{none}</SelectItem>
               <SelectSeparator />
             </>
           )}
@@ -104,7 +108,7 @@ export function ModelSelect({
             <>
               <SelectSeparator />
               <SelectGroup>
-                <SelectLabel>Older models</SelectLabel>
+                <SelectLabel>{t("ai.modelSelect.older")}</SelectLabel>
                 {older.map((m) => (
                   <ModelItem key={m.id} model={m} />
                 ))}
@@ -112,16 +116,16 @@ export function ModelSelect({
             </>
           )}
           <SelectSeparator />
-          <SelectItem value={CUSTOM}>Custom model id…</SelectItem>
+          <SelectItem value={CUSTOM}>{t("ai.modelSelect.customItem")}</SelectItem>
         </SelectContent>
       </Select>
       {custom && (
         <CommitInput
-          aria-label="Custom model id"
+          aria-label={t("ai.modelSelect.custom")}
           disabled={disabled}
           autoFocus={!value || !!known}
           className="font-mono text-[13px]"
-          placeholder="e.g. claude-opus-5-5 or opus"
+          placeholder={t("ai.modelSelect.customPlaceholder")}
           value={known ? "" : value}
           onCommit={(v) => v.trim() && onChange(v.trim())}
         />
@@ -131,6 +135,7 @@ export function ModelSelect({
 }
 
 export function AiSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { patch } = useSettingsPatch();
   const { catalog } = useModelCatalog();
   const r = settings.runner;
@@ -146,28 +151,25 @@ export function AiSection({ settings }: { settings: Settings }) {
       return;
     }
     patch({ runner: { bypassPermissions: false } });
-    toast.warning("Full bypass mode is off", { description: "Agents will pause at permission prompts — unattended automations may stall." });
+    toast.warning(t("ai.bypassOffToast"), { description: t("ai.bypassOffToastDescription") });
   };
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="AI & Claude"
-        description="Godmode drives the Claude Code CLI as the brain of every agent. These defaults apply unless an agent overrides them."
-      />
+      <SectionHeading title={t("ai.title")} description={t("ai.description")} />
 
-      <SettingsGroup title="Model" icon={<Sparkles />} description="Agents can pick their own model; this is the default.">
-        <SettingRow label="Default model" htmlFor="default-model" description="Opus 5.5 is tuned for long, autonomous multi-step work.">
+      <SettingsGroup title={t("ai.model.title")} icon={<Sparkles />} description={t("ai.model.description")}>
+        <SettingRow label={t("ai.model.default")} htmlFor="default-model" description={t("ai.model.defaultDescription")}>
           <ModelSelect id="default-model" value={r.model} onChange={(model) => patch({ runner: { model } })} />
         </SettingRow>
-        <SettingRow label="Fallback model" htmlFor="fallback-model" description="Used automatically when the default model is overloaded.">
+        <SettingRow label={t("ai.model.fallback")} htmlFor="fallback-model" description={t("ai.model.fallbackDescription")}>
           <ModelSelect id="fallback-model" allowNone value={r.fallbackModel} onChange={(fallbackModel) => patch({ runner: { fallbackModel } })} />
         </SettingRow>
-        <SettingRow label="Reasoning effort" description="Higher effort thinks longer before acting — better results, more tokens.">
+        <SettingRow label={t("ai.model.effort")} description={t("ai.model.effortDescription")}>
           <ReasoningEffort
-            aria-label="Reasoning effort"
-            label={defaultModel?.label ?? "Effort"}
-            stops={EFFORT_OPTIONS.map((e) => EFFORT_LABELS[e])}
+            aria-label={t("ai.model.effort")}
+            label={defaultModel?.label ?? t("ai.model.effortShort")}
+            stops={EFFORT_OPTIONS.map((e) => effortLabel(e, currentLanguage()))}
             value={Math.max(0, EFFORT_OPTIONS.indexOf(r.effort))}
             onChange={(i) => {
               const effort: Effort = EFFORT_OPTIONS[i] ?? "medium";
@@ -180,12 +182,12 @@ export function AiSection({ settings }: { settings: Settings }) {
           htmlFor="ultracode"
           description={
             <>
-              {ULTRACODE_HINT}
+              {currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT}
               {!ultracodeAvailable && (
                 <span className="mt-1 block font-medium text-foreground/80">
                   {anyUltracode
-                    ? `${defaultModel?.label ?? "The default model"} doesn't support dynamic workflows — pick a model that does.`
-                    : "The installed Claude Code doesn't offer dynamic workflows."}
+                    ? t("ai.model.ultracodeUnsupported", { model: defaultModel?.label ?? t("ai.model.theDefaultModel") })
+                    : t("ai.model.ultracodeMissing")}
                 </span>
               )}
             </>
@@ -202,9 +204,9 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup
-        title="Autonomy"
+        title={t("ai.autonomy.title")}
         icon={<ShieldAlert />}
-        description="How much your agents may do without asking."
+        description={t("ai.autonomy.description")}
         actions={
           <Badge
             variant="outline"
@@ -214,48 +216,43 @@ export function AiSection({ settings }: { settings: Settings }) {
             )}
           >
             <span className={cn("size-1.5 rounded-full", r.bypassPermissions ? "bg-warning" : "bg-brand")} />
-            {r.bypassPermissions ? "Full bypass" : "Ask for permission"}
+            {r.bypassPermissions ? t("ai.autonomy.badgeBypass") : t("ai.autonomy.badgeAsk")}
           </Badge>
         }
       >
         <SettingRow
-          label="Full bypass mode"
+          label={t("ai.autonomy.bypass")}
           htmlFor="bypass"
           description={
-            <>
-              Runs Claude Code with <code className="rounded-[4px] bg-secondary px-1 py-0.5 font-mono text-[11px]">--dangerously-skip-permissions</code>.
-            </>
+            <Trans t={t} i18nKey="ai.autonomy.bypassDescription" values={{ flag: "--dangerously-skip-permissions" }} components={{ code: <code className="rounded-[4px] bg-secondary px-1 py-0.5 font-mono text-[11px]" /> }} />
           }
         >
           <Switch id="bypass" checked={r.bypassPermissions} onCheckedChange={setBypass} />
         </SettingRow>
         <div className="py-4">
           {r.bypassPermissions ? (
-            <Callout tone="warning" title="Agents act without asking">
-              They can run any shell command, install software, and create, edit or delete files on this machine — exactly like a coworker with
-              full access. This is what lets automations finish unattended. Vault secrets stay protected: in fill mode the AI never sees your
-              passwords, and every secret use is audited.
+            <Callout tone="warning" title={t("ai.autonomy.onTitle")}>
+              {t("ai.autonomy.onBody")}
             </Callout>
           ) : (
-            <Callout tone="muted" title="Agents stop at permission prompts">
-              Every command or file edit needs approval. Nobody is watching an automation, so unattended work will stall until you turn
-              full bypass back on.
+            <Callout tone="muted" title={t("ai.autonomy.offTitle")}>
+              {t("ai.autonomy.offBody")}
             </Callout>
           )}
         </div>
       </SettingsGroup>
 
-      <SettingsGroup title="Limits" icon={<Gauge />} description="Guardrails for runaway tasks.">
-        <SettingRow label="Parallel runs" htmlFor="max-runs" description="How many agent runs may execute at the same time. Extra runs wait in a queue.">
+      <SettingsGroup title={t("ai.limits.title")} icon={<Gauge />} description={t("ai.limits.description")}>
+        <SettingRow label={t("ai.limits.parallel")} htmlFor="max-runs" description={t("ai.limits.parallelDescription")}>
           <NumberField id="max-runs" min={1} max={32} value={r.maxConcurrentRuns} onCommit={(v) => v !== null && patch({ runner: { maxConcurrentRuns: v } })} />
         </SettingRow>
-        <SettingRow label="Run timeout" htmlFor="timeout" description="A run is stopped after this long.">
-          <NumberField id="timeout" min={1} max={1440} suffix="min" value={r.runTimeoutMinutes} onCommit={(v) => v !== null && patch({ runner: { runTimeoutMinutes: v } })} />
+        <SettingRow label={t("ai.limits.timeout")} htmlFor="timeout" description={t("ai.limits.timeoutDescription")}>
+          <NumberField id="timeout" min={1} max={1440} suffix={t("ai.limits.minutes")} value={r.runTimeoutMinutes} onCommit={(v) => v !== null && patch({ runner: { runTimeoutMinutes: v } })} />
         </SettingRow>
         <SettingRow
-          label="Compress long chats"
+          label={t("ai.limits.compact")}
           htmlFor="auto-compact"
-          description="Once a chat fills this much of the model's memory, it is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper; later keeps more detail. Compress by hand any time with the ring next to the model, or /compress."
+          description={t("ai.limits.compactDescription")}
         >
           <Select
             value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
@@ -267,54 +264,54 @@ export function AiSection({ settings }: { settings: Settings }) {
             <SelectContent align="end">
               {[40, 50, 60, 70, 80].map((p) => (
                 <SelectItem key={p} value={String(p)}>
-                  At {p}%{p === DEFAULT_AUTO_COMPACT_PERCENT ? " (default)" : ""}
+                  {p === DEFAULT_AUTO_COMPACT_PERCENT ? t("ai.limits.compactAtDefault", { percent: p }) : t("ai.limits.compactAt", { percent: p })}
                 </SelectItem>
               ))}
-              <SelectItem value="claude">When nearly full</SelectItem>
+              <SelectItem value="claude">{t("ai.limits.compactNearlyFull")}</SelectItem>
               <SelectSeparator />
-              <SelectItem value="0">Never by itself</SelectItem>
+              <SelectItem value="0">{t("ai.limits.compactNever")}</SelectItem>
             </SelectContent>
           </Select>
         </SettingRow>
         <SettingRow
-          label="Continue after a usage limit"
+          label={t("ai.limits.autoContinue")}
           htmlFor="auto-continue"
-          description="When Claude's usage limit stops a run, it waits and continues by itself once the limit has reset — where it stopped."
+          description={t("ai.limits.autoContinueDescription")}
         >
           <Switch id="auto-continue" checked={r.autoContinueOnLimit ?? true} onCheckedChange={(autoContinueOnLimit) => patch({ runner: { autoContinueOnLimit } })} />
         </SettingRow>
         <SettingRow
-          label="Continue cut-off work"
+          label={t("ai.limits.resume")}
           htmlFor="resume-after-restart"
-          description="Chats, automations and handed-over tasks that were working when Godmode quit, updated or crashed pick up where they stopped once it is back (work of the last day). Turns that broke off because Claude couldn't be reached continue once the internet is back, and a turn that ended while its background work still ran picks that up. Board tickets always do."
+          description={t("ai.limits.resumeDescription")}
         >
           <Switch id="resume-after-restart" checked={r.resumeAfterRestart ?? true} onCheckedChange={(resumeAfterRestart) => patch({ runner: { resumeAfterRestart } })} />
         </SettingRow>
         <SettingRow
-          label="Watchdog"
+          label={t("ai.limits.watchdog")}
           htmlFor="watchdog"
-          description="Stops runs that stall or go in circles, with a report of where they stood. Board tickets try again once on their own."
+          description={t("ai.limits.watchdogDescription")}
         >
           <Switch id="watchdog" checked={r.watchdog ?? true} onCheckedChange={(watchdog) => patch({ runner: { watchdog } })} />
         </SettingRow>
         {(r.watchdog ?? true) && (
           <>
-            <SettingRow label="Stalled after" htmlFor="stall-minutes" description="No sign of life for this long. A tool that is still running gets three times as long, at least 30 minutes.">
+            <SettingRow label={t("ai.limits.stalled")} htmlFor="stall-minutes" description={t("ai.limits.stalledDescription")}>
               <NumberField
                 id="stall-minutes"
                 min={3}
                 max={240}
-                suffix="min"
+                suffix={t("ai.limits.minutes")}
                 value={r.stallMinutes ?? DEFAULT_STALL_MINUTES}
                 onCommit={(v) => v !== null && patch({ runner: { stallMinutes: v } })}
               />
             </SettingRow>
-            <SettingRow label="Same step repeated" htmlFor="loop-repeats" description="The same tool with the same input and result, this many times in a row.">
+            <SettingRow label={t("ai.limits.loop")} htmlFor="loop-repeats" description={t("ai.limits.loopDescription")}>
               <NumberField
                 id="loop-repeats"
                 min={3}
                 max={50}
-                suffix="times"
+                suffix={t("ai.limits.times")}
                 value={r.loopRepeats ?? DEFAULT_LOOP_REPEATS}
                 onCommit={(v) => v !== null && patch({ runner: { loopRepeats: v } })}
               />
@@ -324,19 +321,19 @@ export function AiSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Claude Code CLI" icon={<TerminalSquare />}>
-        <SettingRow label="CLI path" htmlFor="claude-path" description={<InlineCode text="Leave empty to auto-detect the `claude` binary on your PATH." />}>
+        <SettingRow label={t("ai.cli.path")} htmlFor="claude-path" description={<InlineCode text={t("ai.cli.pathDescription")} />}>
           <CommitInput
             id="claude-path"
             className="w-72 font-mono text-[13px]"
-            placeholder="Auto-detect"
+            placeholder={t("ai.cli.autoDetect")}
             value={r.claudePath}
             onCommit={(claudePath) => patch({ runner: { claudePath: claudePath.trim() } })}
           />
         </SettingRow>
         <SettingRow
-          label="Config folder"
+          label={t("ai.cli.configDir")}
           htmlFor="claude-config-dir"
-          description={<InlineCode text="Where Claude Code keeps its login, settings and sessions (`CLAUDE_CONFIG_DIR`). Leave empty for `~/.claude`. Applies to new runs." />}
+          description={<InlineCode text={t("ai.cli.configDirDescription")} />}
         >
           <CommitInput
             id="claude-config-dir"
@@ -348,8 +345,8 @@ export function AiSection({ settings }: { settings: Settings }) {
         </SettingRow>
       </SettingsGroup>
 
-      <SettingsGroup title="Advanced" icon={<SlidersHorizontal />} description="For power users — mistakes here can break every run.">
-        <SettingRow stacked label="Extra CLI arguments" htmlFor="extra-args" description={<InlineCode text="One argument per line, appended to every `claude` invocation." />}>
+      <SettingsGroup title={t("ai.advanced.title")} icon={<SlidersHorizontal />} description={t("ai.advanced.description")}>
+        <SettingRow stacked label={t("ai.advanced.extraArgs")} htmlFor="extra-args" description={<InlineCode text={t("ai.advanced.extraArgsDescription")} />}>
           <LinesTextarea
             id="extra-args"
             placeholder={"--verbose\n--add-dir\n/Users/me/projects"}
@@ -363,20 +360,19 @@ export function AiSection({ settings }: { settings: Settings }) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Cpu className="size-5 text-warning" /> Turn on full bypass mode?
+              <Cpu className="size-5 text-warning" /> {t("ai.confirm.title")}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Agents will run commands and change files on this computer without asking first. Only enable this if you trust the instructions
-              your agents receive. You can turn it off at any time.
+              {t("ai.confirm.description")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-warning text-black hover:bg-warning/90"
               onClick={() => patch({ runner: { bypassPermissions: true } })}
             >
-              Enable full bypass
+              {t("ai.confirm.enable")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

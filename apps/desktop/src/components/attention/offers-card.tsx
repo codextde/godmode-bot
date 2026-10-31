@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowRight, ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent, Offer } from "@godmode/shared";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/common";
@@ -13,12 +14,14 @@ import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
+import { useLocale } from "@/i18n/language";
 
 /**
  * What the main agent offers to take off the human's plate, spotted while it dreamt. "Do it" starts the chat that does
  * it; "No thanks" declines, and the next dream learns from both.
  */
 export function OffersCard({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("attention");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const { data: offers = [] } = useQuery({ queryKey: qk.offers, queryFn: api.offers.list, staleTime: 60_000 });
@@ -36,7 +39,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
     },
     onError: (err) => {
       qc.invalidateQueries({ queryKey: qk.offers });
-      toast.error("Couldn't start it", { description: errorMessage(err) });
+      toast.error(t("offers.startError"), { description: errorMessage(err) });
     },
     onSettled: () => setBusy(null),
   });
@@ -44,7 +47,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
   const dismiss = useMutation({
     mutationFn: (id: string) => api.offers.dismiss(id),
     onMutate: (id) => qc.setQueryData<Offer[]>(qk.offers, (cur) => cur?.filter((o) => o.id !== id)),
-    onError: (err) => toast.error("Couldn't decline it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("offers.declineError"), { description: errorMessage(err) }),
     onSettled: () => qc.invalidateQueries({ queryKey: qk.offers }),
   });
 
@@ -56,7 +59,7 @@ export function OffersCard({ agents }: { agents: Agent[] }) {
       <div className="mb-3 flex items-center gap-2">
         {owner && <AgentAvatar agent={owner} size="sm" still className="size-5 rounded-md text-[10px]" />}
         <h2 id="offers-title" className="eyebrow">
-          {owner ? `${owner.name} can take these off your plate` : "Work your agent can take off your plate"}
+          {owner ? t("offers.titleOwner", { name: owner.name }) : t("offers.title")}
         </h2>
       </div>
       <ul className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
@@ -90,6 +93,8 @@ function OfferRow({
   onAccept: () => void;
   onDismiss: () => void;
 }) {
+  const { t } = useTranslation(["attention", "common"]);
+  const { dateLocale } = useLocale();
   const [open, setOpen] = useState(false);
   const long = offer.prompt.length > 160 || offer.prompt.includes("\n");
   return (
@@ -106,11 +111,11 @@ function OfferRow({
           <p className="text-[13.5px] leading-snug font-medium">{offer.title}</p>
           {offer.why && <p className="mt-0.5 text-xs text-muted-foreground">{offer.why}</p>}
           <p className="mt-2 rounded-lg border-l-2 border-foreground/15 bg-muted/50 px-2.5 py-1.5 text-[12.5px] text-foreground/85">
-            <span className="text-muted-foreground">Starts with: </span>
+            <span className="text-muted-foreground">{t("offers.startsWith")} </span>
             <span className={cn("whitespace-pre-wrap", long && !open && "line-clamp-2")}>{offer.prompt}</span>
           </p>
           <p className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-            <time dateTime={offer.createdAt}>Offered {formatDistanceStrict(new Date(offer.createdAt), new Date(), { addSuffix: true })}</time>
+            <time dateTime={offer.createdAt}>{t("offers.offered", { time: formatDistanceStrict(new Date(offer.createdAt), new Date(), { addSuffix: true, locale: dateLocale }) })}</time>
             {long && (
               <>
                 <span className="opacity-50">·</span>
@@ -120,7 +125,7 @@ function OfferRow({
                   onClick={() => setOpen((v) => !v)}
                   className="inline-flex items-center gap-0.5 transition hover:text-foreground focus-visible:text-foreground focus-visible:outline-none"
                 >
-                  {open ? "Show less" : "Show all"}
+                  {open ? t("common:actions.showLess") : t("offers.showAll")}
                   <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} aria-hidden />
                 </button>
               </>
@@ -129,10 +134,10 @@ function OfferRow({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Button size="sm" variant="ghost" className="text-muted-foreground" disabled={disabled} onClick={onDismiss}>
-            No thanks
+            {t("offers.decline")}
           </Button>
           <Button size="sm" disabled={disabled} onClick={onAccept}>
-            Do it
+            {t("offers.accept")}
             {pending ? <Spinner /> : <ArrowRight />}
           </Button>
         </div>

@@ -125,6 +125,57 @@ WHERE reason = 'budget';
 DELETE FROM meta WHERE key LIKE 'budget.told.%';
 `;
 
+export const SEARCH_REBUILD_SQL = /* sql */ `
+INSERT INTO search_messages(search_messages) VALUES ('rebuild');
+INSERT INTO search_titles(search_titles) VALUES ('rebuild');
+INSERT INTO search_tasks(search_tasks) VALUES ('rebuild');
+`;
+
+const SEARCH_TOKENIZER = `tokenize = 'unicode61 remove_diacritics 2', prefix = '2 3 4'`;
+
+const SEARCH_INDEX_SQL = /* sql */ `
+CREATE VIRTUAL TABLE search_messages USING fts5(content, content = 'messages', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_titles USING fts5(title, content = 'conversations', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_tasks USING fts5(title, description, content = 'tasks', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_notes USING fts5(agent_id UNINDEXED, path UNINDEXED, line UNINDEXED, heading, body, ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search_messages, 'row');
+
+CREATE TRIGGER search_messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO search_messages(rowid, content) SELECT new.rowid, new.content WHERE new.content != '';
+END;
+CREATE TRIGGER search_messages_ad AFTER DELETE ON messages BEGIN
+  INSERT INTO search_messages(search_messages, rowid, content) SELECT 'delete', old.rowid, old.content WHERE old.content != '';
+END;
+CREATE TRIGGER search_messages_au AFTER UPDATE OF content ON messages BEGIN
+  INSERT INTO search_messages(search_messages, rowid, content) SELECT 'delete', old.rowid, old.content WHERE old.content != '';
+  INSERT INTO search_messages(rowid, content) SELECT new.rowid, new.content WHERE new.content != '';
+END;
+
+CREATE TRIGGER search_titles_ai AFTER INSERT ON conversations BEGIN
+  INSERT INTO search_titles(rowid, title) VALUES (new.rowid, new.title);
+END;
+CREATE TRIGGER search_titles_ad AFTER DELETE ON conversations BEGIN
+  INSERT INTO search_titles(search_titles, rowid, title) VALUES ('delete', old.rowid, old.title);
+END;
+CREATE TRIGGER search_titles_au AFTER UPDATE OF title ON conversations BEGIN
+  INSERT INTO search_titles(search_titles, rowid, title) VALUES ('delete', old.rowid, old.title);
+  INSERT INTO search_titles(rowid, title) VALUES (new.rowid, new.title);
+END;
+
+CREATE TRIGGER search_tasks_ai AFTER INSERT ON tasks BEGIN
+  INSERT INTO search_tasks(rowid, title, description) VALUES (new.rowid, new.title, new.description);
+END;
+CREATE TRIGGER search_tasks_ad AFTER DELETE ON tasks BEGIN
+  INSERT INTO search_tasks(search_tasks, rowid, title, description) VALUES ('delete', old.rowid, old.title, old.description);
+END;
+CREATE TRIGGER search_tasks_au AFTER UPDATE OF title, description ON tasks BEGIN
+  INSERT INTO search_tasks(search_tasks, rowid, title, description) VALUES ('delete', old.rowid, old.title, old.description);
+  INSERT INTO search_tasks(rowid, title, description) VALUES (new.rowid, new.title, new.description);
+END;
+
+${SEARCH_REBUILD_SQL}
+`;
+
 export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
   {
     id: 1,
@@ -1803,5 +1854,30 @@ CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
     id: 109,
     name: "remove_costs",
     sql: REMOVE_COSTS_SQL,
+  },
+  {
+    id: 110,
+    name: "claude_accounts",
+    sql: /* sql */ `
+-- Claude subscriptions signed in from Godmode (their tokens live in the vault); the system login is not a row.
+CREATE TABLE IF NOT EXISTS claude_accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  name TEXT,
+  organization TEXT,
+  plan TEXT,
+  limited_until TEXT,
+  needs_sign_in INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL
+);
+-- JSON {ids, defaultId}: the Claude accounts a workspace's runs use; NULL = Godmode's.
+ALTER TABLE workspaces ADD COLUMN claude_accounts TEXT;
+`,
+  },
+  {
+    id: 111,
+    name: "search_index",
+    sql: SEARCH_INDEX_SQL,
   },
 ];

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { CircleCheck, LayoutGrid, Plus, Search, SearchX, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { ComposioToolkit } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function ToolkitGallery({
   onToolkits?: (items: ComposioToolkit[]) => void;
 }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["integrations", "common"]);
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput.trim(), 300);
   const [category, setCategory] = useState("");
@@ -97,22 +99,22 @@ export function ToolkitGallery({
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <section aria-label="App gallery" className="space-y-4">
+    <section aria-label={t("gallery.label")} className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-            <LayoutGrid className="size-4 text-muted-foreground" /> Add an app
+            <LayoutGrid className="size-4 text-muted-foreground" /> {t("gallery.title")}
           </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Connect an account and your agents get its actions as tools.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("gallery.description")}</p>
         </div>
         <InputGroup className="h-9 w-full @xl:w-72">
           <InputGroupAddon>
             <Search />
           </InputGroupAddon>
-          <InputGroupInput placeholder="Search apps…" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} aria-label="Search apps" />
+          <InputGroupInput placeholder={t("gallery.searchPlaceholder")} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} aria-label={t("gallery.searchAria")} />
           {searchInput && (
             <InputGroupAddon align="inline-end">
-              <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setSearchInput("")}>
+              <InputGroupButton size="icon-xs" aria-label={t("gallery.clearSearch")} onClick={() => setSearchInput("")}>
                 <X />
               </InputGroupButton>
             </InputGroupAddon>
@@ -121,7 +123,7 @@ export function ToolkitGallery({
       </div>
 
       {chips.length > 0 && (
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Categories">
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" role="tablist" aria-label={t("gallery.categories")}>
           {["", ...chips].map((c) => {
             const active = category === c;
             return (
@@ -137,7 +139,7 @@ export function ToolkitGallery({
                 )}
               >
                 {active && <motion.span layoutId={reduce ? undefined : "toolkit-cat"} className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
-                <span className="relative">{c || "All"}</span>
+                <span className="relative">{c || t("common:words.all")}</span>
               </button>
             );
           })}
@@ -145,7 +147,7 @@ export function ToolkitGallery({
       )}
 
       {query.isError ? (
-        <QueryError error={query.error} onRetry={() => query.refetch()} title="Couldn't load Composio apps" />
+        <QueryError error={query.error} onRetry={() => query.refetch()} title={t("gallery.loadError")} />
       ) : query.isLoading ? (
         <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
@@ -155,11 +157,11 @@ export function ToolkitGallery({
       ) : items.length === 0 ? (
         <EmptyState
           icon={<SearchX />}
-          title={search ? `No apps match “${search}”` : "No apps in this category"}
-          description="Try another search or category."
+          title={search ? t("gallery.noMatch", { search }) : t("gallery.noneInCategory")}
+          description={t("gallery.tryAnother")}
           action={
             <Button variant="outline" onClick={() => (setSearchInput(""), setCategory(""))}>
-              Reset filters
+              {t("gallery.resetFilters")}
             </Button>
           }
         />
@@ -173,10 +175,10 @@ export function ToolkitGallery({
           <div ref={sentinel} className="flex justify-center pt-2">
             {hasNextPage ? (
               <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-                {isFetchingNextPage ? <Spinner /> : null} {isFetchingNextPage ? "Loading more…" : "Load more apps"}
+                {isFetchingNextPage ? <Spinner /> : null} {isFetchingNextPage ? t("gallery.loadingMore") : t("gallery.loadMore")}
               </Button>
             ) : (
-              items.length > 12 && <p className="text-xs text-muted-foreground">That's everything — {items.length} apps.</p>
+              items.length > 12 && <p className="text-xs text-muted-foreground">{t("gallery.everything", { n: items.length })}</p>
             )}
           </div>
         </>
@@ -185,7 +187,8 @@ export function ToolkitGallery({
   );
 }
 
-function ToolkitCard({ toolkit: t, index, connected, onConnect }: { toolkit: ComposioToolkit; index: number; connected: number; onConnect: () => void }) {
+function ToolkitCard({ toolkit: tk, index, connected, onConnect }: { toolkit: ComposioToolkit; index: number; connected: number; onConnect: () => void }) {
+  const { t } = useTranslation("integrations");
   const reduce = useReduceAnimations();
   return (
     <motion.div
@@ -195,34 +198,34 @@ function ToolkitCard({ toolkit: t, index, connected, onConnect }: { toolkit: Com
       className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <div className="flex items-start gap-3">
-        <ToolkitLogo src={t.logo} name={t.name} />
+        <ToolkitLogo src={tk.logo} name={tk.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{t.name}</h3>
+            <h3 className="truncate text-sm font-medium tracking-[-0.01em]">{tk.name}</h3>
             {connected > 0 && (
               <Badge variant="outline" className="h-5 shrink-0 gap-1 border-brand/25 bg-brand-soft px-1.5 text-[10px] text-brand-strong">
-                <CircleCheck /> {connected > 1 ? `${connected} accounts` : "Connected"}
+                <CircleCheck /> {connected > 1 ? t("gallery.accounts", { n: connected }) : t("gallery.connected")}
               </Badge>
             )}
           </div>
-          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{t.description || "No description."}</p>
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{tk.description || t("gallery.noDescription")}</p>
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between gap-2 pt-3">
         <div className="flex min-w-0 gap-1 overflow-hidden">
-          {t.noAuth && (
+          {tk.noAuth && (
             <Badge variant="outline" className="h-5 shrink-0 text-[10px] font-normal">
-              No sign-in
+              {t("gallery.noSignIn")}
             </Badge>
           )}
-          {t.categories.slice(0, t.noAuth ? 1 : 2).map((c) => (
+          {tk.categories.slice(0, tk.noAuth ? 1 : 2).map((c) => (
             <Badge key={c} variant="secondary" className="h-5 max-w-28 truncate text-[10px] font-normal capitalize">
               {c}
             </Badge>
           ))}
         </div>
-        <Button size="sm" variant={connected ? "outline" : "secondary"} className="shrink-0" onClick={onConnect} aria-label={`Connect ${t.name}`}>
-          <Plus /> {connected ? "Add account" : "Connect"}
+        <Button size="sm" variant={connected ? "outline" : "secondary"} className="shrink-0" onClick={onConnect} aria-label={t("connect.title", { name: tk.name })}>
+          <Plus /> {connected ? t("gallery.addAccount") : t("gallery.connect")}
         </Button>
       </div>
     </motion.div>

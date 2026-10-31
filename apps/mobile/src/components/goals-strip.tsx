@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Goal } from "@godmode/shared";
 import { Icon } from "./icon";
 import { Row, T, tap } from "./ui";
@@ -16,6 +17,7 @@ import { radius, space, useColors } from "@/lib/theme";
  */
 export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | null; bleed?: number }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const goals = useQuery({ queryKey: qk.goals(workspaceId), queryFn: () => api.goals.list(workspaceId) });
   const [showDone, setShowDone] = useState(false);
   if (!goals.data) return null;
@@ -31,7 +33,7 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      accessibilityLabel="Goals"
+      accessibilityLabel={t("goalsStrip.label")}
       style={{ marginHorizontal: -bleed }}
       contentContainerStyle={[styles.row, { paddingHorizontal: bleed }]}
     >
@@ -41,15 +43,15 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
       <View style={styles.side}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={goals.data.length ? "New goal" : "Add a goal"}
-          accessibilityHint={goals.data.length ? undefined : "Goals say what the work is for — tickets that serve one tell their agent why, and you see how far it is."}
+          accessibilityLabel={goals.data.length ? t("goalsStrip.newGoal") : t("goalsStrip.addGoal")}
+          accessibilityHint={goals.data.length ? undefined : t("goalsStrip.addHint")}
           hitSlop={4}
           onPress={add}
           style={({ pressed }) => [styles.add, { borderColor: c.borderStrong, opacity: pressed ? 0.6 : 1 }]}
         >
           <Icon name="plus" size={12} color={c.textMuted} weight="semibold" />
           <T variant="footnote" muted style={{ fontWeight: "600" }}>
-            {goals.data.length ? "Goal" : "Add a goal"}
+            {goals.data.length ? t("goalsStrip.goal") : t("goalsStrip.addGoal")}
           </T>
         </Pressable>
         {done > 0 && (
@@ -62,7 +64,7 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
             }}
           >
             <T variant="caption" muted style={{ paddingHorizontal: 4 }}>
-              {showDone ? "Hide finished" : `${done} finished`}
+              {showDone ? t("goalsStrip.hideFinished") : t("goalsStrip.finished", { count: done })}
             </T>
           </Pressable>
         )}
@@ -73,13 +75,14 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
 
 function GoalCard({ goal: g }: { goal: Goal }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const share = g.tickets.total ? Math.round((g.tickets.done / g.tickets.total) * 100) : 0;
   const overdue = g.status === "active" && !!g.targetDate && daysUntil(g.targetDate) < 0;
-  const progress = g.tickets.total ? `${g.tickets.done} of ${g.tickets.total} done` : "No tickets yet";
+  const progress = g.tickets.total ? t("goalsStrip.progress", { done: g.tickets.done, total: g.tickets.total }) : t("goalsStrip.noTickets");
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[g.title, g.status === "active" ? null : g.status === "achieved" ? "Achieved" : "Dropped", progress, g.targetDate ? dueLabel(g.targetDate) : null].filter(Boolean).join(", ")}
+      accessibilityLabel={[g.title, g.status === "active" ? null : g.status === "achieved" ? t("goalsStrip.achieved") : t("goalsStrip.dropped"), progress, g.targetDate ? dueLabel(g.targetDate) : null].filter(Boolean).join(", ")}
       accessibilityHint={g.why || undefined}
       onPress={() => {
         tap();

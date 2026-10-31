@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { TextQuote } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { isMac, modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
@@ -32,6 +33,7 @@ function quoteOf(text: string): string {
  */
 export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quote: string) => void; disabled?: boolean; children: ReactNode }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation("chat");
   const containerRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
   const [at, setAt] = useState<{ x: number; y: number; below: boolean } | null>(null);
@@ -133,7 +135,7 @@ export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quot
               )}
             >
               <TextQuote className="size-3.5 text-muted-foreground" />
-              Quote
+              {t("quote")}
               <span className="font-normal text-muted-foreground">{modKey}L</span>
             </motion.button>
           )}

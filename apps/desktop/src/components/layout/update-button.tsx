@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { RotateCw } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { LiveDot } from "@/components/aicss/Motion";
 import { ConfirmDialog } from "@/components/integrations/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { useLive } from "@/stores/live";
 import { installUpdate, useUpdater } from "@/stores/updater";
 
 export function useRestartToUpdate() {
+  const { t } = useTranslation("layout");
   const running = useLive((s) => Object.keys(s.runs).length);
   const [confirming, setConfirming] = useState(false);
   const installing = useRef(false);
@@ -22,7 +24,7 @@ export function useRestartToUpdate() {
       await installUpdate();
     } catch (e) {
       installing.current = false;
-      toast.error("Couldn't install the update", { description: e instanceof Error ? e.message : String(e) });
+      toast.error(t("update.installFailed"), { description: e instanceof Error ? e.message : String(e) });
     }
   };
   const restart = () => (running > 0 ? setConfirming(true) : void install());
@@ -32,9 +34,9 @@ export function useRestartToUpdate() {
       open={confirming}
       onOpenChange={setConfirming}
       destructive={false}
-      title="Restart to update?"
-      description={`${running === 1 ? "1 agent is" : `${running} agents are`} still working. Restarting stops ${running === 1 ? "it" : "them"} — you can pick up where you left off once Godmode is back.`}
-      confirmLabel="Restart now"
+      title={t("update.confirmTitle")}
+      description={t("update.confirmDescription", { count: running })}
+      confirmLabel={t("update.restartNow")}
       onConfirm={() => void install()}
     />
   );
@@ -42,6 +44,7 @@ export function useRestartToUpdate() {
 }
 
 export function UpdateButton() {
+  const { t } = useTranslation("layout");
   const update = useUpdater((s) => s.update);
   const { restart, dialog } = useRestartToUpdate();
   const visible = update.status === "ready" || update.status === "installing";
@@ -62,17 +65,17 @@ export function UpdateButton() {
             <div className="flex w-full items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 shadow-card group-data-[collapsible=icon]:hidden">
               <LiveDot live={false} className="bg-brand" />
               <div className="min-w-0 flex-1 leading-tight">
-                <p className="text-[12.5px] font-medium">Update ready</p>
+                <p className="text-[12.5px] font-medium">{t("update.ready")}</p>
                 <p className="truncate font-mono text-[10.5px] text-muted-foreground">v{version}</p>
               </div>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button size="xs" className="h-7 px-2.5" onClick={restart} disabled={installing}>
                     {installing ? <Spinner className="size-3" /> : <RotateCw />}
-                    {installing ? "Restarting" : "Restart"}
+                    {installing ? t("update.restarting") : t("update.restart")}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Install v{version} and reopen Godmode</TooltipContent>
+                <TooltipContent>{t("update.installAndReopen", { version })}</TooltipContent>
               </Tooltip>
             </div>
 
@@ -85,13 +88,13 @@ export function UpdateButton() {
                     className="relative size-8"
                     onClick={restart}
                     disabled={installing}
-                    aria-label={`Restart to update to v${version}`}
+                    aria-label={t("update.restartToUpdate", { version })}
                   >
                     {installing ? <Spinner /> : <RotateCw />}
                     <LiveDot live={false} className="absolute top-1 right-1 bg-brand" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right">Restart to update to v{version}</TooltipContent>
+                <TooltipContent side="right">{t("update.restartToUpdate", { version })}</TooltipContent>
               </Tooltip>
             </div>
           </motion.div>

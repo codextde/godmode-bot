@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import {
   ArrowRight,
   Bot,
@@ -45,6 +46,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t as translate } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { useBootstrap, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -58,16 +61,16 @@ import { ProjectMoveMenu, ScopeDnd, WorkspaceMoveMenu, useProjectDnd, useWorkspa
 import { ProjectDialog } from "@/components/projects/project-dialog";
 import { useReduceAnimations } from "@/lib/motion";
 
-const SORTS: { id: WorkspacesSort; label: string }[] = [
-  { id: "name", label: "A–Z" },
-  { id: "active", label: "Recently active" },
-  { id: "attention", label: "Needs you" },
-];
+const SORTS = [
+  { id: "name", labelKey: "page.sort.name" },
+  { id: "active", labelKey: "page.sort.active" },
+  { id: "attention", labelKey: "page.sort.attention" },
+] as const satisfies readonly { id: WorkspacesSort; labelKey: string }[];
 
-const VIEWS: { id: WorkspacesView; label: string; icon: typeof List }[] = [
-  { id: "grid", label: "Cards", icon: LayoutGrid },
-  { id: "list", label: "List", icon: List },
-];
+const VIEWS = [
+  { id: "grid", labelKey: "page.view.grid", icon: LayoutGrid },
+  { id: "list", labelKey: "page.view.list", icon: List },
+] as const satisfies readonly { id: WorkspacesView; labelKey: string; icon: typeof List }[];
 
 interface Counts {
   agents: number | null;
@@ -109,6 +112,7 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
 
 export default function WorkspacesPage() {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["workspaces", "common"]);
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -163,7 +167,7 @@ export default function WorkspacesPage() {
     const next = new URLSearchParams(params);
     next.delete("edit");
     setParams(next, { replace: true });
-    toast.error("That workspace doesn't exist anymore");
+    toast.error(t("page.gone"));
   }, [editId, workspaces, linked, params, setParams]);
   const editFocused = (ws: Workspace, field: "instructions" | "sources") => {
     setFocus(field);
@@ -192,7 +196,7 @@ export default function WorkspacesPage() {
     next.delete("newProject");
     setParams(next, { replace: true });
     if (workspaces.some((w) => w.id === newProjectIn)) setProjectDialog({ workspaceId: newProjectIn, projectId: null });
-    else toast.error("That workspace doesn't exist anymore");
+    else toast.error(t("page.gone"));
   }, [newProjectIn, workspaces, params, setParams]);
   // Kept while the dialog closes, so it can animate out.
   const lastProjectWorkspace = useRef<Workspace | undefined>(undefined);
@@ -206,7 +210,7 @@ export default function WorkspacesPage() {
     mutationFn: ({ ws, force }: { ws: Workspace; force: boolean }) => api.workspaces.delete(ws.id, force),
     onSuccess: (_r, { ws }) => {
       if (scope === ws.id) setScope("all");
-      toast.success(`${ws.name} deleted`);
+      toast.success(t("page.deleted", { name: ws.name }));
       setDeleting(null);
       setForceDelete(null);
       for (const key of [qk.workspaces, qk.bootstrap, qk.agents, qk.credentials, qk.totp, qk.mcpServers, qk.apiTools, qk.composio, qk.browserProfiles])
@@ -218,7 +222,7 @@ export default function WorkspacesPage() {
         setForceDelete({ workspace: ws, counts: conflictCounts(e.details, counts.get(ws.id)) });
         return;
       }
-      toastApiError(e, "Could not delete workspace", qc);
+      toastApiError(e, t("page.deleteFailed"), qc);
     },
   });
 
@@ -242,31 +246,31 @@ export default function WorkspacesPage() {
   const menuFor = (ws: Workspace) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`Actions for ${ws.name}`} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" aria-label={t("page.actionsFor", { name: ws.name })} className="text-muted-foreground">
           <EllipsisVertical />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem onClick={() => open(ws, "/")}>
-          <MessagesSquare /> Chats
+          <MessagesSquare /> {t("page.menu.chats")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => open(ws, "/tasks")}>
-          <SquareKanban /> Tasks
+          <SquareKanban /> {t("page.menu.tasks")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => open(ws, "/agents")}>
-          <Bot /> Agents
+          <Bot /> {t("common:words.agents")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => setEditing(ws)}>
-          <Pencil /> Edit
+          <Pencil /> {t("common:actions.edit")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => addProject(ws)}>
-          <FolderPlus /> New project
+          <FolderPlus /> {t("page.menu.newProject")}
         </DropdownMenuItem>
         <WorkspaceMoveMenu workspace={ws} />
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onClick={() => setDeleting(ws)}>
-          <Trash2 /> Delete
+          <Trash2 /> {t("common:actions.delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -277,7 +281,7 @@ export default function WorkspacesPage() {
     </div>
   );
   const globalContext = {
-    label: hasGlobalInstructions ? "Instructions for every agent" : "Add instructions for every agent",
+    label: hasGlobalInstructions ? t("page.globalInstructions") : t("page.addGlobalInstructions"),
     set: hasGlobalInstructions,
     onClick: () => navigate("/settings/instructions"),
   };
@@ -286,11 +290,11 @@ export default function WorkspacesPage() {
     <div className="relative min-h-full">
       <PageHeader
         icon={<Layers />}
-        title="Workspaces"
-        description="Separate clients, projects or areas of your life. Each workspace has its own agents, logins, 2FA codes and integrations — global items are shared with all of them."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <Button onClick={openCreate}>
-            <Plus /> New workspace
+            <Plus /> {t("dialog.newTitle")}
           </Button>
         }
       />
@@ -304,15 +308,15 @@ export default function WorkspacesPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Escape" && setSearch("")}
-                placeholder={`Search ${all.length} workspace${all.length === 1 ? "" : "s"}…`}
-                aria-label="Search workspaces"
+                placeholder={t("page.searchPlaceholder", { count: all.length })}
+                aria-label={t("page.searchLabel")}
                 className="pr-10 pl-9"
               />
               <span className="absolute top-1/2 right-2.5 -translate-y-1/2">
                 <Kbd>/</Kbd>
               </span>
             </div>
-            <div role="radiogroup" aria-label="Sort workspaces" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+            <div role="radiogroup" aria-label={t("page.sortLabel")} className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
               {SORTS.map((o) => (
                 <button
                   key={o.id}
@@ -328,18 +332,18 @@ export default function WorkspacesPage() {
                   {sort === o.id && (
                     <motion.span layoutId={reduce ? undefined : "workspaces-sort"} className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
                   )}
-                  <span className="relative">{o.label}</span>
+                  <span className="relative">{t(o.labelKey)}</span>
                 </button>
               ))}
             </div>
-            <div role="group" aria-label="View" className="ml-auto flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+            <div role="group" aria-label={t("page.viewLabel")} className="ml-auto flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
               {VIEWS.map((v) => (
                 <button
                   key={v.id}
                   type="button"
                   aria-pressed={view === v.id}
-                  aria-label={v.label}
-                  title={v.label}
+                  aria-label={t(v.labelKey)}
+                  title={t(v.labelKey)}
                   onClick={() => setView(v.id)}
                   className={cn(
                     "flex items-center gap-1.5 rounded-md px-2 py-1.5 text-sm transition focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none [&_svg]:size-3.5",
@@ -361,20 +365,20 @@ export default function WorkspacesPage() {
             </div>
           ) : isError ? (
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 text-sm">
-              <p className="font-medium text-destructive">Couldn't load workspaces</p>
+              <p className="font-medium text-destructive">{t("page.loadFailed")}</p>
               <p className="mt-1 text-muted-foreground">{errorMessage(error)}</p>
               <Button size="sm" variant="outline" className="mt-3" onClick={() => refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             </div>
           ) : query && !list.length && !showGlobal ? (
             <EmptyState
               icon={<Search />}
-              title={`No workspace matches “${search.trim()}”`}
-              description="Try another name, or create it."
+              title={t("page.noMatch", { query: search.trim() })}
+              description={t("page.noMatchHint")}
               action={
                 <Button variant="outline" onClick={openCreate}>
-                  <Plus /> New workspace
+                  <Plus /> {t("dialog.newTitle")}
                 </Button>
               }
             />
@@ -385,8 +389,8 @@ export default function WorkspacesPage() {
                   workspace={null}
                   current={scope === "global"}
                   tile={<div aria-hidden className="grid size-9 shrink-0 place-items-center rounded-lg bg-secondary ring-1 ring-border ring-inset"><Globe2 className="size-4" /></div>}
-                  title="Global"
-                  description="Shared with every workspace"
+                  title={t("page.global")}
+                  description={t("page.globalShared")}
                   counts={counts.get(null)}
                   activity={activity.of(null)}
                   onOpen={() => open(null)}
@@ -431,7 +435,7 @@ export default function WorkspacesPage() {
                   <span className="grid size-9 place-items-center rounded-lg border border-dashed">
                     <Plus className="size-4" />
                   </span>
-                  New workspace
+                  {t("dialog.newTitle")}
                 </button>
               )}
             </div>
@@ -443,9 +447,9 @@ export default function WorkspacesPage() {
                   index={0}
                   current={scope === "global"}
                   tile={globalTile}
-                  title="Global"
-                  subtitle="Shared with every workspace"
-                  description="Logins, 2FA codes, integrations and agents here are available everywhere — perfect for your personal accounts and the main Godmode assistant."
+                  title={t("page.global")}
+                  subtitle={t("page.globalShared")}
+                  description={t("page.globalDescription")}
                   counts={counts.get(null)}
                   countsLoading={counts.loading}
                   activity={activity.of(null)}
@@ -470,7 +474,7 @@ export default function WorkspacesPage() {
                     onOpen={() => open(ws)}
                     onBoard={() => open(ws, "/tasks")}
                     context={{
-                      label: ws.instructions.trim() ? "Agent context" : "Add agent context",
+                      label: ws.instructions.trim() ? t("dialog.agentContext") : t("page.addAgentContext"),
                       set: !!ws.instructions.trim(),
                       onClick: () => editFocused(ws, "instructions"),
                     }}
@@ -499,9 +503,9 @@ export default function WorkspacesPage() {
                   <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
                     <Plus className="size-5" />
                   </span>
-                  <span className="text-sm font-medium">{list.length ? "New workspace" : "Create your first workspace"}</span>
+                  <span className="text-sm font-medium">{list.length ? t("dialog.newTitle") : t("page.createFirst")}</span>
                   <span className="max-w-60 text-xs text-muted-foreground">
-                    {list.length ? "Another client, project or team." : "e.g. one per client — agents there only see that client's logins."}
+                    {list.length ? t("page.anotherHint") : t("page.firstHint")}
                   </span>
                 </motion.button>
               )}
@@ -509,7 +513,7 @@ export default function WorkspacesPage() {
           )}
           {movable && list.length > 0 && (
             <p className="mt-6 text-xs text-muted-foreground">
-              Drag a project onto another workspace, or out to make it a workspace. Drag a workspace onto another to nest it.
+              {t("page.dragHint")}
             </p>
           )}
         </ScopeDnd>
@@ -536,13 +540,11 @@ export default function WorkspacesPage() {
       <AlertDialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              Delete {deleting?.icon} {deleting?.name}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>This can't be undone. Global items and other workspaces are not affected.</AlertDialogDescription>
+            <AlertDialogTitle>{t("page.deleteDialog.title", { icon: deleting?.icon, name: deleting?.name })}</AlertDialogTitle>
+            <AlertDialogDescription>{t("page.deleteDialog.description")}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={remove.isPending}
@@ -551,7 +553,7 @@ export default function WorkspacesPage() {
                 if (deleting) remove.mutate({ ws: deleting, force: false });
               }}
             >
-              Delete workspace
+              {t("page.deleteDialog.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -561,9 +563,9 @@ export default function WorkspacesPage() {
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <TriangleAlert className="size-5 text-destructive" /> {forceDelete?.workspace.name} isn't empty
+              <TriangleAlert className="size-5 text-destructive" /> {t("page.forceDialog.title", { name: forceDelete?.workspace.name })}
             </AlertDialogTitle>
-            <AlertDialogDescription>Force delete removes the workspace together with everything that belongs to it:</AlertDialogDescription>
+            <AlertDialogDescription>{t("page.forceDialog.description")}</AlertDialogDescription>
           </AlertDialogHeader>
           {forceDelete && forceDelete.counts.length > 0 && (
             <ul className="grid gap-2 sm:grid-cols-2">
@@ -575,9 +577,9 @@ export default function WorkspacesPage() {
               ))}
             </ul>
           )}
-          <p className="text-xs text-muted-foreground">Tip: move items you want to keep to Global or another workspace first.</p>
+          <p className="text-xs text-muted-foreground">{t("page.forceDialog.tip")}</p>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep workspace</AlertDialogCancel>
+            <AlertDialogCancel>{t("page.forceDialog.keep")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               disabled={remove.isPending}
@@ -586,7 +588,7 @@ export default function WorkspacesPage() {
                 if (forceDelete) remove.mutate({ ws: forceDelete.workspace, force: true });
               }}
             >
-              Delete everything
+              {t("page.forceDialog.confirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -594,6 +596,19 @@ export default function WorkspacesPage() {
     </div>
   );
 }
+
+const SERVER_COUNT_KEYS = {
+  projects: "workspaces:page.counts.projects",
+  agents: "workspaces:page.counts.agents",
+  credentials: "workspaces:page.counts.credentials",
+  totp: "workspaces:page.counts.totpServer",
+  cards: "workspaces:page.counts.cards",
+  mcpServers: "workspaces:page.counts.mcpServers",
+  apiTools: "workspaces:page.counts.apiTools",
+  browserProfiles: "workspaces:page.counts.browserProfiles",
+  composioConnections: "workspaces:page.counts.composioConnections",
+  tasks: "workspaces:page.counts.tasks",
+} as const;
 
 /** Counts for the force-delete dialog: from the 409 details when the core sends them, else computed client-side. */
 function conflictCounts(details: unknown, fallback: Counts): [string, number][] {
@@ -606,16 +621,16 @@ function conflictCounts(details: unknown, fallback: Counts): [string, number][] 
   const fromServer = source
     ? Object.entries(source)
         .filter((e): e is [string, number] => typeof e[1] === "number" && e[1] > 0)
-        .map(([k, v]) => [k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ").toLowerCase(), v] as [string, number])
+        .map(([k, v]) => [k in SERVER_COUNT_KEYS ? translate(SERVER_COUNT_KEYS[k as keyof typeof SERVER_COUNT_KEYS]) : k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]/g, " ").toLowerCase(), v] as [string, number])
     : [];
   if (fromServer.length) return fromServer;
-  const labels: [keyof Counts, string][] = [
-    ["agents", "agents"],
-    ["logins", "logins"],
-    ["totp", "2FA codes"],
-    ["integrations", "integrations"],
-  ];
-  return labels.flatMap(([k, label]) => (fallback[k] ? [[label, fallback[k]!] as [string, number]] : []));
+  const labels = [
+    ["agents", "workspaces:page.counts.agents"],
+    ["logins", "workspaces:page.counts.logins"],
+    ["totp", "workspaces:page.counts.totp"],
+    ["integrations", "workspaces:page.counts.integrations"],
+  ] as const satisfies readonly (readonly [keyof Counts, string])[];
+  return labels.flatMap(([k, label]) => (fallback[k] ? [[translate(label), fallback[k]!] as [string, number]] : []));
 }
 
 function ScopeCard({
@@ -655,11 +670,12 @@ function ScopeCard({
   projects?: { list: Project[]; current: string | null; onOpen: (p: Project) => void; onEdit: (p: Project) => void; onAdd: () => void };
 }) {
   const reduce = useReduceAnimations();
+  const { t } = useTranslation(["workspaces", "common"]);
   const stats: { key: keyof Counts; label: string; icon: ReactNode }[] = [
-    { key: "agents", label: "Agents", icon: <Bot /> },
-    { key: "logins", label: "Logins", icon: <KeyRound /> },
-    { key: "totp", label: "2FA", icon: <ShieldCheck /> },
-    { key: "integrations", label: "Integrations", icon: <Plug /> },
+    { key: "agents", label: t("common:words.agents"), icon: <Bot /> },
+    { key: "logins", label: t("page.stats.logins"), icon: <KeyRound /> },
+    { key: "totp", label: t("page.stats.totp"), icon: <ShieldCheck /> },
+    { key: "integrations", label: t("page.stats.integrations"), icon: <Plug /> },
   ];
   const dnd = useWorkspaceDnd(workspace);
   return (
@@ -686,7 +702,7 @@ function ScopeCard({
           {current && (
             <Badge variant="outline" className="gap-1.5 border-brand/25 bg-brand-soft text-brand-strong">
               <span aria-hidden className="size-1.5 rounded-full bg-brand" />
-              Current
+              {t("page.current")}
             </Badge>
           )}
           {menu}
@@ -697,7 +713,7 @@ function ScopeCard({
         {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
         <ActivityChips activity={activity} className="mt-2" />
         <p className={cn("mt-1.5 line-clamp-2 min-h-10 text-sm text-muted-foreground", !description && "italic opacity-70")}>
-          {description || "No description yet."}
+          {description || t("page.noDescription")}
         </p>
         {context && (
           <button
@@ -716,7 +732,7 @@ function ScopeCard({
           <button
             type="button"
             onClick={sources.onClick}
-            aria-label={sources.list.length ? `Folders and repositories: ${sources.list.map((s) => s.name).join(", ")}` : undefined}
+            aria-label={sources.list.length ? t("page.sourcesLabel", { names: sources.list.map((s) => s.name).join(", ") }) : undefined}
             className={cn(
               "mt-1.5 flex max-w-full items-center gap-1.5 rounded-md text-xs transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
               sources.list.length ? "text-foreground hover:text-foreground/70" : "text-muted-foreground hover:text-foreground",
@@ -727,7 +743,7 @@ function ScopeCard({
             ) : (
               <>
                 <Plus className="size-3.5 shrink-0" />
-                <span className="truncate">Add folders or repositories</span>
+                <span className="truncate">{t("page.addSources")}</span>
               </>
             )}
           </button>
@@ -739,7 +755,7 @@ function ScopeCard({
             className="mt-1.5 flex max-w-full items-center gap-1.5 rounded-md text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >
             <FolderPlus className="size-3.5 shrink-0" />
-            <span className="truncate">Add a project (optional)</span>
+            <span className="truncate">{t("page.addProject")}</span>
           </button>
         )}
       </div>
@@ -759,18 +775,18 @@ function ScopeCard({
                   )}
                 </div>
               </TooltipTrigger>
-              <TooltipContent>{n === null && !countsLoading ? `${s.label}: unavailable (vault locked?)` : s.label}</TooltipContent>
+              <TooltipContent>{n === null && !countsLoading ? t("page.statUnavailable", { label: s.label }) : s.label}</TooltipContent>
             </Tooltip>
           );
         })}
       </div>
       <div className="relative mt-4 flex gap-2">
         <Button variant="outline" className="flex-1 justify-between" onClick={onOpen}>
-          Open {title === "Global" ? "Global" : "workspace"}
+          {workspace ? t("page.openWorkspace") : t("page.openGlobal")}
           <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
         </Button>
-        <Button variant="outline" onClick={onBoard} aria-label={`Tasks of ${title}`}>
-          <SquareKanban /> Tasks
+        <Button variant="outline" onClick={onBoard} aria-label={t("page.tasksOf", { name: title })}>
+          <SquareKanban /> {t("page.menu.tasks")}
         </Button>
       </div>
     </motion.article>
@@ -780,26 +796,28 @@ function ScopeCard({
 
 /** What's going on in a scope, in a line: what waits for the human, what works, what's open, and when it last moved. */
 function ActivityChips({ activity, className, compact }: { activity: WorkspaceActivity; className?: string; compact?: boolean }) {
+  const { t } = useTranslation("workspaces");
+  const { dateLocale } = useLocale();
   const quiet = !activity.needsYou && !activity.running;
   return (
     <div className={cn("flex min-w-0 flex-wrap items-center gap-1.5 text-xs", className)}>
       {activity.needsYou > 0 && (
         <span className="inline-flex h-5 items-center gap-1 rounded-full bg-warning/12 px-2 font-medium text-warning">
           <span className="size-1.5 rounded-full bg-current" aria-hidden />
-          {activity.needsYou} need{activity.needsYou === 1 ? "s" : ""} you
+          {t("page.activity.needsYou", { count: activity.needsYou })}
         </span>
       )}
       {activity.running > 0 && (
         <span className="inline-flex h-5 items-center gap-1 rounded-full bg-brand-strong/10 px-2 font-medium text-brand-strong">
           <span className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden />
-          {activity.running} working
+          {t("page.activity.working", { count: activity.running })}
         </span>
       )}
       {!compact && (
         <span className="truncate text-muted-foreground">
           {[
-            activity.openTasks ? `${activity.openTasks} open task${activity.openTasks === 1 ? "" : "s"}` : quiet ? "No open tasks" : null,
-            activity.lastActive ? `active ${formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true })}` : null,
+            activity.openTasks ? t("page.activity.openTasks", { count: activity.openTasks }) : quiet ? t("page.activity.noOpenTasks") : null,
+            activity.lastActive ? t("page.activity.activeLower", { when: formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true, locale: dateLocale }) }) : null,
           ]
             .filter(Boolean)
             .join(" · ")}
@@ -833,11 +851,13 @@ function ScopeListRow({
   onBoard: () => void;
   menu?: ReactNode;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
+  const { dateLocale } = useLocale();
   const stats: { label: string; n: number | null; icon: ReactNode }[] = [
-    { label: "Agents", n: counts.agents, icon: <Bot /> },
-    { label: "Open tasks", n: activity.openTasks, icon: <SquareKanban /> },
-    { label: "Logins", n: counts.logins, icon: <KeyRound /> },
-    { label: "Integrations", n: counts.integrations, icon: <Plug /> },
+    { label: t("common:words.agents"), n: counts.agents, icon: <Bot /> },
+    { label: t("page.stats.openTasks"), n: activity.openTasks, icon: <SquareKanban /> },
+    { label: t("page.stats.logins"), n: counts.logins, icon: <KeyRound /> },
+    { label: t("page.stats.integrations"), n: counts.integrations, icon: <Plug /> },
   ];
   const dnd = useWorkspaceDnd(workspace);
   return (
@@ -858,10 +878,10 @@ function ScopeListRow({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
         <span className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{title}</span>
-          {current && <span className="shrink-0 text-[11px] font-medium text-brand-strong">Current</span>}
+          {current && <span className="shrink-0 text-[11px] font-medium text-brand-strong">{t("page.current")}</span>}
         </span>
         <span className="block truncate text-xs text-muted-foreground">
-          {activity.lastActive ? `Active ${formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true })}` : description || "No activity yet"}
+          {activity.lastActive ? t("page.activity.active", { when: formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true, locale: dateLocale }) }) : description || t("page.activity.none")}
         </span>
       </button>
       <ActivityChips activity={activity} compact className="pointer-events-none hidden shrink-0 flex-nowrap @3xl:flex" />
@@ -879,8 +899,8 @@ function ScopeListRow({
         ))}
       </div>
       <div className="relative z-10 flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onBoard} aria-label={`Tasks of ${title}`} className="text-muted-foreground">
-          <SquareKanban /> <span className="hidden @2xl:inline">Tasks</span>
+        <Button variant="ghost" size="sm" onClick={onBoard} aria-label={t("page.tasksOf", { name: title })} className="text-muted-foreground">
+          <SquareKanban /> <span className="hidden @2xl:inline">{t("page.menu.tasks")}</span>
         </Button>
         {menu ?? <span className="w-8" />}
       </div>
@@ -904,6 +924,7 @@ function ProjectStrip({
   onEdit: (p: Project) => void;
   onAdd: () => void;
 }) {
+  const { t } = useTranslation(["workspaces", "common"]);
   const [all, setAll] = useState(false);
   const shown = all ? list : list.slice(0, STRIP_MAX);
   const hidden = list.length - shown.length;
@@ -911,14 +932,15 @@ function ProjectStrip({
     <div className="relative mt-4 rounded-lg border bg-paper-2 p-2">
       <div className="flex items-center justify-between px-1 pb-1.5">
         <span className="eyebrow text-[10.5px] text-muted-foreground">
-          Projects{list.length > 0 && <span className="ml-1 font-mono tabular-nums">{list.length}</span>}
+          {t("page.projects")}
+          {list.length > 0 && <span className="ml-1 font-mono tabular-nums">{list.length}</span>}
         </span>
         <button
           type="button"
           onClick={onAdd}
           className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition hover:bg-card hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
         >
-          <Plus className="size-3.5" /> New
+          <Plus className="size-3.5" /> {t("page.newProjectShort")}
         </button>
       </div>
       <ul className="flex flex-col gap-0.5">
@@ -928,7 +950,7 @@ function ProjectStrip({
       </ul>
       {(hidden > 0 || all) && list.length > STRIP_MAX && (
         <button type="button" onClick={() => setAll((v) => !v)} className="mt-0.5 px-1.5 text-xs text-muted-foreground transition hover:text-foreground">
-          {all ? "Show less" : `${hidden} more`}
+          {all ? t("common:actions.showLess") : t("page.more", { count: hidden })}
         </button>
       )}
     </div>
@@ -937,6 +959,7 @@ function ProjectStrip({
 
 /** One project in a card's strip; drag it to another workspace or out into its own. */
 function ProjectChip({ project: p, current, onOpen, onEdit }: { project: Project; current: boolean; onOpen: () => void; onEdit: () => void }) {
+  const { t } = useTranslation("workspaces");
   const dnd = useProjectDnd(p);
   const reveal = "size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [&_svg]:size-3.5";
   return (
@@ -957,7 +980,7 @@ function ProjectChip({ project: p, current, onOpen, onEdit }: { project: Project
           </span>
         )}
       </button>
-      <Button variant="ghost" size="icon-sm" aria-label={`Edit ${p.name}`} onClick={onEdit} className={reveal}>
+      <Button variant="ghost" size="icon-sm" aria-label={t("page.editNamed", { name: p.name })} onClick={onEdit} className={reveal}>
         <Pencil />
       </Button>
       <ProjectMoveMenu project={p} className={cn("mr-0.5", reveal)} />
@@ -985,6 +1008,8 @@ function ProjectListRow({
   onBoard: () => void;
   onEdit: () => void;
 }) {
+  const { t } = useTranslation("workspaces");
+  const { dateLocale } = useLocale();
   const dnd = useProjectDnd(project, workspace);
   return (
     <div
@@ -1007,18 +1032,18 @@ function ProjectListRow({
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left outline-none after:absolute after:inset-0 focus-visible:after:ring-2 focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
         <span className="flex items-center gap-2">
           <span className="truncate text-[13px] font-medium">{project.name}</span>
-          {current && <span className="shrink-0 text-[11px] font-medium text-brand-strong">Current</span>}
+          {current && <span className="shrink-0 text-[11px] font-medium text-brand-strong">{t("page.current")}</span>}
         </span>
         <span className="block truncate text-xs text-muted-foreground">
-          {activity.lastActive ? `Active ${formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true })}` : project.description || "No activity yet"}
+          {activity.lastActive ? t("page.activity.active", { when: formatDistanceToNowStrict(new Date(activity.lastActive), { addSuffix: true, locale: dateLocale }) }) : project.description || t("page.activity.none")}
         </span>
       </button>
       <ActivityChips activity={activity} compact className="pointer-events-none hidden shrink-0 flex-nowrap @3xl:flex" />
       <div className="relative z-10 flex shrink-0 items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={onBoard} aria-label={`Tasks of ${project.name}`} className="text-muted-foreground">
-          <SquareKanban /> <span className="hidden @2xl:inline">Tasks</span>
+        <Button variant="ghost" size="sm" onClick={onBoard} aria-label={t("page.tasksOf", { name: project.name })} className="text-muted-foreground">
+          <SquareKanban /> <span className="hidden @2xl:inline">{t("page.menu.tasks")}</span>
         </Button>
-        <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={`Edit ${project.name}`} className="text-muted-foreground">
+        <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label={t("page.editNamed", { name: project.name })} className="text-muted-foreground">
           <Pencil />
         </Button>
         <ProjectMoveMenu project={project} />

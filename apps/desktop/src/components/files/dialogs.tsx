@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { AlertTriangle, ChevronRight, Folder, FolderOpen, Lock, Trash2 } from "lucide-react";
 import type { AgentFileEntry } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { t as translate } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +34,7 @@ export function DeleteDialog({
   onClose: () => void;
   onDeleted?: (paths: string[]) => void;
 }) {
+  const { t } = useTranslation(["files", "common"]);
   const open = !!paths?.length;
   const info = useQuery({
     queryKey: ["files", agentId, "inspect", paths],
@@ -52,8 +55,8 @@ export function DeleteDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{paths?.length === 1 ? `Delete ${nameOf(paths[0]!)}?` : `Delete ${plural(paths?.length ?? 0, "item")}?`}</DialogTitle>
-          <DialogDescription>It goes to {agentName}'s bin: you can put it back there for 30 days.</DialogDescription>
+          <DialogTitle>{paths?.length === 1 ? t("dialogs.delete.titleOne", { name: nameOf(paths[0]!) }) : t("dialogs.delete.titleMany", { items: plural(paths?.length ?? 0, "item") })}</DialogTitle>
+          <DialogDescription>{t("dialogs.delete.description", { name: agentName })}</DialogDescription>
         </DialogHeader>
         {info.isLoading ? (
           <div className="space-y-2">
@@ -87,13 +90,13 @@ export function DeleteDialog({
               <div className="flex gap-2.5 rounded-lg border border-warning/25 bg-warning/[0.07] px-3 py-2.5 text-xs">
                 <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
                 <div className="space-y-1">
-                  <p className="font-medium text-foreground">{agentName} still names {named.length === 1 ? "it" : `${named.length} of these`}</p>
+                  <p className="font-medium text-foreground">{named.length === 1 ? t("dialogs.delete.stillNamesOne", { name: agentName }) : t("dialogs.delete.stillNamesMany", { name: agentName, n: named.length })}</p>
                   {named.slice(0, 4).map((e) => (
                     <p key={e.path} className="text-muted-foreground">
-                      <span className="font-mono">{nameOf(e.path)}</span> — in {e.namedBy.slice(0, 2).join(", ")}
+                      <Trans t={t} i18nKey="dialogs.delete.namedIn" values={{ file: nameOf(e.path), names: e.namedBy.slice(0, 2).join(", ") }} components={{ mono: <span className="font-mono" /> }} />
                     </p>
                   ))}
-                  <p className="text-muted-foreground">It may still need {named.length === 1 ? "it" : "them"}. Remove the mention too, or keep the file.</p>
+                  <p className="text-muted-foreground">{named.length === 1 ? t("dialogs.delete.mayNeedOne") : t("dialogs.delete.mayNeedMany")}</p>
                 </div>
               </div>
             )}
@@ -103,7 +106,12 @@ export function DeleteDialog({
                   <p key={e.path} className="flex items-start gap-1.5">
                     <Lock className="mt-px size-3.5 shrink-0" />
                     <span>
-                      <span className="font-mono text-foreground">{nameOf(e.path) || e.path}</span> stays: {e.locked}
+                      <Trans
+                        t={t}
+                        i18nKey="dialogs.delete.stays"
+                        values={{ name: nameOf(e.path) || e.path, reason: e.locked }}
+                        components={{ mono: <span className="font-mono text-foreground" /> }}
+                      />
                     </span>
                   </p>
                 ))}
@@ -113,7 +121,7 @@ export function DeleteDialog({
         )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             variant="destructive"
@@ -125,7 +133,7 @@ export function DeleteDialog({
               )
             }
           >
-            {remove.isPending ? <Spinner /> : <Trash2 />} Move to bin
+            {remove.isPending ? <Spinner /> : <Trash2 />} {t("dialogs.delete.moveToBin")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -147,14 +155,14 @@ function noteFile(name: string) {
 
 function nameProblem(name: string, taken: Set<string>, kind: NameDialogMode["kind"], current?: string): string | null {
   const n = name.trim();
-  if (!n) return "Give it a name.";
-  if (n.includes("/") || n.includes("\\")) return "A name can't contain a slash — use Move to put it elsewhere.";
-  if (n === "." || n === ".." || n.startsWith(".")) return "Names can't start with a dot here.";
-  if (n.length > 200) return "That name is too long.";
+  if (!n) return translate("files:dialogs.name.errors.empty");
+  if (n.includes("/") || n.includes("\\")) return translate("files:dialogs.name.errors.slash");
+  if (n === "." || n === ".." || n.startsWith(".")) return translate("files:dialogs.name.errors.dot");
+  if (n.length > 200) return translate("files:dialogs.name.errors.tooLong");
   const final = kind === "note" ? noteFile(n) : n;
   // A new spelling of its own name (Notes.md → notes.md) is fine.
   if (current && final.toLowerCase() === current.toLowerCase()) return null;
-  if (taken.has(final.toLowerCase())) return `${final} is already there.`;
+  if (taken.has(final.toLowerCase())) return translate("files:dialogs.name.errors.taken", { name: final });
   return null;
 }
 
@@ -174,6 +182,7 @@ export function NameDialog({
   onCreated?: (path: string, kind: "note" | "folder") => void;
   onRenamed?: (from: string, to: string) => void;
 }) {
+  const { t } = useTranslation(["files", "common"]);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,7 +204,7 @@ export function NameDialog({
     if (!mode) return;
     setError(null);
     setBusy(false);
-    setName(mode.kind === "rename" ? nameOf(mode.path) : mode.kind === "note" ? "untitled.md" : "new folder");
+    setName(mode.kind === "rename" ? nameOf(mode.path) : mode.kind === "note" ? t("dialogs.name.defaultNote") : t("dialogs.name.defaultFolder"));
     requestAnimationFrame(() => {
       const el = inputRef.current;
       if (!el) return;
@@ -238,15 +247,19 @@ export function NameDialog({
     }
   };
 
-  const title = mode?.kind === "rename" ? `Rename ${current}` : mode?.kind === "note" ? "New note" : "New folder";
+  const title = mode?.kind === "rename" ? t("dialogs.name.titleRename", { name: current }) : mode?.kind === "note" ? t("dialogs.name.titleNote") : t("dialogs.name.titleFolder");
   return (
     <Dialog open={!!mode} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            In <span className="font-mono text-foreground">{dir || "the repository"}/</span>
-            {mode?.kind === "rename" && " — where the agent's memory names it, the new name is written in too."}
+            <Trans
+              t={t}
+              i18nKey={mode?.kind === "rename" ? "dialogs.name.inRename" : "dialogs.name.in"}
+              values={{ dir: dir || t("dialogs.name.theRepository") }}
+              components={{ mono: <span className="font-mono text-foreground" /> }}
+            />
           </DialogDescription>
         </DialogHeader>
         <form
@@ -256,24 +269,22 @@ export function NameDialog({
           }}
           className="space-y-2"
         >
-          <Input ref={inputRef} value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" aria-invalid={!!problem && name !== current} className="font-mono text-[13px]" />
+          <Input ref={inputRef} value={name} onChange={(e) => setName(e.target.value)} aria-label={t("common:words.name")} aria-invalid={!!problem && name !== current} className="font-mono text-[13px]" />
           {(error || (problem && name)) && <p className="text-xs text-destructive">{error ?? problem}</p>}
           {pins.length > 0 && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
-              <span>
-                Named in {pins.slice(0, 2).join(", ")} — change the name there too, or the agent looks for the old one.
-              </span>
+              <span>{t("dialogs.name.pinned", { names: pins.slice(0, 2).join(", ") })}</span>
             </p>
           )}
         </form>
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button disabled={!!problem || busy || loading || move.isPending} onClick={() => void submit()}>
             {(busy || move.isPending) && <Spinner />}
-            {mode?.kind === "rename" ? "Rename" : "Create"}
+            {mode?.kind === "rename" ? t("common:actions.rename") : t("common:actions.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -301,6 +312,7 @@ function FolderTree({
   /** Folders being moved: nothing goes into them. */
   blocked: Set<string>;
 }) {
+  const { t } = useTranslation("files");
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const q = useQuery({ queryKey: qk.agentFiles(agentId, dir), queryFn: () => api.agents.files(agentId, dir) });
   const dirs = (q.data ?? []).filter((e: AgentFileEntry) => e.type === "dir" && !nameOf(e.path).startsWith("."));
@@ -316,7 +328,7 @@ function FolderTree({
             <div className="flex items-center" style={{ paddingLeft: depth * 14 }}>
               <button
                 type="button"
-                aria-label={isOpen ? "Fold" : "Unfold"}
+                aria-label={isOpen ? t("dialogs.move.fold") : t("dialogs.move.unfold")}
                 onClick={() =>
                   setOpen((s) => {
                     const next = new Set(s);
@@ -361,6 +373,7 @@ export function MoveDialog({
   onClose: () => void;
   onMoved?: (moves: { from: string; to: string }[]) => void;
 }) {
+  const { t } = useTranslation(["files", "common"]);
   const [picked, setPicked] = useState("workspace");
   const move = useMoveFiles(agentId, onMoved);
   const info = useQuery({
@@ -382,8 +395,8 @@ export function MoveDialog({
     <Dialog open={!!paths?.length} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{paths?.length === 1 ? `Move ${nameOf(paths[0]!)}` : `Move ${plural(paths?.length ?? 0, "item")}`}</DialogTitle>
-          <DialogDescription>Pick a folder. Where the agent's memory names a moved file, the new place is written in.</DialogDescription>
+          <DialogTitle>{paths?.length === 1 ? t("dialogs.move.titleOne", { name: nameOf(paths[0]!) }) : t("dialogs.move.titleMany", { items: plural(paths?.length ?? 0, "item") })}</DialogTitle>
+          <DialogDescription>{t("dialogs.move.description")}</DialogDescription>
         </DialogHeader>
         <div className="max-h-72 overflow-y-auto rounded-lg border p-1.5">
           {roots.map((root) => (
@@ -399,24 +412,24 @@ export function MoveDialog({
             </div>
           ))}
         </div>
-        <p className="truncate font-mono text-xs text-muted-foreground">To {picked}/</p>
+        <p className="truncate font-mono text-xs text-muted-foreground">{t("dialogs.move.to", { dir: picked })}</p>
         {pinned.length > 0 && (
           <div className="flex gap-2.5 rounded-lg border border-warning/25 bg-warning/[0.07] px-3 py-2.5 text-xs">
             <AlertTriangle className="mt-px size-3.5 shrink-0 text-warning" />
             <div className="space-y-1">
-              <p className="font-medium text-foreground">Not updated by the move</p>
+              <p className="font-medium text-foreground">{t("dialogs.move.notUpdated")}</p>
               {pinned.slice(0, 4).map((e) => (
                 <p key={e.path} className="text-muted-foreground">
-                  <span className="font-mono">{nameOf(e.path)}</span> is named in {e.pins.slice(0, 2).join(", ")}
+                  <Trans t={t} i18nKey="dialogs.move.namedIn" values={{ file: nameOf(e.path), names: e.pins.slice(0, 2).join(", ") }} components={{ mono: <span className="font-mono" /> }} />
                 </p>
               ))}
-              <p className="text-muted-foreground">Change the path there too, or the agent looks for it in the old place.</p>
+              <p className="text-muted-foreground">{t("dialogs.move.changeHint")}</p>
             </div>
           </div>
         )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             disabled={already || move.isPending}
@@ -427,7 +440,7 @@ export function MoveDialog({
               )
             }
           >
-            {move.isPending && <Spinner />} {pinned.length ? "Move anyway" : "Move here"}
+            {move.isPending && <Spinner />} {pinned.length ? t("dialogs.move.moveAnyway") : t("dialogs.move.moveHere")}
           </Button>
         </DialogFooter>
       </DialogContent>

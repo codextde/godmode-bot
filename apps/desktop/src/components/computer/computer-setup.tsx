@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, MonitorOff, ShieldAlert } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ComputerStatus } from "@godmode/shared";
 import { useMacPermissionsGuide } from "@/components/permissions/mac-permissions";
@@ -23,6 +24,7 @@ export function missingPermissions(status: ComputerStatus | undefined): string[]
 }
 
 export function useComputerSetupActions() {
+  const { t } = useTranslation("computer");
   const qc = useQueryClient();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: qk.computer });
@@ -33,28 +35,29 @@ export function useComputerSetupActions() {
     onSuccess: (status) => {
       qc.setQueryData(qk.computerStatus, status);
       if (missingPermissions(status).length) {
-        toast.info("Allow Godmode in System Settings", {
-          description: "Privacy & Security → Accessibility and Screen & System Audio Recording. Restart Godmode if pictures stay black afterwards.",
+        toast.info(t("setup.allowTitle"), {
+          description: t("setup.allowDescription"),
         });
       }
       refresh();
     },
-    onError: (e) => toast.error("Couldn't ask for access", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("setup.askFailed"), { description: errorMessage(e) }),
   });
   const installCua = useMutation({
     mutationFn: api.computer.installCua,
     onSuccess: (r) => {
-      if (r.ok) toast.success("Cua Driver is ready");
-      else toast.error("Cua Driver couldn't be installed", { description: r.output });
+      if (r.ok) toast.success(t("setup.cuaReady"));
+      else toast.error(t("setup.cuaFailed"), { description: r.output });
       refresh();
     },
-    onError: (e) => toast.error("Cua Driver couldn't be installed", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("setup.cuaFailed"), { description: errorMessage(e) }),
   });
   return { permissions, installCua };
 }
 
 /** What still stands between the human and computer use: turned off, missing macOS permissions, Cua Driver. */
 export function ComputerSetupNotice({ status, className, showCua = true }: { status: ComputerStatus | undefined; className?: string; showCua?: boolean }) {
+  const { t } = useTranslation("computer");
   const { installCua } = useComputerSetupActions();
   const showGuide = useMacPermissionsGuide((s) => s.show);
   if (!status) return null;
@@ -63,12 +66,12 @@ export function ComputerSetupNotice({ status, className, showCua = true }: { sta
 
   if (!status.enabled) {
     items.push(
-      <Notice key="off" icon={<MonitorOff />} tone="muted" title="Computer use is turned off">
-        Turn it on in{" "}
-        <Link to="/settings/computer" className="font-medium text-foreground underline underline-offset-2">
-          Settings → Computer
-        </Link>{" "}
-        to share windows and screens with agents.
+      <Notice key="off" icon={<MonitorOff />} tone="muted" title={t("setup.offTitle")}>
+        <Trans
+          t={t}
+          i18nKey="setup.offBody"
+          components={{ link: <Link to="/settings/computer" className="font-medium text-foreground underline underline-offset-2" /> }}
+        />
       </Notice>,
     );
   } else if (missing.length) {
@@ -77,15 +80,15 @@ export function ComputerSetupNotice({ status, className, showCua = true }: { sta
         key="perm"
         icon={<ShieldAlert />}
         tone="warn"
-        title={`Godmode needs ${missing.join(" and ")}`}
+        title={missing.length > 1 ? t("setup.permTitleBoth") : missing[0] === "Accessibility" ? t("setup.permTitleAccessibility") : t("setup.permTitleScreen")}
         action={
           <Button size="sm" onClick={() => showGuide(status.permissions.accessibility === false ? "accessibility" : "screen-recording")}>
-            Set up
+            {t("setup.setUp")}
           </Button>
         }
       >
-        A short guide shows where to switch {missing.length > 1 ? "them" : "it"} on. {missing.includes("Screen Recording") ? "Without Screen Recording, agents can't see windows. " : ""}
-        {missing.includes("Accessibility") ? "Without Accessibility, they can't click or type." : ""}
+        {t("setup.guide", { count: missing.length })} {missing.includes("Screen Recording") ? `${t("setup.noScreen")} ` : ""}
+        {missing.includes("Accessibility") ? t("setup.noAccessibility") : ""}
       </Notice>,
     );
   }
@@ -96,16 +99,16 @@ export function ComputerSetupNotice({ status, className, showCua = true }: { sta
         key="cua"
         icon={<Download />}
         tone="muted"
-        title="Install Cua Driver for sharing single windows"
+        title={t("setup.cuaTitle")}
         action={
           <Button size="sm" variant="outline" onClick={() => installCua.mutate()} disabled={installCua.isPending}>
-            {installCua.isPending && <Spinner />} {installCua.isPending ? "Installing…" : "Install"}
+            {installCua.isPending && <Spinner />} {installCua.isPending ? t("setup.installing") : t("setup.install")}
           </Button>
         }
       >
         {status.platform === "darwin"
-          ? "Open-source (trycua/cua): clicks buttons and fills fields through accessibility, even when the window is covered. Godmode's built-in helper works without it."
-          : "Open-source (trycua/cua): needed on this system to see and control windows and the screen."}
+          ? t("setup.cuaMac")
+          : t("setup.cuaOther")}
       </Notice>,
     );
   }

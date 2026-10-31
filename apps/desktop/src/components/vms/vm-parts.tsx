@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Moon, TriangleAlert } from "lucide-react";
 import type { Vm, VmImagePreset, VmProgress, VmState } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { Spinner } from "@/components/ui/spinner";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 /* ------------------------------------------------------------------ */
@@ -52,13 +54,27 @@ export function nextVmName(vms: Pick<Vm, "name">[], base = "macOS VM"): string {
 /* ------------------------------------------------------------------ */
 
 export const VM_STATE_LABEL: Record<VmState, string> = {
-  creating: "Creating",
-  starting: "Starting",
-  running: "Running",
-  suspended: "Suspended",
-  stopping: "Stopping",
-  stopped: "Stopped",
-  error: "Needs attention",
+  get creating() {
+    return t("vms:state.creating");
+  },
+  get starting() {
+    return t("vms:state.starting");
+  },
+  get running() {
+    return t("vms:state.running");
+  },
+  get suspended() {
+    return t("vms:state.suspended");
+  },
+  get stopping() {
+    return t("vms:state.stopping");
+  },
+  get stopped() {
+    return t("vms:state.stopped");
+  },
+  get error() {
+    return t("vms:state.error");
+  },
 };
 
 /** Busy = Godmode is doing something with the VM right now (progress shows). */
@@ -77,6 +93,7 @@ const BADGE: Record<VmState, string> = {
 };
 
 export function VmStateBadge({ state, className }: { state: VmState; className?: string }) {
+  const { t } = useTranslation("vms");
   return (
     <span
       className={cn(
@@ -96,7 +113,7 @@ export function VmStateBadge({ state, className }: { state: VmState; className?:
       ) : (
         <span aria-hidden className="size-1.5 rounded-full bg-muted-foreground/50" />
       )}
-      {VM_STATE_LABEL[state]}
+      {t(`state.${state}`)}
     </span>
   );
 }
@@ -179,11 +196,11 @@ function useEta(key: string, percent: number | null): number | null {
 
 function formatEta(ms: number): string {
   const min = Math.round(ms / 60_000);
-  if (min < 1) return "less than a minute left";
-  if (min < 60) return `about ${min} min left`;
+  if (min < 1) return t("vms:eta.lessThanMinute");
+  if (min < 60) return t("vms:eta.minutes", { n: min });
   const h = Math.floor(min / 60);
   const m = min % 60;
-  return `about ${h} h${m ? ` ${m} min` : ""} left`;
+  return m ? t("vms:eta.hoursMinutes", { h, m }) : t("vms:eta.hours", { h });
 }
 
 /**
@@ -191,6 +208,7 @@ function formatEta(ms: number): string {
  * download — how much arrived and roughly how long is left.
  */
 export function VmProgressBlock({ vm, progress, preset }: { vm: Vm; progress: VmProgress; preset?: VmImagePreset }) {
+  const { t } = useTranslation("vms");
   const eta = useEta(`${vm.id}:${progress.phase}`, progress.percent);
   const pct = progress.percent === null ? null : Math.max(0, Math.min(100, progress.percent));
   const downloaded = progress.phase === "download" && pct !== null && preset ? (preset.downloadGb * pct) / 100 : null;
@@ -207,13 +225,11 @@ export function VmProgressBlock({ vm, progress, preset }: { vm: Vm; progress: Vm
       {(downloaded !== null || eta !== null || progress.phase === "download") && (
         <p className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-muted-foreground tabular-nums">
           {downloaded !== null && preset && (
-            <span>
-              {downloaded.toFixed(1)} of {preset.downloadGb} GB
-            </span>
+            <span>{t("progress.downloaded", { done: downloaded.toFixed(1), total: preset.downloadGb })}</span>
           )}
           {downloaded !== null && eta !== null && <span className="opacity-40">·</span>}
           {eta !== null && <span>{formatEta(eta)}</span>}
-          {progress.phase === "download" && eta === null && downloaded === null && <span>The first download takes a while — later VMs from this image are ready in seconds.</span>}
+          {progress.phase === "download" && eta === null && downloaded === null && <span>{t("progress.firstDownload")}</span>}
         </p>
       )}
     </div>
