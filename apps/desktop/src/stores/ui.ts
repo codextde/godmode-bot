@@ -56,6 +56,8 @@ interface UiState {
   hideSuggestions: boolean;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
+  /** Pages the human took out of the sidebar's Work section. */
+  hiddenNav: string[];
   /** Page explainers the human closed. */
   hiddenHints: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
@@ -79,6 +81,7 @@ interface UiState {
   setRecentSource: (source: RecentSource) => void;
   toggleNavSection: (key: string) => void;
   toggleNavCollapsed: (key: string) => void;
+  toggleNavHidden: (to: string) => void;
   hideHint: (key: string) => void;
   setWorkspacesView: (v: WorkspacesView) => void;
   setWorkspacesSort: (v: WorkspacesSort) => void;
@@ -109,6 +112,7 @@ export const useUi = create<UiState>()(
       recentWorkspaces: [],
       expandedNav: [],
       collapsedNav: [],
+      hiddenNav: [],
       hiddenHints: [],
       workspacesView: "grid",
       workspacesSort: "name",
@@ -147,6 +151,7 @@ export const useUi = create<UiState>()(
         set((s) => ({ expandedNav: s.expandedNav.includes(key) ? s.expandedNav.filter((k) => k !== key) : [...s.expandedNav, key] })),
       toggleNavCollapsed: (key) =>
         set((s) => ({ collapsedNav: s.collapsedNav.includes(key) ? s.collapsedNav.filter((k) => k !== key) : [...s.collapsedNav, key] })),
+      toggleNavHidden: (to) => set((s) => ({ hiddenNav: s.hiddenNav.includes(to) ? s.hiddenNav.filter((k) => k !== to) : [...s.hiddenNav, to] })),
       hideHint: (key) => set((s) => ({ hiddenHints: s.hiddenHints.includes(key) ? s.hiddenHints : [...s.hiddenHints, key] })),
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
@@ -173,6 +178,7 @@ export const useUi = create<UiState>()(
         recentWorkspaces: s.recentWorkspaces,
         expandedNav: s.expandedNav,
         collapsedNav: s.collapsedNav,
+        hiddenNav: s.hiddenNav,
         hiddenHints: s.hiddenHints,
         workspacesView: s.workspacesView,
         workspacesSort: s.workspacesSort,

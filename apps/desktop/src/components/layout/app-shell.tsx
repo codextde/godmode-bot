@@ -52,6 +52,7 @@ import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
 import { NavSectionHeader } from "@/components/layout/nav-section-header";
+import { EditSidebarButton } from "@/components/layout/edit-sidebar";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
@@ -128,6 +129,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const attention = boot?.counts.attention;
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
+  const hiddenNav = useUi((s) => s.hiddenNav);
   const { data: mods = [] } = useMods();
   // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
   const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;
@@ -226,6 +228,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/vms", "Virtual machines"),
     easyItem("/ssh", "Servers"),
   ].filter(shown);
+  const workItems = easy ? easyNav : workNav.filter(shown);
 
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
@@ -269,7 +272,13 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarHeader>
 
         <SidebarContent>
-          <NavSection id="work" label="Work" items={[chatItem, ...(easy ? easyNav : workNav.filter(shown))]} defaultOpen />
+          <NavSection
+            id="work"
+            label="Work"
+            items={[chatItem, ...workItems.filter((item) => !hiddenNav.includes(item.to))]}
+            action={<EditSidebarButton items={workItems} />}
+            defaultOpen
+          />
           {easy ? (
             <NavSection id="more" label="More" items={easyMore} folded="list" />
           ) : (
@@ -403,12 +412,14 @@ function NavSection({
   items,
   folded = "icons",
   defaultOpen = false,
+  action,
 }: {
   id: string;
   label: string;
   items: NavItem[];
   folded?: "icons" | "list";
   defaultOpen?: boolean;
+  action?: ReactNode;
 }) {
   const expanded = useUi((s) => (defaultOpen ? !s.collapsedNav.includes(id) : s.expandedNav.includes(id)));
   const toggle = useUi((s) => (defaultOpen ? s.toggleNavCollapsed : s.toggleNavSection));
@@ -417,7 +428,15 @@ function NavSection({
   const { pathname } = useLocation();
   const listId = `nav-section-${id}`;
   const open = expanded || railed;
-  const header = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
+  const toggleButton = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
+  const header = action ? (
+    <div className="group/section flex min-w-0 items-center justify-between gap-1 pr-1">
+      {toggleButton}
+      {action}
+    </div>
+  ) : (
+    toggleButton
+  );
   if (open)
     return (
       <SidebarGroup className="py-1">
