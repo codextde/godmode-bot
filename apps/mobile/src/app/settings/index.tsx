@@ -161,13 +161,10 @@ export default function Settings() {
         {s ? (
           <PickerRow
             title="Palette"
-            detail="Colours for both sides, light and dark."
+            detail="Just for this phone, light and dark."
             options={PALETTE_OPTIONS}
             value={palette}
-            onChange={(next: Palette) => {
-              useAppearance.getState().setPalette(next);
-              void patchSettings({ general: { palette: next } });
-            }}
+            onChange={(next: Palette) => useAppearance.getState().setPalette(next)}
           />
         ) : null}
         {s ? (

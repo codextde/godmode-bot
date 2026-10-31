@@ -18,7 +18,7 @@ interface AppearanceState {
   setPalette: (palette: Palette) => void;
 }
 
-/** The computer's theme and palette (Settings → General), light Paper until the human picks others; kept on the phone for the next cold start. */
+/** The computer's theme (Settings → General) and this phone's own palette, light Paper until the human picks others; kept on the phone for the next cold start. */
 export const useAppearance = create<AppearanceState>((set, get) => ({
   theme: "light",
   palette: DEFAULT_PALETTE,
