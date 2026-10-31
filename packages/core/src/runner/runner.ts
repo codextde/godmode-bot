@@ -185,6 +185,9 @@ export function __setPersistForTests(intervalMs: number, backoff: number) {
 const KILL_GRACE_MS = 5000;
 /** A run whose account hit its limit continues on the next one after this short breath. */
 const ACCOUNT_SWITCH_DELAY_MS = 2_000;
+/** A run moves to another Claude account at most this often; then it waits for the limit like any other. */
+const MAX_ACCOUNT_SWITCHES = 4;
+const accountSwitches = new Map<string, number>();
 /** A pause lets the step in progress finish for this long before it cuts it off. */
 const PAUSE_GRACE_MS = 8000;
 /** Continuations a Stop hook (`/goal`) forces in a row without a tool call before Godmode ends the run. */
@@ -1956,8 +1959,9 @@ function bodyOf(job: Job, agent: Agent): string {
   return continueContext({ reason: resumed.reason, userName: getSettings().general.userName, pausedAt: resumed.pausedAt, messages, answer: resumed.answer });
 }
 
-/** The usage limit Claude last refused a run with on this computer, and when: every run works on the same account. */
-let lastLimit: { pause: LimitPause; at: number } | null = null;
+/** The usage limit Claude last refused a run with on this computer, and when, with the Claude account it was on. */
+let lastLimit: { pause: LimitPause; at: number; account: string } | null = null;
+const accountOf = (job: Job) => job.claudeAccount?.id ?? "system";
 const LIMIT_ECHO_MS = 5 * 60_000;
 
 /** The usage limit Claude Code named when the run ended. */
@@ -1968,7 +1972,7 @@ function limitSaid(job: Job, attempt: Attempt): LimitPause | null {
   const said = [limitLine ?? "", limit ? (final?.text ?? "") : "", final?.errors.join("\n") ?? "", attempt.stderr, attempt.noise.join("\n")].join("\n");
   // Refused requests (429) while Claude reports a limit as reached are that limit, whatever the wording.
   const reached = limitReached(limit, final?.apiErrorStatus === 429 && limit ? `${said}\nusage limit reached` : said);
-  if (reached) lastLimit = { pause: reached, at: Date.now() };
+  if (reached) lastLimit = { pause: reached, at: Date.now(), account: accountOf(job) };
   return reached;
 }
 
@@ -1977,7 +1981,7 @@ function limitSaid(job: Job, attempt: Attempt): LimitPause | null {
  * own line about it is out. That limit is this run's too.
  */
 function limitUnsaid(job: Job, attempt: Attempt): LimitPause | null {
-  if (!lastLimit || job.acc.final || !attempt.exitCode || attempt.stderr.trim() || attempt.noise.length) return null;
+  if (!lastLimit || lastLimit.account !== accountOf(job) || job.acc.final || !attempt.exitCode || attempt.stderr.trim() || attempt.noise.length) return null;
   const until = lastLimit.pause.resumeAt ? Date.parse(lastLimit.pause.resumeAt) : 0;
   return Date.now() - lastLimit.at < LIMIT_ECHO_MS && until > Date.now() ? lastLimit.pause : null;
 }
@@ -2376,6 +2380,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
       log.warn("could not pick a Claude account; using Claude Code's own login", err);
       return null;
     });
+    if (job.claudeAccount?.outsidePool) job.acc.addNotice("warning", "None of this workspace's Claude accounts can be used right now (vault locked or signed out), so this run uses this computer's Claude login.");
     applyAccountEnv(env, job.claudeAccount);
   }
   job.claudeConfigDir = env.CLAUDE_CONFIG_DIR ?? null;
@@ -2495,9 +2500,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     // Claude's usage limit ended the run: it stands still until the limit has reset.
     const limit = limitOf(job, attempt);
     if (limit) {
-      const next = job.claudeAccount ? noteAccountLimit(job.claudeAccount.id, limit.resumeAt, job.accountWorkspaceId ?? null) : null;
-      if (next) job.acc.addNotice("info", `Claude account ${job.claudeAccount!.label} reached its ${limit.limit}. Switching to ${next.label}.`);
-      job.pause = { reason: "limit", applied: true, ...limit, ...(next ? { switchAccount: true } : {}) };
+      const switches = accountSwitches.get(job.runId) ?? 0;
+      const next = job.claudeAccount ? await noteAccountLimit(job.claudeAccount.id, limit.resumeAt, job.accountWorkspaceId ?? null) : null;
+      if (next && switches >= MAX_ACCOUNT_SWITCHES) log.warn(`run ${job.runId} switched Claude accounts ${switches} times; it waits for the limit now`);
+      if (next && switches < MAX_ACCOUNT_SWITCHES) accountSwitches.set(job.runId, switches + 1);
+      else if (next) next.stop = true;
+      const switching = !!next && !next.stop;
+      if (switching) job.acc.addNotice("info", `Claude account ${job.claudeAccount!.label} reached its ${limit.limit}. Switching to ${next!.label}.`);
+      job.pause = { reason: "limit", applied: true, ...limit, ...(switching ? { switchAccount: true } : {}) };
       // As with a pause by hand: what it delegated would report back to a process that is gone.
       for (const child of delegatedBy(job.runId)) await cancelRun(child, "Stopped (the run that delegated this waits for Claude's usage limit)").catch(() => {});
       return { status: "paused", error: null };
@@ -2505,7 +2515,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const unsaid = limitUnsaid(job, attempt);
     if (unsaid) return { status: "failed", error: `Claude's ${unsaid.limit} is reached` };
     const error = describeFailure(job, attempt);
-    if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt) && job.claudeAccount?.token) noteClaudeAccountSignedOut(job.claudeAccount.id);
+    if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt) && job.claudeAccount?.token) void noteClaudeAccountSignedOut(job.claudeAccount.id).catch((err) => log.warn("could not check a refused Claude account", err));
     else if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt)) {
       void noteClaudeSignedOut({ apiKey: !!env.ANTHROPIC_API_KEY, since: job.spawnedAt }).catch((err) => log.warn("could not mark Claude Code signed out", err));
     }
@@ -2772,6 +2782,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
 async function finalize(job: Job, outcome: Outcome, agent: Agent | null, startedMs: number): Promise<void> {
   // No longer active: `running` flags, waiters and the queue must see that before run.finished goes out.
   jobs.delete(job.runId);
+  accountSwitches.delete(job.runId);
   const idx = queue.indexOf(job.runId);
   if (idx >= 0) queue.splice(idx, 1);
   const acc = job.acc;
