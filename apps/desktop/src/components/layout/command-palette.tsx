@@ -354,8 +354,8 @@ export function CommandPalette() {
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Navigate">
-          <CommandItem value="tasks board kanban tickets issues" keywords={alias("/tasks", "Tasks")} onSelect={() => go("/tasks")}>
-            <SquareKanban /> {named("/tasks", "Tasks")}
+          <CommandItem value="agent tasks board kanban tickets issues" keywords={alias("/tasks", "Agent tasks")} onSelect={() => go("/tasks")}>
+            <SquareKanban /> {named("/tasks", "Agent tasks")}
           </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
             <Bot /> Agents
@@ -369,8 +369,8 @@ export function CommandPalette() {
           <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
             <Activity /> {named("/activity", "Activity")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/inbox")}>
-            <Inbox /> Inbox
+          <CommandItem value="needs you inbox to-dos questions approvals my tasks" onSelect={() => go("/inbox")}>
+            <Inbox /> Needs you
           </CommandItem>
           <CommandItem onSelect={() => go("/archived")}>
             <Archive /> Archived chats

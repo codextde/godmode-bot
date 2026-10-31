@@ -160,7 +160,7 @@ function AloneView() {
       </AnimatePresence>
 
       <Callout tone="muted" icon={<MessagesSquare className="text-muted-foreground" />} title="What lives where">
-        Every computer keeps a copy of the agents, logins, settings, the task board, automations and My tasks, and changes travel both ways. The
+        Every computer keeps a copy of the agents, logins, settings, the task board, automations and your to-dos, and changes travel both ways. The
         primary runs the schedules. Each chat lives on the computer it runs on, and every computer of the group sees all of them.
       </Callout>
     </>
