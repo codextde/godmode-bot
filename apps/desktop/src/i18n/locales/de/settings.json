@@ -270,6 +270,50 @@
       "enable": "Bypass einschalten"
     }
   },
+  "accounts": {
+    "title": "Claude-Konten",
+    "description": "Nutze mehr als ein Claude-Abo. Agenten arbeiten mit dem Standardkonto und wechseln zu einem anderen, wenn es knapp wird.",
+    "listTitle": "Konten",
+    "listDescription": "Hinzugefügte Konten behalten ihre eigene Anmeldung, ein Login anderswo meldet sie nie ab.",
+    "default": "Standard",
+    "systemLogin": "Claude-Code-Login dieses Computers",
+    "thisComputer": "Dieser Computer",
+    "addedHere": "In Godmode hinzugefügt",
+    "unknown": "Claude-Konto",
+    "session": "Sitzung",
+    "week": "Woche",
+    "signedOut": "Abgemeldet. Melde dich neu an, um es zu nutzen.",
+    "limitedUntil": "Limit erreicht, wieder ab {{time}}",
+    "signInAgain": "Neu anmelden",
+    "makeDefault": "Als Standard",
+    "more": "Weitere Aktionen",
+    "remove": "Entfernen",
+    "refresh": "Nutzung aktualisieren",
+    "add": "Konto hinzufügen",
+    "adding": "Melde dich mit dem Claude-Konto an, das du hinzufügen willst",
+    "signingInAgain": "{{email}} neu anmelden",
+    "emptyTitle": "Zweites Claude-Konto hinzufügen",
+    "emptyBody": "Erreicht ein Konto sein Limit, arbeitet Godmode mit dem anderen weiter.",
+    "startFailed": "Anmeldung konnte nicht starten",
+    "codeFailed": "Code konnte nicht gesendet werden",
+    "signInFailed": "Die Anmeldung wurde nicht abgeschlossen",
+    "linkCopied": "Anmeldelink kopiert",
+    "added": "{{email}} angemeldet",
+    "defaultFailed": "Standard konnte nicht geändert werden",
+    "removed": "Konto entfernt",
+    "removeFailed": "Konto konnte nicht entfernt werden",
+    "removeTitle": "{{email}} entfernen?",
+    "removeBody": "Godmode vergisst die Anmeldung dieses Kontos. Workspaces, die es genutzt haben, nehmen ihre anderen Konten. Du kannst es jederzeit wieder hinzufügen.",
+    "lockedTitle": "Der Tresor ist gesperrt",
+    "lockedBody": "In Godmode hinzugefügte Konten speichern ihre Anmeldung im Tresor. Bis du ihn entsperrst, nutzen Agenten den Claude-Code-Login dieses Computers.",
+    "switchTitle": "Wechseln",
+    "switchDescription": "Wie Arbeit zwischen deinen Konten wechselt.",
+    "autoSwitch": "Automatisch wechseln",
+    "autoSwitchDescription": "Neue Arbeit startet mit einem anderen Konto, sobald das Standardkonto die Schwelle erreicht, und Arbeit, die an ein Limit stößt, geht sofort mit einem Konto weiter, das noch Luft hat.",
+    "threshold": "Wechseln ab",
+    "thresholdDescription": "Nutzung des Sitzungs- oder Wochenlimits, je nachdem, welche höher ist.",
+    "perWorkspaceDescription": "Workspaces können eigene Konten nutzen: Workspace bearbeiten und unter Claude-Konten auswählen."
+  },
   "android": {
     "adbReady": "adb ist bereit",
     "adbInstallError": "adb konnte nicht installiert werden",
@@ -378,7 +422,8 @@
       "system": "System",
       "cleanup": "Aufräumen",
       "logs": "Logs",
-      "about": "Über"
+      "about": "Über",
+      "accounts": "Claude-Konten"
     },
     "easy": {
       "general": "Allgemein",
@@ -404,7 +449,8 @@
       "about": "Über",
       "computer": "Computersteuerung",
       "connect": "Claude Code & MCP",
-      "system": "Systemcheck"
+      "system": "Systemcheck",
+      "accounts": "Claude-Konten"
     },
     "groups": {
       "preferences": "Einstellungen",

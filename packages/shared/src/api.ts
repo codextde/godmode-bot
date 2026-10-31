@@ -25,6 +25,7 @@ import type {
   TotpAlgorithm,
   TotpEntry,
   Workspace,
+  WorkspaceClaudeAccounts,
   Project,
 } from "./models";
 
@@ -49,6 +50,8 @@ export interface WorkspaceInput {
   sources?: WorkspaceSourceInput[];
   /** Merge tickets' pull requests as soon as they're delivered. */
   autoMerge?: boolean;
+  /** Claude accounts for the workspace's runs; null = Godmode's. */
+  claudeAccounts?: WorkspaceClaudeAccounts | null;
 }
 
 export interface ProjectInput {

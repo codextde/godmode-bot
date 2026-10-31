@@ -70,10 +70,18 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   // Signing Claude Code in picks the account every agent on the computer runs on: only its owner does that from afar
   // (the sign-in page opens on the phone and its code comes back here).
   ["GET", "/api/doctor/claude-login", A],
+  ["GET", "/api/doctor/claude-usage", A],
   ["POST|DELETE", "/api/doctor/claude-login", "owner"],
   ["POST", "/api/doctor/claude-login/code", "owner"],
   // Copies the link to the computer's clipboard, which is out of reach from afar.
   ["POST", "/api/doctor/claude-login/copy", refused(COMPUTER_ONLY)],
+  // More Claude accounts: which subscriptions the computer's agents run on is the owner's call, like signing in.
+  ["GET", "/api/claude-accounts", A],
+  ["POST", "/api/claude-accounts/refresh", A],
+  ["POST|DELETE", "/api/claude-accounts/login", "owner"],
+  ["POST", "/api/claude-accounts/login/code", "owner"],
+  ["POST", "/api/claude-accounts/:id/default", "owner"],
+  ["DELETE", "/api/claude-accounts/:id", "owner"],
   // Settings → System: reading the state is fine from anywhere; changing macOS permissions or the machine's tools
   // happens on the computer itself.
   ["GET", "/api/doctor/permissions", A],
