@@ -43,7 +43,9 @@ function jsxTags(src: string, names: string[]): string[] {
   return tags;
 }
 
-const attr = (tag: string, names: string[]) => [...tag.matchAll(new RegExp(`\\s(?:${names.join("|")})="([^"]+)"`, "g"))].map((m) => m[1]);
+/** A literal attribute stays as it is; `{t("key")}` becomes "@key", translated in the app. */
+const attr = (tag: string, names: string[]) =>
+  [...tag.matchAll(new RegExp(`\\s(?:${names.join("|")})=(?:"([^"]+)"|\\{t\\("([\\w.:-]+)"[,)])`, "g"))].map((m) => m[1] ?? `@${m[2]}`);
 
 function settingsSearch(): Plugin {
   const id = "virtual:settings-search";
@@ -71,12 +73,12 @@ function settingsSearch(): Plugin {
       };
       const pageSrc = read(page);
       const files = new Map([...pageSrc.matchAll(/import \{ (\w+) \} from "@\/components\/settings\/([\w-]+)"/g)].map((m) => [m[1], m[2]] as const));
-      const index: Record<string, { labels: string[]; text: string }> = {};
+      const index: Record<string, { labels: string[]; text: string[] }> = {};
       for (const [, section, component] of pageSrc.matchAll(/"?([\w-]+)"?: \(\) => <(\w+)/g)) {
         const file = files.get(component);
         if (!file) continue;
         const { labels, text } = scan(file, new Set(), { labels: [], text: [] });
-        index[section] = { labels: [...new Set(labels)], text: [...new Set(text)].join(" ") };
+        index[section] = { labels: [...new Set(labels)], text: [...new Set(text)] };
       }
       return `export default ${JSON.stringify(index)};`;
     },

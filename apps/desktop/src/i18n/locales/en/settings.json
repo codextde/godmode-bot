@@ -1,0 +1,48 @@
+{
+  "general": {
+    "title": "General",
+    "description": "How Godmode greets you, looks and behaves on your desktop.",
+    "launchAtLoginError": "Could not change launch at login",
+    "interface": {
+      "title": "Interface",
+      "description": "Easy keeps Godmode simple for everyday work. Professional shows every tool and detail. Both can do exactly the same."
+    },
+    "profile": {
+      "title": "Profile",
+      "name": "Your name",
+      "nameDescription": "Agents use it to address you and sign messages on your behalf.",
+      "namePlaceholder": "e.g. Alex"
+    },
+    "language": {
+      "title": "Language",
+      "label": "App language",
+      "description": "The language of the app on this computer, in the browser dashboard and on your phone. System follows your device."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "mode": "Mode",
+      "modeDescription": "Every palette has a light and a dark side. System follows your OS. Switch any time with {{shortcut}}.",
+      "light": "Light",
+      "dark": "Dark",
+      "palette": "Palette"
+    },
+    "desktop": {
+      "title": "Desktop",
+      "onlyDesktop": "These options only apply to the desktop app.",
+      "launchAtLogin": "Launch at login",
+      "launchAtLoginDescription": "Start Godmode in the background when you sign in, so automations keep running.",
+      "desktopOnly": "Desktop app only.",
+      "tray": "Keep running in the menu bar",
+      "trayDescription": "Closing the window hides Godmode to the tray instead of quitting — agents and automations keep working."
+    },
+    "notifications": {
+      "title": "Notifications",
+      "desktop": "Desktop notifications",
+      "desktopDescription": "Get notified when a task finishes, an automation fails, or an agent needs a login from you.",
+      "test": "Test",
+      "testBody": "Notifications are working. You'll hear from your agents here.",
+      "testSent": "Test notification sent",
+      "testHint": "If nothing appeared, check your OS notification permissions."
+    }
+  }
+}
