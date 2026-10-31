@@ -12,6 +12,7 @@ import {
   discardPrivateChat,
   discardPrivateChats,
   getConversation,
+  getConversationSummary,
   listConversations,
   listMessagePage,
   safeFileName,
@@ -214,6 +215,23 @@ describe("HTTP routes", () => {
     const page = (await (await api("GET", `/api/conversations/${conv.id}/messages?before=${shot.id}&limit=5`)).json()) as MessagePage;
     expect(page).toEqual({ messages: [expect.objectContaining({ id: first.id })], hasMore: false });
     expect((await api("GET", `/api/conversations/${conv.id}/messages?before=msg_missing`)).status).toBe(404);
+  });
+
+  test("Haiku names a new chat in the background unless it has a title of its own", async () => {
+    await ensureDefaultAgent();
+    const named = (await (await api("POST", "/api/chat", { content: "NAME_CHAT please sort my invoices" })).json()) as StartChatResult;
+    expect(named.conversation.title).toBe("NAME_CHAT please sort my invoices");
+    await until(() => getConversationSummary(named.conversation.id).title === "Named by Haiku", 10_000, "the generated title");
+    await waitForRun(named.run.id, 20_000);
+    expect(getConversationSummary(named.conversation.id).title).toBe("Named by Haiku");
+
+    const renamed = await startChat({ content: "NAME_CHAT later", title: "My own title" });
+    await waitForRun(renamed.run.id, 20_000);
+    expect(getConversationSummary(renamed.conversation.id).title).toBe("My own title");
+
+    const plain = (await (await api("POST", "/api/chat", { content: "Plan my month" })).json()) as StartChatResult;
+    await waitForRun(plain.run.id, 20_000);
+    expect(getConversationSummary(plain.conversation.id).title).toBe("Plan my month");
   });
 
   test("chat lifecycle over HTTP", async () => {
