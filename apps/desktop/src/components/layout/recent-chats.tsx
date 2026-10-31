@@ -107,7 +107,7 @@ export function RecentChats() {
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <div className="flex items-center justify-between gap-2">
-        <NavSectionHeader label="Recent" open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} quiet />
+        <NavSectionHeader label="Recent" open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} />
         {!open && (counts.running > 0 || needsYou > 0) && (
           <span className="mr-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
             {needsYou > 0 && (
