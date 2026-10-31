@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from "react";
-import { Navigate, NavLink, useParams } from "react-router";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Navigate, NavLink, useLocation, useNavigate, type To } from "react-router";
+import searchIndex from "virtual:settings-search";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
@@ -26,6 +27,7 @@ import {
   Plug,
   Puzzle,
   RefreshCw,
+  Search,
   ScrollText,
   Server,
   Settings2,
@@ -34,8 +36,9 @@ import {
   Smartphone,
   Sparkles,
   SquareTerminal,
+  X,
 } from "lucide-react";
-import { EmptyState, PageBody, PageHeader } from "@/components/common";
+import { EmptyState } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
 import { ActivitySection } from "@/components/settings/activity-section";
 import { AiSection } from "@/components/settings/ai-section";
@@ -69,6 +72,7 @@ import { SystemSection } from "@/components/settings/system-section";
 import { VmSection } from "@/components/settings/vm-section";
 import { VoiceSection } from "@/components/settings/voice-section";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/api";
 import { useBootstrap, useSettings } from "@/lib/hooks";
@@ -145,14 +149,83 @@ const EASY_ADVANCED_LABEL: Partial<Record<SectionId, string>> = {
 /** Sections that render without the settings document (they use their own endpoints). */
 const STANDALONE: SectionId[] = ["files", "api-keys", "backup", "devices", "connect", "cloud", "license", "billing", "system", "cleanup", "about"];
 
-export default function SettingsPage() {
-  const { section } = useParams();
-  const settings = useSettings();
-  const { data: boot } = useBootstrap();
+export default function SettingsDialog({ closeTo }: { closeTo: To }) {
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const [query, setQuery] = useState("");
+  const [focusLabel, setFocusLabel] = useState<string | null>(null);
+  const section = pathname.split("/")[2];
 
   if (!SECTIONS.some((s) => s.id === section)) return <Navigate to="/settings/general" replace />;
   const active = section as SectionId;
+
+  const open = (id: SectionId, label: string | null = null) => {
+    setFocusLabel(label);
+    if (id !== active) navigate(`/settings/${id}`, { replace: true });
+  };
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && navigate(closeTo)}>
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          document.getElementById("settings-search")?.focus();
+        }}
+        onEscapeKeyDown={(e) => {
+          if (!query) return;
+          e.preventDefault();
+          setQuery("");
+        }}
+        className="@container flex h-[min(860px,calc(100vh-3rem))] w-[min(1180px,calc(100vw-3rem))] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none"
+      >
+        <header className="flex shrink-0 items-center justify-between border-b px-5 py-3">
+          <DialogTitle className="text-[15px] font-medium tracking-[-0.01em]">Settings</DialogTitle>
+          <DialogDescription className="sr-only">Tune how your AI coworkers think, browse, speak and keep your secrets.</DialogDescription>
+          <Button variant="ghost" size="icon" className="size-8" aria-label="Close settings" onClick={() => navigate(closeTo)}>
+            <X />
+          </Button>
+        </header>
+        <div className="flex min-h-0 flex-1 flex-col @4xl:flex-row">
+          <aside className="flex shrink-0 flex-col gap-3 border-b px-4 pt-4 pb-2 @4xl:w-64 @4xl:overflow-y-auto @4xl:border-r @4xl:border-b-0 @4xl:pb-4">
+            <SettingsSearch query={query} onQuery={setQuery} onPick={open} />
+            {query.trim() ? <SearchResults query={query} active={active} onPick={open} /> : <SectionNav active={active} />}
+          </aside>
+          <SectionContent active={active} focusLabel={focusLabel} onFocused={() => setFocusLabel(null)} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; focusLabel: string | null; onFocused: () => void }) {
+  const settings = useSettings();
+  const { data: boot } = useBootstrap();
+  const scroller = useRef<HTMLDivElement>(null);
   const needsSettings = !STANDALONE.includes(active);
+
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [active]);
+
+  useEffect(() => {
+    if (!focusLabel) return;
+    const started = performance.now();
+    let timer = 0;
+    const find = () => {
+      const target = [...(scroller.current?.querySelectorAll(`[data-section="${active}"] :is(label, h2, h3)`) ?? [])].find((el) => el.textContent?.trim() === focusLabel);
+      if (target) {
+        const row = target.closest<HTMLElement>("[data-slot=setting-row], [data-slot=settings-group]") ?? (target as HTMLElement);
+        row.scrollIntoView({ block: "center", behavior: "smooth" });
+        row.animate([{ backgroundColor: "color-mix(in oklab, var(--brand) 14%, transparent)" }, { backgroundColor: "transparent" }], { duration: 1800, easing: "ease-out" });
+        onFocused();
+      } else if (performance.now() - started < 3000) timer = window.setTimeout(find, 100);
+      else onFocused();
+    };
+    find();
+    return () => window.clearTimeout(timer);
+  }, [focusLabel, active, onFocused]);
 
   let content: ReactNode;
   if (needsSettings && settings.isLoading) content = <SectionSkeleton />;
@@ -207,27 +280,107 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="@container relative min-h-full">
-      <PageHeader icon={<Settings2 />} title="Settings" description="Tune how your AI coworkers think, browse, speak and keep your secrets." />
-      <PageBody>
-        <div className="flex flex-col gap-6 @4xl:flex-row @4xl:items-start @4xl:gap-10">
-          <SectionNav active={active} />
-          <div className="min-w-0 flex-1 @4xl:max-w-3xl">
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.div
-                key={active}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.18, ease: "easeOut" }}
-              >
-                {content}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
-      </PageBody>
+    <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-6 @4xl:px-10">
+      <div className="mx-auto max-w-3xl">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={active}
+            data-section={active}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+          >
+            {content}
+          </motion.div>
+        </AnimatePresence>
+      </div>
     </div>
+  );
+}
+
+const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+type Hit = { id: SectionId; label: string; icon: ReactNode; settings: string[] };
+
+function useLabels(): Record<SectionId, string> {
+  const easy = useEasyMode();
+  return Object.fromEntries(SECTIONS.map((s) => [s.id, easy ? (EASY[s.id]?.label ?? EASY_ADVANCED_LABEL[s.id] ?? s.label) : s.label])) as Record<SectionId, string>;
+}
+
+function useSearch(query: string): Hit[] {
+  const labels = useLabels();
+  return useMemo(() => {
+    const words = fold(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const matches = (text: string) => {
+      const folded = fold(text);
+      return words.every((w) => folded.includes(w));
+    };
+    return SECTIONS.flatMap((s) => {
+      const entry = searchIndex[s.id] ?? { labels: [], text: "" };
+      const settings = entry.labels.filter((l) => l !== labels[s.id] && matches(l));
+      const hit = matches(labels[s.id]) || matches(s.label) || settings.length > 0 || matches(entry.text);
+      return hit ? [{ id: s.id, label: labels[s.id], icon: s.icon, settings: settings.slice(0, 5) }] : [];
+    }).sort((a, b) => Number(matches(b.label)) - Number(matches(a.label)) || b.settings.length - a.settings.length);
+  }, [query, labels]);
+}
+
+function SettingsSearch({ query, onQuery, onPick }: { query: string; onQuery: (q: string) => void; onPick: (id: SectionId, label: string | null) => void }) {
+  const hits = useSearch(query);
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter" || !hits[0]) return;
+    e.preventDefault();
+    onPick(hits[0].id, hits[0].settings[0] ?? null);
+  };
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        id="settings-search"
+        type="search"
+        value={query}
+        onChange={(e) => onQuery(e.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder="Search settings"
+        aria-label="Search settings"
+        className="h-9 w-full rounded-lg border bg-secondary pr-3 pl-8.5 text-[13.5px] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-search-cancel-button]:hidden"
+      />
+    </div>
+  );
+}
+
+function SearchResults({ query, active, onPick }: { query: string; active: SectionId; onPick: (id: SectionId, label: string | null) => void }) {
+  const hits = useSearch(query);
+  if (!hits.length) return <p className="px-3 py-2 text-[13px] text-muted-foreground">No settings match “{query.trim()}”.</p>;
+  return (
+    <nav aria-label="Matching settings" className="flex max-h-48 flex-col gap-0.5 overflow-y-auto @4xl:max-h-none @4xl:overflow-visible">
+      {hits.map((hit) => (
+        <div key={hit.id} className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => onPick(hit.id, null)}
+            className={cn(
+              "flex h-8 items-center gap-2.5 rounded-md px-3 text-left text-[13.5px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-4 [&_svg]:shrink-0",
+              hit.id === active ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent hover:text-foreground",
+            )}
+          >
+            {hit.icon}
+            <span className="truncate">{hit.label}</span>
+          </button>
+          {hit.settings.map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => onPick(hit.id, label)}
+              className="ml-9 truncate rounded-md px-2 py-1 text-left text-[12.5px] text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ))}
+    </nav>
   );
 }
 
@@ -300,6 +453,7 @@ function SectionList({ active, entries, marks, footer }: { active: SectionId; en
             )}
             <NavLink
               to={`/settings/${s.id}`}
+              replace
               aria-current={isActive ? "page" : undefined}
               className={cn(
                 "relative flex h-8 shrink-0 items-center gap-2.5 rounded-md px-3 text-[13.5px] whitespace-nowrap outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
