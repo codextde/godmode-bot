@@ -60,7 +60,7 @@ export function ClaudeUpdateButton() {
           >
             <span className="relative grid size-7 shrink-0 place-items-center rounded-md border bg-paper-2 text-foreground/80">
               <SquareTerminal className="size-3.5" />
-              {!pending && <LiveDot className="absolute -top-0.5 -right-0.5 size-1.5" />}
+              {!pending && <LiveDot live={false} className="absolute -top-0.5 -right-0.5 size-1.5 bg-brand" />}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
               <p className="text-[12.5px] font-medium">Claude Code</p>
@@ -114,7 +114,7 @@ export function ClaudeUpdateButton() {
                   aria-label={`Update Claude Code to ${latest}`}
                 >
                   {pending ? <Spinner /> : <SquareTerminal />}
-                  {!pending && <LiveDot className="absolute top-1 right-1" />}
+                  {!pending && <LiveDot live={false} className="absolute top-1 right-1 bg-brand" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right">{pending ? `Installing Claude Code ${latest}…` : `Update Claude Code to ${latest}`}</TooltipContent>
