@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
-import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail } from "lucide-react";
+import { ArrowRight, BedDouble, Bell, CalendarClock, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Backdrop } from "@/components/brand";
@@ -110,6 +110,8 @@ export default function ChatHome() {
   const { data: agents = [], isLoading: agentsLoading } = useAllAgents();
   const markVoiceRun = useVoiceSession((s) => s.markVoiceRun);
   const voiceMode = useUi((s) => s.voiceMode);
+  const hideSuggestions = useUi((s) => s.hideSuggestions);
+  const setHideSuggestions = useUi((s) => s.setHideSuggestions);
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
   const [agentId, setAgentId, agentDraft] = useDraft<string | null>(`${SETUP_DRAFT}agent`, null);
@@ -345,8 +347,23 @@ export default function ChatHome() {
         </motion.div>
 
         {privateChat ? null : easy ? (
+          hideSuggestions ? null : (
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
-            <h2 className="eyebrow mb-2.5 px-0.5">Try something like</h2>
+            <div className="mb-2.5 flex items-center justify-between px-0.5">
+              <h2 className="eyebrow">Try something like</h2>
+              <button
+                type="button"
+                aria-label="Hide suggestions"
+                title="Hide suggestions"
+                onClick={() => {
+                  setHideSuggestions(true);
+                  toast("Suggestions hidden", { action: { label: "Undo", onClick: () => setHideSuggestions(false) } });
+                }}
+                className="-my-1 grid size-6 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
             <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-3">
               {EASY_SUGGESTIONS.map(({ icon: Icon, text, prompt }) => (
                 <button
@@ -363,6 +380,7 @@ export default function ChatHome() {
               ))}
             </div>
           </motion.div>
+          )
         ) : (
           <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
             {SUGGESTIONS.map(({ icon: Icon, text }) => (
