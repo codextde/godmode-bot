@@ -5,7 +5,7 @@
  *    failed for a reason another try may get past, one that never started — in the ticket's own conversation, with
  *    what changed since it last worked on it;
  *  - runs its standing checklist in the agent's heartbeat chat, with the board and the changes since the last beat;
- *  - records what it did. A beat with nothing to do is quiet: no run, no cost.
+ *  - records what it did. A beat with nothing to do is quiet: no run.
  * Beats due while Godmode was off happen once it is back (one, not one per missed interval).
  */
 import type { AgentHeartbeatState, HeartbeatBeat, HeartbeatOutcome, HeartbeatWake, HeartbeatWakeReason, Run, RunUsage, Task, TaskEvent } from "@godmode/shared";
@@ -37,7 +37,6 @@ import { describeNow, retryContext, retryWhy } from "../runner/prompt";
 import { listTaskEvents, listTasks, wakeTask } from "../tasks/service";
 import { listWatchdogEvents } from "../runner/watchdog";
 import { licenseBlocks } from "../license/license";
-import { exhaustedBudget } from "./budgets";
 import { createConversation, sendMessage, setConversationState } from "./conversations";
 import { pauseOf } from "./pauses";
 import { getSettings } from "./settings";
@@ -70,10 +69,9 @@ interface BeatRow {
   run_status: string | null;
   run_result: string | null;
   run_error: string | null;
-  run_cost: number | null;
 }
 
-const SELECT = `SELECT h.*, r.status AS run_status, r.result AS run_result, r.error AS run_error, r.cost_usd AS run_cost
+const SELECT = `SELECT h.*, r.status AS run_status, r.result AS run_result, r.error AS run_error
   FROM heartbeats h LEFT JOIN runs r ON r.id = h.run_id`;
 
 function toBeat(r: BeatRow): HeartbeatBeat {
@@ -91,7 +89,6 @@ function toBeat(r: BeatRow): HeartbeatBeat {
     conversationId: r.conversation_id,
     runStatus: r.run_status,
     result: answer ? answer.slice(0, 1200) : null,
-    costUsd: r.run_cost,
     createdAt: r.created_at,
   };
 }
@@ -125,7 +122,7 @@ function waitsOnHuman(t: Task): boolean {
 function retryable(t: Task): boolean {
   if (t.status !== "blocked" || (t.blockedKind !== "failed" && t.blockedKind !== "interrupted")) return false;
   const end = runEndOf(t.blockedReason ?? "");
-  return retryHelps(end) && !needsFix(end) && end?.kind !== "budget";
+  return retryHelps(end) && !needsFix(end);
 }
 
 function since(t: Task, at: number): number {
@@ -272,7 +269,7 @@ Work through the checklist now. End with a short report for ${human}: what you d
 
 const beating = new Set<string>();
 
-function record(agentId: string, b: Omit<BeatRow, "id" | "agent_id" | "created_at" | "retried" | "run_status" | "run_result" | "run_error" | "run_cost">): HeartbeatBeat {
+function record(agentId: string, b: Omit<BeatRow, "id" | "agent_id" | "created_at" | "retried" | "run_status" | "run_result" | "run_error">): HeartbeatBeat {
   const id = newId("hbt");
   insert("heartbeats", { id, agent_id: agentId, ...b, retried: 0, created_at: now() });
   bus.changed("heartbeats");
@@ -309,7 +306,6 @@ async function beatOnce(agentId: string, reason: "scheduled" | "now"): Promise<H
   const skip = (summary: string) => record(agentId, { reason, outcome: "skipped", summary, wakes: "[]", waiting: "[]", changes: 0, run_id: null, conversation_id: null });
   if (!agent.enabled) return skip(`${agent.name} is switched off`);
   if (licenseBlocks()) return skip("Godmode needs an active licence to start work");
-  if (reason === "scheduled" && exhaustedBudget(agent)) return skip("A monthly budget is used up");
 
   const tickets = agentTickets(agentId).sort(byUrgency);
   const changes = tickets
@@ -355,7 +351,6 @@ async function beatOnce(agentId: string, reason: "scheduled" | "now"): Promise<H
           prompt: checklistPrompt({ interval: hb.intervalMinutes, checklist: hb.checklist, tickets, changes, lastBeat, woke }),
           trigger: "heartbeat",
           source: "automation",
-          byHuman: reason === "now",
         });
         runId = run.id;
         checklist = "ran";

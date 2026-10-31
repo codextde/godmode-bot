@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Activity, ArrowRight, Coins, Gauge, Pencil, Timer } from "lucide-react";
+import { Activity, ArrowRight, Gauge, Pencil, Timer } from "lucide-react";
 import type { Agent, Run } from "@godmode/shared";
 import { useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
@@ -10,26 +10,23 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RunRow } from "@/components/runs/run-row";
 import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
-import { formatCost, formatDuration } from "@/components/runs/run-status";
+import { formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
-import { useBootstrap, useBudgets, useSpendTracking } from "@/lib/hooks";
+import { useBootstrap } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
-import { BudgetMeter } from "@/components/budgets/budget-meter";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
   const runsQ = useRuns(agent.id);
   const [selected, setSelected] = useState<Run | null>(null);
   const [runTask, setRunTask] = useState(false);
   const easy = useEasyMode();
-  const spendTracking = useSpendTracking();
   const activityOn = useBootstrap().data?.settings.activity.enabled !== false;
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
     const succeeded = runs.filter((r) => r.status === "succeeded").length;
     const failed = runs.filter((r) => r.status === "failed").length;
-    const cost = runs.reduce((s, r) => s + (r.costUsd ?? 0), 0);
     const durations = runs.map((r) => r.durationMs).filter((d): d is number => d != null && d > 0);
     const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
     // Runs per day over the last 14 days
@@ -47,7 +44,6 @@ export function OverviewTab({ agent }: { agent: Agent }) {
       total: runs.length,
       successRate: succeeded + failed > 0 ? succeeded / (succeeded + failed) : null,
       failed,
-      cost,
       avg,
       buckets,
     };
@@ -56,10 +52,9 @@ export function OverviewTab({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-6">
       <Plate agent={agent} onRunTask={() => setRunTask(true)} />
-      <AgentBudget agent={agent} />
       <RunTaskDialog agent={agent} open={runTask} onOpenChange={setRunTask} />
 
-      <div className={cn("grid gap-3", spendTracking ? "grid-cols-2 @4xl:grid-cols-4" : "grid-cols-3")}>
+      <div className="grid grid-cols-3 gap-3">
         <Kpi
           icon={<Activity />}
           label={easy ? (runs.length >= 200 ? "Jobs (last 200)" : "Jobs done") : runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
@@ -73,7 +68,6 @@ export function OverviewTab({ agent }: { agent: Agent }) {
           hint={stats.failed ? `${stats.failed} failed` : undefined}
           tone={stats.successRate != null && stats.successRate < 0.8 ? "warn" : undefined}
         />
-        {spendTracking && <Kpi icon={<Coins />} label="Total cost" value={runsQ.isLoading ? null : formatCost(stats.cost)} />}
         <Kpi icon={<Timer />} label={easy ? "Average time" : "Avg duration"} value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
       </div>
 
@@ -185,31 +179,5 @@ function Sparkbars({ values }: { values: number[] }) {
         />
       ))}
     </div>
-  );
-}
-
-/** The agent's monthly budget (only when it has one, or the team's is used up). */
-function AgentBudget({ agent }: { agent: Agent }) {
-  const { data } = useBudgets();
-  if (!data) return null;
-  const own = data.agents.find((b) => b.agentId === agent.id);
-  const teamOut = data.team.state === "exhausted";
-  if (!own?.budgetUsd && !teamOut) return null;
-  return (
-    <section aria-label="Budget" className="rounded-xl border bg-card p-4 shadow-card">
-      <h2 className="mb-2 text-sm font-medium tracking-[-0.01em]">Budget</h2>
-      {own?.budgetUsd ? (
-        <BudgetMeter status={own} resetsAt={data.resetsAt} whose={`${agent.name}'s`} setLink={`/agents/${agent.id}/settings#permissions`} release={{ scope: "agent", agentId: agent.id }} />
-      ) : null}
-      {teamOut && (
-        <p className={cn("text-[13px] text-muted-foreground", own?.budgetUsd && "mt-2")}>
-          The team's budget for this month is used up too —{" "}
-          <Link to="/settings/ai" className="underline-offset-2 hover:text-foreground hover:underline">
-            see Settings
-          </Link>
-          .
-        </p>
-      )}
-    </section>
   );
 }

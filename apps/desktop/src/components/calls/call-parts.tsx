@@ -74,3 +74,12 @@ export function formatCallTime(secs: number | null | undefined): string {
   const rest = String(s % 60).padStart(2, "0");
   return h ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
 }
+
+/** What the telephony provider charged for a call. */
+export function formatCallCost(usd: number | null | undefined): string {
+  if (usd == null || !Number.isFinite(usd)) return "—";
+  if (usd === 0) return "$0";
+  if (usd < 0.01) return "<$0.01";
+  if (usd < 10) return `$${usd.toFixed(2)}`;
+  return `$${usd.toFixed(0)}`;
+}

@@ -9,7 +9,6 @@ import {
   CalendarClock,
   ChevronRight,
   CircleStop,
-  Coins,
   Cpu,
   Hash,
   MessageSquare,
@@ -24,7 +23,7 @@ import {
 import type { Run } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAgent, useQuestions, useSpendTracking } from "@/lib/hooks";
+import { useAgent, useQuestions } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
@@ -35,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { formatCost, formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
+import { formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
 import { RunRow, useRunLiveState } from "./run-row";
 import { RunLogViewer } from "./run-log-viewer";
 
@@ -122,7 +121,6 @@ function RunDetail({ runId, placeholder, onOpenRun }: { runId: string; placehold
 
 function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) => void }) {
   const modelLabel = useModelLabel();
-  const spendTracking = useSpendTracking();
   const { data: agent } = useAgent(run.agentId);
   const { live, status, running, elapsed } = useRunLiveState(run);
   const cancel = useCancelRun();
@@ -212,7 +210,6 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Stat icon={<Timer />} label="Duration" value={elapsed != null ? formatElapsed(elapsed) : formatDuration(run.durationMs)} />
-          {spendTracking && <Stat icon={<Coins />} label="Cost" value={formatCost(run.costUsd)} />}
           <Stat icon={<Repeat />} label="Turns" value={run.numTurns != null ? String(run.numTurns) : "—"} />
           <Stat icon={<Cpu />} label="Model" value={modelLabel(run.model)} />
           <Stat
@@ -226,7 +223,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
             label="Started"
             value={run.startedAt ? format(new Date(run.startedAt), "p") : "—"}
             hint={run.startedAt ? format(new Date(run.startedAt), "PP") : undefined}
-            className={spendTracking ? undefined : "col-span-2"}
+            className="col-span-2"
           />
         </div>
 

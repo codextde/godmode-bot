@@ -451,7 +451,7 @@ async function primaryArrived(id: string): Promise<void> {
 }
 
 /**
- * On a secondary: work for `primary` doesn't go on by itself later (a usage limit or budget that resets, a follow-up)
+ * On a secondary: work for `primary` doesn't go on by itself later (a usage limit that resets, a follow-up)
  * in chats it took over from there, or in automations it started while standing in since `since`. The primary is back
  * and does its own work again; days later it would only be repeated. What waits for the human stays.
  */
@@ -462,14 +462,14 @@ export async function stopWaitingWork(primary: string, name: string, since: stri
     since
       ? all<{ run_id: string }>(
           `SELECT p.run_id FROM paused_runs p JOIN runs r ON r.id = p.run_id
-             WHERE p.reason IN ('limit', 'budget') AND r.trigger IN ('routine', 'heartbeat', 'check', 'dream', 'followup') AND r.created_at >= ?`,
+             WHERE p.reason = 'limit' AND r.trigger IN ('routine', 'heartbeat', 'check', 'dream', 'followup') AND r.created_at >= ?`,
           since,
         ).map((r) => r.run_id)
       : [],
   );
   for (const id of taken) {
     const paused = pauseOf(id);
-    if (paused && (paused.reason === "limit" || paused.reason === "budget")) runs.add(paused.run_id);
+    if (paused?.reason === "limit") runs.add(paused.run_id);
   }
   let stopped = 0;
   for (const runId of runs) {

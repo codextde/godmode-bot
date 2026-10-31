@@ -8,10 +8,8 @@ import { Markdown } from "./markdown";
 import { formatDuration, formatTokens } from "./run-row";
 import { Badge, Button, LiveDot, Row, Skeleton, T, tap } from "./ui";
 import { ApiError, api, errorText } from "@/lib/api";
-import { formatCost } from "@/lib/desktop-parity";
 import { toolLabel } from "@/lib/format";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
 type Json = Record<string, unknown>;
@@ -28,7 +26,6 @@ export type LogEntry =
       subtype: string;
       isError: boolean;
       durationMs: number | null;
-      costUsd: number | null;
       numTurns: number | null;
       tokensIn: number | null;
       tokensOut: number | null;
@@ -109,7 +106,6 @@ export function parseRunLog(text: string): LogEntry[] {
         subtype: str(ev.subtype) || str(ev.stop_reason) || "done",
         isError: !!ev.is_error,
         durationMs: num(ev.duration_ms),
-        costUsd: num(ev.total_cost_usd),
         numTurns: num(ev.num_turns),
         tokensIn: num(usage.input_tokens),
         tokensOut: num(usage.output_tokens),
@@ -149,7 +145,6 @@ type Tools = Map<string, { name: string; input: unknown }>;
 /** A run's stream-json log as readable steps (or raw), newest at the bottom; refreshes every few seconds while `live`. */
 export function RunLog({ runId, live = false }: { runId: string; live?: boolean }) {
   const c = useColors();
-  const spendTracking = useSpendTracking();
   const [mode, setMode] = useState<"steps" | "raw">("steps");
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
@@ -232,7 +227,7 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
       ) : (
         <View style={[styles.steps, { borderColor: c.border }]}>
           {visible.slice(0, limit).map(({ entry, at }) => (
-            <LogRow key={at} entry={entry} tools={tools} spendTracking={spendTracking} />
+            <LogRow key={at} entry={entry} tools={tools} />
           ))}
         </View>
       )}
@@ -247,7 +242,7 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
   );
 }
 
-const LogRow = memo(function LogRow({ entry, tools, spendTracking }: { entry: LogEntry; tools: Tools; spendTracking: boolean }) {
+const LogRow = memo(function LogRow({ entry, tools }: { entry: LogEntry; tools: Tools }) {
   const c = useColors();
   switch (entry.kind) {
     case "init":
@@ -308,7 +303,6 @@ const LogRow = memo(function LogRow({ entry, tools, spendTracking }: { entry: Lo
         >
           <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
             {formatDuration(entry.durationMs)}
-            {spendTracking && entry.costUsd != null ? ` · ${formatCost(entry.costUsd)}` : ""}
             {entry.numTurns != null ? ` · ${entry.numTurns} turns` : ""}
             {entry.tokensIn != null ? ` · ${formatTokens(entry.tokensIn)} in / ${formatTokens(entry.tokensOut)} out` : ""}
           </T>

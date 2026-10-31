@@ -333,7 +333,7 @@ describe("lid-closed mode", () => {
     expect(existsSync(marker())).toBe(false);
   });
 
-  test("paused by hand or held by a budget: the Mac may sleep; a short usage limit keeps it awake", async () => {
+  test("paused by hand: the Mac may sleep; a short usage limit keeps it awake", async () => {
     mac.rule = true;
     setPowerDeps({ platform: "darwin", exec, user: "alex", pollMs: 60_000, idleGraceMs: 40 });
     await startPower();
@@ -353,7 +353,6 @@ describe("lid-closed mode", () => {
     await sleep(150);
     expect(mac.sleepDisabled).toBe(true);
     runEvent("run.finished", "run_limit");
-    pause("run_budget", "budget", new Date(Date.now() + 20 * 86_400_000).toISOString());
     pause("run_user", "user", null);
     await sleep(150);
     expect(mac.sleepDisabled).toBe(false);

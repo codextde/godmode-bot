@@ -8,7 +8,6 @@ import { BellRing, ChevronDown, HeartPulse, Hourglass, ListChecks, Repeat2, Rota
 import {
   HEARTBEAT_INTERVALS,
   MAX_HEARTBEAT_CHECKLIST_LENGTH,
-  formatUsd,
   heartbeatIntervalLabel,
   heartbeatIntervalText,
   normalizeHeartbeat,
@@ -24,7 +23,7 @@ import {
 } from "@godmode/shared";
 import { api, errorMessage, isLicenseRequired } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useSettings, useSpendTracking } from "@/lib/hooks";
+import { useSettings } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { Markdown } from "@/components/chat/markdown";
@@ -352,7 +351,7 @@ function Rhythm({ hb, save }: { hb: AgentHeartbeat; save: SaveHeartbeat }) {
         stacked
         label="Every beat, also…"
         htmlFor="hb-checklist"
-        description="Standing duties it runs in its Heartbeat chat. Leave empty and it only looks after its tickets — quiet beats cost nothing."
+        description="Standing duties it runs in its Heartbeat chat. Leave empty and it only looks after its tickets — quiet beats start no run."
       >
         <ChecklistField value={hb.checklist} save={save} />
       </SettingRow>
@@ -613,7 +612,6 @@ const RUN_STATE: Record<string, { label: string; className?: string }> = {
 
 function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
   const [open, setOpen] = useState(false);
-  const spendTracking = useSpendTracking();
   const state = b.runStatus && b.runStatus !== "succeeded" ? RUN_STATE[b.runStatus] : undefined;
   const running = b.runStatus === "running" || b.runStatus === "queued";
   const long = !!b.result && (b.result.length > 180 || b.result.includes("\n"));
@@ -625,7 +623,6 @@ function ChecklistResult({ beat: b }: { beat: HeartbeatBeat }) {
         <span className="font-medium text-foreground/80">Checklist</span>
         {state && <span className={state.className}>{state.label}</span>}
         <span className="ml-auto flex items-center gap-3">
-          {spendTracking && b.costUsd != null && b.costUsd > 0 && <span className="tabular-nums">{formatUsd(b.costUsd)}</span>}
           {b.conversationId && (
             <Link to={`/chat/${b.conversationId}`} className="font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline">
               {running ? "Watch" : "Open chat"}

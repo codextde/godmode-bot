@@ -77,7 +77,7 @@ WHERE key = 'android' AND json_valid(value) AND json_type(value, '$.enabled') IS
 /**
  * Plugins, cards, SSH servers and virtual machines are off for new installs too. An install that already has one set
  * up keeps it on: a plugin, a saved card, an SSH server, a VM (VMs were on by default). Idempotent, like
- * FEATURE_SWITCHES_SQL; also run after a restore. Migration 108 embeds it.
+ * FEATURE_SWITCHES_SQL; also run after a restore. Migration 109 embeds it.
  */
 export const MODULE_SWITCHES_SQL = /* sql */ `
 INSERT OR IGNORE INTO settings (key, value) SELECT 'plugins', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM mods);
@@ -108,6 +108,21 @@ UPDATE settings SET value = json_set(value, '$.spendTracking', json(CASE
         AND (json_extract(permissions, '$.monthlyBudgetUsd') > 0 OR json_extract(permissions, '$.maxBudgetUsd') > 0))
     THEN 'true' ELSE 'false' END))
 WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.spendTracking') IS NULL;
+`;
+
+/**
+ * Godmode runs on a Claude subscription, so the costs Claude Code reports are no charges: spend tracking and budgets are
+ * gone. Their settings go, and work a budget held continues by itself (the pause sweep picks it up at startup; after a
+ * restore it waits for the human like every other pause). Idempotent; also run after a restore. Migration 109 embeds it.
+ */
+export const REMOVE_COSTS_SQL = /* sql */ `
+UPDATE settings SET value = json_remove(value, '$.spendTracking', '$.defaultMaxBudgetUsd', '$.monthlyBudgetUsd')
+WHERE key = 'runner' AND json_valid(value);
+UPDATE agents SET permissions = json_remove(permissions, '$.maxBudgetUsd', '$.monthlyBudgetUsd') WHERE json_valid(permissions);
+UPDATE paused_runs SET reason = 'user', budget_scope = NULL, budget_usd = NULL, exempt = 0, resume_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  auto = CASE WHEN agent_id IN (SELECT id FROM agents WHERE enabled = 1) THEN 1 ELSE 0 END
+WHERE reason = 'budget';
+DELETE FROM meta WHERE key LIKE 'budget.told.%';
 `;
 
 export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
@@ -1783,5 +1798,10 @@ CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
     id: 108,
     name: "module_switches",
     sql: MODULE_SWITCHES_SQL,
+  },
+  {
+    id: 109,
+    name: "remove_costs",
+    sql: REMOVE_COSTS_SQL,
   },
 ];

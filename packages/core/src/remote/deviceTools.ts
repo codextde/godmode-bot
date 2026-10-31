@@ -49,7 +49,6 @@ export const SHARED_TOOLS: ReadonlySet<string> = new Set([
   "task_get",
   "task_message",
   "task_note",
-  "spend_overview",
   "runs_list",
   "run_cancel",
   "workspaces_list",

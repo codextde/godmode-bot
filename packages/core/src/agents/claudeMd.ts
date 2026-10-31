@@ -12,8 +12,6 @@ export interface ClaudeMdContext {
   /** settings.general.userName ("" = unknown) */
   userName: string;
   workspace: { name: string; description: string } | null;
-  /** settings.runner.spendTracking: per-run cost caps apply only with it on. */
-  spendTracking: boolean;
 }
 
 /** Folders of installed packages an agent may create anywhere in its workspace. */
@@ -98,9 +96,6 @@ export function renderClaudeMd(agent: Agent, ctx: ClaudeMdContext): string {
   ];
   if (agent.description.trim()) who.push("", agent.description.trim());
   if (ctx.workspace?.description.trim()) who.push("", `Workspace context: ${ctx.workspace.description.trim()}`);
-  if (ctx.spendTracking && agent.permissions.maxBudgetUsd != null) {
-    who.push("", `Each run is capped at $${agent.permissions.maxBudgetUsd} — work efficiently and prioritize.`);
-  }
   out.push(section("Who you are", who));
 
   const personality = personalityPrompt(agent.personality);

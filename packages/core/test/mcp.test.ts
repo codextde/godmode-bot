@@ -1596,8 +1596,7 @@ describe("settings tools", () => {
     // Every single setting is either on that list or named as the human's, never both.
     const { humanOnly } = settingsOf(await call(tokens[manager.id]!, "settings_get"));
     for (const key of all) expect(agentSettingKeys().includes(key) !== (humanOnly.includes(key) || humanOnly.includes(key.split(".")[0]!))).toBe(true);
-    // Showing costs and applying budgets is the human's call.
-    expect(humanOnly).toContain("runner.spendTracking");
+    expect(all.some((key) => /spendTracking|BudgetUsd/.test(key))).toBe(false);
   });
 
   test("a manager changes models and limits; the change is applied and audited", async () => {

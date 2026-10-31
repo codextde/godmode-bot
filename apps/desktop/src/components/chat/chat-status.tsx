@@ -27,11 +27,9 @@ export function chatStatus(c: ChatState, live: { running?: boolean; queued?: boo
         <span className="truncate">
           {c.paused.reason === "user"
             ? "Paused"
-            : c.paused.reason === "budget"
-              ? "Held — budget used up"
-              : c.paused.auto && c.paused.resumeAt
-                ? `Continues ${followupWhen(c.paused.resumeAt)}`
-                : "Waiting for the limit"}
+            : c.paused.auto && c.paused.resumeAt
+              ? `Continues ${followupWhen(c.paused.resumeAt)}`
+              : "Waiting for the limit"}
         </span>
       </span>
     );
@@ -52,7 +50,6 @@ export function stillAhead(c: ChatState, running: boolean): string | null {
   const p = c.paused;
   if (p?.reason === "question") return p.question?.kind === "approval" ? "still needs your OK" : "still needs your answer";
   if (p?.reason === "user") return "still paused";
-  if (p?.reason === "budget") return "held until the budget has room";
   if (p) return p.auto && p.resumeAt ? `continues ${followupWhen(p.resumeAt)}` : "waits for you after the limit";
   if (running) return "still working";
   return c.followup ? `continues ${followupWhen(c.followup.dueAt)}` : null;

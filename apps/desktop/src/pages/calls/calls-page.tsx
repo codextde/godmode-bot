@@ -7,10 +7,9 @@ import { CircleCheck, CircleX, MessagesSquare, Phone, PhoneIncoming, PhoneOutgoi
 import type { Agent, CallPurpose, PhoneCall } from "@godmode/shared";
 import { isCallActive } from "@godmode/shared";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
-import { CallStatusPill, OwnerCallBadge, callName, formatCallTime } from "@/components/calls/call-parts";
+import { CallStatusPill, OwnerCallBadge, callName, formatCallCost, formatCallTime } from "@/components/calls/call-parts";
 import { NewCallDialog } from "@/components/calls/new-call-dialog";
 import { QueryError } from "@/components/integrations/query-error";
-import { formatCost } from "@/components/runs/run-status";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -249,7 +248,7 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
           </span>
         </Fact>
         <Fact label="Duration">{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : formatCallTime(c.durationSecs)}</Fact>
-        <Fact label="Cost">{formatCost(c.costUsd)}</Fact>
+        <Fact label="Cost">{formatCallCost(c.costUsd)}</Fact>
         <Fact label="Agent">
           {agentName ? (
             <span className="flex min-w-0 items-center gap-1.5">

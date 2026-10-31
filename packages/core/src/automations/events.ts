@@ -395,8 +395,6 @@ export async function dispatch(routineId: string, opts: { byHuman?: boolean } = 
       trigger: "routine",
       routineId,
       source: "automation",
-      // Only the human's test event alone: a batch with real events is the automation's own work.
-      byHuman: opts.byHuman && firstTest === 0,
     });
     setEventStatus(ids, "running", null, run.id);
     // A run that failed right away finished before its events were linked to it (and before run.finished could
@@ -513,7 +511,7 @@ export function buildEventPrompt(routine: Routine, events: AutomationEvent[]): s
 /* ------------------------------------------------------------------ */
 
 /** Send a test event to an app or webhook automation and start it (run is null when it is busy). */
-/** `byHuman`: the human sent it (Run now, Send test event): the run isn't held for a used-up budget. */
+/** `byHuman`: the human sent it (Run now, Send test event): it isn't held for a stand-in. */
 export async function sendTestEvent(routineId: string, payload?: unknown, opts: { byHuman?: boolean } = {}): Promise<{ event: AutomationEvent; run: Run | null }> {
   const routine = getRoutine(routineId);
   if (routine.trigger.type !== "app" && routine.trigger.type !== "webhook") {

@@ -95,7 +95,6 @@ export function pauseLabel(task: Task): string | null {
     const title = task.pause.question?.title ?? "";
     return `${task.pause.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}${title ? `: ${title}` : ""}`;
   }
-  if (task.pause.reason === "budget") return task.pause.budget?.scope === "team" ? "Held — the team's budget is used up" : "Held — its agent's budget is used up";
   return task.pause.reason === "limit" ? `Waiting — Claude's ${task.pause.limit ?? "usage limit"} is reached` : "Paused";
 }
 
@@ -243,10 +242,4 @@ export function formatWork(ms: number): string {
   const m = Math.round(s / 60);
   if (m < 60) return `${m}m`;
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
-
-/** "$0.84", "<$0.01". */
-export function formatCost(usd: number): string {
-  if (usd > 0 && usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
 }

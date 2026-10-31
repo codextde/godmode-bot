@@ -13,12 +13,10 @@ import { formatDuration, formatElapsed, formatTokens, openRun, RunStatusBadge, T
 import { Badge, Button, Card, EmptyState, ErrorState, Hairline, LiveDot, LoadingState, Row, Skeleton, T, tap } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { useModelCatalog } from "@/lib/composer";
-import { formatCost } from "@/lib/desktop-parity";
 import { activityText } from "@/lib/format";
 import { useAgents, useNow } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
 const TRIGGER_ICON: Record<RunTrigger, IconName> = {
@@ -85,7 +83,6 @@ function RunDetail({ run }: { run: Run }) {
   const status = live?.run.status ?? run.status;
   const running = status === "running";
   const cancellable = running || status === "queued" || status === "paused";
-  const spendTracking = useSpendTracking();
   const catalog = useModelCatalog();
   const modelLabel = run.model ? (findModel(catalog.data?.models ?? [], run.model)?.label ?? run.model) : "Default";
   // A paused run may wait for the human's answer: that, not Continue, is the way on.
@@ -160,7 +157,6 @@ function RunDetail({ run }: { run: Run }) {
 
       <Card style={styles.facts}>
         <Fact label="Duration" value={running && run.startedAt ? <Elapsed since={run.startedAt} /> : formatDuration(run.durationMs)} />
-        {spendTracking ? <Fact label="Cost" value={run.costUsd != null ? formatCost(run.costUsd) : "—"} /> : null}
         <Fact label="Turns" value={run.numTurns != null ? String(run.numTurns) : "—"} />
         <Fact label="Model" value={modelLabel} />
         <Fact
