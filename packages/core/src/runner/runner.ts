@@ -2174,6 +2174,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
               PreToolUse: [{ matcher: "Bash|Write|Edit|MultiEdit", hooks: [hook("pre-tool-use")] }],
               PostToolBatch: [{ hooks: [hook("post-tool-batch")] }],
             },
+            // User settings aren't loaded (--setting-sources): without this Claude Code signs commits and PRs as Claude.
+            attribution: { commit: "", pr: "" },
+            includeCoAuthoredBy: false,
             // Claude Code honours one --settings value: the session's Ultracode and the mods' options go with the hooks.
             ...(ultracode ? { ultracode: true } : {}),
             ...(mods && Object.keys(mods.configs).length ? { pluginConfigs: mods.configs } : {}),
