@@ -10,6 +10,14 @@ pub fn data_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     app.path().home_dir().ok().map(|home| home.join(".godmode"))
 }
 
+pub fn data_dir_before_start() -> Option<PathBuf> {
+    if let Some(home) = std::env::var_os("GODMODE_HOME").filter(|v| !v.is_empty()) {
+        return std::path::absolute(PathBuf::from(home)).ok();
+    }
+    #[allow(deprecated)]
+    std::env::home_dir().map(|home| home.join(".godmode"))
+}
+
 /// Where the core writes `godmode.jsonl` and the shell writes `desktop.log`.
 pub fn logs_dir<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     data_dir(app).map(|dir| dir.join("logs"))

@@ -8,6 +8,7 @@ export const VERSION = "0.2.38";
 export const BUILD = process.env.GODMODE_BUILD || "dev";
 /** A `bun build --compile` binary (release app sidecar, server binary, Docker image), not the sources. */
 export const COMPILED = Bun.main.startsWith("/$bunfs/") || Bun.main.startsWith("B:/~BUN/");
+export const PATCHED = COMPILED && !!process.env.GODMODE_CORE_BUNDLE;
 
 export type RunMode = "desktop" | "server";
 

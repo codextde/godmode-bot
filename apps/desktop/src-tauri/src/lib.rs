@@ -3,6 +3,7 @@
 mod clock;
 mod commands;
 mod core;
+mod ota;
 mod paths;
 mod tray;
 mod updater;
@@ -19,7 +20,7 @@ use tauri::{Manager, RunEvent, Window, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_window_state::StateFlags;
 
-use crate::{core::CoreManager, updater::Updater};
+use crate::{core::CoreManager, ota::Patches, updater::Updater};
 
 /// Passed by the OS login item; the app then starts in the tray instead of opening its window.
 const AUTOSTART_ARG: &str = "--autostart";
@@ -38,6 +39,13 @@ fn set_close_to_tray(state: tauri::State<'_, CloseToTray>, enabled: bool) {
 }
 
 pub fn run() {
+    let mut context = tauri::generate_context!();
+    let patches = Arc::new(Patches::load(
+        paths::data_dir_before_start(),
+        context.package_info().version.to_string(),
+        !cfg!(debug_assertions) && updater::canary_enabled_in(paths::data_dir_before_start()),
+    ));
+    ota::PatchAssets::wrap(&mut context, patches.clone());
     let app = tauri::Builder::default()
         // Must be registered first: a second launch just focuses the running instance.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| tray::show_main_window(app)))
@@ -55,6 +63,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::new(CoreManager::new()))
         .manage(Arc::new(Updater::new()))
+        .manage(patches)
         .manage(CloseToTray(AtomicBool::new(true)))
         .invoke_handler(tauri::generate_handler![
             clock::system_clock,
@@ -91,7 +100,7 @@ pub fn run() {
                 }
             }
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while building Godmode Bot");
 
     app.run(|app, event| match event {

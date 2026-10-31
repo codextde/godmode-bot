@@ -37,7 +37,7 @@ permissions:
 
 concurrency:
   group: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') && 'release-canary' || format('release-{0}', github.event.inputs.tag || github.ref_name) }}
-  cancel-in-progress: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') }}
+  cancel-in-progress: false
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -368,6 +368,9 @@ jobs:
           if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
           gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$feed/assets?name=latest.json" \
             -H "Content-Type: application/json" --input latest.json --jq .browser_download_url
+          gh api "repos/$GITHUB_REPOSITORY/releases/$feed/assets?per_page=100" \
+            --jq '.[] | select(.name | test("^godmode-patch-.*\\.tar\\.gz$|^patch-.*\\.json$")) | .id' |
+            while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"; done
 
       - name: Keep the three newest canaries
         env:

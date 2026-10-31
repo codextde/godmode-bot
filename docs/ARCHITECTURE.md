@@ -220,6 +220,30 @@ ask within the same moment share a request.
 * **Token hand-off**: the desktop shell starts the core with `--token-stdin` and writes the token as the first stdin
   line; the core strips `GODMODE_*` from every child process environment.
 
+## Canary patches
+
+The desktop app updates itself through the Tauri updater (`src-tauri/src/updater.rs`): stable from usegodmode.com,
+canary (Settings → About) from the `canary` GitHub release. Canary builds also take patches when only core or web UI
+code changed since the canary the app runs:
+
+* `canary.yml` compares main with the commit of the canary in the feed. If nothing under the Rust shell, the build
+  scripts, the CI setup or any `package.json` / the lockfile changed (`SHELL_PATHS`), it builds
+  `scripts/build.ts --bundle` (the core as plain JavaScript plus `apps/desktop/dist`) on one Linux runner, signs the
+  tarball with the updater key (version bound into the signature) and puts `godmode-patch-<version>.tar.gz` and
+  `patch-<canary version>.json` on the `canary` release. Otherwise it tags the commit and starts a full release build,
+  which removes the patches once its canary is published. Neither workflow cancels a running build; a newer push only
+  replaces the one waiting.
+* The app looks for `patch-<its own version>.json` once no full update is waiting, downloads and verifies the patch like
+  a full update and unpacks it to `<data>/updates/patch/<app version>/<patch version>`. "Restart to update" writes
+  `current` and relaunches. On start the shell (`src-tauri/src/ota.rs`) serves the window from the patch's `ui/` and
+  starts the sidecar with `GODMODE_CORE_BUNDLE` pointing at its `core/index.js`; the sidecar's entry imports that
+  instead of its own core (it already embeds Bun, and `BUN_BE_BUN` made it a script runner before). Patches only apply
+  with canary on, and only to the app version they were built for: a full update leaves them behind and they are
+  deleted.
+* A patched core that exits before it printed `GODMODE_READY`, or crashes three times, is written to `failed` (never
+  offered again), the window reloads with the built-in UI and the built-in core starts. A patched core sends no
+  program to runners (it would send the unpatched sidecar).
+
 ## Runner
 
 For each user message / routine tick / delegation the runner spawns:
