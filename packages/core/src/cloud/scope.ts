@@ -282,6 +282,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|POST", "/api/goals", A],
   ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
+  ["GET", "/api/github/pull", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
   // Runners: seeing them is fine from anywhere. Copying the setup (logins, 2FA, sessions) to them, updating and
   // removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the

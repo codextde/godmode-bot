@@ -9,6 +9,7 @@ import { ChatTable } from "./chat-table";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
 import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
 import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
+import { PullRequestLink, isPullRequestLink } from "@/components/github/pull-request-link";
 
 /** Fenced code in chat — aicss code block (line numbers + copy), height-capped for long snippets. */
 export function CodeBlock({ lang, code, className }: { lang: string; code: string; className?: string }) {
@@ -48,6 +49,13 @@ const components: Components = {
     if (href && isCoreFile(href)) return <CoreFileLink href={href}>{children}</CoreFileLink>;
     if (href && href.startsWith("/") && !href.startsWith("//")) {
       return <Link to={href}>{children}</Link>;
+    }
+    if (isPullRequestLink(href)) {
+      return (
+        <PullRequestLink {...rest} href={href}>
+          {children}
+        </PullRequestLink>
+      );
     }
     return (
       <a {...rest} href={href} target="_blank" rel="noreferrer noopener">
