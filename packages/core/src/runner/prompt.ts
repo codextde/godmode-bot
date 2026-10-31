@@ -260,7 +260,7 @@ export function buildSystemPrompt(ctx: PromptContext): string {
     : `- Working directory: your own git repository. \`CLAUDE.md\` holds your identity and standing instructions; \`MEMORY.md\` (and \`memory/\`) is your long-term memory — read it at the start of a task when it may be relevant. Put files you produce (downloads, reports, exports) in a topic folder of \`workspace/\`, and throwaway files in \`workspace/tmp/\` (what nobody touched for a week is removed). Files the human attaches are saved under \`workspace/uploads/\`.`;
 
   out.push(`# Godmode runtime
-You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on ${human}'s computer. You work independently: finish tasks end to end, use your tools, and only stop to ask ${human} when a decision genuinely needs them${ctx.asking ? ` (see “Asking ${human}”)` : ""}.
+You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on ${human}'s computer. You work independently: finish tasks end to end, use your tools, and only stop to ask ${human} when a decision genuinely needs them${ctx.asking ? ` (see “Asking ${human}”)` : ""}. Background work still running when your turn ends is stopped: while a subagent or background command you depend on is still working (also a subagent that says it waits on its own background work), don't end your turn — wait for its notification (or watch it with Monitor), and if it stalls, finish the work yourself.
 
 - Current date/time: ${describeNow(ctx.now)}
 - Operating system: ${osName()}${
@@ -850,6 +850,29 @@ export function restartContext(opts: { userName: string; endedAt: string; starte
 ${what}${goesTo ? ` ${goesTo}` : ""}
 Pick the work up exactly where you stopped: don't start over and don't repeat what is already done. A step that was running at that moment may have been cut off, so check what it left behind before you run it again — something that reaches other people or costs money (a message, a post, an order, a payment) must not happen twice.${handoffs}
 Then finish the task and end with your answer${opts.startedBy === "delegation" ? "" : ` for ${human}`}.
+</godmode-continue>`;
+}
+
+/** Background work stopped with the turn: what it was, and the subagent it belonged to. */
+export interface StoppedWork {
+  description: string;
+  subagent: string | null;
+}
+
+/** The note a turn gets that Godmode continues by itself because background work was stopped when the last one ended. */
+export function backgroundContext(opts: { userName: string; endedAt: string; startedBy: RunTrigger; work: StoppedWork[] }): string {
+  const human = opts.userName.trim() || "the user";
+  const quote = (t: string) => {
+    const one = stripNoteTags(t).replace(/\s+/g, " ").trim();
+    return `“${one.length > 120 ? `${one.slice(0, 119)}…` : one}”`;
+  };
+  const shown = opts.work.slice(0, 8);
+  const list = shown.map((w) => `${quote(w.description)}${w.subagent ? ` (of the subagent ${quote(w.subagent)})` : ""}`).join("; ");
+  const more = opts.work.length > shown.length ? `; and ${opts.work.length - shown.length} more` : "";
+  const goesTo = answerGoesTo(opts.startedBy);
+  return `<godmode-continue>
+Background work was stopped when your last turn in this chat ended on ${describeNow(new Date(opts.endedAt))}: ${list}${more}. Godmode continues the turn by itself — this is not a new task.${goesTo ? ` ${goesTo}` : ""}
+Check where that work stood and finish the task; don't end your turn while work you depend on is still running. Don't repeat what is already done. Then end with your answer${opts.startedBy === "delegation" ? "" : ` for ${human}`}.
 </godmode-continue>`;
 }
 
