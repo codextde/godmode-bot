@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
     claudeConfigDir: "",
     model: DEFAULT_MODEL,
     fallbackModel: DEFAULT_FALLBACK_MODEL,
-    effort: "high",
+    effort: "medium",
     ultracode: false,
     bypassPermissions: true,
     maxConcurrentRuns: 3,

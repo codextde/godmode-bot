@@ -240,7 +240,7 @@ describe("catalog from the Claude Code CLI", () => {
     await waitForRun(sent.run.id, 20_000);
     inv = invocations(env).at(-1)!;
     expect(argValue(inv, "--model")).toBe("claude-opus-5-5");
-    expect(argValue(inv, "--effort")).toBe("high");
+    expect(argValue(inv, "--effort")).toBe("medium");
   });
 
   test("routes validate model and effort", async () => {
