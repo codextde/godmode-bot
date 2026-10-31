@@ -46,6 +46,13 @@
       "title": "Language",
       "detail": "System follows this phone's language. The same on your computer."
     },
+    "timeFormat": {
+      "title": "Time format",
+      "detail": "Automatic follows this phone's region (here {{example}}). The same on your computer.",
+      "system": "Automatic",
+      "h24": "15:00",
+      "h12": "3:00 PM"
+    },
     "mode": {
       "title": "Interface",
       "detail": "{{blurb}} The same on your computer.",

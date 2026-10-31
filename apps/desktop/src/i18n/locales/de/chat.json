@@ -303,7 +303,7 @@
       "inWeek": "In einer Woche"
     },
     "continueAt": "Weitermachen um",
-    "todayTimeFormat": "'Heute' HH:mm",
+    "todayTimeFormat": "'Heute' p",
     "dateAndTime": "Datum und Uhrzeit",
     "set": "Festlegen",
     "barContinues": "<b>{{name}}</b> macht {{when}} weiter",

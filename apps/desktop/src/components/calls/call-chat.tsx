@@ -34,7 +34,7 @@ export function CallMarker({ block }: { block: CallBlock }) {
             <span className={cn("text-xs", block.status === "failed" ? "text-destructive" : "text-muted-foreground")}>
               {block.status === "done" ? "" : `${t(status.labelKey)} · `}
               <time dateTime={block.at} className="tabular-nums">
-                {format(new Date(block.at), "HH:mm", { locale: dateLocale })}
+                {format(new Date(block.at), "p", { locale: dateLocale })}
               </time>
             </span>
           </span>

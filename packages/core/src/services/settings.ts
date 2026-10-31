@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
     minimizeToTray: true,
     desktopNotifications: true,
     language: "system",
+    timeFormat: "system",
   },
   runner: {
     claudePath: "",

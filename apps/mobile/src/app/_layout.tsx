@@ -13,7 +13,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AppLock } from "@/components/app-lock";
 import { api } from "@/lib/api";
 import { loadAppearance, useAppearance } from "@/lib/appearance";
-import { loadLanguage, useLanguage } from "@/lib/i18n";
+import { loadLanguage, loadTimeFormat, useLanguage, useTimeFormat } from "@/lib/i18n";
 import { forgetQueries, persistQueries, restoreQueries } from "@/lib/persist";
 import { qk, queryClient } from "@/lib/query";
 import { startRealtime } from "@/lib/realtime";
@@ -46,7 +46,7 @@ export default function RootLayout() {
   const [appearanceReady, setAppearanceReady] = useState(false);
   useEffect(() => {
     void useSession.getState().load();
-    void Promise.all([loadAppearance(), loadLanguage()]).finally(() => setAppearanceReady(true));
+    void Promise.all([loadAppearance(), loadLanguage(), loadTimeFormat()]).finally(() => setAppearanceReady(true));
   }, []);
 
   // What the last session saw is on screen before the computer answers.
@@ -87,6 +87,7 @@ export default function RootLayout() {
           <ThemeProvider value={theme}>
             <ThemeSync paired={paired} />
             <LanguageSync paired={paired} />
+            <TimeFormatSync paired={paired} />
             <StatusBar style="auto" />
             <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: "minimal", contentStyle: page }}>
               <Stack.Protected guard={paired}>
@@ -136,6 +137,15 @@ function ThemeSync({ paired }: { paired: boolean }) {
   const { data } = useQuery({ queryKey: qk.settings, queryFn: api.settings.get, enabled: paired, select: (s) => s.general.theme });
   useEffect(() => {
     if (data) useAppearance.getState().setTheme(data);
+  }, [data]);
+  return null;
+}
+
+/** Follows the computer's time format like the language; "system" follows this phone. */
+function TimeFormatSync({ paired }: { paired: boolean }) {
+  const { data } = useQuery({ queryKey: qk.settings, queryFn: api.settings.get, enabled: paired, select: (s) => s.general.timeFormat });
+  useEffect(() => {
+    if (data) useTimeFormat.getState().setTimeFormat(data);
   }, [data]);
   return null;
 }

@@ -8,8 +8,8 @@
   "working_other": "{{count}} working",
   "slowConnection": "Slow connection",
   "clock": {
-    "today": "HH:mm",
-    "earlier": "d MMM, HH:mm"
+    "today": "p",
+    "earlier": "d MMM, p"
   },
   "state": {
     "standsInSince": "Stands in since {{time}}",

@@ -18,6 +18,13 @@
       "label": "App language",
       "description": "The language of the app on this computer, in the browser dashboard and on your phone. System follows your device."
     },
+    "timeFormat": {
+      "label": "Time format",
+      "description": "How times read everywhere in Godmode, including your phone. Automatic follows your region (here {{example}}).",
+      "system": "Automatic",
+      "h24": "15:00",
+      "h12": "3:00 PM"
+    },
     "appearance": {
       "title": "Appearance",
       "mode": "Mode",
