@@ -45,7 +45,7 @@ function Arc({ radius, remaining }: { radius: number; remaining: number }) {
   );
 }
 
-function useResetLabel() {
+export function useResetLabel() {
   const { t } = useTranslation("layout");
   return (iso: string | null): string => {
     if (!iso) return t("usage.notStarted");

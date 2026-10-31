@@ -10,11 +10,12 @@ import { logger } from "../log";
 import { listAgents, refreshAgentFiles, removeFromDelegateLists, stopAgentRuns, trashAgentRepo } from "../agents/service";
 import { deleteProfile, updateProfile } from "../browser/manager";
 import { reloadSchedules } from "../scheduler/scheduler";
-import { HttpError, badRequest, newId, notFound, now, slugify } from "../util";
+import { HttpError, badRequest, newId, notFound, now, parseJson, slugify } from "../util";
 import { assignmentsChanged, normalizeVmId } from "../vm/assignments";
 import { gitSourceRows, listSources, setSources, sourcesByOwner, trashClones } from "./workspaceSources";
 import { listProjects, projectsByWorkspace } from "./projects";
 import { removeWorkspaceTasks } from "../tasks/service";
+import { cleanWorkspaceAccounts } from "./claudeAccounts";
 
 const log = logger("workspaces");
 
@@ -28,6 +29,7 @@ interface WorkspaceRow {
   instructions: string;
   vm_id: string | null;
   auto_merge: number;
+  claude_accounts: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +50,7 @@ function toModel(
     color: r.color,
     icon: r.icon,
     instructions: r.instructions,
+    claudeAccounts: cleanWorkspaceAccounts(parseJson(r.claude_accounts, null)),
     vmId: r.vm_id ?? null,
     browserProfileId: r.browser_profile_id ?? null,
     sources,
@@ -98,6 +101,7 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
     instructions: input.instructions?.trim() ?? "",
     vm_id: normalizeVmId(input.vmId) ?? null,
     auto_merge: input.autoMerge ? 1 : 0,
+    claude_accounts: accountsColumn(input.claudeAccounts) ?? null,
     created_at: ts,
     updated_at: ts,
   };
@@ -111,6 +115,13 @@ export function createWorkspace(input: WorkspaceInput): Workspace {
   bus.changed("workspaces");
   if (row.vm_id) assignmentsChanged();
   return getWorkspace(row.id);
+}
+
+/** The workspace's Claude accounts as stored; undefined = unchanged, null = Godmode's. */
+function accountsColumn(value: WorkspaceInput["claudeAccounts"]): string | null | undefined {
+  if (value === undefined) return undefined;
+  const clean = cleanWorkspaceAccounts(value);
+  return clean ? JSON.stringify(clean) : null;
 }
 
 /** The workspace's agents browse with this profile unless they pick their own; null = the global default. */
@@ -136,6 +147,7 @@ export function updateWorkspace(id: string, patch: Partial<WorkspaceInput>): Wor
       instructions: patch.instructions?.trim(),
       vm_id: vmId,
       auto_merge: patch.autoMerge === undefined ? undefined : patch.autoMerge ? 1 : 0,
+      claude_accounts: accountsColumn(patch.claudeAccounts),
       updated_at: now(),
     });
     const apply = patch.sources ? setSources(id, patch.sources) : undefined;

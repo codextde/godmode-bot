@@ -37,6 +37,7 @@ import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
 import { startPauses, stopPauses } from "./services/pauses";
+import { startClaudeAccounts, stopClaudeAccounts } from "./services/claudeAccounts";
 import { startRunNotices, stopRunNotices } from "./services/runNotices";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
@@ -202,6 +203,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   else void startPower();
   startFollowups();
   startPauses();
+  startClaudeAccounts();
   // After the pauses: a question whose run no longer waits is withdrawn there, and its ticket goes with it.
   startHumanTasks();
   startWatchdog();
@@ -374,6 +376,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopFollowups();
     stopHumanTasks();
     stopPauses();
+    stopClaudeAccounts();
     stopWatchdog();
     stopMacPrompts();
     if (runner) {

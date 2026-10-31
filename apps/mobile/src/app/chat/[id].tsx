@@ -324,11 +324,11 @@ export default function Chat() {
         case "user":
           return <UserMessage message={item.message} />;
         case "live":
-          return <LiveMessage conversationId={id} runId={runId} />;
+          return <LiveMessage conversationId={id} runId={runId} agent={agent} />;
         case "note":
           return <SystemNote content={item.content} />;
         default:
-          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />;
+          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
     [agent, id, runId],
@@ -441,12 +441,12 @@ export default function Chat() {
 }
 
 /** The answer being written: it alone renders with every word that arrives. */
-const LiveMessage = memo(function LiveMessage({ conversationId, runId }: { conversationId: string; runId?: string }) {
+const LiveMessage = memo(function LiveMessage({ conversationId, runId, agent }: { conversationId: string; runId?: string; agent?: Agent }) {
   const blocks = useLive((s) => {
     const draft = s.drafts[conversationId];
     return draft && draft.runId === runId ? draft.blocks : NO_BLOCKS;
   });
-  return <AssistantMessage blocks={blocks} streaming />;
+  return <AssistantMessage blocks={blocks} streaming agent={agent} />;
 });
 
 function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string }) {

@@ -33,7 +33,14 @@
     "vmNone": "Keine – Agenten arbeiten auf diesem Mac",
     "vmHint": "Die Agenten des Workspaces arbeiten in dieser macOS-VM, sofern ein Agent oder Chat keine eigene hat.",
     "saveChanges": "Änderungen speichern",
-    "create": "Workspace erstellen"
+    "create": "Workspace erstellen",
+    "claudeAccounts": "Claude-Konten",
+    "claudeAccountsHint": "Nutzt den Godmode-Standard ({{email}}) und wechselt wie überall. Einschalten, um Konten für diesen Workspace zu wählen.",
+    "claudeAccountsOwnHint": "Läufe hier nutzen nur die angehakten Konten, zuerst das Standardkonto, und wechseln zwischen ihnen.",
+    "claudeAccountsThisComputer": "Claude-Login dieses Computers",
+    "claudeAccountsSystem": "Claude-Code-Login auf diesem Computer",
+    "claudeAccountsMakeDefault": "Als Standard",
+    "claudeAccountsFooter": "Konten hinzufügen oder entfernen unter Einstellungen → Claude-Konten."
   },
   "sources": {
     "openFinderFailed": "Finder konnte nicht geöffnet werden",

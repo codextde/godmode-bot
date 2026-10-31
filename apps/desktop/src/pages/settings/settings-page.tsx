@@ -39,12 +39,14 @@ import {
   Smartphone,
   Sparkles,
   SquareTerminal,
+  UsersRound,
   X,
 } from "lucide-react";
 import { EmptyState } from "@/components/common";
 import { AboutSection } from "@/components/settings/about-section";
 import { ActivitySection } from "@/components/settings/activity-section";
 import { AiSection } from "@/components/settings/ai-section";
+import { ClaudeAccountsSection } from "@/components/settings/claude-accounts-section";
 import { AndroidSection } from "@/components/settings/android-section";
 import { ApiKeysSection } from "@/components/settings/api-keys-section";
 import { ArtifactsSection } from "@/components/settings/artifacts-section";
@@ -87,6 +89,7 @@ type SettingsKey = ParseKeys<"settings">;
 const SECTIONS = [
   { id: "general", labelKey: "page.sections.general", icon: <SlidersHorizontal />, groupKey: "page.groups.preferences" },
   { id: "ai", labelKey: "page.sections.ai", icon: <Sparkles />, groupKey: "page.groups.preferences" },
+  { id: "accounts", labelKey: "page.sections.accounts", icon: <UsersRound />, groupKey: "page.groups.preferences" },
   { id: "instructions", labelKey: "page.sections.instructions", icon: <ScrollText />, groupKey: "page.groups.preferences" },
   { id: "browser", labelKey: "page.sections.browser", icon: <Globe />, groupKey: "page.groups.preferences" },
   { id: "computer", labelKey: "page.sections.computer", icon: <MonitorUp />, groupKey: "page.groups.preferences" },
@@ -124,6 +127,7 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 const EASY: Partial<Record<SectionId, { labelKey: SettingsKey; groupKey: SettingsKey }>> = {
   general: { labelKey: "page.easy.general", groupKey: "page.groups.everyday" },
   ai: { labelKey: "page.easy.ai", groupKey: "page.groups.everyday" },
+  accounts: { labelKey: "page.easy.accounts", groupKey: "page.groups.everyday" },
   instructions: { labelKey: "page.easy.instructions", groupKey: "page.groups.everyday" },
   memory: { labelKey: "page.easy.memory", groupKey: "page.groups.everyday" },
   voice: { labelKey: "page.easy.voice", groupKey: "page.groups.everyday" },
@@ -254,6 +258,7 @@ function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; 
     content = {
       general: () => <GeneralSection settings={s} />,
       ai: () => <AiSection settings={s} />,
+      accounts: () => <ClaudeAccountsSection settings={s} />,
       instructions: () => <InstructionsSection settings={s} />,
       browser: () => <BrowserSection settings={s} />,
       computer: () => <ComputerSection settings={s} />,
