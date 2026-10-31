@@ -1,5 +1,6 @@
 import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, HandoffResult, JoinGroupInput, MoveChatInput, RetireRunnerInput, RetireRunnerResult,
   AndroidAssignInput,
+  SearchResults,
   HexStatus,
   AndroidConnectInput,
   AndroidConnectResult,
@@ -666,6 +667,7 @@ export const api = {
     list: (q: { limit?: number; routineId?: string } = {}) => get<AutomationEvent[]>("/api/automation-events", q),
   },
 
+  search: (q: string, opts: { limit?: number } = {}) => get<SearchResults>("/api/search", { q, ...opts }),
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),

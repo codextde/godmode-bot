@@ -15,6 +15,7 @@ import {
   BrainCircuit,
   Cloud,
   CreditCard,
+  FileText,
   FolderOpen,
   DatabaseBackup,
   Fingerprint,
@@ -69,7 +70,7 @@ import { ATTENTION_ICON } from "@/components/attention/attention-list";
 import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
-import { PALETTES } from "@godmode/shared";
+import { PALETTES, searchSegments } from "@godmode/shared";
 import { paletteLabel } from "@/lib/palettes";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -147,20 +148,20 @@ export function CommandPalette() {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
   const searching = query.length > 0;
-  // What the core finds in chats (message text too), a moment after typing stops.
   const [deferred, setDeferred] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDeferred(q.trim()), 250);
+    const t = setTimeout(() => setDeferred(q.trim()), 60);
     return () => clearTimeout(t);
   }, [q]);
   useEffect(() => {
     if (!open) setQ("");
   }, [open]);
   const { data: found, isPlaceholderData: foundBefore } = useQuery({
-    queryKey: qk.conversations("all", deferred),
-    queryFn: () => api.conversations.list({ search: deferred, limit: 20 }),
-    enabled: open && deferred.length >= 3,
+    queryKey: qk.search(deferred),
+    queryFn: () => api.search(deferred, { limit: 20 }),
+    enabled: open && deferred.length >= 2,
     placeholderData: keepPreviousData,
+    staleTime: 5_000,
   });
   const { data: waiting = [] } = useQuery({ queryKey: qk.attention, queryFn: api.attention, enabled: open, staleTime: 2_000 });
   const { data: tasks = [] } = useQuery({ queryKey: qk.taskList("all"), queryFn: () => api.tasks.list({ workspaceId: "all" }), enabled: open && searching });
@@ -173,20 +174,27 @@ export function CommandPalette() {
 
   // Tickets by number ("#12", "12") or title; automations by name or what they do. Capped: the list stays short.
   const number = /^#?(\d+)$/.exec(query)?.[1];
+  const fresh = searching && deferred === q.trim() && !foundBefore ? (found ?? null) : null;
   const ticketHits = searching
     ? number
-      ? tasks.filter((t) => String(t.number).startsWith(number)).sort((a, b) => a.number - b.number).slice(0, 8)
-      : tasks.filter((t) => wordFilter(`${t.title} ${t.description ?? ""}`, q) > 0).slice(0, 8)
+      ? tasks.filter((t) => String(t.number).startsWith(number)).sort((a, b) => a.number - b.number).slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, snippet: null as string | null }))
+      : fresh
+        ? fresh.tasks
+        : tasks.filter((t) => wordFilter(t.title, q) > 0).slice(0, 8).map((t) => ({ id: t.id, number: t.number, title: t.title, snippet: null as string | null }))
     : [];
   const routineHits = searching ? routines.filter((r) => wordFilter(`${r.name} ${r.prompt}`, q) > 0).slice(0, 6) : [];
-  // Chats whose title or preview match here, then what the core found in their messages (for this very search).
-  const chats = searching ? conversations.filter((c) => wordFilter(`${c.title} ${c.preview ?? ""}`, q) > 0) : conversations.slice(0, 50);
-  const fresh = searching && deferred === q.trim() && !foundBefore ? (found ?? []) : [];
-  const inMessages = fresh.filter((c) => !chats.some((l) => l.id === c.id));
+  const chatHits = !searching
+    ? conversations.slice(0, 50).map((c) => ({ id: c.id, title: c.title, snippet: c.preview ? c.preview : null, messageId: null as string | null, marked: false }))
+    : fresh
+      ? fresh.chats.map((c) => ({ id: c.id, title: c.title, snippet: c.snippet, messageId: c.titleMatch && !c.snippet ? null : c.messageId, marked: true }))
+      : conversations.filter((c) => wordFilter(c.title, q) > 0).map((c) => ({ id: c.id, title: c.title, snippet: null as string | null, messageId: null as string | null, marked: false }));
+  const noteHits = fresh?.notes ?? [];
+  const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? "";
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen} filter={wordFilter} title={t("common:actions.search")} description={t("palette.description")}>
       <CommandInput placeholder={t("palette.placeholder")} value={q} onValueChange={setQ} />
+      {fresh?.corrected && <div className="px-3 pt-2 text-xs text-muted-foreground">{t("palette.showingFor", { query: fresh.corrected })}</div>}
       <CommandList>
         <CommandEmpty>{t("palette.empty")}</CommandEmpty>
         {waiting.length > 0 && (
@@ -255,6 +263,24 @@ export function CommandPalette() {
                 <SquareKanban className="opacity-60" />
                 <span className="shrink-0 font-mono text-xs text-muted-foreground">#{t.number}</span>
                 <span className="truncate">{t.title}</span>
+                {t.snippet && <Marked text={t.snippet} className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground" />}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {noteHits.length > 0 && (
+          <CommandGroup heading={t("palette.groups.notes")}>
+            {noteHits.map((n) => (
+              <CommandItem
+                key={`${n.agentId}:${n.path}:${q}`}
+                value={unique(`note ${n.path} ${n.heading}`, `${n.agentId}:${n.path}`)}
+                keywords={[q]}
+                onSelect={() => go(`/files/${n.agentId}?${new URLSearchParams({ file: n.path, dir: n.path.includes("/") ? n.path.slice(0, n.path.lastIndexOf("/")) : "" })}`)}
+              >
+                <FileText className="opacity-60" />
+                <span className="shrink-0 truncate">{n.heading || n.path.split("/").pop()}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{agentName(n.agentId)}</span>
+                <Marked text={n.snippet} className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground" />
               </CommandItem>
             ))}
           </CommandGroup>
@@ -509,21 +535,19 @@ export function CommandPalette() {
             </CommandGroup>
           </>
         )}
-        {chats.length + inMessages.length > 0 && (
+        {chatHits.length > 0 && (
           <>
             <CommandSeparator />
             <CommandGroup heading={t("palette.groups.chats")}>
-              {chats.map((c) => (
-                <CommandItem key={c.id} value={unique(`chat ${c.title} ${c.preview ?? ""}`, c.id)} onSelect={() => go(`/chat/${c.id}`)}>
-                  <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
-                  {c.preview && <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{c.preview}</span>}
-                </CommandItem>
-              ))}
-              {inMessages.map((c) => (
-                // Found by the core in its messages: kept whatever the title says (keyed by the search, see Tickets).
-                <CommandItem key={`${c.id}:${q}`} value={unique(`chat ${c.title}`, c.id)} keywords={[q]} onSelect={() => go(`/chat/${c.id}`)}>
-                  <MessageCircle className="opacity-50" /> <span className="truncate">{c.title}</span>
-                  <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{t("palette.mentioned")}</span>
+              {chatHits.map((c) => (
+                <CommandItem
+                  key={searching ? `${c.id}:${q}` : c.id}
+                  value={unique(`chat ${c.title}`, c.id)}
+                  keywords={searching ? [q] : c.snippet ? [c.snippet] : undefined}
+                  onSelect={() => go(c.messageId ? `/chat/${c.id}?m=${c.messageId}` : `/chat/${c.id}`)}
+                >
+                  <MessageCircle className="opacity-50" /> <span className="max-w-[45%] shrink-0 truncate">{c.title}</span>
+                  {c.snippet && (c.marked ? <Marked text={c.snippet} className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground" /> : <span className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">{c.snippet}</span>)}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -531,5 +555,21 @@ export function CommandPalette() {
         )}
       </CommandList>
     </CommandDialog>
+  );
+}
+
+function Marked({ text, className }: { text: string; className?: string }) {
+  return (
+    <span className={className}>
+      {searchSegments(text).map((seg, i) =>
+        seg.hit ? (
+          <mark key={i} className="rounded-[3px] bg-primary/15 px-0.5 text-foreground">
+            {seg.text}
+          </mark>
+        ) : (
+          seg.text
+        ),
+      )}
+    </span>
   );
 }
