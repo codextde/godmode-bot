@@ -44,6 +44,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { SettingsGroup } from "./settings-kit";
+import { useReduceAnimations } from "@/lib/motion";
 
 const ICONS: Record<CleanupId, ComponentType<{ className?: string }>> = {
   "temp-files": FileClock,
@@ -80,6 +81,7 @@ function toastRun(run: CleanupRun) {
 
 /** What can go, picked by the human: recommended items are preselected, the rest needs a look first. */
 export function CleanupItems({ report, refreshing }: { report: CleanupReport; refreshing: boolean }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   // null = the recommended selection, which follows the report until the human changes it.
   const [picked, setPicked] = useState<Set<CleanupId> | null>(null);
@@ -140,7 +142,7 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
         </div>
       )}
       {items.map((item, i) => (
-        <motion.div key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+        <motion.div key={item.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
           <ItemRow
             item={item}
             checked={selected.has(item.id)}

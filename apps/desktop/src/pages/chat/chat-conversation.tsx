@@ -55,6 +55,7 @@ import { ProjectChip } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
 import { speak, useVoiceSession } from "@/lib/voice";
+import { EASE_OUT } from "@/lib/motion";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 
@@ -582,7 +583,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    transition={{ duration: 0.2, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <div className="mb-2 flex items-center gap-2.5 rounded-lg border bg-card py-1.5 pr-1.5 pl-3 text-[13px] text-muted-foreground shadow-card">
@@ -603,7 +604,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    transition={{ duration: 0.2, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <SwitchedOffBar agent={agent} />
@@ -615,7 +616,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    transition={{ duration: 0.2, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
@@ -627,7 +628,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    transition={{ duration: 0.2, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <RunnerOfflineBar runner={runner} onMove={() => openMove(placeOf(hereId))} />
@@ -639,7 +640,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                    transition={{ duration: 0.2, ease: EASE_OUT }}
                     className="overflow-hidden"
                   >
                     <FollowupBar conversationId={conversationId} followup={conv.followup} agentName={agent?.name ?? "The agent"} running={!!activeRunId || !!paused} />
@@ -659,7 +660,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                      transition={{ duration: 0.2, ease: EASE_OUT }}
                       className="overflow-hidden"
                     >
                       <CompressBar gauge={gauge} agentName={agent?.name ?? "The agent"} running={!!activeRunId} onCompress={compress} onDismiss={() => setCompressHiddenAt(gauge.tokens)} />

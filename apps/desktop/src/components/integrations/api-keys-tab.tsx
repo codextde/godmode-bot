@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "./confirm-dialog";
 import { QueryError } from "./query-error";
+import { useReduceAnimations } from "@/lib/motion";
 
 interface KeyMeta {
   key: string;
@@ -106,6 +107,7 @@ async function selectSolverForKey(key: string): Promise<string | null> {
 
 /** App-level API keys stored in the vault. Values are write-only. */
 export function ApiKeysTab({ onOpenComposio, onOpenTools }: { onOpenComposio: () => void; onOpenTools: () => void }) {
+  const reduce = useReduceAnimations();
   const secrets = useQuery({ queryKey: qk.appSecrets, queryFn: api.vault.secrets.list });
   const byKey = new Map((secrets.data ?? []).map((s) => [s.key, s] as const));
   const unknown = (secrets.data ?? []).filter((s) => !KNOWN_KEYS.some((k) => k.key === s.key));
@@ -149,12 +151,12 @@ export function ApiKeysTab({ onOpenComposio, onOpenTools }: { onOpenComposio: ()
       ) : (
         <ul className="space-y-2">
           {KNOWN_KEYS.map((meta, i) => (
-            <motion.li key={meta.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
+            <motion.li key={meta.key} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
               <KeyRow meta={meta} state={byKey.get(meta.key)} onOpenComposio={onOpenComposio} />
             </motion.li>
           ))}
           {unknown.map((s, i) => (
-            <motion.li key={s.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i + KNOWN_KEYS.length, 12) * 0.03 }}>
+            <motion.li key={s.key} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i + KNOWN_KEYS.length, 12) * 0.03 }}>
               <KeyRow meta={{ key: s.key, label: s.key, description: "Custom secret", icon: KeyRound }} state={s} onOpenComposio={onOpenComposio} />
             </motion.li>
           ))}

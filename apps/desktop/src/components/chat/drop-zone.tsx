@@ -164,7 +164,7 @@ function DropSurface() {
               className="absolute inset-x-0 top-0 mx-auto h-[68px] w-[54px]"
             >
               <motion.span
-                animate={reduce ? undefined : { y: [0, -5, 0] }}
+                animate={reduce ? undefined : { transform: ["translateY(0px)", "translateY(-5px)", "translateY(0px)"] }}
                 transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                 className="grid size-full place-items-center rounded-xl border border-brand/50 bg-card text-brand-strong shadow-float"
               >

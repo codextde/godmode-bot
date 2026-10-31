@@ -16,6 +16,7 @@ import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { PANEL } from "@/lib/motion";
 import { useVmActions } from "./use-vm-actions";
 import { formatMemory, VM_STATE_LABEL, VmStateBadge } from "./vm-parts";
 import { resolveInherited, type InheritedVm } from "./vm-picker";
@@ -121,7 +122,7 @@ export function VmPanel({
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="flex h-full w-80 flex-col">

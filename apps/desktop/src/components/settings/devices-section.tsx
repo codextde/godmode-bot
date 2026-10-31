@@ -47,6 +47,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { ExpiryRing, Step } from "./pair-phone-dialog";
 import { Callout, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function DevicesSection() {
   const { data: group, isLoading, isError, error, refetch } = useDeviceGroup();
@@ -193,7 +194,7 @@ function GroupGlyph() {
       <div className="relative mx-2 mb-[22px] w-14 border-t-[1.5px] border-dashed border-foreground/20">
         <motion.span
           className="absolute -top-[4px] left-0 size-1.5 rounded-full bg-brand"
-          animate={still ? undefined : { x: [0, 50, 50, 0, 0] }}
+          animate={still ? undefined : { transform: ["translateX(0px)", "translateX(50px)", "translateX(50px)", "translateX(0px)", "translateX(0px)"] }}
           transition={{ duration: 4.8, times: [0, 0.35, 0.5, 0.85, 1], ease: "easeInOut", repeat: Infinity }}
         />
       </div>
@@ -453,6 +454,7 @@ function RoleBadge({ role }: { role: keyof typeof ROLE_BADGE }) {
 }
 
 function StatusCard({ group }: { group: DeviceGroup }) {
+  const reduce = useReduceAnimations();
   const self = group.devices.find((d) => d.self);
   const primaryDevice = group.devices.find((d) => d.role === "primary");
   const secondary = group.role === "secondary";
@@ -467,7 +469,7 @@ function StatusCard({ group }: { group: DeviceGroup }) {
         : `${group.primaryName} is away`;
 
   return (
-    <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
+    <motion.section initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
       <div className="flex items-start gap-4 p-5">
         <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-[18px]">
           {self ? <DeviceIcon device={self} /> : <Network />}
@@ -654,12 +656,13 @@ function BrowserSignInsGroup({ group }: { group: DeviceGroup }) {
 }
 
 function HandoffCard({ group }: { group: DeviceGroup }) {
+  const reduce = useReduceAnimations();
   const { working, targets } = useHandoff();
   const secondary = group.role === "secondary";
   const to = secondary ? group.primaryName : targets.length === 1 ? targets[0].name : "another computer";
   return (
     <motion.section
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.04 }}
       className="relative overflow-hidden rounded-xl border bg-card shadow-card"

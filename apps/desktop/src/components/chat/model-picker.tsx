@@ -109,7 +109,7 @@ function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; v
           >
             <span
               className={cn(
-                "h-1.5 w-full rounded-full transition-[background-color,transform] duration-150 group-hover:scale-y-[1.35]",
+                "h-1.5 w-full rounded-full transition-[background-color,transform] duration-150 full-motion:group-hover:scale-y-[1.35]",
                 i <= (hover ?? active) ? (hover !== null ? "bg-foreground/45" : "bg-foreground/85") : "bg-foreground/10",
               )}
             />

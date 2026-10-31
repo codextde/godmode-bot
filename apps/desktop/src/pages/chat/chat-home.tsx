@@ -46,6 +46,7 @@ import { OffersCard } from "@/components/attention/offers-card";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 const SUGGESTIONS = [
   { icon: Mail, text: "Summarize my unread emails" },
@@ -92,13 +93,14 @@ const SETUP_DRAFT = "chat:home-setup:";
 const NO_SSH_SERVERS: string[] = [];
 const NO_ANDROID_DEVICES: string[] = [];
 
-const fade = (delay: number) => ({
-  initial: { opacity: 0, y: 10 },
+const fade = (delay: number, reduce: boolean) => ({
+  initial: reduce ? (false as const) : { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.5, delay, ease: [0.2, 0.8, 0.2, 1] as const },
+  transition: { duration: 0.5, delay, ease: EASE_OUT },
 });
 
 export default function ChatHome() {
+  const reduce = useReduceAnimations();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const easy = useEasyMode();
@@ -220,12 +222,12 @@ export default function ChatHome() {
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
       <Backdrop />
 
-      <motion.div {...fade(0)} className="absolute top-3 right-3 z-10 @xl:top-4 @xl:right-4">
+      <motion.div {...fade(0, reduce)} className="absolute top-3 right-3 z-10 @xl:top-4 @xl:right-4">
         <PrivateChatToggle value={privateChat} onChange={setPrivateChat} />
       </motion.div>
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
-        <motion.div {...fade(0)}>
+        <motion.div {...fade(0, reduce)}>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
             <LiveDot live={false} className="bg-brand" />
             {format(now, "EEEE, MMMM d")}
@@ -238,7 +240,7 @@ export default function ChatHome() {
           </span>
         </motion.div>
         {privateChat ? (
-          <motion.div key="private" {...fade(0.03)} className="mt-7 flex flex-col items-center">
+          <motion.div key="private" {...fade(0.03, reduce)} className="mt-7 flex flex-col items-center">
             <span className="grid size-20 place-items-center rounded-full border-2 border-dashed border-foreground/25 bg-card text-foreground/80 shadow-card">
               <Ghost className="size-9" strokeWidth={1.5} />
             </span>
@@ -251,11 +253,11 @@ export default function ChatHome() {
         ) : (
           <>
             {selected && (
-              <motion.div {...fade(0.03)} className="mt-7">
+              <motion.div {...fade(0.03, reduce)} className="mt-7">
                 <AgentAvatar key={selected.id} agent={selected} size="xl" follow className="size-20" />
               </motion.div>
             )}
-            <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
+            <motion.h1 {...fade(0.05, reduce)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
               {greeting(now)}
               {userName ? `, ${userName}` : ""}.
               <span className="block text-foreground/35">What should we get done?</span>
@@ -263,7 +265,7 @@ export default function ChatHome() {
           </>
         )}
 
-        <motion.div {...fade(0.12)} className="mt-9 w-full text-left">
+        <motion.div {...fade(0.12, reduce)} className="mt-9 w-full text-left">
           <Composer
             key={privateChat ? "private" : "home"}
             ref={composerRef}
@@ -337,7 +339,7 @@ export default function ChatHome() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: 0.2, ease: EASE_OUT }}
                 className="overflow-hidden"
               >
                 <RunnerNote place={target} />
@@ -348,7 +350,7 @@ export default function ChatHome() {
 
         {privateChat ? null : easy ? (
           hideSuggestions ? null : (
-          <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
+          <motion.div {...fade(0.18, reduce)} className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="eyebrow">Try something like</h2>
               <button
@@ -370,7 +372,7 @@ export default function ChatHome() {
                   key={text}
                   type="button"
                   onClick={() => composerRef.current?.setText(prompt ?? text)}
-                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 full-motion:hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
                     <Icon className="size-3.5" />
@@ -382,7 +384,7 @@ export default function ChatHome() {
           </motion.div>
           )
         ) : (
-          <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
+          <motion.div {...fade(0.18, reduce)} className="mt-4 flex flex-wrap justify-center gap-2">
             {SUGGESTIONS.map(({ icon: Icon, text }) => (
               <button
                 key={text}
@@ -397,7 +399,7 @@ export default function ChatHome() {
           </motion.div>
         )}
 
-        <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
+        <motion.p {...fade(0.24, reduce)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
             <>
               <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
@@ -487,6 +489,7 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
 }
 
 function RunningNow({ agents }: { agents: Agent[] }) {
+  const reduce = useReduceAnimations();
   const inScope = useInScope();
   const runs = Object.values(useLive((s) => s.runs)).filter(inScope);
   const list = runs.filter((r) => r.status === "running");
@@ -495,7 +498,7 @@ function RunningNow({ agents }: { agents: Agent[] }) {
   return (
     <section aria-label="Working now">
       <h2 className="eyebrow mb-3 flex items-center gap-2">
-        <LiveDot />
+        <LiveDot live={!reduce} className="bg-brand" />
         Working now
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
         {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {queued} queued</span>}
@@ -510,12 +513,13 @@ function RunningNow({ agents }: { agents: Agent[] }) {
 }
 
 function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index: number }) {
+  const reduce = useReduceAnimations();
   const now = useNow(1000);
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="shrink-0">
+    <motion.div initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="shrink-0">
       <Link
         to={`/chat/${run.conversationId}`}
-        className="glow-border flex w-72 items-center gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="full-motion:glow-border flex w-72 items-center gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         <AgentAvatar agent={agent ?? { id: run.agentId, avatar: "🤖", color: "violet" }} size="md" />
         <span className="min-w-0 flex-1">
@@ -526,7 +530,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
           <span className="text-shimmer block truncate text-xs font-medium">{liveActivityLabel(run)}</span>
         </span>
         <span className="flex flex-col items-end gap-1">
-          <WorkingTicks count={6} className="h-3 text-brand-strong" />
+          {!reduce && <WorkingTicks count={6} className="h-3 text-brand-strong" />}
           <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>
         </span>
       </Link>
@@ -579,14 +583,15 @@ function RecentChats({ agents }: { agents: Agent[] }) {
 }
 
 function RecentCard({ conversation: c, agent, running, index }: { conversation: Conversation; agent?: Agent; running: boolean; index: number }) {
+  const reduce = useReduceAnimations();
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.04, duration: 0.35 }}>
+    <motion.div initial={reduce ? false : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.04, duration: 0.35 }}>
       <Link
         to={`/chat/${c.id}`}
         className={cn(
           "group flex h-full flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition",
-          "hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-          running && "glow-border",
+          "hover:border-foreground/15 full-motion:hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+          running && "full-motion:glow-border",
         )}
       >
         <div className="flex items-center gap-2">

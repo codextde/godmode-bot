@@ -4,15 +4,17 @@ import { Backdrop } from "@/components/brand";
 import { Character } from "@/components/character";
 import { Orb } from "@/components/aicss/Orb";
 import { Button } from "@/components/ui/button";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 export function SplashScreen({ error }: { error?: string }) {
+  const reduce = useReduceAnimations();
   return (
     <div className="relative grid h-full place-items-center overflow-hidden bg-background">
       <Backdrop />
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: reduce ? 0.25 : 0.45, ease: EASE_OUT }}
         className="relative flex flex-col items-center gap-6 text-center"
       >
         <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={error ? "error" : "working"} title="Godmode" />

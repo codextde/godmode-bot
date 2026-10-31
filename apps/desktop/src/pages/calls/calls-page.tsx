@@ -18,6 +18,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useAllAgents, useSettings } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 const LIMIT = 200;
 const LIVE_POLL = 5_000;
@@ -151,10 +152,11 @@ export default function CallsPage() {
 }
 
 function CallList({ calls, selectedId, agents, onSelect }: { calls: PhoneCall[]; selectedId: string | null; agents: Map<string, Agent>; onSelect: (id: string) => void }) {
+  const reduce = useReduceAnimations();
   return (
     <ul aria-label="Calls" className="divide-y overflow-hidden rounded-xl border bg-card shadow-card @4xl:sticky @4xl:top-6">
       {calls.map((c, i) => (
-        <motion.li key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.025 } }}>
+        <motion.li key={c.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.025 } }}>
           <CallRow call={c} agent={c.agentId ? agents.get(c.agentId) : undefined} selected={c.id === selectedId} onSelect={() => onSelect(c.id)} />
         </motion.li>
       ))}
@@ -205,12 +207,13 @@ function CallRow({ call: c, agent, selected, onSelect }: { call: PhoneCall; agen
 }
 
 function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
+  const reduce = useReduceAnimations();
   const inbound = c.direction === "inbound";
   const active = isCallActive(c);
   const DirectionIcon = inbound ? PhoneIncoming : PhoneOutgoing;
   const agentName = agent?.name ?? c.agentName;
   return (
-    <motion.article initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-card">
+    <motion.article initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-card">
       <header className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="flex min-w-0 items-start gap-3.5">
           <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-[18px]", inbound ? "text-sky-600 dark:text-sky-400" : "text-brand-strong")}>

@@ -78,6 +78,7 @@ import { errorMessage } from "@/lib/api";
 import { useBootstrap, useSettings } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 const SECTIONS = [
   { id: "general", label: "General", icon: <SlidersHorizontal />, group: "Preferences" },
@@ -200,6 +201,7 @@ export default function SettingsDialog({ closeTo }: { closeTo: To }) {
 }
 
 function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; focusLabel: string | null; onFocused: () => void }) {
+  const reduce = useReduceAnimations();
   const settings = useSettings();
   const { data: boot } = useBootstrap();
   const scroller = useRef<HTMLDivElement>(null);
@@ -282,18 +284,24 @@ function SectionContent({ active, focusLabel, onFocused }: { active: SectionId; 
   return (
     <div ref={scroller} className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 py-6 @4xl:px-10">
       <div className="mx-auto max-w-3xl">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={active}
-            data-section={active}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.18, ease: "easeOut" }}
-          >
+        {reduce ? (
+          <div key={active} data-section={active}>
             {content}
-          </motion.div>
-        </AnimatePresence>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={active}
+              data-section={active}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+            >
+              {content}
+            </motion.div>
+          </AnimatePresence>
+        )}
       </div>
     </div>
   );
@@ -435,6 +443,7 @@ function SectionNav({ active }: { active: SectionId }) {
 }
 
 function SectionList({ active, entries, marks, footer }: { active: SectionId; entries: readonly NavEntry[]; marks: Marks; footer?: ReactNode }) {
+  const reduce = useReduceAnimations();
   return (
     <nav
       aria-label="Settings sections"
@@ -463,7 +472,7 @@ function SectionList({ active, entries, marks, footer }: { active: SectionId; en
             >
               {isActive && (
                 <motion.span
-                  layoutId="settings-nav-pill"
+                  layoutId={reduce ? undefined : "settings-nav-pill"}
                   className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border"
                   transition={{ type: "spring", stiffness: 420, damping: 36 }}
                 />

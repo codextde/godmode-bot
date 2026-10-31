@@ -22,6 +22,7 @@ import { AttentionList } from "@/components/attention/attention-list";
 import { HumanTaskBoard } from "@/components/human-tasks/human-task-board";
 import { HumanTaskSheet } from "@/components/human-tasks/human-task-sheet";
 import { DirectionHint } from "@/components/layout/direction-hint";
+import { useReduceAnimations } from "@/lib/motion";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
 
@@ -166,6 +167,7 @@ function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView
 }
 
 function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
+  const reduce = useReduceAnimations();
   const [tab, setTab] = useState<MissingLoginStatus>("open");
   const open = useMissingLogins("open");
   const resolved = useMissingLogins("resolved");
@@ -271,8 +273,8 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
                     <motion.div
                       key={entry.item.id}
                       layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                      initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
+                      animate={reduce ? { opacity: 1, transition: { duration: 0.15, ease: "easeOut" } } : { opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
                       exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
                     >
                       {entry.kind === "question" ? (

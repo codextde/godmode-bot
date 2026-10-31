@@ -52,6 +52,7 @@ import {
   shortChars,
   upcomingWhen,
 } from "./dream-parts";
+import { useReduceAnimations } from "@/lib/motion";
 
 const JOURNAL_PREVIEW = 3;
 const CHANGES_PREVIEW = 6;
@@ -371,7 +372,7 @@ function MemoryMeter({
         className="relative h-1.5 min-w-32 flex-1 basis-40 rounded-full bg-secondary"
       >
         <div
-          className={cn("h-full rounded-full transition-[width] duration-500", cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70")}
+          className={cn("h-full rounded-full transition-[width] duration-500 calm-motion:duration-250", cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70")}
           style={{ width: `${Math.min(100, (chars / limit) * 100)}%` }}
         />
         <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-foreground/35" style={{ left: `${(target / limit) * 100}%` }} />
@@ -779,7 +780,7 @@ function NightSky({ active }: { active: boolean }) {
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
         className={cn(
-          "absolute inset-0 bg-[radial-gradient(80%_140%_at_100%_0%,var(--dream-soft),transparent_70%)] transition-opacity duration-700",
+          "absolute inset-0 bg-[radial-gradient(80%_140%_at_100%_0%,var(--dream-soft),transparent_70%)] transition-opacity duration-700 calm-motion:duration-250",
           active ? "opacity-100" : "opacity-70",
         )}
       />
@@ -787,8 +788,8 @@ function NightSky({ active }: { active: boolean }) {
         <span
           key={i}
           className={cn(
-            "absolute rounded-full bg-dream transition-opacity duration-700",
-            active ? "opacity-70 motion-safe:animate-twinkle" : "opacity-20",
+            "absolute rounded-full bg-dream transition-opacity duration-700 calm-motion:duration-250",
+            active ? "opacity-70 full-motion:motion-safe:animate-twinkle" : "opacity-20",
           )}
           style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s` }}
         />
@@ -799,18 +800,19 @@ function NightSky({ active }: { active: boolean }) {
 
 function MoonTile({ active }: { active: boolean }) {
   const reduce = useReducedMotion();
+  const calm = useReduceAnimations();
   return (
     <div
       aria-hidden
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-dream transition-colors duration-500 [&_svg]:size-[18px]",
+        "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-dream transition-colors duration-500 calm-motion:duration-250 [&_svg]:size-[18px]",
         active && "border-dream/30 bg-dream-soft motion-safe:animate-dream-halo",
       )}
     >
       {active ? (
         <motion.span
           className="grid place-items-center"
-          animate={reduce ? undefined : { rotate: [-10, 6, -10], y: [0, -1.5, 0] }}
+          animate={reduce || calm ? undefined : { rotate: [-10, 6, -10], y: [0, -1.5, 0] }}
           transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
         >
           <Moon className="fill-dream/20" />
@@ -829,9 +831,9 @@ function DreamScan() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-px overflow-hidden">
       <motion.span
-        className="absolute inset-y-0 w-1/3 bg-linear-to-r from-transparent via-dream to-transparent"
-        initial={{ left: "-33%" }}
-        animate={{ left: "100%" }}
+        className="absolute inset-y-0 left-0 w-1/3 bg-linear-to-r from-transparent via-dream to-transparent"
+        initial={{ transform: "translateX(-99%)" }}
+        animate={{ transform: "translateX(300%)" }}
         transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
       />
     </div>

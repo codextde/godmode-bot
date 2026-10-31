@@ -34,6 +34,7 @@ import { FixInCodeDialog } from "@/components/tasks/fix-in-code-dialog";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CommitInput, SectionHeading, Segmented, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+import { useReduceAnimations } from "@/lib/motion";
 
 const REFRESH_MS = 10_000;
 const ENTRY_LIMIT = 300;
@@ -103,6 +104,7 @@ async function copyReport(): Promise<string> {
 }
 
 export function LogsSection({ settings }: { settings: Settings }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const { patch } = useSettingsPatch();
   const [filter, setFilter] = useState<Filter>("all");
@@ -159,7 +161,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
         description="A private record of errors, slow spots and how runs went. Copy it into a chat with Claude to track down bugs and make Godmode faster."
       />
 
-      <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
+      <motion.section initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
           <div className="flex min-w-0 items-start gap-3">
             <div className="grid size-8 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-4">

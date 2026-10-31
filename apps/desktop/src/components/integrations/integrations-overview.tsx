@@ -7,6 +7,7 @@ import { ApiToolsTab, useApiTools } from "@/components/integrations/api-tools-ta
 import { ComposioTab, useComposioConnections, useComposioStatus } from "@/components/integrations/composio-tab";
 import { McpServersTab, useMcpServers } from "@/components/integrations/mcp-servers-tab";
 import { NoConnectorsNote } from "@/components/integrations/no-connectors-note";
+import { useReduceAnimations } from "@/lib/motion";
 
 const TABS = ["composio", "tools", "mcp"] as const;
 type Tab = (typeof TABS)[number];
@@ -70,8 +71,9 @@ export function IntegrationsOverview() {
 }
 
 function FadeIn({ children }: { children: ReactNode }) {
+  const reduce = useReduceAnimations();
   return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+    <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
       {children}
     </motion.div>
   );

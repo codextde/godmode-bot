@@ -23,6 +23,7 @@ import { qk } from "@/lib/queryKeys";
 import { subscribeBrowser } from "@/lib/realtime";
 import { useLive } from "@/stores/live";
 import { cn } from "@/lib/utils";
+import { PANEL, useReduceAnimations } from "@/lib/motion";
 
 export type BrowserFocusMode = "watch" | "control";
 
@@ -126,7 +127,7 @@ export function BrowserPanel({
       initial={{ width: 0, opacity: 0 }}
       animate={{ width: 320, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 320, damping: 36 }}
+      transition={PANEL}
       className="h-full shrink-0 overflow-hidden border-l bg-paper-2"
     >
       <div className="flex h-full w-80 flex-col">
@@ -175,7 +176,7 @@ export function BrowserPanel({
               </span>
             </div>
           ) : (
-            <div className={cn("rounded-xl", activity && "glow-border")}>
+            <div className={cn("rounded-xl", activity && "full-motion:glow-border")}>
               <button
                 type="button"
                 onClick={() => onFocus("watch")}
@@ -348,12 +349,13 @@ export function BrowserFocus({
 
 /** Header button that brings the browser back once the panel is hidden (or opens it full size on narrow windows). */
 export function BrowserToggle({ working, onClick }: { working: boolean; onClick: () => void }) {
+  const reduce = useReduceAnimations();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button variant="ghost" size="icon-sm" aria-label="Show browser" onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
-          {working && <LiveDot className="absolute top-1.5 right-1.5" />}
+          {working && <LiveDot live={!reduce} className="absolute top-1.5 right-1.5 bg-brand" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent>Show browser</TooltipContent>

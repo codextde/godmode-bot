@@ -13,6 +13,7 @@ import { AgentAvatar } from "@/components/common";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { plural } from "./use-files";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function useFilesOverview() {
   return useQuery({ queryKey: qk.filesOverview, queryFn: () => api.files.overview(), staleTime: 60_000 });
@@ -24,6 +25,7 @@ function compactChars(n: number) {
 
 /** Every agent's files at a glance, the largest first: where tidying pays off. */
 export function FilesOverview({ agents }: { agents: Agent[] }) {
+  const reduce = useReduceAnimations();
   const overview = useFilesOverview();
   const boot = useBootstrap();
   const budget = memoryBudget(boot.data?.settings.memory.dreaming.maxMemoryChars);
@@ -64,7 +66,7 @@ export function FilesOverview({ agents }: { agents: Agent[] }) {
       {overview.isError && <p className="text-sm text-destructive">{errorMessage(overview.error)}</p>}
       <ul className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
         {rows.map(({ agent, row }, i) => (
-          <motion.li key={agent.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.02 }}>
+          <motion.li key={agent.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.02 }}>
             <AgentCard agent={agent} row={row} largest={largest} memoryLimit={budget.target} />
           </motion.li>
         ))}

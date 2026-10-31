@@ -37,6 +37,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
 import { RunRow, useRunLiveState } from "./run-row";
 import { RunLogViewer } from "./run-log-viewer";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function useCancelRun() {
   const qc = useQueryClient();
@@ -120,6 +121,7 @@ function RunDetail({ runId, placeholder, onOpenRun }: { runId: string; placehold
 }
 
 function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) => void }) {
+  const reduce = useReduceAnimations();
   const modelLabel = useModelLabel();
   const { data: agent } = useAgent(run.agentId);
   const { live, status, running, elapsed } = useRunLiveState(run);
@@ -195,16 +197,16 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
         {agent?.failedRunId === run.id && <FailureNotice agentId={agent.id} agentName={agent.name} />}
         {running && (
           <motion.div
-            initial={{ opacity: 0, y: 6 }}
+            initial={reduce ? false : { opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
+            className="full-motion:glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
           >
             <Orb variant="S3" size={28} label="Working" />
             <div className="min-w-0 flex-1">
               <div className="text-shimmer truncate text-sm font-medium">{live?.activity ?? "Working…"}</div>
               <div className="font-mono text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
             </div>
-            <WorkingTicks count={8} className="shrink-0 text-brand-strong" />
+            {!reduce && <WorkingTicks count={8} className="shrink-0 text-brand-strong" />}
           </motion.div>
         )}
 

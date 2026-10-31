@@ -18,6 +18,7 @@ import { ScopeBadge } from "@/components/common";
 import { cn } from "@/lib/utils";
 import { PaymentCardFace } from "./payment-card-face";
 import { approvalText } from "./card-utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 export const CardTile = memo(function CardTile({
   card,
@@ -39,6 +40,7 @@ export const CardTile = memo(function CardTile({
   onToggleFreeze: (card: PaymentCard) => void;
   onDelete: (card: PaymentCard) => void;
 }) {
+  const reduce = useReduceAnimations();
   const expired = cardExpired(card);
   const agentNames = (card.agentIds ?? []).map((id) => agentsById.get(id)?.name ?? "Deleted agent");
 
@@ -48,13 +50,13 @@ export const CardTile = memo(function CardTile({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
+      transition={reduce ? undefined : { delay: Math.min(index, 12) * 0.03 }}
       onClick={(e) => {
         // The whole tile opens Edit; its own controls (and menus portaled out of it) handle their clicks.
         const target = e.target as HTMLElement;
         if (e.currentTarget.contains(target) && !target.closest("button, a, [role=menuitem]")) onEdit(card);
       }}
-      className="group flex cursor-pointer flex-col rounded-[22px] border bg-card p-2 shadow-card transition hover:border-foreground/15 hover:shadow-float"
+      className="group flex cursor-pointer flex-col rounded-[22px] border bg-card p-2 shadow-card transition hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <button
         type="button"
@@ -71,7 +73,7 @@ export const CardTile = memo(function CardTile({
           expYear={card.expYear}
           frozen={card.frozen}
           expired={expired}
-          className="transition-transform duration-300 ease-out group-hover:-translate-y-0.5"
+          className="transition-transform duration-300 ease-out full-motion:group-hover:-translate-y-0.5"
         />
       </button>
 
@@ -158,7 +160,7 @@ function SpendMeter({ card, className }: { card: PaymentCard; className?: string
       </div>
       <div role="meter" aria-valuemin={0} aria-valuemax={limit} aria-valuenow={Math.min(card.spentThisMonth, limit)} aria-valuetext={sentence} aria-label="Spent this month" className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
-          className={cn("h-full rounded-full transition-[width] duration-500", state === "full" ? "bg-destructive" : state === "warning" ? "bg-warning" : "bg-foreground/60")}
+          className={cn("h-full rounded-full transition-[width] duration-500 calm-motion:duration-250", state === "full" ? "bg-destructive" : state === "warning" ? "bg-warning" : "bg-foreground/60")}
           style={{ width: `${card.spentThisMonth > 0 ? Math.max(2, share * 100) : 0}%` }}
         />
       </div>

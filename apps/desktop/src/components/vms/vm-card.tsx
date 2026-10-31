@@ -52,6 +52,7 @@ import { api, errorMessage, type VmOpenTarget } from "@/lib/api";
 import { useAllAgents, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { EASE_OUT } from "@/lib/motion";
 import { VmProgressBlock, VmStateBadge, formatDisplay, formatGb, formatMemory, guestFolderLabel, imageName, presetOf, vmBusy } from "./vm-parts";
 import type { VmActions } from "./use-vm-actions";
 
@@ -197,7 +198,7 @@ export function VmCard({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+            transition={{ duration: 0.2, ease: EASE_OUT }}
             className="overflow-hidden"
           >
             <CommandPanel vm={vm} />

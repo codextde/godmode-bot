@@ -13,6 +13,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, type DeepPartial } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 /* ------------------------------------------------------------------ */
 /* Saving                                                              */
@@ -309,10 +310,11 @@ export function SettingsGroup({
   tone?: "danger";
   bodyClassName?: string;
 }) {
+  const reduce = useReduceAnimations();
   return (
     <motion.section
       data-slot="settings-group"
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn("rounded-xl border bg-card shadow-card", tone === "danger" && "border-destructive/25", className)}
     >
@@ -395,6 +397,7 @@ export function Segmented<T extends string>({
   "aria-label"?: string;
   disabled?: boolean;
 }) {
+  const reduce = useReduceAnimations();
   const layoutId = useId();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -433,7 +436,7 @@ export function Segmented<T extends string>({
           >
             {active && (
               <motion.span
-                layoutId={layoutId}
+                layoutId={reduce ? undefined : layoutId}
                 className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent"
                 transition={{ type: "spring", stiffness: 420, damping: 34 }}
               />

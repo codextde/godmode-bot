@@ -135,12 +135,12 @@ export function VmProgressBar({ percent, className, label }: { percent: number |
       {value === undefined ? (
         <motion.span
           className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-brand/80"
-          initial={{ x: "-100%" }}
-          animate={{ x: "300%" }}
+          initial={{ transform: "translateX(-100%)" }}
+          animate={{ transform: "translateX(300%)" }}
           transition={{ duration: 1.6, ease: [0.4, 0, 0.2, 1], repeat: Infinity }}
         />
       ) : (
-        <span className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-700 ease-out" style={{ width: `${value}%` }} />
+        <span className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-700 calm-motion:duration-250 ease-out" style={{ width: `${value}%` }} />
       )}
     </div>
   );

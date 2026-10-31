@@ -6,6 +6,7 @@ import { ArrowDown } from "lucide-react";
 import type { LiveRun } from "@/stores/live";
 import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
 import { useStickToBottom } from "./use-stick-to-bottom";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 function dayLabel(iso: string): string {
   const d = new Date(iso);
@@ -33,8 +34,8 @@ export interface ThreadProps {
 }
 
 export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after }: ThreadProps) {
+  const reduce = useReduceAnimations();
   const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
-  // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
   if (initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
 
@@ -50,7 +51,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
             const day = dayLabel(m.createdAt);
             const showDay = day && day !== lastDay;
             lastDay = day || lastDay;
-            const animate = !initialIds.current!.has(m.id);
+            const animate = !reduce && !initialIds.current!.has(m.id);
             return (
               <Fragment key={m.id}>
                 {showDay && (
@@ -63,7 +64,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
                 <motion.div
                   initial={animate ? { opacity: 0, y: 8 } : false}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
+                  transition={{ duration: 0.25, ease: EASE_OUT }}
                 >
                   {m.role === "user" && m.source ? (
                     <StartedMessage message={m} delegatedFrom={delegatedFrom} />
@@ -98,9 +99,10 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
         {!atBottom && !isEmpty && (
           <motion.button
             type="button"
-            initial={{ opacity: 0, y: 8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.96 }}
+            animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.96 }}
+            transition={reduce ? { duration: 0.15, ease: "easeOut" } : undefined}
             onClick={() => scrollToBottom()}
             className="absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-md glass px-3 py-1.5 text-xs font-medium transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
           >

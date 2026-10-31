@@ -37,7 +37,7 @@ export function PasswordsHeader({ actions }: { actions?: ReactNode }) {
                 to={t.to}
                 className={({ isActive }) =>
                   cn(
-                    "inline-flex h-full items-center gap-2 rounded-md border border-transparent px-3.5 text-sm font-medium whitespace-nowrap text-foreground/60 outline-none transition-all hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
+                    "inline-flex h-full items-center gap-2 rounded-md border border-transparent px-3.5 text-sm font-medium whitespace-nowrap text-foreground/60 outline-none transition-all calm-motion:transition-[color,background-color,border-color,box-shadow] hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:text-muted-foreground dark:hover:text-foreground [&_svg]:size-4 [&_svg]:shrink-0",
                     isActive && "bg-background text-foreground shadow-sm dark:border-input dark:bg-input/30 dark:text-foreground",
                   )
                 }

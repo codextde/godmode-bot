@@ -21,6 +21,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useAgents, useArtifact, useArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** Dashboards and small apps the agents built: a line to ask for a new one, then the gallery. */
 export function ArtifactsOverview() {
@@ -155,6 +156,7 @@ function useSeen<T extends Element>() {
 }
 
 function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: number }) {
+  const reduce = useReduceAnimations();
   const [box, seen] = useSeen<HTMLDivElement>();
   const { data: full } = useArtifact(seen ? artifact.id : null);
   const actions = useArtifactActions(artifact);
@@ -165,10 +167,10 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 6 }}
+      initial={reduce ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index, 8) * 0.03 }}
-      className="group relative overflow-hidden rounded-xl border bg-card shadow-card transition hover:-translate-y-0.5 hover:border-foreground/15 hover:shadow-lg"
+      className="group relative overflow-hidden rounded-xl border bg-card shadow-card transition full-motion:hover:-translate-y-0.5 hover:border-foreground/15 full-motion:hover:shadow-lg"
     >
       <Link to={`/artifacts/${artifact.id}`} className="block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <div ref={box} className="relative aspect-[16/10] border-b bg-background">

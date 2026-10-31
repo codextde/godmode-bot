@@ -14,6 +14,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { QueryError } from "./query-error";
 import { ToolkitLogo } from "./toolkit-logo";
+import { useReduceAnimations } from "@/lib/motion";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [v, setV] = useState(value);
@@ -35,6 +36,7 @@ export function ToolkitGallery({
   /** Reports every loaded toolkit (used to show logos/names in the connections list). */
   onToolkits?: (items: ComposioToolkit[]) => void;
 }) {
+  const reduce = useReduceAnimations();
   const [searchInput, setSearchInput] = useState("");
   const search = useDebounced(searchInput.trim(), 300);
   const [category, setCategory] = useState("");
@@ -134,7 +136,7 @@ export function ToolkitGallery({
                   active ? "border-transparent text-primary-foreground" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
-                {active && <motion.span layoutId="toolkit-cat" className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+                {active && <motion.span layoutId={reduce ? undefined : "toolkit-cat"} className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
                 <span className="relative">{c || "All"}</span>
               </button>
             );
@@ -184,12 +186,13 @@ export function ToolkitGallery({
 }
 
 function ToolkitCard({ toolkit: t, index, connected, onConnect }: { toolkit: ComposioToolkit; index: number; connected: number; onConnect: () => void }) {
+  const reduce = useReduceAnimations();
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index % 24, 12) * 0.03 }}
-      className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float"
+      className="group flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <ToolkitLogo src={t.logo} name={t.name} />

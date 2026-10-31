@@ -19,7 +19,7 @@ const ORB_FOR_PHASE: Record<VoiceOrbPhase, OrbVariant> = {
 /**
  * The big voice-mode orb: hairline rings, a radial tick dial and a solid paper core with a dot-matrix
  * Orb, breathing with the audio level (mic while listening, playback while speaking). Level is read
- * from a ref per frame and exposed as `--lvl`. Monochrome ink; the brand colour marks "listening".
+ * from a ref per frame and written to each part's transform. Monochrome ink; the brand colour marks "listening".
  */
 export function VoiceOrb({
   phase,
@@ -41,7 +41,12 @@ export function VoiceOrb({
   useEffect(() => {
     let raf = 0;
     let smooth = 0;
+    let shown = "";
     const t0 = performance.now();
+    const parts = Array.from(ref.current?.querySelectorAll<HTMLElement>("[data-lvl]") ?? [], (el) => {
+      const [fn, base, k] = (el.dataset.lvl ?? "").split(" ");
+      return { el, fn, base: Number(base), k: Number(k) };
+    });
     const tick = () => {
       const t = (performance.now() - t0) / 1000;
       const p = phaseRef.current;
@@ -50,7 +55,11 @@ export function VoiceOrb({
       else if (p === "paused") target = 0.04;
       else if (p === "listening") target = Math.max(0.06 + 0.03 * Math.sin(t * 1.6), target);
       smooth += (Math.min(1, target) - smooth) * 0.18;
-      ref.current?.style.setProperty("--lvl", smooth.toFixed(3));
+      const lvl = smooth.toFixed(3);
+      if (lvl !== shown) {
+        shown = lvl;
+        for (const p of parts) p.el.style.transform = `${p.fn}(${p.base + Number(lvl) * p.k})`;
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -64,7 +73,6 @@ export function VoiceOrb({
       onClick={onClick}
       aria-label={label}
       data-phase={phase}
-      style={{ ["--lvl" as string]: 0 }}
       className={cn(
         "group relative grid size-56 place-items-center rounded-full text-foreground outline-none transition-colors duration-500 sm:size-64",
         "focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-offset-8 focus-visible:ring-offset-background",
@@ -76,12 +84,14 @@ export function VoiceOrb({
       <span
         aria-hidden
         className="absolute inset-0 rounded-full border border-current opacity-[0.08]"
-        style={{ transform: "scale(calc(0.9 + var(--lvl) * 0.22))" }}
+        data-lvl="scale 0.9 0.22"
+        style={{ transform: "scale(0.9)" }}
       />
       <span
         aria-hidden
         className="absolute inset-[7%] rounded-full border border-current opacity-[0.14]"
-        style={{ transform: "scale(calc(0.94 + var(--lvl) * 0.14))" }}
+        data-lvl="scale 0.94 0.14"
+        style={{ transform: "scale(0.94)" }}
       />
       {/* Radial tick dial — each tick stretches with the level, like a round equaliser */}
       <span
@@ -95,7 +105,8 @@ export function VoiceOrb({
           <span key={i} className="absolute inset-0" style={{ transform: `rotate(${i * (360 / TICKS.length)}deg)` }}>
             <span
               className="absolute top-[4%] left-1/2 h-[11%] w-[1.5px] -translate-x-1/2 origin-bottom rounded-[1px] bg-current opacity-50"
-              style={{ transform: `scaleY(calc(0.18 + var(--lvl) * ${k}))` }}
+              data-lvl={`scaleY 0.18 ${k}`}
+              style={{ transform: "scaleY(0.18)" }}
             />
           </span>
         ))}
@@ -104,9 +115,10 @@ export function VoiceOrb({
       <span
         aria-hidden
         className="absolute inset-[24%] rounded-full border bg-card shadow-float transition-[border-color] duration-500 group-data-[phase=listening]:border-brand/30"
-        style={{ transform: "scale(calc(1 + var(--lvl) * 0.08))" }}
+        data-lvl="scale 1 0.08"
+        style={{ transform: "scale(1)" }}
       />
-      <span className="relative transition-transform duration-300 [--orb-fg:currentColor] group-active:scale-[0.97]">
+      <span className="relative transition-transform duration-150 ease-out [--orb-fg:currentColor] group-active:scale-[0.97]">
         <Orb variant={ORB_FOR_PHASE[phase]} size={56} label={label} />
       </span>
     </button>

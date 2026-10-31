@@ -13,11 +13,13 @@ import { useModTemplates } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { ModIconTile, hooksModulePath, sortedPaths } from "./mod-parts";
 import type { ModActions } from "./use-mod-actions";
+import { useReduceAnimations } from "@/lib/motion";
 
 const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3";
 
 /** Small plugins Godmode ships: browse by category, read one through, add it. */
 export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; actions: ModActions; onOpen: (mod: Mod) => void; onAdded: (mod: Mod) => void }) {
+  const reduce = useReduceAnimations();
   const templates = useModTemplates();
   const [category, setCategory] = useState<ModCategory | "">("");
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -71,7 +73,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
                   active ? "border-transparent text-primary-foreground" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
-                {active && <motion.span layoutId="mod-cat" className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+                {active && <motion.span layoutId={reduce ? undefined : "mod-cat"} className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
                 <span className="relative">{c ? MOD_CATEGORY_LABELS[c] : "All"}</span>
               </button>
             );
@@ -139,12 +141,13 @@ function TemplateCard({
   onAdd: () => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const reduce = useReduceAnimations();
   return (
     <motion.article
-      initial={{ opacity: 0, y: 8 }}
+      initial={reduce ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: Math.min(index, 12) * 0.03 }}
-      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float"
+      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <ModIconTile icon={t.icon} size="sm" />

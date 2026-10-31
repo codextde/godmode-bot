@@ -28,6 +28,7 @@ import { API_TOOL_PRESETS, CUSTOM_ICON, toolIcon, type ApiToolPreset } from "./a
 import { ConfirmDialog } from "./confirm-dialog";
 import { QueryError } from "./query-error";
 import { ScopeChip } from "./scope-picker";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function useApiTools() {
   return useQuery({ queryKey: qk.apiTools, queryFn: () => api.apiTools.list({ workspaceId: "all" }) });
@@ -43,6 +44,7 @@ function hostOf(url: string): string {
 
 /** APIs agents may call with a stored key: add from a preset or from scratch, test, scope, enable. */
 export function ApiToolsTab() {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const tools = useApiTools();
   const [dialog, setDialog] = useState<ApiToolDialogState>(null);
@@ -155,7 +157,7 @@ export function ApiToolsTab() {
                 key={t.id}
                 layout
                 initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                animate={reduce ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
                 exit={{ opacity: 0, height: 0 }}
               >
                 <ToolRow
@@ -200,7 +202,7 @@ function PresetGallery({ onPick }: { onPick: (p: ApiToolPreset | null) => void }
             type="button"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: Math.min(i, 12) * 0.035 }}
+            transition={{ delay: Math.min(i, 6) * 0.04 }}
             onClick={() => onPick(c.preset)}
             className={cn(
               "group flex items-start gap-3 rounded-xl border bg-card p-4 text-left shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
