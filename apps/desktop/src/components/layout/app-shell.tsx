@@ -444,7 +444,7 @@ function NavSection({
   const open = bare || expanded || railed;
   const toggleButton = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
   const header = action ? (
-    <div className="group/section flex min-w-0 items-center justify-between gap-1 pr-1">
+    <div className="group/section flex min-w-0 flex-1 items-center justify-between gap-1 pr-1">
       {toggleButton}
       {action}
     </div>
@@ -468,7 +468,7 @@ function NavSection({
     const current = items.find((item) => isActive(item, pathname));
     const waiting = items.reduce((sum, item) => sum + (item.badge ?? 0), 0);
     return (
-      <SidebarGroup className="py-1">
+      <SidebarGroup className="py-0">
         <div className="flex items-center justify-between gap-1">
           {header}
           {waiting > 0 && <span className="mr-2 size-1.5 rounded-full bg-brand" aria-label={`${waiting} waiting`} />}

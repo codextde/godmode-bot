@@ -1,7 +1,7 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
-import type { Agent, Conversation, Workspace } from "@godmode/shared";
+import type { Agent, Conversation } from "@godmode/shared";
 import { Fragment, useEffect, useState } from "react";
 import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LiveDot } from "@/components/aicss/Motion";
 import { NavSectionHeader } from "@/components/layout/nav-section-header";
-import { AgentAvatar, colorGradient } from "@/components/common";
+import { AgentAvatar } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
 import { AnimatedTitle } from "@/components/chat/animated-title";
@@ -87,6 +87,7 @@ export function RecentChats() {
   const setRecentSource = useUi((s) => s.setRecentSource);
   const open = useUi((s) => !s.collapsedNav.includes("recent"));
   const toggleOpen = useUi((s) => s.toggleNavCollapsed);
+  const foldedGroups = useUi((s) => s.collapsedNav);
 
   const unarchived = conversations.filter((c) => !c.archived);
   const sources = sourceStats(unarchived);
@@ -111,8 +112,6 @@ export function RecentChats() {
           ? continuesAt(a).localeCompare(continuesAt(b))
           : Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt)),
     );
-  const items = matching.slice(0, limit);
-  const more = matching.length - items.length;
   const dayOf = (c: Conversation) => (c.pinned ? "Pinned" : dayLabel(c.lastMessageAt ?? c.createdAt));
   const groupOf = (c: Conversation): string | null => {
     if (grouped) {
@@ -123,6 +122,32 @@ export function RecentChats() {
     }
     return recentTab === "done" ? dayOf(c) : null;
   };
+  const groupSize = new Map<string, number>();
+  for (const c of matching) {
+    const g = groupOf(c);
+    if (g) groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+  }
+  type Row = { c: Conversation; heading: string | null; folded: boolean };
+  const rows: Row[] = [];
+  let more = 0;
+  let shown = 0;
+  let previous: string | null | undefined;
+  for (const c of matching) {
+    const group = groupOf(c);
+    const starts = group !== previous;
+    previous = group;
+    const folded = !!group && foldedGroups.includes(`recent:${group}`);
+    if (folded) {
+      if (starts) rows.push({ c, heading: group, folded });
+      continue;
+    }
+    if (shown >= limit) {
+      more++;
+      continue;
+    }
+    shown++;
+    rows.push({ c, heading: starts ? group : null, folded });
+  }
   const unreadIds = visible.flatMap((c) => (c.unread ? [c.id] : []));
   const markAllRead = unreadIds.length
     ? () => void api.conversations.read(scope === "all" ? "all" : unreadIds).catch(() => undefined)
@@ -131,7 +156,7 @@ export function RecentChats() {
   if (unarchived.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
   return (
-    <SidebarGroup className="pt-1 group-data-[collapsible=icon]:hidden">
+    <SidebarGroup className="pt-0 group-data-[collapsible=icon]:hidden">
       <div className="sticky top-0 z-10 -mx-2 flex items-center justify-between gap-2 bg-sidebar px-2">
         <NavSectionHeader label="Recent" open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} />
         {open ? (
@@ -167,10 +192,19 @@ export function RecentChats() {
       {open && (
         <SidebarGroupContent id="recent-chats-panel">
           <SidebarMenu className="gap-px">
-            {items.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
-            {items.map((c, i) => {
-              const group = groupOf(c);
-              const heading = group && (i === 0 || groupOf(items[i - 1]!) !== group) ? group : null;
+            {matching.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
+            {rows.map(({ c, heading, folded }, i) => {
+              const headingNode = heading && (
+                <GroupHeading
+                  label={heading}
+                  first={i === 0}
+                  live={heading === "Running"}
+                  folded={folded}
+                  count={groupSize.get(heading) ?? 0}
+                  onToggle={() => toggleOpen(`recent:${heading}`)}
+                />
+              );
+              if (folded) return <Fragment key={`group-${heading}`}>{headingNode}</Fragment>;
               const agent = agents.find((a) => a.id === c.agentId);
               const workspaceId = c.workspaceId ?? agent?.workspaceId;
               const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
@@ -190,7 +224,7 @@ export function RecentChats() {
                 .join(" · ");
               return (
                 <Fragment key={c.id}>
-                  {heading && <GroupHeading label={heading} first={i === 0} live={heading === "Running"} />}
+                  {headingNode}
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
@@ -206,7 +240,6 @@ export function RecentChats() {
                             </span>
                             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
                             <span className="flex shrink-0 items-center gap-1.5 group-focus-within/menu-item:hidden group-hover/menu-item:hidden max-md:hidden">
-                              {workspace && <WorkspaceChip workspace={workspace} />}
                               {unread ? (
                                 <span
                                   className={cn("size-1.5 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
@@ -306,11 +339,39 @@ export function RecentChats() {
   );
 }
 
-function GroupHeading({ label, first, live }: { label: string; first: boolean; live: boolean }) {
+function GroupHeading({
+  label,
+  first,
+  live,
+  folded,
+  count,
+  onToggle,
+}: {
+  label: string;
+  first: boolean;
+  live: boolean;
+  folded: boolean;
+  count: number;
+  onToggle: () => void;
+}) {
   return (
-    <li role="presentation" className={cn("flex items-center gap-1.5 px-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/80", first ? "pt-0.5" : "pt-3")}>
-      {live && <LiveDot className="size-1.5 bg-brand-strong" />}
-      {label}
+    <li role="presentation" className={cn("px-0.5", first ? "pt-0.5" : "pt-2")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        className="group/heading flex h-5 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[10.5px] font-medium text-muted-foreground/80 outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      >
+        {live && <LiveDot className="size-1.5 bg-brand-strong" />}
+        {label}
+        {folded && <span className="font-normal text-muted-foreground/60 tabular-nums">{count}</span>}
+        <ChevronDown
+          className={cn(
+            "size-3 transition",
+            folded ? "-rotate-90" : "opacity-0 group-hover/heading:opacity-100 group-focus-visible/heading:opacity-100",
+          )}
+        />
+      </button>
     </li>
   );
 }
@@ -334,24 +395,6 @@ function originLine(c: Conversation, agents: Agent[]): string | null {
   if (c.origin === "routine") return "Automation";
   if (c.origin === "heartbeat") return "Heartbeat";
   return null;
-}
-
-/** Which workspace a chat belongs to, in the workspace's colour. Global chats go without. */
-function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Workspace, "name" | "icon" | "color">; kind?: string }) {
-  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(workspace.color);
-  return (
-    <span
-      title={`${kind}: ${workspace.name}`}
-      className={cn(
-        "inline-flex h-4 max-w-22 shrink-0 items-center gap-1 rounded-[5px] px-1 text-[10px] font-medium text-foreground/75 ring-1 ring-inset",
-        hex ? "ring-foreground/10" : colorGradient(workspace.color),
-      )}
-      style={hex ? { backgroundColor: `color-mix(in oklab, ${workspace.color} 14%, transparent)` } : undefined}
-    >
-      {workspace.icon && <span className="text-[9px] leading-none" aria-hidden>{workspace.icon}</span>}
-      <span className="truncate">{workspace.name}</span>
-    </span>
-  );
 }
 
 type ChatSource = Exclude<RecentSource, "all">;
