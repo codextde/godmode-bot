@@ -117,7 +117,7 @@ function applyTheme(mode: Resolved, palette: Palette, animate: boolean) {
 /** People the owner let into the cloud dashboard keep a theme of their own in their browser. */
 const personal = !!cloudContext && cloudContext.role !== "owner";
 
-function useSharedChoice<K extends "theme" | "palette">(
+export function useSharedChoice<K extends "theme" | "palette" | "language">(
   key: K,
   initial: () => General[K],
   valid: (v: unknown) => v is General[K],

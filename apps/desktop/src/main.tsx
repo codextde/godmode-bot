@@ -1,3 +1,4 @@
+import "@/i18n";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -5,6 +6,7 @@ import { BrowserRouter } from "react-router";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { LanguageProvider } from "@/i18n/language";
 import { VaultGrantDialog } from "@/components/vault/grant";
 import { MacPermissionsGuide } from "@/components/permissions/mac-permissions";
 import { isCloudError } from "@/lib/api";
@@ -42,6 +44,7 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
+        <LanguageProvider>
         <TooltipProvider delayDuration={250}>
           <BrowserRouter basename={cloudContext?.base}>
             <App />
@@ -50,6 +53,7 @@ createRoot(document.getElementById("root")!, reactRootErrorHandlers).render(
           <VaultGrantDialog />
           <MacPermissionsGuide />
         </TooltipProvider>
+        </LanguageProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </StrictMode>,

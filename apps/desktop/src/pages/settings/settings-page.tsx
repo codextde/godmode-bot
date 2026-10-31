@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Navigate, NavLink, useLocation, useNavigate, type To } from "react-router";
 import searchIndex from "virtual:settings-search";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
@@ -308,8 +310,11 @@ function useLabels(): Record<SectionId, string> {
   return Object.fromEntries(SECTIONS.map((s) => [s.id, easy ? (EASY[s.id]?.label ?? EASY_ADVANCED_LABEL[s.id] ?? s.label) : s.label])) as Record<SectionId, string>;
 }
 
+const searchText = (s: string) => (s.startsWith("@") ? i18n.t(s.slice(1) as never, { ns: "settings" }) : s);
+
 function useSearch(query: string): Hit[] {
   const labels = useLabels();
+  const { i18n: { language } } = useTranslation();
   return useMemo(() => {
     const words = fold(query).split(/\s+/).filter(Boolean);
     if (!words.length) return [];
@@ -318,12 +323,12 @@ function useSearch(query: string): Hit[] {
       return words.every((w) => folded.includes(w));
     };
     return SECTIONS.flatMap((s) => {
-      const entry = searchIndex[s.id] ?? { labels: [], text: "" };
-      const settings = entry.labels.filter((l) => l !== labels[s.id] && matches(l));
-      const hit = matches(labels[s.id]) || matches(s.label) || settings.length > 0 || matches(entry.text);
+      const entry = searchIndex[s.id] ?? { labels: [], text: [] };
+      const settings = entry.labels.map(searchText).filter((l) => l !== labels[s.id] && matches(l));
+      const hit = matches(labels[s.id]) || matches(s.label) || settings.length > 0 || matches(entry.text.map(searchText).join(" "));
       return hit ? [{ id: s.id, label: labels[s.id], icon: s.icon, settings: settings.slice(0, 5) }] : [];
     }).sort((a, b) => Number(matches(b.label)) - Number(matches(a.label)) || b.settings.length - a.settings.length);
-  }, [query, labels]);
+  }, [query, labels, language]);
 }
 
 function SettingsSearch({ query, onQuery, onPick }: { query: string; onQuery: (q: string) => void; onPick: (id: SectionId, label: string | null) => void }) {

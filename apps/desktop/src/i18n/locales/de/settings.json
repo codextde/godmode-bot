@@ -1,0 +1,48 @@
+{
+  "general": {
+    "title": "Allgemein",
+    "description": "Wie Godmode dich begrüßt, aussieht und sich auf deinem Desktop verhält.",
+    "launchAtLoginError": "Start bei Anmeldung konnte nicht geändert werden",
+    "interface": {
+      "title": "Oberfläche",
+      "description": "Einfach hält Godmode schlicht für die tägliche Arbeit. Profi zeigt jedes Werkzeug und jedes Detail. Beide können genau dasselbe."
+    },
+    "profile": {
+      "title": "Profil",
+      "name": "Dein Name",
+      "nameDescription": "Agenten sprechen dich damit an und unterschreiben Nachrichten in deinem Namen.",
+      "namePlaceholder": "z. B. Alex"
+    },
+    "language": {
+      "title": "Sprache",
+      "label": "App-Sprache",
+      "description": "Die Sprache der App auf diesem Computer, im Browser-Dashboard und auf deinem Handy. System folgt deinem Gerät."
+    },
+    "appearance": {
+      "title": "Darstellung",
+      "mode": "Modus",
+      "modeDescription": "Jede Palette hat eine helle und eine dunkle Seite. System folgt deinem Betriebssystem. Jederzeit umschalten mit {{shortcut}}.",
+      "light": "Hell",
+      "dark": "Dunkel",
+      "palette": "Palette"
+    },
+    "desktop": {
+      "title": "Desktop",
+      "onlyDesktop": "Diese Optionen gelten nur für die Desktop-App.",
+      "launchAtLogin": "Bei Anmeldung starten",
+      "launchAtLoginDescription": "Godmode startet im Hintergrund, wenn du dich anmeldest, damit Automationen weiterlaufen.",
+      "desktopOnly": "Nur in der Desktop-App.",
+      "tray": "In der Menüleiste weiterlaufen",
+      "trayDescription": "Beim Schließen des Fensters wandert Godmode in die Menüleiste, statt sich zu beenden — Agenten und Automationen arbeiten weiter."
+    },
+    "notifications": {
+      "title": "Mitteilungen",
+      "desktop": "Desktop-Mitteilungen",
+      "desktopDescription": "Werde benachrichtigt, wenn eine Aufgabe fertig ist, eine Automation fehlschlägt oder ein Agent einen Login von dir braucht.",
+      "test": "Testen",
+      "testBody": "Mitteilungen funktionieren. Hier hörst du von deinen Agenten.",
+      "testSent": "Test-Mitteilung gesendet",
+      "testHint": "Falls nichts erschienen ist, prüfe die Mitteilungsrechte deines Betriebssystems."
+    }
+  }
+}
