@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { motion } from "motion/react";
 import { Boxes, Server, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiToolsTab, useApiTools } from "@/components/integrations/api-tools-tab";
@@ -50,30 +49,16 @@ export function IntegrationsOverview() {
           <TabTrigger value="mcp" icon={<Server />} label="MCP servers" count={counts.mcp} />
         </TabsList>
         <TabsContent value="composio">
-          <FadeIn>
-            <ComposioTab />
-          </FadeIn>
+          <ComposioTab />
         </TabsContent>
         <TabsContent value="tools">
-          <FadeIn>
-            <ApiToolsTab />
-          </FadeIn>
+          <ApiToolsTab />
         </TabsContent>
         <TabsContent value="mcp">
-          <FadeIn>
-            <McpServersTab />
-          </FadeIn>
+          <McpServersTab />
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-function FadeIn({ children }: { children: ReactNode }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-      {children}
-    </motion.div>
   );
 }
 

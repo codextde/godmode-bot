@@ -324,7 +324,7 @@ export default function WorkspacesPage() {
                   )}
                 >
                   {sort === o.id && (
-                    <motion.span layoutId="workspaces-sort" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+                    <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
                   )}
                   <span className="relative">{o.label}</span>
                 </button>
@@ -438,7 +438,6 @@ export default function WorkspacesPage() {
               {showGlobal && (
                 <ScopeCard
                   workspace={null}
-                  index={0}
                   current={scope === "global"}
                   tile={globalTile}
                   title="Global"
@@ -453,11 +452,10 @@ export default function WorkspacesPage() {
                 />
               )}
               <AnimatePresence initial={false}>
-                {list.map((ws, i) => (
+                {list.map((ws) => (
                   <ScopeCard
                     key={ws.id}
                     workspace={ws}
-                    index={i + 1}
                     current={scope === ws.id && !scopedProject}
                     tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
                     title={ws.name}
@@ -489,9 +487,6 @@ export default function WorkspacesPage() {
                   layout
                   type="button"
                   onClick={openCreate}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(list.length + 1, 12) * 0.03 }}
                   className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/15 p-6 text-center transition hover:border-foreground/25 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
@@ -618,7 +613,6 @@ function conflictCounts(details: unknown, fallback: Counts): [string, number][] 
 
 function ScopeCard({
   workspace,
-  index,
   current,
   tile,
   title,
@@ -636,7 +630,6 @@ function ScopeCard({
 }: {
   /** null for Global. */
   workspace: Workspace | null;
-  index: number;
   current: boolean;
   tile: ReactNode;
   title: string;
@@ -664,10 +657,7 @@ function ScopeCard({
       ref={dnd.ref}
       {...dnd.props}
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-5 shadow-card transition hover:shadow-float",
         current ? "border-brand/35 ring-1 ring-brand/15" : dnd.state === "none" && "hover:border-foreground/15",

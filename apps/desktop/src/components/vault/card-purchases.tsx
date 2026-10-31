@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Ban, Bot, Check, CircleCheck, MessageSquare, MoreHorizontal, RotateCcw, Square, X } from "lucide-react";
 import { cardLabel, formatMoney, type CardPurchase, type CardPurchasePatch, type PaymentCard } from "@godmode/shared";
@@ -161,11 +160,11 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
         </p>
       ) : (
         <ul className={cn("divide-y overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
-          {purchases.map((p, i) => {
+          {purchases.map((p) => {
             const agent = p.agentId ? agentById.get(p.agentId) : undefined;
             const card = cardById.get(p.cardId);
             return (
-              <motion.li key={p.id} initial={{ opacity: 0 }} animate={{ opacity: 1, transition: { delay: Math.min(i, 10) * 0.02 } }}>
+              <li key={p.id}>
                 <PurchaseRow
                   purchase={p}
                   agentName={agent?.name ?? "Deleted agent"}
@@ -176,7 +175,7 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
                   deciding={decidingId === p.id}
                   onDecide={(decision) => decide.mutate({ purchase: p, decision })}
                 />
-              </motion.li>
+              </li>
             );
           })}
         </ul>

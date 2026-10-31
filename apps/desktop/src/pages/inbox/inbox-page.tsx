@@ -267,12 +267,12 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
             ) : (
               <div className="space-y-3">
                 <AnimatePresence initial={false} mode="popLayout">
-                  {items.map((entry, i) => (
+                  {items.map((entry) => (
                     <motion.div
                       key={entry.item.id}
                       layout
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1, transition: { duration: 0.15, ease: "easeOut" } }}
                       exit={{ opacity: 0, x: 40, transition: { duration: 0.2 } }}
                     >
                       {entry.kind === "question" ? (

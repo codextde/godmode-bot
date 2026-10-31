@@ -151,14 +151,13 @@ export function NotificationList({ className }: { className?: string }) {
       ) : (
         <ul className="divide-y">
           <AnimatePresence initial={false}>
-            {items.slice(0, limit).map((n, i) => (
+            {items.slice(0, limit).map((n) => (
               <motion.li
                 key={n.id}
                 layout
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
-                transition={{ delay: Math.min(i, 12) * 0.03 }}
               >
                 <NotificationRow n={n} onOpen={() => open(n)} />
               </motion.li>

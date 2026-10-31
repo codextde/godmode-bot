@@ -3,7 +3,6 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
-import { motion } from "motion/react";
 import {
   ArrowUpRight,
   CalendarClock,
@@ -194,9 +193,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         {agent?.failedRunId === run.id && <FailureNotice agentId={agent.id} agentName={agent.name} />}
         {running && (
-          <motion.div
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
+          <div
             className="glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
           >
             <Orb variant="S3" size={28} label="Working" />
@@ -205,7 +202,7 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
               <div className="font-mono text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
             </div>
             <WorkingTicks count={8} className="shrink-0 text-brand-strong" />
-          </motion.div>
+          </div>
         )}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

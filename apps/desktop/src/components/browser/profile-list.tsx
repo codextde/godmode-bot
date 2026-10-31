@@ -87,14 +87,13 @@ export function ProfileList({
     <>
       <div className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-1" role="listbox" aria-label="Browser profiles">
         <AnimatePresence initial={false}>
-          {profiles.map((p, i) => (
+          {profiles.map((p) => (
             <motion.div
               key={p.id}
               layout
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96 }}
-              transition={{ delay: Math.min(i, 12) * 0.03 }}
             >
               <ProfileCard
                 profile={p}

@@ -40,14 +40,13 @@ function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; o
   return (
     <div className="grid grid-cols-1 items-start gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
       <AnimatePresence initial={false}>
-        {devices.map((device, i) => (
+        {devices.map((device) => (
           <motion.div
             key={device.id}
             layout="position"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97 }}
-            transition={{ delay: Math.min(i, 8) * 0.03 }}
             className="min-w-0"
           >
             <DeviceCard device={device} onEdit={() => onEdit(device)} onForget={() => onForget(device)} />

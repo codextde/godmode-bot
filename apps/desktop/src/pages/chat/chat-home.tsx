@@ -92,12 +92,6 @@ const SETUP_DRAFT = "chat:home-setup:";
 const NO_SSH_SERVERS: string[] = [];
 const NO_ANDROID_DEVICES: string[] = [];
 
-const fade = (delay: number) => ({
-  initial: { opacity: 0, y: 10 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.5, delay, ease: [0.2, 0.8, 0.2, 1] as const },
-});
-
 export default function ChatHome() {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -220,12 +214,12 @@ export default function ChatHome() {
     <ChatDropZone onFiles={(files) => composerRef.current?.addFiles(files)} disabled={voiceMode} className="relative min-h-full">
       <Backdrop />
 
-      <motion.div {...fade(0)} className="absolute top-3 right-3 z-10 @xl:top-4 @xl:right-4">
+      <div className="absolute top-3 right-3 z-10 @xl:top-4 @xl:right-4">
         <PrivateChatToggle value={privateChat} onChange={setPrivateChat} />
-      </motion.div>
+      </div>
 
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
-        <motion.div {...fade(0)}>
+        <div>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
             <LiveDot live={false} className="bg-brand" />
             {format(now, "EEEE, MMMM d")}
@@ -236,9 +230,9 @@ export default function ChatHome() {
               </>
             )}
           </span>
-        </motion.div>
+        </div>
         {privateChat ? (
-          <motion.div key="private" {...fade(0.03)} className="mt-7 flex flex-col items-center">
+          <div key="private" className="mt-7 flex flex-col items-center">
             <span className="grid size-20 place-items-center rounded-full border-2 border-dashed border-foreground/25 bg-card text-foreground/80 shadow-card">
               <Ghost className="size-9" strokeWidth={1.5} />
             </span>
@@ -247,23 +241,23 @@ export default function ChatHome() {
               <span className="block text-foreground/35">Just between us.</span>
             </h1>
             <p className="mt-3 max-w-md text-sm text-muted-foreground">{PRIVATE_CHAT_HINT}</p>
-          </motion.div>
+          </div>
         ) : (
           <>
             {selected && (
-              <motion.div {...fade(0.03)} className="mt-7">
+              <div className="mt-7">
                 <AgentAvatar key={selected.id} agent={selected} size="xl" follow className="size-20" />
-              </motion.div>
+              </div>
             )}
-            <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
+            <h1 className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
               {greeting(now)}
               {userName ? `, ${userName}` : ""}.
               <span className="block text-foreground/35">What should we get done?</span>
-            </motion.h1>
+            </h1>
           </>
         )}
 
-        <motion.div {...fade(0.12)} className="mt-9 w-full text-left">
+        <div className="mt-9 w-full text-left">
           <Composer
             key={privateChat ? "private" : "home"}
             ref={composerRef}
@@ -344,11 +338,11 @@ export default function ChatHome() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
 
         {privateChat ? null : easy ? (
           hideSuggestions ? null : (
-          <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
+          <div className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
               <h2 className="eyebrow">Try something like</h2>
               <button
@@ -370,7 +364,7 @@ export default function ChatHome() {
                   key={text}
                   type="button"
                   onClick={() => composerRef.current?.setText(prompt ?? text)}
-                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
                     <Icon className="size-3.5" />
@@ -379,10 +373,10 @@ export default function ChatHome() {
                 </button>
               ))}
             </div>
-          </motion.div>
+          </div>
           )
         ) : (
-          <motion.div {...fade(0.18)} className="mt-4 flex flex-wrap justify-center gap-2">
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             {SUGGESTIONS.map(({ icon: Icon, text }) => (
               <button
                 key={text}
@@ -394,10 +388,10 @@ export default function ChatHome() {
                 {text}
               </button>
             ))}
-          </motion.div>
+          </div>
         )}
 
-        <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
+        <p className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
             <>
               <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
@@ -409,7 +403,7 @@ export default function ChatHome() {
               <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
             </>
           )}
-        </motion.p>
+        </p>
       </div>
 
       {!privateChat && (
@@ -495,27 +489,27 @@ function RunningNow({ agents }: { agents: Agent[] }) {
   return (
     <section aria-label="Working now">
       <h2 className="eyebrow mb-3 flex items-center gap-2">
-        <LiveDot />
+        <LiveDot live={false} className="bg-brand" />
         Working now
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
         {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {queued} queued</span>}
       </h2>
       <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pt-1 pb-3">
-        {list.map((r, i) => (
-          <RunningCard key={r.runId} run={r} agent={agents.find((a) => a.id === r.agentId)} index={i} />
+        {list.map((r) => (
+          <RunningCard key={r.runId} run={r} agent={agents.find((a) => a.id === r.agentId)} />
         ))}
       </div>
     </section>
   );
 }
 
-function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index: number }) {
+function RunningCard({ run, agent }: { run: LiveRun; agent?: Agent }) {
   const now = useNow(1000);
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="shrink-0">
+    <div className="shrink-0">
       <Link
         to={`/chat/${run.conversationId}`}
-        className="glow-border flex w-72 items-center gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="flex w-72 items-center gap-3 rounded-xl border bg-card p-3 shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         <AgentAvatar agent={agent ?? { id: run.agentId, avatar: "🤖", color: "violet" }} size="md" />
         <span className="min-w-0 flex-1">
@@ -530,7 +524,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
           <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - run.startedAt)}</span>
         </span>
       </Link>
-    </motion.div>
+    </div>
   );
 }
 
@@ -570,23 +564,22 @@ function RecentChats({ agents }: { agents: Agent[] }) {
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
-        {recent.map((c, i) => (
-          <RecentCard key={c.id} conversation={c} agent={agents.find((a) => a.id === c.agentId)} running={running.has(c.id) || !!c.running} index={i} />
+        {recent.map((c) => (
+          <RecentCard key={c.id} conversation={c} agent={agents.find((a) => a.id === c.agentId)} running={running.has(c.id) || !!c.running} />
         ))}
       </div>
     </section>
   );
 }
 
-function RecentCard({ conversation: c, agent, running, index }: { conversation: Conversation; agent?: Agent; running: boolean; index: number }) {
+function RecentCard({ conversation: c, agent, running }: { conversation: Conversation; agent?: Agent; running: boolean }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.04, duration: 0.35 }}>
+    <div>
       <Link
         to={`/chat/${c.id}`}
         className={cn(
           "group flex h-full flex-col gap-3 rounded-xl border bg-card p-4 shadow-card transition",
-          "hover:border-foreground/15 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-          running && "glow-border",
+          "hover:border-foreground/15 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
         )}
       >
         <div className="flex items-center gap-2">
@@ -606,6 +599,6 @@ function RecentCard({ conversation: c, agent, running, index }: { conversation: 
           {c.preview && <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-muted-foreground">{plainPreview(c.preview)}</p>}
         </div>
       </Link>
-    </motion.div>
+    </div>
   );
 }

@@ -157,7 +157,7 @@ function Hero({
         <div
           aria-hidden
           className={cn(
-            "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 transition-colors duration-500 [&_svg]:size-[18px]",
+            "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 transition-colors duration-250 [&_svg]:size-[18px]",
             live ? "border-brand/25 bg-brand-soft text-brand-strong" : "text-muted-foreground",
           )}
         >

@@ -85,7 +85,7 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
   const reclaim = report?.items.filter((i) => i.recommended && i.count && !i.blocked).reduce((n, i) => n + i.bytes, 0) ?? 0;
   const last = report?.lastRun;
   return (
-    <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-xl border bg-card shadow-card">
+    <section className="overflow-hidden rounded-xl border bg-card shadow-card">
       <div className="space-y-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -131,7 +131,7 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
           )}
         </div>
       )}
-    </motion.section>
+    </section>
   );
 }
 
@@ -144,13 +144,13 @@ function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
   return (
     <div className="space-y-3.5">
       <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Storage by area">
-        {report.storage.map((s, i) => (
+        {report.storage.map((s) => (
           <Tooltip key={s.area}>
             <TooltipTrigger asChild>
               <motion.div
-                initial={{ flexGrow: 0 }}
+                initial={false}
                 animate={{ flexGrow: s.bytes }}
-                transition={{ duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
+                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                 style={{ flexBasis: 0, minWidth: 3 }}
                 className={cn("h-full transition-opacity hover:opacity-80", AREA_COLOR[s.area])}
               />
@@ -291,9 +291,9 @@ function SelfCheck({
       <div className="grid grid-cols-1 gap-2 @xl:grid-cols-2">
         {checks.map((c, i) =>
           c ? (
-            <motion.div key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+            <div key={c.id}>
               <CheckTile check={c} />
-            </motion.div>
+            </div>
           ) : (
             <Skeleton key={i} className="h-[62px] rounded-lg" />
           ),

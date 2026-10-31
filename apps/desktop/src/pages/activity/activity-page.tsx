@@ -120,7 +120,7 @@ export default function ActivityPage() {
         }
       />
       <PageBody className="space-y-6">
-        <AnimatePresence>
+        <AnimatePresence initial={false}>
           {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && statusFilter !== "paused" && (
             <motion.section
               initial={{ opacity: 0, height: 0 }}
@@ -251,10 +251,8 @@ export default function ActivityPage() {
               <section key={g.label}>
                 <h2 className="eyebrow mb-2 px-1">{g.label}</h2>
                 <div className="space-y-0.5 rounded-xl border bg-card p-1.5 shadow-card">
-                  {g.runs.map((r, i) => (
-                    <motion.div key={r.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(i, 15) * 0.015 }}>
-                      <RunRow run={r} agent={agentById.get(r.agentId)} selected={r.id === selectedId} onSelect={(run) => setParam("run", run.id)} />
-                    </motion.div>
+                  {g.runs.map((r) => (
+                    <RunRow key={r.id} run={r} agent={agentById.get(r.agentId)} selected={r.id === selectedId} onSelect={(run) => setParam("run", run.id)} />
                   ))}
                 </div>
               </section>
@@ -274,12 +272,8 @@ export default function ActivityPage() {
 function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpen: () => void }) {
   const now = useNow(true);
   return (
-    <motion.button
+    <button
       type="button"
-      layout
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.97 }}
       onClick={onOpen}
       className="glow-border flex items-center gap-3 rounded-xl border bg-card p-3.5 text-left shadow-card transition hover:border-foreground/20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
     >
@@ -295,6 +289,6 @@ function LiveCard({ live, agent, onOpen }: { live: LiveRun; agent?: Agent; onOpe
         <WorkingTicks count={6} className="h-3 text-brand-strong" />
         <span className="font-mono text-[11px] text-muted-foreground tabular-nums">{formatElapsed(now - live.startedAt)}</span>
       </div>
-    </motion.button>
+    </button>
   );
 }

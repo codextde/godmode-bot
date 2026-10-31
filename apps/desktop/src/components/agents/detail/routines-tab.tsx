@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { motion } from "motion/react";
 import { Blocks, CalendarDays, Plus, Radar, Sun, Workflow } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { useRoutines } from "@/lib/hooks";
@@ -64,10 +63,10 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
         />
       ) : (
         <div className="space-y-3">
-          {routines.map((r, i) => (
-            <motion.div key={r.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
+          {routines.map((r) => (
+            <div key={r.id}>
               <RoutineItem routine={r} onEdit={(routine) => setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine })} />
-            </motion.div>
+            </div>
           ))}
         </div>
       )}

@@ -26,7 +26,6 @@ export function TotpCard({
   now,
   credential,
   hideCodes,
-  index,
   onEdit,
   onDelete,
 }: {
@@ -35,7 +34,6 @@ export function TotpCard({
   now: number;
   credential?: Credential;
   hideCodes: boolean;
-  index: number;
   onEdit: (focusLink?: boolean) => void;
   onDelete: () => void;
 }) {
@@ -64,7 +62,6 @@ export function TotpCard({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
       onMouseEnter={() => setPeek(true)}
       onMouseLeave={() => setPeek(false)}
       onFocus={() => setPeek(true)}

@@ -138,7 +138,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
             </div>
             <ul className="space-y-1">
               <AnimatePresence initial={false}>
-                {g.items.map((c, i) => {
+                {g.items.map((c) => {
                   const tk = toolkits[c.toolkit];
                   const name = tk?.name ?? prettySlug(c.toolkit);
                   return (
@@ -146,7 +146,7 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                       key={c.id}
                       layout
                       initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                      animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, height: 0 }}
                       className="group flex items-center gap-3 rounded-lg px-2.5 py-2 transition-colors hover:bg-accent"
                     >

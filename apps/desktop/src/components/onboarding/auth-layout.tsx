@@ -30,7 +30,7 @@ export function AuthLayout({
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
         className={cn("relative w-full max-w-md", className)}
       >
         <div className="mb-8 flex flex-col items-center text-center">

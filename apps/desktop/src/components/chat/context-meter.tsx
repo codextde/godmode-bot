@@ -38,7 +38,7 @@ function Ring({ share, tone, busy }: { share: number; tone: ContextGauge["tone"]
         strokeDasharray={c}
         initial={false}
         animate={{ strokeDashoffset: c * (1 - (busy ? 0.25 : Math.max(0.04, share))) }}
-        transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+        transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
       />
     </svg>
   );
@@ -95,7 +95,7 @@ export function ContextMeter({
                 className={cn("h-full rounded-full", tone.bar)}
                 initial={false}
                 animate={{ width: `${Math.max(1.5, gauge.share * 100)}%` }}
-                transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
+                transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
               />
               {gauge.autoAt !== null && (
                 <span className="absolute -top-1 h-3.5 w-px bg-foreground/40" style={{ left: `${gauge.autoAt * 100}%` }} title={`Compresses by itself at ${Math.round(gauge.autoAt * 100)}%`} />
@@ -152,7 +152,7 @@ export function CompressBar({ gauge, agentName, running, onCompress, onDismiss }
 export function CompactedDivider({ info }: { info: CompactInfo }) {
   const saved = info.preTokens && info.postTokens !== null ? Math.max(0, Math.round((1 - info.postTokens / info.preTokens) * 100)) : null;
   return (
-    <motion.div initial={{ opacity: 0, scaleX: 0.9 }} animate={{ opacity: 1, scaleX: 1 }} transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }} className="flex items-center gap-3 py-1.5" role="separator">
+    <div className="flex items-center gap-3 py-1.5" role="separator">
       <span className="h-px flex-1 bg-gradient-to-r from-transparent to-border" />
       <span className="inline-flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-1 text-[11.5px] text-muted-foreground shadow-card">
         <FoldVertical className="size-3.5 text-success" />
@@ -165,6 +165,6 @@ export function CompactedDivider({ info }: { info: CompactInfo }) {
         )}
       </span>
       <span className="h-px flex-1 bg-gradient-to-l from-transparent to-border" />
-    </motion.div>
+    </div>
   );
 }

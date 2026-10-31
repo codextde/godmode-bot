@@ -159,7 +159,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
         description="A private record of errors, slow spots and how runs went. Copy it into a chat with Claude to track down bugs and make Godmode faster."
       />
 
-      <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
+      <section className="rounded-xl border bg-card shadow-card">
         <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-5">
           <div className="flex min-w-0 items-start gap-3">
             <div className="grid size-8 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-4">
@@ -223,7 +223,7 @@ export function LogsSection({ settings }: { settings: Settings }) {
           <ShieldCheck className="size-3.5 shrink-0 text-success" />
           Passwords, 2FA codes, API keys and tokens are masked before anything is written. Nothing leaves this device unless you copy it.
         </p>
-      </motion.section>
+      </section>
 
       <IssuesCard overview={o} loading={overview.isLoading} onSelect={showIssue} />
 
