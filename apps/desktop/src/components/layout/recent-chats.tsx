@@ -1,10 +1,11 @@
 import { Link, useLocation, useMatch, useNavigate } from "react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
+import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, CircleDot, MessagesSquare, Pin, PinOff, Trash2, Workflow, Zap } from "lucide-react";
+import { toast } from "sonner";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -14,6 +15,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,7 +32,7 @@ import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
 import { AnimatedTitle } from "@/components/chat/animated-title";
-import { api } from "@/lib/api";
+import { api, errorMessage } from "@/lib/api";
 import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
 import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
@@ -84,6 +86,13 @@ export function RecentChats() {
   const { setArchived } = useArchiveChat();
   const navigate = useNavigate();
   const { askDelete, deleteDialog } = useDeleteChat((id) => id === conversationId && navigate("/", { replace: true }));
+  const markUnread = useMarkUnread();
+  const qc = useQueryClient();
+  const setPinned = (c: Conversation, pinned: boolean) =>
+    void api.conversations
+      .update(c.id, { pinned })
+      .then(() => qc.invalidateQueries({ queryKey: qk.conversationsAll }))
+      .catch((err) => toast.error(t("recent.menu.failed"), { description: errorMessage(err) }));
 
   const recentTab = useUi((s) => s.recentTab);
   const setRecentTab = useUi((s) => s.setRecentTab);
@@ -248,78 +257,108 @@ export function RecentChats() {
               return (
                 <Fragment key={c.id}>
                   {headingNode}
-                  <SidebarMenuItem>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={conversationId === c.id}
-                      className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
-                    >
-                      <Link to={`/chat/${c.id}`} title={hover} className="flex items-start gap-2">
-                        <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1">
-                            <span className={cn("min-w-0 flex-1 truncate text-[13px]", unread && "font-semibold text-foreground")}>
-                              <AnimatedTitle text={c.title || t("shell.newChat")} />
-                            </span>
-                            {unread ? (
-                              <span
-                                className={cn("size-1.5 shrink-0 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
-                                role="img"
-                                aria-label={c.unread!.failed ? t("recent.failedHere") : t("recent.newReply")}
-                              />
-                            ) : null}
-                            {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                            {slot >= 0 ? (
-                              <kbd className="ml-0.5 shrink-0 rounded-[4px] bg-foreground/8 px-1 font-mono text-[10px] leading-4 text-foreground/80 tabular-nums">
-                                {modKey}
-                                {slot + 1}
-                              </kbd>
-                            ) : (
-                              running &&
-                              !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
-                            )}
-                          </span>
-                          <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-                            {workspace && <WorkspaceChip workspace={workspace} />}
-                            {project && <WorkspaceChip workspace={project} kind="project" />}
-                            <span className="block min-w-0 flex-1 truncate">
-                              {detail ?? (
-                                <>
-                                  {originLine(c, agents) ?? agent?.name ?? t("common:words.agent")} · {formatDistanceToNowStrict(new Date(when), { addSuffix: false, locale: dateLocale() })}
-                                </>
-                              )}
-                            </span>
-                          </span>
-                        </span>
-                      </Link>
-                    </SidebarMenuButton>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuAction
-                          showOnHover
-                          aria-label={t("recent.archiveLabel", { title: c.title || t("shell.newChat") })}
-                          onClick={() => setArchived(c, true)}
-                          className={cn(ROW_ACTION, "right-7.5")}
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <SidebarMenuItem className="rounded-md data-[state=open]:bg-sidebar-accent">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={conversationId === c.id}
+                          className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                         >
-                          <Archive />
-                        </SidebarMenuAction>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{t("recent.archive")}</TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <SidebarMenuAction
-                          showOnHover
-                          aria-label={t("recent.deleteLabel", { title: c.title || t("shell.newChat") })}
-                          onClick={() => askDelete(c)}
-                          className={cn(ROW_ACTION, "hover:text-destructive")}
-                        >
-                          <Trash2 />
-                        </SidebarMenuAction>
-                      </TooltipTrigger>
-                      <TooltipContent side="top">{t("common:actions.delete")}</TooltipContent>
-                    </Tooltip>
-                  </SidebarMenuItem>
+                          <Link to={`/chat/${c.id}`} title={hover} className="flex items-start gap-2">
+                            <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
+                            <span className="min-w-0 flex-1">
+                              <span className="flex items-center gap-1">
+                                <span className={cn("min-w-0 flex-1 truncate text-[13px]", unread && "font-semibold text-foreground")}>
+                                  <AnimatedTitle text={c.title || t("shell.newChat")} />
+                                </span>
+                                {unread ? (
+                                  <span
+                                    className={cn("size-1.5 shrink-0 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
+                                    role="img"
+                                    aria-label={c.unread!.failed ? t("recent.failedHere") : t("recent.newReply")}
+                                  />
+                                ) : null}
+                                {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+                                {slot >= 0 ? (
+                                  <kbd className="ml-0.5 shrink-0 rounded-[4px] bg-foreground/8 px-1 font-mono text-[10px] leading-4 text-foreground/80 tabular-nums">
+                                    {modKey}
+                                    {slot + 1}
+                                  </kbd>
+                                ) : (
+                                  running &&
+                                  !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                                )}
+                              </span>
+                              <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                                {workspace && <WorkspaceChip workspace={workspace} />}
+                                {project && <WorkspaceChip workspace={project} kind="project" />}
+                                <span className="block min-w-0 flex-1 truncate">
+                                  {detail ?? (
+                                    <>
+                                      {originLine(c, agents) ?? agent?.name ?? t("common:words.agent")} · {formatDistanceToNowStrict(new Date(when), { addSuffix: false, locale: dateLocale() })}
+                                    </>
+                                  )}
+                                </span>
+                              </span>
+                            </span>
+                          </Link>
+                        </SidebarMenuButton>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuAction
+                              showOnHover
+                              aria-label={t("recent.archiveLabel", { title: c.title || t("shell.newChat") })}
+                              onClick={() => setArchived(c, true)}
+                              className={cn(ROW_ACTION, "right-7.5")}
+                            >
+                              <Archive />
+                            </SidebarMenuAction>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t("recent.archive")}</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <SidebarMenuAction
+                              showOnHover
+                              aria-label={t("recent.deleteLabel", { title: c.title || t("shell.newChat") })}
+                              onClick={() => askDelete(c)}
+                              className={cn(ROW_ACTION, "hover:text-destructive")}
+                            >
+                              <Trash2 />
+                            </SidebarMenuAction>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">{t("common:actions.delete")}</TooltipContent>
+                        </Tooltip>
+                      </SidebarMenuItem>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-48">
+                      {unread ? (
+                        <ContextMenuItem onSelect={() => markUnread(c, false)}>
+                          <CheckCheck />
+                          {t("recent.menu.markRead")}
+                        </ContextMenuItem>
+                      ) : (
+                        <ContextMenuItem onSelect={() => markUnread(c, true, conversationId === c.id ? () => navigate("/") : undefined)}>
+                          <CircleDot />
+                          {t("recent.menu.markUnread")}
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuItem onSelect={() => setPinned(c, !c.pinned)}>
+                        {c.pinned ? <PinOff /> : <Pin />}
+                        {c.pinned ? t("recent.menu.unpin") : t("recent.menu.pin")}
+                      </ContextMenuItem>
+                      <ContextMenuItem onSelect={() => setArchived(c, true)}>
+                        <Archive />
+                        {t("recent.archive")}
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem variant="destructive" onSelect={() => askDelete(c)}>
+                        <Trash2 />
+                        {t("common:actions.delete")}
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 </Fragment>
               );
             })}
@@ -371,6 +410,25 @@ export function RecentChats() {
       {deleteDialog}
     </SidebarGroup>
   );
+}
+
+/**
+ * Mark a chat read or unread from its menu: the dot changes right away. Marking the open chat unread leaves it
+ * (`leave`), so it doesn't count as read again while it is on screen.
+ */
+function useMarkUnread() {
+  const { t } = useTranslation("layout");
+  const qc = useQueryClient();
+  return async (c: Conversation, unread: boolean, leave?: () => void) => {
+    leave?.();
+    await qc.cancelQueries({ queryKey: qk.conversationLists });
+    qc.setQueriesData<Conversation[]>({ queryKey: qk.conversationLists }, (list) =>
+      list?.map((x) => (x.id === c.id ? { ...x, unread: unread ? (x.unread ?? { runId: "", failed: false }) : null } : x)),
+    );
+    void (unread ? api.conversations.unread([c.id]).then((r) => r.unread || toast(t("recent.menu.nothingNew"))) : api.conversations.read([c.id]))
+      .catch((err) => toast.error(t("recent.menu.failed"), { description: errorMessage(err) }))
+      .finally(() => qc.invalidateQueries({ queryKey: qk.conversationsAll }));
+  };
 }
 
 function useModifierHeld(): boolean {

@@ -655,6 +655,8 @@ export const api = {
   conversations: {
     /** The human has seen these chats ("all" = every chat). */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
+    /** Show these chats as new again until they are opened. */
+    unread: (ids: string[]) => post<{ unread: number }>("/api/conversations/unread", { ids }),
     /** `ongoing`: only chats with work ahead (working, standing still, or continuing by themselves later). */
     list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
