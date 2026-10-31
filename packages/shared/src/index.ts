@@ -34,3 +34,4 @@ export * from "./chatContext";
 export * from "./artifacts";
 export * from "./memoryImport";
 export * from "./palettes";
+export * from "./github";
