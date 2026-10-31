@@ -2109,7 +2109,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (stop) return stop;
   }
   // SSH servers of the chat and the agent. Uploads and downloads stay within the folders this run works with.
-  const ssh = dreaming ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
+  const ssh = dreaming || !settings.ssh.enabled ? [] : promptServers(runSshServerIds(job.conversationId, agent.id));
   if (ssh.length) {
     const folders = [cwd, agent.repoPath, vm?.hostSharedDir, ...sources.map((s) => s.path)].filter((f): f is string => !!f);
     attachSsh(job.runId, [...new Set(folders)]);
@@ -2131,7 +2131,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     android: phones.length > 0,
   });
   // The human's plugins (Plugins page). Dreams and condition checks are small jobs with a fixed shape: they load none.
-  const mods = dreaming || job.trigger === "check" ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
+  const mods = dreaming || job.trigger === "check" || !settings.plugins.enabled ? null : await modsForRun(agent, job.runId, (text) => job.acc.addNotice("warning", text));
   // A run takes its MCP servers from this file alone: the ones its plugins declare go in beside Godmode's.
   for (const [name, server] of Object.entries(mods?.mcpServers ?? {})) mcp.mcpServers[name] ??= server;
   const mcpPath = writeMcpConfigFile(job.runId, mcp);
@@ -2240,9 +2240,9 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         fillOnly,
         // Delegated work reports to the run that handed it over; checks only observe.
         asking: job.trigger !== "check" && !job.parentRunId,
-        cards: !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
+        cards: settings.cards.enabled && !vm && job.trigger !== "check" && "browser" in mcp.mcpServers && hasCardsForAgent(agent),
         delegated: !!job.parentRunId,
-        mods: config().role !== "runner",
+        mods: settings.plugins.enabled && config().role !== "runner",
         settingsTools: config().role !== "runner",
         savesLogins: config().role !== "runner" && job.trigger !== "check",
         vaultOpen: isUnlocked(),

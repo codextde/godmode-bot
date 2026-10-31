@@ -13,6 +13,7 @@ import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
 import { formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
+import { useBootstrap } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
@@ -20,6 +21,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
   const [selected, setSelected] = useState<Run | null>(null);
   const [runTask, setRunTask] = useState(false);
   const easy = useEasyMode();
+  const activityOn = useBootstrap().data?.settings.activity.enabled !== false;
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
@@ -73,11 +75,13 @@ export function OverviewTab({ agent }: { agent: Agent }) {
         <section className="min-w-0 rounded-xl border bg-card p-2 shadow-card">
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
             <h2 className="text-sm font-medium tracking-[-0.01em]">{easy ? "Recent work" : "Recent runs"}</h2>
-            <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
-              <Link to={`/activity?agent=${agent.id}`}>
-                All activity <ArrowRight />
-              </Link>
-            </Button>
+            {activityOn && (
+              <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
+                <Link to={`/activity?agent=${agent.id}`}>
+                  All activity <ArrowRight />
+                </Link>
+              </Button>
+            )}
           </div>
           {runsQ.isLoading ? (
             <div className="space-y-1 p-2">

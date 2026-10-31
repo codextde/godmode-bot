@@ -25,7 +25,7 @@ import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
 import { leaveInterruptedWork } from "../services/resume";
-import { FEATURE_SWITCHES_SQL, REMOVE_COSTS_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
+import { FEATURE_SWITCHES_SQL, MODULE_SWITCHES_SQL, REMOVE_COSTS_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
 import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -787,6 +787,7 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       getDb().run(REMOVE_COSTS_SQL);
       // A backup from before the feature switches: on for the features it uses.
       getDb().run(FEATURE_SWITCHES_SQL);
+      getDb().run(MODULE_SWITCHES_SQL);
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.
