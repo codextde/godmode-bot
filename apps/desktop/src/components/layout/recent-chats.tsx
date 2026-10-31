@@ -2,7 +2,7 @@ import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
   SidebarGroup,
@@ -34,6 +34,7 @@ import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScope
 import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { isMac, modKey } from "@/lib/desktop";
 import { useLive } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
 
@@ -148,6 +149,23 @@ export function RecentChats() {
     shown++;
     rows.push({ c, heading: starts ? group : null, folded });
   }
+  const slots = rows.flatMap((r) => (r.folded ? [] : [r.c.id])).slice(0, 9);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const holding = useModifierHeld();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod || e.shiftKey || e.altKey || !/^Digit[1-9]$/.test(e.code)) return;
+      if ((e.target as HTMLElement | null)?.closest?.("[role=application],[role=dialog],[role=alertdialog]")) return;
+      const id = slotsRef.current[Number(e.code.slice(5)) - 1];
+      if (!id) return;
+      e.preventDefault();
+      navigate(`/chat/${id}`);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
   const unreadIds = visible.flatMap((c) => (c.unread ? [c.id] : []));
   const markAllRead = unreadIds.length
     ? () => void api.conversations.read(scope === "all" ? "all" : unreadIds).catch(() => undefined)
@@ -205,6 +223,7 @@ export function RecentChats() {
                 />
               );
               if (folded) return <Fragment key={`group-${heading}`}>{headingNode}</Fragment>;
+              const slot = holding ? slots.indexOf(c.id) : -1;
               const agent = agents.find((a) => a.id === c.agentId);
               const workspaceId = c.workspaceId ?? agent?.workspaceId;
               const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
@@ -246,8 +265,14 @@ export function RecentChats() {
                               />
                             ) : null}
                             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
-                            {running && !c.paused && (
-                              <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                            {slot >= 0 ? (
+                              <kbd className="ml-0.5 shrink-0 rounded-[4px] bg-foreground/8 px-1 font-mono text-[10px] leading-4 text-foreground/80 tabular-nums">
+                                {modKey}
+                                {slot + 1}
+                              </kbd>
+                            ) : (
+                              running &&
+                              !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
                             )}
                           </span>
                           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -343,6 +368,38 @@ export function RecentChats() {
       {deleteDialog}
     </SidebarGroup>
   );
+}
+
+function useModifierHeld(): boolean {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const key = isMac ? "Meta" : "Control";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reset = () => {
+      clearTimeout(timer);
+      setHeld(false);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (e.key === key) {
+        if (e.repeat) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => setHeld(true), 300);
+      } else if (!/^Digit[1-9]$/.test(e.code)) reset();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === key || !(isMac ? e.metaKey : e.ctrlKey)) reset();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", reset);
+    return () => {
+      reset();
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return held;
 }
 
 function GroupHeading({

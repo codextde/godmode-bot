@@ -9,11 +9,11 @@ import { useSidebar } from "@/components/ui/sidebar";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { type WorkspaceActivity, projectKey, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
 import { useWorkspaces } from "@/lib/hooks";
-import { isMac, modKey } from "@/lib/desktop";
+import { altKey, isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 
-/** ⌘0 is all workspaces, ⌘1–9 the workspaces in A–Z order. Not behind dialogs or on a remote screen the human controls. */
+/** ⌥⌘0 is all workspaces, ⌥⌘1–9 the workspaces in A–Z order. Not behind dialogs or on a remote screen the human controls. */
 export function useWorkspaceShortcuts() {
   const { data: workspaces = [] } = useWorkspaces();
   const setScope = useUi((s) => s.setWorkspace);
@@ -21,7 +21,7 @@ export function useWorkspaceShortcuts() {
     const sorted = [...workspaces].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (!mod || e.shiftKey || e.altKey || !/^Digit[0-9]$/.test(e.code)) return;
+      if (!mod || e.shiftKey || !e.altKey || !/^Digit[0-9]$/.test(e.code)) return;
       if ((e.target as HTMLElement | null)?.closest?.("[role=application],[role=dialog],[role=alertdialog]")) return;
       const n = Number(e.code.slice(5));
       const next = n === 0 ? "all" : sorted[n - 1]?.id;
@@ -127,7 +127,7 @@ export function WorkspaceSwitcher() {
         {(railed || elsewhere > 0) && !open && (
           <TooltipContent side="right">
             {railed && `${label} · `}
-            {elsewhere > 0 ? `${elsewhere} waiting for you in other workspaces` : `Switch workspace (${modKey}0–9)`}
+            {elsewhere > 0 ? `${elsewhere} waiting for you in other workspaces` : `Switch workspace (${altKey}${modKey}0–9)`}
           </TooltipContent>
         )}
       </Tooltip>
@@ -142,7 +142,7 @@ export function WorkspaceSwitcher() {
                 keywords={["All workspaces", "everything"]}
                 selected={scope === "all"}
                 onSelect={() => pick("all")}
-                shortcut={`${modKey}0`}
+                shortcut={`${altKey}${modKey}0`}
                 lead={indent ? <FoldSpace /> : undefined}
               >
                 <ScopeTile scope="all" />
@@ -186,7 +186,7 @@ export function WorkspaceSwitcher() {
                         workspace={w}
                         selected={scope === w.id && !projectScope}
                         activity={activity(w.id)}
-                        shortcut={i < 9 ? `${modKey}${i + 1}` : undefined}
+                        shortcut={i < 9 ? `${altKey}${modKey}${i + 1}` : undefined}
                         onSelect={() => pick(w.id)}
                         fold={projects.length && !query ? { open: unfolded.has(w.id), toggle: () => toggle(w.id) } : undefined}
                         indent={indent}
