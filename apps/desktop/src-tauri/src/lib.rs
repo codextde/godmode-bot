@@ -63,7 +63,9 @@ pub fn run() {
             set_close_to_tray,
             updater::update_state,
             updater::check_for_updates,
-            updater::install_update
+            updater::install_update,
+            updater::canary_updates,
+            updater::set_canary_updates
         ])
         .setup(|app| {
             let handle = app.handle();
