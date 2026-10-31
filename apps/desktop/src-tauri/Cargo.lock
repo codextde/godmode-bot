@@ -1445,10 +1445,13 @@ name = "godmode-bot"
 version = "0.2.38"
 dependencies = [
  "base64 0.23.1",
+ "flate2",
  "getrandom 0.4.3",
  "libc",
+ "semver",
  "serde",
  "serde_json",
+ "tar",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",

@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_shell::ShellExt;
 
-use crate::paths;
+use crate::{ota, ota::Patches, paths, tray};
 
 const SIDECAR: &str = "godmode-core";
 const READY_PREFIX: &str = "GODMODE_READY ";
@@ -74,6 +74,8 @@ pub struct CoreManager {
 
 struct CoreProcess {
     pid: u32,
+    patch: Option<String>,
+    ready: AtomicBool,
     child: Mutex<Child>,
     stdin: Mutex<Option<ChildStdin>>,
 }
@@ -221,11 +223,15 @@ fn supervise(app: AppHandle, manager: Arc<CoreManager>) {
     let mut crashes = 0u32;
     loop {
         let started = Instant::now();
-        let status = match spawn_core(&app, &manager, crashes > 0, path_env.as_ref()) {
-            Ok(process) => process.wait(),
+        let (status, unready_patch) = match spawn_core(&app, &manager, crashes > 0, path_env.as_ref()) {
+            Ok(process) => {
+                let status = process.wait();
+                let unready = process.patch.clone().filter(|_| !process.ready.load(Ordering::SeqCst));
+                (status, unready)
+            }
             Err(err) => {
                 manager.log(&err);
-                None
+                (None, None)
             }
         };
         *lock(&manager.info) = None;
@@ -237,6 +243,18 @@ fn supervise(app: AppHandle, manager: Arc<CoreManager>) {
         let status = status.map_or_else(|| "unknown status".to_string(), |s| s.to_string());
         if started.elapsed() >= STABLE_AFTER {
             crashes = 0;
+        }
+        if unready_patch.is_some() || crashes >= MAX_RESTARTS {
+            if let Some(version) = app.state::<Arc<Patches>>().fail() {
+                manager.log(&format!(
+                    "core of canary patch {version} exited ({status}); going back to the core this app shipped with"
+                ));
+                if let Some(window) = app.get_webview_window(tray::MAIN_WINDOW) {
+                    let _ = window.reload();
+                }
+                crashes = 0;
+                continue;
+            }
         }
         if crashes >= MAX_RESTARTS {
             let message = format!("Godmode core stopped ({status}) and did not recover after {MAX_RESTARTS} restarts");
@@ -267,7 +285,17 @@ fn spawn_core(
     is_restart: bool,
     path_env: Option<&OsString>,
 ) -> Result<Arc<CoreProcess>, String> {
-    let (mut cmd, description) = core_command(app)?;
+    let (mut cmd, mut description, sidecar) = core_command(app)?;
+    let patch = if sidecar { app.state::<Arc<Patches>>().active() } else { None };
+    match &patch {
+        Some(patch) => {
+            cmd.env(ota::BUNDLE_ENV, patch.core_entry());
+            description.push_str(&format!(" with canary patch {}", patch.version));
+        }
+        None => {
+            cmd.env_remove(ota::BUNDLE_ENV);
+        }
+    }
     cmd.args(["serve", "--mode", "desktop", "--token-stdin"])
         // Never pass the token via the environment (not even one inherited from our own parent).
         .env_remove("GODMODE_TOKEN")
@@ -305,16 +333,22 @@ fn spawn_core(
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
-    let process =
-        Arc::new(CoreProcess { pid: child.id(), stdin: Mutex::new(child.stdin.take()), child: Mutex::new(child) });
+    let process = Arc::new(CoreProcess {
+        pid: child.id(),
+        patch: patch.map(|patch| patch.version.clone()),
+        ready: AtomicBool::new(false),
+        stdin: Mutex::new(child.stdin.take()),
+        child: Mutex::new(child),
+    });
     *slot = Some(process.clone());
     drop(slot);
 
     if let Some(stdout) = stdout {
-        let (app, manager) = (app.clone(), manager.clone());
+        let (app, manager, watched) = (app.clone(), manager.clone(), process.clone());
         thread::spawn(move || {
             for_each_line(stdout, |line| {
                 if let Some(json) = line.strip_prefix(READY_PREFIX) {
+                    watched.ready.store(true, Ordering::SeqCst);
                     on_ready(&app, &manager, json, is_restart);
                 }
                 eprintln!("[core] {line}");
@@ -372,7 +406,7 @@ fn for_each_line(stream: impl Read, mut handle: impl FnMut(&str)) {
 }
 
 /// The command prefix used to run the core (without `serve …`), plus a description for the logs.
-fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
+fn core_command(app: &AppHandle) -> Result<(Command, String, bool), String> {
     let home = app.path().home_dir().ok();
 
     if let Some(custom) = std::env::var("GODMODE_CORE_CMD").ok().filter(|v| !v.trim().is_empty()) {
@@ -383,7 +417,7 @@ fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
         if let Some(home) = &home {
             cmd.current_dir(home);
         }
-        return Ok((cmd, custom));
+        return Ok((cmd, custom, false));
     }
 
     #[cfg(debug_assertions)]
@@ -396,7 +430,7 @@ fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
             if let Some(core_dir) = entry.parent().and_then(Path::parent) {
                 cmd.current_dir(core_dir);
             }
-            return Ok((cmd, format!("bun {}", entry.display())));
+            return Ok((cmd, format!("bun {}", entry.display()), false));
         }
     }
 
@@ -404,7 +438,7 @@ fn core_command(app: &AppHandle) -> Result<(Command, String), String> {
     if let Some(home) = &home {
         cmd.current_dir(home);
     }
-    Ok((cmd, format!("sidecar {SIDECAR}")))
+    Ok((cmd, format!("sidecar {SIDECAR}"), true))
 }
 
 /// Splits `GODMODE_CORE_CMD` on whitespace, honouring '…' and "…" quotes (no escapes, so Windows paths work).

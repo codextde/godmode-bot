@@ -8,6 +8,11 @@ on:
       - "apps/mobile/**"
       - "**/*.md"
   workflow_dispatch:
+    inputs:
+      full:
+        description: Build a full canary even when a patch would do
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -15,30 +20,144 @@ permissions:
 
 concurrency:
   group: canary
-  cancel-in-progress: true
+  cancel-in-progress: false
+
+env:
+  GODMODE_OFFICIAL_BUILD: "1"
+  SHELL_PATHS: '^(apps/desktop/src-tauri/|packages/core/native/|packages/core/scripts/|scripts/|\.github/actions/|\.github/workflows/(canary|release)\.yml$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|(.*/)?package\.json$)'
 
 jobs:
-  tag:
-    name: Tag and build a canary
+  plan:
+    name: Patch or full build
     if: github.repository == 'codextde/godmode-bot'
     runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.plan.outputs.kind }}
+      base: ${{ steps.plan.outputs.base }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
+      - name: Compare with the canary the apps run
+        id: plan
+        env:
+          RUN: ${{ github.run_number }}
+          FULL: ${{ github.event.inputs.full || 'false' }}
+        run: |
+          current=$(node -p "require('./apps/desktop/package.json').version.split('-')[0]")
+          IFS=. read -r major minor patch <<< "$current"
+          next="$major.$minor.$((patch + 1))"
+          echo "version=$next-$RUN" >> "$GITHUB_OUTPUT"
+          echo "tag=v$next-canary.$RUN" >> "$GITHUB_OUTPUT"
+
+          kind="full"
+          base=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/canary/latest.json" | jq -r '.version // empty' || true)
+          sha=""
+          if [[ "$base" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-([0-9]+)$ ]]; then
+            sha=$(git rev-list -n 1 "v${BASH_REMATCH[1]}-canary.${BASH_REMATCH[2]}" 2>/dev/null || true)
+          fi
+          if [ "$FULL" = "true" ]; then
+            echo "A full build was asked for"
+          elif [ -z "$sha" ]; then
+            echo "No commit found for the canary in the feed (${base:-none})"
+          elif [ "${BASH_REMATCH[1]}" != "$next" ]; then
+            echo "The version moved on from $base"
+          elif ! git cat-file -e "$sha:apps/desktop/src-tauri/src/ota.rs" 2>/dev/null; then
+            echo "Canary $base can't apply patches yet"
+          else
+            shell=$(git diff --name-only "$sha" HEAD | grep -E "$SHELL_PATHS" || true)
+            if [ -n "$shell" ]; then
+              echo "Changed since canary $base outside the core and the web UI:"
+              echo "$shell"
+            else
+              kind="patch"
+              echo "Only core and web UI changes since canary $base: a patch does"
+            fi
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+  full:
+    name: Tag and build a canary
+    needs: plan
+    if: needs.plan.outputs.kind == 'full'
+    runs-on: ubuntu-latest
+    steps:
       - name: Tag the commit
-        id: tag
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN: ${{ github.run_number }}
-        run: |
-          base=$(node -p "require('./apps/desktop/package.json').version.split('-')[0]")
-          IFS=. read -r major minor patch <<< "$base"
-          tag="v$major.$minor.$((patch + 1))-canary.$RUN"
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --jq .ref
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" --jq .ref
 
       - name: Start the release build
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: gh workflow run release.yml --ref main -f tag="$TAG"
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$TAG"
+
+  patch:
+    name: Build and publish a patch
+    needs: plan
+    if: needs.plan.outputs.kind == 'patch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BASE: ${{ needs.plan.outputs.base }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Set the version
+        run: bun scripts/bump-version.ts "$VERSION"
+
+      - name: Build the web UI
+        run: pnpm --filter @godmode/desktop build
+
+      - name: Build the core bundle
+        working-directory: packages/core
+        run: bun run scripts/build.ts --bundle --out="$RUNNER_TEMP/patch" --smoke
+
+      - name: Pack and sign
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          name="godmode-patch-$VERSION.tar.gz"
+          archive="$RUNNER_TEMP/$name"
+          tar -czf "$archive" -C "$RUNNER_TEMP/patch" core ui
+          (cd apps/desktop && pnpm exec tauri signer sign --app-version "$VERSION" "$archive")
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/canary/$name"
+          jq -n --arg version "$VERSION" --arg url "$url" --rawfile signature "$archive.sig" \
+            --arg notes "$(git log -1 --format=%s)" --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{version: $version, notes: $notes, pub_date: $date, platforms: {
+              "darwin-aarch64": {url: $url, signature: ($signature | rtrimstr("\n"))},
+              "darwin-x86_64": {url: $url, signature: ($signature | rtrimstr("\n"))}
+            }}' > "$RUNNER_TEMP/patch-$BASE.json"
+          echo "ARCHIVE=$archive" >> "$GITHUB_ENV"
+          ls -la "$archive"
+
+      - name: Publish on the canary feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          feed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "canary") | .id' | head -n1)
+          if [ -z "$feed" ]; then echo "::error::the canary release is missing"; exit 1; fi
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/$feed/assets?per_page=100")
+          upload() {
+            local file="$1" type="$2" name
+            name=$(basename "$file")
+            old=$(jq -r --arg name "$name" '.[] | select(.name == $name) | .id' <<< "$assets")
+            if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+            gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$feed/assets?name=$name" \
+              -H "Content-Type: $type" --input "$file" --jq .browser_download_url
+          }
+          upload "$ARCHIVE" application/gzip
+          upload "$RUNNER_TEMP/patch-$BASE.json" application/json
+          jq -r --arg keep "$(basename "$ARCHIVE")" --arg feed "patch-$BASE.json" \
+            '.[] | select((.name | test("^godmode-patch-.*\\.tar\\.gz$|^patch-.*\\.json$")) and .name != $keep and .name != $feed) | .id' <<< "$assets" |
+            while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"; done

@@ -14,11 +14,12 @@ use std::{
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, Url};
-use tauri_plugin_updater::{Update, Updater as Checker, UpdaterExt};
+use tauri_plugin_updater::{Update, Updater as Checker, UpdaterBuilder, UpdaterExt};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use crate::{
     core::{lock, CoreManager},
+    ota::Patches,
     paths,
 };
 
@@ -58,9 +59,20 @@ impl UpdateState {
     }
 }
 
+enum Pending {
+    Full(Box<Update>, Vec<u8>),
+    Patch(String),
+}
+
+struct Found {
+    version: String,
+    notes: Option<String>,
+    pending: Pending,
+}
+
 pub struct Updater {
     state: Mutex<UpdateState>,
-    downloaded: Mutex<Option<(Update, Vec<u8>)>>,
+    downloaded: Mutex<Option<Pending>>,
     /// Windows: the pre-exit hook stopped the core and removed the tray.
     exiting: AtomicBool,
 }
@@ -121,11 +133,11 @@ async fn check_and_download(app: &AppHandle) {
     }
     let core = app.state::<Arc<CoreManager>>().inner().clone();
     let next = match find_and_download(app, &updater, &core).await {
-        Ok(Some((update, mut bytes))) => {
-            core.log(&format!("update {} downloaded and verified", update.version));
-            bytes.shrink_to_fit();
-            let state = UpdateState::Ready { version: update.version.clone(), notes: update.body.clone() };
-            *lock(&updater.downloaded) = Some((update, bytes));
+        Ok(Some(found)) => {
+            let kind = if matches!(found.pending, Pending::Patch(_)) { "patch" } else { "update" };
+            core.log(&format!("{kind} {} downloaded and verified", found.version));
+            let state = UpdateState::Ready { version: found.version, notes: found.notes };
+            *lock(&updater.downloaded) = Some(found.pending);
             state
         }
         Ok(None) => UpdateState::UpToDate { checked_at: now_millis() },
@@ -141,8 +153,9 @@ async fn find_and_download(
     app: &AppHandle,
     updater: &Updater,
     core: &Arc<CoreManager>,
-) -> Result<Option<(Update, Vec<u8>)>, String> {
-    let canary = if canary_enabled(app) {
+) -> Result<Option<Found>, String> {
+    let canary_channel = canary_enabled(app);
+    let canary = if canary_channel {
         let feed = Url::parse(CANARY_FEED).map_err(|err| err.to_string())?;
         match checker(app, core, Some(vec![feed]))?.check().await {
             Ok(update) => update,
@@ -158,14 +171,53 @@ async fn find_and_download(
         Some(update) => Some(update),
         None => checker(app, core, None)?.check().await.map_err(|err| err.to_string())?,
     };
-    let Some(update) = found else { return Ok(None) };
+    let Some(update) = found else {
+        return if canary_channel { find_patch(app, updater, core).await } else { Ok(None) };
+    };
 
+    let mut bytes = download(app, updater, &update, "update").await?;
+    bytes.shrink_to_fit();
+    Ok(Some(Found {
+        version: update.version.clone(),
+        notes: update.body.clone(),
+        pending: Pending::Full(Box::new(update), bytes),
+    }))
+}
+
+async fn find_patch(app: &AppHandle, updater: &Updater, core: &Arc<CoreManager>) -> Result<Option<Found>, String> {
+    let patches = app.state::<Arc<Patches>>().inner().clone();
+    let feed = patches.feed()?;
+    let wanted = patches.clone();
+    let checker = builder(app, core)
+        .endpoints(vec![feed])
+        .map_err(|err| err.to_string())?
+        .version_comparator(move |_, remote| wanted.wants(&remote.version))
+        .build()
+        .map_err(|err| err.to_string())?;
+    let update = match checker.check().await {
+        Ok(Some(update)) => update,
+        Ok(None) => return Ok(None),
+        Err(err) => {
+            core.log(&format!("no canary patch for this build: {err}"));
+            return Ok(None);
+        }
+    };
+    let bytes = download(app, updater, &update, "patch").await?;
     let version = update.version.clone();
-    app.state::<Arc<CoreManager>>().log(&format!("update {version} available, downloading"));
+    let staged = version.clone();
+    tauri::async_runtime::spawn_blocking(move || patches.stage(&staged, &bytes))
+        .await
+        .map_err(|err| err.to_string())??;
+    Ok(Some(Found { notes: update.body.clone(), pending: Pending::Patch(version.clone()), version }))
+}
+
+async fn download(app: &AppHandle, updater: &Updater, update: &Update, kind: &str) -> Result<Vec<u8>, String> {
+    let version = update.version.clone();
+    app.state::<Arc<CoreManager>>().log(&format!("{kind} {version} available, downloading"));
     updater.set(app, UpdateState::Downloading { version: version.clone(), downloaded: 0, total: None });
     let mut downloaded = 0u64;
     let mut last_emit = Instant::now();
-    let bytes = update
+    update
         .download(
             |chunk, total| {
                 downloaded += chunk as u64;
@@ -177,14 +229,20 @@ async fn find_and_download(
             || {},
         )
         .await
-        .map_err(|err| err.to_string())?;
-    Ok(Some((update, bytes)))
+        .map_err(|err| err.to_string())
 }
 
 fn checker(app: &AppHandle, core: &Arc<CoreManager>, endpoints: Option<Vec<Url>>) -> Result<Checker, String> {
+    let mut builder = builder(app, core);
+    if let Some(endpoints) = endpoints {
+        builder = builder.endpoints(endpoints).map_err(|err| err.to_string())?;
+    }
+    builder.build().map_err(|err| err.to_string())
+}
+
+fn builder(app: &AppHandle, core: &Arc<CoreManager>) -> UpdaterBuilder {
     let (core, handle, shared) = (core.clone(), app.clone(), app.state::<Arc<Updater>>().inner().clone());
-    let mut builder = app
-        .updater_builder()
+    app.updater_builder()
         .configure_client(|client| client.connect_timeout(CONNECT_TIMEOUT).read_timeout(READ_TIMEOUT))
         // Windows only: the installer replaces godmode-core.exe, so the core has to be gone before it starts.
         .on_before_exit(move || {
@@ -193,15 +251,15 @@ fn checker(app: &AppHandle, core: &Arc<CoreManager>, endpoints: Option<Vec<Url>>
             let _ = handle.save_window_state(StateFlags::all() & !StateFlags::VISIBLE);
             core.shutdown();
             handle.cleanup_before_exit();
-        });
-    if let Some(endpoints) = endpoints {
-        builder = builder.endpoints(endpoints).map_err(|err| err.to_string())?;
-    }
-    builder.build().map_err(|err| err.to_string())
+        })
 }
 
 fn canary_marker(app: &AppHandle) -> Option<PathBuf> {
     paths::data_dir(app).map(|dir| dir.join(CANARY_MARKER))
+}
+
+pub fn canary_enabled_in(data_dir: Option<PathBuf>) -> bool {
+    data_dir.is_some_and(|dir| dir.join(CANARY_MARKER).exists())
 }
 
 fn canary_enabled(app: &AppHandle) -> bool {
@@ -259,8 +317,23 @@ pub async fn set_canary_updates(app: AppHandle, enabled: bool) -> Result<(), Str
 /// On Windows the installer takes over and restarts the app itself.
 #[tauri::command]
 pub async fn install_update(app: AppHandle, updater: State<'_, Arc<Updater>>) -> Result<(), String> {
-    let (update, bytes) = lock(&updater.downloaded).take().ok_or("No update has been downloaded yet")?;
+    let pending = lock(&updater.downloaded).take().ok_or("No update has been downloaded yet")?;
     let core = app.state::<Arc<CoreManager>>();
+    let (update, bytes) = match pending {
+        Pending::Full(update, bytes) => (*update, bytes),
+        Pending::Patch(version) => {
+            core.log(&format!("installing patch {version}"));
+            if let Err(err) = app.state::<Arc<Patches>>().activate(&version) {
+                core.log(&format!("patch install failed: {err}"));
+                updater.set(&app, UpdateState::Error { message: err.clone() });
+                return Err(err);
+            }
+            updater.set(&app, UpdateState::Installing { version });
+            mark_relaunch(&app);
+            app.request_restart();
+            return Ok(());
+        }
+    };
     let version = update.version.clone();
     core.log(&format!("installing update {version}"));
     updater.set(&app, UpdateState::Installing { version: version.clone() });
@@ -278,7 +351,7 @@ pub async fn install_update(app: AppHandle, updater: State<'_, Arc<Updater>>) ->
         }
         Ok((update, bytes, Err(err))) => {
             let notes = update.body.clone();
-            *lock(&updater.downloaded) = Some((update, bytes));
+            *lock(&updater.downloaded) = Some(Pending::Full(Box::new(update), bytes));
             updater.set(&app, UpdateState::Ready { version, notes });
             err.to_string()
         }
