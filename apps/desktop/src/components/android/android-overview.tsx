@@ -15,6 +15,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { useAndroidDevices, useAndroidStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { useReduceAnimations } from "@/lib/motion";
 
 const STEPS = [
   { title: "Turn on developer options", body: "Settings → About phone → tap Build number seven times." },
@@ -37,16 +38,18 @@ function SetupSteps() {
 }
 
 function DeviceGrid({ devices, onEdit, onForget }: { devices: AndroidDevice[]; onEdit: (d: AndroidDevice) => void; onForget: (d: AndroidDevice) => void }) {
+  const reduce = useReduceAnimations();
   return (
     <div className="grid grid-cols-1 items-start gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3">
       <AnimatePresence initial={false}>
-        {devices.map((device) => (
+        {devices.map((device, i) => (
           <motion.div
             key={device.id}
             layout="position"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97 }}
+            transition={reduce ? undefined : { delay: Math.min(i, 8) * 0.03 }}
             className="min-w-0"
           >
             <DeviceCard device={device} onEdit={() => onEdit(device)} onForget={() => onForget(device)} />

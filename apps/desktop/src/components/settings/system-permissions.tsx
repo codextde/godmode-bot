@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { CircleAlert, CircleCheck, CircleX, KeyRound, RefreshCw, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type { FixResult, PermissionId, PermissionReport, PermissionStatus } from "@godmode/shared";
@@ -12,6 +13,7 @@ import { isPrivacyPermission, useMacPermissionsGuide } from "@/components/permis
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** After asking macOS, the answer is given in System Settings: look again for a while. */
 const WAIT_FOR_ANSWER_MS = 2 * 60_000;
@@ -34,6 +36,7 @@ export function toastFix(result: FixResult) {
  * for everything it can repair or ask for itself.
  */
 export function PermissionsChecklist({ className }: { className?: string }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   // The permission the human was just asked for in a system dialog.
   const [asked, setAsked] = useState<{ id: PermissionId; at: number } | null>(null);
@@ -75,8 +78,8 @@ export function PermissionsChecklist({ className }: { className?: string }) {
           {isFetching ? <Spinner className="size-3" /> : <RefreshCw />} Re-check
         </Button>
       </div>
-      {data.permissions.map((permission) => (
-        <div key={permission.id}>
+      {data.permissions.map((permission, i) => (
+        <motion.div key={permission.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
           <PermissionRow
             permission={permission}
             onFixed={(result) => {
@@ -86,7 +89,7 @@ export function PermissionsChecklist({ className }: { className?: string }) {
               if (permission.id === "tool-binaries") void qc.invalidateQueries({ queryKey: qk.doctor });
             }}
           />
-        </div>
+        </motion.div>
       ))}
     </div>
   );

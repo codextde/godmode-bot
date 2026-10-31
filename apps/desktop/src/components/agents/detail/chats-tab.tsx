@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentType } from "react";
 import { Link } from "react-router";
+import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Archive, ArchiveRestore, HeartPulse, MessageSquare, MessagesSquare, Moon, Pin, Plug, Plus, Search, Share2, SquareKanban, Trash2, Workflow } from "lucide-react";
 import type { Agent, Conversation, ConversationOrigin } from "@godmode/shared";
@@ -19,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { useStartAgentChat } from "../agent-actions";
 import { PLATFORMS } from "@/components/messaging/platform";
+import { useReduceAnimations } from "@/lib/motion";
 
 const ORIGIN: Record<ConversationOrigin, { icon: ComponentType<{ className?: string }>; label: string }> = {
   chat: { icon: MessageSquare, label: "Chat" },
@@ -108,10 +110,11 @@ export function ChatsTab({ agent }: { agent: Agent }) {
         />
       ) : (
         <div className="divide-y overflow-hidden rounded-xl border bg-card shadow-card">
-          {list.map((c) => (
+          {list.map((c, i) => (
             <ConversationRow
               key={c.id}
               conversation={c}
+              index={i}
               running={!!c.running || runningConversations.split(",").includes(c.id)}
               onToggleArchive={() => setArchived(c, !c.archived)}
               onDelete={() => askDelete(c)}
@@ -126,20 +129,23 @@ export function ChatsTab({ agent }: { agent: Agent }) {
 
 function ConversationRow({
   conversation: c,
+  index,
   running,
   onToggleArchive,
   onDelete,
 }: {
   conversation: Conversation;
+  index: number;
   running: boolean;
   onToggleArchive: () => void;
   onDelete: () => void;
 }) {
+  const reduce = useReduceAnimations();
   const origin = ORIGIN[c.origin] ?? ORIGIN.chat;
   const Icon = origin.icon;
   const when = c.lastMessageAt ?? c.createdAt;
   return (
-    <div className="group relative">
+    <motion.div initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: Math.min(index, 15) * 0.02 }} className="group relative">
       <Link
         to={`/chat/${c.id}`}
         className={cn(
@@ -197,6 +203,6 @@ function ConversationRow({
           <TooltipContent>Delete</TooltipContent>
         </Tooltip>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -141,7 +141,7 @@ export function FileDiff({ file, before, after, rows: given }: { file: string; b
                 {r.text}
               </div>
             ) : (
-              <div key={i} className={[styles.diffRow, styles[r.type]].filter(Boolean).join(" ")}>
+              <div key={i} className={[styles.diffRow, styles[r.type]].filter(Boolean).join(" ")} style={{ animationDelay: `${Math.min(i, 24) * 14}ms` }}>
                 <span className={styles.ln + " " + styles.old}>{r.old ?? ""}</span>
                 <span className={styles.ln + " " + styles.new}>{r.cur ?? ""}</span>
                 <span className={styles.sign}>{r.type === "add" ? "+" : r.type === "del" ? "-" : ""}</span>

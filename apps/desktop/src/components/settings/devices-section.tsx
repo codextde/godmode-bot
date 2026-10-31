@@ -47,6 +47,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { ExpiryRing, Step } from "./pair-phone-dialog";
 import { Callout, SectionHeading, SettingRow, SettingsGroup } from "./settings-kit";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function DevicesSection() {
   const { data: group, isLoading, isError, error, refetch } = useDeviceGroup();
@@ -453,6 +454,7 @@ function RoleBadge({ role }: { role: keyof typeof ROLE_BADGE }) {
 }
 
 function StatusCard({ group }: { group: DeviceGroup }) {
+  const reduce = useReduceAnimations();
   const self = group.devices.find((d) => d.self);
   const primaryDevice = group.devices.find((d) => d.role === "primary");
   const secondary = group.role === "secondary";
@@ -467,7 +469,7 @@ function StatusCard({ group }: { group: DeviceGroup }) {
         : `${group.primaryName} is away`;
 
   return (
-    <section className="rounded-xl border bg-card shadow-card">
+    <motion.section initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl border bg-card shadow-card">
       <div className="flex items-start gap-4 p-5">
         <div className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-[18px]">
           {self ? <DeviceIcon device={self} /> : <Network />}
@@ -492,7 +494,7 @@ function StatusCard({ group }: { group: DeviceGroup }) {
           />
         )}
       </div>
-    </section>
+    </motion.section>
   );
 }
 
@@ -654,11 +656,17 @@ function BrowserSignInsGroup({ group }: { group: DeviceGroup }) {
 }
 
 function HandoffCard({ group }: { group: DeviceGroup }) {
+  const reduce = useReduceAnimations();
   const { working, targets } = useHandoff();
   const secondary = group.role === "secondary";
   const to = secondary ? group.primaryName : targets.length === 1 ? targets[0].name : "another computer";
   return (
-    <section className="relative overflow-hidden rounded-xl border bg-card shadow-card">
+    <motion.section
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.04 }}
+      className="relative overflow-hidden rounded-xl border bg-card shadow-card"
+    >
       <div className="flex flex-col gap-4 p-5 @xl:flex-row @xl:items-center">
         <div className="flex min-w-0 flex-1 items-start gap-4">
           <div className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-soft text-brand-strong [&_svg]:size-[18px]">
@@ -677,7 +685,7 @@ function HandoffCard({ group }: { group: DeviceGroup }) {
         </div>
         <HandoffButton label="Hand off to" className="max-w-full shrink-0 self-start @xl:max-w-80 @xl:self-center" variant={working > 0 ? "default" : "outline"} />
       </div>
-    </section>
+    </motion.section>
   );
 }
 

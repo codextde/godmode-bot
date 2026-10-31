@@ -217,7 +217,7 @@ export default function LoginsPage() {
             />
           )
         ) : (
-          <div className={cn("@container overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
+          <div className={cn("@container full-motion:animate-in overflow-hidden rounded-xl border bg-card shadow-card transition-opacity full-motion:fade-in-0", list.isFetching && list.isPlaceholderData && "opacity-70")}>
             <div className={cn(CREDENTIAL_GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
               <span className="pl-12">Login</span>
               <span>Username</span>

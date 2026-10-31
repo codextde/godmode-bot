@@ -120,7 +120,32 @@
   82%, 100% { background-position: 0% 0; }
 }
 
+:global([data-motion="full"]) .tr {
+  animation: tr-block-in 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes tr-block-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+:global([data-motion="full"]) .trCollapsible {
+  transition: grid-template-rows 320ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease;
+}
+:global([data-motion="full"]) .trViewport {
+  transition: height 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+:global([data-motion="full"]) .trStream {
+  transition: transform 560ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+:global([data-motion="full"]) .trSentence {
+  animation: tr-sentence-in-full 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes tr-sentence-in-full {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .trStream, .trViewport, .trCollapsible { transition: none; }
-  .trSentence { animation: none; }
+  .trStream, .trViewport, .trCollapsible,
+  :global([data-motion]) .trStream, :global([data-motion]) .trViewport, :global([data-motion]) .trCollapsible { transition: none; }
+  .trSentence, :global([data-motion]) .trSentence, :global([data-motion]) .tr { animation: none; }
 }

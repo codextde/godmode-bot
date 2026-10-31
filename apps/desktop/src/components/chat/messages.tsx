@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
+import { motion } from "motion/react";
 import { Link } from "react-router";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
 import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
@@ -24,6 +25,7 @@ import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
 import { CallMarker, callBlock } from "@/components/calls/call-chat";
 import { liveMood } from "./conversation-mood";
+import { useReduceAnimations } from "@/lib/motion";
 
 const FALLBACK_AGENT = { avatar: "🤖", color: "violet" };
 
@@ -286,6 +288,7 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 }
 
 function RunMeta({ runId }: { runId: string }) {
+  const reduce = useReduceAnimations();
   const modelLabel = useModelLabel();
   const { data: run } = useQuery({
     queryKey: qk.run(runId),
@@ -296,7 +299,7 @@ function RunMeta({ runId }: { runId: string }) {
   if (!run) return null;
   const tokens = run.usage ? run.usage.inputTokens + run.usage.outputTokens + run.usage.cacheReadTokens + run.usage.cacheWriteTokens : null;
   return (
-    <span className="flex items-center gap-2.5 border-l pl-2.5">
+    <motion.span initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2.5 border-l pl-2.5">
       {run.durationMs != null && (
         <span className="inline-flex items-center gap-1">
           <Timer className="size-3" /> {formatDuration(run.durationMs)}
@@ -324,7 +327,7 @@ function RunMeta({ runId }: { runId: string }) {
           </TooltipContent>
         </Tooltip>
       )}
-    </span>
+    </motion.span>
   );
 }
 
@@ -383,11 +386,12 @@ export function LiveAssistantMessage({
   onPause?: () => void;
   pausing?: boolean;
 }) {
+  const reduce = useReduceAnimations();
   const now = useNow(1000);
   const label = liveActivityLabel(live);
   const since = live?.startedAt ?? startedAt;
   return (
-    <div className="flex gap-3" aria-live="polite" aria-busy="true">
+    <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3" aria-live="polite" aria-busy="true">
       <AgentAvatar agent={agent ?? FALLBACK_AGENT} size="md" mood={liveMood(live).mood} className="mt-0.5" />
       <div className="min-w-0 flex-1">
         <AgentHeader agent={agent}>
@@ -420,6 +424,6 @@ export function LiveAssistantMessage({
         </AgentHeader>
         <MessageBlocks blocks={live?.blocks ?? []} streaming runId={live?.runId} />
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import type { ArtifactSummary } from "@godmode/shared";
 import { ARTIFACT_STARTERS, MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
@@ -20,6 +21,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useAgents, useArtifact, useArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** Dashboards and small apps the agents built: a line to ask for a new one, then the gallery. */
 export function ArtifactsOverview() {
@@ -63,8 +65,8 @@ export function ArtifactsOverview() {
           </div>
           {list.length ? (
             <div className="grid grid-cols-1 gap-4 @xl:grid-cols-2 @5xl:grid-cols-3">
-              {list.map((a) => (
-                <ArtifactTile key={a.id} artifact={a} />
+              {list.map((a, i) => (
+                <ArtifactTile key={a.id} artifact={a} index={i} />
               ))}
             </div>
           ) : (
@@ -153,7 +155,8 @@ function useSeen<T extends Element>() {
   return [ref, seen] as const;
 }
 
-function ArtifactTile({ artifact }: { artifact: ArtifactSummary }) {
+function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: number }) {
+  const reduce = useReduceAnimations();
   const [box, seen] = useSeen<HTMLDivElement>();
   const { data: full } = useArtifact(seen ? artifact.id : null);
   const actions = useArtifactActions(artifact);
@@ -163,8 +166,11 @@ function ArtifactTile({ artifact }: { artifact: ArtifactSummary }) {
   const [deleting, setDeleting] = useState(false);
 
   return (
-    <article
-      className="group relative overflow-hidden rounded-xl border bg-card shadow-card transition-colors hover:border-foreground/15"
+    <motion.article
+      initial={reduce ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 8) * 0.03 }}
+      className="group relative overflow-hidden rounded-xl border bg-card shadow-card transition full-motion:hover:-translate-y-0.5 hover:border-foreground/15 full-motion:hover:shadow-lg"
     >
       <Link to={`/artifacts/${artifact.id}`} className="block outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
         <div ref={box} className="relative aspect-[16/10] border-b bg-background">
@@ -222,6 +228,6 @@ function ArtifactTile({ artifact }: { artifact: ArtifactSummary }) {
         </DropdownMenu>
       </div>
       <DeleteArtifactDialog artifact={artifact} open={deleting} onOpenChange={setDeleting} />
-    </article>
+    </motion.article>
   );
 }

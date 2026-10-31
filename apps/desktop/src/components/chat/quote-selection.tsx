@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { TextQuote } from "lucide-react";
 import { isMac, modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
-import { EASE_OUT } from "@/lib/motion";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 /** The text selected in `container`, if there is some and all of it is there (not in a field the human types in). */
 function selectionIn(container: HTMLElement | null): { text: string; range: Range } | null {
@@ -31,6 +31,7 @@ function quoteOf(text: string): string {
  * ⌘L / Ctrl+L.
  */
 export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quote: string) => void; disabled?: boolean; children: ReactNode }) {
+  const reduce = useReduceAnimations();
   const containerRef = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
   const [at, setAt] = useState<{ x: number; y: number; below: boolean } | null>(null);
@@ -118,9 +119,9 @@ export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quot
             <motion.button
               ref={pillRef}
               type="button"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={reduce ? { opacity: 0 } : { opacity: 0, y: at.below ? -4 : 4, scale: 0.96 }}
+              animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0, scale: 1 }}
+              exit={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.96 }}
               transition={{ duration: 0.14, ease: EASE_OUT }}
               style={{ left: at.x, top: at.y }}
               // Keep the selection: it is read on click.

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Ban, Bot, Check, CircleCheck, MessageSquare, MoreHorizontal, RotateCcw, Square, X } from "lucide-react";
 import { cardLabel, formatMoney, type CardPurchase, type CardPurchasePatch, type PaymentCard } from "@godmode/shared";
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { isGrantCancelled, withGrant } from "./grant";
 import { toastApiError } from "./vault-utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 const FREES_ROOM = "Confirm with your vault passphrase: this frees room under the card's limits.";
 const ALL = "all";
@@ -60,6 +62,7 @@ function statusOf(p: CardPurchase): { label: string; tone: keyof typeof TONES; h
 
 /** The ledger: every purchase an agent made or asked to make with a card, newest first. */
 export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[]; cardById: Map<string, PaymentCard>; scoped: boolean }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const [cardFilter, setCardFilter] = useState(ALL);
   useEffect(() => {
@@ -160,11 +163,11 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
         </p>
       ) : (
         <ul className={cn("divide-y overflow-hidden rounded-xl border bg-card shadow-card transition-opacity", list.isFetching && list.isPlaceholderData && "opacity-70")}>
-          {purchases.map((p) => {
+          {purchases.map((p, i) => {
             const agent = p.agentId ? agentById.get(p.agentId) : undefined;
             const card = cardById.get(p.cardId);
             return (
-              <li key={p.id}>
+              <motion.li key={p.id} initial={reduce ? false : { opacity: 0 }} animate={{ opacity: 1, transition: { delay: Math.min(i, 10) * 0.02 } }}>
                 <PurchaseRow
                   purchase={p}
                   agentName={agent?.name ?? "Deleted agent"}
@@ -175,7 +178,7 @@ export function CardPurchases({ cards, cardById, scoped }: { cards: PaymentCard[
                   deciding={decidingId === p.id}
                   onDecide={(decision) => decide.mutate({ purchase: p, decision })}
                 />
-              </li>
+              </motion.li>
             );
           })}
         </ul>

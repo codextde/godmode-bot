@@ -199,7 +199,7 @@ export default function TotpPage() {
           <div className="@container">
             <div className="grid gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
               <AnimatePresence initial={false}>
-                {entries.map((t) => (
+                {entries.map((t, i) => (
                   <TotpCard
                     key={t.id}
                     entry={t}
@@ -207,6 +207,7 @@ export default function TotpPage() {
                     now={now}
                     credential={t.credentialId ? credById.get(t.credentialId) : undefined}
                     hideCodes={hideCodes}
+                    index={i}
                     onEdit={(focusLink) => setEditing({ entry: t, focusLink: !!focusLink })}
                     onDelete={() => setToDelete(t)}
                   />

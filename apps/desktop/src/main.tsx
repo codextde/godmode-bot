@@ -13,6 +13,7 @@ import { cloudContext } from "@/lib/core";
 import { installExternalLinks, installDropGuard } from "@/lib/desktop";
 import { installErrorReporting, reactRootErrorHandlers, reportRequestError } from "@/lib/diagnostics";
 import { startMotionRest } from "@/lib/motion-rest";
+import { useUi } from "@/stores/ui";
 import "./index.css";
 import { App } from "./App";
 
@@ -20,6 +21,12 @@ installErrorReporting();
 installExternalLinks();
 installDropGuard();
 startMotionRest();
+
+const applyMotion = (reduce: boolean) => {
+  document.documentElement.dataset.motion = reduce ? "reduced" : "full";
+};
+applyMotion(useUi.getState().reduceAnimations);
+useUi.subscribe((s) => applyMotion(s.reduceAnimations));
 
 const queryClient = new QueryClient({
   queryCache: new QueryCache({ onError: (err, query) => reportRequestError(err, query.queryKey.slice(0, 2).join(".")) }),

@@ -56,6 +56,7 @@ import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { type WorkspaceActivity, projectKey, useWorkspaceActivity } from "@/components/workspaces/workspace-activity";
 import { ProjectMoveMenu, ScopeDnd, WorkspaceMoveMenu, useProjectDnd, useWorkspaceDnd } from "@/components/workspaces/scope-dnd";
 import { ProjectDialog } from "@/components/projects/project-dialog";
+import { useReduceAnimations } from "@/lib/motion";
 
 const SORTS: { id: WorkspacesSort; label: string }[] = [
   { id: "name", label: "A–Z" },
@@ -107,6 +108,7 @@ function useScopeCounts(): { get: (workspaceId: string | null) => Counts; loadin
 }
 
 export default function WorkspacesPage() {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -324,7 +326,7 @@ export default function WorkspacesPage() {
                   )}
                 >
                   {sort === o.id && (
-                    <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
+                    <motion.span layoutId={reduce ? undefined : "workspaces-sort"} className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
                   )}
                   <span className="relative">{o.label}</span>
                 </button>
@@ -438,6 +440,7 @@ export default function WorkspacesPage() {
               {showGlobal && (
                 <ScopeCard
                   workspace={null}
+                  index={0}
                   current={scope === "global"}
                   tile={globalTile}
                   title="Global"
@@ -452,10 +455,11 @@ export default function WorkspacesPage() {
                 />
               )}
               <AnimatePresence initial={false}>
-                {list.map((ws) => (
+                {list.map((ws, i) => (
                   <ScopeCard
                     key={ws.id}
                     workspace={ws}
+                    index={i + 1}
                     current={scope === ws.id && !scopedProject}
                     tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="lg" />}
                     title={ws.name}
@@ -487,6 +491,9 @@ export default function WorkspacesPage() {
                   layout
                   type="button"
                   onClick={openCreate}
+                  initial={reduce ? false : { opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={reduce ? undefined : { delay: Math.min(list.length + 1, 12) * 0.03 }}
                   className="group flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-foreground/15 p-6 text-center transition hover:border-foreground/25 hover:bg-card focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="grid size-11 place-items-center rounded-lg border bg-card text-muted-foreground shadow-card transition group-hover:text-foreground group-hover:shadow-float">
@@ -613,6 +620,7 @@ function conflictCounts(details: unknown, fallback: Counts): [string, number][] 
 
 function ScopeCard({
   workspace,
+  index,
   current,
   tile,
   title,
@@ -630,6 +638,7 @@ function ScopeCard({
 }: {
   /** null for Global. */
   workspace: Workspace | null;
+  index: number;
   current: boolean;
   tile: ReactNode;
   title: string;
@@ -645,6 +654,7 @@ function ScopeCard({
   sources?: { list: WorkspaceSource[]; onClick: () => void };
   projects?: { list: Project[]; current: string | null; onOpen: (p: Project) => void; onEdit: (p: Project) => void; onAdd: () => void };
 }) {
+  const reduce = useReduceAnimations();
   const stats: { key: keyof Counts; label: string; icon: ReactNode }[] = [
     { key: "agents", label: "Agents", icon: <Bot /> },
     { key: "logins", label: "Logins", icon: <KeyRound /> },
@@ -657,7 +667,10 @@ function ScopeCard({
       ref={dnd.ref}
       {...dnd.props}
       layout
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
+      transition={reduce ? undefined : { delay: Math.min(index, 12) * 0.03 }}
       className={cn(
         "group relative flex flex-col overflow-hidden rounded-xl border bg-card p-5 shadow-card transition hover:shadow-float",
         current ? "border-brand/35 ring-1 ring-brand/15" : dnd.state === "none" && "hover:border-foreground/15",

@@ -24,6 +24,7 @@ import { toastApiError } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string }> = {
   info: { icon: Info, className: "border bg-card text-muted-foreground shadow-card" },
@@ -38,6 +39,7 @@ const KIND_ICON: Record<NotificationKind, { icon: typeof Info; className: string
 const PAGE = 30;
 
 export function NotificationList({ className }: { className?: string }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [limit, setLimit] = useState(PAGE);
@@ -151,13 +153,14 @@ export function NotificationList({ className }: { className?: string }) {
       ) : (
         <ul className="divide-y">
           <AnimatePresence initial={false}>
-            {items.slice(0, limit).map((n) => (
+            {items.slice(0, limit).map((n, i) => (
               <motion.li
                 key={n.id}
                 layout
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
+                transition={reduce ? undefined : { delay: Math.min(i, 12) * 0.03 }}
               >
                 <NotificationRow n={n} onOpen={() => open(n)} />
               </motion.li>

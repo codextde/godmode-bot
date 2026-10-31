@@ -276,7 +276,7 @@ export function Picture({ file }: { file: ChatFile }) {
     );
   }
   return (
-    <span className="gm-shot inline-flex max-w-full min-w-52 flex-col overflow-hidden rounded-xl border bg-card align-top shadow-card">
+    <span className="gm-shot inline-flex max-w-full min-w-52 flex-col overflow-hidden rounded-xl border bg-card align-top shadow-card transition-shadow full-motion:hover:shadow-float">
       <button
         type="button"
         onClick={() => preview(file.path)}

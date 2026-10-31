@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
+import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { CircleAlert, Clock, Plus, Search, Workflow, Zap } from "lucide-react";
 import type { Routine, RoutineTriggerType } from "@godmode/shared";
@@ -16,6 +17,7 @@ import { RoutineItem } from "@/components/agents/routine-item";
 import { OnePromptCard } from "@/components/automations/one-prompt-card";
 import { FollowupsSection } from "@/components/automations/followups-section";
 import { TRIGGER_ORDER, TRIGGER_TYPES, triggerText } from "@/components/automations/trigger-meta";
+import { useReduceAnimations } from "@/lib/motion";
 
 type Filter = "all" | "active" | "paused" | "failing";
 type TriggerFilter = "all" | RoutineTriggerType;
@@ -26,6 +28,7 @@ const COMPACT_FROM = 3;
 const isFailing = (r: Routine) => r.lastStatus === "failed" || r.triggerStatus.state === "error";
 
 export default function AutomationsPage() {
+  const reduce = useReduceAnimations();
   const routinesQ = useRoutines();
   const eventsQ = useAutomationEvents(20);
   const followupsQ = useFollowups();
@@ -194,7 +197,7 @@ export default function AutomationsPage() {
                       filter === f.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {filter === f.id && <span className="absolute inset-0 rounded-md border bg-card shadow-card" />}
+                    {filter === f.id && <motion.span layoutId={reduce ? undefined : "automations-filter"} className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />}
                     <span className="relative flex items-center gap-1.5">
                       {f.label}
                       {counts[f.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{counts[f.id]}</span>}
@@ -279,10 +282,10 @@ export default function AutomationsPage() {
           />
         ) : (
           <div className="space-y-3">
-            {visible.map((r) => (
-              <div key={r.id}>
+            {visible.map((r, i) => (
+              <motion.div key={r.id} layout={!reduce} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
                 <RoutineItem routine={r} agent={agentById.get(r.agentId)} onEdit={(routine) => setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine })} />
-              </div>
+              </motion.div>
             ))}
           </div>
         )}

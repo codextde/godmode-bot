@@ -20,6 +20,7 @@ import { CleanupItems } from "./cleanup-items";
 import { SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 import { usePermissions } from "./system-permissions";
 import { useToolUpdates } from "./system-updates";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** Fixed per area (never by rank), checked for color-blind separation on both surfaces. */
 const AREA_COLOR: Record<StorageArea, string> = {
@@ -81,11 +82,12 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
 /* ------------------------------------------------------------------ */
 
 function StorageCard({ report, scanning, onScan }: { report: CleanupReport | undefined; scanning: boolean; onScan: () => void }) {
+  const reduce = useReduceAnimations();
   const used = report?.storage.reduce((n, s) => n + s.bytes, 0) ?? 0;
   const reclaim = report?.items.filter((i) => i.recommended && i.count && !i.blocked).reduce((n, i) => n + i.bytes, 0) ?? 0;
   const last = report?.lastRun;
   return (
-    <section className="overflow-hidden rounded-xl border bg-card shadow-card">
+    <motion.section initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-xl border bg-card shadow-card">
       <div className="space-y-5 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -131,11 +133,12 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
           )}
         </div>
       )}
-    </section>
+    </motion.section>
   );
 }
 
 function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
+  const reduce = useReduceAnimations();
   const percent = (bytes: number) => (used ? (bytes / used) * 100 : 0);
   const share = (bytes: number) => {
     const p = percent(bytes);
@@ -144,13 +147,13 @@ function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
   return (
     <div className="space-y-3.5">
       <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Storage by area">
-        {report.storage.map((s) => (
+        {report.storage.map((s, i) => (
           <Tooltip key={s.area}>
             <TooltipTrigger asChild>
               <motion.div
-                initial={false}
+                initial={reduce ? false : { flexGrow: 0 }}
                 animate={{ flexGrow: s.bytes }}
-                transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                transition={reduce ? { duration: 0.25, ease: [0.22, 1, 0.36, 1] } : { duration: 0.6, delay: i * 0.05, ease: [0.22, 1, 0.36, 1] }}
                 style={{ flexBasis: 0, minWidth: 3 }}
                 className={cn("h-full transition-opacity hover:opacity-80", AREA_COLOR[s.area])}
               />
@@ -215,6 +218,7 @@ function SelfCheck({
   failed: boolean;
   rescan: UseMutationResult<CleanupReport, Error, void>;
 }) {
+  const reduce = useReduceAnimations();
   const doctor = useDoctor();
   const permissions = usePermissions();
   const updates = useToolUpdates();
@@ -291,9 +295,9 @@ function SelfCheck({
       <div className="grid grid-cols-1 gap-2 @xl:grid-cols-2">
         {checks.map((c, i) =>
           c ? (
-            <div key={c.id}>
+            <motion.div key={c.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
               <CheckTile check={c} />
-            </div>
+            </motion.div>
           ) : (
             <Skeleton key={i} className="h-[62px] rounded-lg" />
           ),

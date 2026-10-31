@@ -5,7 +5,7 @@ import { MASCOT_CHARACTER, MASCOT_COLOR, type CloudUiContext } from "@godmode/sh
 import { Backdrop } from "@/components/brand";
 import { Character } from "@/components/character";
 import { Button } from "@/components/ui/button";
-import { EASE_OUT } from "@/lib/motion";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 
 const RETRY_MS = 5_000;
 
@@ -19,6 +19,7 @@ export type CloudState =
  * it right now, or the computer refuses browser access. Each leads back to the cloud's list of computers.
  */
 export function CloudStatePage({ cloud, state, onRetry }: { cloud: CloudUiContext; state: CloudState; onRetry: () => Promise<unknown> }) {
+  const reduce = useReduceAnimations();
   const offline = state.kind === "offline";
   const busy = useRef(false);
 
@@ -46,7 +47,7 @@ export function CloudStatePage({ cloud, state, onRetry }: { cloud: CloudUiContex
       <motion.div
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.25, ease: EASE_OUT }}
+        transition={{ duration: reduce ? 0.25 : 0.45, ease: EASE_OUT }}
         className="relative flex max-w-md flex-col items-center gap-6 text-center"
       >
         <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={72} mood={offline ? "sleeping" : "attention"} title="Godmode" />

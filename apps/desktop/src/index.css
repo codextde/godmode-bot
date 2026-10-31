@@ -5,6 +5,8 @@
 @import "@godmode/shared/character.css";
 
 @custom-variant dark (&:is(.dark *));
+@custom-variant full-motion (&:where([data-motion=full], [data-motion=full] *));
+@custom-variant calm-motion (&:where([data-motion=reduced], [data-motion=reduced] *));
 
 /* ------------------------------------------------------------------ */
 /* Godmode design tokens — warm paper + anthracite, one quiet accent   */
@@ -180,12 +182,34 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
+  --animate-shimmer: shimmer 2.2s linear infinite;
+  --animate-spin-slow: spin 6s linear infinite;
+  --animate-float: float 6s ease-in-out infinite;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-twinkle: twinkle 3.6s ease-in-out infinite;
   --animate-dream-halo: dream-halo 3.2s ease-in-out infinite;
   --animate-march: march 0.6s linear infinite;
   --animate-ekg: ekg 2.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
   --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
-  --animate-title-in: title-in 0.25s cubic-bezier(0.22, 0.8, 0.24, 1) both;
+  --animate-title-in: title-in 0.55s cubic-bezier(0.22, 0.8, 0.24, 1) both;
 
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-4px); }
+  }
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 45%, transparent); }
+    70% { box-shadow: 0 0 0 8px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; transform: scale(0.7); }
+    50% { opacity: 1; transform: scale(1); }
+  }
   @keyframes dream-halo {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dream) 0%, transparent), 0 0 12px -4px color-mix(in oklab, var(--dream) 30%, transparent); }
     50% { box-shadow: 0 0 0 5px color-mix(in oklab, var(--dream) 10%, transparent), 0 0 22px -2px color-mix(in oklab, var(--dream) 45%, transparent); }

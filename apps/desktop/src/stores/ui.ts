@@ -55,6 +55,7 @@ interface UiState {
   /** The "Try something like" suggestions on Home were closed. */
   hideSuggestions: boolean;
   sidebarWidth: number | null;
+  reduceAnimations: boolean;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
   /** Pages the human took out of the sidebar's Work section. */
@@ -89,6 +90,7 @@ interface UiState {
   setAway: (away: { since: string; until: string } | null) => void;
   setHideSuggestions: (v: boolean) => void;
   setSidebarWidth: (width: number | null) => void;
+  setReduceAnimations: (v: boolean) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -121,6 +123,7 @@ export const useUi = create<UiState>()(
       away: null,
       hideSuggestions: false,
       sidebarWidth: null,
+      reduceAnimations: false,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
@@ -159,6 +162,7 @@ export const useUi = create<UiState>()(
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
+      setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.
@@ -188,6 +192,7 @@ export const useUi = create<UiState>()(
         workspacesSort: s.workspacesSort,
         hideSuggestions: s.hideSuggestions,
         sidebarWidth: s.sidebarWidth,
+        reduceAnimations: s.reduceAnimations,
       }),
     },
   ),

@@ -164,10 +164,11 @@ export default function CardsPage() {
             <div className="@container">
               <div className="grid gap-4 @xl:grid-cols-2 @4xl:grid-cols-3">
                 <AnimatePresence initial={false}>
-                  {cards.map((c) => (
+                  {cards.map((c, i) => (
                     <CardTile
                       key={c.id}
                       card={c}
+                      index={i}
                       agentsById={agentsById}
                       busy={busyId === c.id}
                       onEdit={openEdit}

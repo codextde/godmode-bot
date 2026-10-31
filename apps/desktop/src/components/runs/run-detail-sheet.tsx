@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format, formatDistanceToNowStrict } from "date-fns";
+import { motion } from "motion/react";
 import {
   ArrowUpRight,
   CalendarClock,
@@ -26,7 +27,7 @@ import { useAgent, useQuestions } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { AgentAvatar } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
-import { DrawCheck } from "@/components/aicss/Motion";
+import { DrawCheck, WorkingTicks } from "@/components/aicss/Motion";
 import { Markdown } from "@/components/chat/markdown";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { formatDuration, formatElapsed, formatTokens, RunStatusBadge, TriggerBadge, useModelLabel } from "./run-status";
 import { RunRow, useRunLiveState } from "./run-row";
 import { RunLogViewer } from "./run-log-viewer";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function useCancelRun() {
   const qc = useQueryClient();
@@ -119,6 +121,7 @@ function RunDetail({ runId, placeholder, onOpenRun }: { runId: string; placehold
 }
 
 function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) => void }) {
+  const reduce = useReduceAnimations();
   const modelLabel = useModelLabel();
   const { data: agent } = useAgent(run.agentId);
   const { live, status, running, elapsed } = useRunLiveState(run);
@@ -193,15 +196,18 @@ function RunDetailBody({ run, onOpenRun }: { run: Run; onOpenRun: (id: string) =
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
         {agent?.failedRunId === run.id && <FailureNotice agentId={agent.id} agentName={agent.name} />}
         {running && (
-          <div
-            className="flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="full-motion:glow-border flex items-center gap-3 rounded-xl border bg-card p-4 shadow-card"
           >
             <Orb variant="S3" size={28} label="Working" />
             <div className="min-w-0 flex-1">
               <div className="text-shimmer truncate text-sm font-medium">{live?.activity ?? "Working…"}</div>
               <div className="font-mono text-xs text-muted-foreground tabular-nums">{elapsed != null ? formatElapsed(elapsed) : "Starting…"} elapsed</div>
             </div>
-          </div>
+            {!reduce && <WorkingTicks count={8} className="shrink-0 text-brand-strong" />}
+          </motion.div>
         )}
 
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

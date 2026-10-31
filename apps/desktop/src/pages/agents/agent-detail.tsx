@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { leadOf, reportsOf } from "@godmode/shared";
@@ -39,6 +40,7 @@ import { HeartbeatTab } from "@/components/agents/detail/heartbeat-tab";
 import { MemoryTab } from "@/components/agents/detail/memory-tab";
 import { HistoryTab } from "@/components/agents/detail/history-tab";
 import { SettingsTab } from "@/components/agents/detail/settings-tab";
+import { useReduceAnimations } from "@/lib/motion";
 
 const TABS = [
   { id: "", label: "Overview", icon: LayoutGrid },
@@ -57,6 +59,7 @@ const EASY_MORE: readonly TabId[] = ["heartbeat", "history"];
 const EASY_LABELS: Partial<Record<TabId, string>> = { heartbeat: "Check-ins", history: "Version history" };
 
 export default function AgentDetailPage() {
+  const reduce = useReduceAnimations();
   const params = useParams();
   const agentId = params.agentId!;
   const rest = (params["*"] ?? "").split("/")[0];
@@ -103,7 +106,7 @@ export default function AgentDetailPage() {
       <AgentHeader agent={agent} />
       <TabNav agentId={agent.id} active={tab} />
       <PageBody className="pt-6">
-        <div key={tab}>
+        <motion.div key={tab} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {tab === "" && <OverviewTab agent={agent} />}
           {tab === "chats" && <ChatsTab agent={agent} />}
           {tab === "routines" && <RoutinesTab agent={agent} />}
@@ -111,7 +114,7 @@ export default function AgentDetailPage() {
           {tab === "memory" && <MemoryTab agent={agent} />}
           {tab === "history" && <HistoryTab agent={agent} />}
           {tab === "settings" && <SettingsTab agent={agent} />}
-        </div>
+        </motion.div>
       </PageBody>
     </div>
   );
@@ -269,6 +272,7 @@ function AgentHeader({ agent }: { agent: Agent }) {
 }
 
 function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
+  const reduce = useReduceAnimations();
   const { isMobile } = useSidebar();
   const easy = useEasyMode();
   const navigate = useNavigate();
@@ -298,7 +302,11 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
               )}
             >
               {isActive && (
-                <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
+                <motion.span
+                  layoutId={reduce ? undefined : "agent-tab"}
+                  className="absolute inset-0 rounded-md border bg-card shadow-card"
+                  transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
+                />
               )}
               <Icon className="relative size-4" />
               <span className="relative">{t.label}</span>
@@ -315,7 +323,11 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
               )}
             >
               {activeMore && (
-                <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
+                <motion.span
+                  layoutId={reduce ? undefined : "agent-tab"}
+                  className="absolute inset-0 rounded-md border bg-card shadow-card"
+                  transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
+                />
               )}
               {activeMore ? <activeMore.icon className="relative size-4" /> : <Ellipsis className="relative size-4" />}
               <span className="relative">{activeMore ? EASY_LABELS[activeMore.id] : "More"}</span>

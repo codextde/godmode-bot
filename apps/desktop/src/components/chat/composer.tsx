@@ -28,7 +28,7 @@ import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
-import { EASE_OUT } from "@/lib/motion";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } from "./attachments";
 import { LevelBars } from "./voice-visuals";
 import { WorkingTicks } from "@/components/aicss/Motion";
@@ -110,6 +110,7 @@ export function Composer({
   className,
   ref,
 }: ComposerProps) {
+  const reduce = useReduceAnimations();
   const navigate = useNavigate();
   const easy = useEasyMode();
   const textKey = draftKey ? `chat:${draftKey}` : undefined;
@@ -346,31 +347,38 @@ export function Composer({
 
   const listening = dictation.state === "listening" || dictation.state === "starting";
   const transcribing = dictation.state === "transcribing";
+  const glow = (!!running || !!busy) && !disabled && !reduce;
 
   return (
     <div
       ref={rootRef}
       className={cn(
-        "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200 before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:opacity-0 before:ring-4 before:ring-foreground/[0.035] before:transition-opacity before:duration-200 dark:before:ring-foreground/[0.05]",
-        focused && "border-foreground/20 before:opacity-100 dark:border-foreground/25",
+        "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
+        glow
+          ? "glow-border"
+          : "before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:opacity-0 before:ring-4 before:ring-foreground/[0.035] before:transition-opacity before:duration-200 dark:before:ring-foreground/[0.05]",
+        focused && "border-foreground/20 dark:border-foreground/25",
+        focused && (glow ? "ring-4 ring-foreground/[0.035] dark:ring-foreground/[0.05]" : "before:opacity-100"),
         disabled && "shadow-card",
         className,
       )}
     >
-      {menuOpen && (
-        <SlashMenu
-          id={menuId}
-          items={menuItems}
-          active={menuIndex}
-          grouped={!menuQuery}
-          loading={commands.isLoading}
-          error={commands.error}
-          below={menuRoom.below}
-          maxHeight={menuRoom.maxHeight}
-          onHover={setMenuActive}
-          onPick={pickCommand}
-        />
-      )}
+      <AnimatePresence>
+        {menuOpen && (
+          <SlashMenu
+            id={menuId}
+            items={menuItems}
+            active={menuIndex}
+            grouped={!menuQuery}
+            loading={commands.isLoading}
+            error={commands.error}
+            below={menuRoom.below}
+            maxHeight={menuRoom.maxHeight}
+            onHover={setMenuActive}
+            onPick={pickCommand}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence initial={false}>
         {attachments.length > 0 && (
@@ -399,7 +407,7 @@ export function Composer({
         )}
       </AnimatePresence>
 
-      {hint && <SlashHint command={hint} />}
+      <AnimatePresence initial={false}>{hint && <SlashHint key="slash-hint" command={hint} />}</AnimatePresence>
 
       <label htmlFor={draftKey ? `composer-${draftKey}` : "composer"} className="sr-only">
         Message
@@ -463,23 +471,28 @@ export function Composer({
           <AnimatePresence>
             {((running && !disabled) || transcribing) && (
               <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15, ease: "easeOut" }}
+                initial={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                animate={reduce ? { opacity: 1 } : { opacity: 1, x: 0 }}
+                exit={reduce ? { opacity: 0 } : { opacity: 0, x: 6 }}
+                transition={reduce ? { duration: 0.15, ease: "easeOut" } : undefined}
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
                 <span className="truncate">{transcribing ? "Transcribing…" : "Working — new messages are queued"}</span>
               </motion.span>
             )}
+            {!running && !transcribing && focused && text.length > 0 && (
+              <motion.span
+                initial={reduce ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={reduce ? undefined : { opacity: 0 }}
+                className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
+              >
+                <Kbd>⇧</Kbd>
+                <Kbd>↵</Kbd> new line
+              </motion.span>
+            )}
           </AnimatePresence>
-          {!running && !transcribing && focused && text.length > 0 && (
-            <span className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex">
-              <Kbd>⇧</Kbd>
-              <Kbd>↵</Kbd> new line
-            </span>
-          )}
 
           {status}
           {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}
