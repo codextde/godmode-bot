@@ -8,11 +8,11 @@ import { useUi } from "@/stores/ui";
 /** "G then T" style jumps: the second key, where it goes, and what it's called. */
 export const GO_TO: readonly { key: string; to: string; label: string }[] = [
   { key: "c", to: "/", label: "Chat" },
-  { key: "t", to: "/tasks", label: "Tasks" },
-  { key: "m", to: "/inbox?view=board", label: "My tasks board" },
+  { key: "t", to: "/tasks", label: "Agent tasks" },
+  { key: "m", to: "/inbox?view=board", label: "Your to-dos board" },
   { key: "a", to: "/agents", label: "Agents" },
   { key: "u", to: "/automations", label: "Automations" },
-  { key: "i", to: "/inbox", label: "Inbox" },
+  { key: "i", to: "/inbox", label: "Needs you" },
   { key: "y", to: "/activity", label: "Activity" },
   { key: "l", to: "/vault/logins", label: "Passwords" },
   { key: "s", to: "/settings/general", label: "Settings" },

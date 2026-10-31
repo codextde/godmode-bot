@@ -54,7 +54,7 @@ export function HumanTaskBar({ conversationId, agentName }: { conversationId: st
       ))}
       {tasks.length > 3 && (
         <Link to="/inbox?view=board" className="block px-1 text-xs text-muted-foreground hover:text-foreground">
-          +{tasks.length - 3} more in your Inbox
+          +{tasks.length - 3} more in Needs you
         </Link>
       )}
     </div>
