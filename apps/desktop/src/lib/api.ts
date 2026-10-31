@@ -221,6 +221,9 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   Offer,
   AcceptOfferResult,
   ImportMemoryInput,
+  ClaudeAccount,
+  ClaudeAccountLogin,
+  ClaudeAccountsState,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED } from "@godmode/shared";
 import { t } from "@/i18n";
@@ -402,6 +405,16 @@ export const api = {
 
   models: {
     get: (refresh = false) => get<ModelCatalog>("/api/models", { refresh: refresh ? 1 : undefined }),
+  },
+
+  claudeAccounts: {
+    list: () => get<ClaudeAccountsState>("/api/claude-accounts"),
+    refresh: () => post<ClaudeAccountsState>("/api/claude-accounts/refresh"),
+    startLogin: (accountId: string | null = null) => post<ClaudeAccountLogin>("/api/claude-accounts/login", { accountId }),
+    submitCode: (code: string) => post<ClaudeAccountLogin>("/api/claude-accounts/login/code", { code }),
+    cancelLogin: () => del<ClaudeAccountLogin>("/api/claude-accounts/login"),
+    setDefault: (id: string) => post<ClaudeAccount[]>(`/api/claude-accounts/${encodeURIComponent(id)}/default`),
+    remove: (id: string) => del<ClaudeAccount[]>(`/api/claude-accounts/${encodeURIComponent(id)}`),
   },
 
   doctor: {

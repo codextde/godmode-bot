@@ -270,6 +270,50 @@
       "enable": "Enable full bypass"
     }
   },
+  "accounts": {
+    "title": "Claude accounts",
+    "description": "Use more than one Claude subscription. Agents work on the default account and move to another one when it runs low.",
+    "listTitle": "Accounts",
+    "listDescription": "Accounts you add keep their own sign-in, so logging in elsewhere never signs them out.",
+    "default": "Default",
+    "systemLogin": "This computer's Claude Code login",
+    "thisComputer": "This computer",
+    "addedHere": "Added in Godmode",
+    "unknown": "Claude account",
+    "session": "Session",
+    "week": "Week",
+    "signedOut": "Signed out. Sign in again to use it.",
+    "limitedUntil": "Limit reached, back at {{time}}",
+    "signInAgain": "Sign in again",
+    "makeDefault": "Make default",
+    "more": "More actions",
+    "remove": "Remove",
+    "refresh": "Refresh usage",
+    "add": "Add account",
+    "adding": "Sign in with the Claude account you want to add",
+    "signingInAgain": "Signing in {{email}} again",
+    "emptyTitle": "Add a second Claude account",
+    "emptyBody": "When one account reaches its limit, Godmode keeps working on the other.",
+    "startFailed": "Couldn't start the sign-in",
+    "codeFailed": "Couldn't send the code",
+    "signInFailed": "The sign-in didn't finish",
+    "linkCopied": "Sign-in link copied",
+    "added": "Signed in {{email}}",
+    "defaultFailed": "Couldn't change the default",
+    "removed": "Account removed",
+    "removeFailed": "Couldn't remove the account",
+    "removeTitle": "Remove {{email}}?",
+    "removeBody": "Godmode forgets this account's sign-in. Workspaces that used it fall back to their other accounts. You can add it again any time.",
+    "lockedTitle": "The vault is locked",
+    "lockedBody": "Accounts added in Godmode keep their sign-in in the vault. Until you unlock it, agents use this computer's Claude Code login.",
+    "switchTitle": "Switching",
+    "switchDescription": "How work moves between your accounts.",
+    "autoSwitch": "Switch automatically",
+    "autoSwitchDescription": "New work starts on another account once the default reaches the threshold, and work that hits a limit goes on right away on an account with room left.",
+    "threshold": "Switch at",
+    "thresholdDescription": "Usage of the session or weekly limit, whichever is higher.",
+    "perWorkspaceDescription": "Workspaces can use their own accounts: edit a workspace and pick them under Claude accounts."
+  },
   "android": {
     "adbReady": "adb is ready",
     "adbInstallError": "adb couldn't be installed",
@@ -378,7 +422,8 @@
       "system": "System",
       "cleanup": "Cleanup",
       "logs": "Logs",
-      "about": "About"
+      "about": "About",
+      "accounts": "Claude accounts"
     },
     "easy": {
       "general": "General",
@@ -404,7 +449,8 @@
       "about": "About",
       "computer": "Computer control",
       "connect": "Claude Code & MCP",
-      "system": "System check"
+      "system": "System check",
+      "accounts": "Claude accounts"
     },
     "groups": {
       "preferences": "Preferences",

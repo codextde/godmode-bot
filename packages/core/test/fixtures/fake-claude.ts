@@ -51,7 +51,8 @@
  *              Claude Code does: told to stop (`continue: false`), write `stopped-by-hook` and end the turn without an
  *              answer, else answer "step finished"
  *   LIMIT_HIT   while the state dir has a `limit` file (its content: the reset time in unix seconds, may be empty) end
- *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit"
+ *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit". With a
+ *              `limit-token` file only the account with that CLAUDE_CODE_OAUTH_TOKEN ("system": none) is limited
  *   LIMIT_SILENT  while the state dir has a `limit` file exit with code 1 and without a word, like Claude Code
  *              sometimes does at a usage limit; afterwards whatever the rest of the prompt asks for
  *   OVERAGE_CRASH  report a reached limit like Claude Code does while requests still go through, then crash like CRASH
@@ -331,6 +332,7 @@ appendFileSync(
       ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
       ENABLE_TOOL_SEARCH: process.env.ENABLE_TOOL_SEARCH ?? null,
       CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? null,
+      CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? null,
     },
   }) + "\n",
 );
@@ -891,7 +893,10 @@ if (slash?.[1] === "clear") {
 } else if (prompt.includes("LIMIT_HIT")) {
   out(init);
   const limitFile = join(stateDir, "limit");
-  if (existsSync(limitFile)) {
+  // `limit-token`: only the account with this token (or "system" for Claude Code's own login) is at its limit.
+  const tokenFile = join(stateDir, "limit-token");
+  const account = process.env.CLAUDE_CODE_OAUTH_TOKEN || "system";
+  if (existsSync(limitFile) && (!existsSync(tokenFile) || readFileSync(tokenFile, "utf8").trim() === account)) {
     const resetsAt = Number(readFileSync(limitFile, "utf8").trim()) || undefined;
     const text = "You've hit your session limit · resets 3pm (Europe/Berlin)";
     out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", rateLimitType: "five_hour", ...(resetsAt ? { resetsAt } : {}) }, session_id: sessionId });

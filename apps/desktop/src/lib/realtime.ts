@@ -50,6 +50,7 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
+  "claude-accounts": [qk.claudeAccounts],
   agents: [qk.agents, qk.bootstrap],
   routines: [qk.routines, qk.bootstrap],
   credentials: [qk.credentials, qk.totpAutolink],
