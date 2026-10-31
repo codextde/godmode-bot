@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Bot,
   Box,
-  ChevronRight,
   CreditCard,
   Globe,
   MonitorUp,
@@ -52,6 +51,7 @@ import { Logo, Wordmark } from "@/components/brand";
 import { LiveDot } from "@/components/aicss/Motion";
 import { WorkspaceSwitcher, useWorkspaceShortcuts } from "@/components/layout/workspace-switcher";
 import { RecentChats } from "@/components/layout/recent-chats";
+import { NavSectionHeader } from "@/components/layout/nav-section-header";
 import { CommandPalette } from "@/components/layout/command-palette";
 import { UpdateButton } from "@/components/layout/update-button";
 import { ClaudeUpdateButton } from "@/components/layout/claude-update-button";
@@ -106,7 +106,8 @@ interface NavItem {
   also?: readonly string[];
 }
 
-const isActive = (item: NavItem, pathname: string) => [item.to, ...(item.also ?? [])].some((to) => pathname.startsWith(to));
+const isActive = (item: NavItem, pathname: string) =>
+  item.end ? pathname === item.to || (item.to === "/" && pathname.startsWith("/chat/")) : [item.to, ...(item.also ?? [])].some((to) => pathname.startsWith(to));
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { data: boot } = useBootstrap();
@@ -184,6 +185,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, setCommandOpen, toggleTheme]);
 
+  const chatItem: NavItem = { to: "/", label: "Chat", icon: <MessagesSquare />, end: true };
   const workNav: NavItem[] = [
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
@@ -264,16 +266,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu className="group-data-[collapsible=icon]:items-center">
-                <NavMenuItem item={{ to: "/", label: "Chat", icon: <MessagesSquare />, end: true }} />
-                {(easy ? easyNav : workNav).map((item) => (
-                  <NavMenuItem key={item.to} item={item} />
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          <NavSection id="work" label="Work" items={[chatItem, ...(easy ? easyNav : workNav)]} defaultOpen />
           {easy ? (
             <NavSection id="more" label="More" items={easyMore} folded="list" />
           ) : (
@@ -401,28 +394,27 @@ function DesktopDragStrip() {
  * A sidebar section that folds to its label and a row of icons (or, for long lists, to the label and the page on screen),
  * so chats keep the room. The rail always lists every item.
  */
-function NavSection({ id, label, items, folded = "icons" }: { id: string; label: string; items: NavItem[]; folded?: "icons" | "list" }) {
-  const expanded = useUi((s) => s.expandedNav.includes(id));
-  const toggle = useUi((s) => s.toggleNavSection);
+function NavSection({
+  id,
+  label,
+  items,
+  folded = "icons",
+  defaultOpen = false,
+}: {
+  id: string;
+  label: string;
+  items: NavItem[];
+  folded?: "icons" | "list";
+  defaultOpen?: boolean;
+}) {
+  const expanded = useUi((s) => (defaultOpen ? !s.collapsedNav.includes(id) : s.expandedNav.includes(id)));
+  const toggle = useUi((s) => (defaultOpen ? s.toggleNavCollapsed : s.toggleNavSection));
   const { state, isMobile } = useSidebar();
   const railed = state === "collapsed" && !isMobile;
   const { pathname } = useLocation();
   const listId = `nav-section-${id}`;
   const open = expanded || railed;
-  const header = (
-    <button
-      type="button"
-      onClick={() => toggle(id)}
-      aria-expanded={open}
-      aria-controls={listId}
-      className="eyebrow group/label flex h-7 min-w-0 shrink items-center gap-1 rounded-md px-2 text-[10.5px] text-sidebar-foreground/70 outline-none transition hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:hidden"
-    >
-      {label}
-      <ChevronRight
-        className={cn("size-3 transition", folded === "icons" && "opacity-0 group-hover/label:opacity-100 group-focus-visible/label:opacity-100", open && "rotate-90")}
-      />
-    </button>
-  );
+  const header = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
   if (open)
     return (
       <SidebarGroup className="py-1">
@@ -455,10 +447,11 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
       </SidebarGroup>
     );
   }
+  const wide = items.length > 5;
   return (
-    <SidebarGroup className="flex-row items-center justify-between gap-1 py-0.5">
+    <SidebarGroup className={cn("gap-1 py-0.5", !wide && "flex-row items-center justify-between")}>
       {header}
-      <div id={listId} className="flex items-center">
+      <div id={listId} className={cn("flex items-center", wide && "flex-wrap justify-between px-1")}>
         {items.map((item) => {
           const active = isActive(item, pathname);
           return (
@@ -466,6 +459,7 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
               <TooltipTrigger asChild>
                 <NavLink
                   to={item.to}
+                  end={item.end}
                   aria-label={item.badge ? `${item.label} (${item.badge})` : item.label}
                   className={cn(
                     "relative grid size-7 place-items-center rounded-md text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring [&>svg]:size-4",
@@ -490,7 +484,7 @@ function NavSection({ id, label, items, folded = "icons" }: { id: string; label:
 
 function NavMenuItem({ item }: { item: NavItem }) {
   const location = useLocation();
-  const active = item.end ? location.pathname === item.to || location.pathname.startsWith("/chat/") : isActive(item, location.pathname);
+  const active = isActive(item, location.pathname);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
