@@ -13,7 +13,7 @@ export interface EditableNavItem {
   icon: ReactNode;
 }
 
-export function EditSidebarButton({ items }: { items: EditableNavItem[] }) {
+export function EditSidebarButton({ items, section }: { items: EditableNavItem[]; section?: string }) {
   const { t } = useTranslation("layout");
   const [open, setOpen] = useState(false);
   return (
@@ -32,12 +32,22 @@ export function EditSidebarButton({ items }: { items: EditableNavItem[] }) {
         </TooltipTrigger>
         <TooltipContent>{t("editSidebar.title")}</TooltipContent>
       </Tooltip>
-      <EditSidebarDialog open={open} onOpenChange={setOpen} items={items} />
+      <EditSidebarDialog open={open} onOpenChange={setOpen} items={items} section={section} />
     </>
   );
 }
 
-function EditSidebarDialog({ open, onOpenChange, items }: { open: boolean; onOpenChange: (open: boolean) => void; items: EditableNavItem[] }) {
+function EditSidebarDialog({
+  open,
+  onOpenChange,
+  items,
+  section,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  items: EditableNavItem[];
+  section?: string;
+}) {
   const { t } = useTranslation(["layout", "common"]);
   const hidden = useUi((s) => s.hiddenNav);
   const toggle = useUi((s) => s.toggleNavHidden);
@@ -47,7 +57,7 @@ function EditSidebarDialog({ open, onOpenChange, items }: { open: boolean; onOpe
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{t("editSidebar.title")}</DialogTitle>
-          <DialogDescription>{t("editSidebar.description")}</DialogDescription>
+          <DialogDescription>{section ? t("editSidebar.sectionDescription", { section }) : t("editSidebar.description")}</DialogDescription>
         </DialogHeader>
         <ul className="grid gap-1">
           {items.map((item) => {
