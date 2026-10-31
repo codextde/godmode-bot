@@ -209,6 +209,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
+  ["GET", "/api/files/text", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/mcp-servers", A],
@@ -283,6 +284,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
   ["GET", "/api/github/pull", A],
+  ["POST", "/api/github/pull/merge", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
   // Runners: seeing them is fine from anywhere. Copying the setup (logins, 2FA, sessions) to them, updating and
   // removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the

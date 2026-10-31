@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { GithubErrorCode, parsePullRequestUrl, type PullRequestCheck, type PullRequestReview, type PullRequestView, type PullRequestViewState } from "@godmode/shared";
+import { GithubErrorCode, parsePullRequestUrl, type PullRequestMergeMethod, type PullRequestCheck, type PullRequestReview, type PullRequestView, type PullRequestViewState } from "@godmode/shared";
 import {
   ArrowUpRight,
   Check,
@@ -28,7 +28,17 @@ import { api, ApiRequestError } from "@/lib/api";
 import { openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { PullRequestScopeProvider } from "./pull-request-link";
+import { SidePanelScopeProvider } from "@/components/side-panel/store";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const STALE_MS = 30_000;
 const OPEN_REFRESH_MS = 60_000;
@@ -111,9 +121,9 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
         </header>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {data ? (
-            <PullRequestScopeProvider value={{ conversationId, openUrl: url }}>
-              <PullRequestBody pr={data} />
-            </PullRequestScopeProvider>
+            <SidePanelScopeProvider value={{ conversationId, current: { kind: "pull", url } }}>
+              <PullRequestBody pr={data} url={url} />
+            </SidePanelScopeProvider>
           ) : query.isError ? (
             <Failure error={query.error} url={url} onRetry={() => void refresh()} />
           ) : (
@@ -187,7 +197,7 @@ const STATES: Record<PullRequestViewState, { label: string; icon: typeof GitPull
   closed: { label: "Closed", icon: GitPullRequestClosed, className: "bg-red-500/12 text-red-700 dark:text-red-400" },
 };
 
-function PullRequestBody({ pr }: { pr: PullRequestView }) {
+function PullRequestBody({ pr, url }: { pr: PullRequestView; url: string }) {
   const state = STATES[pr.state];
   const StateIcon = state.icon;
   const when = pr.state === "merged" ? `merged ${ago(pr.mergedAt)}` : pr.state === "closed" ? `closed ${ago(pr.closedAt)}` : `opened ${ago(pr.createdAt)}`;
@@ -254,6 +264,8 @@ function PullRequestBody({ pr }: { pr: PullRequestView }) {
           {pr.mergeable === "conflicting" ? "Has conflicts with the base branch" : "Can't be merged yet: a required review or check is missing"}
         </p>
       )}
+
+      {(pr.state === "open" || pr.state === "draft") && pr.canMerge && <MergeBar pr={pr} url={url} />}
 
       {pr.reviews && pr.reviews.length > 0 && <Reviews reviews={pr.reviews} />}
       {pr.checks && pr.checks.length > 0 && <Checks checks={pr.checks} />}
@@ -413,5 +425,123 @@ function Files({ pr }: { pr: PullRequestView }) {
         </div>
       )}
     </Section>
+  );
+}
+
+const METHOD_LABEL: Record<PullRequestMergeMethod, { button: string; hint: string }> = {
+  merge: { button: "Merge", hint: "All commits, plus a merge commit" },
+  squash: { button: "Squash and merge", hint: "All changes as one commit" },
+  rebase: { button: "Rebase and merge", hint: "The commits, replayed on the base branch" },
+};
+const METHOD_KEY = "gm.github.mergeMethod";
+
+function preferredMethod(methods: PullRequestMergeMethod[]): PullRequestMergeMethod | null {
+  const saved = localStorage.getItem(METHOD_KEY) as PullRequestMergeMethod | null;
+  return saved && methods.includes(saved) ? saved : (methods[0] ?? null);
+}
+
+function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<PullRequestMergeMethod | null>(() => preferredMethod(pr.mergeMethods));
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const blocker =
+    pr.state === "draft"
+      ? "It's still a draft. Mark it ready for review on GitHub first."
+      : pr.mergeable === "conflicting"
+        ? "Resolve the conflicts with the base branch first."
+        : pr.mergeMethods.length === 0
+          ? "This repository allows no merge method."
+          : null;
+  const failing = (pr.checks ?? []).filter((c) => c.state === "failure").length;
+  const running = (pr.checks ?? []).filter((c) => c.state === "pending").length;
+  const wantsChanges = (pr.reviews ?? []).some((r) => r.state === "changes_requested");
+  const warnings = [
+    failing > 0 && `${failing} ${failing === 1 ? "check failed" : "checks failed"}`,
+    running > 0 && `${running} ${running === 1 ? "check is" : "checks are"} still running`,
+    wantsChanges && "a reviewer asked for changes",
+    pr.mergeable === "blocked" && "GitHub reports a required review or check missing",
+  ].filter((w): w is string => !!w);
+
+  const merge = async () => {
+    if (!method) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      localStorage.setItem(METHOD_KEY, method);
+      const view = await api.github.merge({ url, method, headSha: pr.headSha });
+      qc.setQueryData(qk.pullRequest(url), view);
+      setOpen(false);
+      toast.success(`Merged #${pr.ref.number} into ${pr.baseBranch}`);
+    } catch (err) {
+      setProblem(err instanceof Error ? err.message : String(err));
+      if (err instanceof ApiRequestError && err.code === GithubErrorCode.MergeRefused) void qc.invalidateQueries({ queryKey: qk.pullRequest(url) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
+      <GitMerge className="size-4 shrink-0 text-muted-foreground" />
+      <p className="min-w-0 flex-1 text-xs text-muted-foreground">{blocker ?? `Into ${pr.baseBranch}`}</p>
+      <Button
+        size="sm"
+        disabled={!!blocker || !method}
+        onClick={() => {
+          setProblem(null);
+          setMethod(preferredMethod(pr.mergeMethods));
+          setOpen(true);
+        }}
+      >
+        <GitMerge /> Merge…
+      </Button>
+      <AlertDialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Merge #{pr.ref.number} into {pr.baseBranch}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="break-words">{pr.title}</AlertDialogDescription>
+          </AlertDialogHeader>
+          {pr.mergeMethods.length > 1 && (
+            <div className="grid gap-1.5" role="radiogroup" aria-label="How to merge">
+              {pr.mergeMethods.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  role="radio"
+                  aria-checked={method === m}
+                  onClick={() => setMethod(m)}
+                  className={cn("rounded-lg border px-3 py-2 text-left transition", method === m ? "border-brand/50 bg-brand-soft/40 ring-2 ring-brand/15" : "hover:border-foreground/15")}
+                >
+                  <span className="block text-sm font-medium">{METHOD_LABEL[m].button}</span>
+                  <span className="block text-xs text-muted-foreground">{METHOD_LABEL[m].hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {warnings.length > 0 && (
+            <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+              <span>Heads up: {warnings.join(", ")}.</span>
+            </p>
+          )}
+          {problem && (
+            <p className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive" role="alert">
+              <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <span>GitHub didn't merge it: {problem}</span>
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <Button onClick={() => void merge()} disabled={busy || !method}>
+              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />} {method ? METHOD_LABEL[method].button : "Merge"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

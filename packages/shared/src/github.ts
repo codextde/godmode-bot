@@ -29,6 +29,14 @@ export interface PullRequestFile {
   deletions: number;
 }
 
+export type PullRequestMergeMethod = "merge" | "squash" | "rebase";
+
+export interface PullRequestMergeInput {
+  url: string;
+  method: PullRequestMergeMethod;
+  headSha: string;
+}
+
 export interface PullRequestView {
   ref: PullRequestRef;
   url: string;
@@ -57,6 +65,9 @@ export interface PullRequestView {
   stale: boolean;
   retryAt: string | null;
   signedIn: boolean;
+  headSha: string;
+  mergeMethods: PullRequestMergeMethod[];
+  canMerge: boolean;
 }
 
 export const GithubErrorCode = {
@@ -64,6 +75,7 @@ export const GithubErrorCode = {
   NotFound: "github_not_found",
   Unauthorized: "github_unauthorized",
   Unreachable: "github_unreachable",
+  MergeRefused: "github_merge_refused",
 } as const;
 
 const PR_PATH = /^\/([A-Za-z0-9-]{1,39})\/([A-Za-z0-9._-]{1,100})\/pull\/(\d{1,9})(?:\/[^?#]*)?$/;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -37,7 +37,7 @@ import { MoveChatDialog } from "@/components/runners/move-chat";
 import { isOlderRunner, usePlaces, type Place } from "@/lib/places";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
-import { PullRequestScopeProvider, usePullRequestPanel } from "@/components/github/pull-request-link";
+import { SidePanelScopeProvider, sideKey, useChatSidePanel } from "@/components/side-panel/store";
 import { PullRequestPanel } from "@/components/github/pull-request-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
@@ -59,6 +59,8 @@ import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
 import { speak, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
+
+const FilePanel = lazy(() => import("@/components/side-panel/file-panel"));
 
 const NO_INHERITED_VMS: InheritedVm[] = [];
 
@@ -138,17 +140,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const artifactId = useArtifactPanel((s) => s.open[conversationId] ?? null);
   const showArtifact = useArtifactPanel((s) => s.show);
   const hideArtifact = useArtifactPanel((s) => s.hide);
-  const pullRequestUrl = usePullRequestPanel((s) => s.open[conversationId] ?? null);
-  const hidePullRequest = usePullRequestPanel((s) => s.hide);
+  const side = useChatSidePanel((s) => s.open[conversationId] ?? null);
+  const hideSide = useChatSidePanel((s) => s.hide);
   useEffect(() => {
-    if (pullRequestUrl) hideArtifact(conversationId);
-  }, [pullRequestUrl, conversationId, hideArtifact]);
+    if (side) hideArtifact(conversationId);
+  }, [side, conversationId, hideArtifact]);
   useEffect(() => {
-    if (artifactId) hidePullRequest(conversationId);
-  }, [artifactId, conversationId, hidePullRequest]);
-  const showPullRequestPanel = wide && !!pullRequestUrl && !artifactId;
+    if (artifactId) hideSide(conversationId);
+  }, [artifactId, conversationId, hideSide]);
+  const showSidePanel = wide && !!side && !artifactId;
   const showArtifactPanel = wide && !!artifactId;
-  const sidePanelTaken = showArtifactPanel || showPullRequestPanel;
+  const sidePanelTaken = showArtifactPanel || showSidePanel;
   const vmPanel = useUi((s) => s.vmPanel);
   const setVmPanel = useUi((s) => s.setVmPanel);
   const [vmFocus, setVmFocus] = useState(false);
@@ -559,7 +561,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
-          <PullRequestScopeProvider value={wide ? { conversationId, openUrl: showPullRequestPanel ? pullRequestUrl : null } : null}>
+          <SidePanelScopeProvider value={wide ? { conversationId, current: showSidePanel ? side : null } : null}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? "The agent", openId: waiting?.question?.id ?? null }}>
             <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
               <Thread
@@ -578,7 +580,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               />
             </QuoteSelection>
           </QuestionScopeProvider>
-          </PullRequestScopeProvider>
+          </SidePanelScopeProvider>
           </ArtifactScopeProvider>
         </ChatFilesScope>
 
@@ -828,8 +830,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         )}
       </ChatDropZone>
       <AnimatePresence initial={false}>
-        {showPullRequestPanel && (
-          <PullRequestPanel key={`pull-${pullRequestUrl}`} conversationId={conversationId} url={pullRequestUrl!} onHide={() => hidePullRequest(conversationId)} />
+        {showSidePanel && side.kind === "pull" && (
+          <PullRequestPanel key={sideKey(side)} conversationId={conversationId} url={side.url} onHide={() => hideSide(conversationId)} />
+        )}
+        {showSidePanel && side.kind === "file" && (
+          <Suspense key={sideKey(side)} fallback={null}>
+            <FilePanel file={side.file} line={side.line} local={side.local} onHide={() => hideSide(conversationId)} />
+          </Suspense>
         )}
         {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}
         {showVmPanel && (
