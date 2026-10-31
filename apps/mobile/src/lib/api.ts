@@ -414,7 +414,7 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
 
 /** What the phone may change of the settings, by section (the computer refuses the rest). */
 export type SettingsPatch = {
-  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "palette" | "mode">>;
+  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "mode">>;
   runner?: Partial<Omit<Settings["runner"], "claudePath" | "extraArgs" | "bypassPermissions">>;
   browser?: Partial<Pick<Settings["browser"], "enabled" | "headless" | "keepAliveMinutes" | "liveView" | "stealth" | "muteAudio">>;
   computer?: Partial<Pick<Settings["computer"], "enabled" | "allowForeground" | "agentCursor" | "liveView" | "liveViewFps">>;
