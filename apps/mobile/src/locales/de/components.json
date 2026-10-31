@@ -123,8 +123,8 @@
     },
     "todayAt": "Heute, {{time}}",
     "yesterdayAt": "Gestern, {{time}}",
-    "dateTimeFormat": "EEE, d. MMM, HH:mm",
-    "dateTimeYearFormat": "d. MMM yyyy, HH:mm",
+    "dateTimeFormat": "EEE, d. MMM, p",
+    "dateTimeYearFormat": "d. MMM yyyy, p",
     "dateFormat": "EEE, d. MMM",
     "dateYearFormat": "d. MMM yyyy",
     "upcoming": {
@@ -899,7 +899,7 @@
     "paused": "Pausiert",
     "continued": "fortgesetzt",
     "justNow": "gerade eben",
-    "markerDateFormat": "d. MMM, HH:mm",
+    "markerDateFormat": "d. MMM, p",
     "helper": {
       "helper": "Helfer",
       "background": "Helfer im Hintergrund",

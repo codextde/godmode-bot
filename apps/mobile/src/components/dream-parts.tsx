@@ -44,7 +44,7 @@ export function reviewedLabel(dream: Pick<Dream, "exchanges" | "conversations" |
 /** "Today, 03:00" · "Yesterday, 03:00" · "Mon, Sep 22, 03:00" */
 export function dreamWhen(iso: string): string {
   const d = new Date(iso);
-  const time = format(d, "HH:mm");
+  const time = format(d, "p", { locale: dateLocale() });
   if (isToday(d)) return t("components:dreamParts.todayAt", { time });
   if (isYesterday(d)) return t("components:dreamParts.yesterdayAt", { time });
   return format(d, isThisYear(d) ? t("components:dreamParts.dateTimeFormat") : t("components:dreamParts.dateTimeYearFormat"), { locale: dateLocale() });
@@ -54,7 +54,7 @@ export function dreamWhen(iso: string): string {
 export function upcomingWhen(iso: string, now = Date.now()): string {
   const d = new Date(iso);
   if (d.getTime() <= now) return t("components:dreamParts.upcoming.dueNow");
-  const time = format(d, "HH:mm");
+  const time = format(d, "p", { locale: dateLocale() });
   const hour = d.getHours();
   // "Tonight" is this evening or the small hours after it — never tomorrow evening.
   if ((isToday(d) && hour >= 20) || (isTomorrow(d) && hour < 6)) return t("components:dreamParts.upcoming.tonight", { time });

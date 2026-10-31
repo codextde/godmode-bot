@@ -4,7 +4,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { PALETTES, effortLabel, findModel, type AppLanguage, type InterfaceMode, type Palette, type Theme } from "@godmode/shared";
+import { PALETTES, effortLabel, findModel, type AppLanguage, type InterfaceMode, type Palette, type Theme, type TimeFormat } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
 import { ChoiceRow, FieldRow, Group, LinkRow, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
@@ -12,7 +12,7 @@ import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAppearance } from "@/lib/appearance";
-import { useLanguage, currentLanguage } from "@/lib/i18n";
+import { useLanguage, useTimeFormat, currentLanguage, deviceHour12 } from "@/lib/i18n";
 import { useSuggestions } from "@/lib/suggestions";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
@@ -40,6 +40,12 @@ const LANGUAGE_OPTIONS = [
   { value: "de", labelKey: "common:language.de" },
 ] as const satisfies readonly { value: AppLanguage; labelKey: string }[];
 
+const TIME_FORMAT_OPTIONS = [
+  { value: "system", labelKey: "overview.timeFormat.system" },
+  { value: "24h", labelKey: "overview.timeFormat.h24" },
+  { value: "12h", labelKey: "overview.timeFormat.h12" },
+] as const satisfies readonly { value: TimeFormat; labelKey: string }[];
+
 const MODE_OPTIONS = [
   { value: "easy", labelKey: "settings:overview.mode.easy" },
   { value: "pro", labelKey: "settings:overview.mode.pro" },
@@ -57,6 +63,7 @@ export default function Settings() {
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
   const language = useLanguage((s) => s.language);
+  const timeFormat = useTimeFormat((s) => s.timeFormat);
   const palette = useAppearance((s) => s.palette);
   const hideSuggestions = useSuggestions((s) => s.hidden);
   const setHideSuggestions = useSuggestions((s) => s.setHidden);
@@ -187,6 +194,18 @@ export default function Settings() {
             onChange={(next) => {
               useLanguage.getState().setLanguage(next);
               void patchSettings({ general: { language: next } });
+            }}
+          />
+        ) : null}
+        {s ? (
+          <SegmentRow
+            title={t("overview.timeFormat.title")}
+            detail={t("overview.timeFormat.detail", { example: t(deviceHour12() ? "overview.timeFormat.h12" : "overview.timeFormat.h24") })}
+            options={TIME_FORMAT_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+            value={timeFormat}
+            onChange={(next) => {
+              useTimeFormat.getState().setTimeFormat(next);
+              void patchSettings({ general: { timeFormat: next } });
             }}
           />
         ) : null}
