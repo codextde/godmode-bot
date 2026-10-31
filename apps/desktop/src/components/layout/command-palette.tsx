@@ -18,6 +18,8 @@ import {
   FolderOpen,
   DatabaseBackup,
   Fingerprint,
+  FolderKanban,
+  FolderPlus,
   Gauge,
   Ghost,
   Globe,
@@ -280,6 +282,11 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/agents/new")}>
             <Plus /> {t("palette.createAgent")}
           </CommandItem>
+          {workspaces.length > 0 && (
+            <CommandItem value={`new project create add ${t("palette.newProject")}`} onSelect={() => go(`/projects?new=${scope !== "all" && scope !== "global" ? scope : "1"}`)}>
+              <FolderPlus /> {t("palette.newProject")}
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => go("/vault/logins?new=1")}>
             <KeyRound /> {t("palette.addLogin")}
           </CommandItem>
@@ -379,6 +386,9 @@ export function CommandPalette() {
         <CommandGroup heading={t("palette.groups.navigate")}>
           <CommandItem value={`agent tasks board kanban tickets issues ${t("nav.tasks")}`} keywords={alias("/tasks", t("nav.tasks"))} onSelect={() => go("/tasks")}>
             <SquareKanban /> {named("/tasks", t("nav.tasks"))}
+          </CommandItem>
+          <CommandItem value={`projects overview all projects ${t("nav.projects")}`} onSelect={() => go("/projects")}>
+            <FolderKanban /> {t("nav.projects")}
           </CommandItem>
           <CommandItem onSelect={() => go("/agents")}>
             <Bot /> {t("nav.agents")}

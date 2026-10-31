@@ -60,5 +60,43 @@
     "workspaceDefault": "Workspace-Standard",
     "global": "Global",
     "hint": "Läufe in diesem Projekt surfen mit diesem Profil, sofern Chat oder Agent kein eigenes wählen."
+  },
+  "overview": {
+    "title": "Projekte",
+    "description": "Alle Projekte deiner Workspaces auf einen Blick: was auf dich wartet, was gerade läuft und was noch offen ist.",
+    "inWhichWorkspace": "In welchem Workspace?",
+    "summary": {
+      "needsYou": "Braucht dich",
+      "working": "Läuft gerade",
+      "openTasks": "Offene Aufgaben"
+    },
+    "searchPlaceholder_one": "{{count}} Projekt durchsuchen…",
+    "searchPlaceholder_other": "{{count}} Projekte durchsuchen…",
+    "searchLabel": "Projekte durchsuchen",
+    "sortLabel": "Projekte sortieren",
+    "sort": {
+      "name": "A–Z",
+      "active": "Zuletzt aktiv",
+      "attention": "Braucht dich"
+    },
+    "loadFailed": "Projekte konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Projekte",
+    "emptyDescription": "Projekte bündeln Chats, Tickets und Agenten innerhalb eines Workspaces – jedes mit eigenem Kontext, eigenen Ordnern und Repositories.",
+    "noWorkspaces": "Projekte gehören zu einem Workspace. Lege zuerst einen Workspace an.",
+    "createWorkspace": "Neuer Workspace",
+    "noMatch": "Kein Projekt passt zu „{{query}}“",
+    "noMatchHint": "Versuch einen anderen Namen oder den Namen eines Workspaces.",
+    "add": "Hinzufügen",
+    "current": "Aktuell",
+    "edit": "{{name}} bearbeiten",
+    "noDescription": "Noch keine Beschreibung",
+    "stats": {
+      "openTasks": "Offene Aufgaben",
+      "doneTasks": "Erledigte Aufgaben",
+      "sources": "Ordner & Repositories"
+    },
+    "open": "Öffnen",
+    "tasks": "Aufgaben",
+    "tasksOf": "Aufgaben von {{name}}"
   }
 }
