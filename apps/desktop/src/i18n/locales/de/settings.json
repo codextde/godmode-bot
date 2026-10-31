@@ -18,6 +18,13 @@
       "label": "App-Sprache",
       "description": "Die Sprache der App auf diesem Computer, im Browser-Dashboard und auf deinem Handy. System folgt deinem Gerät."
     },
+    "timeFormat": {
+      "label": "Uhrzeitformat",
+      "description": "So erscheinen Uhrzeiten überall in Godmode, auch auf deinem Handy. Automatisch folgt deiner Region (hier {{example}}).",
+      "system": "Automatisch",
+      "h24": "15:00",
+      "h12": "3:00 PM"
+    },
     "appearance": {
       "title": "Darstellung",
       "mode": "Modus",

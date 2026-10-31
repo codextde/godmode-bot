@@ -46,6 +46,13 @@
       "title": "Sprache",
       "detail": "System folgt der Sprache dieses Handys. Gilt auch auf deinem Computer."
     },
+    "timeFormat": {
+      "title": "Uhrzeitformat",
+      "detail": "Automatisch folgt der Region dieses Handys (hier {{example}}). Gilt auch auf deinem Computer.",
+      "system": "Automatisch",
+      "h24": "15:00",
+      "h12": "3:00 PM"
+    },
     "mode": {
       "title": "Oberfläche",
       "detail": "{{blurb}} Gilt auch auf deinem Computer.",

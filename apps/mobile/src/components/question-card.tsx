@@ -225,7 +225,7 @@ export function QuestionCard({ question: q, streaming }: { question: QuestionBlo
                     : q.answer.via === "phone" ? "questionCard.settled.answeredPhone" : "questionCard.settled.answered",
               { option: chosen?.label ?? "" },
             )}
-            {` · ${format(new Date(q.answer.at), "HH:mm", { locale: dateLocale() })}`}
+            {` · ${format(new Date(q.answer.at), "p", { locale: dateLocale() })}`}
             {q.answer.text && !chosen ? `\n${q.answer.text}` : ""}
           </T>
         </View>

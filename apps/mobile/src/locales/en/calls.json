@@ -25,7 +25,7 @@
     },
     "incoming": "Incoming",
     "outgoing": "Outgoing",
-    "dateFormat": "EEE, MMM d · HH:mm",
+    "dateFormat": "EEE, MMM d · p",
     "ownerCall": "Owner call",
     "duration": "Duration",
     "openChat": "Open chat",

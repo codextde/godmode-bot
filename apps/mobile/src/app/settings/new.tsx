@@ -22,7 +22,7 @@ import { api, errorText } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
-import { currentLanguage, t as translate } from "@/lib/i18n";
+import { currentLanguage, t as translate, uses12Hour } from "@/lib/i18n";
 import { templateText } from "@/lib/templates";
 
 type Kind = "workspace" | "project" | "agent";
@@ -208,7 +208,7 @@ export default function New() {
             <View style={styles.hint}>
               <Icon name="clock" size={13} color={c.textMuted} />
               <T variant="footnote" muted style={{ flex: 1 }}>
-                {t("new.routineHint", { name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron, currentLanguage()) })}
+                {t("new.routineHint", { name: templateText(template).routine!.name, schedule: cronToHuman(template.routine.cron, currentLanguage(), uses12Hour()) })}
               </T>
             </View>
           ) : null}

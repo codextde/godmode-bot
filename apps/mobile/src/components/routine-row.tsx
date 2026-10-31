@@ -9,7 +9,7 @@ import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
-import { currentLanguage, dateLocale, t } from "@/lib/i18n";
+import { currentLanguage, dateLocale, t, uses12Hour } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -48,13 +48,13 @@ export function triggerText(r: Routine, withNext = true): string {
   switch (trigger.type) {
     case "schedule": {
       const zone = r.timezone && r.timezone !== phoneTimezone() ? ` (${r.timezone.replace(/_/g, " ")})` : "";
-      const schedule = `${scheduleToHuman(r.cron, trigger.startWindowMinutes, trigger.runsPerWindow, currentLanguage())}${zone}`;
+      const schedule = `${scheduleToHuman(r.cron, trigger.startWindowMinutes, trigger.runsPerWindow, currentLanguage(), uses12Hour())}${zone}`;
       return next ? t("components:routineRow.withNextRun", { schedule, when: next }) : schedule;
     }
     case "app":
       return `${trigger.triggerName} · ${appName(trigger.toolkit)}`;
     case "condition": {
-      const often = cronToHuman(r.cron, currentLanguage());
+      const often = cronToHuman(r.cron, currentLanguage(), uses12Hour());
       return t("components:routineRow.conditionChecked", { condition: trigger.condition, often: `${often.charAt(0).toLowerCase()}${often.slice(1)}` });
     }
     case "webhook":
