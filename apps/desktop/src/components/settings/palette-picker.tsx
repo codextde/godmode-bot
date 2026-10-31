@@ -2,7 +2,7 @@ import type { KeyboardEvent } from "react";
 import { Check } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PALETTES, type Palette } from "@godmode/shared";
-import { PALETTE_DEFS, type Mode } from "@/lib/palettes";
+import { PALETTE_DEFS, paletteBlurb, paletteLabel, type Mode } from "@/lib/palettes";
 import { cn } from "@/lib/utils";
 
 export function PalettePicker({ value, mode, onChange }: { value: Palette; mode: Mode; onChange: (p: Palette) => void }) {
@@ -29,7 +29,7 @@ export function PalettePicker({ value, mode, onChange }: { value: Palette; mode:
             aria-checked={active}
             tabIndex={active ? 0 : -1}
             data-palette={id}
-            title={def.blurb}
+            title={paletteBlurb(id)}
             onClick={() => onChange(id)}
             className={cn(
               "group flex flex-col overflow-hidden rounded-lg border bg-card text-left shadow-card outline-none transition",
@@ -50,7 +50,7 @@ export function PalettePicker({ value, mode, onChange }: { value: Palette; mode:
               </span>
             </span>
             <span className="flex items-center gap-1.5 border-t px-2.5 py-2 text-xs font-medium">
-              <span className="min-w-0 flex-1 truncate">{def.label}</span>
+              <span className="min-w-0 flex-1 truncate">{paletteLabel(id)}</span>
               {active && <Check className="size-3.5 shrink-0" />}
             </span>
           </button>

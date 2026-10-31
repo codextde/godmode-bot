@@ -54,8 +54,11 @@ interface UiState {
   expandedNav: string[];
   /** The "Try something like" suggestions on Home were closed. */
   hideSuggestions: boolean;
+  sidebarWidth: number | null;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
+  /** Pages the human took out of the sidebar's Work section. */
+  hiddenNav: string[];
   /** Page explainers the human closed. */
   hiddenHints: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
@@ -79,11 +82,13 @@ interface UiState {
   setRecentSource: (source: RecentSource) => void;
   toggleNavSection: (key: string) => void;
   toggleNavCollapsed: (key: string) => void;
+  toggleNavHidden: (to: string) => void;
   hideHint: (key: string) => void;
   setWorkspacesView: (v: WorkspacesView) => void;
   setWorkspacesSort: (v: WorkspacesSort) => void;
   setAway: (away: { since: string; until: string } | null) => void;
   setHideSuggestions: (v: boolean) => void;
+  setSidebarWidth: (width: number | null) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -109,11 +114,13 @@ export const useUi = create<UiState>()(
       recentWorkspaces: [],
       expandedNav: [],
       collapsedNav: [],
+      hiddenNav: [],
       hiddenHints: [],
       workspacesView: "grid",
       workspacesSort: "name",
       away: null,
       hideSuggestions: false,
+      sidebarWidth: null,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
@@ -147,9 +154,11 @@ export const useUi = create<UiState>()(
         set((s) => ({ expandedNav: s.expandedNav.includes(key) ? s.expandedNav.filter((k) => k !== key) : [...s.expandedNav, key] })),
       toggleNavCollapsed: (key) =>
         set((s) => ({ collapsedNav: s.collapsedNav.includes(key) ? s.collapsedNav.filter((k) => k !== key) : [...s.collapsedNav, key] })),
+      toggleNavHidden: (to) => set((s) => ({ hiddenNav: s.hiddenNav.includes(to) ? s.hiddenNav.filter((k) => k !== to) : [...s.hiddenNav, to] })),
       hideHint: (key) => set((s) => ({ hiddenHints: s.hiddenHints.includes(key) ? s.hiddenHints : [...s.hiddenHints, key] })),
       setAway: (away) => set({ away }),
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
+      setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.
@@ -173,10 +182,12 @@ export const useUi = create<UiState>()(
         recentWorkspaces: s.recentWorkspaces,
         expandedNav: s.expandedNav,
         collapsedNav: s.collapsedNav,
+        hiddenNav: s.hiddenNav,
         hiddenHints: s.hiddenHints,
         workspacesView: s.workspacesView,
         workspacesSort: s.workspacesSort,
         hideSuggestions: s.hideSuggestions,
+        sidebarWidth: s.sidebarWidth,
       }),
     },
   ),

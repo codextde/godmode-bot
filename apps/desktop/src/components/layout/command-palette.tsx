@@ -70,7 +70,7 @@ import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { PALETTES } from "@godmode/shared";
-import { PALETTE_DEFS } from "@/lib/palettes";
+import { paletteLabel } from "@/lib/palettes";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
@@ -324,13 +324,13 @@ export function CommandPalette() {
           {PALETTES.filter((p) => p !== palette).map((p) => (
             <CommandItem
               key={`palette-${p}`}
-              value={`palette theme colors appearance ${PALETTE_DEFS[p].label}`}
+              value={`palette theme colors appearance ${paletteLabel(p)}`}
               onSelect={() => {
                 setPalette(p);
                 setOpen(false);
               }}
             >
-              <Palette /> {t("palette.usePalette", { name: PALETTE_DEFS[p].label })}
+              <Palette /> {t("palette.usePalette", { name: paletteLabel(p) })}
             </CommandItem>
           ))}
           <CommandItem

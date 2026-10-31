@@ -1,10 +1,5 @@
-import { join } from "node:path";
-import { config, ensureDir } from "../config";
-import { logger } from "../log";
-import { claudeEnv, killTree, resolveClaudeCommand } from "./claude";
 import { noteId, stripNoteTags, tagged } from "./prompt";
-
-const log = logger("ending-judge");
+import { quickAsk } from "./quickAsk";
 
 const JUDGE_MODEL = "haiku";
 const JUDGE_TIMEOUT_MS = 60_000;
@@ -38,44 +33,6 @@ export function parseVerdict(said: string): boolean | null {
 
 export async function stoppedEarly(task: string, answer: string): Promise<boolean | null> {
   if (!answer.trim()) return null;
-  const cmd = resolveClaudeCommand();
-  if (!cmd) return null;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const proc = Bun.spawn({
-      cmd: [...cmd, "-p", "--model", JUDGE_MODEL, "--output-format", "json", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--no-session-persistence", "--disable-slash-commands"],
-      cwd: ensureDir(join(config().dataDir, "claude-probe")),
-      env: claudeEnv(),
-      stdin: "pipe",
-      stdout: "pipe",
-      stderr: "ignore",
-      detached: process.platform !== "win32",
-    });
-    timer = setTimeout(() => killTree(proc, true), JUDGE_TIMEOUT_MS);
-    proc.stdin.write(endingJudgePrompt(task, answer));
-    await proc.stdin.end();
-    const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-    return parseVerdict(resultOf(out) ?? "");
-  } catch (err) {
-    log.warn("could not judge how a turn ended", err);
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-type ResultEvent = { type?: unknown; result?: unknown; is_error?: unknown };
-
-function resultOf(out: string): string | null {
-  const events: ResultEvent[] = [];
-  for (const line of out.trim().split("\n")) {
-    try {
-      const parsed = JSON.parse(line) as ResultEvent | ResultEvent[];
-      events.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-    } catch {
-      continue;
-    }
-  }
-  const result = events.reverse().find((e) => e?.type === "result");
-  return result && typeof result.result === "string" && result.is_error !== true ? result.result : null;
+  const said = await quickAsk(endingJudgePrompt(task, answer), { model: JUDGE_MODEL, timeoutMs: JUDGE_TIMEOUT_MS, what: "judge how a turn ended" });
+  return said === null ? null : parseVerdict(said);
 }

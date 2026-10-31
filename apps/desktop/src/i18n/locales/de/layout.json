@@ -74,7 +74,10 @@
     "home": "Godmode-Startseite",
     "search": "Suche und Befehle",
     "waiting_one": "{{count}} wartet",
-    "waiting_other": "{{count}} warten"
+    "waiting_other": "{{count}} warten",
+    "resizeSidebar": "Seitenleiste anpassen",
+    "resizeHint": "Ziehen zum Anpassen · Klicken zum Einklappen",
+    "expandHint": "Klicken zum Ausklappen"
   },
   "cloud": {
     "allComputers": "Alle Computer",
@@ -226,7 +229,8 @@
       "quote": "Markierten Text in der nächsten Nachricht zitieren",
       "stopDictation": "Diktat beenden",
       "newTicket": "Neues Ticket (Aufgaben)",
-      "searchList": "Suchen (Agenten, Logins, Workspaces)"
+      "searchList": "Suchen (Agenten, Logins, Workspaces)",
+      "openChat": "1. bis 9. Chat in der Seitenleiste öffnen ({{key}} halten, um die Nummern zu sehen)"
     }
   },
   "palette": {
@@ -359,7 +363,11 @@
       "title": "Noch keine Chats in {{name}}",
       "archived": "Die archivierten Chats findest du unten.",
       "new": "Neue Chats, die du hier startest, landen in dieser Liste."
-    }
+    },
+    "filterLabel": "Chats filtern: {{source}}",
+    "filterLabelTab": "Chats filtern: {{source}}, {{tab}}",
+    "startedBy": "Gestartet von",
+    "status": "Status"
   },
   "deviceStatus": {
     "thisMac": "Dieser Mac",
@@ -413,5 +421,9 @@
     "hideProjects": "Projekte von {{name}} ausblenden",
     "showProjects": "Projekte von {{name}} zeigen",
     "empty": "Leer"
+  },
+  "editSidebar": {
+    "title": "Seitenleiste bearbeiten",
+    "description": "Wähle, welche Einträge in deiner Seitenleiste erscheinen."
   }
 }

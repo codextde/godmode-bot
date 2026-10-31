@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ActionSheetIOS, Alert, Linking } from "react-native";
 import { MAX_TASK_ATTACHMENT_BYTES, type SendMessageInput } from "@godmode/shared";
 import { intlLocale, t } from "./i18n";
+import type { PastedFile } from "../../modules/paste-input";
 
 /** A file picked on the phone, not sent yet. */
 export interface PendingFile {
@@ -127,6 +128,10 @@ async function fromFiles(room: number): Promise<PendingFile[]> {
   const result = await DocumentPicker.getDocumentAsync({ multiple: room > 1, copyToCacheDirectory: true });
   if (result.canceled) return [];
   return result.assets.map((a) => ({ id: nextId(), uri: a.uri, name: a.name, mime: mimeOf(a.name, a.mimeType), size: sizeOf(a.uri, a.size) }));
+}
+
+export function fromPasted(files: PastedFile[]): PendingFile[] {
+  return files.map((f) => ({ id: nextId(), uri: f.uri, name: f.name, mime: mimeOf(f.name, f.mime), size: sizeOf(f.uri, f.size) }));
 }
 
 export type FileSource = "library" | "camera" | "files";

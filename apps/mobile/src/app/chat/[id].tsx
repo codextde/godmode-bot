@@ -46,6 +46,7 @@ import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
 import { currentLanguage } from "@/lib/i18n";
+import { useTypewriter } from "@/lib/typewriter";
 
 type Item =
   | { key: string; role: "intro" }
@@ -296,7 +297,7 @@ export default function Chat() {
     Alert.prompt(t("thread.rename"), undefined, (text) => text.trim() && void change({ title: text.trim() }), "plain-text", conversation.data?.title ?? "");
   };
 
-  const title = conversation.data?.title || t("thread.fallbackTitle");
+  const title = useTypewriter(conversation.data?.title || t("thread.fallbackTitle"));
   const primary = screens[0];
   const data = conversation.data;
   const menu: HeaderMenuItem[] = data

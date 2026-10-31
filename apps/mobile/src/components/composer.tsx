@@ -1,6 +1,6 @@
 import { Button as MenuButton, Host, Image as SwiftImage, Menu } from "@expo/ui/swift-ui";
 import { accessibilityLabel, background, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
-import { useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -11,9 +11,10 @@ import { Glass } from "./glass";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { errorText } from "@/lib/api";
-import { addFiles, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
+import { addFiles, fromPasted, MAX_FILES, pickFrom, type FileSource, type PendingFile } from "@/lib/attachments";
 import { findCommand, rankCommands, useDraft, useDrafts, useSlashCommands } from "@/lib/composer";
 import { fonts, radius, space, type, useColors } from "@/lib/theme";
+import { addPasteListener, setPasteActive } from "../../modules/paste-input";
 
 export interface ComposerHandle {
   focus: () => void;
@@ -50,7 +51,7 @@ export function Composer({
   draftKey: string;
   /** Agent whose slash commands are offered after typing "/". */
   agentId?: string;
-  /** Offer files and photos from the phone. */
+  /** Offer files and photos from the phone, picked or pasted. */
   attachments?: boolean;
   /** In the toolbar, before the send button (e.g. the model). */
   trailing?: ReactNode;
@@ -120,6 +121,20 @@ export function Composer({
     const current = useDrafts.getState().drafts[draftKey]?.files ?? [];
     setDraft(draftKey, { files: addFiles(current, picked) });
   };
+
+  const pasteOn = !!allowFiles && focused && !disabled;
+  useEffect(() => {
+    if (!pasteOn) return;
+    setPasteActive(true);
+    const remove = addPasteListener((pasted) => {
+      const current = useDrafts.getState().drafts[draftKey]?.files ?? [];
+      setDraft(draftKey, { files: addFiles(current, fromPasted(pasted)) });
+    });
+    return () => {
+      remove();
+      setPasteActive(false);
+    };
+  }, [pasteOn, draftKey, setDraft]);
 
   const removeFile = (id: string) => {
     setDraft(draftKey, { files: files.filter((f) => f.id !== id) });

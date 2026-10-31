@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import { useTranslation } from "react-i18next";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/common";
-import { modKey } from "@/lib/desktop";
+import { altKey, modKey } from "@/lib/desktop";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { useUi } from "@/stores/ui";
 
@@ -27,8 +27,9 @@ const GROUPS = [
       { keys: [`${modKey}N`], what: "shortcuts.rows.newChat" },
       { keys: ["⇧", `${modKey}N`], what: "shortcuts.rows.newPrivateChat" },
       { keys: [`${modKey}B`], what: "shortcuts.rows.toggleSidebar" },
-      { keys: [`${modKey}1–9`], what: "shortcuts.rows.switchWorkspace" },
-      { keys: [`${modKey}0`], what: "shortcuts.rows.allWorkspaces" },
+      { keys: [`${modKey}1–9`], what: "shortcuts.rows.openChat" },
+      { keys: [`${altKey}${modKey}1–9`], what: "shortcuts.rows.switchWorkspace" },
+      { keys: [`${altKey}${modKey}0`], what: "shortcuts.rows.allWorkspaces" },
       { keys: [`${modKey},`], what: "shortcuts.rows.settings" },
       { keys: [THEME_SHORTCUT], what: "shortcuts.rows.theme" },
       { keys: ["?"], what: "shortcuts.rows.thisList" },
@@ -79,7 +80,7 @@ export function ShortcutsDialog() {
               <dl className="space-y-1.5">
                 {g.rows.map((r) => (
                   <div key={r.what} className="flex items-center justify-between gap-3 text-[13px]">
-                    <dt className="min-w-0 text-foreground/85">{t(r.what)}</dt>
+                    <dt className="min-w-0 text-foreground/85">{t(r.what, { key: modKey })}</dt>
                     <dd className="flex shrink-0 items-center gap-1">
                       {r.keys.map((k, i) => (
                         <Fragment key={i}>

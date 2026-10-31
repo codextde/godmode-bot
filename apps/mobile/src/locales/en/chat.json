@@ -6,7 +6,8 @@
     "placeholderAgent": "Ask {{name}} anything, or hand over a task…",
     "placeholder": "Ask anything, or hand over a task…",
     "projectHint": "It works with the project's context, folders and repositories.",
-    "try": "Try"
+    "try": "Try",
+    "hideSuggestions": "Hide suggestions"
   },
   "newTask": {
     "title": "New task",

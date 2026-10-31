@@ -74,7 +74,10 @@
     "home": "Godmode home",
     "search": "Search and commands",
     "waiting_one": "{{count}} waiting",
-    "waiting_other": "{{count}} waiting"
+    "waiting_other": "{{count}} waiting",
+    "resizeSidebar": "Resize sidebar",
+    "resizeHint": "Drag to resize · click to collapse",
+    "expandHint": "Click to expand"
   },
   "cloud": {
     "allComputers": "All computers",
@@ -226,7 +229,8 @@
       "quote": "Quote the selected text in your next message",
       "stopDictation": "Stop dictation",
       "newTicket": "New ticket (Tasks)",
-      "searchList": "Search (Agents, Logins, Workspaces)"
+      "searchList": "Search (Agents, Logins, Workspaces)",
+      "openChat": "Open the 1st–9th chat in the sidebar (hold {{key}} to see the numbers)"
     }
   },
   "palette": {
@@ -359,7 +363,11 @@
       "title": "No chats in {{name}} yet",
       "archived": "Its archived chats are below.",
       "new": "New chats you start here land in this list."
-    }
+    },
+    "filterLabel": "Filter chats: {{source}}",
+    "filterLabelTab": "Filter chats: {{source}}, {{tab}}",
+    "startedBy": "Started by",
+    "status": "Status"
   },
   "deviceStatus": {
     "thisMac": "This Mac",
@@ -413,5 +421,9 @@
     "hideProjects": "Hide {{name}}'s projects",
     "showProjects": "Show {{name}}'s projects",
     "empty": "Empty"
+  },
+  "editSidebar": {
+    "title": "Edit sidebar",
+    "description": "Choose which items appear in your sidebar."
   }
 }

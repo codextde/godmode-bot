@@ -26,6 +26,7 @@ import { useLinkComputer, useLive, useRunningChats } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { reconnectNow } from "@/lib/realtime";
 import { isLive, useLiveScreens } from "@/lib/screens";
+import { confirmHideSuggestions, useSuggestions } from "@/lib/suggestions";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { chatProject, inProject, useProjectIndex, useWorkspace, useWorkspaceRuns } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
@@ -38,6 +39,7 @@ const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "
 export default function Home() {
   const c = useColors();
   const { t } = useTranslation(["tabs", "common"]);
+  const hideSuggestions = useSuggestions((s) => s.hidden);
   const link = useLinkComputer();
   const computer = link.name ?? t("home.yourComputer");
   const status = useLive((s) => s.status);
@@ -121,21 +123,35 @@ export default function Home() {
         </Glass>
       </Pressable>
 
-      <View style={styles.suggestions}>
-        {SUGGESTIONS.map((s) => (
+      {hideSuggestions ? null : (
+        <View style={styles.suggestions}>
+          {SUGGESTIONS.map((s) => (
+            <Pressable
+              key={s.text}
+              accessibilityRole="button"
+              onPress={() => ask(s.text)}
+              style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Icon name={s.icon} size={13} color={c.textMuted} />
+              <T variant="footnote" muted numberOfLines={1} style={{ flexShrink: 1 }}>
+                {s.text}
+              </T>
+            </Pressable>
+          ))}
           <Pressable
-            key={s.text}
             accessibilityRole="button"
-            onPress={() => ask(s.text)}
-            style={({ pressed }) => [styles.suggestion, { backgroundColor: c.surface, borderColor: c.border, opacity: pressed ? 0.6 : 1 }]}
+            accessibilityLabel={t("home.hideSuggestions")}
+            hitSlop={8}
+            onPress={() => {
+              tap();
+              confirmHideSuggestions();
+            }}
+            style={({ pressed }) => [styles.suggestion, { borderColor: "transparent", opacity: pressed ? 0.6 : 1 }]}
           >
-            <Icon name={s.icon} size={13} color={c.textMuted} />
-            <T variant="footnote" muted numberOfLines={1} style={{ flexShrink: 1 }}>
-              {s.text}
-            </T>
+            <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
           </Pressable>
-        ))}
-      </View>
+        </View>
+      )}
 
       {status === "offline" && (
         <Card style={[styles.notice, { backgroundColor: c.warningSoft, borderColor: "transparent" }]} onPress={() => reconnectNow()}>

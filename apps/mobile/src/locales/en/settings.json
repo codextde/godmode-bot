@@ -85,6 +85,48 @@
       "footer": "Remove this phone on your computer anytime in Settings → Phone.",
       "thisPhone": "This phone",
       "version": "Godmode for {{platform}} {{version}}"
+    },
+    "palette": {
+      "title": "Palette",
+      "detail": "Just for this phone, light and dark.",
+      "names": {
+        "paper": {
+          "label": "Paper",
+          "blurb": "Warm paper by day, anthracite by night"
+        },
+        "graphite": {
+          "label": "Graphite",
+          "blurb": "Cool neutral greys with a blue accent"
+        },
+        "nord": {
+          "label": "Nord",
+          "blurb": "Arctic blue-greys and frost"
+        },
+        "solarized": {
+          "label": "Solarized",
+          "blurb": "Ethan Schoonover's classic cream and teal"
+        },
+        "rose": {
+          "label": "Rosé",
+          "blurb": "Soft blush with a raspberry accent"
+        },
+        "forest": {
+          "label": "Forest",
+          "blurb": "Moss, fern and bark"
+        },
+        "ocean": {
+          "label": "Ocean",
+          "blurb": "Sea glass and deep water"
+        },
+        "dracula": {
+          "label": "Dracula",
+          "blurb": "Purple night, and a pale day to match"
+        }
+      }
+    },
+    "suggestions": {
+      "title": "Show suggestions",
+      "detail": "Ideas like “Summarize my unread emails” on Home and in a new chat."
     }
   },
   "ai": {

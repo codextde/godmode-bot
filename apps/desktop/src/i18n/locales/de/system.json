@@ -46,12 +46,12 @@
   "palettes": {
     "paper": { "label": "Papier", "blurb": "Warmes Papier am Tag, Anthrazit in der Nacht" },
     "graphite": { "label": "Graphit", "blurb": "Kühle neutrale Grautöne mit blauem Akzent" },
-    "nord": { "blurb": "Arktische Blaugrautöne und Frost" },
-    "solarized": { "blurb": "Ethan Schoonovers klassisches Creme und Petrol" },
+    "nord": { "blurb": "Arktische Blaugrautöne und Frost", "label": "Nord" },
+    "solarized": { "blurb": "Ethan Schoonovers klassisches Creme und Petrol", "label": "Solarized" },
     "rose": { "label": "Rosé", "blurb": "Zartes Rosa mit Himbeer-Akzent" },
     "forest": { "label": "Wald", "blurb": "Moos, Farn und Rinde" },
     "ocean": { "label": "Ozean", "blurb": "Meerglas und tiefes Wasser" },
-    "dracula": { "blurb": "Violette Nacht und ein heller Tag dazu" }
+    "dracula": { "blurb": "Violette Nacht und ein heller Tag dazu", "label": "Dracula" }
   },
   "password": {
     "strength": {

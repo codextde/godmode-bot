@@ -55,7 +55,8 @@
       "openChat": "Open the chat to answer",
       "approve": "Approve",
       "decline": "Decline"
-    }
+    },
+    "hideSuggestions": "Hide suggestions"
   },
   "chats": {
     "title": "Chats",

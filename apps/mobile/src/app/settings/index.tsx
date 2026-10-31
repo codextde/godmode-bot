@@ -4,15 +4,16 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { router, Stack } from "expo-router";
 import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
-import { effortLabel, findModel, type AppLanguage, type InterfaceMode, type Theme } from "@godmode/shared";
+import { PALETTES, effortLabel, findModel, type AppLanguage, type InterfaceMode, type Palette, type Theme } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { ChoiceRow, FieldRow, Group, LinkRow, SegmentRow, SwitchRow } from "@/components/form";
+import { ChoiceRow, FieldRow, Group, LinkRow, PickerRow, SegmentRow, SwitchRow } from "@/components/form";
 import { Icon, type IconName } from "@/components/icon";
 import { Logo } from "@/components/logo";
 import { Button, Card, LiveDot, Row, T } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useAppearance } from "@/lib/appearance";
 import { useLanguage, currentLanguage } from "@/lib/i18n";
+import { useSuggestions } from "@/lib/suggestions";
 import { useModelCatalog } from "@/lib/composer";
 import { hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
@@ -56,6 +57,9 @@ export default function Settings() {
   const appLock = useSession((s) => s.appLock);
   const theme = useAppearance((s) => s.theme);
   const language = useLanguage((s) => s.language);
+  const palette = useAppearance((s) => s.palette);
+  const hideSuggestions = useSuggestions((s) => s.hidden);
+  const setHideSuggestions = useSuggestions((s) => s.setHidden);
   const status = useLive((s) => s.status);
   const linked = useLive((s) => s.computer);
   const preferredAway = useLive((s) => s.preferredAway);
@@ -166,6 +170,15 @@ export default function Settings() {
           />
         ) : null}
         {s ? (
+          <PickerRow
+            title={t("overview.palette.title")}
+            detail={t("overview.palette.detail")}
+            options={PALETTES.map((value) => ({ value, label: t(`overview.palette.names.${value}.label`), detail: t(`overview.palette.names.${value}.blurb`) }))}
+            value={palette}
+            onChange={(next: Palette) => useAppearance.getState().setPalette(next)}
+          />
+        ) : null}
+        {s ? (
           <SegmentRow
             title={t("overview.language.title")}
             detail={t("overview.language.detail")}
@@ -221,6 +234,13 @@ export default function Settings() {
       </Group>
 
       <Group title={t("overview.app.title")} footer={t("overview.app.footer")}>
+        <SwitchRow
+          icon="sparkles"
+          title={t("overview.suggestions.title")}
+          detail={t("overview.suggestions.detail")}
+          value={!hideSuggestions}
+          onChange={(on) => setHideSuggestions(!on)}
+        />
         <Info icon="network" label={isGatewayUrl(connection.activeUrl) ? "Godmode Cloud" : "Tailscale"} value={hostOf(connection.activeUrl)} />
         <Info icon="phone" label={t("overview.app.thisPhone")} value={me.data?.device.name ?? connection.deviceName} />
       </Group>

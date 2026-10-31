@@ -6,7 +6,8 @@
     "placeholderAgent": "Frag {{name}} etwas oder gib eine Aufgabe ab…",
     "placeholder": "Frag etwas oder gib eine Aufgabe ab…",
     "projectHint": "Arbeitet mit Kontext, Ordnern und Repositorys des Projekts.",
-    "try": "Probier mal"
+    "try": "Probier mal",
+    "hideSuggestions": "Vorschläge ausblenden"
   },
   "newTask": {
     "title": "Neue Aufgabe",

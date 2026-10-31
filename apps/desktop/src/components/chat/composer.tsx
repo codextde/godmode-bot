@@ -14,7 +14,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash, Volume2, VolumeX } from "lucide-react";
+import { ArrowUp, AudioLines, Loader2, Mic, Paperclip, SlidersHorizontal, SquareSlash } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SlashCommand } from "@godmode/shared";
@@ -24,7 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/common";
 import { useDictation, useVoiceSettings } from "@/hooks/use-voice";
-import { useVoicePrefs, useVoiceSession, stopSpeaking } from "@/lib/voice";
+import { useVoiceSession, stopSpeaking } from "@/lib/voice";
 import { useUi } from "@/stores/ui";
 import { loadDraft, saveDraft, useDraft } from "@/lib/drafts";
 import { useEasyMode } from "@/lib/mode";
@@ -132,8 +132,6 @@ export function Composer({
 
   const voiceSettings = useVoiceSettings();
   const voiceEnabled = voiceSettings?.enabled ?? true;
-  const speakReplies = useVoicePrefs((s) => s.speakReplies);
-  const setSpeakReplies = useVoicePrefs((s) => s.setSpeakReplies);
   const setVoiceMode = useUi((s) => s.setVoiceMode);
   const armVoice = useVoiceSession((s) => s.arm);
 
@@ -463,18 +461,6 @@ export function Composer({
           className={cn(dictation.active && "bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive")}
         >
           {transcribing ? <Loader2 className="animate-spin" /> : listening ? <LevelBars levelRef={dictation.levelRef} /> : <Mic />}
-        </ToolbarButton>
-
-        <ToolbarButton
-          label={speakReplies ? t("composer.readingAloud") : t("composer.readAloud")}
-          onClick={() => {
-            if (speakReplies) stopSpeaking();
-            setSpeakReplies(!speakReplies);
-          }}
-          active={speakReplies}
-          className={cn(speakReplies && "bg-accent text-foreground")}
-        >
-          {speakReplies ? <Volume2 /> : <VolumeX />}
         </ToolbarButton>
 
         <div className="ml-auto flex min-w-0 items-center gap-1.5">

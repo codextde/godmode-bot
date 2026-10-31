@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["PasteInputModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.pasteinput.PasteInputModule"]
+  }
+}
