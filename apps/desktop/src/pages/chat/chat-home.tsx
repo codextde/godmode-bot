@@ -225,7 +225,7 @@ export default function ChatHome() {
       <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center px-4 pt-[8vh] pb-10 text-center @md:px-5 @xl:px-8 @2xl:pt-[12vh]">
         <motion.div {...fade(0)}>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
-            <LiveDot />
+            <LiveDot live={false} className="bg-brand" />
             {format(now, "EEEE, MMMM d")}
             {ready > 0 && (
               <>

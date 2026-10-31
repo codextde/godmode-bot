@@ -41,6 +41,8 @@ const STABLE_AFTER: Duration = Duration::from_secs(120);
 /// How long the core gets to stop its runs and browsers before it is killed.
 const SHUTDOWN_GRACE: Duration = Duration::from_secs(6);
 const POLL_INTERVAL: Duration = Duration::from_millis(100);
+/// The core runs for days: checking on it ten times a second only keeps the Mac awake. Restarts wait a second longer.
+const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 
 /// Returned to the UI by the `core_info` command and sent with `core-restarted`.
@@ -152,7 +154,7 @@ impl CoreProcess {
         loop {
             match self.try_wait() {
                 Ok(Some(status)) => return Some(status),
-                Ok(None) => thread::sleep(POLL_INTERVAL),
+                Ok(None) => thread::sleep(WATCH_INTERVAL),
                 Err(_) => return None,
             }
         }
