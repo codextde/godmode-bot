@@ -37,6 +37,7 @@ import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
 import { startRemoteChat } from "../../remote/runners";
 import { selfDeviceId } from "../../remote/group";
+import { search } from "../../services/search";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -93,6 +94,8 @@ function flag(v: string | undefined): boolean | undefined {
 }
 
 export function registerChatRoutes(app: Hono): void {
+  app.get("/api/search", async (c) => c.json(await search(c.req.query("q") ?? "", { limit: num(c.req.query("limit")), notes: c.req.query("notes") !== "0" })));
+
   app.get("/api/conversations", (c) =>
     c.json(
       listConversations({

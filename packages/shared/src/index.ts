@@ -35,3 +35,4 @@ export * from "./artifacts";
 export * from "./memoryImport";
 export * from "./palettes";
 export * from "./github";
+export * from "./search";
