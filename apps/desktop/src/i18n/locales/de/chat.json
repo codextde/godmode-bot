@@ -1058,8 +1058,6 @@
     "trySomething": "Probier zum Beispiel",
     "hideSuggestions": "Vorschläge ausblenden",
     "suggestionsHidden": "Vorschläge ausgeblendet",
-    "hideSuggestion": "Diesen Vorschlag ausblenden",
-    "suggestionHidden": "Vorschlag ausgeblendet",
     "hint": {
       "send": "senden",
       "dropAnywhere": "Dateien überall ablegen",

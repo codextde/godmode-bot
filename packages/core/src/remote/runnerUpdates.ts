@@ -11,7 +11,7 @@
  * The Update button does the same at once and installs the runner's tool updates (Claude Code, uv, Chromium…) too.
  */
 import type { RemoteRunner, RunnerInfo, RunnerUpdate, RunnerUpdateSource, RunnerUpdateState, ToolUpdateResult, ToolUpdateStatus, UpdateReport } from "@godmode/shared";
-import { BUILD, COMPILED, VERSION } from "../config";
+import { BUILD, COMPILED, PATCHED, VERSION } from "../config";
 import { licenseBaseUrl, licenseKey } from "../license/license";
 import { logger } from "../log";
 import { tailscaleStatus } from "../mobile/tailscale";
@@ -125,6 +125,7 @@ export function planUpdate(r: { platform: string | null; arch: string | null; ve
   else if (sameProgram && mine && info?.digest) needed = info.digest !== mine;
   else needed = compareVersions(version, VERSION) < 0;
   if (!needed) return none;
+  if (PATCHED) return { needed, source: null, reason: "This computer runs a canary patch: runners get its Godmode with the next full canary build.", command: null, key };
 
   if (info?.compiled === false) return { needed, source: null, reason: "It runs Godmode from its sources. Update it there with git.", command: null, key };
   if (sameProgram && !legacy) return { needed, source: "controller", reason: null, command: null, key };
