@@ -181,9 +181,10 @@ const AUTO_LABELS: Record<RetryCause, Record<RetryMode, string>> = {
   restart: { continue: "Continued after Godmode restarted", again: "Sent again after Godmode restarted" },
   offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
   error: { continue: "Continued after an error", again: "Sent again after an error" },
+  background: { continue: "Continued after background work was stopped", again: "Sent again after background work was stopped" },
 };
 
-/** Where a turn that ended early was picked up: by the human, or by Godmode after a restart, a lost connection or an error. */
+/** Where a turn that ended early was picked up: by the human, or by Godmode after a restart, a lost connection, an error or stopped background work. */
 function RetryMarker({ block, at }: { block: Extract<MessageBlock, { type: "retry" }>; at: string }) {
   const Icon = block.mode === "continue" ? Play : RotateCcw;
   const label = block.auto

@@ -3,12 +3,13 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent, MessageBlock, Run, RunTrigger } from "@godmode/shared";
 import { RUN_INTERRUPTED, RUN_SHUT_DOWN, RUN_STOPPED_BY_USER } from "@godmode/shared";
-import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
+import { makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
 import { all, get, insert, run as sql, setMeta } from "../src/db";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { brokeOffOffline, brokeOffOnError, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, offlineRetryAt, resumeInterruptedWork } from "../src/services/resume";
+import { sendMessage, startChat } from "../src/services/conversations";
 import { createRoutine } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
@@ -440,4 +441,43 @@ describe("continuing once Claude can be reached again", () => {
     sql("UPDATE runs SET status = 'succeeded' WHERE conversation_id = ?", off);
     expect(await continueAfterOutage(online)).toBe(0);
   });
+});
+
+describe("continuing after background work was stopped", () => {
+  const TERMINAL = ["succeeded", "failed", "cancelled"];
+  /** The chat's runs, oldest first, once `count` of them have ended and no other follows. */
+  async function settled(conversationId: string, count: number): Promise<Run[]> {
+    const runs = () => listRuns({ conversationId }).reverse();
+    await until(() => runs().length >= count && runs().every((r) => TERMINAL.includes(r.status)), 30_000, `${count} finished runs`);
+    await new Promise((r) => setTimeout(r, 300));
+    return runs();
+  }
+
+  test("a turn that ended while a subagent's commands still ran continues by itself, at most twice in a row", async () => {
+    const { conversation, run: first } = await startChat({ agentId: agent.id, content: "BG_STOPPED" });
+    const [, second, third, ...rest] = await settled(conversation.id, 3);
+    expect(rest).toEqual([]);
+    expect(first!.trigger).toBe("chat");
+    for (const r of [second!, third!]) expect(r).toMatchObject({ trigger: "chat", status: "succeeded" });
+    expect(second!.prompt).toContain("<godmode-continue>");
+    expect(second!.prompt).toContain("Background work was stopped when your last turn in this chat ended");
+    expect(second!.prompt).toContain("“Rerun full core suite” (of the subagent “Remove spend/cost feature”); “Wait for core test rerun to finish”");
+    expect(second!.prompt).toContain("don't end your turn while work you depend on is still running");
+    expect(marker(second!.id)).toMatchObject({ type: "retry", mode: "continue", runId: first!.id, auto: true, cause: "background" });
+    expect(marker(third!.id)).toMatchObject({ runId: second!.id, auto: true, cause: "background" });
+    expect(get<{ content: string }>("SELECT content FROM messages WHERE run_id = ? AND role = 'system'", second!.id)?.content).toBe("Continued after background work was stopped");
+
+    // A new message from the human starts the count again.
+    await sendMessage(conversation.id, { content: "BG_STOPPED again" });
+    expect((await settled(conversation.id, 6)).length).toBe(6);
+  }, 60_000);
+
+  test("not with continuing cut-off work switched off, nor after a turn whose background work completed", async () => {
+    updateSettings({ runner: { resumeAfterRestart: false } });
+    const off = await startChat({ agentId: agent.id, content: "BG_STOPPED" });
+    expect((await settled(off.conversation.id, 1)).length).toBe(1);
+    updateSettings({ runner: { resumeAfterRestart: true } });
+    const done = await startChat({ agentId: agent.id, content: "USE_WORKFLOW" });
+    expect((await settled(done.conversation.id, 1)).length).toBe(1);
+  }, 60_000);
 });

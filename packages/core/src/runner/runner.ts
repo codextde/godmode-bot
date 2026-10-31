@@ -95,6 +95,7 @@ import {
   wholeBlocks,
 } from "../services/conversations";
 import { startQueued, takeQueued } from "../services/messageQueue";
+import { continueStoppedBackground } from "../services/resume";
 import {
   announceQuestion,
   owedAnswer,
@@ -2836,6 +2837,13 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   }
   // Start the next queued turn (e.g. a follow-up message in this conversation) right away.
   pump();
+
+  // Background work the end of the turn stopped (a subagent still waiting on its own command): the chat goes on.
+  const stopped = outcome.status === "succeeded" && wasRunning && convAlive && !shuttingDown && !job.goalPaused ? acc.cutOffWork() : [];
+  if (stopped.length) {
+    log.info(`run ${job.runId}: the end of the turn stopped background work`, { tasks: stopped.map((t) => `${t.kind} ${t.id}`) });
+    await continueStoppedBackground(job.runId, stopped).catch((err) => log.warn(`could not continue run ${job.runId} after its background work was stopped`, err));
+  }
 
   if (!wasRunning || !finished || !agent) return;
   // A dream's summary may talk about past login trouble — that is no new missing login. Neither is Claude Code's own
