@@ -568,6 +568,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** "Mark all read": every chat, or these. */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
+    /** Show these chats as new again until they are opened. */
+    unread: (ids: string[]) => post<{ unread: number }>("/api/conversations/unread", { ids }),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
     /** Make the chat's run stand still; it continues where it stopped. */

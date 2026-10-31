@@ -109,6 +109,7 @@
     },
     "menu": {
       "markRead": "Als gelesen markieren",
+      "markUnread": "Als ungelesen markieren",
       "pin": "Anheften",
       "unpin": "Loslösen",
       "archive": "Archivieren"
