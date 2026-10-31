@@ -266,6 +266,11 @@ if (argValue("--input-format") === "stream-json") {
 }
 
 const prompt = await new Response(Bun.stdin.stream()).text();
+if (prompt.includes("Decide whether it stopped early")) {
+  const verdict = /<final-message[^>]*>[\s\S]*NOT_DONE_YET/.test(prompt) ? "UNFINISHED" : "FINISHED";
+  process.stdout.write(JSON.stringify([{ type: "result", subtype: "success", is_error: false, result: verdict }]) + "\n");
+  process.exit(0);
+}
 const resume = argValue("--resume");
 const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
 // The run's settings file is gone once the run has ended: its content is kept for the tests.
@@ -928,6 +933,11 @@ if (slash?.[1] === "clear") {
   const usage = { input_tokens: 2, cache_read_input_tokens: 420_000, cache_creation_input_tokens: 1_000, output_tokens: 600 };
   out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "long" }], usage }, parent_tool_use_id: null, session_id: sessionId });
   result("long", { modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } } });
+} else if (prompt.includes("NOT_DONE_YET")) {
+  out(init);
+  const text = "I drafted the report (NOT_DONE_YET). Next I will send it to Dana.";
+  textTurn(text);
+  result(text);
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);
   const text = "I opened the dashboard. I couldn't log in to example.com because there are no saved credentials for it.";

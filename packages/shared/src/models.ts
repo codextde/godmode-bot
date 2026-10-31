@@ -453,7 +453,7 @@ export type RetryMode = "continue" | "again";
  * What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, Claude Code failing on its own,
  * or background work the end of the turn stopped.
  */
-export type RetryCause = "restart" | "offline" | "error" | "background";
+export type RetryCause = "restart" | "offline" | "error" | "background" | "unfinished";
 
 /** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
 export interface RunPause {

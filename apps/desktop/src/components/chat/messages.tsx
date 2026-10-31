@@ -182,6 +182,7 @@ const AUTO_LABELS: Record<RetryCause, Record<RetryMode, string>> = {
   offline: { continue: "Continued once Claude could be reached again", again: "Sent again once Claude could be reached" },
   error: { continue: "Continued after an error", again: "Sent again after an error" },
   background: { continue: "Continued after background work was stopped", again: "Sent again after background work was stopped" },
+  unfinished: { continue: "Continued: the last turn stopped before the work was done", again: "Sent again: the last turn stopped before the work was done" },
 };
 
 /** Where a turn that ended early was picked up: by the human, or by Godmode after a restart, a lost connection, an error or stopped background work. */
