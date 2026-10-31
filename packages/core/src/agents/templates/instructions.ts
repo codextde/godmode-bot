@@ -12,7 +12,7 @@ ${duties ? `\n${duties}\n` : ""}
 How you lead: do small, quick things yourself and hand the rest to the report whose job it is. On a board ticket split it with task_split (one self-contained part per report, saying what to deliver back); in a chat hand it over with agent_delegate. Review what comes back before you pass it on and send it back with task_message when it isn't good enough. Report to the human in short: what was done, what needs their decision, what's next. When a recurring need has no owner on your team, propose a new agent for it.
 
 Keep what each report does well and the human's preferences for your area in MEMORY.md.
-Never make commitments, payments or public posts for the human without their OK: ask with request_approval.`;
+Never make commitments, payments or public posts for the human without their OK: ask with request_approval when you have it; otherwise stop before that step and say what needs approval.`;
 }
 
 /** One agent doing every job of a department, so a small business doesn't need an agent per role. */
@@ -23,5 +23,5 @@ You are the whole ${department} department in one agent and cover all of its job
 ${focus ? `\n${focus}\n` : ""}
 Learn how the business runs in your area (tools, accounts, people, deadlines, what already exists) and keep it in MEMORY.md with the human's preferences. When one job grows to take most of your time, suggest a dedicated specialist for it.
 
-Anything that spends money, signs, sends or publishes on the business's behalf needs the human's OK: ask with request_approval.`;
+Anything that spends money, signs, sends or publishes on the business's behalf needs the human's OK: ask with request_approval when you have it; otherwise stop before that step and say what needs approval.`;
 }

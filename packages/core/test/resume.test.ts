@@ -10,7 +10,7 @@ import { callTool } from "../src/mcp/tools";
 import { getRun, listRuns, waitForRun } from "../src/runner/runner";
 import { brokeOffOffline, brokeOffOnError, continueAfterOutage, continueCutOffRun, interruptedWork, latestContinuation, leaveInterruptedWork, offlineRetryAt, resumeInterruptedWork } from "../src/services/resume";
 import { sendMessage, startChat } from "../src/services/conversations";
-import { createRoutine } from "../src/services/routines";
+import { createRoutine, runRoutineNow } from "../src/services/routines";
 import { updateSettings } from "../src/services/settings";
 import { createTask } from "../src/tasks/service";
 import { newId, now } from "../src/util";
@@ -479,5 +479,33 @@ describe("continuing after background work was stopped", () => {
     updateSettings({ runner: { resumeAfterRestart: true } });
     const done = await startChat({ agentId: agent.id, content: "USE_WORKFLOW" });
     expect((await settled(done.conversation.id, 1)).length).toBe(1);
+  }, 60_000);
+});
+
+describe("continuing a turn nobody watched that stopped early", () => {
+  const TERMINAL = ["succeeded", "failed", "cancelled"];
+  async function settled(conversationId: string, count: number): Promise<Run[]> {
+    const runs = () => listRuns({ conversationId }).reverse();
+    await until(() => runs().length >= count && runs().every((r) => TERMINAL.includes(r.status)), 30_000, `${count} finished runs`);
+    await new Promise((r) => setTimeout(r, 1_000));
+    return runs();
+  }
+
+  test("an automation whose answer announces more work goes on once the judge says it stopped early", async () => {
+    const routine = createRoutine({ agentId: agent.id, name: "Report", cron: "0 8 * * *", prompt: "NOT_DONE_YET: write and send the report" });
+    const first = await runRoutineNow(routine.id);
+    const [, second, ...rest] = await settled(first.conversationId, 2);
+    expect(rest).toEqual([]);
+    expect(second).toMatchObject({ trigger: "routine", status: "succeeded" });
+    expect(second!.prompt).toContain("reads like a progress report");
+    expect(marker(second!.id)).toMatchObject({ type: "retry", mode: "continue", runId: first.id, auto: true, cause: "unfinished" });
+  }, 60_000);
+
+  test("not a chat the human watches, nor an automation that finished", async () => {
+    const watched = await startChat({ agentId: agent.id, content: "NOT_DONE_YET" });
+    expect((await settled(watched.conversation.id, 1)).length).toBe(1);
+    const routine = createRoutine({ agentId: agent.id, name: "Hello", cron: "0 8 * * *", prompt: "Say hello" });
+    const done = await runRoutineNow(routine.id);
+    expect((await settled(done.conversationId, 1)).length).toBe(1);
   }, 60_000);
 });

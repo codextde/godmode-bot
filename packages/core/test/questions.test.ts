@@ -136,7 +136,7 @@ describe("asking", () => {
     expect(inv.prompt).toContain("<godmode-continue>");
     expect(inv.prompt).toContain("Dana picked one of the answers you suggested");
     expect(inv.prompt).toContain("<your-question>\nWhich color should the header be?\n1. Yellow\n2. Blue\n</your-question>");
-    expect(inv.prompt).toContain("<answer-from-human>\nBlue\n</answer-from-human>");
+    expect(inv.prompt).toMatch(/<answer-from-human id="[0-9a-f]{6}">\nBlue\n<\/answer-from-human id="[0-9a-f]{6}">/);
 
     expect(getConversation(conversation.id).messages.filter((m) => m.role === "assistant")).toHaveLength(1);
     expect(questionBlock(conversation.id)).toMatchObject({ status: "answered", answer: { optionId: "2", text: "Blue" } });
@@ -187,7 +187,7 @@ describe("asking", () => {
     answerQuestion(decline.question.id, { decision: "decline", note: "Wait until Monday" }, { actor: "user", via: "app" });
     await waitForRun(decline.run.id, 20_000);
     expect(lastPrompt().prompt).toContain("Dana declined the step. Don't do it");
-    expect(lastPrompt().prompt).toContain("<answer-from-human>\nWait until Monday\n</answer-from-human>");
+    expect(lastPrompt().prompt).toMatch(/<answer-from-human id="[0-9a-f]{6}">\nWait until Monday\n<\/answer-from-human id="[0-9a-f]{6}">/);
     expect(questionBlock(decline.conversation.id)).toMatchObject({ status: "declined", answer: { text: "Wait until Monday" } });
 
     const neither = await asking("ASK_APPROVAL now");
@@ -288,7 +288,7 @@ describe("asking", () => {
       await waitForRun(blocker.run.id, 10_000);
       continueConversation(getRun(run.id).conversationId);
       await waitForRun(run.id, 20_000);
-      expect(lastPrompt().prompt).toContain("<answer-from-human>\nBlue\n</answer-from-human>");
+      expect(lastPrompt().prompt).toMatch(/<answer-from-human id="[0-9a-f]{6}">\nBlue\n<\/answer-from-human id="[0-9a-f]{6}">/);
     } finally {
       updateSettings({ runner: { maxConcurrentRuns: 3 } });
     }
@@ -304,7 +304,7 @@ describe("asking", () => {
     const next = ((await res.json()) as { run: Run }).run;
     await waitForRun(next.id, 20_000);
     expect(lastPrompt().prompt).toContain("the answer came — but that turn broke off before the answer reached you");
-    expect(lastPrompt().prompt).toContain("<answer-from-human>\nYellow\n</answer-from-human>");
+    expect(lastPrompt().prompt).toMatch(/<answer-from-human id="[0-9a-f]{6}">\nYellow\n<\/answer-from-human id="[0-9a-f]{6}">/);
     expect(get<{ answer_owed: number }>("SELECT answer_owed FROM questions WHERE id = ?", question.id)!.answer_owed).toBe(0);
   }, 30_000);
 
@@ -322,7 +322,7 @@ describe("asking", () => {
     await waitForRun(run.id, 20_000);
     const prompt = lastPrompt().prompt;
     expect(prompt.match(/<godmode-continue>/g)).toHaveLength(1);
-    expect(prompt.match(/<\/answer-from-human>/g)).toHaveLength(1);
+    expect(prompt.match(/<\/answer-from-human\b/g)).toHaveLength(1);
     // What the human typed reaches the agent; what is stored is masked.
     expect(prompt).toContain("hunter2-very-secret");
     expect(questionBlock(conversation.id).answer!.text).not.toContain("hunter2-very-secret");

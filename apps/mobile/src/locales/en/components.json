@@ -880,7 +880,11 @@
       "pickedUpAgain": "Picked up again",
       "continuedWhereStopped": "Continued where it stopped",
       "triedAgain": "Tried again",
-      "secretsMasked": "Saved secrets stay masked"
+      "secretsMasked": "Saved secrets stay masked",
+      "unfinished": {
+        "continue": "Continued: the last turn stopped before the work was done",
+        "again": "Sent again: the last turn stopped before the work was done"
+      }
     },
     "moved": "Moved from {{from}} to {{to}}",
     "continuedThere": "Continued there",

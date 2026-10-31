@@ -79,9 +79,9 @@ describe("message queue", () => {
     expect(answer.hookType).toBe("http");
     // A subagent's step leaves the queue alone.
     expect(answer.subagent).toBe(204);
-    expect(answer.context).toContain("<message-from-human>\nalso check the invoices\n\nAttached files: ");
+    expect(answer.context).toMatch(/<message-from-human id="[0-9a-f]{6}">\nalso check the invoices\n\nAttached files: /);
     expect(answer.context).toContain(join(agent.repoPath, first.attachments[0]!.path));
-    expect(answer.context).toContain("<message-from-human>\nand use the blue template\n</message-from-human>");
+    expect(answer.context).toMatch(/<message-from-human id="[0-9a-f]{6}">\nand use the blue template\n<\/message-from-human id="[0-9a-f]{6}">/);
 
     const conv = getConversation(conversationId);
     expect(conv.queue).toEqual([]);
@@ -120,7 +120,7 @@ describe("message queue", () => {
     signal("queue-ready");
 
     await waitForRun(started.run.id, 20_000);
-    expect(readFileSync(join(env.stateDir, "queue-context.txt"), "utf8")).toContain(`<message-from-human>\nthe portal password is ${PASSWORD}\n`);
+    expect(readFileSync(join(env.stateDir, "queue-context.txt"), "utf8")).toMatch(new RegExp(`<message-from-human id="[0-9a-f]{6}">\\nthe portal password is ${PASSWORD}\\n`));
     const assistant = getConversation(conversationId).messages.at(-1)!;
     expect(JSON.stringify(assistant)).not.toContain(PASSWORD);
     expect(assistant.blocks.find((b): b is Picked => b.type === "user_message")!.text).toBe("the portal password is ••••••••");
