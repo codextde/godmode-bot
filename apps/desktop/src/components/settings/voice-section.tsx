@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { useQueryClient } from "@tanstack/react-query";
 import { Callout, CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
+import { HexSettings } from "./hex-settings";
 
 const DEFAULT_VOICE = "__default__";
 const LANG_SUGGESTIONS = ["en-US", "en-GB", "de-DE", "fr-FR", "es-ES", "it-IT", "nl-NL", "pt-BR", "ja-JP"];
@@ -149,7 +150,7 @@ export function VoiceSection({ settings }: { settings: Settings }) {
       <SettingsGroup title={t("voice.stt.title")} icon={<Mic />}>
         <SettingRow
           label={t("voice.provider")}
-          description={v.sttProvider === "browser" ? t("voice.stt.browserDescription") : t("voice.stt.openaiDescription")}
+          description={t(`voice.stt.${v.sttProvider}Description`)}
         >
           <Segmented<SttProvider>
             aria-label={t("voice.stt.providerLabel")}
@@ -158,10 +159,13 @@ export function VoiceSection({ settings }: { settings: Settings }) {
             options={[
               { value: "browser", label: t("voice.browser") },
               { value: "openai", label: "OpenAI" },
+              { value: "hex", label: "Hex" },
             ]}
           />
         </SettingRow>
       </SettingsGroup>
+
+      {v.sttProvider === "hex" && <HexSettings voice={v} />}
 
       <SettingsGroup title={t("voice.tts.title")} icon={<Volume2 />}>
         <SettingRow label={t("voice.provider")} description={t("voice.tts.description")}>

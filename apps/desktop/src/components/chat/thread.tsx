@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { dateLocale, t } from "@/i18n";
 import type { LiveRun } from "@/stores/live";
 import { AssistantMessage, LiveAssistantMessage, StartedMessage, SystemMessage, UserMessage } from "./messages";
+import { BackgroundSubagentsPill } from "./subagents";
 import { useStickToBottom } from "./use-stick-to-bottom";
 
 function dayLabel(iso: string): string {
@@ -97,6 +98,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
         </div>
       </div>
 
+      {inflight?.live && <BackgroundSubagentsPill blocks={inflight.live.blocks} agent={agent} scrollRef={scrollRef} />}
       <AnimatePresence>
         {!atBottom && !isEmpty && (
           <motion.button

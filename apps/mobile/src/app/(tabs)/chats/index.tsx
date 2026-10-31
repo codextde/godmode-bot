@@ -330,7 +330,11 @@ const ChatItem = memo(function ChatItem({
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        {conversation.unread ? <Link.MenuAction title={t("chats.menu.markRead")} icon="checkmark.message" onPress={() => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} /> : null}
+        {conversation.unread ? (
+          <Link.MenuAction title={t("chats.menu.markRead")} icon="checkmark.message" onPress={() => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
+        ) : (
+          <Link.MenuAction title={t("chats.menu.markUnread")} icon="message.badge" onPress={() => void api.conversations.unread([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
+        )}
         <Link.MenuAction title={conversation.pinned ? t("chats.menu.unpin") : t("chats.menu.pin")} icon={conversation.pinned ? "pin.slash" : "pin"} onPress={() => update.mutate({ pinned: !conversation.pinned })} />
         <Link.MenuAction title={t("chats.menu.archive")} icon="archivebox" onPress={() => update.mutate({ archived: true })} />
         <Link.MenuAction title={t("common:actions.delete")} icon="trash" destructive onPress={remove} />

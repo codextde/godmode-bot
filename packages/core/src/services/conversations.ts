@@ -632,6 +632,25 @@ export function markConversationsRead(ids: string[] | "all"): number {
   return rows.length;
 }
 
+/**
+ * "Mark as unread": the chat's latest run counts as new again until the human opens the chat. A failed run is only
+ * taken when there is no other, so a reminder doesn't bring the failure back to "Needs you". Private chats stay unmarked.
+ */
+export function markConversationsUnread(ids: string[]): number {
+  let marked = 0;
+  for (const id of ids) {
+    const r = get<{ run_id: string }>(
+      `SELECT r.id AS run_id FROM conversations c JOIN runs r ON r.conversation_id = c.id
+       WHERE c.id = ? AND c.unread_run_id IS NULL AND c.private = 0 ORDER BY r.status = 'failed', r.created_at DESC, r.rowid DESC LIMIT 1`,
+      id,
+    );
+    if (!r || !sql("UPDATE conversations SET unread_run_id = ? WHERE id = ? AND unread_run_id IS NULL", r.run_id, id).changes) continue;
+    marked++;
+    emitConversationUpdated(id);
+  }
+  return marked;
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
   // First, so the run that is cancelled below doesn't hand over to the queue.

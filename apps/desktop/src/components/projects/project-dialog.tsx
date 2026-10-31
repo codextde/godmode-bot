@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { ConfirmDialog } from "@/components/integrations/confirm-dialog";
+import { DeleteProjectDialog } from "@/components/projects/delete-project";
 import { isGrantCancelled, withGrant } from "@/components/vault/grant";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ColorRadios, ICONS, IconPicker } from "@/components/workspaces/icon-picker";
@@ -115,19 +115,6 @@ export function ProjectDialog({
       onOpenChange(false);
     },
     onError: (e) => !isGrantCancelled(e) && toastApiError(e, editing ? t("dialog.updateFailed") : t("dialog.createFailed"), qc),
-  });
-
-  const remove = useMutation({
-    mutationFn: () => api.projects.delete(project!.id),
-    onSuccess: () => {
-      clearDraft(draftKey);
-      if (scope === workspace.id && scopedProject === project!.id) setScope(workspace.id);
-      void qc.invalidateQueries({ queryKey: qk.workspaces });
-      void qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      toast.success(t("dialog.deleted", { name: project!.name }), { description: t("dialog.deletedDescription", { workspace: workspace.name }) });
-      onOpenChange(false);
-    },
-    onError: (e) => toastApiError(e, t("dialog.deleteFailed"), qc),
   });
 
   const submit = (e: FormEvent) => {
@@ -242,13 +229,15 @@ export function ProjectDialog({
         </form>
       </DialogContent>
       {project && (
-        <ConfirmDialog
+        <DeleteProjectDialog
+          project={project}
+          workspaceName={workspace.name}
           open={confirmDelete}
           onOpenChange={setConfirmDelete}
-          title={t("dialog.deleteTitle", { name: project.name })}
-          description={t("dialog.deleteDescription", { workspace: workspace.name })}
-          confirmLabel={t("dialog.deleteConfirm")}
-          onConfirm={() => remove.mutate()}
+          onDeleted={() => {
+            clearDraft(draftKey);
+            onOpenChange(false);
+          }}
         />
       )}
     </Dialog>

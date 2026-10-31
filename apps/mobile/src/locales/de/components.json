@@ -910,6 +910,18 @@
       "report": "Bericht",
       "result": "Ergebnis"
     },
+    "subagents": {
+      "helpers_one": "{{count}} Helfer",
+      "helpers_other": "{{count}} Helfer",
+      "running_one": "{{count}} arbeitet",
+      "running_other": "{{count}} arbeiten",
+      "done_one": "{{count}} fertig",
+      "done_other": "{{count}} fertig",
+      "failed_one": "{{count}} fehlgeschlagen",
+      "failed_other": "{{count}} fehlgeschlagen",
+      "stopped_one": "{{count}} gestoppt",
+      "stopped_other": "{{count}} gestoppt"
+    },
     "steps_one": "{{count}} Schritt",
     "steps_other": "{{count}} Schritte",
     "earlierSteps_one": "und {{count}} früherer Schritt",
