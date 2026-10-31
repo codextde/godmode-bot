@@ -81,14 +81,18 @@ const SETTINGS: { id: string; label: string; icon: LucideIcon; words: string }[]
   { id: "ai", label: "AI & Claude", icon: Sparkles, words: "model effort ultracode monthly budget team cost limit" },
   { id: "browser", label: "Browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "Computer", icon: MonitorUp, words: "screen share control mac" },
-  { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux" },
   { id: "voice", label: "Voice", icon: AudioLines, words: "speech dictation read aloud microphone" },
-  { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound" },
   { id: "memory", label: "Memory", icon: BrainCircuit, words: "dreaming remember learn" },
   { id: "artifacts", label: "Artifacts", icon: AppWindow, words: "dashboards apps trackers tools build feature turn on off" },
   { id: "integrations", label: "Integrations", icon: Plug, words: "connected apps composio api tools mcp servers gmail slack notion feature turn on off" },
   { id: "messaging", label: "Messaging", icon: MessageCircle, words: "chat apps slack telegram microsoft teams bots feature turn on off" },
   { id: "android", label: "Android phones", icon: Smartphone, words: "adb usb debugging emulator device feature turn on off" },
+  { id: "activity", label: "Activity", icon: Activity, words: "history runs log feature turn on off" },
+  { id: "plugins", label: "Plugins", icon: Puzzle, words: "claude code mods skills hooks add-ons feature turn on off" },
+  { id: "calls", label: "Phone calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound feature turn on off" },
+  { id: "cards", label: "Cards", icon: CreditCard, words: "payment credit cards purchases pay feature turn on off" },
+  { id: "vms", label: "Virtual machines", icon: Box, words: "vm tart macos linux feature turn on off" },
+  { id: "ssh", label: "SSH servers", icon: Server, words: "remote linux servers feature turn on off" },
   { id: "api-keys", label: "API keys", icon: KeyRound, words: "anthropic openai elevenlabs z.ai glm captcha browser-use secrets" },
   { id: "security", label: "Security", icon: ShieldCheck, words: "vault passphrase auto-lock password" },
   { id: "files", label: "Files", icon: FolderOpen, words: "workspace notes memory cleanup tidy delete bin agents" },
@@ -280,9 +284,11 @@ export function CommandPalette() {
           <CommandItem value="import memory chatgpt claude gemini bring your memory" onSelect={() => go("/settings/memory?import=1")}>
             <ArrowDownToLine /> Import memory from ChatGPT, Claude or Gemini
           </CommandItem>
-          <CommandItem value="add card payment credit card" onSelect={() => go("/vault/cards?new=1")}>
-            <CreditCard /> Add card
-          </CommandItem>
+          {on?.cards.enabled && (
+            <CommandItem value="add card payment credit card" onSelect={() => go("/vault/cards?new=1")}>
+              <CreditCard /> Add card
+            </CommandItem>
+          )}
           <CommandItem
             onSelect={async () => {
               setOpen(false);
@@ -363,12 +369,16 @@ export function CommandPalette() {
           <CommandItem value="automations routines schedules triggers webhooks" onSelect={() => go("/automations")}>
             <Workflow /> Automations
           </CommandItem>
-          <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
-            <Puzzle /> {named("/plugins", "Plugins")}
-          </CommandItem>
-          <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
-            <Activity /> {named("/activity", "Activity")}
-          </CommandItem>
+          {on?.plugins.enabled && (
+            <CommandItem value="plugins claude code mods skills hooks guardrails github install" keywords={alias("/plugins", "Plugins")} onSelect={() => go("/plugins")}>
+              <Puzzle /> {named("/plugins", "Plugins")}
+            </CommandItem>
+          )}
+          {on?.activity.enabled && (
+            <CommandItem keywords={alias("/activity", "Activity")} onSelect={() => go("/activity")}>
+              <Activity /> {named("/activity", "Activity")}
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => go("/inbox")}>
             <Inbox /> Inbox
           </CommandItem>
@@ -387,9 +397,11 @@ export function CommandPalette() {
           <CommandItem value="passkeys webauthn" onSelect={() => go("/vault/passkeys")}>
             <Fingerprint /> Passkeys
           </CommandItem>
-          <CommandItem value="cards payment credit cards purchases subscriptions" keywords={alias("/vault/cards", "Cards")} onSelect={() => go("/vault/cards")}>
-            <CreditCard /> {named("/vault/cards", "Cards")}
-          </CommandItem>
+          {on?.cards.enabled && (
+            <CommandItem value="cards payment credit cards purchases subscriptions" keywords={alias("/vault/cards", "Cards")} onSelect={() => go("/vault/cards")}>
+              <CreditCard /> {named("/vault/cards", "Cards")}
+            </CommandItem>
+          )}
           {on?.artifacts.enabled && (
             <CommandItem value="artifacts dashboards apps trackers" keywords={mode === "easy" ? ["Dashboards & apps"] : undefined} onSelect={() => go("/settings/artifacts")}>
               <AppWindow /> {mode === "easy" ? "Dashboards & apps" : "Artifacts"}
@@ -405,21 +417,27 @@ export function CommandPalette() {
               <MessageCircle /> {mode === "easy" ? "Chat apps" : "Messaging"}
             </CommandItem>
           )}
-          <CommandItem value="calls phone calls elevenlabs voice transcripts" keywords={alias("/calls", "Calls")} onSelect={() => go("/calls")}>
-            <Phone /> {named("/calls", "Calls")}
-          </CommandItem>
+          {on?.phone.enabled && (
+            <CommandItem value="calls phone calls elevenlabs voice transcripts" keywords={alias("/calls", "Calls")} onSelect={() => go("/calls")}>
+              <Phone /> {named("/calls", "Calls")}
+            </CommandItem>
+          )}
           <CommandItem onSelect={() => go("/browser")}>
             <Globe /> Browser
           </CommandItem>
           <CommandItem keywords={alias("/computer", "Computer")} onSelect={() => go("/computer")}>
             <MonitorUp /> {named("/computer", "Computer")}
           </CommandItem>
-          <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
-            <Box /> Virtual machines
-          </CommandItem>
-          <CommandItem value="ssh servers remote linux" keywords={alias("/ssh", "SSH servers")} onSelect={() => go("/ssh")}>
-            <Server /> {named("/ssh", "SSH servers")}
-          </CommandItem>
+          {on?.vm.enabled && (
+            <CommandItem value="virtual machines vms macos tart" onSelect={() => go("/vms")}>
+              <Box /> Virtual machines
+            </CommandItem>
+          )}
+          {on?.ssh.enabled && (
+            <CommandItem value="ssh servers remote linux" keywords={alias("/ssh", "SSH servers")} onSelect={() => go("/ssh")}>
+              <Server /> {named("/ssh", "SSH servers")}
+            </CommandItem>
+          )}
           {on?.android.enabled && (
             <CommandItem value="android phones adb emulator devices" onSelect={() => go("/settings/android")}>
               <Smartphone /> Android phones

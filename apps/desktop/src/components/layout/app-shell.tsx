@@ -76,6 +76,7 @@ import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { startPresence } from "@/lib/presence";
 import { GO_TO, ShortcutsDialog } from "@/components/layout/shortcuts-dialog";
+import { pageOn } from "@/components/settings/feature-section";
 
 /**
  * Typing in a field, a dialog, an open list or menu (typeahead), or a remote screen the human controls
@@ -184,6 +185,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, setCommandOpen, toggleTheme]);
 
+  // Pages of features the human turned off leave the sidebar (Settings → Features turns them on again).
+  const shown = (item: NavItem) => pageOn(boot?.settings, item.to);
   const workNav: NavItem[] = [
     { to: "/inbox", label: "Inbox", icon: <Inbox />, badge: inboxCount || undefined },
     { to: "/tasks", label: "Tasks", icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
@@ -220,7 +223,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/computer", "Computer control"),
     easyItem("/vms", "Virtual machines"),
     easyItem("/ssh", "Servers"),
-  ];
+  ].filter(shown);
 
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
@@ -268,7 +271,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <SidebarGroupContent>
               <SidebarMenu className="group-data-[collapsible=icon]:items-center">
                 <NavMenuItem item={{ to: "/", label: "Chat", icon: <MessagesSquare />, end: true }} />
-                {(easy ? easyNav : workNav).map((item) => (
+                {(easy ? easyNav : workNav.filter(shown)).map((item) => (
                   <NavMenuItem key={item.to} item={item} />
                 ))}
               </SidebarMenu>
@@ -278,7 +281,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <NavSection id="more" label="More" items={easyMore} folded="list" />
           ) : (
             <>
-              <NavSection id="machines" label="Machines" items={machineNav} />
+              <NavSection id="machines" label="Machines" items={machineNav.filter(shown)} />
             </>
           )}
           <RecentChats />

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { updateSettings } from "../src/services/settings";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -35,6 +36,7 @@ let manager: Agent;
 
 beforeAll(async () => {
   env = await setupEnv("godmode-mods-");
+  updateSettings({ plugins: { enabled: true } });
   await vault.setup(PASSPHRASE, false);
   agent = await makeAgent({ name: "Coder" });
   other = await makeAgent({ name: "Researcher" });
