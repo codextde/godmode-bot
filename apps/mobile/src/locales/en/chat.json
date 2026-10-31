@@ -1,0 +1,190 @@
+{
+  "compose": {
+    "title": "New chat",
+    "startFailed": "Couldn't start the chat",
+    "loadingAgents": "Loading agents",
+    "placeholderAgent": "Ask {{name}} anything, or hand over a task…",
+    "placeholder": "Ask anything, or hand over a task…",
+    "projectHint": "It works with the project's context, folders and repositories.",
+    "try": "Try",
+    "hideSuggestions": "Hide suggestions"
+  },
+  "newTask": {
+    "title": "New task",
+    "tooLongTitle": "The details are too long",
+    "tooLongMessage": "Shorten the text or attach fewer files.",
+    "createFailed": "Couldn't create the task",
+    "titlePlaceholder": "What needs to be done?",
+    "detailsPlaceholder": "Details, links, what done looks like (optional)",
+    "addMoreFilesA11y_one": "Add more files, {{count}} added",
+    "addMoreFilesA11y_other": "Add more files, {{count}} added",
+    "addFiles": "Add photos or files",
+    "addMore": "Add more",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "kind": "Kind",
+    "codingNeedsWorkspace": ". Pick a workspace with a repository on your computer.",
+    "projectHint": "The agent works with the project's context, folders and repositories.",
+    "workspaceHint": "It uses the workspace's setup.",
+    "unassigned": "Unassigned",
+    "agentStarts": "{{name}} starts as soon as you create it.",
+    "waitsInBacklog": "It waits in the backlog until you assign an agent.",
+    "startWith": "Start with {{name}}",
+    "addToBacklog": "Add to backlog"
+  },
+  "live": {
+    "browser": "Browser",
+    "sharedScreen": "Shared screen",
+    "screen": "Screen",
+    "virtualMachine": "Virtual machine",
+    "androidPhone": "Android phone",
+    "notRunning": "Not running",
+    "inputFailed": "Couldn't reach the screen",
+    "vmFailed": "Couldn't change the VM",
+    "browserFailed": "Couldn't start the browser",
+    "controlHintMac": "In control: tap to click, hold to right-click",
+    "controlHint": "In control: tap to click",
+    "vmIs": "{{name}} is {{state}}",
+    "startVm": "Start VM",
+    "stopVm": "Stop VM",
+    "stopVmTitle": "Stop this VM?",
+    "stopVmMessage": "macOS shuts down; agents working in it are interrupted.",
+    "phoneNotConnected": "{{name}} isn't connected",
+    "phoneConnectHint": "Plug it in or connect it over Wi-Fi in Godmode on your computer.",
+    "browserNotRunning": "{{name}} isn't running",
+    "browserStartsChat": "It starts when the agent needs the web.",
+    "browserStartsHint": "Agents start it when they need the web. Start it now to watch it here.",
+    "startBrowser": "Start browser",
+    "waitingBrowser": "Waiting for the browser. It shows up here as soon as an agent uses it.",
+    "waitingPicture": "Waiting for the picture…",
+    "typePlaceholder": "Type into the screen",
+    "enter": "Enter",
+    "inControl": "You're in control",
+    "takeControl": "Take control",
+    "type": "Type",
+    "scrollUp": "Scroll up",
+    "scrollDown": "Scroll down",
+    "tapHintMac": "Tap to click, hold to right-click",
+    "tapHint": "Tap the picture to click there",
+    "keys": {
+      "escape": "Escape",
+      "tab": "Tab",
+      "delete": "Delete",
+      "left": "Left arrow",
+      "up": "Up arrow",
+      "down": "Down arrow",
+      "right": "Right arrow",
+      "spotlight": "Spotlight",
+      "switchApps": "Switch apps",
+      "closeWindow": "Close window",
+      "quitApp": "Quit app",
+      "enter": "Enter"
+    }
+  },
+  "activity": {
+    "title": "Activity",
+    "loadFailed": "Couldn't load activity",
+    "noMatch": "No runs match these filters",
+    "clearFilters": "Clear filters",
+    "emptyTitle": "No activity yet",
+    "emptyBody": "When your agents chat, run automations or delegate work, every run shows up here — live.",
+    "workingNow": "Working now",
+    "doneToday": "Done today",
+    "failedToday": "Failed today",
+    "filters": {
+      "all": "All",
+      "running": "Running",
+      "paused": "Paused",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "cancelled": "Cancelled",
+      "queued": "Queued"
+    }
+  },
+  "thread": {
+    "fallbackTitle": "Chat",
+    "theAgent": "The agent",
+    "loading": "Loading the chat",
+    "openFailed": "Couldn't open this chat",
+    "notSent": "Message not sent",
+    "stopFailed": "Couldn't stop",
+    "continueFailed": "Couldn't continue",
+    "retryFailed": "Couldn't pick this up",
+    "changeFailed": "Couldn't change the chat",
+    "pauseFailed": "Couldn't pause",
+    "deleteTitle": "Delete this chat?",
+    "deleteMessage": "It's removed on your computer too.",
+    "deleteFailed": "Couldn't delete the chat",
+    "rename": "Rename chat",
+    "renameLabel": "Chat title",
+    "watchScreen": "Watch the agent's screen",
+    "usageLimit": "usage limit",
+    "menu": {
+      "pause": "Pause",
+      "pin": "Pin",
+      "unpin": "Unpin",
+      "archive": "Archive",
+      "unarchive": "Unarchive"
+    },
+    "send": {
+      "answer": "Send answer",
+      "andContinue": "Send and continue",
+      "queue": "Queue message"
+    },
+    "placeholder": {
+      "message": "Message",
+      "answer": "Answer {{name}}",
+      "howToGoOn": "Tell {{name}} how to go on",
+      "afterReset": "Message {{name}} — goes along after the reset",
+      "whenContinues": "Message {{name}} — goes along when it continues",
+      "queue": "Queue a message for {{name}}",
+      "default": "Message {{name}}, or / for commands"
+    },
+    "earlier": {
+      "title": "Earlier messages",
+      "load": "Load earlier messages",
+      "loading": "Loading earlier messages",
+      "failed": "Couldn't load earlier messages. Tap to try again"
+    },
+    "followup": {
+      "continues": "Continues {{when}}",
+      "a11y": "{{name}} continues {{when}}. Change",
+      "change": "Change",
+      "continueNow": "Continue now",
+      "continueNowFailed": "Couldn't continue now",
+      "inAnHour": "In an hour",
+      "tomorrow": "Tomorrow at 09:00",
+      "cancel": "Cancel the follow-up",
+      "cancelFailed": "Couldn't cancel the follow-up",
+      "moveFailed": "Couldn't move the follow-up",
+      "updateDesktop": "Update Godmode on your computer to change follow-ups from the phone."
+    },
+    "forYou": {
+      "answer": "Waiting for your answer: ",
+      "you": "Waiting for you: ",
+      "more_one": " and {{count}} more",
+      "more_other": " and {{count}} more"
+    },
+    "asking": {
+      "approval": "{{name}} needs your OK — reply below",
+      "question": "{{name}} is waiting for your answer — reply below"
+    },
+    "paused": {
+      "limit": "Claude's {{limit}} is reached",
+      "limitAuto": "Claude's {{limit}} is reached — continues by itself after the reset",
+      "user": "Paused — continues where it stopped",
+      "tryNow": "Try now"
+    },
+    "longChat": {
+      "title": "This chat is getting long",
+      "titlePct": "This chat is getting long · {{pct}}%",
+      "compress": "Compress",
+      "compressA11y": "Compress the chat",
+      "hide": "Hide"
+    },
+    "ended": {
+      "stopped": "Stopped before it was done",
+      "failed": "Didn't get through"
+    }
+  }
+}

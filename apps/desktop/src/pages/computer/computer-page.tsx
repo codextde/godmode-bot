@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { AppWindow, Globe, Layers, Monitor, MonitorUp, RefreshCw } from "lucide-react";
 import type { ComputerTarget } from "@godmode/shared";
 import { computerTargetLabel, computerView, sameComputerTarget } from "@godmode/shared";
@@ -14,6 +15,7 @@ import { domainFromUrl } from "@/components/vault/vault-utils";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { currentLanguage } from "@/i18n";
 
 function Item({ active, onClick, icon, title, subtitle }: { active: boolean; onClick: () => void; icon: React.ReactNode; title: string; subtitle?: string }) {
   return (
@@ -37,6 +39,7 @@ function Item({ active, onClick, icon, title, subtitle }: { active: boolean; onC
 
 /** Watch and take over this computer's displays, app windows and Godmode browser tabs. */
 export default function ComputerPage() {
+  const { t } = useTranslation(["computer", "common"]);
   const status = useComputerStatus();
   const enabled = status.data?.enabled !== false;
   const sources = useQuery({ queryKey: qk.computerSources, queryFn: api.computer.sources, enabled, refetchInterval: 10_000, retry: false });
@@ -55,11 +58,11 @@ export default function ComputerPage() {
     <div className="relative">
       <PageHeader
         icon={<MonitorUp />}
-        title="Computer"
-        description="What agents can see and control when you share it in a chat. Watch any display, window or browser tab here and take over when needed."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <Button variant="outline" onClick={() => sources.refetch()} disabled={!enabled}>
-            <RefreshCw className={cn(sources.isFetching && "animate-spin")} /> Refresh
+            <RefreshCw className={cn(sources.isFetching && "animate-spin")} /> {t("common:actions.refresh")}
           </Button>
         }
       />
@@ -68,11 +71,11 @@ export default function ComputerPage() {
         {!enabled ? null : sources.isError ? (
           <EmptyState
             icon={<MonitorUp />}
-            title="Couldn't list displays and windows"
+            title={t("page.loadError")}
             description={errorMessage(sources.error)}
             action={
               <Button variant="outline" onClick={() => sources.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -89,57 +92,57 @@ export default function ComputerPage() {
                 <>
                   {data.displays.length > 0 && (
                     <section className="space-y-1">
-                      <h2 className="eyebrow px-1 pb-1">Screens</h2>
+                      <h2 className="eyebrow px-1 pb-1">{t("page.screens")}</h2>
                       {data.displays.length > 1 && (
                         <Item
                           active={sameComputerTarget(target, { kind: "desktop" })}
                           onClick={() => setPicked({ kind: "desktop" })}
                           icon={<Layers />}
-                          title="Entire desktop"
-                          subtitle={`${data.displays.length} displays`}
+                          title={t("page.entireDesktop")}
+                          subtitle={t("page.displays", { n: data.displays.length })}
                         />
                       )}
                       {data.displays.map((d) => {
-                        const t: ComputerTarget = data.displays.length > 1 ? displayTarget(d) : { kind: "desktop" };
+                        const next: ComputerTarget = data.displays.length > 1 ? displayTarget(d) : { kind: "desktop" };
                         return (
                           <Item
                             key={d.id}
-                            active={sameComputerTarget(target, t)}
-                            onClick={() => setPicked(t)}
+                            active={sameComputerTarget(target, next)}
+                            onClick={() => setPicked(next)}
                             icon={<Monitor />}
                             title={d.name}
-                            subtitle={`${Math.round(d.width)} × ${Math.round(d.height)}${d.primary ? " · primary" : ""}`}
+                            subtitle={`${Math.round(d.width)} × ${Math.round(d.height)}${d.primary ? ` · ${t("page.primary")}` : ""}`}
                           />
                         );
                       })}
                     </section>
                   )}
                   <section className="space-y-1">
-                    <h2 className="eyebrow px-1 pb-1">Windows</h2>
+                    <h2 className="eyebrow px-1 pb-1">{t("page.windows")}</h2>
                     {windows.length ? (
                       windows.map((w) => {
-                        const t = windowTarget(w);
+                        const next = windowTarget(w);
                         return (
-                          <Item key={`${w.pid}:${w.id}`} active={sameComputerTarget(target, t)} onClick={() => setPicked(t)} icon={appInitials(w.app)} title={w.app} subtitle={w.title || undefined} />
+                          <Item key={`${w.pid}:${w.id}`} active={sameComputerTarget(target, next)} onClick={() => setPicked(next)} icon={appInitials(w.app)} title={w.app} subtitle={w.title || undefined} />
                         );
                       })
                     ) : (
-                      <p className="px-1 text-xs text-muted-foreground">No windows on screen.</p>
+                      <p className="px-1 text-xs text-muted-foreground">{t("page.noWindows")}</p>
                     )}
                   </section>
                   {data.tabs.length > 0 && (
                     <section className="space-y-1">
-                      <h2 className="eyebrow px-1 pb-1">Godmode browser tabs</h2>
+                      <h2 className="eyebrow px-1 pb-1">{t("page.tabs")}</h2>
                       {data.tabs.map((tab) => {
-                        const t = tabTarget(tab);
+                        const next = tabTarget(tab);
                         const domain = domainFromUrl(tab.url);
                         return (
                           <Item
                             key={`${tab.profileId}:${tab.targetId}`}
-                            active={sameComputerTarget(target, t)}
-                            onClick={() => setPicked(t)}
+                            active={sameComputerTarget(target, next)}
+                            onClick={() => setPicked(next)}
                             icon={domain ? <Favicon domain={domain} name={tab.title || domain} size="sm" className="size-3.5 rounded-[3px]" /> : <Globe />}
-                            title={tab.title || domain || "New tab"}
+                            title={tab.title || domain || t("page.newTab")}
                             subtitle={domain || tab.url}
                           />
                         );
@@ -160,12 +163,16 @@ export default function ComputerPage() {
               ) : sources.isLoading ? (
                 <Skeleton className="aspect-[16/10] w-full rounded-xl" />
               ) : (
-                <EmptyState icon={<AppWindow />} title="Nothing to show" description="Open an app window or connect a display, then refresh." />
+                <EmptyState icon={<AppWindow />} title={t("page.nothingTitle")} description={t("page.nothingDescription")} />
               )}
               {target && (
                 <p className="mt-3 text-xs text-muted-foreground">
-                  To let an agent work here, open a chat and use <span className="font-medium text-foreground">Share</span> in the message box — then pick{" "}
-                  {computerTargetLabel(target)}.
+                  <Trans
+                    t={t}
+                    i18nKey="page.shareHint"
+                    values={{ target: computerTargetLabel(target, currentLanguage()) }}
+                    components={{ b: <span className="font-medium text-foreground" /> }}
+                  />
                 </p>
               )}
             </div>

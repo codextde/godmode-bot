@@ -1,9 +1,11 @@
 import type { Hono } from "hono";
 import { body, z } from "../validate";
 import { MAX_AUDIO_BYTES, speak, transcribe } from "../../voice/voice";
+import { hexLanguage, hexStatus, prepareHex } from "../../voice/hex";
 import { badRequest, HttpError } from "../../util";
 
 const speakSchema = z.object({ text: z.string() });
+const prepareSchema = z.object({ language: z.string().max(20).optional() });
 
 export function registerVoiceRoutes(app: Hono): void {
   app.post("/api/voice/transcribe", async (c) => {
@@ -24,6 +26,14 @@ export function registerVoiceRoutes(app: Hono): void {
         filename: audio instanceof File ? audio.name : null,
       }),
     );
+  });
+
+  app.get("/api/voice/hex", async (c) => c.json(await hexStatus()));
+
+  app.post("/api/voice/hex/prepare", async (c) => {
+    const { language } = await body(c, prepareSchema);
+    prepareHex(language ? hexLanguage(language) : undefined).catch(() => undefined);
+    return c.json(await hexStatus(), 202);
   });
 
   app.post("/api/voice/speak", async (c) => {

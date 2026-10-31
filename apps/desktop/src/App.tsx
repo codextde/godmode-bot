@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate, type Location } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
 import { ApiRequestError, api, isCloudError, setCloudIssueHandler, setLicenseRequiredHandler, setUnauthorizedHandler, type CloudIssue } from "@/lib/api";
@@ -17,6 +17,7 @@ import { LoginPage } from "@/pages/auth/login";
 import { UnlockPage } from "@/pages/auth/unlock";
 import { OnboardingPage } from "@/pages/onboarding/onboarding";
 import { toast } from "sonner";
+import { t } from "@/i18n";
 
 const ChatHome = lazy(() => import("@/pages/chat/chat-home"));
 const ChatConversation = lazy(() => import("@/pages/chat/chat-conversation"));
@@ -42,7 +43,9 @@ const SshPage = lazy(() => import("@/pages/ssh/ssh-page"));
 const AndroidDevicePage = lazy(() => import("@/pages/android/android-device-page"));
 const CallsPage = lazy(() => import("@/pages/calls/calls-page"));
 const InboxPage = lazy(() => import("@/pages/inbox/inbox-page"));
-const SettingsPage = lazy(() => import("@/pages/settings/settings-page"));
+const SettingsDialog = lazy(() => import("@/pages/settings/settings-page"));
+
+const isSettingsPath = (pathname: string) => pathname === "/settings" || pathname.startsWith("/settings/");
 
 export function App() {
   const qc = useQueryClient();
@@ -51,6 +54,9 @@ export function App() {
   const location = useLocation();
   const onScreen = useRef("");
   onScreen.current = `${location.pathname}${location.search}`;
+  const settingsOpen = isSettingsPath(location.pathname);
+  const underSettings = useRef<Location | null>(null);
+  if (!settingsOpen) underSettings.current = location;
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
   const [cloudIssue, setCloudIssue] = useState<CloudIssue | null>(null);
@@ -70,11 +76,11 @@ export function App() {
     // A run start refused for the licence: one calm toast that leads to activation (and the gate, when it blocks).
     setLicenseRequiredHandler((message) => {
       void qc.invalidateQueries({ queryKey: qk.license });
-      toast.warning("Godmode needs an active licence", {
+      toast.warning(t("layout:app.licenseRequired"), {
         id: "license-required",
         description: message,
         duration: 12_000,
-        action: { label: "Activate", onClick: () => navigate("/settings/license") },
+        action: { label: t("layout:app.activate"), onClick: () => navigate("/settings/license") },
       });
     });
   }, [qc, navigate]);
@@ -134,7 +140,7 @@ export function App() {
           id: n.link ? `question:${n.link}` : undefined,
           description: n.body || undefined,
           duration: 20_000,
-          action: n.link ? { label: n.link.startsWith("/my-tasks") ? "Open" : "Answer", onClick: () => navigate(n.link!) } : undefined,
+          action: n.link ? { label: n.link.startsWith("/my-tasks") ? t("common:actions.open") : t("layout:app.answer"), onClick: () => navigate(n.link!) } : undefined,
         });
         const desktopOn = qc.getQueryData<{ settings?: { general?: { desktopNotifications?: boolean } } }>(qk.bootstrap)?.settings?.general
           ?.desktopNotifications;
@@ -154,7 +160,7 @@ export function App() {
           description: n.body || undefined,
           action: n.link
             ? {
-                label: "Open",
+                label: t("common:actions.open"),
                 onClick: () => {
                   navigate(n.link!);
                   void api.notifications.read([n.id]).catch(() => undefined);
@@ -178,7 +184,7 @@ export function App() {
   if (auth.isError) {
     // Signed out of the cloud: the browser is already on its way to the sign-in page.
     if (auth.error instanceof ApiRequestError && auth.error.code === CloudErrorCode.CloudUnauthorized) return <SplashScreen />;
-    return <SplashScreen error={cloudContext ? "Cannot reach this computer through Godmode Cloud." : "Cannot reach the Godmode core."} />;
+    return <SplashScreen error={cloudContext ? t("layout:app.cannotReachCloud") : t("layout:app.cannotReachCore")} />;
   }
   // In cloud mode the cloud signs people in; the core's own sign-in page never shows there.
   if (!authed) return cloudContext ? <SplashScreen /> : <LoginPage hasPassword={auth.data?.hasDashboardPassword ?? false} />;
@@ -192,7 +198,7 @@ export function App() {
   return (
     <AppShell>
       <Suspense fallback={<div className="p-8" />}>
-        <Routes>
+        <Routes location={settingsOpen ? (underSettings.current ?? "/") : location}>
           <Route path="/" element={<ChatHome />} />
           <Route path="/chat/:conversationId" element={<ChatConversation />} />
           <Route path="/archived" element={<ArchivedPage />} />
@@ -207,30 +213,33 @@ export function App() {
           <Route path="/my-tasks" element={<MyTasksRedirect />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
-          <Route path="/plugins" element={<PluginsPage />} />
+          <Route path="/plugins" element={<FeaturePage on={b.settings.plugins.enabled} section="plugins" keep="plugin"><PluginsPage /></FeaturePage>} />
           <Route path="/mods" element={<LegacyModsRedirect />} />
-          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/activity" element={<FeaturePage on={b.settings.activity.enabled} section="activity" keep="run"><ActivityPage /></FeaturePage>} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />
           <Route path="/vault/logins" element={<LoginsPage />} />
           <Route path="/vault/2fa" element={<TotpPage />} />
-          <Route path="/vault/cards" element={<CardsPage />} />
+          <Route path="/vault/cards" element={<FeaturePage on={b.settings.cards.enabled} section="cards"><CardsPage /></FeaturePage>} />
           <Route path="/vault/passkeys" element={<PasskeysPage />} />
           <Route path="/integrations" element={<ToSettings section="integrations" />} />
           <Route path="/messaging" element={<ToSettings section="messaging" />} />
           <Route path="/browser" element={<BrowserPage />} />
           <Route path="/computer" element={<ComputerPage />} />
-          <Route path="/vms" element={<VmsPage />} />
-          <Route path="/ssh" element={<SshPage />} />
+          <Route path="/vms" element={<FeaturePage on={b.settings.vm.enabled} section="vms"><VmsPage /></FeaturePage>} />
+          <Route path="/ssh" element={<FeaturePage on={b.settings.ssh.enabled} section="ssh"><SshPage /></FeaturePage>} />
           <Route path="/android" element={<ToSettings section="android" />} />
           <Route path="/android/:id" element={b.settings.android.enabled ? <AndroidDevicePage /> : <ToSettings section="android" />} />
-          <Route path="/calls" element={<CallsPage />} />
+          <Route path="/calls" element={<FeaturePage on={b.settings.phone.enabled} section="calls" keep="call"><CallsPage /></FeaturePage>} />
           <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          <Route path="/settings/:section" element={<SettingsPage />} />
           <Route path="*" element={<NotFoundRedirect />} />
         </Routes>
       </Suspense>
+      {settingsOpen && (
+        <Suspense fallback={null}>
+          <SettingsDialog closeTo={underSettings.current ?? "/"} />
+        </Suspense>
+      )}
     </AppShell>
   );
 }
@@ -239,21 +248,21 @@ export function App() {
 function cloudBlock(authError: unknown, authenticated: boolean | undefined, bootError: unknown, boot: Bootstrap | undefined): CloudState | null {
   for (const err of [authError, bootError]) {
     if (err instanceof ApiRequestError && (err.code === CloudErrorCode.CloudForbidden || err.code === CloudErrorCode.DeviceNotFound)) {
-      return { kind: "blocked", title: "Can't open this computer", message: err.message };
+      return { kind: "blocked", title: t("layout:app.cloudBlock.cantOpen"), message: err.message };
     }
   }
   if (authenticated === false) {
     return {
       kind: "blocked",
-      title: "Browser access is off",
-      message: "Godmode on this computer doesn't accept browser access through the cloud right now. Turn it on there under Settings → Cloud.",
+      title: t("layout:app.cloudBlock.browserOffTitle"),
+      message: t("layout:app.cloudBlock.browserOffMessage"),
     };
   }
   if (boot && (!boot.vault.initialized || !boot.settings.onboardingComplete)) {
     return {
       kind: "blocked",
-      title: "Godmode isn't set up on this computer yet",
-      message: "Finish the setup in Godmode on the computer itself, then open it here again.",
+      title: t("layout:app.cloudBlock.notSetUpTitle"),
+      message: t("layout:app.cloudBlock.notSetUpMessage"),
     };
   }
   return null;
@@ -269,6 +278,16 @@ function NotFoundRedirect() {
 
 /** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
 /** My tasks became the Inbox's board: old links (notifications, tickets) open the same task there. */
+/**
+ * A page of a feature the human can turn off: while it's off, its address opens the feature's switch in Settings. A
+ * link to one record (a run, a call) still opens it.
+ */
+function FeaturePage({ on, section, keep, children }: { on: boolean; section: string; keep?: string; children: ReactNode }) {
+  const { search } = useLocation();
+  if (on || (keep && new URLSearchParams(search).has(keep))) return children;
+  return <Navigate to={`/settings/${section}`} replace />;
+}
+
 /** A page that moved into Settings: its old address, with its query (?tab=, ?connection=), opens the section. */
 function ToSettings({ section }: { section: string }) {
   const { search } = useLocation();

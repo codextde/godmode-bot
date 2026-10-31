@@ -25,8 +25,7 @@ import { config, VERSION } from "../config";
 import { all, get, getDb, run as exec } from "../db";
 import { recoverInterruptedRuns } from "../runner/runner";
 import { leaveInterruptedWork } from "../services/resume";
-import { FEATURE_SWITCHES_SQL, SPEND_BACKFILL_SQL, SPEND_TRACKING_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
-import { startBudgets, stopBudgets } from "../services/budgets";
+import { FEATURE_SWITCHES_SQL, MODULE_SWITCHES_SQL, REMOVE_COSTS_SQL, TEAM_BACKFILL_SQL, TICKET_FACTS_SQL } from "../db/migrations";
 import { repairReportingLines } from "../agents/service";
 import { bus } from "../events/bus";
 import { logger } from "../log";
@@ -141,7 +140,7 @@ export const SAFE_ID = /^[a-z0-9][a-z0-9-_]{0,63}$/i;
 
 /** Settings that point at programs or endpoints; a backup must not be able to set them. */
 export const EXECUTABLE_SETTINGS: Record<string, string[]> = {
-  runner: ["extraArgs", "claudePath"],
+  runner: ["extraArgs", "claudePath", "claudeConfigDir"],
   browser: ["chromePath", "browserUseCommand"],
   computer: ["cuaDriverCommand"],
   vm: ["tartPath"],
@@ -763,7 +762,6 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
     stopScheduler();
     stopFollowups();
     stopPauses();
-    stopBudgets();
     stopAppTriggers();
     stopAutomationEvents();
     await stopMessaging();
@@ -782,15 +780,14 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       // lines an edited or partial backup may have broken.
       getDb().run(TEAM_BACKFILL_SQL);
       repairReportingLines();
-      // A backup from before the ticket package: who filed each ticket, why it is blocked, what it cost.
+      // A backup from before the ticket package: who filed each ticket, why it is blocked.
       getDb().run(TICKET_FACTS_SQL);
       recomputeTicketTotals();
-      // A backup from before the spend ledger: what its runs cost, booked when they last ran.
-      getDb().run(SPEND_BACKFILL_SQL);
-      // A backup from before spend tracking: on where it had budgets.
-      getDb().run(SPEND_TRACKING_SQL);
+      // A backup with spend tracking or budgets: their settings go, and held work is a pause like any other.
+      getDb().run(REMOVE_COSTS_SQL);
       // A backup from before the feature switches: on for the features it uses.
       getDb().run(FEATURE_SWITCHES_SQL);
+      getDb().run(MODULE_SWITCHES_SQL);
       exec("UPDATE automation_events SET status = 'skipped', note = 'Restored from a backup' WHERE status = 'pending'");
       exec("DELETE FROM followups WHERE due_at <= ?", new Date().toISOString());
       // Paused runs come back paused; none continues by itself after a restore.
@@ -826,7 +823,6 @@ export function importBackup(file: Uint8Array, passphrase: string, actor = "user
       startScheduler();
       startFollowups();
       startPauses();
-      startBudgets();
       startAutomationEvents();
       startAppTriggers();
       startMessaging();

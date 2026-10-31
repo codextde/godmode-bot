@@ -1,0 +1,10 @@
+{
+  "name": "paste-input",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Files and images pasted into the message field",
+  "license": "UNLICENSED",
+  "author": "Godmode",
+  "homepage": "https://github.com/codextde/godmode-bot",
+  "main": "index.ts"
+}

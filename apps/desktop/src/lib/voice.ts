@@ -5,29 +5,13 @@
  * Pure browser/runtime code — React bindings live in `hooks/use-voice.ts`.
  */
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import type { VoiceSettings } from "@godmode/shared";
+import { t } from "@/i18n";
 import { api, request } from "./api";
 
 /* ------------------------------------------------------------------ */
 /* Stores                                                               */
 /* ------------------------------------------------------------------ */
-
-interface VoicePrefsState {
-  /** Read every assistant reply aloud (composer toggle). */
-  speakReplies: boolean;
-  setSpeakReplies: (v: boolean) => void;
-}
-
-export const useVoicePrefs = create<VoicePrefsState>()(
-  persist(
-    (set) => ({
-      speakReplies: false,
-      setSpeakReplies: (speakReplies) => set({ speakReplies }),
-    }),
-    { name: "godmode-voice" },
-  ),
-);
 
 interface VoiceSessionState {
   /** Voice mode was opened by the user during this app session (guards against a persisted flag on reload). */
@@ -57,8 +41,8 @@ export function stripMarkdown(md: string): string {
   return (
     md
       // fenced code → short spoken hint
-      .replace(/```[\s\S]*?```/g, " (code omitted) ")
-      .replace(/~~~[\s\S]*?~~~/g, " (code omitted) ")
+      .replace(/```[\s\S]*?```/g, ` ${t("system:voice.codeOmitted")} `)
+      .replace(/~~~[\s\S]*?~~~/g, ` ${t("system:voice.codeOmitted")} `)
       // images → alt text, links → label
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -193,7 +177,7 @@ export class LevelMeter {
 
   constructor(source: MediaStream | HTMLAudioElement) {
     const Ctor = audioContextCtor();
-    if (!Ctor) throw new Error("Web Audio is not available");
+    if (!Ctor) throw new Error(t("system:voice.noWebAudio"));
     this.ctx = new Ctor();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512;
@@ -263,7 +247,7 @@ export async function startDictation(opts: DictationOptions): Promise<DictationH
   }
   if (!canRecord()) {
     if (Recognition) return startRecognition(Recognition, opts);
-    throw new Error("Voice input isn't supported here.");
+    throw new Error(t("system:voice.inputUnsupported"));
   }
   return startRecorder(opts);
 }
@@ -275,8 +259,8 @@ async function openMic(): Promise<MediaStream> {
     });
   } catch (e) {
     const name = (e as { name?: string })?.name;
-    if (name === "NotAllowedError" || name === "SecurityError") throw new Error("Microphone access was denied. Allow it in your system settings.");
-    if (name === "NotFoundError") throw new Error("No microphone found.");
+    if (name === "NotAllowedError" || name === "SecurityError") throw new Error(t("system:voice.micDenied"));
+    if (name === "NotFoundError") throw new Error(t("system:voice.noMic"));
     throw e instanceof Error ? e : new Error(String(e));
   }
 }
@@ -383,10 +367,10 @@ function startRecognition(Recognition: SpeechRecognitionCtor, opts: DictationOpt
       cleanupMeter();
       const msg =
         e.error === "not-allowed" || e.error === "service-not-allowed"
-          ? "Microphone or speech recognition access was denied."
+          ? t("system:voice.recognitionDenied")
           : e.error === "audio-capture"
-            ? "No microphone found."
-            : `Speech recognition failed (${e.error}).`;
+            ? t("system:voice.noMic")
+            : t("system:voice.recognitionFailed", { error: e.error });
       const err = new Error(msg);
       if (started) opts.onError(err);
       else reject(err);
@@ -473,7 +457,10 @@ async function startRecorder(opts: DictationOptions): Promise<DictationHandle> {
     opts.onPhase?.("transcribing");
     try {
       const blob = new Blob(chunks, { type: mime || chunks[0]?.type || "audio/webm" });
-      const text = await transcribe(blob, ext, opts.settings?.language);
+      const text =
+        opts.settings?.sttProvider === "hex"
+          ? await transcribe(await toWav(blob), "wav", opts.settings.language)
+          : await transcribe(blob, ext, opts.settings?.language);
       opts.onFinal(text.trim());
     } catch (e) {
       opts.onError(e instanceof Error ? e : new Error(String(e)));
@@ -493,6 +480,41 @@ async function startRecorder(opts: DictationOptions): Promise<DictationHandle> {
       else release();
     },
   };
+}
+
+const WAV_RATE = 16_000;
+const MIN_WAV_SECONDS = 1.6;
+
+export async function toWav(blob: Blob): Promise<Blob> {
+  const ctx = new OfflineAudioContext(1, 1, WAV_RATE);
+  const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  const frames = Math.max(Math.ceil(decoded.duration * WAV_RATE), Math.ceil(MIN_WAV_SECONDS * WAV_RATE));
+  const render = new OfflineAudioContext(1, frames, WAV_RATE);
+  const source = render.createBufferSource();
+  source.buffer = decoded;
+  source.connect(render.destination);
+  source.start();
+  const samples = (await render.startRendering()).getChannelData(0);
+  const out = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const ascii = (at: number, text: string) => [...text].forEach((c, i) => out.setUint8(at + i, c.charCodeAt(0)));
+  ascii(0, "RIFF");
+  out.setUint32(4, 36 + samples.length * 2, true);
+  ascii(8, "WAVE");
+  ascii(12, "fmt ");
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, WAV_RATE, true);
+  out.setUint32(28, WAV_RATE * 2, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  ascii(36, "data");
+  out.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]!));
+    out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Blob([out.buffer], { type: "audio/wav" });
 }
 
 /** Send recorded audio to the core for transcription (keeps the real container extension). */
@@ -628,7 +650,7 @@ function speakServer(text: string, opts: SpeakOptions): { done: Promise<void>; s
       .then(async (blob) => {
         if (stopped) return resolve();
         if (!(blob instanceof Blob) || blob.size === 0 || (blob.type && !blob.type.startsWith("audio/") && blob.type !== "application/octet-stream")) {
-          throw new Error("The voice service returned no audio.");
+          throw new Error(t("system:voice.noAudio"));
         }
         url = URL.createObjectURL(blob);
         audio = new Audio(url);
@@ -638,7 +660,7 @@ function speakServer(text: string, opts: SpeakOptions): { done: Promise<void>; s
         };
         audio.onerror = () => {
           cleanup();
-          reject(new Error("Could not play the reply audio."));
+          reject(new Error(t("system:voice.playFailed")));
         };
         if (opts.onLevel) {
           try {
@@ -687,7 +709,7 @@ export async function speak(text: string, settings: VoiceSettings | undefined, o
   };
 
   if (provider === "browser") {
-    if (!canSpeakInBrowser()) throw new Error("Speech synthesis isn't available here.");
+    if (!canSpeakInBrowser()) throw new Error(t("system:voice.synthesisUnavailable"));
     return run(speakBrowser(clean, settings, opts));
   }
   try {

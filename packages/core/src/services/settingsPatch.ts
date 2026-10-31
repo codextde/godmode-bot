@@ -1,10 +1,11 @@
-import type { CaptchaSolver, Effort, InterfaceMode, Theme } from "@godmode/shared";
-import { CAPTCHA_SOLVERS, EFFORT_OPTIONS, INTERFACE_MODES, THEMES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
+import type { AppLanguage, CaptchaSolver, Effort, InterfaceMode, Palette, Theme, TimeFormat } from "@godmode/shared";
+import { APP_LANGUAGES, CAPTCHA_SOLVERS, TIME_FORMATS, EFFORT_OPTIONS, INTERFACE_MODES, PALETTES, THEMES, MAX_INSTRUCTIONS_LENGTH, MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, POWER_MIN_BATTERY_OPTIONS, isClockTime, isModelId, isValidBranch, modelProvider, parseGitUrl, toE164 } from "@godmode/shared";
 import { isAbsolute } from "node:path";
 import { isPremiumNumber } from "../calls/numbers";
 import { get } from "../db";
 import { badRequest } from "../util";
 import { isValidDreamSchedule } from "../memory/dreaming";
+import { expandHome } from "./folders";
 import { DEFAULT_SETTINGS, getSettings } from "./settings";
 
 const CLOUD_SWITCHES = ["enabled", "browserAccess", "phoneAccess", "allowSecrets"];
@@ -19,16 +20,22 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   // Making "reveal" the default secret access for new agents needs a fresh passphrase confirmation.
   const security = patch.security as { defaultSecretAccess?: unknown } | undefined;
   if (security?.defaultSecretAccess === "reveal" && getSettings().security.defaultSecretAccess !== "reveal") needsGrant();
-  const { mode, theme } = (patch.general ?? {}) as { mode?: unknown; theme?: unknown };
+  const { mode, theme, palette, language, timeFormat } = (patch.general ?? {}) as { mode?: unknown; theme?: unknown; palette?: unknown; language?: unknown; timeFormat?: unknown };
   if (mode !== undefined && !INTERFACE_MODES.includes(mode as InterfaceMode)) throw badRequest(`general.mode must be one of ${INTERFACE_MODES.join(", ")}`);
   if (theme !== undefined && !THEMES.includes(theme as Theme)) throw badRequest(`general.theme must be one of ${THEMES.join(", ")}`);
-  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown; spendTracking?: unknown } | undefined;
+  if (palette !== undefined && !PALETTES.includes(palette as Palette)) throw badRequest(`general.palette must be one of ${PALETTES.join(", ")}`);
+  if (language !== undefined && !APP_LANGUAGES.includes(language as AppLanguage)) throw badRequest(`general.language must be one of ${APP_LANGUAGES.join(", ")}`);
+  if (timeFormat !== undefined && !TIME_FORMATS.includes(timeFormat as TimeFormat)) throw badRequest(`general.timeFormat must be one of ${TIME_FORMATS.join(", ")}`);
+  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
   const instructions = runner?.appendSystemPrompt;
   if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
     throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
   }
   if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
-  if (runner?.spendTracking !== undefined && typeof runner.spendTracking !== "boolean") throw badRequest("runner.spendTracking must be true or false");
+  const configDir = (runner as { claudeConfigDir?: unknown } | undefined)?.claudeConfigDir;
+  if (configDir !== undefined && (typeof configDir !== "string" || (configDir.trim() !== "" && !isAbsolute(expandHome(configDir.trim()))))) {
+    throw badRequest("runner.claudeConfigDir must be an absolute path, a path starting with ~, or empty");
+  }
   const { effort, model, fallbackModel } = (runner ?? {}) as { effort?: unknown; model?: unknown; fallbackModel?: unknown };
   if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
   for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {
@@ -39,10 +46,6 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const compactAt = (runner as { autoCompactPercent?: unknown } | undefined)?.autoCompactPercent;
   if (compactAt !== undefined && compactAt !== null && !(typeof compactAt === "number" && Number.isInteger(compactAt) && compactAt >= 0 && compactAt <= 95)) {
     throw badRequest("Auto-compress must be a whole percent between 0 (off) and 95, or empty for Claude Code's own threshold");
-  }
-  const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
-  if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
-    throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");
   }
   const memory = patch.memory as { dreaming?: unknown } | undefined;
   if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");
@@ -115,7 +118,7 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
       throw badRequest("The adb binary must be an absolute path (or empty)");
     }
   }
-  for (const feature of ["artifacts", "integrations", "messaging"] as const) {
+  for (const feature of ["artifacts", "integrations", "messaging", "activity", "plugins", "cards", "ssh"] as const) {
     const value = patch[feature] as Record<string, unknown> | undefined;
     if (isObject(value) && value.enabled !== undefined && typeof value.enabled !== "boolean") throw badRequest(`${feature}.enabled must be true or false`);
   }

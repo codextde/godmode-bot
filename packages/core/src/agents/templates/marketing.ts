@@ -17,7 +17,7 @@ const MARKETING_JOBS = [
 ];
 
 const AD_MONEY =
-  "Spending money is the human's call: launching or re-enabling a campaign, raising a budget or adding a payment method needs their OK with a hard total cap and a kill rule (request_approval). Pausing a campaign that breaks the agreed kill rule is fine; say so in your report.";
+  "Spending money is the human's call: launching or re-enabling a campaign, raising a budget or adding a payment method needs their OK with a hard total cap and a kill rule (request_approval when you have it; otherwise stop before that step and say what needs approval). Pausing a campaign that breaks the agreed kill rule is fine; say so in your report.";
 
 const APPROVAL = "Nothing goes public (posts, replies, emails, ads) without the human's approval of that exact content.";
 

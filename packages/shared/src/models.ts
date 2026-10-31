@@ -31,6 +31,8 @@ export interface Workspace {
   icon: string; // emoji or lucide icon name
   /** Agent context: standing instructions for every agent in this workspace, on every run. */
   instructions: string;
+  /** Claude accounts the workspace's runs use; null = Godmode's (Settings → Claude accounts). */
+  claudeAccounts: WorkspaceClaudeAccounts | null;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
   /** The workspace's default browser profile (unless an agent pins its own). null = the global default. */
@@ -141,10 +143,6 @@ export interface AgentPermissions {
   credentialIds: ID[] | null;
   /** TOTP ids the agent may use. `null` = every TOTP in its scope. */
   totpIds: ID[] | null;
-  /** Hard cost cap per run in USD (passed to claude --max-budget-usd). null = unlimited */
-  maxBudgetUsd: number | null;
-  /** What the agent may cost per calendar month in USD; used up = its unattended work waits. null = no budget. Human-only. */
-  monthlyBudgetUsd?: number | null;
 }
 
 export interface AgentBrowserConfig {
@@ -212,8 +210,6 @@ export interface Agent {
   pausedRuns?: number;
   /** Runs of the agent that wait for the human's answer (see AgentQuestion). They are not part of `pausedRuns`. */
   openQuestions?: number;
-  /** Runs of the agent held because a monthly budget is used up. They are not part of `pausedRuns`. */
-  heldRuns?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -448,23 +444,18 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
 
 /**
  * `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run · `question`: the run asked the
- * human something and waits for the answer (see AgentQuestion) · `budget`: unattended work held because a monthly budget
- * is used up (see PauseBudget).
+ * human something and waits for the answer (see AgentQuestion).
  */
-export type PauseReason = "user" | "limit" | "question" | "budget";
+export type PauseReason = "user" | "limit" | "question";
 
 /** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
 export type RetryMode = "continue" | "again";
 
-/** What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, or Claude Code failing on its own. */
-export type RetryCause = "restart" | "offline" | "error";
-
-/** Whose monthly budget holds a run: the agent's own, or the whole team's. */
-export interface PauseBudget {
-  scope: "agent" | "team";
-  /** The monthly budget in USD when the run was held. */
-  limitUsd: number;
-}
+/**
+ * What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, Claude Code failing on its own,
+ * or background work the end of the turn stopped.
+ */
+export type RetryCause = "restart" | "offline" | "error" | "background" | "unfinished";
 
 /** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
 export interface RunPause {
@@ -479,9 +470,6 @@ export interface RunPause {
   auto: boolean;
   /** Question pauses: what the human is asked. Answering it is the only way to continue the run. */
   question?: Pick<AgentQuestion, "id" | "kind" | "title"> | null;
-  /** Budget pauses: which budget holds it. It continues by itself on the 1st of next month (`resumeAt`) or once the
-   *  budget has room again, or now when the human lets it run. */
-  budget?: PauseBudget | null;
 }
 
 /** `question`: the agent asks something, with suggested answers · `approval`: it asks for an OK before one specific step. */
@@ -632,7 +620,7 @@ export type MessageBlock =
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
-  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate; budget?: PauseBudget | null }
+  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate }
   /**
    * What the agent asked the human at this point of the turn (see AgentQuestion; `id` is the question's). A snapshot
    * that needs no lookup: it is `open` from the moment the agent asks — the run stands still for it a moment later,
@@ -678,6 +666,7 @@ export interface ToolTask {
   lastTool?: string;
   /** A subagent's final report, from Claude Code's notification that it ended. */
   summary?: string;
+  model?: string;
 }
 
 export interface ToolTaskAgent {
@@ -764,6 +753,7 @@ export interface Run {
   prompt: string;
   result: string | null;
   error: string | null;
+  /** What Claude Code reported, kept for device-group mirroring only: never shown (Godmode runs on a Claude subscription). */
   costUsd: number | null;
   durationMs: number | null;
   numTurns: number | null;
@@ -1351,8 +1341,21 @@ export const INTERFACE_MODES: readonly InterfaceMode[] = ["easy", "pro"];
 export type Theme = "light" | "dark" | "system";
 export const THEMES: readonly Theme[] = ["light", "dark", "system"];
 
+/** The colours the app is painted in; each has a light and a dark side, picked by the theme. */
+export type Palette = "paper" | "graphite" | "nord" | "solarized" | "rose" | "forest" | "ocean" | "dracula";
+export const PALETTES: readonly Palette[] = ["paper", "graphite", "nord", "solarized", "rose", "forest", "ocean", "dracula"];
+
+/** The language the apps are shown in; "system" follows each device's own language. */
+export type AppLanguage = "system" | "en" | "de";
+export const APP_LANGUAGES: readonly AppLanguage[] = ["system", "en", "de"];
+
+/** How clock times read: "system" follows each device's region (24-hour in Germany, 12-hour in the US). */
+export type TimeFormat = "system" | "24h" | "12h";
+export const TIME_FORMATS: readonly TimeFormat[] = ["system", "24h", "12h"];
+
 export interface GeneralSettings {
   theme: Theme;
+  palette: Palette;
   /** How much of Godmode the dashboard shows at once; every feature stays in both. */
   mode: InterfaceMode;
   accent: string;
@@ -1361,7 +1364,8 @@ export interface GeneralSettings {
   launchAtLogin: boolean;
   minimizeToTray: boolean;
   desktopNotifications: boolean;
-  language: string;
+  language: AppLanguage;
+  timeFormat: TimeFormat;
 }
 
 /** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */
@@ -1374,6 +1378,7 @@ export interface CompactInfo {
 export interface RunnerSettings {
   /** Path to claude CLI; empty = auto-detect */
   claudePath: string;
+  claudeConfigDir: string;
   model: string;
   fallbackModel: string;
   effort: Effort;
@@ -1389,7 +1394,11 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
-  /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start. */
+  /** With more than one Claude account: move to another one when the one in use runs low or hits a limit. */
+  accountAutoSwitch: boolean;
+  /** Usage (percent of the session or weekly limit, whichever is higher) at which runs move to another account. */
+  accountSwitchPercent: number;
+  /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start; so does background work the end of a turn stopped. */
   resumeAfterRestart: boolean;
   /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
   watchdog: boolean;
@@ -1402,14 +1411,6 @@ export interface RunnerSettings {
    * 0 = never by itself (only /compress), null = Claude Code's own threshold (close to full).
    */
   autoCompactPercent: number | null;
-  /**
-   * Shows what runs cost in USD and enables budgets. Off (Claude subscription, where Claude Code's costs are API prices
-   * nobody pays): nothing about cost is shown and no budget applies. Costs are recorded either way.
-   */
-  spendTracking: boolean;
-  defaultMaxBudgetUsd: number | null;
-  /** What the whole team may cost per calendar month in USD; used up = unattended work waits. null = no budget. */
-  monthlyBudgetUsd: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;
@@ -1458,7 +1459,27 @@ export interface ComputerSettings {
   screenshotMaxSize: number;
 }
 
-export type SttProvider = "browser" | "openai";
+export type SttProvider = "browser" | "openai" | "hex";
+
+export const HEX_LANGUAGES = ["en", "de"] as const;
+export type HexLanguage = (typeof HEX_LANGUAGES)[number];
+
+export const HEX_MODELS = [
+  { id: "parakeet_v3", name: "Parakeet v3", sizeMb: 740 },
+  { id: "whisper_large_v3_turbo", name: "Whisper large-v3-turbo", sizeMb: 890 },
+  { id: "qwen3_asr06_b", name: "Qwen3-ASR 0.6B", sizeMb: 850 },
+  { id: "cohere_transcribe", name: "Cohere Transcribe", sizeMb: 2410 },
+] as const;
+
+export interface HexStatus {
+  path: string | null;
+  version: string | null;
+  model: string;
+  installed: boolean;
+  downloadBytes: number | null;
+  progress: { phase: "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
+  error: string | null;
+}
 export type TtsProvider = "browser" | "openai" | "elevenlabs";
 
 export interface VoiceSettings {
@@ -1470,6 +1491,8 @@ export interface VoiceSettings {
   language: string;
   openaiBaseUrl: string;
   sttModel: string;
+  hexPath: string;
+  hexModel: string;
   ttsModel: string;
   ttsVoice: string;
   elevenlabsVoiceId: string;
@@ -1580,6 +1603,26 @@ export interface MessagingSettings {
   enabled: boolean;
 }
 
+/** The Activity page: every run of every agent. Off only hides it; runs are still recorded. */
+export interface ActivitySettings {
+  enabled: boolean;
+}
+
+/** Claude Code plugins from the Plugins page: runs load them only while this is on. */
+export interface PluginSettings {
+  enabled: boolean;
+}
+
+/** Saved payment cards: agents may pay with them only while this is on. */
+export interface CardSettings {
+  enabled: boolean;
+}
+
+/** SSH servers agents sign in to: their tools only reach runs while this is on. */
+export interface SshSettings {
+  enabled: boolean;
+}
+
 export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
@@ -1650,12 +1693,17 @@ export interface Settings {
   vm: VmSettings;
   android: AndroidSettings;
   /**
-   * Optional features, off for new installs (Settings → Features). An install that already used one before the switch
-   * existed starts with it on (migration 105).
+   * Optional features, off for new installs (Settings → Features), Activity aside. An install that already used one
+   * before the switch existed starts with it on (migrations 105 and 108). Virtual machines (`vm`) and phone calls
+   * (`phone`) have their switch in their own section.
    */
   artifacts: ArtifactSettings;
   integrations: IntegrationSettings;
   messaging: MessagingSettings;
+  activity: ActivitySettings;
+  plugins: PluginSettings;
+  cards: CardSettings;
+  ssh: SshSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;
@@ -1751,6 +1799,66 @@ export interface ClaudeUpdateStatus {
   channel: ClaudeReleaseChannel;
   updateAvailable: boolean;
   checkedAt: ISODate;
+}
+
+export interface ClaudeUsageWindow {
+  percent: number;
+  resetsAt: ISODate | null;
+}
+
+export interface ClaudeUsage {
+  state: "ok" | "signed_out" | "unavailable";
+  fiveHour: ClaudeUsageWindow | null;
+  week: ClaudeUsageWindow | null;
+  plan: string | null;
+  checkedAt: ISODate;
+}
+
+/** The Claude Code login on this computer: always there, never removed (its id in lists and workspace settings). */
+export const SYSTEM_CLAUDE_ACCOUNT = "system";
+
+/**
+ * A Claude subscription Godmode can run agents with. The system one is Claude Code's own login on this computer; the
+ * others were signed in from Godmode and their tokens are kept in the vault, so `claude auth login` in a terminal never
+ * logs them out.
+ */
+export interface ClaudeAccount {
+  id: ID;
+  system: boolean;
+  email: string | null;
+  name: string | null;
+  organization: string | null;
+  /** "max", "pro", "team", … as Claude reports it. */
+  plan: string | null;
+  isDefault: boolean;
+  usage: ClaudeUsage | null;
+  /** A usage limit stopped a run on this account: other accounts go first until then. */
+  limitedUntil: ISODate | null;
+  /** Its sign-in ran out or was revoked: sign in again. */
+  needsSignIn: boolean;
+  lastUsedAt: ISODate | null;
+  addedAt: ISODate | null;
+}
+
+export interface ClaudeAccountLogin {
+  state: "idle" | "waiting" | "done" | "failed";
+  url: string | null;
+  message: string | null;
+  /** The account being signed in again; null = adding a new one. */
+  accountId: ID | null;
+}
+
+export interface ClaudeAccountsState {
+  accounts: ClaudeAccount[];
+  login: ClaudeAccountLogin;
+  /** The vault is locked: the accounts signed in from Godmode can't be used until it is unlocked. */
+  locked: boolean;
+}
+
+/** A workspace's own choice of Claude accounts: runs there use only these, starting with the default. */
+export interface WorkspaceClaudeAccounts {
+  ids: ID[];
+  defaultId: ID;
 }
 
 export interface ClaudeUpdateResult {

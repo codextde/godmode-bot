@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppWindow, CircleCheck, CircleDashed, Eye, EyeOff, KeyRound, RectangleEllipsis, ScrollText, Smartphone, Terminal, Usb, UserCheck, Wrench } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { AndroidSettings, Settings } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,6 +36,7 @@ function State({ ok, children }: { ok: boolean | null; children: React.ReactNode
 }
 
 export function AndroidSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch, patchAsync } = useSettingsPatch();
   const a = settings.android;
   const qc = useQueryClient();
@@ -44,18 +46,18 @@ export function AndroidSection({ settings }: { settings: Settings }) {
   const install = useMutation({
     mutationFn: api.android.install,
     onSuccess: (res) => {
-      if (res.ok) toast.success("adb is ready");
-      else toast.error("adb couldn't be installed", { description: res.output || undefined });
+      if (res.ok) toast.success(t("android.adbReady"));
+      else toast.error(t("android.adbInstallError"), { description: res.output || undefined });
       void qc.invalidateQueries({ queryKey: qk.android });
     },
-    onError: (e) => toastApiError(e, "adb couldn't be installed", qc),
+    onError: (e) => toastApiError(e, t("android.adbInstallError"), qc),
   });
   const set = (p: Partial<AndroidSettings>) => patch({ android: p });
   const ensureGrant = useVaultGrant();
   const setVaultFill = async (vaultFill: boolean) => {
     if (vaultFill) {
       try {
-        await ensureGrant("Enter your vault passphrase to let agents type your logins and 2FA codes into phones.");
+        await ensureGrant(t("android.grantReason"));
       } catch {
         return;
       }
@@ -72,44 +74,44 @@ export function AndroidSection({ settings }: { settings: Settings }) {
     <FeatureSection
       feature="android"
       settings={settings}
-      title="Android phones"
-      summary="Agents use real Android phones and emulators connected to this computer by USB or Wi-Fi: they see the screen, tap, type, open apps and run shell commands."
+      title={t("android.title")}
+      summary={t("android.summary")}
       icon={<Smartphone />}
       points={[
-        { icon: <Usb />, text: "Phones and emulators over USB or Wi-Fi" },
-        { icon: <Eye />, text: "Watch live and take over any time" },
-        { icon: <UserCheck />, text: "Only the agents and chats you give a phone" },
+        { icon: <Usb />, text: t("android.pointUsb") },
+        { icon: <Eye />, text: t("android.pointWatch") },
+        { icon: <UserCheck />, text: t("android.pointAccess") },
       ]}
     >
       <div className="space-y-8">
         <AndroidOverview />
         <div className="space-y-5">
           {s?.error && (
-            <Callout tone="warning" title="Godmode can't list the phones">
+            <Callout tone="warning" title={t("android.listError")}>
               {s.error}
             </Callout>
           )}
           <SettingsGroup
-            title="Logins and 2FA codes"
+            title={t("vms.fill.title")}
             icon={<KeyRound />}
-            description="Let agents sign in to apps and websites on a phone with the logins and 2FA codes from your vault."
+            description={t("android.fill.description")}
           >
             <SettingRow
-              label="Type logins and 2FA codes into phones"
+              label={t("android.fill.label")}
               htmlFor="android-vault-fill"
-              description="Godmode types saved logins into password fields on the phone. Whatever is typed on a phone can be read through its shell, so only agents you allow to see passwords get this; the others ask you to sign in on the phone. Turning this on asks for your vault passphrase."
+              description={t("android.fill.labelDescription")}
             >
               <Switch id="android-vault-fill" checked={a.vaultFill} onCheckedChange={(on) => void setVaultFill(on)} />
             </SettingRow>
-            <ul aria-label="How it works" className="flex flex-wrap gap-2 py-3.5">
-              <Fact icon={<EyeOff />}>Only agents that may see passwords</Fact>
-              <Fact icon={<RectangleEllipsis />}>Passwords only into password fields</Fact>
-              <Fact icon={<ScrollText />}>Every fill audited</Fact>
+            <ul aria-label={t("vms.fill.howItWorks")} className="flex flex-wrap gap-2 py-3.5">
+              <Fact icon={<EyeOff />}>{t("android.fill.factAgents")}</Fact>
+              <Fact icon={<RectangleEllipsis />}>{t("vms.fill.factPasswords")}</Fact>
+              <Fact icon={<ScrollText />}>{t("vms.fill.factAudited")}</Fact>
               <Fact icon={<AppWindow />} caution>
-                Not bound to an app
+                {t("android.fill.factApp")}
               </Fact>
               <Fact icon={<Terminal />} caution>
-                Readable through the shell
+                {t("android.fill.factShell")}
               </Fact>
             </ul>
           </SettingsGroup>
@@ -117,42 +119,42 @@ export function AndroidSection({ settings }: { settings: Settings }) {
           <SettingsGroup
             title="adb"
             icon={<Wrench />}
-            description="Android Debug Bridge, from Google's platform-tools. Godmode reaches the phones through it."
+            description={t("android.adb.description")}
             actions={
               s && !s.adb.installed && s.canInstall ? (
                 <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending}>
-                  {install.isPending && <Spinner />} {install.isPending ? "Installing…" : "Install"}
+                  {install.isPending && <Spinner />} {install.isPending ? t("computer.cua.installing") : t("computer.cua.install")}
                 </Button>
               ) : undefined
             }
           >
-            <InfoRow label="Status">
+            <InfoRow label={t("computer.cua.status")}>
               {s ? (
                 <State ok={s.adb.installed}>
                   {s.adb.installed
-                    ? [s.adb.version ? `adb ${s.adb.version}` : "Installed", s.adb.managed ? "Godmode's own copy" : "found on this computer"].join(" · ")
+                    ? [s.adb.version ? `adb ${s.adb.version}` : t("vms.tart.installed"), s.adb.managed ? t("vms.tart.ownCopy") : t("android.adb.found")].join(" · ")
                     : s.canInstall
-                      ? "Not installed — Godmode can download it from Google"
-                      : "Not installed — install Android's platform-tools"}
+                      ? t("android.adb.notInstalledCanInstall")
+                      : t("android.adb.notInstalled")}
                 </State>
               ) : (
-                <State ok={null}>Checking…</State>
+                <State ok={null}>{t("vms.tart.checking")}</State>
               )}
             </InfoRow>
             {s?.adb.path && (
-              <InfoRow label="Binary" mono>
+              <InfoRow label={t("vms.tart.binary")} mono>
                 <span className="break-all">{short(s.adb.path)}</span>
               </InfoRow>
             )}
             <SettingRow
-              label="Custom adb binary"
+              label={t("android.adb.custom")}
               htmlFor="android-adb-path"
-              description="Leave empty to use the one from the Android SDK, your PATH or Homebrew, else Godmode's own copy."
+              description={t("android.adb.customDescription")}
             >
               <CommitInput
                 id="android-adb-path"
                 className="w-72 font-mono text-[13px]"
-                placeholder="Found automatically"
+                placeholder={t("android.adb.auto")}
                 value={a.adbPath}
                 onCommit={saveAdbPath}
               />

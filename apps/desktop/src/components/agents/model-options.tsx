@@ -1,5 +1,6 @@
 import type { ClaudeModel } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
 import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
 
 function Item({ model }: { model: ClaudeModel }) {
@@ -16,6 +17,7 @@ function Item({ model }: { model: ClaudeModel }) {
  * special case, plus an unknown current id. `claudeOnly` leaves GLM out (subagents share their run's provider).
  */
 export function ModelOptions({ models: all, current, claudeOnly }: { models: ClaudeModel[]; current?: string; claudeOnly?: boolean }) {
+  const { t } = useTranslation("agents");
   const models = all.filter((m) => !m.provider);
   const special = claudeOnly ? [] : all.filter((m) => m.provider);
   const older = models.filter((m) => !m.latest);
@@ -28,7 +30,7 @@ export function ModelOptions({ models: all, current, claudeOnly }: { models: Cla
         ))}
       {older.length > 0 && (
         <SelectGroup>
-          <SelectLabel>Older models</SelectLabel>
+          <SelectLabel>{t("modelOptions.olderModels")}</SelectLabel>
           {older.map((m) => (
             <SelectItem key={m.id} value={m.id}>
               {m.label}
@@ -38,7 +40,7 @@ export function ModelOptions({ models: all, current, claudeOnly }: { models: Cla
       )}
       {special.length > 0 && (
         <SelectGroup>
-          <SelectLabel>Special tasks</SelectLabel>
+          <SelectLabel>{t("modelOptions.specialTasks")}</SelectLabel>
           {special.map((m) => (
             <Item key={m.id} model={m} />
           ))}

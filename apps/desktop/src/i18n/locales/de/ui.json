@@ -1,0 +1,14 @@
+{
+  "loading": "Lädt",
+  "more": "Mehr",
+  "breadcrumb": "Pfadnavigation",
+  "sidebar": {
+    "title": "Seitenleiste",
+    "description": "Zeigt die mobile Seitenleiste an.",
+    "toggle": "Seitenleiste ein- oder ausblenden"
+  },
+  "commandDialog": {
+    "title": "Befehlspalette",
+    "description": "Suche nach einem Befehl…"
+  }
+}

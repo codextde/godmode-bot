@@ -32,12 +32,14 @@ const S: Rule = "secrets";
 const refused = (message: string): Rule => ({ refused: message });
 
 /** Settings groups a cloud user may change. Machine, access and security settings stay on the computer; a new group is refused until it is added here. */
-const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer", "vm", "artifacts", "integrations", "messaging", "voice", "memory", "diagnostics", "onboardingComplete"]);
+const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer", "vm", "artifacts", "integrations", "messaging", "activity", "plugins", "ssh", "voice", "memory", "diagnostics", "onboardingComplete"]);
 
 /** The voice provider's address is where the vault's OpenAI key is sent: pointing it elsewhere needs allowSecrets. */
 const settingsGroups: Rule = (body) => {
   if (!Object.keys(body).every((k) => CLOUD_SETTINGS_GROUPS.has(k))) return { refused: SETTINGS_ONLY };
-  const baseUrl = asObject(body.voice).openaiBaseUrl;
+  const voice = asObject(body.voice);
+  if (voice.hexPath !== undefined && voice.hexPath !== getSettings().voice.hexPath) return { refused: SETTINGS_ONLY };
+  const baseUrl = voice.openaiBaseUrl;
   return baseUrl !== undefined && baseUrl !== getSettings().voice.openaiBaseUrl ? "secrets" : "allowed";
 };
 /** What an agent may do (its permissions) widens what reaches secrets: that needs allowSecrets. */
@@ -68,10 +70,18 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   // Signing Claude Code in picks the account every agent on the computer runs on: only its owner does that from afar
   // (the sign-in page opens on the phone and its code comes back here).
   ["GET", "/api/doctor/claude-login", A],
+  ["GET", "/api/doctor/claude-usage", A],
   ["POST|DELETE", "/api/doctor/claude-login", "owner"],
   ["POST", "/api/doctor/claude-login/code", "owner"],
   // Copies the link to the computer's clipboard, which is out of reach from afar.
   ["POST", "/api/doctor/claude-login/copy", refused(COMPUTER_ONLY)],
+  // More Claude accounts: which subscriptions the computer's agents run on is the owner's call, like signing in.
+  ["GET", "/api/claude-accounts", A],
+  ["POST", "/api/claude-accounts/refresh", A],
+  ["POST|DELETE", "/api/claude-accounts/login", "owner"],
+  ["POST", "/api/claude-accounts/login/code", "owner"],
+  ["POST", "/api/claude-accounts/:id/default", "owner"],
+  ["DELETE", "/api/claude-accounts/:id", "owner"],
   // Settings → System: reading the state is fine from anywhere; changing macOS permissions or the machine's tools
   // happens on the computer itself.
   ["GET", "/api/doctor/permissions", A],
@@ -180,9 +190,11 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/routines/:id/webhook/rotate", A],
   ["GET", "/api/automation-events", A],
 
+  ["GET", "/api/search", A],
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
   ["POST", "/api/conversations/read", A],
+  ["POST", "/api/conversations/unread", A],
   ["POST", "/api/conversations/:id/retry", A],
   ["POST", "/api/conversations/:id/move-here", A],
   ["POST", "/api/conversations/:id/move", A],
@@ -209,6 +221,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/missing-logins/:id/link-totp", S],
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
+  ["GET", "/api/files/text", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/mcp-servers", A],
@@ -282,6 +295,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET|POST", "/api/goals", A],
   ["PATCH|DELETE", "/api/goals/:id", A],
   ["GET", "/api/tasks/:id/events", A],
+  ["GET", "/api/github/pull", A],
+  ["POST", "/api/github/pull/merge", A],
   // Questions agents ask before they act: reading and answering them is ordinary use of the dashboard.
   // Runners: seeing them is fine from anywhere. Copying the setup (logins, 2FA, sessions) to them, updating and
   // removing them, and the runner's own link API (/api/link/*, which includes running commands) stay on the
@@ -403,6 +418,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/backup/import", S],
   ["POST", "/api/voice/transcribe", A],
   ["POST", "/api/voice/speak", A],
+  ["GET", "/api/voice/hex", A],
+  ["POST", "/api/voice/hex/prepare", A],
   ["GET", "/api/calls", A],
   ["POST", "/api/calls", refused(COMPUTER_ONLY)],
   ["GET", "/api/calls/setup", A],
@@ -439,10 +456,6 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/license", "owner"],
   ["POST", "/api/license/refresh", "owner"],
   ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
-  // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
-  ["GET", "/api/spend", A],
-  ["GET", "/api/budgets", A],
-  ["POST", "/api/budgets/release", A],
 ];
 
 /** Writes a viewer may make: resolving a chat's files and looking at an agent's before a delete change nothing. */

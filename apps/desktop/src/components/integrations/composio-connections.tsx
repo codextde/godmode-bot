@@ -3,12 +3,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { formatDistanceToNow } from "date-fns";
 import { Bot, Globe2, Layers, Link2, RefreshCw, Unplug } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { ComposioConnection, ComposioToolkit } from "@godmode/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { useLocale } from "@/i18n/language";
 import { api } from "@/lib/api";
 import { useAllAgents, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -26,15 +28,16 @@ export function connectionTone(status: string): "ok" | "pending" | "error" | "ne
 }
 
 export function ConnectionStatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation("integrations");
   const tone = connectionTone(status);
   const upper = status.toUpperCase();
   const label =
     tone === "ok"
-      ? "Active"
+      ? t("connections.status.active")
       : tone === "pending"
-        ? "Waiting for sign-in"
+        ? t("connections.status.pending")
         : upper === "DELETED"
-          ? "Deleted upstream"
+          ? t("connections.status.deleted")
           : status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
   return (
     <Badge
@@ -61,6 +64,8 @@ interface Group {
 
 /** Connected Composio accounts grouped by who can use them. */
 export function ComposioConnections({ connections, toolkits }: { connections: ComposioConnection[]; toolkits: Record<string, ComposioToolkit> }) {
+  const { t } = useTranslation(["integrations", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const { data: workspaces = [] } = useWorkspaces();
   const { data: agents = [] } = useAllAgents();
@@ -77,23 +82,23 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
         const a = agents.find((x) => x.id === c.agentId);
         ensure(`agent:${c.agentId}`, () => ({
           key: `agent:${c.agentId}`,
-          label: a?.name ?? "Agent",
+          label: a?.name ?? t("common:words.agent"),
           icon: a ? <AgentAvatar agent={a} size="sm" /> : <Bot className="size-4" />,
         })).items.push(c);
       } else if (c.workspaceId) {
         const w = workspaces.find((x) => x.id === c.workspaceId);
         ensure(`ws:${c.workspaceId}`, () => ({
           key: `ws:${c.workspaceId}`,
-          label: w?.name ?? "Workspace",
+          label: w?.name ?? t("scope.workspace"),
           icon: w?.icon ? <span className="text-sm">{w.icon}</span> : <Layers className="size-4" />,
         })).items.push(c);
       } else {
-        ensure("global", () => ({ key: "global", label: "Global — every agent", icon: <Globe2 className="size-4" /> })).items.push(c);
+        ensure("global", () => ({ key: "global", label: t("connections.globalGroup"), icon: <Globe2 className="size-4" /> })).items.push(c);
       }
     }
     const order = (k: string) => (k === "global" ? 0 : k.startsWith("ws:") ? 1 : 2);
     return [...map.values()].sort((a, b) => order(a.key) - order(b.key) || a.label.localeCompare(b.label));
-  }, [connections, agents, workspaces]);
+  }, [connections, agents, workspaces, t]);
 
   const disconnect = useMutation({
     mutationFn: (id: string) => api.composio.disconnect(id),
@@ -105,9 +110,9 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
     },
     onError: (e, _id, ctx) => {
       if (ctx?.prev) qc.setQueryData(qk.composioConnections, ctx.prev);
-      toastApiError(e, "Couldn't disconnect", qc);
+      toastApiError(e, t("connections.disconnectFailed"), qc);
     },
-    onSuccess: () => toast.success("Disconnected"),
+    onSuccess: () => toast.success(t("connections.disconnected")),
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: qk.composio });
       void qc.invalidateQueries({ queryKey: qk.mcpServers });
@@ -118,15 +123,15 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
     mutationFn: (id: string) => api.composio.refresh(id),
     onSuccess: (c) => {
       qc.setQueryData<ComposioConnection[]>(qk.composioConnections, (list) => list?.map((x) => (x.id === c.id ? c : x)));
-      toast(connectionTone(c.status) === "ok" ? "Connection is active" : `Status: ${c.status.toLowerCase()}`);
+      toast(connectionTone(c.status) === "ok" ? t("connections.isActive") : t("connections.statusToast", { status: c.status.toLowerCase() }));
     },
-    onError: (e) => toastApiError(e, "Couldn't refresh the connection", qc),
+    onError: (e) => toastApiError(e, t("connections.refreshFailed"), qc),
   });
 
   return (
-    <section aria-label="Connected accounts" className="space-y-3">
+    <section aria-label={t("connections.title")} className="space-y-3">
       <h2 className="eyebrow flex items-center gap-2">
-        <Link2 className="size-3.5" /> Connected accounts
+        <Link2 className="size-3.5" /> {t("connections.title")}
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{connections.length}</span>
       </h2>
       <div className="grid grid-cols-1 gap-3 @3xl:grid-cols-2">
@@ -159,11 +164,16 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <p className="truncate text-xs text-muted-foreground">
-                              Connected {formatDistanceToNow(new Date(c.createdAt), { addSuffix: true })}
+                              {t("connections.connectedAgo", { ago: formatDistanceToNow(new Date(c.createdAt), { addSuffix: true, locale: dateLocale }) })}
                             </p>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Composio user <span className="font-mono">{c.userId}</span> · account <span className="font-mono">{c.connectedAccountId}</span>
+                            <Trans
+                              t={t}
+                              i18nKey="connections.accountInfo"
+                              values={{ user: c.userId, account: c.connectedAccountId }}
+                              components={{ code: <span className="font-mono" /> }}
+                            />
                           </TooltipContent>
                         </Tooltip>
                       </div>
@@ -173,14 +183,14 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                             <Button
                               size="icon-sm"
                               variant="ghost"
-                              aria-label={`Refresh ${name} status`}
+                              aria-label={t("connections.refreshAria", { name })}
                               onClick={() => refresh.mutate(c.id)}
                               disabled={refresh.isPending && refresh.variables === c.id}
                             >
                               <RefreshCw className={cn(refresh.isPending && refresh.variables === c.id && "animate-spin")} />
                             </Button>
                           </TooltipTrigger>
-                          <TooltipContent>Check status</TooltipContent>
+                          <TooltipContent>{t("connections.checkStatus")}</TooltipContent>
                         </Tooltip>
                       )}
                       <Tooltip>
@@ -189,13 +199,13 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
                             size="icon-sm"
                             variant="ghost"
                             className="text-muted-foreground opacity-70 group-hover:opacity-100 hover:text-destructive"
-                            aria-label={`Disconnect ${name}`}
+                            aria-label={t("connections.disconnectAria", { name })}
                             onClick={() => setPending(c)}
                           >
                             <Unplug />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>Disconnect</TooltipContent>
+                        <TooltipContent>{t("connections.disconnect")}</TooltipContent>
                       </Tooltip>
                     </motion.li>
                   );
@@ -208,9 +218,9 @@ export function ComposioConnections({ connections, toolkits }: { connections: Co
       <ConfirmDialog
         open={!!pending}
         onOpenChange={(o) => !o && setPending(null)}
-        title={`Disconnect ${pending ? (toolkits[pending.toolkit]?.name ?? prettySlug(pending.toolkit)) : ""}?`}
-        description="Agents in this scope immediately lose access to this account. You can reconnect it any time."
-        confirmLabel="Disconnect"
+        title={t("connections.disconnectTitle", { name: pending ? (toolkits[pending.toolkit]?.name ?? prettySlug(pending.toolkit)) : "" })}
+        description={t("connections.disconnectDescription")}
+        confirmLabel={t("connections.disconnect")}
         onConfirm={() => pending && disconnect.mutate(pending.id)}
       />
     </section>

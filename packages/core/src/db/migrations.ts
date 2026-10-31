@@ -75,6 +75,20 @@ WHERE key = 'android' AND json_valid(value) AND json_type(value, '$.enabled') IS
 `;
 
 /**
+ * Plugins, cards, SSH servers and virtual machines are off for new installs too. An install that already has one set
+ * up keeps it on: a plugin, a saved card, an SSH server, a VM (VMs were on by default). Idempotent, like
+ * FEATURE_SWITCHES_SQL; also run after a restore. Migration 109 embeds it.
+ */
+export const MODULE_SWITCHES_SQL = /* sql */ `
+INSERT OR IGNORE INTO settings (key, value) SELECT 'plugins', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM mods);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'cards', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM payment_cards);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'ssh', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM ssh_servers);
+INSERT OR IGNORE INTO settings (key, value) SELECT 'vm', '{"enabled":true}' WHERE EXISTS (SELECT 1 FROM vms);
+UPDATE settings SET value = json_set(value, '$.enabled', json(CASE WHEN EXISTS (SELECT 1 FROM vms) THEN 'true' ELSE 'false' END))
+WHERE key = 'vm' AND json_valid(value) AND json_type(value, '$.enabled') IS NULL;
+`;
+
+/**
  * Ordered, append-only SQL migrations. Never edit a shipped migration — add a new one.
  * JSON columns are stored as TEXT. Encrypted columns end with `_enc` and hold vault ciphertext.
  */
@@ -94,6 +108,72 @@ UPDATE settings SET value = json_set(value, '$.spendTracking', json(CASE
         AND (json_extract(permissions, '$.monthlyBudgetUsd') > 0 OR json_extract(permissions, '$.maxBudgetUsd') > 0))
     THEN 'true' ELSE 'false' END))
 WHERE key = 'runner' AND json_valid(value) AND json_type(value, '$.spendTracking') IS NULL;
+`;
+
+/**
+ * Godmode runs on a Claude subscription, so the costs Claude Code reports are no charges: spend tracking and budgets are
+ * gone. Their settings go, and work a budget held continues by itself (the pause sweep picks it up at startup; after a
+ * restore it waits for the human like every other pause). Idempotent; also run after a restore. Migration 109 embeds it.
+ */
+export const REMOVE_COSTS_SQL = /* sql */ `
+UPDATE settings SET value = json_remove(value, '$.spendTracking', '$.defaultMaxBudgetUsd', '$.monthlyBudgetUsd')
+WHERE key = 'runner' AND json_valid(value);
+UPDATE agents SET permissions = json_remove(permissions, '$.maxBudgetUsd', '$.monthlyBudgetUsd') WHERE json_valid(permissions);
+UPDATE paused_runs SET reason = 'user', budget_scope = NULL, budget_usd = NULL, exempt = 0, resume_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+  auto = CASE WHEN agent_id IN (SELECT id FROM agents WHERE enabled = 1) THEN 1 ELSE 0 END
+WHERE reason = 'budget';
+DELETE FROM meta WHERE key LIKE 'budget.told.%';
+`;
+
+export const SEARCH_REBUILD_SQL = /* sql */ `
+INSERT INTO search_messages(search_messages) VALUES ('rebuild');
+INSERT INTO search_titles(search_titles) VALUES ('rebuild');
+INSERT INTO search_tasks(search_tasks) VALUES ('rebuild');
+`;
+
+const SEARCH_TOKENIZER = `tokenize = 'unicode61 remove_diacritics 2', prefix = '2 3 4'`;
+
+const SEARCH_INDEX_SQL = /* sql */ `
+CREATE VIRTUAL TABLE search_messages USING fts5(content, content = 'messages', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_titles USING fts5(title, content = 'conversations', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_tasks USING fts5(title, description, content = 'tasks', content_rowid = 'rowid', ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_notes USING fts5(agent_id UNINDEXED, path UNINDEXED, line UNINDEXED, heading, body, ${SEARCH_TOKENIZER});
+CREATE VIRTUAL TABLE search_vocab USING fts5vocab(search_messages, 'row');
+
+CREATE TRIGGER search_messages_ai AFTER INSERT ON messages BEGIN
+  INSERT INTO search_messages(rowid, content) SELECT new.rowid, new.content WHERE new.content != '';
+END;
+CREATE TRIGGER search_messages_ad AFTER DELETE ON messages BEGIN
+  INSERT INTO search_messages(search_messages, rowid, content) SELECT 'delete', old.rowid, old.content WHERE old.content != '';
+END;
+CREATE TRIGGER search_messages_au AFTER UPDATE OF content ON messages BEGIN
+  INSERT INTO search_messages(search_messages, rowid, content) SELECT 'delete', old.rowid, old.content WHERE old.content != '';
+  INSERT INTO search_messages(rowid, content) SELECT new.rowid, new.content WHERE new.content != '';
+END;
+
+CREATE TRIGGER search_titles_ai AFTER INSERT ON conversations BEGIN
+  INSERT INTO search_titles(rowid, title) VALUES (new.rowid, new.title);
+END;
+CREATE TRIGGER search_titles_ad AFTER DELETE ON conversations BEGIN
+  INSERT INTO search_titles(search_titles, rowid, title) VALUES ('delete', old.rowid, old.title);
+END;
+CREATE TRIGGER search_titles_au AFTER UPDATE OF title ON conversations BEGIN
+  INSERT INTO search_titles(search_titles, rowid, title) VALUES ('delete', old.rowid, old.title);
+  INSERT INTO search_titles(rowid, title) VALUES (new.rowid, new.title);
+END;
+
+CREATE TRIGGER search_tasks_ai AFTER INSERT ON tasks BEGIN
+  INSERT INTO search_tasks(rowid, title, description) VALUES (new.rowid, new.title, new.description);
+END;
+CREATE TRIGGER search_tasks_ad AFTER DELETE ON tasks BEGIN
+  INSERT INTO search_tasks(search_tasks, rowid, title, description) VALUES ('delete', old.rowid, old.title, old.description);
+END;
+CREATE TRIGGER search_tasks_au AFTER UPDATE OF title, description ON tasks BEGIN
+  INSERT INTO search_tasks(search_tasks, rowid, title, description) VALUES ('delete', old.rowid, old.title, old.description);
+  INSERT INTO search_tasks(rowid, title, description) VALUES (new.rowid, new.title, new.description);
+END;
+
+${SEARCH_REBUILD_SQL}
 `;
 
 export const MIGRATIONS: { id: number; name: string; sql: string }[] = [
@@ -1764,5 +1844,40 @@ CREATE TABLE IF NOT EXISTS offers (
 CREATE INDEX IF NOT EXISTS idx_offers_status ON offers(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
 `,
+  },
+  {
+    id: 108,
+    name: "module_switches",
+    sql: MODULE_SWITCHES_SQL,
+  },
+  {
+    id: 109,
+    name: "remove_costs",
+    sql: REMOVE_COSTS_SQL,
+  },
+  {
+    id: 110,
+    name: "claude_accounts",
+    sql: /* sql */ `
+-- Claude subscriptions signed in from Godmode (their tokens live in the vault); the system login is not a row.
+CREATE TABLE IF NOT EXISTS claude_accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  name TEXT,
+  organization TEXT,
+  plan TEXT,
+  limited_until TEXT,
+  needs_sign_in INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL
+);
+-- JSON {ids, defaultId}: the Claude accounts a workspace's runs use; NULL = Godmode's.
+ALTER TABLE workspaces ADD COLUMN claude_accounts TEXT;
+`,
+  },
+  {
+    id: 111,
+    name: "search_index",
+    sql: SEARCH_INDEX_SQL,
   },
 ];

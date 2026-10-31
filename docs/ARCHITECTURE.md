@@ -231,7 +231,7 @@ claude -p --output-format stream-json --verbose --include-partial-messages
        --mcp-config <tmp json> --strict-mcp-config
        --append-system-prompt <godmode system prompt>
        [--resume <conversation.claudeSessionId> | --session-id <new uuid>]
-       [--max-budget-usd n] [--agents <subagents json>] [--fallback-model m]
+       [--agents <subagents json>] [--fallback-model m]
        --setting-sources project,local
        --settings <tmp json>                   (the message-queue hook, see below; `ultracode: true` with Ultracode;
                                                 `pluginConfigs` with the options of the run's plugins)
@@ -254,8 +254,8 @@ again: each block is masked and serialized once and made again only when it chan
 forgot a secret). A delta carries what changed (`patch`, see WebSocket); the row saved every few seconds while the run
 works is put together from the serialized blocks, less often the longer saving takes (never more than 1/50 of the time).
 Claude Code reports a run's cost as the total of its whole Claude session, so on a resumed session the chat's earlier
-runs are in it: the run is charged that total minus what the session had counted before
-(`conversations.claude_session_cost_usd`). A process can end more than once (a background task that finishes wakes it
+runs are in it: the run stores that total minus what the session had counted before
+(`conversations.claude_session_cost_usd`; stored only, see Costs). A process can end more than once (a background task that finishes wakes it
 for another turn); time, turns and tokens of the endings add up.
 Concurrency is limited by `settings.runner.maxConcurrentRuns` (queue). A per-conversation lock prevents
 two concurrent turns in the same conversation. Runs sharing a browser profile don't wait for each other: every chat
@@ -348,7 +348,7 @@ only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pau
 * **Continuing** (`POST /api/conversations/:id/continue`, `POST /api/agents/:id/continue`): the run goes back into the
   queue ahead of what waited behind it, with the blocks it had (`pause` blocks mark where it stood still), and the next
   `claude -p --resume` gets a `<godmode-continue>` note to pick the work up where it stopped instead of the prompt.
-  Cost, time, turns and tokens add up over the stretches (the budget is what is left); the raw run log is appended to.
+  Time, turns and tokens add up over the stretches; the raw run log is appended to.
   What never reached Claude (paused while queued or starting, a limit on the first request) is sent again — after a
   restart with saved secrets masked. When the session is gone, the new one gets the recap with the run's own task.
 * **A paused chat is frozen.** Runs that come after the paused one wait for it (also its follow-up). Messages wait in
@@ -366,7 +366,7 @@ only an answer continues it); `Conversation.paused`, `Task.pause` and `Agent.pau
 A chat's latest turn that failed or was cancelled — timed out, out of turns, stopped by the human, cut off by a restart,
 any error — can be picked up with one click (`POST /api/conversations/:id/retry { runId }`, `services/retries.ts`; the
 desktop shows it under the turn, the phone above the message box). It is a new `chat` run in the same chat, so it is
-queued, budgeted and reported like a message from the human:
+queued and reported like a message from the human:
 
 * **Continue** when the turn holds text, thinking or a tool step (Claude got the prompt) and the chat still has its
   Claude session: `--resume` with a `<godmode-continue>` note that says why it stopped and asks to finish without
@@ -402,6 +402,13 @@ restarted").
 * Something new in the chat since, a run already working there, a pause or an automation that already runs again
   (one chat per event) leave it alone; a turn continued three times in a row by itself (one that restarts Godmode) is
   left for the human, and so is what a restored backup marked interrupted (`leaveInterruptedWork`).
+* Background work still running when a turn ends (a subagent waiting on its own command) is stopped as Claude Code
+  exits. `cutOffBackgroundWork` (`runner/stream.ts`) finds it: tasks killed after the turn's last `result`
+  (`task_updated` with `patch.status` `killed`, `task_notification` with `status` `stopped`); what the agent stops
+  itself is stopped before that. After a turn that succeeded (chat, follow-up, call, API or automation; not a ticket's
+  or a handoff's), `continueStoppedBackground` gives the chat a `continue` turn with a `<godmode-continue>` note naming
+  the work and its subagent (`backgroundContext`, marker cause `background`: "Continued after background work was
+  stopped"), at most twice in a row without a new message from the human, under the same setting.
 * Managers continue what is left (older work, setting off) with the `run_continue` tool. They stop a run for good (a paused run that would repeat work already done, also on another computer of the group) with `run_cancel`.
 
 ### Questions and approvals
@@ -491,7 +498,7 @@ Deleting the chat withdraws its open tickets. Cloud and phone: listing, moving a
   state on every read — never from notifications, so an item leaves the moment the thing is handled anywhere: open
   questions and approvals, open missing logins (linked to the chat or ticket of the run that reported them), tickets
   to review and blocked ones, chats paused by the human or past a usage limit with nothing continuing them (on a runner:
-  from what it last said, `runner_state`), budget holds (one row per budget), chats whose latest run failed while
+  from what it last said, `runner_state`), chats whose latest run failed while
   nobody looked, automations whose own last run failed or that couldn't start (`last_status`), or whose own trigger is
   broken (not the shared app-event connection), and people asking a bot for access. Each item
   has a stable id (`<kind>:<id>`), who, what, since when, a link and its one action. Bootstrap carries
@@ -506,8 +513,7 @@ Deleting the chat withdraws its open tickets. Cloud and phone: listing, moving a
 * **While you were away** (`services/away.ts`, `GET /api/away?since=<ISO>&until=<ISO>`, Cloud: allowed; phone: closed).
   After at least two hours without the human's input (released pointer or key, wheel, in a focused window; the last time
   is kept per computer in `localStorage`, `lib/presence.ts`), Home shows what the team did from then until they came
-  back (at most 31 days): runs that ended (checks left out) and how many failed, tickets delivered (by whom), what the
-  work cost (the spend ledger), who worked, and up to six things worth a look — delivered tickets, problems (chats still
+  back (at most 31 days): runs that ended (checks left out) and how many failed, tickets delivered (by whom), who worked, and up to six things worth a look — delivered tickets, problems (chats still
   unread, and automations), then replies in chats still unread — one line per chat or automation. Runs are found
   through `idx_runs_finished` (migration 58). Closed with ×.
 * **Notices** (`services/runNotices.ts`). Such a run that nobody watched notifies once — "Mia replied in “Q4 plan”" /
@@ -517,37 +523,16 @@ Deleting the chat withdraws its open tickets. Cloud and phone: listing, moving a
   run succeeds again), `always`, or `never`; nothing when its chat is on screen. Toasts carry *Open* to the thing, and a
   notification about what is already on screen is marked read instead of popping up.
 
-## Spend and budgets
+## Costs
 
-* **Ledger.** `spend` (migration 52) has one row per stretch of a run — booked in `suspend` and `finalize` when the
-  stretch ends, with that stretch's own cost (`stretchCost`) and time — so money counts in the day and month it was
-  spent, also for a run that continues next month. No foreign keys: rows keep the agent's name and stay when an agent,
-  chat or run is deleted. `SPEND_BACKFILL_SQL` books older runs once (runs from before migration 30 count only what
-  they added to their chat's session) and runs again after a restore.
-* **Report.** `GET /api/spend?period=today|week|month|all&agentId=` (`services/spend.ts`): the four period totals (runs,
-  failed, cost, working time) and, for the chosen period, per agent (deleted ones by their stored name) and per kind of
-  work (`SPEND_KIND_OF`: chats, automations incl. checks, board tasks, handed-over work, follow-ups, dreams). Periods
-  start at local midnight, Monday and the 1st. `GET /api/usage` (Cloud billing) is separate. Managers read it through
-  `spend_overview`.
-* **Budgets.** `settings.runner.monthlyBudgetUsd` (team) and `permissions.monthlyBudgetUsd` (agent; human-only — an
-  agent's change is ignored), audited as `budget.set`. `services/budgets.ts` tells the human once per budget, month and
-  amount at 80 % and at 100 % (`checkThresholds` on `run.finished` / `run.paused`; meta `budget.told.*`).
-* **Held, not failed.** While the team's or the agent's budget is used up, `pump()` holds queued unattended runs —
-  automations, follow-ups, board tickets (`HELD_TRIGGERS`), and messages from Slack, Telegram or Teams (anyone in such a
-  channel could otherwise spend past the owner's budget; they're told the chat is on hold, no amounts) — as a pause with
-  reason `budget` (`paused_runs.budget_scope`, `budget_usd`), `resume_at` the 1st of next month and `auto = 1`. A run is
-  held only when it would start now (its chat has nothing working or standing still), so the hold is the chat's one
-  pause. The pause timer continues held runs on the 1st, and a changed budget amount continues those with room again
-  (`releaseHeld("auto")`; a run still held by the other budget gets its scope updated). The human lets them run from the
-  chat's bar, the budget meter or `POST /api/budgets/release` (audited `budget.release`/`budget.continue`; the run is
-  then exempt; `paused_runs.exempt`, migration 55, keeps that through later pauses). The human continuing any paused
-  run lets it run past a budget too. The agent's Continue and messages into the chat don't release a hold (a message
-  waits and goes along; *Send now* in the queue says it lets the run past the budget).
-  Runs the human starts — chats, *Run now*, a test event, a follow-up's *Continue now* (`byHuman`) — still run, and a
-  chat says once a month that a budget is used up. What such a run hands over is exempt too (`runExempt`). Unattended
-  work can't hand work to an agent whose budget is used up (`agent_delegate` refuses); scheduled
-  condition checks and dreams don't start. Automations skip their ticks meanwhile (recorded once). Checks happen when
-  work starts: a run already working finishes under its own per-run cap.
+Godmode runs on a Claude subscription, so the dollar figures Claude Code reports are no charges: nothing shows or
+returns them, and no budget caps or holds work. Runs still store what Claude Code reported (`runs.cost_usd`,
+`conversations.claude_session_cost_usd`, `tasks.cost_usd`; the `spend` ledger of migration 52 is no longer written) so
+device groups mirror runs unchanged. Migration 108 (`REMOVE_COSTS_SQL`, also run after a restore) drops the old
+settings (`runner.spendTracking`, `defaultMaxBudgetUsd`, `monthlyBudgetUsd`; agents' `maxBudgetUsd` and
+`monthlyBudgetUsd`) and turns runs a budget held (pause reason `budget`) into pauses that continue by themselves at the
+next start (`reason = 'user'`, `auto = 1`, `resume_at` now; a switched-off agent's wait for the human). Agents whose
+CLAUDE.md still names a per-run cap get it rewritten at startup.
 
 ## Team
 
@@ -609,7 +594,7 @@ the core, the desktop and the phone alike.
 | `browser_profile_create_own()` | Create an empty browser profile in the agent's workspace and pin it to the calling agent; only while it has none, applies from its next run |
 | `agents_list()`, `agent_get({id})` | Discover peer agents: role, who they report to (`relation` marks the caller's lead and reports), and for `agent_get` who reports to it (only agents the caller could reach) |
 | `agent_delegate({ agentId, task, wait })` | Hand a task to a peer agent (optionally wait for its result). The chat stores the bare task (`source: "delegation"`); the run's prompt starts with `[Delegated by <name> (<role>), your lead. Your final answer goes back to <name>.]` |
-| `agent_create`, `templates_list`, `team_install`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `run_cancel`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`; `agent_create({ template })` starts from a role template (unset fields come from it, its schedule comes back as `templateSchedule`), `templates_list` shows the roles and structures (seats with their paths for `skip`), and `team_install` hires a structure as the calling agent (no secret access or management rights for the new agents; refused in a run kept in a VM). `workspace_update` / `project_update` only add sources (`addSources`); removing sources, deleting, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's context follows the `agent_update` rules for every agent in it (reveal mode, computer use); changing a project's, for every agent working on it (its own agents, and those with a chat or ticket in it) — a new project has none. What a caller without raw secrets or computer use writes into a project is marked (`projects.fill_only` / `off_computer`): runs that get it go fill-only, agents that control the computer get it without description and instructions, until the human saves its instructions (lifting `fill_only` takes the vault passphrase) |
+| `agent_create`, `templates_list`, `team_install`, `agent_update`, `agent_delete`, `routine_list`, `routine_create`, `routine_update`, `routine_run`, `routine_delete`, `automation_triggers_list`, `automation_events_list`, `runs_list`, `run_continue`, `run_cancel`, `workspaces_list`, `workspace_create`, `workspace_update`, `project_create`, `project_update`, `project_delete`, `project_delete`, `tasks_list`, `task_get`, `task_create`, `task_update`, `task_message` | Management tools — only for agents with `canManageAgents` (the built-in *Godmode* agent). `agent_create` / `agent_update` also set `role` and `reportsTo`; `agent_create({ template })` starts from a role template (unset fields come from it, its schedule comes back as `templateSchedule`), `templates_list` shows the roles and structures (seats with their paths for `skip`), and `team_install` hires a structure as the calling agent (no secret access or management rights for the new agents; refused in a run kept in a VM). `workspace_update` / `project_update` only add sources (`addSources`); `project_delete` deletes a project like the app does (chats, tickets and agents stay in the workspace, clones go to the trash), refused while an agent the caller couldn't hand work to works on it; removing sources, deleting workspaces, VM, browser profile and auto-merge stay human-only. A run kept in a VM sets up no workspaces or projects (their instructions reach agents on the computer), and changing a workspace's context follows the `agent_update` rules for every agent in it (reveal mode, computer use); changing a project's, for every agent working on it (its own agents, and those with a chat or ticket in it) — a new project has none. What a caller without raw secrets or computer use writes into a project is marked (`projects.fill_only` / `off_computer`): runs that get it go fill-only, agents that control the computer get it without description and instructions, until the human saves its instructions (lifting `fill_only` takes the vault passphrase) |
 | `automation_check_result({ met, observation, summary })` | Only in condition-check runs: report whether an automation's condition holds (see Automations) |
 | `task_note({ text, taskId? })` | A progress note on the ticket the run works on (managers: any ticket); on its timeline, nobody is notified |
 | `ask_human({ question, context?, options? })`, `request_approval({ action, reason, affects })` | Ask the human a question or for an OK and stand still until the answer; the run continues with it (see Questions and approvals). Not in condition checks, dreams or delegated runs |
@@ -617,7 +602,7 @@ the core, the desktop and the phone alike.
 | `memory_dream_report({ summary, changes })` | Only in dream runs: report what a memory consolidation changed (see Dreaming) |
 | `workspace_tidy({ operations })` | Only in dream runs that tidy the workspace: move or discard entries of `workspace/` (see Dreaming) |
 | `plugins_list({ plugin? })`, `plugin_save({ plugin?, title, description?, files })`, `plugin_install({ source, ref?, plugin? })` | Only for agents with `canManageAgents`: the installed plugins (with `plugin`: one with its files), saving a small plugin the agent wrote as a draft, and installing one from a git repository — each arrives switched off, checked by Claude Code's validator, for the human to review (see Plugins). `plugin_save` only saves over an agent's own draft — never a plugin the human made, added, installed or has had on; `plugin_save` and `plugin_install` aren't offered on a runner |
-| `settings_get({ section? })`, `settings_update({ changes })` | Only for agents with `canManageAgents`, not on a runner: Godmode's own settings (models, effort, run limits, browser and computer behaviour, VMs, memory and dreaming, voice, upkeep, logs). `changes` is a partial object by section, checked like a change in the app and written to the audit log. Agents change only what `AGENT_SETTINGS` in `services/agentSettings.ts` lists, down to the single setting (`dreaming.model`); a new setting is closed until it is added there. Security, the server, phone and cloud access, self-repair, the user's name and the instructions for every agent (both reach reveal-mode agents), program paths, endpoints and extra CLI flags, permission bypass, the browser and computer control switches, live views, notifications, the watchdog, the VM switch and VM isolation, automatic cleanup and spending limits stay with the human. Not in a run kept in a VM. Connected apps: `settings_get` with any key, `settings_update` with full access, so `godmode call settings_update '{"changes":{...}}'` works from a terminal |
+| `settings_get({ section? })`, `settings_update({ changes })` | Only for agents with `canManageAgents`, not on a runner: Godmode's own settings (models, effort, run limits, browser and computer behaviour, VMs, memory and dreaming, voice, upkeep, logs). `changes` is a partial object by section, checked like a change in the app and written to the audit log. Agents change only what `AGENT_SETTINGS` in `services/agentSettings.ts` lists, down to the single setting (`dreaming.model`); a new setting is closed until it is added there. Security, the server, phone and cloud access, self-repair, the user's name and the instructions for every agent (both reach reveal-mode agents), program paths, endpoints and extra CLI flags, permission bypass, the browser and computer control switches, live views, notifications, the watchdog, the VM switch and VM isolation and automatic cleanup stay with the human. Not in a run kept in a VM. Connected apps: `settings_get` with any key, `settings_update` with full access, so `godmode call settings_update '{"changes":{...}}'` works from a terminal |
 | `notify_user({ title, body })` | Push a notification to the human |
 | `my_routines()`, `my_routine_set_enabled({ routineId, enabled, reason? })` | For agents without `canManageAgents`, not on a runner: list their own automations and switch one off or back on (e.g. the human asked them to stop a scheduled job). Other agents' automations stay the human's. Switching back on only undoes its own pause (its `routine.pause` audit entry is the last change), and follows the `routine_update` rule (a fill-only run makes it fill-only); audited as `routine.pause` / `routine.resume` |
 | `artifact_create`, `artifact_update`, `artifact_get`, `artifact_list` | Build and change artifacts: small web apps shown next to the chat and on the Artifacts page (see Artifacts); not in condition checks or dreams, not on a runner |
@@ -643,7 +628,7 @@ tasks, and read what was done. `packages/core/src/connect/`.
   `CONNECT_INSTRUCTIONS` instead of the agents' text.
 * **Tools.** `CONNECTOR_TOOLS` in `mcp/tools.ts` is the allowlist, each tool marked `read` or `manage`: `agents_list`,
   `agent_get`, `agent_create`, `agent_update`, `agent_delete`, `templates_list` (read), `team_install`, the `routine_*` and `automation_*` tools, `tasks_list`,
-  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `spend_overview`, `workspaces_list`,
+  `task_get`, `task_create`, `task_update`, `task_message`, `task_note`, `runs_list`, `workspaces_list`,
   `workspace_create`, `workspace_update`, `project_create`, `project_update`,
   `logins_overview` (names, never secrets), `missing_logins_list`, `vms_list`, `vm_create`, `vm_assign`, `vm_power`.
   Nothing that needs a run, a chat or a browser (vault fills, questions, follow-ups, delegation, API tools). `tools/list`
@@ -695,7 +680,7 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 | Scope | Entries |
 |---|---|
-| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, cost, tokens, tokens read per turn (`contextTokens`), the session's total on a resumed one, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
+| `runner` | A run's start, and one entry when it ends: status, duration (`ms`: Claude's own, `wallMs`: by the clock), queue wait, tokens, tokens read per turn (`contextTokens`), whether it resumed a session, tool calls, failed tools with the head and end of their output, how heavy the message got (`blocks`, `resultKb`, `images`, `imageKb`, `deltas`, `slowestSaveMs`) |
 | `http` | Requests slower than 1 s (`expected` when the route waits by design — `expectSlow`), rejected requests (4xx except sign-in, vault-locked and grant prompts), unknown API routes, 5xx with stack; every request with `verbose` |
 | `mcp` | Agent tool calls slower than 10 s or returning an error, crashes, unknown tools |
 | `db` | Statements slower than 100 ms (SQL only, once a minute each, with how often it was that slow meanwhile) |
@@ -707,7 +692,7 @@ directory are masked; request paths are logged as route patterns. `info` and up 
 
 Settings → Logs reads it through `GET /api/logs` (counts, recurring warnings/errors grouped by message without ids and
 numbers), `GET /api/logs/entries?level=&search=&limit=` and `GET /api/logs/report[?full=1]`: Markdown for an AI with
-the environment (with the build's commit), recurring problems, a run summary (cost by agent, runs that took far longer
+the environment (with the build's commit), recurring problems, a run summary (runs by agent, runs that took far longer
 by the clock than Claude worked), memory and sleep, slow spots (requests, by-design waits apart, tool calls, queries,
 stalls and what blocked them), the tail of `desktop.log` and the newest entries that fit in 250 KB (`full` = all). `DELETE /api/logs` removes the log files and empties `desktop.log`.
 
@@ -758,7 +743,7 @@ above it or on power, with a notification), and with `onlyWhileWorking` three mi
 marker file `power-sleep-disabled` in the data directory says Godmode owns `disablesleep`. It is written before sleep
 is turned off (turning the mode on takes over one set by hand), so after a crash or a quit at the password dialog
 (which closes the dialog) the next start gives sleep back unless the mode is still wanted; without a marker a
-`disablesleep` set by hand is never touched. A run that waits for an answer, or for a usage limit that resets within an hour, counts as working; one paused by hand or held by a budget doesn't. A release that fails
+`disablesleep` set by hand is never touched. A run that waits for an answer, or for a usage limit that resets within an hour, counts as working; one paused by hand doesn't. A release that fails
 shows the mode as needing attention and sends a notification. While on, a poll every minute follows the
 battery and the lid (`entity.changed` `power`).
 
@@ -1318,7 +1303,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   "Trying again shortly…"), twice in a row at most (once after a timeout; after 30 s, then 2 min; after a restart in 5 s,
   a few seconds apart — a run that had finished is published, not run again): the agent's
   opening line says the last run failed and why, the timeline says "tried again on its own" with that reason. What only
-  the human can fix (sign-in, Claude Code, a folder, the VM, the model, a chat too long, the cost limit) or a run they
+  the human can fix (sign-in, Claude Code, a folder, the VM, the model, a chat too long) or a run they
   stopped is blocked at once; after the last try it is blocked "still failing after 2 more tries" and the human is told.
   The count starts over when a run goes well (delivered, waiting) or the human acts on it (counted in the order rows
   were written); a move, a message or a new agent cancels a try that waits, and a try never cuts across a newer run. A restored backup leaves interrupted tickets to the human.
@@ -1341,8 +1326,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   /api/goals/:id`, Cloud: allowed; phone: closed). A goal has a title, why it matters, a target day and a status (active,
   achieved, dropped); global or a workspace's. A ticket serves one (`Task.goalId`, set on create or in the sheet; a part
   serves its ticket's goal and follows it when the ticket's changes), and its brief says so with the why. A goal counts
-  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open) and what the work
-  for it cost (all of its tickets'). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
+  the tickets of the board's scope that serve it (archived and cancelled left out: total, done, open). A goal stays in its workspace; deleting a workspace deletes its goals (migration 64 clears older leftovers). The board shows the goals above the columns (a click filters, `?goal=`), new
   tickets there serve the filtered goal; managers read them with `goals_list` and file tickets under one
   (`task_create { goalId }`). Deleting a goal leaves its tickets serving none.
 * **Role templates** (`agents/templates/`, one file per department, `GET /api/agent-templates`). Every job a company
@@ -1400,7 +1384,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
   human cancels it, the ticket goes to review quietly; when it can't start because the agent is off or gone, the ticket
   is blocked (`setup`). Moving, reassigning, archiving or deleting a waiting ticket cancels its follow-up; a restart
   leaves it waiting. The follow-up's own "got back to" notice isn't sent for tickets: they report themselves.
-* **Cost and time**: `costUsd`, `workMs` and `runCount` add up every run that ended in the ticket's conversations
+* **Time**: `workMs` and `runCount` add up every run that ended in the ticket's conversations
   (with the work it delegated), and survive reassignment and the chat being deleted.
 * **Moving on the board**: away from `in_progress` cancels the run (the UI asks first); into `todo` (or
   `in_progress`) with an agent starts it. Every 5 minutes, tasks in review with an open pull request are checked with
@@ -1408,7 +1392,7 @@ a global one. Every change is pushed as `task.updated` / `task.deleted` and patc
 * **Races**: one start or publish per task at a time; a start the board asks for meanwhile runs once the task is free,
   and a run that ended meanwhile is handled then. Moves caused by the work (to In review, Blocked, Done) only apply
   from the status the work expects — a move the human made meanwhile wins — and put the task at the top of its column.
-* **Agents managing the board**: `task_get` reads one ticket in full (result, timeline, cost; by id or `#12`), `tasks_list`
+* **Agents managing the board**: `task_get` reads one ticket in full (result, timeline, working time; by id or `#12`), `tasks_list`
   filters by agent, `task_message` sends feedback into a ticket (it arrives marked as coming from that agent, not the
   human, is on the timeline, and is refused for the caller's own ticket and for a ticket whose run stands still — only
   the human continues those), `task_note` leaves a note (a working agent on its own ticket, managers on any).

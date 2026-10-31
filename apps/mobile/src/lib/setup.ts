@@ -3,15 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import type { Agent, Effort, Project, Settings, Workspace } from "@godmode/shared";
 import { api, errorText, type AgentPatch, type ProjectPatch, type SettingsPatch, type WorkspacePatch } from "./api";
+import { t } from "./i18n";
 import { qk, queryClient } from "./query";
 
 export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.settings.get });
-}
-
-/** Costs of Claude runs show only with spend tracking on (off: a Claude subscription, no real money). */
-export function useSpendTracking(): boolean {
-  return useSettings().data?.runner.spendTracking ?? false;
 }
 
 /** The values `base` had at the keys `patch` changes: undoes one save without undoing another. */
@@ -33,7 +29,7 @@ function merge<T>(base: T, patch: unknown): T {
 type Options = { quiet?: boolean };
 
 function failed(err: unknown, opts?: Options): false {
-  if (!opts?.quiet) Alert.alert("Couldn't save", errorText(err));
+  if (!opts?.quiet) Alert.alert(t("common:errors.couldNotSave"), errorText(err));
   return false;
 }
 

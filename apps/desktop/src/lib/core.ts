@@ -8,6 +8,7 @@
  *    which relays them to the computer; the cloud's own session cookie signs them in.
  */
 import { CLOUD_UI_META, type CloudUiContext } from "@godmode/shared";
+import { t } from "@/i18n";
 
 declare global {
   interface Window {
@@ -84,7 +85,7 @@ export async function getCoreInfo(): Promise<CoreInfo> {
         }
         await new Promise((r) => setTimeout(r, 250));
       }
-      throw new Error("Godmode core did not start. Check the logs in ~/.godmode/logs.");
+      throw new Error(t("system:core.didNotStart"));
     }
     const devToken = window.__DEV_TOKEN__ || null;
     const stored = safeSession("gm_token");

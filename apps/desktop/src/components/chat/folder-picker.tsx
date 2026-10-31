@@ -18,6 +18,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { FolderListing } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { t } from "@/i18n";
 import { copyText } from "./copy-button";
 
 const LAST_FOLDER_KEY = storageKey("gm:last-folder");
@@ -90,7 +92,7 @@ function crumbsOf({ path, home }: FolderListing): Crumb[] {
   let base: Crumb;
   let rest: string;
   if (path === home || path.startsWith(home + sep)) {
-    base = { name: "Home", path: home, home: true };
+    base = { name: t("chat:folderPicker.home"), path: home, home: true };
     rest = path.slice(home.length);
   } else if (win) {
     base = { name: path.slice(0, 2), path: path.slice(0, 3) };
@@ -113,8 +115,8 @@ export function FolderPickerDialog({
   onOpenChange,
   value,
   onPick,
-  title = "Work in a folder",
-  description = "The agent runs inside this folder and can read and edit its files. Its memory stays in its own repository.",
+  title,
+  description,
   onCloseAutoFocus,
 }: {
   open: boolean;
@@ -125,6 +127,7 @@ export function FolderPickerDialog({
   description?: string;
   onCloseAutoFocus?: (e: Event) => void;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const [path, setPath] = useState<string | undefined>();
   const [query, setQuery] = useState("");
@@ -177,7 +180,7 @@ export function FolderPickerDialog({
       setQuery("");
       setBrowsed(true);
     } catch (err) {
-      toast.error("Can't open this folder", { description: errorMessage(err) });
+      toast.error(t("folderPicker.openError"), { description: errorMessage(err) });
     } finally {
       setPending(null);
     }
@@ -195,7 +198,7 @@ export function FolderPickerDialog({
       const picked = await openDialog({ directory: true, defaultPath: current?.path });
       if (typeof picked === "string") pick(picked);
     } catch (err) {
-      toast.error("Couldn't open the folder dialog", { description: errorMessage(err) });
+      toast.error(t("folderPicker.dialogError"), { description: errorMessage(err) });
     }
   };
 
@@ -215,7 +218,7 @@ export function FolderPickerDialog({
 
   const recents = (recent.data ?? []).filter((p) => p !== current?.path).slice(0, 4);
   const entries = current?.entries ?? [];
-  const currentName = current ? (crumbs.at(-1)?.home ? "Home" : folderName(current.path) || current.path) : "";
+  const currentName = current ? (crumbs.at(-1)?.home ? t("folderPicker.home") : folderName(current.path) || current.path) : "";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -230,9 +233,9 @@ export function FolderPickerDialog({
         <DialogHeader className="px-5 pt-5 pb-4 text-left">
           <DialogTitle className="flex items-center gap-2">
             <FolderOpen className="size-[18px] text-muted-foreground" />
-            {title}
+            {title ?? t("folderPicker.title")}
           </DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
+          <DialogDescription>{description ?? t("folderPicker.description")}</DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center gap-1 border-y bg-muted/30 px-2 py-1.5">
@@ -242,7 +245,7 @@ export function FolderPickerDialog({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Up one level"
+                aria-label={t("folderPicker.upOneLevel")}
                 disabled={!current?.parent}
                 onClick={() => current?.parent && void go(current.parent)}
                 className="shrink-0 text-muted-foreground"
@@ -251,10 +254,10 @@ export function FolderPickerDialog({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              Up one level <Kbd>⌫</Kbd>
+              {t("folderPicker.upOneLevel")} <Kbd>⌫</Kbd>
             </TooltipContent>
           </Tooltip>
-          <nav ref={crumbsRef} aria-label="Current folder" className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]">
+          <nav ref={crumbsRef} aria-label={t("folderPicker.currentFolder")} className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]">
             {current ? (
               crumbs.map((c, i) => (
                 <Fragment key={c.path}>
@@ -283,7 +286,7 @@ export function FolderPickerDialog({
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                aria-label="Show hidden folders"
+                aria-label={t("folderPicker.showHidden")}
                 aria-pressed={hidden}
                 onClick={() => setHidden((h) => !h)}
                 className={cn("shrink-0 text-muted-foreground", hidden && "bg-accent text-foreground")}
@@ -291,7 +294,7 @@ export function FolderPickerDialog({
                 {hidden ? <Eye /> : <EyeOff />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{hidden ? "Hide hidden folders" : "Show hidden folders"}</TooltipContent>
+            <TooltipContent>{hidden ? t("folderPicker.hideHidden") : t("folderPicker.showHidden")}</TooltipContent>
           </Tooltip>
         </div>
 
@@ -302,12 +305,12 @@ export function FolderPickerDialog({
               value={query}
               onValueChange={setQuery}
               onKeyDown={onInputKeyDown}
-              placeholder="Filter, or paste a path…"
-              aria-label="Filter folders or enter a path"
+              placeholder={t("folderPicker.filterPlaceholder")}
+              aria-label={t("folderPicker.filterLabel")}
             />
             {!query && (
               <div className="pointer-events-none absolute inset-y-0 right-3 hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex">
-                <Kbd>↵</Kbd> open <span className="opacity-40">·</span> <Kbd>⌫</Kbd> up
+                <Kbd>↵</Kbd> {t("folderPicker.hintOpen")} <span className="opacity-40">·</span> <Kbd>⌫</Kbd> {t("folderPicker.hintUp")}
               </div>
             )}
           </div>
@@ -317,19 +320,19 @@ export function FolderPickerDialog({
                 <CommandGroup>
                   <CommandItem value="__go" onSelect={() => void go(query.trim())} className="gap-2.5 py-2">
                     {pending ? <Loader2 className="animate-spin" /> : <CornerDownLeft />}
-                    Open <span className="min-w-0 truncate font-mono text-[13px]">{query.trim()}</span>
+                    {t("common:actions.open")} <span className="min-w-0 truncate font-mono text-[13px]">{query.trim()}</span>
                   </CommandItem>
                 </CommandGroup>
               ) : (
                 <>
                   {!browsed && recents.length > 0 && (
-                    <CommandGroup heading="Recent">
+                    <CommandGroup heading={t("folderPicker.recent")}>
                       {recents.map((p) => (
                         <CommandItem key={p} value={`recent ${p}`} onSelect={() => pick(p)} className="group gap-2.5 py-2">
                           <History />
                           <span className="shrink-0 font-medium">{folderName(p)}</span>
                           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{shortPath(p, current?.home)}</span>
-                          <span className="text-[11px] text-muted-foreground opacity-0 transition group-data-[selected=true]:opacity-100">Use ↵</span>
+                          <span className="text-[11px] text-muted-foreground opacity-0 transition group-data-[selected=true]:opacity-100">{t("folderPicker.use")} ↵</span>
                         </CommandItem>
                       ))}
                     </CommandGroup>
@@ -339,12 +342,12 @@ export function FolderPickerDialog({
                       <p>{errorMessage(listing.error)}</p>
                       {path !== undefined && (
                         <Button type="button" variant="outline" size="sm" onClick={() => setPath(undefined)}>
-                          <Home /> Go to your home folder
+                          <Home /> {t("folderPicker.goHome")}
                         </Button>
                       )}
                     </div>
                   )}
-                  <CommandGroup heading={current ? `Folders${entries.length ? ` · ${entries.length}${current.truncated ? "+" : ""}` : ""}` : undefined}>
+                  <CommandGroup heading={current ? (entries.length ? t("folderPicker.foldersCount", { n: `${entries.length}${current.truncated ? "+" : ""}` }) : t("folderPicker.folders")) : undefined}>
                     {!current && !listing.isError
                       ? Array.from({ length: 6 }, (_, i) => <Skeleton key={i} className="mx-2 my-2.5 h-4" style={{ width: `${40 + ((i * 17) % 45)}%` }} />)
                       : entries.map((e) => (
@@ -363,7 +366,7 @@ export function FolderPickerDialog({
                                 }}
                                 className="rounded-md border bg-card px-2 py-0.5 text-[11px] font-medium text-muted-foreground opacity-0 shadow-xs transition group-hover:opacity-100 group-data-[selected=true]:opacity-100 hover:text-foreground"
                               >
-                                Use
+                                {t("folderPicker.use")}
                               </button>
                             )}
                             <ChevronRight className="size-3.5 text-muted-foreground/60" />
@@ -372,7 +375,7 @@ export function FolderPickerDialog({
                   </CommandGroup>
                   {current && (
                     <CommandEmpty className="px-6 py-10 text-center text-sm text-muted-foreground">
-                      {query ? `No folders match “${query}”.` : "No subfolders here. Use this folder, or go up a level."}
+                      {query ? t("folderPicker.noMatch", { query }) : t("folderPicker.noSubfolders")}
                     </CommandEmpty>
                   )}
                 </>
@@ -390,11 +393,11 @@ export function FolderPickerDialog({
         <div className="flex items-center gap-2 border-t bg-muted/30 px-4 py-3">
           {isTauri && (
             <Button type="button" variant="ghost" size="sm" onClick={() => void browseNative()} className="-ml-1 text-muted-foreground">
-              {isMac ? "Open Finder…" : "Browse…"}
+              {isMac ? t("folderPicker.openFinder") : t("folderPicker.browse")}
             </Button>
           )}
           <Button type="button" variant="outline" size="sm" onClick={() => onOpenChange(false)} className="ml-auto">
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button
             type="button"
@@ -403,7 +406,7 @@ export function FolderPickerDialog({
             onClick={() => current && pick(current.path)}
             className="min-w-0 shrink"
           >
-            <span className="max-w-[17rem] truncate">Use “{currentName}”</span>
+            <span className="max-w-[17rem] truncate">{t("folderPicker.useNamed", { name: currentName })}</span>
             <kbd className="hidden font-sans text-[10px] opacity-60 md:inline">{modKey}↵</kbd>
           </Button>
         </div>
@@ -429,6 +432,7 @@ export function FolderChip({
   onChange: (path: string | null) => void;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("chat");
   const [picking, setPicking] = useState(false);
   const short = useShortPath();
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -457,14 +461,14 @@ export function FolderChip({
               type="button"
               variant="ghost"
               onClick={() => setPicking(true)}
-              aria-label="Work in a folder"
+              aria-label={t("folderPicker.title")}
               className="h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4"
             >
               {busy ? <Loader2 className="animate-spin" /> : <FolderOpen />}
-              <span className="@max-sm/composer:sr-only">Folder</span>
+              <span className="@max-sm/composer:sr-only">{t("folderPicker.folder")}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Work in a folder</TooltipContent>
+          <TooltipContent>{t("folderPicker.title")}</TooltipContent>
         </Tooltip>
         {dialog}
       </>
@@ -481,7 +485,7 @@ export function FolderChip({
               <button
                 ref={triggerRef}
                 type="button"
-                aria-label={`Folder: ${folderName(folder)}`}
+                aria-label={t("folderPicker.folderNamed", { name: folderName(folder) })}
                 className="flex h-8 max-w-[14rem] min-w-0 items-center gap-1.5 rounded-lg border bg-card pr-1.5 pl-2 text-[13px] transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 {busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <FolderOpen className="size-3.5 shrink-0 text-muted-foreground" />}
@@ -505,22 +509,22 @@ export function FolderChip({
         >
           <DropdownMenuLabel className="space-y-1 font-normal">
             <span className="block text-xs text-muted-foreground">
-              {inherited ? `Default folder of ${agentName ?? "this agent"}` : "This chat works in"}
+              {inherited ? (agentName ? t("folderPicker.defaultOf", { name: agentName }) : t("folderPicker.defaultOfAgent")) : t("folderPicker.chatWorksIn")}
             </span>
             <span className="block font-mono text-xs break-all">{short(folder)}</span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => (pickAfterMenu.current = true)}>
-            <FolderSearch /> Change folder…
+            <FolderSearch /> {t("folderPicker.change")}
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void copyText(folder).then((ok) => ok && toast.success("Path copied"))}>
-            <Copy /> Copy path
+          <DropdownMenuItem onClick={() => void copyText(folder).then((ok) => ok && toast.success(t("folderPicker.pathCopied")))}>
+            <Copy /> {t("folderPicker.copyPath")}
           </DropdownMenuItem>
           {!inherited && (
             <>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onChange(null)}>
-                <X /> {agentFolder ? `Use ${agentName ?? "the agent"}'s folder` : "Remove folder"}
+                <X /> {agentFolder ? (agentName ? t("folderPicker.useAgentFolder", { name: agentName }) : t("folderPicker.useTheAgentFolder")) : t("folderPicker.remove")}
               </DropdownMenuItem>
             </>
           )}

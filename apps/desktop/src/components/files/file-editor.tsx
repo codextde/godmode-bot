@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import { Brain, Columns2, Eye, FileArchive, FileAudio, FileCode2, FileImage, FileJson, FileSpreadsheet, FileText, FileVideo, Lock, Moon, PencilLine, RotateCcw, Save } from "lucide-react";
@@ -8,6 +9,8 @@ import { formatBytes } from "@godmode/shared";
 import { api, ApiRequestError, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { isMac, modKey } from "@/lib/desktop";
+import { t as translate } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { Kbd } from "@/components/common";
 import { Markdown } from "@/components/chat/markdown";
@@ -33,11 +36,11 @@ export function nameOf(path: string) {
 
 /** Why a file can't be edited here (null = editable). */
 export function readOnlyReason(path: string, size: number): string | null {
-  if (path === "CLAUDE.md") return "Generated from the agent's settings — edit the instructions in Settings instead.";
-  if (path.startsWith("state/")) return "Snapshot written by Godmode — changes would be overwritten.";
-  if (path.startsWith("runs/")) return "Raw run log — read-only.";
-  if (path.startsWith("conversations/")) return "Conversation transcript — read-only.";
-  if (size > MAX_EDITABLE) return "This file is too large to edit here.";
+  if (path === "CLAUDE.md") return translate("files:editor.readOnly.claude");
+  if (path.startsWith("state/")) return translate("files:editor.readOnly.state");
+  if (path.startsWith("runs/")) return translate("files:editor.readOnly.runs");
+  if (path.startsWith("conversations/")) return translate("files:editor.readOnly.conversations");
+  if (size > MAX_EDITABLE) return translate("files:editor.readOnly.tooLarge");
   return null;
 }
 
@@ -109,6 +112,8 @@ export function FileEditor({
   /** More buttons for the file (rename, move, delete), at the end of the bar. */
   actions?: ReactNode;
 }) {
+  const { t } = useTranslation(["files", "common"]);
+  const { dateLocale, intlLocale } = useLocale();
   const qc = useQueryClient();
   const file = useQuery({ queryKey: qk.agentFile(agentId, path), queryFn: () => api.agents.readFile(agentId, path), retry: false });
   const original = file.data?.content ?? "";
@@ -120,7 +125,7 @@ export function FileEditor({
   const isMarkdown = NOTE_FILE.test(path);
   const fixedReason = readOnlyReason(path, Math.max(size, original.length));
   const dreamLock = dreaming && isMemoryPath(path);
-  const readOnly = fixedReason ?? (dreamLock ? `${agentName} is dreaming — editing is paused until the dream ends.` : null);
+  const readOnly = fixedReason ?? (dreamLock ? t("editor.dreaming", { name: agentName }) : null);
   const [view, setView] = useState<View>(isMarkdown ? (fixedReason ? "preview" : (defaultView ?? "edit")) : "edit");
   const edit = (text: string) => setDraft((d) => ({ text, base: d && d.text !== original ? d.base : original }));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -176,15 +181,15 @@ export function FileEditor({
       }
       setDraft(null);
       onSaved?.(path);
-      toast.success(`Saved ${nameOf(path)}`);
+      toast.success(t("editor.saved", { name: nameOf(path) }));
     },
     onError: (err) => {
       if (err instanceof StaleDraftError) warnConflict();
-      else toast.error(`Couldn't save ${nameOf(path)}`, { description: errorMessage(err) });
+      else toast.error(t("editor.saveFailed", { name: nameOf(path) }), { description: errorMessage(err) });
     },
   });
   const warnConflict = () =>
-    toast.warning(`${nameOf(path)} changed while you were editing`, { description: "Reload it, or overwrite it with your version." });
+    toast.warning(t("editor.conflictToast", { name: nameOf(path) }), { description: t("editor.conflictToastDescription") });
 
   const saveRef = useRef<() => void>(() => {});
   saveRef.current = () => {
@@ -223,7 +228,7 @@ export function FileEditor({
         onOpenFile(target);
       }}
     >
-      {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-sm text-muted-foreground italic">Empty file.</p>}
+      {value.trim() ? <Markdown>{value}</Markdown> : <p className="text-sm text-muted-foreground italic">{t("editor.empty")}</p>}
     </div>
   );
 
@@ -244,8 +249,8 @@ export function FileEditor({
       }}
       readOnly={!!readOnly}
       spellCheck={isMarkdown}
-      aria-label={`Contents of ${path}`}
-      placeholder={missing ? "This file doesn't exist yet — start typing to create it." : undefined}
+      aria-label={t("editor.contentsAria", { path })}
+      placeholder={missing ? t("editor.missingPlaceholder") : undefined}
       className={cn("block w-full resize-none bg-transparent p-4 font-mono text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground/70", height)}
     />
   );
@@ -257,29 +262,29 @@ export function FileEditor({
         <span className="min-w-0 truncate font-mono text-[13px]" title={path}>
           {path}
         </span>
-        {dirty && <span className="size-2 shrink-0 rounded-full bg-warning" aria-label="Unsaved changes" title="Unsaved changes" />}
+        {dirty && <span className="size-2 shrink-0 rounded-full bg-warning" aria-label={t("editor.unsaved")} title={t("editor.unsaved")} />}
         <div className="ml-auto flex items-center gap-2">
           <SectionMenu sections={sections} onPick={jumpTo} />
           {isMarkdown && !unreadable && (
-            <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as View)} aria-label="View mode">
-              <ToggleGroupItem value="edit" aria-label={readOnly ? "Source" : "Edit"} className="gap-1 px-2 text-xs">
-                <PencilLine className="size-3.5" /> {readOnly ? "Source" : "Edit"}
+            <ToggleGroup type="single" size="sm" variant="outline" value={view} onValueChange={(v) => v && setView(v as View)} aria-label={t("editor.viewMode")}>
+              <ToggleGroupItem value="edit" aria-label={readOnly ? t("editor.source") : t("common:actions.edit")} className="gap-1 px-2 text-xs">
+                <PencilLine className="size-3.5" /> {readOnly ? t("editor.source") : t("common:actions.edit")}
               </ToggleGroupItem>
-              <ToggleGroupItem value="split" aria-label="Side by side" title="Side by side" className="gap-1 px-2 text-xs">
-                <Columns2 className="size-3.5" /> Split
+              <ToggleGroupItem value="split" aria-label={t("editor.sideBySide")} title={t("editor.sideBySide")} className="gap-1 px-2 text-xs">
+                <Columns2 className="size-3.5" /> {t("editor.split")}
               </ToggleGroupItem>
-              <ToggleGroupItem value="preview" aria-label="Preview" className="gap-1 px-2 text-xs">
-                <Eye className="size-3.5" /> Preview
+              <ToggleGroupItem value="preview" aria-label={t("editor.preview")} className="gap-1 px-2 text-xs">
+                <Eye className="size-3.5" /> {t("editor.preview")}
               </ToggleGroupItem>
             </ToggleGroup>
           )}
           {!fixedReason && !unreadable && (
             <>
               <Button variant="ghost" size="sm" disabled={!dirty} onClick={() => setDraft(null)}>
-                <RotateCcw /> Revert
+                <RotateCcw /> {t("editor.revert")}
               </Button>
               <Button size="sm" disabled={!dirty || !!readOnly || conflict || save.isPending} onClick={() => saveRef.current()}>
-                {save.isPending ? <Spinner /> : <Save />} Save
+                {save.isPending ? <Spinner /> : <Save />} {t("common:actions.save")}
                 <Kbd>{modKey}S</Kbd>
               </Button>
             </>
@@ -294,7 +299,7 @@ export function FileEditor({
           <span>{readOnly}</span>
           {path === "CLAUDE.md" && (
             <Link to={`/agents/${agentId}/settings`} className="ml-auto shrink-0 font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-              Open settings
+              {t("editor.openSettings")}
             </Link>
           )}
         </div>
@@ -303,15 +308,19 @@ export function FileEditor({
       {conflict && (
         <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-warning/25 bg-warning/[0.07] px-4 py-2 text-xs">
           <span className="min-w-0 flex-1 basis-64 text-muted-foreground">
-            <span className="font-medium text-foreground">{nameOf(path)} changed while you were editing</span> — {agentName} may have rewritten it. Reload to
-            see the new version (your edits are discarded), or overwrite it with yours.
+            <Trans
+              t={t}
+              i18nKey="editor.conflict"
+              values={{ name: nameOf(path), agent: agentName }}
+              components={{ b: <span className="font-medium text-foreground" /> }}
+            />
           </span>
           <span className="flex shrink-0 gap-1.5">
             <Button variant="outline" size="xs" onClick={() => setDraft(null)}>
-              <RotateCcw /> Reload
+              <RotateCcw /> {t("editor.reload")}
             </Button>
             <Button size="xs" disabled={!!readOnly || save.isPending} onClick={() => save.mutate({ content: value, base: null })}>
-              {save.isPending ? <Spinner /> : <Save />} Overwrite
+              {save.isPending ? <Spinner /> : <Save />} {t("editor.overwrite")}
             </Button>
           </span>
         </div>
@@ -328,12 +337,13 @@ export function FileEditor({
           <div className="grid h-full min-h-[14rem] place-items-center p-8 text-center">
             <div>
               <div className="mx-auto mb-3 grid size-11 place-items-center rounded-lg border bg-card shadow-card">{fileIcon(path, "size-5 text-muted-foreground")}</div>
-              <p className="text-sm font-medium">{status === 413 ? "Too large to open here" : "Not a text file"}</p>
-              <p className="mt-1 text-xs text-muted-foreground">{size ? `${formatBytes(size)} · ` : ""}Move, rename or delete it from the list.</p>
+              <p className="text-sm font-medium">{status === 413 ? t("editor.tooLargeTitle") : t("editor.notText")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{size ? `${formatBytes(size)} · ` : ""}
+                {t("editor.unreadableHint")}</p>
             </div>
           </div>
         ) : file.isError && !missing ? (
-          <div className="p-6 text-sm text-muted-foreground">Couldn't open this file: {errorMessage(file.error)}</div>
+          <div className="p-6 text-sm text-muted-foreground">{t("editor.openFailed", { error: errorMessage(file.error) })}</div>
         ) : showSource && showPreview ? (
           <div className={cn("grid grid-cols-2 divide-x", fill ? "h-full" : "")}>
             {source}
@@ -348,13 +358,13 @@ export function FileEditor({
 
       {!unreadable && (
         <div className="flex items-center gap-3 overflow-hidden border-t px-4 py-2 text-[11px] whitespace-nowrap text-muted-foreground">
-          <span className="tabular-nums">{lines.toLocaleString()} lines</span>
-          {isMarkdown && <span className="tabular-nums">{words.toLocaleString()} words</span>}
+          <span className="tabular-nums">{t("editor.lines", { count: lines, n: lines.toLocaleString(intlLocale) })}</span>
+          {isMarkdown && <span className="tabular-nums">{t("editor.words", { count: words, n: words.toLocaleString(intlLocale) })}</span>}
           <span className="tabular-nums">{formatBytes(new Blob([value]).size)}</span>
           {isMemory && memory.data && <MemoryBudget chars={value.length} memory={memory.data} />}
           {isMemory && <BrokenLinks paths={broken} />}
-          {file.dataUpdatedAt > 0 && !dirty && <span className="ml-auto">loaded {formatDistanceToNowStrict(file.dataUpdatedAt, { addSuffix: true })}</span>}
-          {dirty && <span className="ml-auto text-warning">Unsaved changes</span>}
+          {file.dataUpdatedAt > 0 && !dirty && <span className="ml-auto">{t("editor.loaded", { time: formatDistanceToNowStrict(file.dataUpdatedAt, { addSuffix: true, locale: dateLocale }) })}</span>}
+          {dirty && <span className="ml-auto text-warning">{t("editor.unsaved")}</span>}
         </div>
       )}
     </div>

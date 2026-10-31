@@ -3,10 +3,8 @@
  * notifications), so an item leaves the moment the thing is handled — answered, reviewed, continued, fixed.
  */
 import type { AttentionItem, RunPause } from "@godmode/shared";
-import { formatUsd, monthName } from "@godmode/shared";
 import { all, get } from "../db";
 import { parseJson } from "../util";
-import { getSettings } from "./settings";
 import { listQuestions } from "./questions";
 import { listHumanTasks } from "./humanTasks";
 import { listTasks } from "../tasks/service";
@@ -16,7 +14,7 @@ import { toPause, type PausedRow } from "./pauses";
 const shorten = (s: string, max = 140) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 /** Group order: waiting, review, blocked, went wrong, people; newest first within a group. */
-const RANK: Record<AttentionItem["kind"], number> = { question: 0, todo: 0, login: 0, paused: 0, held: 0, review: 1, blocked: 2, failed: 3, automation: 3, access: 4 };
+const RANK: Record<AttentionItem["kind"], number> = { question: 0, todo: 0, login: 0, paused: 0, review: 1, blocked: 2, failed: 3, automation: 3, access: 4 };
 
 export function listAttention(): AttentionItem[] {
   const items: AttentionItem[] = [];
@@ -139,28 +137,6 @@ export function listAttention(): AttentionItem[] {
       action: "Continue",
       pause,
       conversationId: c.id,
-    });
-  }
-
-  // Held for a monthly budget: one row per budget, not one per run. Without spend tracking nothing is held for long:
-  // only a switched-off agent's runs wait, and they go on once it is switched on.
-  const held = getSettings().runner.spendTracking ? all<{ scope: string | null; agent_id: string; n: number; budget: number | null; since: string; resume_at: string | null }>(
-    `SELECT budget_scope AS scope, CASE WHEN budget_scope = 'team' THEN '' ELSE agent_id END AS agent_id, COUNT(*) AS n,
-       MAX(budget_usd) AS budget, MIN(created_at) AS since, MIN(resume_at) AS resume_at
-     FROM paused_runs WHERE reason = 'budget' GROUP BY 1, 2`,
-  ) : [];
-  for (const h of held) {
-    const team = h.scope === "team";
-    const runs = h.n === 1 ? "1 run waits" : `${h.n} runs wait`;
-    items.push({
-      id: team ? "held:team" : `held:agent:${h.agent_id}`,
-      kind: "held",
-      agentId: team ? null : h.agent_id,
-      title: team ? `The team's ${monthName(new Date())} budget is used up` : `${nameOf(h.agent_id)}'s ${monthName(new Date())} budget is used up`,
-      detail: `${runs}${h.budget ? ` · budget ${formatUsd(h.budget)}` : ""} — raise it or let them run.`,
-      since: h.since,
-      link: team ? "/settings/ai" : `/agents/${h.agent_id}`,
-      action: "Open",
     });
   }
 

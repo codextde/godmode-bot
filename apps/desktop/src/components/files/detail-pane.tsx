@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Copy, FileSearch, FolderInput, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import { chatImageUrl, formatBytes } from "@godmode/shared";
 import type { Agent } from "@godmode/shared";
@@ -8,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useCoreFileUrl } from "@/components/chat/core-file";
 import { FileEditor, IMAGE_FILE, nameOf } from "./file-editor";
 import { isLocked } from "./browse-pane";
-import { REVEAL_LABEL } from "./use-files";
+import { revealLabel } from "./use-files";
 
 export interface DetailActions {
   onRename: (path: string) => void;
@@ -20,30 +21,31 @@ export interface DetailActions {
 }
 
 function FileMenu({ path, frozen, actions }: { path: string; frozen: boolean; actions: DetailActions }) {
+  const { t } = useTranslation(["files", "common"]);
   const locked = isLocked(path);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" aria-label={`More for ${nameOf(path)}`}>
+        <Button variant="ghost" size="icon-sm" aria-label={t("detail.more", { name: nameOf(path) })}>
           <MoreHorizontal />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44">
         <DropdownMenuItem onSelect={() => actions.onReveal(path)}>
-          <Copy /> {REVEAL_LABEL}
+          <Copy /> {revealLabel()}
         </DropdownMenuItem>
         {!locked && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled={frozen} onSelect={() => actions.onRename(path)}>
-              <PencilLine /> Rename
+              <PencilLine /> {t("common:actions.rename")}
             </DropdownMenuItem>
             <DropdownMenuItem disabled={frozen} onSelect={() => actions.onMove([path])}>
-              <FolderInput /> Move to…
+              <FolderInput /> {t("detail.moveTo")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" disabled={frozen} onSelect={() => actions.onDelete([path])}>
-              <Trash2 /> Delete
+              <Trash2 /> {t("common:actions.delete")}
             </DropdownMenuItem>
           </>
         )}
@@ -53,6 +55,7 @@ function FileMenu({ path, frozen, actions }: { path: string; frozen: boolean; ac
 }
 
 function ImageView({ agent, path, frozen, actions }: { agent: Agent; path: string; frozen: boolean; actions: DetailActions }) {
+  const { t } = useTranslation("files");
   const info = useQuery({ queryKey: ["files", agent.id, "inspect", [path]], queryFn: () => api.agents.inspectFiles(agent.id, [path]), staleTime: 30_000 });
   const entry = info.data?.[0];
   const version = entry?.modifiedAt ? Date.parse(entry.modifiedAt) : 0;
@@ -70,12 +73,12 @@ function ImageView({ agent, path, frozen, actions }: { agent: Agent; path: strin
         {image.src ? (
           <img src={image.src} alt={nameOf(path)} className="max-h-full max-w-full rounded-md object-contain shadow-card" />
         ) : image.failed ? (
-          <p className="text-sm text-muted-foreground">This picture can't be shown here (too large or not readable).</p>
+          <p className="text-sm text-muted-foreground">{t("detail.imageFailed")}</p>
         ) : (
           <div className="h-48 w-72 animate-pulse rounded-lg bg-muted" />
         )}
       </div>
-      {entry && entry.namedBy.length > 0 && <p className="border-t px-4 py-2 text-xs text-muted-foreground">Named in {entry.namedBy.join(", ")}</p>}
+      {entry && entry.namedBy.length > 0 && <p className="border-t px-4 py-2 text-xs text-muted-foreground">{t("detail.namedIn", { names: entry.namedBy.join(", ") })}</p>}
     </div>
   );
 }
@@ -97,6 +100,7 @@ export function DetailPane({
   onDirtyChange: (dirty: boolean) => void;
   actions: DetailActions;
 }) {
+  const { t } = useTranslation("files");
   if (!file) {
     return (
       <div className="grid h-full place-items-center p-10 text-center">
@@ -104,8 +108,8 @@ export function DetailPane({
           <div className="mx-auto mb-3 grid size-11 place-items-center rounded-lg border bg-card shadow-card">
             <FileSearch className="size-5 text-muted-foreground" />
           </div>
-          <p className="text-sm font-medium">Pick a file to read or edit it</p>
-          <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">Notes open with a preview; changes are saved into {agent.name}'s history, so they can be undone.</p>
+          <p className="text-sm font-medium">{t("detail.pickTitle")}</p>
+          <p className="mx-auto mt-1 max-w-xs text-xs text-muted-foreground">{t("detail.pickDescription", { name: agent.name })}</p>
         </div>
       </div>
     );

@@ -46,7 +46,6 @@ describe("while you were away", () => {
     expect(away.finished).toBe(3);
     expect(away.failed).toBe(2);
     expect(away.delivered).toBe(1);
-    expect(away.costUsd).toBeGreaterThan(0);
     expect(away.agents.map((a) => a.name).sort()).toEqual(["Bo", "Mia"]);
     // Who worked adds up to what finished.
     expect(away.agents.reduce((n, a) => n + a.runs, 0)).toBe(away.finished);

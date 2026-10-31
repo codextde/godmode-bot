@@ -12,6 +12,7 @@ import {
   messageImage,
   messageWindow,
   markConversationsRead,
+  markConversationsUnread,
   sendMessage,
   startChat,
   updateConversation,
@@ -36,6 +37,7 @@ import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
 import { startRemoteChat } from "../../remote/runners";
 import { selfDeviceId } from "../../remote/group";
+import { search } from "../../services/search";
 
 const attachmentSchema = z.object({
   name: z.string().min(1).max(255),
@@ -92,6 +94,8 @@ function flag(v: string | undefined): boolean | undefined {
 }
 
 export function registerChatRoutes(app: Hono): void {
+  app.get("/api/search", async (c) => c.json(await search(c.req.query("q") ?? "", { limit: num(c.req.query("limit")), notes: c.req.query("notes") !== "0" })));
+
   app.get("/api/conversations", (c) =>
     c.json(
       listConversations({
@@ -142,6 +146,12 @@ export function registerChatRoutes(app: Hono): void {
   app.post("/api/conversations/read", async (c) => {
     const { ids } = await body(c, z.object({ ids: z.union([z.literal("all"), z.array(z.string().min(1).max(100)).max(500)]) }));
     return c.json({ read: markConversationsRead(ids) });
+  });
+
+  // "Mark as unread" from a chat's menu: it shows as new again until it is opened.
+  app.post("/api/conversations/unread", async (c) => {
+    const { ids } = await body(c, z.object({ ids: z.array(z.string().min(1).max(100)).min(1).max(500) }));
+    return c.json({ unread: markConversationsUnread(ids) });
   });
 
   // Pick up a turn that ended early: continue where it stopped, or send it again.

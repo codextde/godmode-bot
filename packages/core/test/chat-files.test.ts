@@ -247,6 +247,34 @@ describe("Markdown for the reader", () => {
   });
 });
 
+describe("code for the side panel", () => {
+  test("code files are served as text, secrets and binaries never", async () => {
+    const work = join(agent.repoPath, "workspace");
+    writeFileSync(join(work, "git.ts"), "export const a = 1;\n");
+    writeFileSync(join(work, ".env"), "TOKEN=x");
+    writeFileSync(join(work, "id_ed25519"), "key");
+    writeFileSync(join(work, "bin.json"), Buffer.from([0x7b, 0, 0x7d]));
+    const files = byRef(await resolveRefs("workspace/git.ts", "workspace/.env", "workspace/plan.md", "workspace/shots/01-positions.png"));
+    const url = files["workspace/git.ts"]!.text!;
+    expect(url).toStartWith(`/api/files/text?path=${encodeURIComponent(join(work, "git.ts"))}&v=`);
+    expect(files["workspace/.env"]!.text).toBeUndefined();
+    expect(files["workspace/plan.md"]!.text).toBeUndefined();
+    expect(files["workspace/shots/01-positions.png"]!.text).toBeUndefined();
+
+    const { status, res } = await call("GET", url);
+    expect(status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await res.text()).toBe("export const a = 1;\n");
+
+    const link = join(outside, "env.ts");
+    symlinkSync(join(work, ".env"), link);
+    for (const path of [join(work, ".env"), join(work, "id_ed25519"), join(work, "bin.json"), link, join(dataDir, "access-token"), join(work, "gone.ts")]) {
+      expect([path, (await call("GET", `/api/files/text?path=${encodeURIComponent(path)}`)).status]).toEqual([path, 404]);
+    }
+    expect((await app.request(`http://127.0.0.1${url}`)).status).toBe(401);
+  });
+});
+
 describe("showing a file in the file manager", () => {
   test("only for the app on this computer", async () => {
     const path = join(shots, "01-positions.png");

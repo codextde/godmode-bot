@@ -69,7 +69,7 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", /^\/api\/models$/],
 
   ["GET", /^\/api\/conversations$/],
-  ["POST", /^\/api\/conversations\/read$/],
+  ["POST", /^\/api\/conversations\/(read|unread)$/],
   ["GET", new RegExp(`^/api/conversations/${ID}$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages$`)],
   ["GET", new RegExp(`^/api/conversations/${ID}/messages/${ID}/images/${ID}$`)],
@@ -105,7 +105,6 @@ const ROUTES: [method: string, path: RegExp][] = [
   ["GET", new RegExp(`^/api/runs/${ID}$`)],
   ["GET", new RegExp(`^/api/runs/${ID}/log$`)],
   ["POST", new RegExp(`^/api/runs/${ID}/cancel$`)],
-  ["GET", /^\/api\/spend$/],
 
   // Scheduled and condition automations are set up from the phone too; app events and webhooks only on the computer.
   ["GET", /^\/api\/routines$/],
@@ -134,7 +133,7 @@ const ROUTES: [method: string, path: RegExp][] = [
  * phone listener and the cloud link stay on the computer.
  */
 const SETTINGS: Record<string, string[]> = {
-  general: ["userName", "desktopNotifications", "theme", "mode"],
+  general: ["userName", "desktopNotifications", "theme", "mode", "language", "timeFormat"],
   runner: [
     "model",
     "fallbackModel",
@@ -148,9 +147,6 @@ const SETTINGS: Record<string, string[]> = {
     "stallMinutes",
     "loopRepeats",
     "autoCompactPercent",
-    "spendTracking",
-    "defaultMaxBudgetUsd",
-    "monthlyBudgetUsd",
     "appendSystemPrompt",
   ],
   browser: ["enabled", "headless", "keepAliveMinutes", "liveView", "stealth", "muteAudio"],
@@ -159,7 +155,6 @@ const SETTINGS: Record<string, string[]> = {
   memory: ["autoCommit", "reflectAfterRun", "injectMemory", "dreaming"],
   maintenance: ["autoFix", "autoUpdate", "autoCleanup"],
 };
-const NULLABLE_SETTINGS = new Set(["defaultMaxBudgetUsd", "monthlyBudgetUsd"]);
 
 const WORKSPACE_KEYS = ["name", "description", "color", "icon", "instructions", "autoMerge", "browserProfileId", "sources"];
 const PROJECT_KEYS = ["name", "description", "color", "icon", "instructions", "browserProfileId", "sources"];
@@ -273,7 +268,7 @@ function settingsRefusal(body: Record<string, unknown>): string | null {
     if (typeof patch !== "object" || patch === null || Array.isArray(patch)) return `Invalid ${section} settings.`;
     for (const [key, value] of Object.entries(patch)) {
       if (!SETTINGS[section]?.includes(key)) return "Change this setting in Godmode on your computer.";
-      if (!sameSettingShape(value, current[section]?.[key], NULLABLE_SETTINGS.has(key)) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
+      if (!sameSettingShape(value, current[section]?.[key], false) || !settingInRange(`${section}.${key}`, value)) return `Invalid value for ${section}.${key}.`;
     }
   }
   return null;

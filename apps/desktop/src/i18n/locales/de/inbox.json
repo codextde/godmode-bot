@@ -1,0 +1,142 @@
+{
+  "header": {
+    "title": "Braucht dich",
+    "descriptionCount_one": "{{count}} Sache braucht dich: Beantworte, was deine Agenten fragen, erledige, was sie dir geben, und ergänze fehlende Zugänge.",
+    "descriptionCount_other": "{{count}} Sachen brauchen dich: Beantworte, was deine Agenten fragen, erledige, was sie dir geben, und ergänze fehlende Zugänge.",
+    "description": "Was deine Agenten von dir brauchen – Fragen, To-dos, Freigaben, fehlende Logins, 2FA-Codes – plus Updates aus ihrer Arbeit.",
+    "newTodo": "Neues To-do"
+  },
+  "views": {
+    "label": "Ansicht",
+    "list": "Liste",
+    "board": "Board"
+  },
+  "board": {
+    "waiting": "{{facts}}. Zum Planen ziehen; leg ein To-do auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat.",
+    "toDo_one": "{{count}} offen",
+    "toDo_other": "{{count}} offen",
+    "onHold_one": "{{count}} Agent wartet auf dich",
+    "onHold_other": "{{count}} Agenten warten auf dich",
+    "inBacklog_one": "{{count}} im Backlog",
+    "inBacklog_other": "{{count}} im Backlog",
+    "onlyBacklog_one": "Gerade nichts zu tun · {{count}} im Backlog für später.",
+    "onlyBacklog_other": "Gerade nichts zu tun · {{count}} im Backlog für später.",
+    "empty": "Deine To-dos als Board: was Agenten dir übergeben und was du dir selbst notierst. Leg eins auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat."
+  },
+  "list": {
+    "title": "Braucht deine Aufmerksamkeit",
+    "vaultLocked": "Tresor ist gesperrt",
+    "loadError": "Anfragen konnten nicht geladen werden"
+  },
+  "tabs": {
+    "open": "Offen",
+    "resolved": "Erledigt",
+    "dismissed": "Verworfen"
+  },
+  "empty": {
+    "open": {
+      "title": "Alles erledigt – deine Agenten haben alles, was sie brauchen",
+      "description": "Wenn ein Agent eine Entscheidung, deine Freigabe, einen fehlenden Login oder einen 2FA-Code braucht, landet das hier, statt in einem Chat unterzugehen."
+    },
+    "resolved": {
+      "title": "Noch nichts erledigt",
+      "description": "Anfragen, die du löst – mit einem Login, einem 2FA-Code oder indem du sie als erledigt markierst –, bleiben hier zum Nachschlagen."
+    },
+    "dismissed": {
+      "title": "Nichts verworfen",
+      "description": "Anfragen, die du verwirfst, landen hier. Du kannst sie jederzeit wieder öffnen."
+    }
+  },
+  "notifications": {
+    "title": "Mitteilungen",
+    "new_one": "{{count}} neu",
+    "new_other": "{{count}} neu",
+    "markAllRead": "Alle als gelesen markieren",
+    "markReadError": "Konnte nicht als gelesen markiert werden",
+    "clear": "Mitteilungen löschen",
+    "clearAll": "Alle löschen",
+    "cleared": "Mitteilungen gelöscht",
+    "clearError": "Mitteilungen konnten nicht gelöscht werden",
+    "clearTitle": "Alle Mitteilungen löschen?",
+    "clearDescription_one": "Das entfernt {{count}} Mitteilung. Agentenläufe und ihre Ergebnisse bleiben erhalten.",
+    "clearDescription_other": "Das entfernt {{count}} Mitteilungen. Agentenläufe und ihre Ergebnisse bleiben erhalten.",
+    "loadError": "Mitteilungen konnten nicht geladen werden",
+    "emptyTitle": "Keine Mitteilungen",
+    "emptyDescription": "Agenten melden sich hier, wenn sie fertig sind, etwas brauchen oder auf ein Problem stoßen.",
+    "showMore_one": "{{count}} weitere anzeigen",
+    "showMore_other": "{{count}} weitere anzeigen",
+    "unread": "Ungelesen: {{title}}"
+  },
+  "question": {
+    "task": "Aufgabe",
+    "taskNumber": "Aufgabe #{{number}}",
+    "openTask": "Aufgabe öffnen",
+    "automation": "Automation · {{name}}",
+    "openChat": "Chat öffnen",
+    "chat": "Chat",
+    "anAgent": "Ein Agent",
+    "stopped": "Gestoppt – die Frage ist zurückgezogen",
+    "stopError": "Lauf konnte nicht gestoppt werden",
+    "asks": "<b>{{name}}</b> <m>fragt</m>",
+    "needsOk": "<b>{{name}}</b> <m>braucht deine Freigabe</m>",
+    "stopTitle": "Lauf stoppen – die Frage wird zurückgezogen"
+  },
+  "missingLogin": {
+    "kinds": {
+      "missingCredential": "Login fehlt",
+      "invalidCredential": "Login fehlgeschlagen",
+      "missingTotp": "2FA fehlt",
+      "missingAccount": "Kein Konto",
+      "other": "Braucht Aufmerksamkeit"
+    },
+    "markedResolved": "Als erledigt markiert",
+    "dismissed": "Verworfen",
+    "reopened": "Wieder geöffnet",
+    "updateError": "Anfrage konnte nicht aktualisiert werden",
+    "unknownService": "Unbekannter Dienst",
+    "reportedTimes_one": "{{count}}-mal gemeldet",
+    "reportedTimes_other": "{{count}}-mal gemeldet",
+    "openInBrowser": "{{url}} im Browser öffnen",
+    "reportedBy": "Gemeldet von <b>{{name}}</b>",
+    "reportedByAgent": "Von einem Agenten gemeldet",
+    "reportedByGodmode": "Von Godmode gemeldet",
+    "dismiss": "Verwerfen",
+    "markResolved": "Als erledigt markieren",
+    "add2fa": "2FA hinzufügen",
+    "updateLogin": "Login aktualisieren",
+    "addLogin": "Login hinzufügen",
+    "resolvedWithLogin": "Mit gespeichertem Login gelöst",
+    "resolved": "Erledigt",
+    "reopen": "Wieder öffnen"
+  },
+  "linkTotp": {
+    "readyFor": "2FA für {{host}} bereit",
+    "linkedTo": "2FA mit {{name}} verknüpft",
+    "readyDescription": "Agenten geben diesen Code bei der nächsten Anmeldung ein.",
+    "linkError": "2FA-Code konnte nicht verknüpft werden",
+    "title": "Gespeicherten 2FA-Code verwenden",
+    "description": "Wähle den Code für <b>{{host}}</b>. Godmode verknüpft ihn mit dem passenden Login, damit Agenten ihn beim nächsten Mal selbst eingeben.",
+    "loginFor": "Login für {{host}}",
+    "noLogin": "Für {{host}} ist noch kein Login gespeichert. Füge zuerst den Login hinzu und verknüpfe dann hier seinen 2FA-Code.",
+    "searchPlaceholder": "2FA-Codes nach Dienst, Konto oder Login durchsuchen…",
+    "codes": "2FA-Codes",
+    "loading": "2FA-Codes werden geladen…",
+    "noMatch": "Kein 2FA-Code passt zu „{{query}}“.",
+    "noCodes": "Dein Tresor enthält noch keine 2FA-Codes.",
+    "suggestedFor": "Vorschläge für {{host}}",
+    "allCodes": "Alle 2FA-Codes",
+    "matches": "Treffer",
+    "hiddenMore_one": "{{count}} weiterer. Tipp weiter, um einzugrenzen.",
+    "hiddenMore_other": "{{count}} weitere. Tipp weiter, um einzugrenzen.",
+    "importNew": "Nicht dabei? Neuen Code importieren",
+    "link": "2FA verknüpfen",
+    "notLinked": "Nicht verknüpft",
+    "outcome": {
+      "alreadyLinked": "Bereits mit {{who}} verknüpft. Damit ist die Anfrage erledigt.",
+      "links": "Verknüpft ihn mit {{who}}.",
+      "staysCovered": "Er bleibt bei {{owner}}, das {{host}} bereits abdeckt.",
+      "sameAccount": "Gleiches Konto: Er bleibt bei {{owner}} ({{domain}}) und {{host}} wird zu diesem Login hinzugefügt, damit beide Anmeldungen den Code bekommen.",
+      "moves": "Verschiebt ihn von {{from}} zu {{who}}."
+    }
+  }
+}

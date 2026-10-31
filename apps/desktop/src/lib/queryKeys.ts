@@ -1,6 +1,7 @@
 /** Central React Query keys. Prefix-based invalidation: invalidating `qk.agents` also hits `qk.agent(id)`. */
 export const qk = {
   bootstrap: ["bootstrap"] as unknown[],
+  search: (q: string) => ["search", q],
   /** "Needs you" — under `bootstrap`, so whatever refreshes the counts refreshes the list. */
   attention: ["bootstrap", "attention"] as unknown[],
   away: (since: string, until: string) => ["away", since, until],
@@ -14,6 +15,8 @@ export const qk = {
   doctor: ["doctor"] as unknown[],
   claudeUpdate: ["doctor", "claude-update"] as unknown[],
   claudeLogin: ["doctor", "claude-login"] as unknown[],
+  claudeUsage: ["doctor", "claude-usage"] as unknown[],
+  claudeAccounts: ["claude-accounts"] as unknown[],
   permissions: ["doctor", "permissions"] as unknown[],
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],
@@ -84,10 +87,6 @@ export const qk = {
   heartbeats: ["heartbeats"] as unknown[],
   agentHeartbeat: (agentId: string) => ["heartbeats", "agent", agentId],
   runs: ["runs"] as unknown[],
-  /** Spend and budgets (refreshed when runs end or stand still, and when settings or agents change). */
-  spend: ["spend"] as unknown[],
-  spendReport: (period: string, agentId: string | null) => ["spend", "report", period, agentId ?? "all"] as const,
-  budgets: ["spend", "budgets"] as unknown[],
   /** Runs handed over by a run (under `runs`, so run events refresh them). */
   runChildren: (runId: string) => ["runs", "children", runId] as const,
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],
@@ -100,6 +99,7 @@ export const qk = {
   artifactList: (workspaceId: string) => ["artifacts", "list", workspaceId],
   chatArtifacts: (conversationId: string) => ["artifacts", "chat", conversationId],
   artifact: (id: string) => ["artifacts", "one", id],
+  pullRequest: (url: string) => ["github", "pull", url],
   artifactVersions: (id: string) => ["artifacts", "versions", id],
   artifactVersion: (id: string, version: number) => ["artifacts", "version", id, version],
   mcpServers: ["mcp-servers"] as unknown[],

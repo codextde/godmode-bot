@@ -4,6 +4,7 @@ import type { Agent, ClaudeModel, ConversationWithMessages, Effort, ModelCatalog
 import { BUILTIN_MODELS, DEFAULT_MODEL, EFFORT_OPTIONS, effortForModel, findModel } from "@godmode/shared";
 import { api } from "./api";
 import type { PendingFile } from "./attachments";
+import { t } from "./i18n";
 import { qk, queryClient } from "./query";
 
 export interface Draft {
@@ -90,7 +91,7 @@ export const useNewChatChoice = create<{ choice: ModelChoice; set: (patch: Parti
 }));
 
 function customModel(id: string, ultracode: boolean): ClaudeModel {
-  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
+  return { id, resolvedModel: id, label: id, description: t("system:composer.customModel"), efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
 }
 
 const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };
@@ -111,7 +112,7 @@ export function useEffectiveModel(agent: Agent | null | void, choice: ModelChoic
   const baseId = agent?.model?.trim() || runner?.model?.trim() || DEFAULT_MODEL;
   const base = findModel(models, baseId) ?? customModel(baseId, anyUltracode);
   const current = choice.model ? (findModel(models, choice.model) ?? customModel(choice.model, anyUltracode)) : base;
-  const baseEffort: Effort = agent?.effort ?? runner?.effort ?? "high";
+  const baseEffort: Effort = agent?.effort ?? runner?.effort ?? "medium";
   const effort = effortForModel(current.efforts, choice.effort ?? baseEffort);
   const baseUltracode = agent?.ultracode ?? runner?.ultracode ?? false;
   const ultracode = current.ultracode && (choice.ultracode ?? baseUltracode);

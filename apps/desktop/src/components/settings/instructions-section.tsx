@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { Bot, ChevronRight, Globe2, Layers, MessageSquare, Plus } from "lucide-react";
 import { MAX_INSTRUCTIONS_LENGTH, type Settings, type Workspace } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
@@ -13,18 +14,14 @@ import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
 import { CommitTextarea, SectionHeading, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
 const LAYERS = [
-  { icon: Globe2, label: "Every agent", where: "Right here" },
-  { icon: Layers, label: "Workspace", where: "Agent context" },
-  { icon: Bot, label: "Agent", where: "Agent settings" },
-  { icon: MessageSquare, label: "Chat", where: "Under the message box" },
-];
-
-const EXAMPLE = `1. Commit as me only — never add an AI co-author.
-2. Keep code comments to a minimum.
-3. Merge main into your branch and fix conflicts before opening a pull request.
-4. For UI changes, attach screenshots of the new feature.`;
+  { icon: Globe2, labelKey: "instructions.layers.every", whereKey: "instructions.layers.everyWhere" },
+  { icon: Layers, labelKey: "instructions.layers.workspace", whereKey: "instructions.layers.workspaceWhere" },
+  { icon: Bot, labelKey: "instructions.layers.agent", whereKey: "instructions.layers.agentWhere" },
+  { icon: MessageSquare, labelKey: "instructions.layers.chat", whereKey: "instructions.layers.chatWhere" },
+] as const;
 
 export function InstructionsSection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation(["settings", "common"]);
   const { patch } = useSettingsPatch();
   const workspaces = useWorkspaces();
   const agents = useAllAgents();
@@ -32,21 +29,18 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
 
   return (
     <div className="space-y-6">
-      <SectionHeading
-        title="Instructions"
-        description="Rules your agents follow on every run. Set them once for everyone, then refine them per workspace, agent or chat."
-      />
+      <SectionHeading title={t("instructions.title")} description={t("instructions.description")} />
 
       <div>
         <ol className="grid grid-cols-2 gap-2 @2xl:grid-cols-4">
-          {LAYERS.map(({ icon: Icon, label, where }, i) => (
-            <li key={label} className="relative flex items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 shadow-card">
+          {LAYERS.map(({ icon: Icon, labelKey, whereKey }, i) => (
+            <li key={labelKey} className="relative flex items-center gap-2.5 rounded-lg border bg-card px-3 py-2.5 shadow-card">
               <span className="grid size-7 shrink-0 place-items-center rounded-md bg-paper-2 text-muted-foreground ring-1 ring-border ring-inset">
                 <Icon className="size-3.5" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium">{label}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">{where}</span>
+                <span className="block truncate text-[13px] font-medium">{t(labelKey)}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">{t(whereKey)}</span>
               </span>
               {i < LAYERS.length - 1 && (
                 <ChevronRight aria-hidden className="absolute top-1/2 -right-[13px] z-10 hidden size-4 -translate-y-1/2 text-muted-foreground/60 @2xl:block" />
@@ -55,35 +49,34 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
           ))}
         </ol>
         <p className="mt-2 text-xs text-muted-foreground">
-          All of them go into every run. When two disagree, the more specific one wins — a chat beats its agent, an agent beats its workspace, a
-          workspace beats every agent.
+          {t("instructions.precedence")}
         </p>
       </div>
 
-      <SettingsGroup title="Every agent" icon={<Globe2 />} description="Included in every run performed on your behalf.">
+      <SettingsGroup title={t("instructions.every.title")} icon={<Globe2 />} description={t("instructions.every.description")}>
         <div className="py-4">
           <CommitTextarea
             id="global-instructions"
-            aria-label="Instructions for every agent"
+            aria-label={t("instructions.every.label")}
             maxLength={MAX_INSTRUCTIONS_LENGTH}
             className="min-h-48 resize-y font-sans text-sm leading-relaxed"
-            placeholder={EXAMPLE}
+            placeholder={t("instructions.every.example")}
             value={settings.runner.appendSystemPrompt}
             onCommit={(appendSystemPrompt) => patch({ runner: { appendSystemPrompt } })}
           />
-          <p className="mt-2 text-xs text-muted-foreground">Saved as you type. Ongoing chats pick up changes with their next message.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("instructions.every.savedHint")}</p>
         </div>
       </SettingsGroup>
 
       <SettingsGroup
-        title="Workspaces"
+        title={t("instructions.workspaces.title")}
         icon={<Layers />}
-        description="Agent context — given to every agent in a workspace on every run."
+        description={t("instructions.workspaces.description")}
         actions={
           workspaces.data?.length ? (
             <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
               <Link to="/workspaces?new=1">
-                <Plus /> New
+                <Plus /> {t("instructions.workspaces.new")}
               </Link>
             </Button>
           ) : undefined
@@ -93,11 +86,11 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
           <RowSkeleton />
         ) : !workspaces.data?.length ? (
           <p className="py-4 text-sm text-muted-foreground">
-            No workspaces yet.{" "}
-            <Link to="/workspaces?new=1" className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground">
-              Create one
-            </Link>{" "}
-            to give a client or project its own agents, logins and context.
+            <Trans
+              t={t}
+              i18nKey="instructions.workspaces.empty"
+              components={{ link: <Link to="/workspaces?new=1" className="font-medium text-foreground underline decoration-foreground/25 underline-offset-[3px] hover:decoration-foreground" /> }}
+            />
           </p>
         ) : (
           workspaces.data.map((ws) => (
@@ -106,10 +99,10 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
               tile={<WorkspaceTile icon={ws.icon} color={ws.color} size="md" className="size-8 rounded-lg text-base" />}
               title={ws.name}
               text={ws.instructions}
-              empty="No agent context yet"
+              empty={t("instructions.workspaces.noContext")}
               action={
                 <Button variant="outline" size="sm" onClick={() => setEditing(ws)}>
-                  {ws.instructions.trim() ? "Edit" : "Add"}
+                  {ws.instructions.trim() ? t("common:actions.edit") : t("common:actions.add")}
                 </Button>
               }
             />
@@ -117,7 +110,7 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
         )}
       </SettingsGroup>
 
-      <SettingsGroup title="Agents" icon={<Bot />} description="Each agent's own role and standing orders, kept in its CLAUDE.md.">
+      <SettingsGroup title={t("instructions.agents.title")} icon={<Bot />} description={t("instructions.agents.description")}>
         {agents.isLoading ? (
           <RowSkeleton />
         ) : (
@@ -127,10 +120,10 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
               tile={<AgentAvatar agent={a} size="md" />}
               title={a.name}
               text={a.instructions}
-              empty="Works from your messages alone"
+              empty={t("instructions.agents.empty")}
               action={
                 <Button variant="outline" size="sm" asChild>
-                  <Link to={`/agents/${a.id}/settings#instructions`}>{a.instructions.trim() ? "Edit" : "Add"}</Link>
+                  <Link to={`/agents/${a.id}/settings#instructions`}>{a.instructions.trim() ? t("common:actions.edit") : t("common:actions.add")}</Link>
                 </Button>
               }
             />
@@ -141,8 +134,7 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
       <div className="flex items-start gap-3 rounded-xl border border-dashed px-5 py-4">
         <MessageSquare className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Just one chat?</span> Use <span className="font-medium text-foreground">Instructions</span> under the
-          message box. They only apply to that chat and win over everything above.
+          <Trans t={t} i18nKey="instructions.oneChat" components={{ b: <span className="font-medium text-foreground" /> }} />
         </p>
       </div>
 
@@ -152,6 +144,7 @@ export function InstructionsSection({ settings }: { settings: Settings }) {
 }
 
 function LayerRow({ tile, title, text, empty, action }: { tile: ReactNode; title: string; text: string; empty: string; action: ReactNode }) {
+  const { t } = useTranslation("settings");
   const set = text.trim().length > 0;
   const lines = set ? text.trim().split("\n").filter((l) => l.trim()).length : 0;
   return (
@@ -160,7 +153,7 @@ function LayerRow({ tile, title, text, empty, action }: { tile: ReactNode; title
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <span className="truncate text-sm font-medium">{title}</span>
-          {set && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{lines === 1 ? "1 line" : `${lines} lines`}</span>}
+          {set && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{t("instructions.lines", { count: lines })}</span>}
         </div>
         <p className={cn("truncate text-xs", set ? "text-muted-foreground" : "text-muted-foreground/70")}>{set ? firstLine(text) : empty}</p>
       </div>

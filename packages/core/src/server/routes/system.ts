@@ -14,6 +14,7 @@ import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { cancelClaudeLogin, claudeLoginStatus, copyClaudeLoginLink, recheckClaudeSignedOut, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
+import { claudeUsage } from "../../services/claudeUsage";
 import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPrivacySettings, resetPrivacy } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
 import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
@@ -74,13 +75,10 @@ export function registerSystemRoutes(app: Hono) {
     checkSettingsPatch(patch, () => requireGrant(c));
     const cloud = patch.cloud as Record<string, unknown> | undefined;
     const previous = getSettings();
-    const { monthlyBudgetUsd: before = null, spendTracking: tracking } = previous.runner;
     const next = updateSettings(patch as never);
     auditSettings("user", previous, next, Object.keys(patch), requestVia(c));
     applyRuntimeSettings(next);
     if (cloud) audit("user", "cloud.settings", null, cloud);
-    if ((next.runner.monthlyBudgetUsd ?? null) !== before) audit("user", "budget.set", null, { scope: "team", from: before, to: next.runner.monthlyBudgetUsd ?? null });
-    if (next.runner.spendTracking !== tracking) audit("user", "spend.tracking", null, { from: tracking, to: next.runner.spendTracking });
     return c.json(next);
   });
 
@@ -115,6 +113,7 @@ export function registerSystemRoutes(app: Hono) {
   });
   app.post("/api/doctor/claude-login/copy", async (c) => c.json(await copyClaudeLoginLink()));
   app.delete("/api/doctor/claude-login", (c) => c.json(cancelClaudeLogin()));
+  app.get("/api/doctor/claude-usage", async (c) => c.json(await claudeUsage(c.req.query("refresh") === "1")));
   app.get("/api/doctor/claude-update", async (c) => c.json(await claudeUpdateStatus(c.req.query("refresh") === "1")));
   app.post("/api/doctor/claude-update", async (c) => {
     disableIdleTimeout(c);

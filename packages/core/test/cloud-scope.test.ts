@@ -102,6 +102,15 @@ describe("cloud route classification", () => {
     expect(res.status).toBe(403);
   });
 
+  test("which Hex program runs is chosen on the computer only", async () => {
+    const current = getSettings().voice.hexPath;
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { hexPath: "/tmp/evil" } }))).toBe(
+      "These settings can only be changed in Godmode on the computer itself.",
+    );
+    expect(await cloudRefusal("PUT", "/api/settings", "owner", async () => ({ voice: { hexPath: current, hexModel: "whisper_large_v3_turbo" } }))).toBeNull();
+    expect(await cloudRefusal("GET", "/api/voice/hex", "owner", async () => null)).toBeNull();
+  });
+
   test("pointing the voice provider somewhere else needs allowSecrets: the vault's OpenAI key goes there", async () => {
     const OPERATOR: CloudRelayUser = { ...OWNER, id: "usr_operator", role: "operator" };
     const current = getSettings().voice.openaiBaseUrl;
@@ -228,14 +237,14 @@ describe("usage", () => {
     const res = await call<UsageSummary>("GET", "/api/usage?days=30");
     expect(res.status).toBe(200);
     const u = res.data;
-    expect(u).toMatchObject({ runs: 4, costUsd: 1.25, durationMs: 3500, turns: 6, tokens: { input: 200, output: 100, cacheRead: 20, cacheWrite: 10 } });
+    expect(u).toMatchObject({ runs: 4, durationMs: 3500, turns: 6, tokens: { input: 200, output: 100, cacheRead: 20, cacheWrite: 10 } });
     expect(u.byDay).toHaveLength(30);
-    expect(u.byDay.at(-1)).toEqual({ day: day(0).slice(0, 10), runs: 2, costUsd: 1 });
-    expect(u.byDay.at(-2)).toEqual({ day: day(1).slice(0, 10), runs: 1, costUsd: 0.25 });
+    expect(u.byDay.at(-1)).toEqual({ day: day(0).slice(0, 10), runs: 2 });
+    expect(u.byDay.at(-2)).toEqual({ day: day(1).slice(0, 10), runs: 1 });
     expect(u.byModel).toEqual([
-      { model: "claude-opus", runs: 2, costUsd: 1 },
-      { model: "unknown", runs: 1, costUsd: 0.25 },
-      { model: "claude-sonnet", runs: 1, costUsd: 0 },
+      { model: "claude-opus", runs: 2 },
+      { model: "claude-sonnet", runs: 1 },
+      { model: "unknown", runs: 1 },
     ]);
     expect(Date.parse(u.from)).toBeLessThan(Date.parse(u.to));
 

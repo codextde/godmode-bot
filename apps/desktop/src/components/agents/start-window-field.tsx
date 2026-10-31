@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Shuffle } from "lucide-react";
-import { formatMinutes } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { maxStartWindow, START_WINDOW_PRESETS } from "./cron";
+import { formatMinutes, maxStartWindow, START_WINDOW_PRESETS } from "./cron";
 
 /**
  * "Random start time": the run begins somewhere in a window after the scheduled time, 0 = on time.
@@ -22,6 +22,7 @@ export function StartWindowField({
   value: number;
   onChange: (minutes: number) => void;
 }) {
+  const { t } = useTranslation("agents");
   const [initial] = useState(value);
   const [remembered, setRemembered] = useState(value || 60);
   const on = value > 0;
@@ -41,9 +42,9 @@ export function StartWindowField({
         </div>
         <div className="min-w-0 flex-1">
           <Label htmlFor="routine-start-window" className="cursor-pointer text-sm">
-            Random start time
+            {t("startWindowField.label")}
           </Label>
-          <p className="mt-0.5 text-xs text-muted-foreground">Starts at a different moment every time — like a coworker who doesn't clock in on the dot.</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t("startWindowField.description")}</p>
         </div>
         <Switch id="routine-start-window" checked={on} onCheckedChange={(v) => onChange(v ? Math.min(remembered, max) : 0)} />
       </div>
@@ -58,7 +59,7 @@ export function StartWindowField({
           >
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-3 py-2.5">
               <span id="routine-start-window-label" className="text-xs text-muted-foreground">
-                Start within
+                {t("startWindowField.within")}
               </span>
               <ToggleGroup
                 type="single"

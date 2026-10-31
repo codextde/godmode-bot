@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Play } from "lucide-react";
 import type { Agent, AgentPresence, CharacterMood } from "@godmode/shared";
-import { agentPresence, presenceLabel } from "@godmode/shared";
+import { agentPresence } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { useMissingLogins, useScopeWorkspace } from "@/lib/hooks";
@@ -89,8 +91,30 @@ export function useAgentMood(agent: Agent): CharacterMood {
 
 type ChatTarget = Pick<Agent, "id" | "name" | "enabled">;
 
+/** The agent's presence as a short status line in the app language. */
+export function agentPresenceLabel(p: AgentPresence): string {
+  switch (p.state) {
+    case "off":
+      return translate("agents:agentActions.presence.off");
+    case "working":
+      return p.running > 1 ? translate("agents:agentActions.presence.workingMany", { n: p.running }) : translate("agents:agentActions.presence.working");
+    case "waiting":
+      if (!p.waiting) return translate("agents:agentActions.presence.needsLogin");
+      return p.waiting > 1 ? translate("agents:agentActions.presence.needsYouMany", { n: p.waiting }) : translate("agents:agentActions.presence.needsAnswer");
+    case "failed":
+      return translate("agents:agentActions.presence.failed");
+    case "paused":
+      return p.paused > 1 ? translate("agents:agentActions.presence.pausedMany", { n: p.paused }) : translate("agents:agentActions.presence.paused");
+    case "queued":
+      return p.queued > 1 ? translate("agents:agentActions.presence.queuedMany", { n: p.queued }) : translate("agents:agentActions.presence.queued");
+    default:
+      return translate("agents:agentActions.presence.idle");
+  }
+}
+
 /** Start a fresh conversation with an agent and open it. A switched-off agent gets a "Switch on and chat" offer instead. */
 export function useStartAgentChat() {
+  const { t } = useTranslation("agents");
   const navigate = useNavigate();
   const qc = useQueryClient();
   const workspace = useScopeWorkspace();
@@ -107,55 +131,58 @@ export function useStartAgentChat() {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${conversation.id}`);
     },
-    onError: (err) => toast.error("Couldn't start a chat", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("agentActions.startChat.error"), { description: errorMessage(err) }),
   });
   return {
     ...mutation,
     mutate: (agent: ChatTarget) => {
       if (agent.enabled) return mutation.mutate({ agent });
-      toast(`${agent.name} is switched off`, {
-        description: "It doesn't answer until you switch it on.",
-        action: { label: "Switch on and chat", onClick: () => mutation.mutate({ agent, switchOn: true }) },
+      toast(t("agentActions.startChat.offTitle", { name: agent.name }), {
+        description: t("agentActions.startChat.offDescription"),
+        action: { label: t("agentActions.startChat.switchOnAndChat"), onClick: () => mutation.mutate({ agent, switchOn: true }) },
       });
     },
   };
 }
 
 export function useToggleAgent() {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api.agents.update(id, { enabled }),
     onSuccess: (agent) => {
       qc.setQueryData(qk.agent(agent.id), agent);
       qc.invalidateQueries({ queryKey: qk.agents });
-      toast.success(agent.enabled ? `${agent.name} is switched on` : `${agent.name} is switched off`, {
-        description: agent.enabled ? undefined : "Its automations won't run until you switch it on again.",
+      toast.success(agent.enabled ? t("agentActions.toggle.on", { name: agent.name }) : t("agentActions.toggle.off", { name: agent.name }), {
+        description: agent.enabled ? undefined : t("agentActions.toggle.offDescription"),
       });
     },
-    onError: (err) => toast.error("Couldn't update agent", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("agentActions.toggle.error"), { description: errorMessage(err) }),
   });
 }
 
 /** Copy an agent's setup (the passphrase first when it may read secrets) and open the copy's settings. */
 export function useDuplicateAgent() {
+  const { t } = useTranslation("agents");
   const navigate = useNavigate();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (agent: Agent) =>
-      agent.permissions.secretAccess === "reveal" ? withGrant((grant) => api.agents.duplicate(agent.id, grant), `Confirm to copy ${agent.name}, which may read secrets.`) : api.agents.duplicate(agent.id),
+      agent.permissions.secretAccess === "reveal" ? withGrant((grant) => api.agents.duplicate(agent.id, grant), t("agentActions.duplicate.grant", { name: agent.name })) : api.agents.duplicate(agent.id),
     onSuccess: (copy, source) => {
       qc.invalidateQueries({ queryKey: qk.agents });
-      toast.success(`${copy.name} is ready`, { description: `Same setup as ${source.name}, with a fresh memory. Give it its own name and role.` });
+      toast.success(t("agentActions.duplicate.ready", { name: copy.name }), { description: t("agentActions.duplicate.readyDescription", { source: source.name }) });
       navigate(`/agents/${copy.id}/settings`);
     },
     onError: (err, source) => {
-      if (!isGrantCancelled(err)) toast.error(`Couldn't duplicate ${source.name}`, { description: errorMessage(err) });
+      if (!isGrantCancelled(err)) toast.error(t("agentActions.duplicate.error", { name: source.name }), { description: errorMessage(err) });
     },
   });
 }
 
 /** Pause everything an agent is working on, and continue it where it stopped. */
 export function useAgentPause() {
+  const { t } = useTranslation("agents");
   const qc = useQueryClient();
   const refresh = () => {
     qc.invalidateQueries({ queryKey: qk.agents });
@@ -166,19 +193,19 @@ export function useAgentPause() {
     mutationFn: (agent: Agent) => api.agents.pause(agent.id),
     onSuccess: ({ paused }, agent) => {
       refresh();
-      toast(`${agent.name} is pausing`, { description: paused > 1 ? `${paused} chats stop after the step they are in.` : "It stops after the step it is in." });
+      toast(t("agentActions.pause.pausing", { name: agent.name }), { description: paused > 1 ? t("agentActions.pause.many", { n: paused }) : t("agentActions.pause.one") });
     },
-    onError: (err) => toast.error("Couldn't pause", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("agentActions.pause.error"), { description: errorMessage(err) }),
   });
   const resume = useMutation({
     mutationFn: (agent: Agent) => api.agents.continue(agent.id),
     onSuccess: ({ continued }, agent) => {
       refresh();
-      toast.success(`${agent.name} continues`, { description: continued > 1 ? `${continued} chats go on where they stopped.` : "It goes on where it stopped." });
+      toast.success(t("agentActions.resume.continues", { name: agent.name }), { description: continued > 1 ? t("agentActions.resume.many", { n: continued }) : t("agentActions.resume.one") });
     },
     onError: (err) => {
       refresh();
-      toast.error("Couldn't continue", { description: errorMessage(err) });
+      toast.error(t("agentActions.resume.error"), { description: errorMessage(err) });
     },
   });
   return { pause, resume };
@@ -203,6 +230,7 @@ export function RunTaskDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const agent = useLatest(agentProp);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -213,14 +241,14 @@ export function RunTaskDialog({
     onSuccess: (res, input) => {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       qc.invalidateQueries({ queryKey: qk.runs });
-      toast.success(`${agent?.name ?? "Agent"} is on it`);
+      toast.success(t("agentActions.runTask.onIt", { name: agent?.name ?? t("common:words.agent") }));
       // Text typed while it was starting stays as the next draft.
       if (input.agentId !== agent?.id) clearDraft(`run-task:${input.agentId}`);
       else if (prompt.trim() === input.prompt) promptDraft.discard();
       onOpenChange(false);
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => toast.error("Couldn't start the task", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("agentActions.runTask.error"), { description: errorMessage(err) }),
   });
   const canRun = !!agent && !run.isPending;
 
@@ -231,8 +259,8 @@ export function RunTaskDialog({
           <div className="flex items-center gap-3">
             {agent && <AgentAvatar agent={agent} size="md" />}
             <div>
-              <DialogTitle>Run a task{agent ? ` with ${agent.name}` : ""}</DialogTitle>
-              <DialogDescription>It works in a new conversation — you can follow along live.</DialogDescription>
+              <DialogTitle>{agent ? t("agentActions.runTask.titleWith", { name: agent.name }) : t("agentActions.runTask.title")}</DialogTitle>
+              <DialogDescription>{t("agentActions.runTask.description")}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -245,7 +273,7 @@ export function RunTaskDialog({
         >
           <div className="space-y-1.5">
             <Label htmlFor="run-task-prompt">
-              Task <span className="font-normal text-muted-foreground">(optional)</span>
+              {t("agentActions.runTask.label")} <span className="font-normal text-muted-foreground">({t("common:words.optional")})</span>
             </Label>
             <Textarea
               id="run-task-prompt"
@@ -258,26 +286,26 @@ export function RunTaskDialog({
                   if (canRun) run.mutate({ agentId: agent.id, prompt: prompt.trim() });
                 }
               }}
-              placeholder={agent?.description ? `e.g. ${agent.description}` : "Describe what it should do…"}
+              placeholder={agent?.description ? t("agentActions.runTask.placeholderExample", { description: agent.description }) : t("agentActions.runTask.placeholder")}
               aria-describedby="run-task-hint"
               className="min-h-32 resize-none text-[15px]"
             />
             <p id="run-task-hint" className="text-xs text-muted-foreground">
-              Leave it empty and {agent?.name ?? "the agent"} works from its instructions.
+              {agent?.name ? t("agentActions.runTask.hint", { name: agent.name }) : t("agentActions.runTask.hintGeneric")}
             </p>
           </div>
           <DialogFooter className="items-center sm:justify-between">
             <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
               <Kbd>{modKey}</Kbd>
-              <Kbd>↵</Kbd> to run
+              <Kbd>↵</Kbd> {t("agentActions.runTask.toRun")}
             </span>
             <div className="flex gap-2">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={!canRun}>
                 {run.isPending ? <Spinner /> : <Play />}
-                Run task
+                {t("agentActions.runTask.submit")}
               </Button>
             </div>
           </DialogFooter>
@@ -298,6 +326,7 @@ export function DeleteAgentDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const agent = useLatest(agentProp);
   const qc = useQueryClient();
   const del = useMutation({
@@ -306,23 +335,21 @@ export function DeleteAgentDialog({
       qc.invalidateQueries({ queryKey: qk.agents });
       qc.invalidateQueries({ queryKey: qk.routines });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      toast.success(`${agent?.name ?? "Agent"} deleted`);
+      toast.success(t("agentActions.delete.deleted", { name: agent?.name ?? t("common:words.agent") }));
       onOpenChange(false);
       onDeleted?.();
     },
-    onError: (err) => toast.error("Couldn't delete agent", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("agentActions.delete.error"), { description: errorMessage(err) }),
   });
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete {agent?.name}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This removes the agent, its automations and conversations. Its memory repository is deleted as well. This can't be undone.
-          </AlertDialogDescription>
+          <AlertDialogTitle>{t("agentActions.delete.title", { name: agent?.name ?? "" })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("agentActions.delete.description")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
@@ -332,7 +359,7 @@ export function DeleteAgentDialog({
             variant="destructive"
           >
             {del.isPending && <Spinner />}
-            Delete agent
+            {t("agentActions.delete.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -355,10 +382,11 @@ export function AgentStatus({
   showActivity?: boolean;
   interactive?: boolean;
 }) {
+  const { t } = useTranslation("agents");
   const live = useAgentLiveRun(agent.id);
   const presence = useAgentPresence(agent);
   const { state } = presence;
-  const label = state === "working" && presence.running === 1 && showActivity && live?.activity ? live.activity : presenceLabel(presence);
+  const label = state === "working" && presence.running === 1 && showActivity && live?.activity ? live.activity : agentPresenceLabel(presence);
   const text = (
     <span className={cn("truncate", state === "working" ? "text-shimmer font-medium" : state === "waiting" ? "text-foreground" : state === "failed" ? "text-destructive" : "text-muted-foreground")}>
       {label}
@@ -381,7 +409,7 @@ export function AgentStatus({
   const linkClass = cn("relative z-10 inline-flex min-w-0 items-center gap-1.5 rounded-sm text-xs underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none", className);
   if (interactive && state === "failed" && agent.failedRunId) {
     return (
-      <Link to={`/activity?run=${agent.failedRunId}`} className={linkClass} title="Open the run that failed" onClick={(e) => e.stopPropagation()}>
+      <Link to={`/activity?run=${agent.failedRunId}`} className={linkClass} title={t("agentActions.status.openFailedRun")} onClick={(e) => e.stopPropagation()}>
         {dot}
         {text}
       </Link>
@@ -389,7 +417,7 @@ export function AgentStatus({
   }
   if (interactive && state === "working" && presence.running === 1 && live) {
     return (
-      <Link to={`/chat/${live.conversationId}`} className={linkClass} aria-label={`Watch ${agent.name} work: ${label}`} onClick={(e) => e.stopPropagation()}>
+      <Link to={`/chat/${live.conversationId}`} className={linkClass} aria-label={t("agentActions.status.watch", { name: agent.name, activity: label })} onClick={(e) => e.stopPropagation()}>
         {dot}
         {text}
       </Link>

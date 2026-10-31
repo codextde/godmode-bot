@@ -1,0 +1,121 @@
+{
+  "theAgent": "der Agent",
+  "theAgentStart": "Der Agent",
+  "version": "Version {{version}}",
+  "more": "Mehr",
+  "unpin": "Lösen",
+  "pinToTop": "Oben anheften",
+  "openChat": "Zugehörigen Chat öffnen",
+  "frame": {
+    "cloudTitle": "Öffne es auf deinem Computer",
+    "cloudDescription": "Artefakte laufen in der Godmode-App oder im Dashboard auf deinem Computer, nicht über Godmode Cloud."
+  },
+  "page": {
+    "back": "Artefakte",
+    "busyPlaceholder": "{{agent}} arbeitet daran — du kannst noch etwas ergänzen",
+    "placeholder": "Bitte {{agent}}, etwas zu ändern…",
+    "askForChange": "Änderung anfragen",
+    "chat": "Chat"
+  },
+  "card": {
+    "artifact": "Artefakt",
+    "built": "Erstellt",
+    "changedCode": "Code geändert",
+    "updatedData": "Daten aktualisiert",
+    "updated": "Aktualisiert",
+    "failed": "Hat nicht geklappt",
+    "building": "Wird erstellt…",
+    "changing": "Wird geändert…",
+    "showing": "Angezeigt"
+  },
+  "toggle": {
+    "showOne": "Artefakt anzeigen",
+    "showMany": "Artefakte anzeigen ({{count}})"
+  },
+  "starters": {
+    "sales": { "title": "Sales-Dashboard", "blurb": "Umsatz, Bestellungen und Top-Produkte auf einen Blick" },
+    "kpi": { "title": "KPI-Tracker", "blurb": "Die paar Zahlen, die du jeden Morgen checkst" },
+    "pipeline": { "title": "Deal-Pipeline", "blurb": "Zieh Deals durch deine Vertriebsphasen" },
+    "budget": { "title": "Budgetplaner", "blurb": "Einnahmen, Kosten und was jeden Monat übrig bleibt" },
+    "content": { "title": "Content-Kalender", "blurb": "Plane Posts über all deine Kanäle" },
+    "calculator": { "title": "Preisrechner", "blurb": "Ein Angebots- oder Margenrechner für deine Angebote" }
+  },
+  "overview": {
+    "emptyTitle": "Noch nichts gebaut",
+    "emptyDescription": "Beschreib oben ein Dashboard oder ein Tool, oder wähl einen Startpunkt. Agenten bauen Artefakte auch, wenn du in einem beliebigen Chat danach fragst.",
+    "yourArtifacts": "Deine Artefakte",
+    "noMatch": "Nichts passt zu „{{query}}“.",
+    "startError": "Konnte nicht gestartet werden",
+    "composerPlaceholder": "Beschreib ein Dashboard oder eine App — z. B. „Ein Sales-Dashboard mit Shopify-Umsatz, Bestellungen und Top-Produkten dieses Monats“",
+    "buildIt": "Bauen"
+  },
+  "tile": {
+    "updating": "Wird aktualisiert"
+  },
+  "toast": {
+    "queued": "{{agent}} kümmert sich direkt nach dem aktuellen Schritt darum",
+    "onIt": "{{agent}} ist dran",
+    "updatesItself": "Es aktualisiert sich hier von selbst.",
+    "sendError": "Konnte nicht gesendet werden",
+    "refreshing": "{{agent}} holt frische Daten",
+    "refreshError": "Konnte nicht aktualisiert werden",
+    "sameVersion": "Version {{version}} ist identisch mit der aktuellen",
+    "restored": "Als Version {{version}} wiederhergestellt",
+    "restoreError": "Konnte nicht wiederhergestellt werden",
+    "deleted": "{{title}} gelöscht",
+    "deletedFallback": "Artefakt gelöscht",
+    "deleteError": "Konnte nicht gelöscht werden",
+    "saveError": "Konnte nicht gespeichert werden"
+  },
+  "view": {
+    "goneTitle": "Dieses Artefakt gibt es nicht mehr",
+    "goneDescription": "Es wurde gelöscht oder liegt auf einem anderen Computer.",
+    "working": "{{agent}} arbeitet daran",
+    "updated": "Aktualisiert {{time}}",
+    "updatedWithData": "Aktualisiert {{time}} · Daten {{data}}",
+    "refreshData": "Daten aktualisieren",
+    "askFreshData": "Frische Daten anfragen",
+    "narrower": "Schmaler",
+    "wider": "Breiter",
+    "openFullScreen": "Im Vollbild öffnen",
+    "howItRefreshesMenu": "So wird aktualisiert…",
+    "downloadHtml": "Als HTML herunterladen",
+    "backToLatest": "Zur neuesten",
+    "restore": "Wiederherstellen",
+    "appAsksRefresh": "Die App bittet {{agent}} um frische Daten.",
+    "appWantsToSend": "Die App möchte {{agent}} senden: <q>„{{text}}“</q>",
+    "notNow": "Nicht jetzt",
+    "somethingBroke": "Etwas ist kaputtgegangen: {{failure}}",
+    "dismiss": "Ausblenden",
+    "askToFix": "{{agent}} um Reparatur bitten"
+  },
+  "refreshDialog": {
+    "title": "So wird aktualisiert",
+    "description": "Was {{agent}} tut, wenn du auf Aktualisieren drückst: woher die Daten kommen und was aktualisiert wird.",
+    "placeholder": "z. B. Lies die Bestellungen der letzten 60 Tage aus dem Shopify-Admin und aktualisiere Umsatz, Bestellungen und Top-Produkte."
+  },
+  "deleteDialog": {
+    "title": "{{title}} löschen?",
+    "description": "Code, alle Versionen und die darin gespeicherten Daten sind endgültig weg. Der Chat bleibt.",
+    "keep": "Behalten"
+  },
+  "tabs": {
+    "label": "Ansicht",
+    "preview": "Vorschau",
+    "code": "Code",
+    "data": "Daten"
+  },
+  "versions": {
+    "label": "Versionen",
+    "first": "Erste Version",
+    "changed": "Geändert"
+  },
+  "source": {
+    "copyHtml": "HTML kopieren",
+    "copyData": "Daten kopieren",
+    "saved": "Gespeichert {{time}}",
+    "noData": "Noch keine Daten gespeichert",
+    "lines_one": "{{formatted}} Zeile",
+    "lines_other": "{{formatted}} Zeilen"
+  }
+}

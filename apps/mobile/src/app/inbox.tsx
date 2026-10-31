@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, AppNotification, MissingLogin, MissingLoginKind, MissingLoginStatus } from "@godmode/shared";
 import { CharacterAvatar } from "@/components/character";
 import { openHumanTask } from "@/components/human-task-row";
@@ -10,27 +11,29 @@ import { NotificationRow, openNotificationLink } from "@/components/notification
 import { openChat } from "@/components/rows";
 import { openTask } from "@/components/task-row";
 import { Badge, Card, ErrorState, Hairline, Row, SectionTitle, SkeletonRows, T, tap } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
 import { needsYou, type Need } from "@/lib/desktop-parity";
 import { shortTime } from "@/lib/format";
 import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { radius, space, useColors } from "@/lib/theme";
 
 const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "person", login: "key", review: "check", blocked: "warning" };
 
-const LOGIN_KIND: Record<MissingLoginKind, { label: string; tone: "warning" | "danger" | "neutral" }> = {
-  missing_credential: { label: "Missing login", tone: "warning" },
-  invalid_credential: { label: "Login failed", tone: "danger" },
-  missing_totp: { label: "Missing 2FA", tone: "warning" },
-  missing_account: { label: "No account", tone: "neutral" },
-  other: { label: "Needs attention", tone: "neutral" },
-};
+const LOGIN_KIND = {
+  missing_credential: { labelKey: "login.kind.missingCredential", tone: "warning" },
+  invalid_credential: { labelKey: "login.kind.invalidCredential", tone: "danger" },
+  missing_totp: { labelKey: "login.kind.missingTotp", tone: "warning" },
+  missing_account: { labelKey: "login.kind.missingAccount", tone: "neutral" },
+  other: { labelKey: "login.kind.other", tone: "neutral" },
+} as const satisfies Record<MissingLoginKind, { labelKey: string; tone: "warning" | "danger" | "neutral" }>;
 
 /** What agents need from the human (questions, tasks, logins, reviews) and their updates, from every workspace. */
 export default function Inbox() {
   const c = useColors();
+  const { t } = useTranslation("inbox");
   const { byId: agents } = useAgents();
   const questions = useQuery({ queryKey: qk.questions, queryFn: api.questions.open });
   const humanTasks = useOpenHumanTasks();
@@ -48,9 +51,9 @@ export default function Inbox() {
         humanTasks: humanTasks.data ?? [],
         missing: [],
         tasks: tasks.data ?? [],
-        nameOf: (id) => (id ? (agents.get(id)?.name ?? "An agent") : "An agent"),
+        nameOf: (id) => (id ? (agents.get(id)?.name ?? t("anAgent")) : t("anAgent")),
       }),
-    [questions.data, humanTasks.data, tasks.data, agents],
+    [questions.data, humanTasks.data, tasks.data, agents, t],
   );
   const logins = missing.data ?? [];
   const loading = questions.isLoading && humanTasks.isLoading && missing.isLoading;
@@ -58,10 +61,10 @@ export default function Inbox() {
 
   return (
     <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={styles.content} refreshControl={<RefreshControl {...pull} />}>
-      <Stack.Title>Inbox</Stack.Title>
+      <Stack.Title>{t("title")}</Stack.Title>
 
       <View>
-        <SectionTitle title={waiting ? `Needs your attention · ${waiting}` : "Needs your attention"} />
+        <SectionTitle title={waiting ? t("attentionCount", { count: waiting }) : t("attention")} />
         {loading ? (
           <Card>
             <SkeletonRows count={3} avatar={30} />
@@ -71,10 +74,10 @@ export default function Inbox() {
             <Icon name="check" size={16} color={c.success} />
             <View style={{ flex: 1, gap: 2 }}>
               <T variant="subhead" style={{ fontWeight: "600" }}>
-                All clear
+                {t("allClear")}
               </T>
               <T variant="footnote" muted>
-                When an agent needs a decision, your OK or a login, it lands here.
+                {t("allClearBody")}
               </T>
             </View>
           </Card>
@@ -143,7 +146,7 @@ function setLoginStatus(item: MissingLogin, status: MissingLoginStatus) {
     .setStatus(item.id, status)
     .catch((err) => {
       if (previous) queryClient.setQueryData(qk.missingLogins, previous);
-      Alert.alert("Couldn't update the request", err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err));
+      Alert.alert(t("inbox:login.updateFailed"), err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
     })
     .finally(() => {
       void queryClient.invalidateQueries({ queryKey: qk.missingLogins });
@@ -153,13 +156,15 @@ function setLoginStatus(item: MissingLogin, status: MissingLoginStatus) {
 
 function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
   const c = useColors();
+  const { t } = useTranslation("inbox");
   const kind = LOGIN_KIND[item.kind] ?? LOGIN_KIND.other;
+  const kindLabel = t(kind.labelKey);
   return (
     <Card style={[styles.login, { borderColor: kind.tone === "danger" ? c.danger : c.border }]}>
       <Row style={{ gap: space.sm, alignItems: "flex-start" }}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-            {item.service || item.url || "Unknown service"}
+            {item.service || item.url || t("login.unknownService")}
           </T>
           {item.url ? (
             <T variant="caption" muted numberOfLines={1}>
@@ -167,7 +172,7 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
             </T>
           ) : null}
         </View>
-        <Badge label={item.occurrences > 1 ? `${kind.label} ×${item.occurrences}` : kind.label} tone={kind.tone} />
+        <Badge label={item.occurrences > 1 ? `${kindLabel} ×${item.occurrences}` : kindLabel} tone={kind.tone} />
       </Row>
       {item.reason ? (
         <T variant="subhead" selectable>
@@ -177,15 +182,15 @@ function LoginCard({ item, agent }: { item: MissingLogin; agent?: Agent }) {
       <Row style={{ gap: 6 }}>
         {agent ? <CharacterAvatar agent={agent} size={18} mood="attention" /> : null}
         <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
-          {agent ? `Reported by ${agent.name}` : item.agentId ? "Reported by an agent" : "Reported by Godmode"} · {shortTime(item.updatedAt || item.createdAt)}
+          {agent ? t("login.reportedBy", { name: agent.name }) : item.agentId ? t("login.reportedByAgent") : t("login.reportedByGodmode")} · {shortTime(item.updatedAt || item.createdAt)}
         </T>
       </Row>
       <T variant="footnote" muted>
-        Add the login in Godmode on your computer, where the vault is.
+        {t("login.addOnComputer")}
       </T>
       <Row style={{ gap: space.sm }}>
-        <LoginButton title="Dismiss" icon="close" onPress={() => setLoginStatus(item, "dismissed")} />
-        <LoginButton title="Mark resolved" icon="check" onPress={() => setLoginStatus(item, "resolved")} />
+        <LoginButton title={t("login.dismiss")} icon="close" onPress={() => setLoginStatus(item, "dismissed")} />
+        <LoginButton title={t("login.markResolved")} icon="check" onPress={() => setLoginStatus(item, "resolved")} />
       </Row>
     </Card>
   );
@@ -218,7 +223,7 @@ function markRead(ids: string[] | "all") {
         // An older computer refuses this route; the phone keeps them read until the next refresh.
         if (err instanceof ApiError && err.code === "device_forbidden") return;
         if (previous) queryClient.setQueryData(qk.notifications, previous);
-        Alert.alert("Couldn't mark it read", errorText(err));
+        Alert.alert(t("inbox:notifications.markReadFailed"), errorText(err));
         void queryClient.invalidateQueries({ queryKey: qk.notifications });
         void queryClient.invalidateQueries({ queryKey: qk.bootstrap });
       },
@@ -228,6 +233,7 @@ function markRead(ids: string[] | "all") {
 const PAGE = 15;
 
 function Notifications({ list, loading, error, onRetry }: { list?: AppNotification[]; loading: boolean; error: string | null; onRetry: () => void }) {
+  const { t } = useTranslation("inbox");
   const [limit, setLimit] = useState(PAGE);
   const items = list ?? [];
   const unread = items.filter((n) => !n.read).length;
@@ -238,8 +244,8 @@ function Notifications({ list, loading, error, onRetry }: { list?: AppNotificati
   return (
     <View>
       <SectionTitle
-        title={unread ? `Notifications · ${unread} new` : "Notifications"}
-        action={unread ? "Mark all read" : undefined}
+        title={unread ? t("notifications.titleNew", { count: unread }) : t("notifications.title")}
+        action={unread ? t("notifications.markAllRead") : undefined}
         onAction={() => {
           tap();
           markRead("all");
@@ -249,10 +255,10 @@ function Notifications({ list, loading, error, onRetry }: { list?: AppNotificati
         {loading ? (
           <SkeletonRows count={4} avatar={30} />
         ) : error && !items.length ? (
-          <ErrorState title="Couldn't load notifications" error={error} onRetry={onRetry} />
+          <ErrorState title={t("notifications.loadFailed")} error={error} onRetry={onRetry} />
         ) : items.length === 0 ? (
           <T variant="subhead" muted style={{ padding: space.lg }}>
-            No notifications. Agents post updates here when they finish work, need something or hit a problem.
+            {t("notifications.empty")}
           </T>
         ) : (
           <>
@@ -267,7 +273,7 @@ function Notifications({ list, loading, error, onRetry }: { list?: AppNotificati
                 <Hairline />
                 <Pressable accessibilityRole="button" onPress={() => setLimit((l) => l + PAGE)} style={styles.more}>
                   <T variant="footnote" muted style={{ fontWeight: "600" }}>
-                    Show {Math.min(PAGE, items.length - limit)} more
+                    {t("notifications.showMore", { count: Math.min(PAGE, items.length - limit) })}
                   </T>
                 </Pressable>
               </>

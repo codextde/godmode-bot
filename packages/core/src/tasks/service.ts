@@ -160,8 +160,6 @@ interface TaskRow extends PauseQuestionCols {
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
-  paused_budget_scope?: "agent" | "team" | null;
-  paused_budget_usd?: number | null;
   paused_at?: string | null;
   parent_id: string | null;
   parts_seen_at: string | null;
@@ -193,7 +191,6 @@ const finishState = new Map<string, boolean>();
 const SELECT = `SELECT t.*, r.id AS run_id, r.status AS run_status, r.started_at AS run_started_at,
     p.run_id AS paused_run_id, p.reason AS paused_reason,
     p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, ${PAUSE_QUESTION_SQL},
-    p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd,
     f.due_at AS followup_due_at, f.note AS followup_note, f.created_at AS followup_set_at,
     (SELECT number FROM tasks pt WHERE pt.id = t.parent_id) AS parent_number,
     (SELECT json_group_array(json_object('id', w.id, 'number', w.number, 'title', w.title,
@@ -233,8 +230,6 @@ function toModel(r: TaskRow): Task {
               resume_at: r.paused_resume_at ?? null,
               auto: r.paused_auto ?? 0,
               created_at: r.paused_at,
-              budget_scope: r.paused_budget_scope ?? null,
-              budget_usd: r.paused_budget_usd ?? null,
             },
             r,
           )
@@ -256,7 +251,6 @@ function toModel(r: TaskRow): Task {
     createdBy: r.created_by ?? "user",
     blockedKind: r.status === "blocked" ? (r.blocked_kind ?? null) : null,
     followup: r.followup_due_at ? { note: r.followup_note ?? "", dueAt: r.followup_due_at, createdAt: r.followup_set_at ?? r.followup_due_at } : null,
-    costUsd: r.cost_usd ?? 0,
     workMs: r.work_ms ?? 0,
     runCount: r.run_count ?? 0,
     runStartedAt: r.run_started_at ?? null,
@@ -1134,7 +1128,7 @@ interface Worktree {
 const TYPE_BRIEF: Record<TaskType, string> = {
   general: "Do the task and finish with a short summary of what you did and anything the human should check.",
   research:
-    "Research this thoroughly and answer with a well-structured report in Markdown: the key findings first, then details, sources (with links) and a recommendation where it helps.",
+    "Answer the question with a Markdown report sized to it: the key findings first, then only the detail needed to act on them, sources (with links) and a recommendation where it helps. Keep it to about one screen unless the task asks for depth.",
   coding: [
     "Implement the change, keep to the project's conventions, run its tests and linters when it has them, and commit your work with clear commit messages.",
     "Don't push and don't open a pull request: Godmode pushes the branch and opens the pull request when you finish.",
@@ -1681,7 +1675,7 @@ function retriesSoFar(id: string): number {
 
 /**
  * Schedule another try when one may help — not for what only the human can fix (sign-in, Claude Code itself, a folder,
- * the VM, the model, a chat too long, the cost limit) or a run they stopped — and the tries aren't used up. The ticket
+ * the VM, the model, a chat too long) or a run they stopped — and the tries aren't used up. The ticket
  * stays In progress meanwhile; the try never cuts across anything newer (a message, a move on the board).
  */
 function retryLater(id: string, reason: string, conversationId: string | null, delayMs?: number): boolean {
@@ -1990,11 +1984,11 @@ function deliver(id: string, runId: string): boolean {
   );
   const moved = !!t?.conversation_id && latestRunId(t.conversation_id) === runId && transition(id, "in_review", WORKING);
   if (moved && t) {
-    const run = get<{ cost_usd: number | null; duration_ms: number | null; agent_id: string }>("SELECT cost_usd, duration_ms, agent_id FROM runs WHERE id = ?", runId);
+    const run = get<{ duration_ms: number | null; agent_id: string }>("SELECT duration_ms, agent_id FROM runs WHERE id = ?", runId);
     record(id, "delivered", agentActor(run?.agent_id ?? t.agent_id), {
       body: t.summary ?? "",
       runId,
-      data: { costUsd: run?.cost_usd ?? null, durationMs: run?.duration_ms ?? null, pullRequest: t.pr_number },
+      data: { durationMs: run?.duration_ms ?? null, pullRequest: t.pr_number },
     });
   }
   emit(id);
@@ -2196,11 +2190,11 @@ export async function pushTaskBranch(id: string, opts: { pullRequest: boolean })
       record(id, "pr_opened", "user", { data: { number: opened.pr_number, url: opened.pr_url ?? pullRequest.url } });
       // Handed over for review: a task blocked on its push is unblocked, and moves to Done when it's merged.
       if (transition(id, "in_review", ["blocked"]) && lastRun) {
-        record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { costUsd: null, durationMs: null, pullRequest: opened.pr_number } });
+        record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { durationMs: null, pullRequest: opened.pr_number } });
       }
     } else if (current.status === "blocked" && current.blocked_kind === "publish" && transition(id, "in_review", ["blocked"]) && lastRun) {
       // Publishing failed before and works now: delivered.
-      record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { costUsd: null, durationMs: null, pullRequest: current.pr_number } });
+      record(id, "delivered", agentActor(current.agent_id), { body: current.summary ?? "", runId: lastRun, data: { durationMs: null, pullRequest: current.pr_number } });
     }
   } catch (err) {
     if (err instanceof HttpError) throw err;

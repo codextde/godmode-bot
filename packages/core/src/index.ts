@@ -19,7 +19,7 @@ import type { CleanupRun } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { loadConfig, config, BUILD, VERSION, isLoopbackHost, type CoreConfig } from "./config";
 import { logger, setLogDir, setLogLevel } from "./log";
-import { openDb, closeDb, get, setMeta, getDb } from "./db";
+import { openDb, closeDb, get, setMeta } from "./db";
 import { createApp } from "./server/app";
 import { websocketHandler, type WsData } from "./server/ws";
 import { authenticateRequest, getAccessToken, isAllowedOrigin, setDashboardPassword } from "./server/auth";
@@ -37,7 +37,7 @@ import { startDreaming, stopDreaming } from "./memory/dreaming";
 import { startFollowups, stopFollowups } from "./services/followups";
 import { startHumanTasks, stopHumanTasks } from "./services/humanTasks";
 import { startPauses, stopPauses } from "./services/pauses";
-import { startBudgets, stopBudgets } from "./services/budgets";
+import { startClaudeAccounts, stopClaudeAccounts } from "./services/claudeAccounts";
 import { startRunNotices, stopRunNotices } from "./services/runNotices";
 import { startAutomationEvents, stopAutomationEvents } from "./automations/events";
 import { startAppTriggers, stopAppTriggers } from "./integrations/composioTriggers";
@@ -45,6 +45,7 @@ import { startMessaging, stopMessaging } from "./messaging/service";
 import { adoptStoredSolverKey } from "./browser/captcha";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
 import { shutdownComputer } from "./computer/service";
+import { stopHex } from "./voice/hex";
 import { shutdownVms, startVms } from "./vm/service";
 import { startAndroid, stopAndroid } from "./android/service";
 import { stopAllStreams } from "./android/stream";
@@ -80,7 +81,6 @@ import { startCloudLink, stopCloudLink } from "./cloud/link";
 import { licenseState, setLicenseKey, startLicense, stopLicense } from "./license/license";
 import { removeCoreFile, runConnectCli, USAGE as CONNECT_USAGE, writeCoreFile } from "./connect/cli";
 import { newId } from "./util";
-import { SPEND_BACKFILL_SQL } from "./db/migrations";
 
 const log = logger("core");
 
@@ -198,16 +198,14 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   // What the stop cut off, before the scheduler, follow-ups or automations start anything in those chats.
   const interrupted = runner ? null : interruptedWork();
   clearRunMods();
-  // Runs that were cut off by a crash are booked now (once): what their earlier stretches cost counts.
-  getDb().run(SPEND_BACKFILL_SQL);
   // Before anything can start a run: the runner keeps the display on while runs work, and counts them from the start.
   if (runner) startKeepAwake();
   else void startPower();
   startFollowups();
   startPauses();
+  startClaudeAccounts();
   // After the pauses: a question whose run no longer waits is withdrawn there, and its ticket goes with it.
   startHumanTasks();
-  startBudgets();
   startWatchdog();
   startMacPrompts();
   // What only the Godmode that holds the shared setup does: on a secondary of a device group, its primary does it.
@@ -378,7 +376,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     stopFollowups();
     stopHumanTasks();
     stopPauses();
-    stopBudgets();
+    stopClaudeAccounts();
     stopWatchdog();
     stopMacPrompts();
     if (runner) {
@@ -404,6 +402,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     await shutdownRunner();
     await shutdownBrowsers();
     await shutdownComputer();
+    await stopHex().catch(() => undefined);
     await shutdownVms().catch((err) => log.warn("could not stop VMs", err));
     stopAndroid();
     await stopAllStreams().catch(() => undefined);

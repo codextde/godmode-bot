@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -19,7 +20,7 @@ export function ConfirmDeleteDialog({
   onOpenChange,
   title,
   description,
-  confirmLabel = "Delete",
+  confirmLabel,
   pending,
   onConfirm,
 }: {
@@ -31,6 +32,7 @@ export function ConfirmDeleteDialog({
   pending?: boolean;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation("common");
   return (
     <AlertDialog open={open} onOpenChange={(o) => !pending && onOpenChange(o)}>
       <AlertDialogContent className="rounded-2xl">
@@ -42,11 +44,11 @@ export function ConfirmDeleteDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{t("actions.cancel")}</AlertDialogCancel>
           {/* Plain button (not AlertDialogAction) so the dialog stays open until the request finishes */}
           <Button variant="destructive" onClick={onConfirm} disabled={pending}>
             {pending && <Spinner />}
-            {confirmLabel}
+            {confirmLabel ?? t("actions.delete")}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

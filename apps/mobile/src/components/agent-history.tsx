@@ -3,16 +3,17 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router } from "expo-router";
 import { memo } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Run, RunStatus } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { runStatusLabel, TRIGGER_LABEL } from "./run-row";
 import { Card, Hairline, LiveDot, SectionTitle, SkeletonRows, T, tap } from "./ui";
 import { api, errorText } from "@/lib/api";
-import { formatCost, formatWork } from "@/lib/desktop-parity";
+import { formatWork } from "@/lib/desktop-parity";
 import { activityText } from "@/lib/format";
+import { dateLocale } from "@/lib/i18n";
 import { useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { alpha, radius, space, useColors, type Colors } from "@/lib/theme";
 
 const SHOWN_RUNS = 10;
@@ -29,6 +30,7 @@ function firstLine(text: string | null | undefined): string {
 /** The agent's latest run failed and the human hasn't let it go yet: what went wrong, the run, and Dismiss. */
 export function FailedRunBanner({ agent }: { agent: Agent }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const runId = agent.failedRunId;
   const run = useQuery({ queryKey: qk.run(runId ?? ""), queryFn: () => api.runs.get(runId!), enabled: !!runId });
   const dismiss = useMutation({
@@ -37,7 +39,7 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
       queryClient.setQueryData<Agent[]>(qk.agents, (old) => old?.map((a) => (a.id === updated.id ? updated : a)));
       void queryClient.invalidateQueries({ queryKey: qk.agents });
     },
-    onError: (err) => Alert.alert("Couldn't dismiss it", errorText(err)),
+    onError: (err) => Alert.alert(t("agentHistory.dismissFailed"), errorText(err)),
   });
   if (!runId) return null;
   const error = firstLine(run.data?.error);
@@ -48,7 +50,7 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
         <Icon name="warning" size={15} color={c.danger} style={{ marginTop: 2 }} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <T variant="subhead" color={c.danger} style={{ fontWeight: "600" }}>
-            Last run failed
+            {t("agentHistory.lastRunFailed")}
           </T>
           {error ? (
             <T variant="footnote" numberOfLines={4}>
@@ -56,7 +58,7 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
             </T>
           ) : run.isLoading ? null : (
             <T variant="footnote" muted>
-              This is why {agent.name} shows “Last run failed”.
+              {t("agentHistory.whyFailed", { name: agent.name })}
             </T>
           )}
         </View>
@@ -74,12 +76,12 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
         >
           {dismiss.isPending ? <ActivityIndicator size="small" color={c.textMuted} /> : null}
           <T variant="footnote" muted style={{ fontWeight: "600" }}>
-            Dismiss
+            {t("agentHistory.dismiss")}
           </T>
         </Pressable>
         <Pressable accessibilityRole="button" hitSlop={10} onPress={() => openRun(runId)}>
           <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-            Open run
+            {t("agentHistory.openRun")}
           </T>
         </Pressable>
       </View>
@@ -87,12 +89,13 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
   );
 }
 
-/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when, how long and what it cost. */
+/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when and how long. */
 export function AgentHistory({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("components");
   const runs = useQuery({ queryKey: qk.agentRuns(agent.id), queryFn: () => api.runs.list({ agentId: agent.id, limit: SHOWN_RUNS }) });
   return (
     <View>
-      <SectionTitle title="Recent runs" />
+      <SectionTitle title={t("agentHistory.recentRuns")} />
       <Card style={{ overflow: "hidden" }}>
         {runs.data?.length ? (
           runs.data.map((r, i) => (
@@ -105,7 +108,7 @@ export function AgentHistory({ agent }: { agent: Agent }) {
           <SkeletonRows count={3} avatar={0} />
         ) : (
           <T variant="subhead" muted style={{ padding: space.lg }}>
-            {runs.isError ? `Couldn't load runs: ${errorText(runs.error)}` : "No runs yet. Start a chat or give it a task — every run shows up here."}
+            {runs.isError ? t("agentHistory.loadFailed", { error: errorText(runs.error) }) : t("agentHistory.empty")}
           </T>
         )}
       </Card>
@@ -130,24 +133,23 @@ function RunGlyph({ status }: { status: RunStatus }) {
 
 const HistoryRow = memo(function HistoryRow({ run }: { run: Run }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const status = useLive((s) => s.runs[run.id]?.run.status) ?? run.status;
   const activity = useRunActivity(status === "running" ? run.id : undefined);
-  const spendTracking = useSpendTracking();
   const finished = status === "succeeded" || status === "failed" || status === "cancelled";
   const when = run.startedAt ?? run.createdAt;
   const meta = [
-    TRIGGER_LABEL[run.trigger] ?? "Manual",
-    formatDistanceToNowStrict(new Date(when), { addSuffix: true }),
+    TRIGGER_LABEL[run.trigger] ?? TRIGGER_LABEL.manual,
+    formatDistanceToNowStrict(new Date(when), { addSuffix: true, locale: dateLocale() }),
     finished && run.durationMs != null ? formatWork(run.durationMs) : null,
-    spendTracking && run.costUsd ? formatCost(run.costUsd) : null,
   ].filter(Boolean);
-  const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || "(no prompt)";
+  const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || t("agentHistory.noPrompt");
   const error = status === "failed" ? firstLine(run.error) : "";
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${runStatusLabel(status)}: ${snippet}`}
+      accessibilityLabel={t("agentHistory.rowLabel", { status: runStatusLabel(status), snippet })}
       onPress={() => openRun(run.id)}
       style={({ pressed }) => [styles.row, pressed && { backgroundColor: c.sunken }]}
     >
@@ -171,7 +173,7 @@ const HistoryRow = memo(function HistoryRow({ run }: { run: Run }) {
           </T>
         ) : status === "queued" ? (
           <T variant="caption" muted numberOfLines={1}>
-            Waiting to start
+            {t("agentHistory.waitingToStart")}
           </T>
         ) : null}
       </View>

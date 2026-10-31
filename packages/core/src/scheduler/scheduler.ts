@@ -23,7 +23,6 @@ import { activeMainRun, ensureRunListener, recordEvent, settleIfFinished } from 
 import { HttpError, badRequest, conflict, now, parseJson } from "../util";
 import { pausedRun } from "../services/pauses";
 import { remindWaitingAutomation } from "../services/questions";
-import { exhaustedBudget } from "../services/budgets";
 import { isLicenseRequired, noteLicenseRefusal } from "../license/license";
 import { localizePaths } from "../remote/localPaths";
 import { standInHold } from "../remote/standIn";
@@ -132,7 +131,7 @@ function nextRunAt(routine: Routine): string | null {
  * Run a schedule automation now: same path as a cron tick. Throws 409 when the agent is disabled or the routine is
  * already running. `scheduled` ticks additionally skip routines that were disabled meanwhile.
  */
-export async function triggerRoutine(id: string, opts: { scheduled?: boolean; byHuman?: boolean; title?: string; note?: string } = {}): Promise<Run> {
+export async function triggerRoutine(id: string, opts: { scheduled?: boolean; title?: string; note?: string } = {}): Promise<Run> {
   ensureRunListener();
   const routine = getRoutine(id);
   if (routine.trigger.type !== "schedule") throw badRequest(`“${routine.name}” is not a scheduled automation`);
@@ -150,12 +149,9 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
   const active = triggering.has(id) ? null : activeMainRun(id);
   if (triggering.has(id) || active) {
     if (opts.scheduled) {
-      const reason = active ? pausedRun(active)?.reason : undefined;
-      const waits = reason === "question";
-      const note = waits ? "The previous run is waiting for your answer" : reason === "budget" ? "The previous run is held — a monthly budget is used up" : "The previous run was still in progress";
-      // A held run skips every tick until the budget has room: once on the list is enough.
-      const last = get<{ note: string | null }>("SELECT note FROM automation_events WHERE routine_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1", id);
-      if (reason !== "budget" || last?.note !== note) recordEvent(id, { source: "schedule", title: "Scheduled time reached", status: "skipped", note });
+      const waits = !!active && pausedRun(active)?.reason === "question";
+      const note = waits ? "The previous run is waiting for your answer" : "The previous run was still in progress";
+      recordEvent(id, { source: "schedule", title: "Scheduled time reached", status: "skipped", note });
       if (waits) remindWaitingAutomation(id);
     }
     throw conflict(`Routine "${routine.name}" is already running`);
@@ -170,7 +166,7 @@ export async function triggerRoutine(id: string, opts: { scheduled?: boolean; by
       nextRunAt(routine),
       id,
     );
-    const { run } = await sendMessage(conversationId, { content: localizePaths(routine.prompt), trigger: "routine", routineId: routine.id, source: "automation", byHuman: opts.byHuman });
+    const { run } = await sendMessage(conversationId, { content: localizePaths(routine.prompt), trigger: "routine", routineId: routine.id, source: "automation" });
     recordEvent(id, {
       source: opts.scheduled ? "schedule" : "manual",
       title: opts.title ?? (opts.scheduled ? "Scheduled time reached" : "Started manually"),
@@ -255,11 +251,6 @@ async function onTick(routineId: string, scheduledAt: Date | null = null, slot: 
   try {
     if (slot && (caughtUp.get(routineId) ?? 0) >= slot.getTime()) {
       log.info(`routine ${routineId} caught up its ${slot.toISOString()} slot already; this tick is skipped`);
-      return;
-    }
-    // A condition check costs money each time: none while the agent's or the team's monthly budget is used up.
-    if (routine.trigger.type === "condition" && exhaustedBudget(getAgent(routine.agentId))) {
-      log.info(`routine ${routineId} skipped its check: a monthly budget is used up`);
       return;
     }
     const run =
@@ -375,7 +366,7 @@ function beat(): void {
 /**
  * Scheduled automations whose time slot fell while the scheduler wasn't running — Godmode was off or the computer
  * slept since `aliveAt` (its last heartbeat) — run now, once each: only the latest slot, at most 12 h old, and not when
- * the next one comes within 2 h. Slots the running scheduler skipped on purpose (still running, budget) stay skipped.
+ * the next one comes within 2 h. Slots the running scheduler skipped on purpose (still running) stay skipped.
  */
 export async function catchUpMissed(reason: "start" | "wake", aliveAt: number): Promise<number> {
   if (!Number.isFinite(aliveAt) || aliveAt <= 0) return 0;

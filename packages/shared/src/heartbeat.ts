@@ -86,23 +86,25 @@ export function nextHeartbeatAt(hb: AgentHeartbeat, lastBeatAt: ISODate | null):
 }
 
 /** "every 15 minutes", "every hour", "every 4 hours", "once a day". */
-export function heartbeatIntervalText(minutes: number): string {
-  if (minutes >= 1440) return "once a day";
-  if (minutes === 60) return "every hour";
-  if (minutes > 60) return `every ${Math.round(minutes / 60)} hours`;
-  return `every ${minutes} minutes`;
+export function heartbeatIntervalText(minutes: number, lang: "en" | "de" = "en"): string {
+  const de = lang === "de";
+  if (minutes >= 1440) return de ? "einmal am Tag" : "once a day";
+  if (minutes === 60) return de ? "jede Stunde" : "every hour";
+  if (minutes > 60) return de ? `alle ${Math.round(minutes / 60)} Stunden` : `every ${Math.round(minutes / 60)} hours`;
+  return de ? `alle ${minutes} Minuten` : `every ${minutes} minutes`;
 }
 
 /** "15 min", "1 h", "4 h", "Daily" — the interval picker's labels. */
-export function heartbeatIntervalLabel(minutes: number): string {
-  if (minutes >= 1440) return "Daily";
+export function heartbeatIntervalLabel(minutes: number, lang: "en" | "de" = "en"): string {
+  if (minutes >= 1440) return lang === "de" ? "Täglich" : "Daily";
+  if (lang === "de") return minutes < 60 ? `${minutes} Min.` : `${Math.round(minutes / 60)} Std.`;
   return minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} h`;
 }
 
 /**
- * - `quiet`: nothing to move forward and no checklist — no run, no cost.
+ * - `quiet`: nothing to move forward and no checklist — no run.
  * - `woke`: it woke the agent on tickets and/or ran its checklist.
- * - `skipped`: the last beat's run was still working, the agent was off, a budget or the licence held it.
+ * - `skipped`: the last beat's run was still working, the agent was off, or the licence held it.
  * - `failed`: the beat couldn't start what it wanted to.
  */
 export type HeartbeatOutcome = "quiet" | "woke" | "skipped" | "failed";
@@ -137,7 +139,6 @@ export interface HeartbeatBeat {
   conversationId: ID | null;
   runStatus: string | null;
   result: string | null;
-  costUsd: number | null;
   createdAt: ISODate;
 }
 

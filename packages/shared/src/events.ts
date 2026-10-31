@@ -178,6 +178,8 @@ export type ServerEvent =
 
 export type EntityName =
   | "workspaces"
+  /** Claude accounts: added, signed in again, removed, made default, their usage or limits changed. */
+  | "claude-accounts"
   | "agents"
   | "routines"
   | "credentials"

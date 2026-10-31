@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
 import { memo, useCallback, useMemo, useState } from "react";
 import { Alert, RefreshControl, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { TASK_STATUSES, type Agent, type Task, type TaskStatus } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { HumanTaskRow } from "@/components/human-task-row";
@@ -13,6 +14,7 @@ import { Button, Card, EmptyState, ErrorState, Hairline, SectionTitle, SkeletonR
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
 import { useAgents, useOpenHumanTasks } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
@@ -25,6 +27,7 @@ const ACTIVE: readonly TaskStatus[] = ["todo", "in_progress", "in_review", "bloc
 
 /** The task board of the picked workspace (or project) as a list, in the desktop's columns: the active ones first. */
 export default function Tasks() {
+  const { t } = useTranslation(["tabs", "common"]);
   const { id: workspaceId, projectId, workspaces } = useWorkspace();
   const projects = useProjectIndex();
   const mine = useOpenHumanTasks();
@@ -74,13 +77,13 @@ export default function Tasks() {
 
   return (
     <>
-      <Stack.Title large>Tasks</Stack.Title>
+      <Stack.Title large>{t("tasks.title")}</Stack.Title>
       <HeaderActions
         actions={[
-          { icon: "person", label: "My tasks", onPress: () => router.push("/my-tasks") },
-          { icon: "plus", label: "New task", onPress: newTask },
+          { icon: "person", label: t("tasks.myTasks"), onPress: () => router.push("/my-tasks") },
+          { icon: "plus", label: t("home.newTask"), onPress: newTask },
         ]}
-        menu={[{ icon: "archive", title: "Archived tasks", onPress: () => router.push("/archived-tasks") }]}
+        menu={[{ icon: "archive", title: t("tasks.archived"), onPress: () => router.push("/archived-tasks") }]}
       />
       <FlashList
         data={items}
@@ -95,7 +98,7 @@ export default function Tasks() {
             <WorkspaceChip />
             {forYou.length > 0 && (
               <View>
-                <SectionTitle title={`My tasks · ${forYou.length}`} action="All" onAction={() => router.push("/my-tasks")} />
+                <SectionTitle title={t("tasks.myTasksCount", { count: forYou.length })} action={t("common:words.all")} onAction={() => router.push("/my-tasks")} />
                 <Card style={{ paddingVertical: 4 }}>
                   {forYou.slice(0, 3).map((t, i) => (
                     <View key={t.id}>
@@ -113,8 +116,8 @@ export default function Tasks() {
                 value={view}
                 onChange={setView}
                 filters={[
-                  { id: "active", label: "Active", count: activeCount },
-                  { id: "all", label: "All", count: board.length },
+                  { id: "active", label: t("tasks.filterActive"), count: activeCount },
+                  { id: "all", label: t("common:words.all"), count: board.length },
                   ...TASK_STATUSES.map((s) => ({ id: s, label: STATUS_META[s].label, count: counts.get(s) ?? 0 })),
                 ]}
               />
@@ -127,20 +130,20 @@ export default function Tasks() {
               <SkeletonRows count={6} avatar={40} />
             </View>
           ) : tasks.isError ? (
-            <ErrorState title="Couldn't load the board" error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
+            <ErrorState title={t("tasks.loadError")} error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
           ) : board.length ? (
             <EmptyState
               icon="tasks"
-              title={view === "active" ? "Nothing in the works" : `Nothing in ${STATUS_META[view as TaskStatus]?.label ?? "this view"}`}
-              body={view === "active" ? "Every ticket is parked, done or cancelled. Hand an agent a new one to get going." : undefined}
-              action={view === "active" ? <Button title="New task" icon="plus" onPress={newTask} /> : undefined}
+              title={view === "active" ? t("tasks.emptyActive.title") : t("tasks.emptyStatus", { status: STATUS_META[view as TaskStatus]?.label ?? t("tasks.thisView") })}
+              body={view === "active" ? t("tasks.emptyActive.body") : undefined}
+              action={view === "active" ? <Button title={t("home.newTask")} icon="plus" onPress={newTask} /> : undefined}
             />
           ) : (
             <EmptyState
               icon="tasks"
-              title="No tasks yet"
-              body="Hand an agent a task and follow it here: it works on it, then asks you to review."
-              action={<Button title="New task" icon="plus" onPress={newTask} />}
+              title={t("tasks.empty.title")}
+              body={t("tasks.empty.body")}
+              action={<Button title={t("home.newTask")} icon="plus" onPress={newTask} />}
             />
           )
         }
@@ -160,7 +163,7 @@ function GroupTitle({ title }: { title: string }) {
 function archiveTask(id: string) {
   api.tasks
     .update(id, { archived: true })
-    .catch((err) => Alert.alert("Couldn't archive the task", errorText(err)))
+    .catch((err) => Alert.alert(t("tabs:tasks.archiveFailed"), errorText(err)))
     .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks }));
 }
 
@@ -178,11 +181,12 @@ const TaskItem = memo(function TaskItem({
   projectName?: string;
   divided: boolean;
 }) {
+  const { t } = useTranslation("tabs");
   const confirmArchive = () => {
     if (task.status !== "in_progress") return archiveTask(task.id);
-    Alert.alert("Stop the agent?", `${agent?.name ?? "The agent"} is still working on it. Archiving it stops the run.`, [
-      { text: "Keep working", style: "cancel" },
-      { text: "Stop and archive", style: "destructive", onPress: () => archiveTask(task.id) },
+    Alert.alert(t("tasks.stopDialog.title"), t("tasks.stopDialog.body", { name: agent?.name ?? t("tasks.stopDialog.theAgent") }), [
+      { text: t("tasks.stopDialog.keep"), style: "cancel" },
+      { text: t("tasks.stopDialog.confirm"), style: "destructive", onPress: () => archiveTask(task.id) },
     ]);
   };
 
@@ -200,7 +204,7 @@ const TaskItem = memo(function TaskItem({
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        <Link.MenuAction title="Archive" icon="archivebox" onPress={confirmArchive} />
+        <Link.MenuAction title={t("chats.menu.archive")} icon="archivebox" onPress={confirmArchive} />
       </Link.Menu>
     </Link>
   );

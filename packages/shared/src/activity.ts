@@ -113,6 +113,7 @@ export const GATEWAY_ACTIVITY: Record<string, (input: Input, names: ActivityName
   workspace_update: () => "Updating a workspace",
   project_create: (i) => (short(i.name) ? `Creating the project ${short(i.name)}` : "Creating a project"),
   project_update: () => "Updating a project",
+  project_delete: () => "Deleting a project",
   plugins_list: () => "Looking at the plugins",
   plugin_install: (i) => (short(i.source) ? `Installing the plugin ${short(i.source, 40)}` : "Installing a plugin"),
   plugin_save: (i) => (short(i.title) ? `Saving the plugin ${short(i.title, 40)} as a draft` : "Saving a plugin as a draft"),
@@ -124,7 +125,6 @@ export const GATEWAY_ACTIVITY: Record<string, (input: Input, names: ActivityName
   android_devices_list: () => "Looking at the Android phones",
   android_assign: () => "Assigning a phone",
   vm_power: (i) => (str(i.action) === "stop" ? "Stopping a VM" : str(i.action) === "suspend" ? "Suspending a VM" : "Starting a VM"),
-  spend_overview: () => "Checking what the team costs",
 };
 
 function browserActivity(tool: string, input: Input): string {
@@ -252,6 +252,26 @@ function builtinActivity(name: string, input: Input): string {
 }
 
 /** What a running tool call is doing, the way a person says it ("Opening github.com…"). Always ends with "…". */
+export function readableModelId(id: string): string {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)(?:-\d{8})?$/.exec(id);
+  return m ? `${m[1]!.charAt(0).toUpperCase()}${m[1]!.slice(1)} ${m[2]}.${m[3]}` : id;
+}
+
+export function reportPreview(markdown: string): string {
+  for (const raw of markdown.split("\n")) {
+    const line = raw
+      .replace(/^\s*(?:#{1,6}\s+|[-*+>]\s+|\d+[.)]\s+)/, "")
+      .replace(/\*\*|__|[*`]/g, "")
+      .trim();
+    if (line) return line;
+  }
+  return "";
+}
+
+export function shortenPaths(text: string): string {
+  return text.replace(/(^|[\s(“"'`])((?:~|\.{1,2})?(?:\/[^\s/]+){2,}\/?)/g, (_, lead: string, path: string) => lead + (path.split("/").filter(Boolean).pop() ?? path));
+}
+
 export function toolActivity(name: string, input: unknown, names: ActivityNames = {}): string {
   const raw: Input = input && typeof input === "object" && !Array.isArray(input) ? (input as Input) : {};
   const i: Input = names.redact ? Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, typeof v === "string" ? names.redact!(v) : v])) : raw;
@@ -339,6 +359,7 @@ export const GATEWAY_DONE: Record<string, string> = {
   workspace_update: "Updated a workspace",
   project_create: "Created a project",
   project_update: "Updated a project",
+  project_delete: "Deleted a project",
   plugins_list: "Looked at the plugins",
   plugin_install: "Installed a plugin",
   plugin_save: "Saved a plugin as a draft",
@@ -350,7 +371,6 @@ export const GATEWAY_DONE: Record<string, string> = {
   android_devices_list: "Looked at the Android phones",
   android_assign: "Assigned a phone",
   vm_power: "Switched a VM on or off",
-  spend_overview: "Checked what the team costs",
   runner_health: "Checked a runner",
   runner_exec: "Ran a command on a runner",
   runner_fix: "Fixed a runner",

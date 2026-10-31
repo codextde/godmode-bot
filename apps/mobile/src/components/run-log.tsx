@@ -2,16 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import { type ReactNode, memo, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Share, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { Segmented } from "./form";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { formatDuration, formatTokens } from "./run-row";
 import { Badge, Button, LiveDot, Row, Skeleton, T, tap } from "./ui";
 import { ApiError, api, errorText } from "@/lib/api";
-import { formatCost } from "@/lib/desktop-parity";
 import { toolLabel } from "@/lib/format";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { fonts, radius, space, useColors } from "@/lib/theme";
 
 type Json = Record<string, unknown>;
@@ -28,7 +27,6 @@ export type LogEntry =
       subtype: string;
       isError: boolean;
       durationMs: number | null;
-      costUsd: number | null;
       numTurns: number | null;
       tokensIn: number | null;
       tokensOut: number | null;
@@ -109,7 +107,6 @@ export function parseRunLog(text: string): LogEntry[] {
         subtype: str(ev.subtype) || str(ev.stop_reason) || "done",
         isError: !!ev.is_error,
         durationMs: num(ev.duration_ms),
-        costUsd: num(ev.total_cost_usd),
         numTurns: num(ev.num_turns),
         tokensIn: num(usage.input_tokens),
         tokensOut: num(usage.output_tokens),
@@ -149,7 +146,7 @@ type Tools = Map<string, { name: string; input: unknown }>;
 /** A run's stream-json log as readable steps (or raw), newest at the bottom; refreshes every few seconds while `live`. */
 export function RunLog({ runId, live = false }: { runId: string; live?: boolean }) {
   const c = useColors();
-  const spendTracking = useSpendTracking();
+  const { t } = useTranslation("components");
   const [mode, setMode] = useState<"steps" | "raw">("steps");
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
@@ -174,27 +171,27 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
 
   if (log.isLoading) {
     return (
-      <View style={{ gap: space.sm }} accessibilityRole="progressbar" accessibilityLabel="Loading the log">
+      <View style={{ gap: space.sm }} accessibilityRole="progressbar" accessibilityLabel={t("runLog.loading")}>
         {Array.from({ length: 5 }, (_, i) => (
           <Skeleton key={i} height={28} radius={radius.md} />
         ))}
       </View>
     );
   }
-  if (log.isError) return <Note text={`Couldn't load the log: ${errorText(log.error)}`} />;
-  if (!entries.length) return <Note text="No log lines yet." />;
+  if (log.isError) return <Note text={t("runLog.loadFailed", { error: errorText(log.error) })} />;
+  if (!entries.length) return <Note text={t("runLog.empty")} />;
 
   return (
     <View style={{ gap: space.md }}>
       <Row style={{ gap: space.sm, flexWrap: "wrap" }}>
         <T variant="caption" muted style={{ fontVariant: ["tabular-nums"] }}>
-          {`${entries.length} events`}
+          {t("runLog.events", { count: entries.length })}
         </T>
         {live ? (
           <Row style={{ gap: 5 }}>
             <LiveDot size={6} />
             <T variant="caption" color={c.brandStrong} style={{ fontWeight: "500" }}>
-              Live
+              {t("runLog.live")}
             </T>
           </Row>
         ) : null}
@@ -208,21 +205,21 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
               setShowStream((v) => !v);
             }}
           >
-            <Badge label={`Streaming deltas (${streamCount})`} tone={showStream ? "brand" : "neutral"} dot={false} />
+            <Badge label={t("runLog.streamingDeltas", { count: streamCount })} tone={showStream ? "brand" : "neutral"} dot={false} />
           </Pressable>
         ) : null}
         <View style={{ flex: 1 }} />
-        <CopyButton text={text} label="Copy raw log" />
+        <CopyButton text={text} label={t("runLog.copyRaw")} />
         <IconButton
           icon="share"
-          label="Share raw log"
+          label={t("runLog.shareRaw")}
           onPress={() => void Share.share({ message: text, title: `run-${runId}.jsonl` }).catch(() => undefined)}
         />
       </Row>
       <Segmented
         options={[
-          { value: "steps", label: "Steps" },
-          { value: "raw", label: "Raw" },
+          { value: "steps", label: t("runLog.steps") },
+          { value: "raw", label: t("runLog.raw") },
         ]}
         value={mode}
         onChange={setMode}
@@ -232,13 +229,13 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
       ) : (
         <View style={[styles.steps, { borderColor: c.border }]}>
           {visible.slice(0, limit).map(({ entry, at }) => (
-            <LogRow key={at} entry={entry} tools={tools} spendTracking={spendTracking} />
+            <LogRow key={at} entry={entry} tools={tools} />
           ))}
         </View>
       )}
       {mode === "steps" && visible.length > limit ? (
         <Button
-          title={`Show ${Math.min(PAGE, visible.length - limit)} more of ${visible.length - limit}`}
+          title={t("runLog.showMore", { count: Math.min(PAGE, visible.length - limit), total: visible.length - limit })}
           variant="outline"
           onPress={() => setLimit((l) => l + PAGE)}
         />
@@ -247,53 +244,54 @@ export function RunLog({ runId, live = false }: { runId: string; live?: boolean 
   );
 }
 
-const LogRow = memo(function LogRow({ entry, tools, spendTracking }: { entry: LogEntry; tools: Tools; spendTracking: boolean }) {
+const LogRow = memo(function LogRow({ entry, tools }: { entry: LogEntry; tools: Tools }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   switch (entry.kind) {
     case "init":
       return (
-        <Step icon="power" title="Session started" raw={entry.raw}>
+        <Step icon="power" title={t("runLog.sessionStarted")} raw={entry.raw}>
           <T variant="footnote" muted>
-            {`${entry.model || "model"} · ${entry.tools} tools`}
+            {`${entry.model || "model"} · ${t("runLog.tools", { count: entry.tools })}`}
             {entry.mcp.length > 0 ? ` · MCP: ${entry.mcp.map((m) => `${m.name}${m.status && m.status !== "connected" ? ` (${m.status})` : ""}`).join(", ")}` : ""}
           </T>
         </Step>
       );
     case "text":
       return (
-        <Step icon="text" title={entry.sub ? "Subagent said" : "Assistant"} raw={entry.raw} defaultOpen>
+        <Step icon="text" title={entry.sub ? t("runLog.subagentSaid") : t("runLog.assistant")} raw={entry.raw} defaultOpen>
           <Markdown text={entry.text} />
         </Step>
       );
     case "thinking":
       return (
-        <Step icon="brain" iconColor={c.textMuted} title="Thinking" summary={entry.text ? oneLine(entry.text) : "redacted"} raw={entry.raw}>
+        <Step icon="brain" iconColor={c.textMuted} title={t("runLog.thinking")} summary={entry.text ? oneLine(entry.text) : t("runLog.redacted")} raw={entry.raw}>
           <T variant="footnote" muted style={entry.text ? undefined : { fontStyle: "italic" }}>
-            {entry.text || "Thinking is redacted."}
+            {entry.text || t("runLog.thinkingRedacted")}
           </T>
         </Step>
       );
     case "tool_use": {
       const meta = toolLabel({ type: "tool_use", id: entry.id, name: entry.name, input: entry.input });
       return (
-        <Step icon={meta.icon} title={meta.title} summary={meta.detail ?? entry.name} raw={entry.raw} badge={entry.sub ? "subagent" : undefined}>
+        <Step icon={meta.icon} title={meta.title} summary={meta.detail ?? entry.name} raw={entry.raw} badge={entry.sub ? t("runLog.subagent") : undefined}>
           <Pre text={formatToolInput(entry.input)} />
         </Step>
       );
     }
     case "tool_result": {
       const tool = tools.get(entry.toolUseId);
-      const title = tool ? toolLabel({ type: "tool_use", id: entry.toolUseId, name: tool.name, input: tool.input }).title : "Tool result";
+      const title = tool ? toolLabel({ type: "tool_use", id: entry.toolUseId, name: tool.name, input: tool.input }).title : t("runLog.toolResult");
       return (
         <Step
           icon={entry.isError ? "closeCircle" : "reply"}
           iconColor={entry.isError ? c.danger : c.textMuted}
-          title={entry.isError ? `Failed: ${title}` : `Result · ${title}`}
-          summary={entry.images ? `${entry.images} image${entry.images > 1 ? "s" : ""}` : oneLine(entry.content)}
+          title={entry.isError ? t("runLog.failedTool", { title }) : t("runLog.resultTool", { title })}
+          summary={entry.images ? t("runLog.images", { count: entry.images }) : oneLine(entry.content)}
           raw={entry.raw}
           tone={entry.isError ? "error" : undefined}
         >
-          <Pre text={entry.content || (entry.images ? "(image result)" : "(empty)")} />
+          <Pre text={entry.content || (entry.images ? t("runLog.imageResult") : t("runLog.emptyResult"))} />
         </Step>
       );
     }
@@ -302,20 +300,19 @@ const LogRow = memo(function LogRow({ entry, tools, spendTracking }: { entry: Lo
         <Step
           icon={entry.isError ? "closeCircle" : "checkCircle"}
           iconColor={entry.isError ? c.danger : c.success}
-          title={entry.isError ? `Finished with error (${entry.subtype})` : "Finished"}
+          title={entry.isError ? t("runLog.finishedWithError", { subtype: entry.subtype }) : t("runLog.finished")}
           raw={entry.raw}
           tone={entry.isError ? "error" : "success"}
         >
           <T variant="footnote" muted style={{ fontVariant: ["tabular-nums"] }}>
             {formatDuration(entry.durationMs)}
-            {spendTracking && entry.costUsd != null ? ` · ${formatCost(entry.costUsd)}` : ""}
-            {entry.numTurns != null ? ` · ${entry.numTurns} turns` : ""}
-            {entry.tokensIn != null ? ` · ${formatTokens(entry.tokensIn)} in / ${formatTokens(entry.tokensOut)} out` : ""}
+            {entry.numTurns != null ? ` · ${t("runLog.turns", { count: entry.numTurns })}` : ""}
+            {entry.tokensIn != null ? ` · ${t("runLog.tokens", { in: formatTokens(entry.tokensIn), out: formatTokens(entry.tokensOut) })}` : ""}
           </T>
         </Step>
       );
     case "rate_limit":
-      return <Step icon="gauge" iconColor={c.textMuted} title={`Rate limit: ${entry.status}`} summary={entry.detail} raw={entry.raw} muted />;
+      return <Step icon="gauge" iconColor={c.textMuted} title={t("runLog.rateLimit", { status: entry.status })} summary={entry.detail} raw={entry.raw} muted />;
     case "system":
       return <Step icon="slider" iconColor={c.textMuted} title={`System · ${entry.subtype}`} raw={entry.raw} muted />;
     case "stream":
@@ -350,6 +347,7 @@ function Step({
   badge?: string;
 }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const [open, setOpen] = useState(defaultOpen);
   const [showRaw, setShowRaw] = useState(false);
   return (
@@ -375,7 +373,7 @@ function Step({
           {children}
           <Pressable hitSlop={6} onPress={() => setShowRaw((r) => !r)} style={{ alignSelf: "flex-start" }}>
             <T variant="caption" muted>
-              {showRaw ? "Hide raw JSON" : "Raw JSON"}
+              {showRaw ? t("runLog.hideRawJson") : t("runLog.rawJson")}
             </T>
           </Pressable>
           {showRaw ? <Pre text={prettyJson(raw)} /> : null}
@@ -405,7 +403,8 @@ function formatToolInput(input: unknown): string {
 
 function Pre({ text }: { text: string }) {
   const c = useColors();
-  const clipped = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n… (${text.length - MAX_TEXT} more characters)` : text;
+  const { t } = useTranslation("components");
+  const clipped = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}\n… ${t("runLog.moreCharacters", { count: text.length - MAX_TEXT })}` : text;
   return (
     <View style={[styles.pre, { backgroundColor: c.surfaceAlt, borderColor: c.border }]}>
       <T variant="caption" selectable style={styles.mono}>
@@ -447,6 +446,7 @@ function IconButton({ icon, label, onPress, color }: { icon: IconName; label: st
 /** Copies `text`; a check says it worked. */
 export function CopyButton({ text, label }: { text: string; label: string }) {
   const c = useColors();
+  const { t } = useTranslation("common");
   const [copied, setCopied] = useState(false);
   useEffect(() => {
     if (!copied) return;
@@ -456,7 +456,7 @@ export function CopyButton({ text, label }: { text: string; label: string }) {
   return (
     <IconButton
       icon={copied ? "check" : "copy"}
-      label={copied ? "Copied" : label}
+      label={copied ? t("actions.copied") : label}
       color={copied ? c.success : undefined}
       onPress={() => {
         void Clipboard.setStringAsync(text);

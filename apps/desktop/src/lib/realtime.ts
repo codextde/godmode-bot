@@ -50,7 +50,8 @@ function resync(runId: string) {
 
 const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   workspaces: [qk.workspaces],
-  agents: [qk.agents, qk.spend, qk.bootstrap],
+  "claude-accounts": [qk.claudeAccounts],
+  agents: [qk.agents, qk.bootstrap],
   routines: [qk.routines, qk.bootstrap],
   credentials: [qk.credentials, qk.totpAutolink],
   totp: [qk.totp],
@@ -65,7 +66,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   "human-tasks": [qk.humanTasks, qk.bootstrap],
   artifacts: [qk.artifacts],
   notifications: [qk.notifications, qk.bootstrap],
-  settings: [qk.settings, qk.bootstrap, qk.spend],
+  settings: [qk.settings, qk.bootstrap],
   runs: [qk.runs],
   models: [qk.models],
   computer: [qk.computer],
@@ -280,7 +281,6 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
-      qc.invalidateQueries({ queryKey: qk.spend });
       break;
     case "run.finished":
       live.runFinished(event.run);
@@ -288,7 +288,6 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
-      qc.invalidateQueries({ queryKey: qk.spend });
       refreshSoon(qc, qk.bootstrap);
       break;
     case "claude.login":

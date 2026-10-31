@@ -6,13 +6,14 @@ import { addDays, endOfMonth, endOfQuarter, format, parseISO } from "date-fns";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { formatUsd, MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, type Goal, type GoalStatus } from "@godmode/shared";
-import { Group, SegmentRow, type Option } from "@/components/form";
+import { useTranslation } from "react-i18next";
+import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, type Goal, type GoalStatus } from "@godmode/shared";
+import { Group, SegmentRow } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { Button, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
-import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
+import { api, ApiError, errorText, updateDesktopMessage } from "@/lib/api";
+import { dateLocale } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 interface Draft {
@@ -22,17 +23,13 @@ interface Draft {
   status: GoalStatus;
 }
 
-const STATUSES: readonly Option<GoalStatus>[] = [
-  { value: "active", label: "Active" },
-  { value: "achieved", label: "Achieved" },
-  { value: "dropped", label: "Dropped" },
-];
+const STATUSES = ["active", "achieved", "dropped"] as const satisfies readonly GoalStatus[];
 
 const day = (date: Date) => format(date, "yyyy-MM-dd");
 
 const draftOf = (g?: Goal): Draft => ({ title: g?.title ?? "", why: g?.why ?? "", targetDate: g?.targetDate ?? null, status: g?.status ?? "active" });
 
-const failure = (err: unknown) => (err instanceof ApiError && err.code === "device_forbidden" ? UPDATE_DESKTOP_MESSAGE : errorText(err));
+const failure = (err: unknown) => (err instanceof ApiError && err.code === "device_forbidden" ? updateDesktopMessage() : errorText(err));
 
 /** The goal as any goals list on the phone has it, so the sheet opens without waiting. */
 function cachedGoal(id: string): Goal | undefined {
@@ -50,12 +47,12 @@ function refresh() {
 /** Add or edit a goal: what it is, why it matters (the agents get that), when; once there, whether it's reached. */
 export default function GoalSheet() {
   const c = useColors();
+  const { t } = useTranslation(["settings", "common"]);
   const params = useLocalSearchParams<{ id?: string; workspaceId?: string }>();
   const id = params.id || null;
   const seed = useMemo(() => (id ? cachedGoal(id) : undefined), [id]);
   const list = useQuery({ queryKey: qk.goals(null), queryFn: () => api.goals.list(null), enabled: !!id, placeholderData: seed ? [seed] : undefined });
   const goal = id ? list.data?.find((g) => g.id === id) : undefined;
-  const spendTracking = useSpendTracking();
   const [draft, setDraft] = useState<Draft | null>(() => (id ? (seed ? draftOf(seed) : null) : draftOf()));
   // Opened before the goal was on the phone: fill the form once it is.
   if (!draft && goal) setDraft(draftOf(goal));
@@ -69,7 +66,7 @@ export default function GoalSheet() {
       refresh();
       router.back();
     },
-    onError: (err) => Alert.alert("Couldn't save the goal", failure(err)),
+    onError: (err) => Alert.alert(t("goal.saveFailed"), failure(err)),
   });
   const remove = useMutation({
     mutationFn: (goalId: string) => api.goals.delete(goalId),
@@ -77,18 +74,18 @@ export default function GoalSheet() {
       refresh();
       router.back();
     },
-    onError: (err) => Alert.alert("Couldn't delete the goal", failure(err)),
+    onError: (err) => Alert.alert(t("goal.deleteFailed"), failure(err)),
   });
 
   if (!draft) {
     return (
       <View style={[styles.fill, { backgroundColor: c.background }]}>
         {list.isLoading ? (
-          <LoadingState label="Loading the goal…" />
+          <LoadingState label={t("goal.loading")} />
         ) : list.isError ? (
-          <ErrorState title="Couldn't load the goal" error={failure(list.error)} onRetry={() => void list.refetch()} />
+          <ErrorState title={t("goal.loadFailed")} error={failure(list.error)} onRetry={() => void list.refetch()} />
         ) : (
-          <ErrorState title="This goal is gone" error="It was deleted on your computer." />
+          <ErrorState title={t("goal.gone.title")} error={t("goal.gone.body")} />
         )}
       </View>
     );
@@ -104,11 +101,11 @@ export default function GoalSheet() {
   };
   const confirmDelete = (g: Goal) =>
     Alert.alert(
-      `Delete “${g.title}”?`,
-      `${g.tickets.total ? `Its ${g.tickets.total === 1 ? "ticket stays" : `${g.tickets.total} tickets stay`}, serving no goal.` : "No ticket serves it yet."} To keep it on record, mark it achieved or drop it instead.`,
+      t("goal.deleteDialog.title", { title: g.title }),
+      g.tickets.total ? t("goal.deleteDialog.ticketsStay", { count: g.tickets.total }) : t("goal.deleteDialog.noTickets"),
       [
-        { text: "Keep it", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: () => remove.mutate(g.id) },
+        { text: t("goal.deleteDialog.keep"), style: "cancel" },
+        { text: t("common:actions.delete"), style: "destructive", onPress: () => remove.mutate(g.id) },
       ],
     );
 
@@ -124,11 +121,11 @@ export default function GoalSheet() {
         <Row>
           <Pressable accessibilityRole="button" hitSlop={10} disabled={busy} onPress={() => router.back()} style={styles.headSide}>
             <T variant="callout" muted>
-              Cancel
+              {t("common:actions.cancel")}
             </T>
           </Pressable>
           <T variant="headline" numberOfLines={1} style={{ flex: 1, textAlign: "center" }}>
-            {id ? "Edit goal" : "New goal"}
+            {id ? t("goal.edit") : t("goal.new")}
           </T>
           <Pressable
             accessibilityRole="button"
@@ -142,23 +139,23 @@ export default function GoalSheet() {
               <ActivityIndicator size="small" color={c.textMuted} />
             ) : (
               <T variant="callout" color={ready ? c.brandStrong : c.textFaint} style={{ fontWeight: "600" }}>
-                {id ? "Save" : "Add goal"}
+                {id ? t("common:actions.save") : t("goal.add")}
               </T>
             )}
           </Pressable>
         </Row>
         <T variant="footnote" muted style={{ textAlign: "center" }}>
-          What the work is for. Tickets that serve it tell their agent why.
+          {t("goal.intro")}
         </T>
       </View>
 
       <View>
         <View style={[styles.fields, { backgroundColor: c.surface, borderColor: c.border }]}>
           <TextInput
-            accessibilityLabel="Goal"
+            accessibilityLabel={t("goal.title")}
             value={draft.title}
             onChangeText={(title) => set({ title })}
-            placeholder="Launch the new pricing"
+            placeholder={t("goal.titlePlaceholder")}
             placeholderTextColor={c.textFaint}
             maxLength={MAX_GOAL_TITLE_LENGTH}
             autoFocus={!id}
@@ -168,10 +165,10 @@ export default function GoalSheet() {
           />
           <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border }} />
           <TextInput
-            accessibilityLabel="Why it matters"
+            accessibilityLabel={t("goal.why")}
             value={draft.why}
             onChangeText={(why) => set({ why })}
-            placeholder="Why it matters, or how to tell it's reached"
+            placeholder={t("goal.whyPlaceholder")}
             placeholderTextColor={c.textFaint}
             maxLength={MAX_GOAL_WHY_LENGTH}
             multiline
@@ -179,24 +176,24 @@ export default function GoalSheet() {
           />
         </View>
         <T variant="footnote" muted style={styles.note}>
-          The agents get this with every ticket that serves it.
+          {t("goal.note")}
         </T>
       </View>
 
       <Group
         footer={
           goal
-            ? [goal.tickets.total ? `${goal.tickets.done} of ${goal.tickets.total} tickets done` : "No ticket serves it yet.", spendTracking && goal.costUsd > 0 ? `${formatUsd(goal.costUsd)} spent` : null]
-                .filter(Boolean)
-                .join(" · ")
+            ? goal.tickets.total
+              ? t("goal.progress", { done: goal.tickets.done, count: goal.tickets.total })
+              : t("goal.noTickets")
             : undefined
         }
       >
         <TargetDate value={draft.targetDate} onChange={(targetDate) => set({ targetDate })} />
-        {id ? <SegmentRow title="Status" options={STATUSES} value={draft.status} onChange={(status) => set({ status })} /> : null}
+        {id ? <SegmentRow title={t("goal.status.title")} options={STATUSES.map((s) => ({ value: s, label: t(`goal.status.${s}`) }))} value={draft.status} onChange={(status) => set({ status })} /> : null}
       </Group>
 
-      {goal ? <Button title="Delete goal" icon="trash" variant="danger" loading={remove.isPending} disabled={busy} onPress={() => confirmDelete(goal)} /> : null}
+      {goal ? <Button title={t("goal.delete")} icon="trash" variant="danger" loading={remove.isPending} disabled={busy} onPress={() => confirmDelete(goal)} /> : null}
     </ScrollView>
   );
 }
@@ -204,20 +201,22 @@ export default function GoalSheet() {
 /** The day it should be reached by: the system's date picker, a few quick picks, or none. */
 function TargetDate({ value, onChange }: { value: string | null; onChange: (day: string | null) => void }) {
   const c = useColors();
+  const { t } = useTranslation(["settings", "common"]);
   const [asking, setAsking] = useState(false);
   const date = value ? parseISO(value) : null;
   const today = new Date();
   const quick = [
-    { label: "In a week", day: day(addDays(today, 7)) },
-    { label: "End of month", day: day(endOfMonth(today)) },
-    { label: "End of quarter", day: day(endOfQuarter(today)) },
+    { label: t("goal.quick.week"), day: day(addDays(today, 7)) },
+    { label: t("goal.quick.month"), day: day(endOfMonth(today)) },
+    { label: t("goal.quick.quarter"), day: day(endOfQuarter(today)) },
   ];
+  const shown = date ? format(date, t("goal.datePattern"), { locale: dateLocale() }) : "";
   const ios = process.env.EXPO_OS === "ios";
   return (
     <View style={styles.dateRow}>
       <Row style={{ gap: space.md, minHeight: 34 }}>
         <T variant="callout" style={{ flex: 1, fontWeight: "500" }}>
-          Target date
+          {t("goal.targetDate")}
         </T>
         {date && ios ? (
           <Host matchContents>
@@ -226,7 +225,7 @@ function TargetDate({ value, onChange }: { value: string | null; onChange: (day:
         ) : !ios ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={date ? `Target date ${format(date, "d MMM yyyy")}. Change` : "Pick a target date"}
+            accessibilityLabel={date ? t("goal.changeDate", { date: shown }) : t("goal.pickTargetDate")}
             hitSlop={6}
             onPress={() => {
               tap();
@@ -235,18 +234,18 @@ function TargetDate({ value, onChange }: { value: string | null; onChange: (day:
             style={[styles.dateButton, { backgroundColor: c.sunken }]}
           >
             <T variant="subhead" color={date ? c.text : c.textMuted}>
-              {date ? format(date, "d MMM yyyy") : "Pick a date"}
+              {date ? shown : t("goal.pickDate")}
             </T>
           </Pressable>
         ) : (
           <T variant="subhead" muted>
-            None
+            {t("common:status.none")}
           </T>
         )}
         {date ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Remove the target date"
+            accessibilityLabel={t("goal.removeDate")}
             hitSlop={8}
             onPress={() => {
               tap();

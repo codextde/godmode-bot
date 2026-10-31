@@ -1,14 +1,15 @@
 {
   "name": "@godmode/desktop",
   "private": true,
-  "version": "0.2.37",
+  "version": "0.2.38",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "build:cloud": "vite build --base=/ui/ --outDir dist-cloud",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json && node scripts/check-i18n.mjs",
+    "i18n:scan": "node scripts/check-i18n.mjs --scan",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@godmode/shared": "workspace:*",
     "@hookform/resolvers": "^5.9.1",
+    "@tanstack/highlight": "^1.2.0",
     "@tanstack/react-query": "^5.105.0",
     "@tanstack/react-virtual": "^3.14.23",
     "@tauri-apps/api": "^2.12.4",
@@ -43,6 +45,7 @@
     "cn": "^0.5.0",
     "croner": "^10.0.1",
     "date-fns": "^4.4.0",
+    "i18next": "^26.5.12",
     "jsqr": "^1.4.0",
     "lucide-react": "^1.64.0",
     "motion": "^14.7.1",
@@ -51,6 +54,7 @@
     "react-day-picker": "^10.0.2",
     "react-dom": "^19.3.1",
     "react-hook-form": "^7.91.0",
+    "react-i18next": "^17.1.9",
     "react-markdown": "^10.1.0",
     "react-router": "^8.5.1",
     "remark-breaks": "^4.0.0",

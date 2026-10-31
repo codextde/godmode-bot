@@ -5,6 +5,7 @@ import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
 import { ArrowRight, BedDouble, Bell, CalendarClock, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -22,7 +23,7 @@ import { VmChip } from "@/components/vms/vm-picker";
 import { BrowserProfileChip } from "@/components/browser/profile-chip";
 import { SshChip } from "@/components/ssh/ssh-chip";
 import { AndroidChip } from "@/components/android/android-chip";
-import { PRIVATE_CHAT_HINT, PrivateChatToggle } from "@/components/chat/private-chat";
+import { PrivateChatToggle } from "@/components/chat/private-chat";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { RunnerChip, RunnerNote } from "@/components/runners/runner-chip";
 import { isOlderRunner, usePlaces } from "@/lib/places";
@@ -47,23 +48,24 @@ import { OffersCard } from "@/components/attention/offers-card";
 import { useLive, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 
 const SUGGESTIONS = [
-  { icon: Mail, text: "Summarize my unread emails" },
-  { icon: Receipt, text: "Create an agent that downloads my invoices every month" },
-  { icon: Bell, text: "Log into GitHub and check my notifications" },
-  { icon: Telescope, text: "Research competitors and write a report" },
-];
+  { icon: Mail, text: "home.suggestions.emails" },
+  { icon: Receipt, text: "home.suggestions.invoicesAgent" },
+  { icon: Bell, text: "home.suggestions.github" },
+  { icon: Telescope, text: "home.suggestions.competitors" },
+] as const;
 
 /** Easy mode: everyday office errands. `prompt` leaves the open end for the human to finish. */
 const EASY_SUGGESTIONS = [
-  { icon: Mail, text: "Sort my inbox and draft replies" },
-  { icon: BedDouble, text: "Find a hotel in Berlin for next week under 150 EUR" },
-  { icon: FileText, text: "Make a summary of this PDF", prompt: "Make a summary of the attached PDF" },
-  { icon: CalendarClock, text: "Remind me every Monday about open invoices" },
-  { icon: Scale, text: "Compare prices for…", prompt: "Compare prices for " },
-  { icon: Receipt, text: "Download this month's invoices and file them" },
-];
+  { icon: Mail, text: "home.easySuggestions.inbox", prompt: undefined },
+  { icon: BedDouble, text: "home.easySuggestions.hotel", prompt: undefined },
+  { icon: FileText, text: "home.easySuggestions.pdf", prompt: "home.easySuggestions.pdfPrompt" },
+  { icon: CalendarClock, text: "home.easySuggestions.remind", prompt: undefined },
+  { icon: Scale, text: "home.easySuggestions.compare", prompt: "home.easySuggestions.comparePrompt" },
+  { icon: Receipt, text: "home.easySuggestions.invoices", prompt: undefined },
+] as const;
 
 /** Chat previews are raw markdown — strip the syntax so cards read as plain sentences. */
 function plainPreview(text: string): string {
@@ -79,13 +81,13 @@ function plainPreview(text: string): string {
     .trim();
 }
 
-function greeting(date: Date): string {
+function greeting(date: Date) {
   const h = date.getHours();
-  if (h < 5) return "Working late";
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  if (h < 22) return "Good evening";
-  return "Good night";
+  if (h < 5) return "home.greeting.late" as const;
+  if (h < 12) return "home.greeting.morning" as const;
+  if (h < 18) return "home.greeting.afternoon" as const;
+  if (h < 22) return "home.greeting.evening" as const;
+  return "home.greeting.night" as const;
 }
 
 const NO_MODEL_CHOICE: ModelChoice = { model: null, effort: null, ultracode: null };
@@ -100,6 +102,8 @@ const fade = (delay: number) => ({
 });
 
 export default function ChatHome() {
+  const { t } = useTranslation(["chat", "common"]);
+  const { dateLocale } = useLocale();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const easy = useEasyMode();
@@ -115,7 +119,7 @@ export default function ChatHome() {
   const setHideSuggestions = useUi((s) => s.setHideSuggestions);
   const hideSuggestionsWithUndo = () => {
     setHideSuggestions(true);
-    toast("Suggestions hidden", { action: { label: "Undo", onClick: () => setHideSuggestions(false) } });
+    toast(t("home.suggestionsHidden"), { action: { label: t("common:actions.undo"), onClick: () => setHideSuggestions(false) } });
   };
   const composerRef = useRef<ComposerHandle>(null);
   // The new chat's setup is part of the draft: coming back to it must not send the message to another agent.
@@ -213,7 +217,7 @@ export default function ChatHome() {
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
       navigate(`/chat/${res.conversation.id}`);
     },
-    onError: (err) => !isLicenseRequired(err) && toast.error("Couldn't start the chat", { description: errorMessage(err) }),
+    onError: (err) => !isLicenseRequired(err) && toast.error(t("home.startError"), { description: errorMessage(err) }),
   });
 
   const userName = boot?.settings.general.userName?.trim();
@@ -233,11 +237,11 @@ export default function ChatHome() {
         <motion.div {...fade(0)}>
           <span className="inline-flex items-center gap-2 rounded-full border bg-card py-1 pr-3 pl-2.5 text-xs text-muted-foreground shadow-card">
             <LiveDot live={false} className="bg-brand" />
-            {format(now, "EEEE, MMMM d")}
+            {format(now, t("thread.dayFormat"), { locale: dateLocale })}
             {ready > 0 && (
               <>
                 <span className="opacity-40">·</span>
-                {ready === 1 ? "1 agent ready" : `${ready} agents ready`}
+                {t("home.agentsReady", { count: ready })}
               </>
             )}
           </span>
@@ -248,10 +252,10 @@ export default function ChatHome() {
               <Ghost className="size-9" strokeWidth={1.5} />
             </span>
             <h1 className="heading-display mt-4 text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]">
-              Private chat
-              <span className="block text-foreground/35">Just between us.</span>
+              {t("home.privateTitle")}
+              <span className="block text-foreground/35">{t("home.privateSubtitle")}</span>
             </h1>
-            <p className="mt-3 max-w-md text-sm text-muted-foreground">{PRIVATE_CHAT_HINT}</p>
+            <p className="mt-3 max-w-md text-sm text-muted-foreground">{t("private.hint")}</p>
           </motion.div>
         ) : (
           <>
@@ -261,9 +265,8 @@ export default function ChatHome() {
               </motion.div>
             )}
             <motion.h1 {...fade(0.05)} className={cn("heading-display text-[34px] text-balance @md:text-[42px] @2xl:text-[52px]", selected ? "mt-4" : "mt-6")}>
-              {greeting(now)}
-              {userName ? `, ${userName}` : ""}.
-              <span className="block text-foreground/35">What should we get done?</span>
+              {userName ? t("home.greetingNamed", { greeting: t(greeting(now)), name: userName }) : t("home.greetingPlain", { greeting: t(greeting(now)) })}
+              <span className="block text-foreground/35">{t("home.whatToDo")}</span>
             </motion.h1>
           </>
         )}
@@ -278,7 +281,7 @@ export default function ChatHome() {
             agentId={selected?.id}
             busy={start.isPending}
             className={privateChat ? "border-dashed border-foreground/30" : undefined}
-            placeholder={privateChat ? "Ask anything. Nothing is saved." : selected ? `Ask ${selected.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
+            placeholder={privateChat ? t("home.privatePlaceholder") : selected ? t("home.askAgent", { name: selected.name }) : t("home.askAnything")}
             leading={
               agentsLoading ? (
                 <Skeleton className="h-8 w-32 rounded-lg" />
@@ -308,7 +311,7 @@ export default function ChatHome() {
                       value={vmId}
                       inherited={[
                         selected?.vmId ? { vmId: selected.vmId, from: selected.name } : null,
-                        selectedWorkspace?.vmId ? { vmId: selectedWorkspace.vmId, from: `the ${selectedWorkspace.name} workspace` } : null,
+                        selectedWorkspace?.vmId ? { vmId: selectedWorkspace.vmId, from: t("home.workspaceFrom", { name: selectedWorkspace.name }) } : null,
                       ]}
                       onChange={setVmId}
                     />
@@ -357,11 +360,11 @@ export default function ChatHome() {
           <ContextMenuTrigger asChild>
           <motion.div {...fade(0.18)} className="mt-6 w-full text-left">
             <div className="mb-2.5 flex items-center justify-between px-0.5">
-              <h2 className="eyebrow">Try something like</h2>
+              <h2 className="eyebrow">{t("home.trySomething")}</h2>
               <button
                 type="button"
-                aria-label="Hide suggestions"
-                title="Hide suggestions"
+                aria-label={t("home.hideSuggestions")}
+                title={t("home.hideSuggestions")}
                 onClick={hideSuggestionsWithUndo}
                 className="-my-1 grid size-6 place-items-center rounded-md text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
@@ -373,13 +376,13 @@ export default function ChatHome() {
                 <button
                   key={text}
                   type="button"
-                  onClick={() => composerRef.current?.setText(prompt ?? text)}
+                  onClick={() => composerRef.current?.setText(t(prompt ?? text))}
                   className="group flex items-start gap-3 rounded-xl border bg-card p-3 text-left text-[13.5px] leading-snug shadow-card transition hover:border-foreground/20 hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="grid size-7 shrink-0 place-items-center rounded-lg border bg-muted/40 text-muted-foreground transition group-hover:text-foreground">
                     <Icon className="size-3.5" />
                   </span>
-                  <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{text}</span>
+                  <span className="min-w-0 pt-1 text-foreground/85 group-hover:text-foreground">{t(text)}</span>
                 </button>
               ))}
             </div>
@@ -388,7 +391,7 @@ export default function ChatHome() {
           <ContextMenuContent>
             <ContextMenuItem onSelect={hideSuggestionsWithUndo}>
               <EyeOff />
-              Hide suggestions
+              {t("home.hideSuggestions")}
             </ContextMenuItem>
           </ContextMenuContent>
           </ContextMenu>
@@ -399,11 +402,11 @@ export default function ChatHome() {
               <button
                 key={text}
                 type="button"
-                onClick={() => composerRef.current?.setText(text)}
+                onClick={() => composerRef.current?.setText(t(text))}
                 className="group flex items-center gap-2 rounded-md border bg-card px-3 py-1.5 text-[13px] text-muted-foreground shadow-card transition hover:border-foreground/20 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
               >
                 <Icon className="size-3.5 transition group-hover:text-foreground" />
-                {text}
+                {t(text)}
               </button>
             ))}
           </motion.div>
@@ -412,13 +415,15 @@ export default function ChatHome() {
         <motion.p {...fade(0.24)} className="mt-5 hidden items-center gap-1.5 text-xs text-muted-foreground @3xl:flex">
           {easy ? (
             <>
-              <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-              <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> drop files anywhere
+              <Kbd>↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
+              <Kbd>↵</Kbd> {t("composer.newLine")} <span className="opacity-40">·</span> {t("home.hint.dropAnywhere")}
             </>
           ) : (
             <>
-              <Kbd>↵</Kbd> send <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
-              <Kbd>↵</Kbd> new line <span className="opacity-40">·</span> <Kbd>/</Kbd> commands <span className="opacity-40">·</span> <Kbd>{modKey}K</Kbd> search <span className="opacity-40">·</span> drop files anywhere <span className="opacity-40">·</span> <Kbd>?</Kbd> shortcuts
+              <Kbd>↵</Kbd> {t("home.hint.send")} <span className="opacity-40">·</span> <Kbd>⇧</Kbd>
+              <Kbd>↵</Kbd> {t("composer.newLine")} <span className="opacity-40">·</span> <Kbd>/</Kbd> {t("home.hint.commands")} <span className="opacity-40">·</span>{" "}
+              <Kbd>{modKey}K</Kbd> {t("home.hint.search")} <span className="opacity-40">·</span> {t("home.hint.dropAnywhere")} <span className="opacity-40">·</span> <Kbd>?</Kbd>{" "}
+              {t("home.hint.shortcuts")}
             </>
           )}
         </motion.p>
@@ -459,6 +464,7 @@ export default function ChatHome() {
 
 /** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
 function NeedsYou({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("chat");
   const { items, elsewhere, workspaceOf } = useScopedAttention();
   const scope = useUi((s) => s.workspace);
   const { data: workspaces = [] } = useWorkspaces();
@@ -472,7 +478,7 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
         className="flex items-center gap-2 rounded-xl border border-dashed px-4 py-3 text-[13px] text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
       >
         <span className="size-1.5 rounded-full bg-warning" aria-hidden />
-        Nothing waits for you here. {elsewhere} {elsewhere === 1 ? "thing waits" : "things wait"} in other workspaces
+        {t("home.nothingHere", { count: elsewhere })}
         <ArrowRight className="ml-auto size-3.5" />
       </Link>
     );
@@ -480,12 +486,12 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
     <section aria-labelledby="needs-you-title">
       <div className="mb-3 flex items-center gap-2">
         <h2 id="needs-you-title" className="eyebrow flex items-center gap-2">
-          Needs you
+          {t("mood.needsYou")}
           <span className="rounded-[4px] bg-warning/12 px-1 font-mono text-[10px] font-medium text-warning tabular-nums">{items.length}</span>
         </h2>
         {(items.length > shown.length || elsewhere > 0) && (
           <Link to="/inbox" className="ml-auto text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-            {elsewhere > 0 ? `+${elsewhere} in other workspaces · Needs you` : `All ${items.length} in Needs you`}
+            {elsewhere > 0 ? t("home.elsewhereLink", { n: elsewhere }) : t("home.allIn", { n: items.length })}
           </Link>
         )}
       </div>
@@ -499,18 +505,19 @@ function NeedsYou({ agents }: { agents: Agent[] }) {
 }
 
 function RunningNow({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("chat");
   const inScope = useInScope();
   const runs = Object.values(useLive((s) => s.runs)).filter(inScope);
   const list = runs.filter((r) => r.status === "running");
   const queued = runs.length - list.length;
   if (list.length === 0) return null;
   return (
-    <section aria-label="Working now">
+    <section aria-label={t("home.workingNow")}>
       <h2 className="eyebrow mb-3 flex items-center gap-2">
         <LiveDot />
-        Working now
+        {t("home.workingNow")}
         <span className="rounded-[4px] border bg-card px-1 font-mono text-[10px] tabular-nums">{list.length}</span>
-        {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {queued} queued</span>}
+        {queued > 0 && <span className="text-[11px] font-normal tracking-normal text-muted-foreground normal-case">· {t("home.queuedCount", { n: queued })}</span>}
       </h2>
       <div className="-mx-2 flex gap-3 overflow-x-auto px-2 pt-1 pb-3">
         {list.map((r, i) => (
@@ -522,6 +529,7 @@ function RunningNow({ agents }: { agents: Agent[] }) {
 }
 
 function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index: number }) {
+  const { t } = useTranslation();
   const now = useNow(1000);
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className="shrink-0">
@@ -532,7 +540,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
         <AgentAvatar agent={agent ?? { id: run.agentId, avatar: "🤖", color: "violet" }} size="md" />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5 text-sm font-medium">
-            <span className="truncate">{agent?.name ?? "Agent"}</span>
+            <span className="truncate">{agent?.name ?? t("words.agent")}</span>
             <Orb variant="S3" size={14} label={liveActivityLabel(run)} />
           </span>
           <span className="text-shimmer block truncate text-xs font-medium">{liveActivityLabel(run)}</span>
@@ -547,6 +555,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
 }
 
 function RecentChats({ agents }: { agents: Agent[] }) {
+  const { t } = useTranslation("chat");
   const { data: conversations = [], isLoading } = useScopedConversations();
   const liveRuns = useLive((s) => s.runs);
   const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : []))), [liveRuns]);
@@ -574,11 +583,11 @@ function RecentChats({ agents }: { agents: Agent[] }) {
   if (recent.length === 0) return null;
 
   return (
-    <section aria-label="Recent chats">
+    <section aria-label={t("home.recentChats")}>
       <div className="mb-3 flex items-center justify-between">
-        <h2 className="eyebrow">Pick up where you left off</h2>
+        <h2 className="eyebrow">{t("home.pickUp")}</h2>
         <Link to="/agents" className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground">
-          Your agents <ArrowRight className="size-3" />
+          {t("home.yourAgents")} <ArrowRight className="size-3" />
         </Link>
       </div>
       <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-3">
@@ -591,6 +600,8 @@ function RecentChats({ agents }: { agents: Agent[] }) {
 }
 
 function RecentCard({ conversation: c, agent, running, index }: { conversation: Conversation; agent?: Agent; running: boolean; index: number }) {
+  const { t } = useTranslation(["chat", "common"]);
+  const { dateLocale } = useLocale();
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + index * 0.04, duration: 0.35 }}>
       <Link
@@ -603,18 +614,18 @@ function RecentCard({ conversation: c, agent, running, index }: { conversation: 
       >
         <div className="flex items-center gap-2">
           <AgentAvatar agent={agent ?? { avatar: "💬", color: "violet" }} size="sm" />
-          <span className="truncate text-xs text-muted-foreground">{agent?.name ?? "Agent"}</span>
+          <span className="truncate text-xs text-muted-foreground">{agent?.name ?? t("common:words.agent")}</span>
           {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
           <span className="ml-auto shrink-0 text-[11px] text-muted-foreground tabular-nums">
             {running ? (
-              <span className="text-shimmer font-medium">Working…</span>
+              <span className="text-shimmer font-medium">{t("status.working")}</span>
             ) : (
-              formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: true })
+              formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: true, locale: dateLocale })
             )}
           </span>
         </div>
         <div className="min-w-0">
-          <div className="truncate text-[15px] font-medium tracking-[-0.01em]">{c.title || "New chat"}</div>
+          <div className="truncate text-[15px] font-medium tracking-[-0.01em]">{c.title || t("header.newChat")}</div>
           {c.preview && <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-muted-foreground">{plainPreview(c.preview)}</p>}
         </div>
       </Link>

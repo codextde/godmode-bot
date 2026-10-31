@@ -194,6 +194,59 @@ export function addUsage(a: RunUsage | null, b: RunUsage | null): RunUsage | nul
   };
 }
 
+/** Background work Claude Code stopped because the process ended (see `cutOffBackgroundWork`). */
+export interface CutOffTask {
+  id: string;
+  /** Claude Code's task type: "local_agent", "local_bash", "local_workflow", "monitor", … */
+  kind: string;
+  description: string;
+  /** The description of the subagent the work belonged to; null for the main agent's own. */
+  subagent: string | null;
+}
+
+const TASK_EVENTS = new Set(["task_started", "task_updated", "task_notification", "background_tasks_changed"]);
+
+/**
+ * Background work (subagents, commands, workflows, monitors) still running when the run's last turn ended, which Claude
+ * Code then stopped as the process exited: `task_updated` with `patch.status` "killed" or `task_notification` with
+ * `status` "stopped" after the last `result`. What the agent stops itself (TaskStop, KillShell) is stopped within a
+ * turn, before that turn's `result`.
+ */
+export function cutOffBackgroundWork(events: readonly unknown[]): CutOffTask[] {
+  const known = new Map<string, { kind: string; description: string; parent: string | null }>();
+  const learn = (t: Json) => {
+    const id = str(t.task_id);
+    if (!id) return;
+    const was = known.get(id);
+    known.set(id, {
+      kind: str(t.task_type) ?? was?.kind ?? "task",
+      description: str(t.description) || was?.description || "",
+      parent: str(t.parent_task_id) ?? was?.parent ?? null,
+    });
+  };
+  let cut = new Map<string, string>();
+  for (const e of events) {
+    if (!isObj(e)) continue;
+    if (e.type === "result") cut = new Map();
+    if (e.type !== "system") continue;
+    if (e.subtype === "task_started") learn(e);
+    else if (e.subtype === "background_tasks_changed" && Array.isArray(e.tasks)) for (const t of e.tasks) if (isObj(t)) learn(t);
+    const id = str(e.task_id);
+    const stopped = (e.subtype === "task_updated" && isObj(e.patch) && e.patch.status === "killed") || (e.subtype === "task_notification" && e.status === "stopped");
+    if (id && stopped) cut.set(id, cut.get(id) || str(e.summary) || "");
+  }
+  return [...cut].map(([id, summary]) => {
+    const task = known.get(id);
+    const parent = task?.parent ? known.get(task.parent) : undefined;
+    return {
+      id,
+      kind: task?.kind ?? "task",
+      description: task?.description || summary || id,
+      subagent: task?.parent ? parent?.description || task.parent : null,
+    };
+  });
+}
+
 export class StreamAccumulator {
   readonly blocks: MessageBlock[];
   sessionId: string | null = null;
@@ -235,6 +288,9 @@ export class StreamAccumulator {
   private messages = new Map<string, BlockRef[]>();
   /** Background work this stretch of the run started, by Claude Code's task id (the same objects as on the blocks). */
   private tasks = new Map<string, ToolTask>();
+  private subagentModels = new Map<string, string>();
+  /** The events `cutOffBackgroundWork` reads. */
+  private taskEvents: Json[] = [];
   private modStatus = new Map<string, string>();
   private modNotes = 0;
   private pendingTextDelta = "";
@@ -249,6 +305,7 @@ export class StreamAccumulator {
   /** Consume one parsed stream-json event. Returns true when the visible blocks changed. */
   push(event: unknown): boolean {
     if (!isObj(event)) return false;
+    if (event.type === "result" || (event.type === "system" && TASK_EVENTS.has(str(event.subtype) ?? ""))) this.taskEvents.push(event);
     switch (event.type) {
       case "system":
         return this.onSystem(event);
@@ -311,6 +368,11 @@ export class StreamAccumulator {
       default:
         return "Working…";
     }
+  }
+
+  /** Background work the end of the process stopped while it still ran. */
+  cutOffWork(): CutOffTask[] {
+    return cutOffBackgroundWork(this.taskEvents);
   }
 
   /** Final answer text: the result text, else the top-level text of the last assistant turn. */
@@ -428,6 +490,9 @@ export class StreamAccumulator {
         startedAt: Date.now(),
         ...(e.is_backgrounded === true ? { background: true } : {}),
       };
+      const toolUseId = (this.blocks[idx] as ToolUseBlock).id;
+      const model = this.subagentModels.get(toolUseId);
+      if (model) task.model = model;
       (this.blocks[idx] as ToolUseBlock).task = task;
       this.tasks.set(id, task);
       return true;
@@ -453,6 +518,16 @@ export class StreamAccumulator {
     task.toolUses = num(usage.tool_uses) ?? task.toolUses;
     task.durationMs = num(usage.duration_ms) ?? task.durationMs;
     return JSON.stringify(task) !== before;
+  }
+
+  private noteSubagentModel(parent: string, model: string | null | undefined): boolean {
+    if (!model || model === "<synthetic>") return false;
+    this.subagentModels.set(parent, model);
+    const idx = this.findToolUse(parent);
+    const task = idx >= 0 ? (this.blocks[idx] as ToolUseBlock).task : undefined;
+    if (!task || task.kind !== "local_agent" || task.model === model) return false;
+    task.model = model;
+    return true;
   }
 
   /** What runs in the background (a workflow, subagents) while no top-level tool call waits for its result. */
@@ -522,7 +597,7 @@ export class StreamAccumulator {
         s.indexMap.clear();
         s.jsonBuf.clear();
         if (msg && str(msg.model)) this.model = str(msg.model);
-        return false;
+        return !!parent && !!msg && this.noteSubagentModel(parent, str(msg.model));
       }
       case "content_block_start": {
         const cb = isObj(ev.content_block) ? ev.content_block : null;
@@ -620,7 +695,7 @@ export class StreamAccumulator {
       const tokens = u.inputTokens + u.cacheReadTokens + u.cacheWriteTokens + u.outputTokens;
       if (tokens > 0) this.contextTokens = tokens;
     }
-    let changed = false;
+    let changed = !!parent && !synthetic && this.noteSubagentModel(parent, str(msg.model));
 
     for (const c of msg.content) {
       if (!isObj(c)) continue;

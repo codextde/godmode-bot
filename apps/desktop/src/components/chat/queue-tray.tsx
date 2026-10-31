@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import type { ConversationWithMessages, PauseReason, QueuedMessage } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { ArrowUp, Paperclip, Pencil, X, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -49,6 +50,7 @@ export function QueueTray({
   onDone: () => void;
   ref?: Ref<QueueTrayHandle>;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
   const key = qk.conversation(conversationId);
   const [editing, setEditing] = useState<{ id: string; text: string; from: string } | null>(null);
@@ -65,7 +67,7 @@ export function QueueTray({
   const gone = (err: unknown) => err instanceof ApiRequestError && err.status === 404;
   const lost = (text: string) => {
     onLost(text);
-    toast(`${agentName} already has that message`, { description: "Your new wording is in the message box — send it as a follow-up." });
+    toast(t("queue.alreadyHas", { name: agentName }), { description: t("queue.alreadyHasHint") });
   };
 
   const edit = useMutation({
@@ -74,7 +76,7 @@ export function QueueTray({
     onError: (err, { content }) => {
       void qc.invalidateQueries({ queryKey: key });
       if (gone(err)) lost(content);
-      else toast.error("Couldn't change the message", { description: errorMessage(err) });
+      else toast.error(t("queue.editError"), { description: errorMessage(err) });
     },
   });
 
@@ -83,8 +85,8 @@ export function QueueTray({
     onMutate: (id) => setQueue((q) => q.filter((m) => m.id !== id)),
     onError: (err) => {
       void qc.invalidateQueries({ queryKey: key });
-      if (gone(err)) toast(`${agentName} already has that message`);
-      else toast.error("Couldn't remove the message", { description: errorMessage(err) });
+      if (gone(err)) toast(t("queue.alreadyHas", { name: agentName }));
+      else toast.error(t("queue.removeError"), { description: errorMessage(err) });
     },
   });
 
@@ -92,7 +94,7 @@ export function QueueTray({
     mutationFn: () => api.conversations.queue.sendNow(conversationId),
     onError: (err) => {
       void qc.invalidateQueries({ queryKey: key });
-      if (!gone(err) && !isLicenseRequired(err)) toast.error("Couldn't send the queue", { description: errorMessage(err) });
+      if (!gone(err) && !isLicenseRequired(err)) toast.error(t("queue.sendError"), { description: errorMessage(err) });
     },
   });
 
@@ -119,24 +121,22 @@ export function QueueTray({
   });
 
   const first = queue[0];
-  const many = queue.length > 1;
+  const count = queue.length;
   const hint = sendNow.isPending
     ? running
-      ? "Stopping the current step…"
-      : "Sending…"
+      ? t("queue.stoppingStep")
+      : t("messages.sending")
     : paused
       ? paused === "question"
-        ? `${many ? "Go" : "Goes"} along with your answer`
+        ? t("queue.withAnswer", { count })
         : paused === "limit"
-          ? `${many ? "Go" : "Goes"} along when the limit resets`
-          : paused === "budget"
-            ? `${many ? "Go" : "Goes"} along when the run continues — Send now lets it run past the budget`
-            : `${many ? "Go" : "Goes"} along when you continue`
+          ? t("queue.whenLimitResets", { count })
+          : t("queue.whenYouContinue", { count })
       : !running
-        ? "Not sent yet"
+        ? t("queue.notSent")
         : first && parseSlashCommand(first.content)
-          ? `Runs when ${agentName} is done`
-          : `${agentName} picks ${many ? "these" : "this"} up at its next step`;
+          ? t("queue.runsWhenDone", { name: agentName })
+          : t("queue.picksUpNext", { name: agentName, count });
 
   return (
     <AnimatePresence initial={false}>
@@ -148,9 +148,9 @@ export function QueueTray({
           transition={{ duration: 0.2, ease: EASE }}
           className="overflow-hidden"
         >
-          <div className="mx-3 overflow-hidden rounded-t-xl border border-b-0 bg-muted/60 @xl:mx-4" role="region" aria-label="Queued messages">
+          <div className="mx-3 overflow-hidden rounded-t-xl border border-b-0 bg-muted/60 @xl:mx-4" role="region" aria-label={t("queue.label")}>
             <div className="flex h-9 items-center gap-2 pr-1.5 pl-3">
-              <span className="eyebrow text-[10.5px]">Queued</span>
+              <span className="eyebrow text-[10.5px]">{t("queue.title")}</span>
               <span className="grid h-[18px] min-w-[18px] place-items-center rounded-[5px] border bg-card px-1 text-[11px] font-medium tabular-nums">{queue.length}</span>
               <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" aria-live="polite">
                 {hint}
@@ -166,17 +166,15 @@ export function QueueTray({
                       onClick={() => sendNow.mutate()}
                     >
                       {sendNow.isPending ? <Spinner className="size-3" /> : running || paused ? <Zap /> : <ArrowUp />}
-                      {running || paused ? "Send now" : "Send"}
+                      {running || paused ? t("queue.sendNow") : t("common:actions.send")}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top">
                     {paused
-                      ? paused === "budget"
-                        ? `Let it run now with ${many ? "these messages" : "this message"} — past the used-up budget`
-                        : `Continue now with ${many ? "these messages" : "this message"}`
+                      ? t("queue.continueWith", { count })
                       : running
-                        ? `Stop what ${agentName} is doing and start on ${many ? "these" : "this"}`
-                        : `Send ${many ? "these messages" : "this message"} to ${agentName}`}
+                        ? t("queue.stopAndStart", { name: agentName, count })
+                        : t("queue.sendTo", { name: agentName, count })}
                   </TooltipContent>
                 </Tooltip>
               )}
@@ -241,6 +239,7 @@ function QueueRow({
   onClose: (save: boolean, byKey: boolean) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("chat");
   const pending = pendingQueued.has(message.id);
   const editing = draft !== null;
   const files = message.attachments.length;
@@ -256,13 +255,13 @@ function QueueRow({
           type="button"
           disabled={pending}
           onClick={onEdit}
-          title="Edit message"
+          title={t("queue.editMessage")}
           className={cn(
             "mt-px line-clamp-2 min-w-0 flex-1 cursor-text rounded-sm py-0.5 text-left text-[13px] leading-snug break-words whitespace-pre-wrap focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
             pending && "opacity-60",
           )}
         >
-          {message.content ? <CommandText text={message.content} /> : <span className="text-muted-foreground">{files > 1 ? `${files} files` : message.attachments[0]?.name}</span>}
+          {message.content ? <CommandText text={message.content} /> : <span className="text-muted-foreground">{files > 1 ? t("queue.files", { count: files }) : message.attachments[0]?.name}</span>}
         </button>
       )}
       {files > 0 && !editing && (
@@ -280,7 +279,7 @@ function QueueRow({
           )}
         >
           {!editing && (
-            <Button size="icon-xs" variant="ghost" aria-label="Edit message" className="text-muted-foreground hover:text-foreground" onClick={onEdit}>
+            <Button size="icon-xs" variant="ghost" aria-label={t("queue.editMessage")} className="text-muted-foreground hover:text-foreground" onClick={onEdit}>
               <Pencil />
             </Button>
           )}
@@ -288,7 +287,7 @@ function QueueRow({
           <Button
             size="icon-xs"
             variant="ghost"
-            aria-label="Remove from the queue"
+            aria-label={t("queue.remove")}
             className="text-muted-foreground hover:text-destructive"
             onMouseDown={(e) => e.preventDefault()}
             onClick={onRemove}
@@ -302,6 +301,7 @@ function QueueRow({
 }
 
 function QueueEditor({ text, onChange, onClose }: { text: string; onChange: (text: string) => void; onClose: (save: boolean, byKey: boolean) => void }) {
+  const { t } = useTranslation("chat");
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useLayoutEffect(() => {
@@ -335,14 +335,14 @@ function QueueEditor({ text, onChange, onClose }: { text: string; onChange: (tex
         ref={ref}
         value={text}
         rows={1}
-        aria-label="Queued message"
+        aria-label={t("queue.queuedMessage")}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         onBlur={() => onClose(true, false)}
         className="mt-px block min-w-0 flex-1 resize-none bg-transparent py-0.5 text-[13px] leading-snug outline-none"
       />
       <span className="hidden shrink-0 items-center gap-1 pb-0.5 text-[11px] whitespace-nowrap text-muted-foreground @lg:flex">
-        <Kbd>↵</Kbd> save <Kbd>esc</Kbd> cancel
+        <Kbd>↵</Kbd> {t("queue.hintSave")} <Kbd>esc</Kbd> {t("queue.hintCancel")}
       </span>
     </div>
   );

@@ -1,7 +1,9 @@
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { isCallActive, type CallStatus, type PhoneCall } from "@godmode/shared";
 import { Badge, tap } from "./ui";
 import { api } from "@/lib/api";
+import { t } from "@/lib/i18n";
 
 /** Events refresh the calls; while one is on it is polled as well, so its status never lags. */
 const LIVE_POLL = 5_000;
@@ -18,24 +20,26 @@ export const callQuery = (id: string) => ({
   refetchInterval: (q: { state: { data?: PhoneCall } }) => (q.state.data && isCallActive(q.state.data) ? LIVE_POLL : false),
 });
 
-export const CALL_STATUS: Record<CallStatus, { label: string; tone: "neutral" | "brand" | "warning" | "danger"; live?: boolean }> = {
-  calling: { label: "Ringing", tone: "brand", live: true },
-  in_progress: { label: "On the line", tone: "brand", live: true },
-  processing: { label: "Wrapping up", tone: "warning", live: true },
-  done: { label: "Done", tone: "brand" },
-  no_answer: { label: "No answer", tone: "neutral" },
-  voicemail: { label: "Voicemail left", tone: "neutral" },
-  failed: { label: "Failed", tone: "danger" },
+export const CALL_STATUS: Record<CallStatus, { tone: "neutral" | "brand" | "warning" | "danger"; live?: boolean }> = {
+  calling: { tone: "brand", live: true },
+  in_progress: { tone: "brand", live: true },
+  processing: { tone: "warning", live: true },
+  done: { tone: "brand" },
+  no_answer: { tone: "neutral" },
+  voicemail: { tone: "neutral" },
+  failed: { tone: "danger" },
 };
 
 export function CallStatusBadge({ status }: { status: CallStatus }) {
-  const meta = CALL_STATUS[status] ?? CALL_STATUS.done;
-  return <Badge label={meta.label} tone={meta.tone} live={meta.live} />;
+  const { t } = useTranslation("components");
+  const known = CALL_STATUS[status] ? status : "done";
+  const meta = CALL_STATUS[known];
+  return <Badge label={t(`callParts.status.${known}`)} tone={meta.tone} live={meta.live} />;
 }
 
 /** Who the call was with: the contact's name, else the number. */
 export function callName(c: Pick<PhoneCall, "contactName" | "number" | "direction">): string {
-  return c.contactName || c.number || (c.direction === "inbound" ? "Unknown caller" : "Unknown number");
+  return c.contactName || c.number || (c.direction === "inbound" ? t("components:callParts.unknownCaller") : t("components:callParts.unknownNumber"));
 }
 
 /** Seconds as a call timer: 0:07, 3:12, 1:02:03. */

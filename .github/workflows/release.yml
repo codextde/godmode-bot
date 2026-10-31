@@ -3,11 +3,13 @@ name: Release
 # Push a tag (v0.2.4) to build it. Every job builds with the tag's version, so the version files don't have to be
 # bumped first; when the tag is ahead of main, main gets a "Release v0.2.4" commit (`pnpm bump` does the same locally).
 # The tag builds:
-#   * desktop installers (macOS arm64 + x64, Windows x64, Linux x64 + arm64) with the core sidecar,
-#   * standalone `godmode` server binaries (web dashboard embedded),
-#   * the Docker image ghcr.io/codextde/godmode-bot,
+#   * desktop installers (macOS arm64 + x64) with the core sidecar,
+#   * standalone macOS `godmode` server binaries (web dashboard embedded),
 # all attached to a draft GitHub release that a maintainer publishes after a quick check. The last job drops the .sig
 # files (latest.json carries the signatures), adds SHA256SUMS and puts a download table on top of the notes.
+#
+# Windows, Linux and Docker are paused (last built in v0.2.38, which usegodmode.com keeps serving for them): restore
+# their matrix entries from git history and set the repo variable LINUX_BUILDS=true to bring them back.
 #
 # Secrets for signed + notarized macOS builds (Developer ID Application: Codext GmbH): APPLE_CERTIFICATE (base64 .p12),
 # APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_TEAM_ID and for notarization either an App Store Connect
@@ -34,8 +36,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  group: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') && 'release-canary' || format('release-{0}', github.event.inputs.tag || github.ref_name) }}
+  cancel-in-progress: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') }}
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -49,6 +51,8 @@ jobs:
     outputs:
       release_id: ${{ steps.release.outputs.id }}
       version: ${{ steps.version.outputs.version }}
+      canary: ${{ steps.version.outputs.canary }}
+      app_version: ${{ steps.version.outputs.app_version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,6 +67,13 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-canary\.([0-9]+)$ ]]; then
+            echo "canary=true" >> "$GITHUB_OUTPUT"
+            echo "app_version=${BASH_REMATCH[1]}-${BASH_REMATCH[2]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "canary=false" >> "$GITHUB_OUTPUT"
+            echo "app_version=$version" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -165,22 +176,6 @@ jobs:
             rust_target: x86_64-apple-darwin
             bun_target: bun-darwin-x64
             args: --target x86_64-apple-darwin
-          - name: Windows x64
-            os: windows-latest
-            rust_target: x86_64-pc-windows-msvc
-            bun_target: bun-windows-x64
-            args: ""
-          - name: Linux x64
-            os: ubuntu-22.04
-            rust_target: x86_64-unknown-linux-gnu
-            bun_target: bun-linux-x64
-            args: ""
-          - name: Linux arm64
-            os: ubuntu-22.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            bun_target: bun-linux-arm64
-            args: ""
-            skip_sidecar_rpath: true
     steps:
       - name: Check out with LF line endings on Windows
         if: runner.os == 'Windows'
@@ -200,7 +195,9 @@ jobs:
 
       - name: Set the version from the tag
         shell: bash
-        run: bun scripts/bump-version.ts "$TAG"
+        env:
+          APP_VERSION: ${{ needs.create-release.outputs.app_version }}
+        run: bun scripts/bump-version.ts "$APP_VERSION"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -249,7 +246,7 @@ jobs:
           fi
 
       - name: Keep linuxdeploy from patching the sidecar
-        if: matrix.skip_sidecar_rpath
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
         run: |
           # linuxdeploy sets an rpath on every ELF file in the AppImage. On arm64 that rewrite makes the Bun-compiled
           # sidecar segfault and ldd fail, which aborts the build. The sidecar only links libc, so it needs no rpath.
@@ -270,7 +267,7 @@ jobs:
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          args: ${{ matrix.args }} --config src-tauri/tauri.updater.conf.json
+          args: ${{ matrix.args }}${{ needs.create-release.outputs.canary == 'true' && runner.os == 'Linux' && ' --bundles deb,appimage' || '' }} --config src-tauri/tauri.updater.conf.json
           releaseId: ${{ needs.create-release.outputs.release_id }}
           uploadUpdaterJson: true
           updaterJsonPreferNsis: true
@@ -320,7 +317,7 @@ jobs:
           fi
           gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > latest.json
           missing=0
-          for platform in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64 linux-aarch64; do
+          for platform in darwin-aarch64 darwin-x86_64; do
             if ! jq -e --arg p "$platform" '.platforms[$p].url' latest.json > /dev/null; then
               echo "::error::latest.json has no $platform entry: re-run that platform's desktop job"
               missing=1
@@ -347,18 +344,54 @@ jobs:
           gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=latest.json" \
             -H "Content-Type: application/json" --input latest.rewritten.json --jq .browser_download_url
 
+  canary-feed:
+    name: Publish the canary
+    needs: [create-release, updater-manifest]
+    if: needs.create-release.outputs.canary == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the prerelease and point the canary feed at it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$TAG" -F draft=false -F prerelease=true --jq .html_url
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq '.[] | select(.name == "latest.json") | .id')
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > latest.json
+          feed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "canary") | .id' | head -n1)
+          if [ -z "$feed" ]; then
+            feed=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name=canary -f target_commitish="$GITHUB_SHA" \
+              -f name="Canary channel" -f body="Update feed of the canary channel. The builds are the v*-canary.* prereleases." \
+              -F prerelease=true --jq .id)
+          fi
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$feed/assets?per_page=100" --jq '.[] | select(.name == "latest.json") | .id')
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$feed/assets?name=latest.json" \
+            -H "Content-Type: application/json" --input latest.json --jq .browser_download_url
+
+      - name: Keep the three newest canaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.tag_name | test("^v[0-9.]+-canary\\.[0-9]+$")) | "\(.id) \(.tag_name)"' |
+            sort -k2 -V -r | tail -n +4 |
+            while read -r id tag; do
+              [ "$tag" = "$TAG" ] && continue
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
+            done
+
   server:
     name: Server binaries (${{ matrix.os }})
     needs: create-release
+    if: needs.create-release.outputs.canary != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Built on Linux: Linux + Windows. macOS binaries are built, signed and notarized on macOS.
-          - os: ubuntu-latest
-            targets: bun-linux-x64 bun-linux-x64-baseline bun-linux-arm64 bun-windows-x64
           - os: macos-latest
             targets: bun-darwin-arm64 bun-darwin-x64
     steps:
@@ -454,6 +487,7 @@ jobs:
   docker:
     name: Docker image
     needs: create-release
+    if: vars.LINUX_BUILDS == 'true' && needs.create-release.outputs.canary != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

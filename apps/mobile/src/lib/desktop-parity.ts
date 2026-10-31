@@ -1,22 +1,43 @@
 import { differenceInCalendarDays, format, isToday, isYesterday } from "date-fns";
 import type { Agent, AgentQuestion, Conversation, HumanTask, MissingLogin, Routine, Task, TaskBlockedKind, TaskPriority } from "@godmode/shared";
 import type { IconName } from "@/components/icon";
+import { dateLocale, t } from "@/lib/i18n";
 
 /** The desktop's greeting: "Working late" before five, "Good night" from ten. */
 export function greeting(date = new Date()): string {
   const h = date.getHours();
-  if (h < 5) return "Working late";
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  if (h < 22) return "Good evening";
-  return "Good night";
+  if (h < 5) return t("system:greeting.late");
+  if (h < 12) return t("system:greeting.morning");
+  if (h < 18) return t("system:greeting.afternoon");
+  if (h < 22) return t("system:greeting.evening");
+  return t("system:greeting.night");
 }
 
 export const SUGGESTIONS: { icon: IconName; text: string }[] = [
-  { icon: "text", text: "Summarize my unread emails" },
-  { icon: "doc", text: "Create an agent that downloads my invoices every month" },
-  { icon: "bell", text: "Log into GitHub and check my notifications" },
-  { icon: "search", text: "Research competitors and write a report" },
+  {
+    icon: "text",
+    get text() {
+      return t("system:suggestions.emails");
+    },
+  },
+  {
+    icon: "doc",
+    get text() {
+      return t("system:suggestions.invoices");
+    },
+  },
+  {
+    icon: "bell",
+    get text() {
+      return t("system:suggestions.github");
+    },
+  },
+  {
+    icon: "search",
+    get text() {
+      return t("system:suggestions.research");
+    },
+  },
 ];
 
 /** Who a new chat goes to: the picked agent, else the main assistant (Godmode), else the first. */
@@ -41,18 +62,18 @@ export function continuesAt(c: Conversation): string {
 export function chatDayLabel(iso: string, now = new Date()): string {
   const date = new Date(iso);
   const days = differenceInCalendarDays(now, date);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return "Previous 7 days";
-  if (days < 30) return "Previous 30 days";
-  return format(date, date.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy");
+  if (days <= 0) return t("common:words.today");
+  if (days === 1) return t("common:words.yesterday");
+  if (days < 7) return t("system:days.previous7");
+  if (days < 30) return t("system:days.previous30");
+  return format(date, date.getFullYear() === now.getFullYear() ? "MMMM" : "MMMM yyyy", { locale: dateLocale() });
 }
 
 /** "Today", "Yesterday", "Thursday, Oct 15". */
 export function runDayLabel(date: Date): string {
-  if (isToday(date)) return "Today";
-  if (isYesterday(date)) return "Yesterday";
-  return format(date, "EEEE, MMM d");
+  if (isToday(date)) return t("common:words.today");
+  if (isYesterday(date)) return t("common:words.yesterday");
+  return format(date, t("system:formats.fullWeekdayDayMonth"), { locale: dateLocale() });
 }
 
 /** "45s", "12m", "1h 04m". */
@@ -64,22 +85,32 @@ export function formatWork(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-/** "$0.84", "<$0.01". */
-export function formatCost(usd: number): string {
-  if (usd > 0 && usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
-}
-
-export const PRIORITY_LABEL: Record<TaskPriority, string> = { urgent: "Urgent", high: "High", medium: "Medium", low: "Low", none: "No priority" };
+export const PRIORITY_LABEL: Record<TaskPriority, string> = {
+  get urgent() {
+    return t("system:priority.urgent");
+  },
+  get high() {
+    return t("system:priority.high");
+  },
+  get medium() {
+    return t("system:priority.medium");
+  },
+  get low() {
+    return t("system:priority.low");
+  },
+  get none() {
+    return t("system:priority.none");
+  },
+};
 
 export const BLOCKED_TITLE: Record<TaskBlockedKind, (agent: string) => string> = {
-  needs_input: (agent) => `${agent} needs something from you`,
-  failed: () => "The run failed",
-  stopped: () => "Stopped",
-  interrupted: () => "Interrupted by a restart",
-  publish: () => "Couldn't publish the work",
-  setup: () => "Couldn't set it up",
-  manual: () => "Blocked",
+  needs_input: (agent) => t("system:blocked.needsInput", { agent }),
+  failed: () => t("system:blocked.failed"),
+  stopped: () => t("system:blocked.stopped"),
+  interrupted: () => t("system:blocked.interrupted"),
+  publish: () => t("system:blocked.publish"),
+  setup: () => t("system:blocked.setup"),
+  manual: () => t("system:blocked.manual"),
 };
 
 function dayOf(iso: string): Date {
@@ -96,11 +127,11 @@ export function daysUntil(day: string, now = new Date()): number {
 /** "Today", "Tomorrow", "Yesterday", "Fri 9 Oct", "9 Oct 2027". */
 export function dueLabel(day: string, now = new Date()): string {
   const n = daysUntil(day, now);
-  if (n === 0) return "Today";
-  if (n === 1) return "Tomorrow";
-  if (n === -1) return "Yesterday";
+  if (n === 0) return t("common:words.today");
+  if (n === 1) return t("system:days.tomorrow");
+  if (n === -1) return t("common:words.yesterday");
   const d = dayOf(day);
-  return format(d, d.getFullYear() === now.getFullYear() ? "EEE d MMM" : "d MMM yyyy");
+  return format(d, d.getFullYear() === now.getFullYear() ? t("system:formats.dueThisYear") : t("system:formats.dueOtherYear"), { locale: dateLocale() });
 }
 
 /** "owner/repo" of a clone URL (https, ssh or git@host:owner/repo), or its last path segment. */
@@ -161,7 +192,7 @@ export function needsYou(input: {
       id: `question:${q.id}`,
       kind: "question",
       agentId: q.agentId,
-      title: q.kind === "approval" ? `${nameOf(q.agentId)} needs your OK` : `${nameOf(q.agentId)} asks you`,
+      title: q.kind === "approval" ? t("system:needs.needsOk", { agent: nameOf(q.agentId) }) : t("system:needs.asksYou", { agent: nameOf(q.agentId) }),
       detail: shorten(q.title),
       since: q.createdAt,
       workspaceId: q.workspaceId,
@@ -177,8 +208,12 @@ export function needsYou(input: {
       id: `todo:${h.id}`,
       kind: "todo",
       agentId: h.agentId,
-      title: !h.agentId ? shorten(h.title) : h.kind === "decision" ? `${nameOf(h.agentId)} left you a decision: ${shorten(h.title, 100)}` : `${nameOf(h.agentId)} needs you to: ${shorten(h.title, 100)}`,
-      detail: h.status === "doing" ? "You're on it" : h.taskNumber != null ? `For task #${h.taskNumber}` : (h.conversationTitle ?? ""),
+      title: !h.agentId
+        ? shorten(h.title)
+        : h.kind === "decision"
+          ? t("system:needs.leftDecision", { agent: nameOf(h.agentId), title: shorten(h.title, 100) })
+          : t("system:needs.needsYouTo", { agent: nameOf(h.agentId), title: shorten(h.title, 100) }),
+      detail: h.status === "doing" ? t("system:needs.onIt") : h.taskNumber != null ? t("system:needs.forTask", { number: h.taskNumber }) : (h.conversationTitle ?? ""),
       since: h.createdAt,
       workspaceId: h.workspaceId,
       humanTask: h,
@@ -189,25 +224,30 @@ export function needsYou(input: {
       id: `login:${m.id}`,
       kind: "login",
       agentId: m.agentId,
-      title: `${nameOf(m.agentId)} ${m.kind === "invalid_credential" ? "couldn't log in to" : m.kind === "missing_totp" ? "needs a 2FA code for" : "needs a login for"} ${m.service}`,
+      title:
+        m.kind === "invalid_credential"
+          ? t("system:needs.couldNotLogIn", { agent: nameOf(m.agentId), service: m.service })
+          : m.kind === "missing_totp"
+            ? t("system:needs.needs2fa", { agent: nameOf(m.agentId), service: m.service })
+            : t("system:needs.needsLogin", { agent: nameOf(m.agentId), service: m.service }),
       detail: shorten(m.reason),
       since: m.createdAt,
       workspaceId: m.workspaceId,
     });
   }
-  for (const t of input.tasks) {
-    if (t.archivedAt || (t.status !== "in_review" && t.status !== "blocked")) continue;
-    if (t.status === "blocked" && t.blockedKind === "needs_input" && waitingTickets.has(t.id)) continue;
-    const review = t.status === "in_review";
+  for (const task of input.tasks) {
+    if (task.archivedAt || (task.status !== "in_review" && task.status !== "blocked")) continue;
+    if (task.status === "blocked" && task.blockedKind === "needs_input" && waitingTickets.has(task.id)) continue;
+    const review = task.status === "in_review";
     items.push({
-      id: `${review ? "review" : "blocked"}:${t.id}`,
+      id: `${review ? "review" : "blocked"}:${task.id}`,
       kind: review ? "review" : "blocked",
-      agentId: t.agentId,
-      title: review ? `#${t.number} ${t.title} is ready for review` : `#${t.number} ${t.title} is blocked`,
-      detail: review ? (t.agentId ? `${nameOf(t.agentId)} delivered it` : "") : shorten(t.blockedReason ?? ""),
-      since: t.updatedAt,
-      workspaceId: t.workspaceId,
-      task: t,
+      agentId: task.agentId,
+      title: review ? t("system:needs.readyForReview", { number: task.number, title: task.title }) : t("system:needs.isBlocked", { number: task.number, title: task.title }),
+      detail: review ? (task.agentId ? t("system:needs.delivered", { agent: nameOf(task.agentId) }) : "") : shorten(task.blockedReason ?? ""),
+      since: task.updatedAt,
+      workspaceId: task.workspaceId,
+      task,
     });
   }
   return items.sort((a, b) => RANK[a.kind] - RANK[b.kind] || b.since.localeCompare(a.since));

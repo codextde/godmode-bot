@@ -4,6 +4,8 @@ import * as ImagePicker from "expo-image-picker";
 import { useState } from "react";
 import { ActionSheetIOS, Alert, Linking } from "react-native";
 import { MAX_TASK_ATTACHMENT_BYTES, type SendMessageInput } from "@godmode/shared";
+import { intlLocale, t } from "./i18n";
+import type { PastedFile } from "../../modules/paste-input";
 
 /** A file picked on the phone, not sent yet. */
 export interface PendingFile {
@@ -54,7 +56,7 @@ const nextId = () => `f${Date.now().toString(36)}${(counter++).toString(36)}`;
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024).toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1, useGrouping: false })} MB`;
 }
 
 export const isImage = (mime: string) => mime.startsWith("image/");
@@ -65,15 +67,15 @@ export function addFiles(current: PendingFile[], picked: PendingFile[]): Pending
   let total = current.reduce((sum, f) => sum + f.size, 0);
   const skipped: string[] = [];
   for (const f of picked) {
-    if (out.length >= MAX_FILES) skipped.push(`${f.name}: up to ${MAX_FILES} files per message`);
-    else if (f.size > MAX_FILE_BYTES) skipped.push(`${f.name} is larger than ${formatBytes(MAX_FILE_BYTES)}`);
-    else if (total + f.size > MAX_TOTAL_BYTES) skipped.push(`${f.name}: ${formatBytes(MAX_TOTAL_BYTES)} per message at most`);
+    if (out.length >= MAX_FILES) skipped.push(t("system:attachments.tooMany", { name: f.name, max: MAX_FILES }));
+    else if (f.size > MAX_FILE_BYTES) skipped.push(t("system:attachments.tooLarge", { name: f.name, size: formatBytes(MAX_FILE_BYTES) }));
+    else if (total + f.size > MAX_TOTAL_BYTES) skipped.push(t("system:attachments.tooMuch", { name: f.name, size: formatBytes(MAX_TOTAL_BYTES) }));
     else {
       out.push(f);
       total += f.size;
     }
   }
-  if (skipped.length) Alert.alert(skipped.length === 1 ? "A file was left out" : "Some files were left out", skipped.join("\n"));
+  if (skipped.length) Alert.alert(t("system:attachments.leftOut", { count: skipped.length }), skipped.join("\n"));
   return out;
 }
 
@@ -112,9 +114,9 @@ async function fromLibrary(room: number): Promise<PendingFile[]> {
 async function fromCamera(): Promise<PendingFile[]> {
   const permission = await ImagePicker.requestCameraPermissionsAsync();
   if (!permission.granted) {
-    Alert.alert("Camera is off for Godmode", "Allow camera access in Settings to take a photo for your agent.", [
-      { text: "Not now", style: "cancel" },
-      { text: "Open Settings", onPress: () => void Linking.openSettings() },
+    Alert.alert(t("system:attachments.cameraOffTitle"), t("system:attachments.cameraOffBody"), [
+      { text: t("system:attachments.notNow"), style: "cancel" },
+      { text: t("system:attachments.openSettings"), onPress: () => void Linking.openSettings() },
     ]);
     return [];
   }
@@ -128,11 +130,15 @@ async function fromFiles(room: number): Promise<PendingFile[]> {
   return result.assets.map((a) => ({ id: nextId(), uri: a.uri, name: a.name, mime: mimeOf(a.name, a.mimeType), size: sizeOf(a.uri, a.size) }));
 }
 
+export function fromPasted(files: PastedFile[]): PendingFile[] {
+  return files.map((f) => ({ id: nextId(), uri: f.uri, name: f.name, mime: mimeOf(f.name, f.mime), size: sizeOf(f.uri, f.size) }));
+}
+
 export type FileSource = "library" | "camera" | "files";
 
 export async function pickFrom(source: FileSource, room: number): Promise<PendingFile[]> {
   if (room <= 0) {
-    Alert.alert("That's the most for one message", `Send up to ${MAX_FILES} files at a time.`);
+    Alert.alert(t("system:attachments.limitTitle"), t("system:attachments.limitBody", { max: MAX_FILES }));
     return [];
   }
   try {
@@ -140,27 +146,27 @@ export async function pickFrom(source: FileSource, room: number): Promise<Pendin
     if (source === "camera") return await fromCamera();
     return await fromFiles(room);
   } catch (err) {
-    Alert.alert("Couldn't add the file", err instanceof Error ? err.message : String(err));
+    Alert.alert(t("system:attachments.couldNotAdd"), err instanceof Error ? err.message : String(err));
     return [];
   }
 }
 
-const SOURCES: { source: FileSource; label: string }[] = [
-  { source: "library", label: "Photo Library" },
-  { source: "camera", label: "Take Photo" },
-  { source: "files", label: "Choose File" },
-];
+const SOURCES = [
+  { source: "library", labelKey: "system:attachments.photoLibrary" },
+  { source: "camera", labelKey: "system:attachments.takePhoto" },
+  { source: "files", labelKey: "system:attachments.chooseFile" },
+] as const satisfies readonly { source: FileSource; labelKey: string }[];
 
 /** The system's own sheet on iOS, a plain dialog on Android. */
 export function chooseSource(): Promise<FileSource | null> {
   return new Promise((resolve) => {
     if (process.env.EXPO_OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions({ options: [...SOURCES.map((s) => s.label), "Cancel"], cancelButtonIndex: SOURCES.length }, (i) =>
+      ActionSheetIOS.showActionSheetWithOptions({ options: [...SOURCES.map((s) => t(s.labelKey)), t("common:actions.cancel")], cancelButtonIndex: SOURCES.length }, (i) =>
         resolve(SOURCES[i]?.source ?? null),
       );
       return;
     }
-    Alert.alert("Attach", undefined, SOURCES.map((s) => ({ text: s.label, onPress: () => resolve(s.source) })), {
+    Alert.alert(t("system:attachments.attach"), undefined, SOURCES.map((s) => ({ text: t(s.labelKey), onPress: () => resolve(s.source) })), {
       cancelable: true,
       onDismiss: () => resolve(null),
     });

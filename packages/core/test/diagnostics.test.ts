@@ -227,14 +227,13 @@ describe("slow synchronous work", () => {
 describe("report", () => {
   test("summarizes problems, runs and slow spots for an AI", () => {
     const runner = logger("runner");
-    runner.info("run finished", { runId: "run_a", trigger: "chat", status: "succeeded", ms: 40_000, queuedMs: 200, costUsd: 0.5 });
+    runner.info("run finished", { runId: "run_a", trigger: "chat", status: "succeeded", ms: 40_000, queuedMs: 200 });
     runner.warn("run failed: Timed out after 60 minutes", {
       runId: "run_b",
       trigger: "routine",
       status: "failed",
       ms: 3_600_000,
       queuedMs: 90_000,
-      costUsd: 1.25,
       error: "Timed out after 60 minutes",
       failedTools: [{ name: "mcp__browser__browser_click", error: "element not found" }],
     });
@@ -247,7 +246,7 @@ describe("report", () => {
     expect(report).toContain("# Godmode diagnostic log");
     expect(report).toContain("## Environment");
     expect(report).toContain(`Bun ${Bun.version}`);
-    expect(report).toContain("2 runs: 1 succeeded, 1 failed, 0 cancelled · total cost $1.75");
+    expect(report).toContain("2 runs: 1 succeeded, 1 failed, 0 cancelled\n");
     expect(report).toContain("1× Timed out after 60 minutes");
     expect(report).toContain("mcp__browser__browser_click ×1");
     expect(report).toContain("| GET /api/agents | 2 | 1.8 s | 2.4 s |");
@@ -258,11 +257,11 @@ describe("report", () => {
     expect(body.indexOf('"run_a"')).toBeLessThan(body.indexOf('"run_b"'));
   });
 
-  test("says who spent what, what blocked the event loop, how the memory stood and which waits are by design", () => {
+  test("says who ran what, what blocked the event loop, how the memory stood and which waits are by design", () => {
     const runner = logger("runner");
-    runner.info("run finished", { runId: "run_a", agent: "Researcher", trigger: "chat", status: "succeeded", ms: 40_000, wallMs: 41_000, costUsd: 0.5, contextTokens: 120_000 });
-    runner.info("run finished", { runId: "run_b", agent: "Researcher", trigger: "routine", status: "succeeded", ms: 60_000, wallMs: 3_000_000, costUsd: 1.5, contextTokens: 400_000 });
-    runner.info("run finished", { runId: "run_c", agent: "Writer", trigger: "chat", status: "succeeded", ms: 5_000, wallMs: 5_100, costUsd: 0.25 });
+    runner.info("run finished", { runId: "run_a", agent: "Researcher", trigger: "chat", status: "succeeded", ms: 40_000, wallMs: 41_000, contextTokens: 120_000 });
+    runner.info("run finished", { runId: "run_b", agent: "Researcher", trigger: "routine", status: "succeeded", ms: 60_000, wallMs: 3_000_000, contextTokens: 400_000 });
+    runner.info("run finished", { runId: "run_c", agent: "Writer", trigger: "chat", status: "succeeded", ms: 5_000, wallMs: 5_100 });
     const perf = logger("perf");
     perf.warn("event loop blocked", { ms: 900, times: 3, totalMs: 2100, running: 2, queued: 0, during: [{ what: "run delta", times: 4, totalMs: 1500, worstMs: 800 }, { what: "db: UPDATE messages SET blocks = ? WHERE id = ?", times: 1, totalMs: 260, worstMs: 260 }] });
     perf.warn("event loop blocked", { ms: 400, times: 1, totalMs: 400, running: 1, queued: 0, during: [{ what: "run delta", times: 1, totalMs: 400, worstMs: 400 }] });
@@ -273,7 +272,8 @@ describe("report", () => {
     logger("http").info("slow request", { method: "GET", route: "/api/agents", status: 200, ms: 1400 });
 
     const report = buildLogReport();
-    expect(report).toContain("- Cost by agent: Researcher $2.00 in 2 runs, ~260k tokens read per turn · Writer $0.25 in 1 run");
+    expect(report).toContain("- Runs by agent: Researcher 2 runs, ~260k tokens read per turn · Writer 1 run");
+    expect(report).not.toContain("Cost by agent");
     expect(report).toContain("1 run took much longer by the clock than Claude worked");
     expect(report).toContain("run_b 50 min 0 s vs 1 min 0 s");
     expect(report).toContain("| run delta | 5 | 1.9 s | 800 ms |");

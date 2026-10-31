@@ -1,10 +1,12 @@
 import { forwardRef, type HTMLAttributes } from "react";
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict, type FormatDistanceToken } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { ArrowUpRight, CircleCheck, CircleSlash, Flag, MessageCircleQuestion, MessagesSquare, ShieldCheck, SquareKanban, Undo2, UserRound } from "lucide-react";
-import type { Agent, HumanTask } from "@godmode/shared";
-import { HUMAN_TASK_WORDS, humanTaskAnswer, humanTaskRef } from "@godmode/shared";
+import type { Agent, HumanTask, HumanTaskKind } from "@godmode/shared";
+import { humanTaskAnswer, humanTaskRef } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
 import { cn } from "@/lib/utils";
+import { dateLocale, t } from "@/i18n";
 
 export function hostOf(url: string): string {
   try {
@@ -32,8 +34,27 @@ export function plainPreview(body: string, max = 160): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
+const AGE_KEY = {
+  xSeconds: "humanTasks:age.seconds",
+  xMinutes: "humanTasks:age.minutes",
+  xHours: "humanTasks:age.hours",
+  xDays: "humanTasks:age.days",
+  xMonths: "humanTasks:age.months",
+  xYears: "humanTasks:age.years",
+} as const;
+
 export function shortAge(iso: string): string {
-  return formatDistanceToNowStrict(new Date(iso), { roundingMethod: "floor" }).replace(/ (\w)\w*$/, "$1");
+  const formatDistance = (token: FormatDistanceToken, n: number) => t(AGE_KEY[token as keyof typeof AGE_KEY] ?? AGE_KEY.xSeconds, { n });
+  return formatDistanceToNowStrict(new Date(iso), { roundingMethod: "floor", locale: { ...dateLocale(), formatDistance } });
+}
+
+export function humanTaskWords(kind: HumanTaskKind) {
+  return {
+    done: t(`humanTasks:words.${kind}.done`),
+    declined: t(`humanTasks:words.${kind}.declined`),
+    wasDone: t(`humanTasks:words.${kind}.wasDone`),
+    wasDeclined: t(`humanTasks:words.${kind}.wasDeclined`),
+  };
 }
 
 const OUTCOME = {
@@ -45,24 +66,25 @@ const OUTCOME = {
 /** How a closed task ended, in the words of its kind ("Answered", "Approved", "Couldn't do it"). */
 export function outcomeOf(task: HumanTask) {
   if (task.status !== "done" && task.status !== "declined" && task.status !== "withdrawn") return null;
-  const words = HUMAN_TASK_WORDS[task.kind];
+  const words = humanTaskWords(task.kind);
   // A decision nobody answered is muted, not a failure.
   const tone = task.status === "declined" && task.kind === "decision" ? "text-muted-foreground" : OUTCOME[task.status].tone;
-  return { icon: OUTCOME[task.status].icon, tone, label: task.status === "done" ? words.wasDone : task.status === "declined" ? words.wasDeclined : "Taken back" };
+  return { icon: OUTCOME[task.status].icon, tone, label: task.status === "done" ? words.wasDone : task.status === "declined" ? words.wasDeclined : t("humanTasks:status.withdrawn") };
 }
 
 const KIND = {
-  decision: { icon: MessageCircleQuestion, label: "Decision" },
-  approval: { icon: ShieldCheck, label: "Needs your OK" },
+  decision: { icon: MessageCircleQuestion, labelKey: "kind.decision" },
+  approval: { icon: ShieldCheck, labelKey: "kind.approval" },
 } as const;
 
 /** What an agent wants to hear from the human: a decision or an OK. Nothing for a plain task. */
 export function KindBadge({ task, className }: { task: HumanTask; className?: string }) {
+  const { t } = useTranslation("humanTasks");
   if (task.kind === "task") return null;
   const k = KIND[task.kind];
   return (
     <span className={cn("flex items-center gap-1 rounded-[4px] bg-warning/10 px-1 text-[11px] font-medium text-warning", className)}>
-      <k.icon className="size-3" aria-hidden /> {k.label}
+      <k.icon className="size-3" aria-hidden /> {t(k.labelKey)}
     </span>
   );
 }
@@ -96,6 +118,7 @@ interface CardProps extends HTMLAttributes<HTMLDivElement> {
 }
 
 export const HumanTaskCard = forwardRef<HTMLDivElement, CardProps>(function HumanTaskCard({ task, agent, overlay, ghost, className, ...rest }, ref) {
+  const { t } = useTranslation("humanTasks");
   const outcome = outcomeOf(task);
   const preview = outcome ? humanTaskAnswer(task) || task.closedReason || "" : plainPreview(task.body);
   const urgent = task.priority === "high" && !outcome;
@@ -123,10 +146,10 @@ export const HumanTaskCard = forwardRef<HTMLDivElement, CardProps>(function Huma
         {!outcome && <KindBadge task={task} />}
         {urgent && (
           <span className="flex items-center gap-0.5 rounded-[4px] bg-rose-500/10 px-1 text-[11px] font-medium text-rose-600 dark:text-rose-400">
-            <Flag className="size-2.5 fill-current" /> Urgent
+            <Flag className="size-2.5 fill-current" /> {t("card.urgent")}
           </span>
         )}
-        {task.status === "doing" && <span className="rounded-[4px] bg-brand-soft px-1 text-[11px] font-medium text-brand-strong">On it</span>}
+        {task.status === "doing" && <span className="rounded-[4px] bg-brand-soft px-1 text-[11px] font-medium text-brand-strong">{t("card.onIt")}</span>}
         <span className="ml-auto font-mono text-[11px] tabular-nums">{shortAge(task.closedAt ?? task.createdAt)}</span>
       </div>
 
@@ -151,7 +174,7 @@ export const HumanTaskCard = forwardRef<HTMLDivElement, CardProps>(function Huma
             <span className="grid size-5 place-items-center rounded-[5px] border bg-secondary">
               <UserRound className="size-3" />
             </span>
-            <span className="truncate">{own ? "Your own" : (task.agentName ?? "Agent removed")}</span>
+            <span className="truncate">{own ? t("card.yourOwn") : (task.agentName ?? t("card.agentRemoved"))}</span>
           </span>
         )}
         <OriginLabel task={task} className="ml-auto max-w-[45%] text-[11px] text-muted-foreground" />

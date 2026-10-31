@@ -7,6 +7,9 @@
  *   (default)   replay stream-partial.jsonl       → "Hello, nice to meet you!"
  *   USE_TOOL    replay stream-tooluse.jsonl       → Bash tool + "DONE"
  *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
+ *   BG_STOPPED  replay stream-background-stopped.jsonl → a subagent's background commands killed after the last result
+ *              (so does Godmode's note about them, "Background work was stopped …")
+ *   NAME_CHAT   as the first message of a chat: the title request answers "Named by Haiku." (other title requests fail)
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   BIG_CONTEXT  one answer whose message fills 421.6k tokens of a 1M window
  *   LOGIN_FAIL  answer with a login-failure sentence
@@ -48,7 +51,8 @@
  *              Claude Code does: told to stop (`continue: false`), write `stopped-by-hook` and end the turn without an
  *              answer, else answer "step finished"
  *   LIMIT_HIT   while the state dir has a `limit` file (its content: the reset time in unix seconds, may be empty) end
- *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit"
+ *              like Claude Code does when a usage limit is reached; afterwards answer "back after the limit". With a
+ *              `limit-token` file only the account with that CLAUDE_CODE_OAUTH_TOKEN ("system": none) is limited
  *   LIMIT_SILENT  while the state dir has a `limit` file exit with code 1 and without a word, like Claude Code
  *              sometimes does at a usage limit; afterwards whatever the rest of the prompt asks for
  *   OVERAGE_CRASH  report a reached limit like Claude Code does while requests still go through, then crash like CRASH
@@ -264,6 +268,16 @@ if (argValue("--input-format") === "stream-json") {
 }
 
 const prompt = await new Response(Bun.stdin.stream()).text();
+if (prompt.includes("Decide whether it stopped early")) {
+  const verdict = /<final-message[^>]*>[\s\S]*NOT_DONE_YET/.test(prompt) ? "UNFINISHED" : "FINISHED";
+  process.stdout.write(JSON.stringify([{ type: "result", subtype: "success", is_error: false, result: verdict }]) + "\n");
+  process.exit(0);
+}
+if (prompt.includes("Name the chat for a sidebar list")) {
+  const named = /<message[^>]*>[\s\S]*NAME_CHAT/.test(prompt);
+  process.stdout.write(JSON.stringify([{ type: "result", subtype: "success", is_error: !named, result: named ? '"Named by Haiku."' : "" }]) + "\n");
+  process.exit(0);
+}
 const resume = argValue("--resume");
 const sessionId = resume ?? argValue("--session-id") ?? crypto.randomUUID();
 // The run's settings file is gone once the run has ended: its content is kept for the tests.
@@ -318,6 +332,7 @@ appendFileSync(
       ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? null,
       ENABLE_TOOL_SEARCH: process.env.ENABLE_TOOL_SEARCH ?? null,
       CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR ?? null,
+      CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN ?? null,
     },
   }) + "\n",
 );
@@ -878,7 +893,10 @@ if (slash?.[1] === "clear") {
 } else if (prompt.includes("LIMIT_HIT")) {
   out(init);
   const limitFile = join(stateDir, "limit");
-  if (existsSync(limitFile)) {
+  // `limit-token`: only the account with this token (or "system" for Claude Code's own login) is at its limit.
+  const tokenFile = join(stateDir, "limit-token");
+  const account = process.env.CLAUDE_CODE_OAUTH_TOKEN || "system";
+  if (existsSync(limitFile) && (!existsSync(tokenFile) || readFileSync(tokenFile, "utf8").trim() === account)) {
     const resetsAt = Number(readFileSync(limitFile, "utf8").trim()) || undefined;
     const text = "You've hit your session limit · resets 3pm (Europe/Berlin)";
     out({ type: "rate_limit_event", rate_limit_info: { status: "rejected", rateLimitType: "five_hour", ...(resetsAt ? { resetsAt } : {}) }, session_id: sessionId });
@@ -926,6 +944,11 @@ if (slash?.[1] === "clear") {
   const usage = { input_tokens: 2, cache_read_input_tokens: 420_000, cache_creation_input_tokens: 1_000, output_tokens: 600 };
   out({ type: "assistant", message: { id: `msg_${crypto.randomUUID()}`, role: "assistant", model: "claude-opus-5-5", content: [{ type: "text", text: "long" }], usage }, parent_tool_use_id: null, session_id: sessionId });
   result("long", { modelUsage: { "claude-opus-5-5": { contextWindow: 1_000_000 } } });
+} else if (prompt.includes("NOT_DONE_YET")) {
+  out(init);
+  const text = "I drafted the report (NOT_DONE_YET). Next I will send it to Dana.";
+  textTurn(text);
+  result(text);
 } else if (prompt.includes("LOGIN_FAIL")) {
   out(init);
   const text = "I opened the dashboard. I couldn't log in to example.com because there are no saved credentials for it.";
@@ -1254,6 +1277,8 @@ if (slash?.[1] === "clear") {
   if (prompt.includes("MOD_NOTES_FLOOD")) for (let i = 0; i < 300; i++) note("ui_log", "flood", `line ${i}`);
   textTurn("mods ran");
   result("mods ran");
+} else if (prompt.includes("BG_STOPPED") || prompt.includes("Background work was stopped")) {
+  await replay("stream-background-stopped.jsonl");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

@@ -12,7 +12,7 @@ import { HttpError, badRequest, notFound } from "../util";
 
 const MAX_ENTRIES = 500;
 
-function expandHome(input: string): string {
+export function expandHome(input: string): string {
   if (input === "~") return homedir();
   if (input.startsWith("~/") || input.startsWith("~\\")) return join(homedir(), input.slice(2));
   return input;

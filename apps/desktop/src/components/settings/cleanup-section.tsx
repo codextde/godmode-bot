@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import { ArrowDown, ArrowUpRight, BroomSparkles, CalendarClock, CircleAlert, CircleArrowDown, CircleCheck, CircleX, FolderOpen, HardDrive, RefreshCw, Stethoscope } from "lucide-react";
 import { Link } from "react-router";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { CleanupReport, HealthCheck, Settings, StorageArea } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDoctor } from "@/components/onboarding/doctor-checklist";
 import { api, errorMessage } from "@/lib/api";
+import { dateLocale, t as translate } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CleanupItems } from "./cleanup-items";
@@ -37,24 +39,25 @@ export function useCleanupReport() {
 
 /** Renders without the settings document too (see STANDALONE in the settings page): only the automatic cleanup needs it. */
 export function CleanupSection({ settings }: { settings: Settings | undefined }) {
+  const { t } = useTranslation(["settings", "common"]);
   const qc = useQueryClient();
   const report = useCleanupReport();
   // Asked for by hand: the database is checked again too, not only the folders.
   const rescan = useMutation({
     mutationFn: () => api.cleanup.report(true),
     onSuccess: (fresh) => qc.setQueryData(qk.cleanup, fresh),
-    onError: (e) => toast.error("Couldn't look at the data folder", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("cleanup.scanError"), { description: errorMessage(e) }),
   });
   const scanning = report.isFetching || rescan.isPending;
   return (
     <div className="space-y-5">
-      <SectionHeading title="Cleanup" description="A self check of Godmode's data folder, and what can go to give the space back." />
+      <SectionHeading title={t("cleanup.title")} description={t("cleanup.description")} />
       {report.isError ? (
         <div className="rounded-xl border border-destructive/25 bg-destructive/[0.05] p-5 text-sm">
-          <p className="font-medium text-destructive">Couldn't look at the data folder</p>
+          <p className="font-medium text-destructive">{t("cleanup.scanError")}</p>
           <p className="mt-1 text-muted-foreground">{errorMessage(report.error)}</p>
           <Button size="sm" variant="outline" className="mt-3" onClick={() => report.refetch()}>
-            <RefreshCw /> Try again
+            <RefreshCw /> {t("common:actions.tryAgain")}
           </Button>
         </div>
       ) : (
@@ -62,11 +65,11 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
       )}
       <SelfCheck report={report.data} failed={report.isError} rescan={rescan} />
       {report.data ? <CleanupItems report={report.data} refreshing={scanning} /> : !report.isError && <ItemsSkeleton />}
-      <SettingsGroup title="Agents' files" description="Look through each agent's workspace, notes and memory yourself: what takes space, copies, junk and notes nothing links to." icon={<FolderOpen />}>
-        <SettingRow label="Files" description="Rename, move and delete by hand. Deleted files wait 30 days in the agent's bin.">
+      <SettingsGroup title={t("cleanup.files.title")} description={t("cleanup.files.description")} icon={<FolderOpen />}>
+        <SettingRow label={t("files.title")} description={t("cleanup.files.label")}>
           <Button asChild size="sm" variant="outline">
             <Link to="/settings/files">
-              Open Files <ArrowUpRight />
+              {t("cleanup.files.open")} <ArrowUpRight />
             </Link>
           </Button>
         </SettingRow>
@@ -81,6 +84,7 @@ export function CleanupSection({ settings }: { settings: Settings | undefined })
 /* ------------------------------------------------------------------ */
 
 function StorageCard({ report, scanning, onScan }: { report: CleanupReport | undefined; scanning: boolean; onScan: () => void }) {
+  const { t } = useTranslation("settings");
   const used = report?.storage.reduce((n, s) => n + s.bytes, 0) ?? 0;
   const reclaim = report?.items.filter((i) => i.recommended && i.count && !i.blocked).reduce((n, i) => n + i.bytes, 0) ?? 0;
   const last = report?.lastRun;
@@ -90,12 +94,12 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="eyebrow flex items-center gap-1.5">
-              <HardDrive className="size-3.5" /> Storage
+              <HardDrive className="size-3.5" /> {t("cleanup.storage.title")}
             </div>
             {report ? (
               <motion.div key={used} initial={{ opacity: 0.4 }} animate={{ opacity: 1 }} className="mt-2 flex items-baseline gap-2">
                 <span className="text-[34px] leading-none font-medium tracking-[-0.04em] tabular-nums">{formatBytes(used)}</span>
-                <span className="text-sm text-muted-foreground">used by Godmode</span>
+                <span className="text-sm text-muted-foreground">{t("cleanup.storage.used")}</span>
               </motion.div>
             ) : (
               <Skeleton className="mt-2 h-9 w-48" />
@@ -103,16 +107,16 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
             <p className="mt-2 text-xs text-muted-foreground">
               {report ? (
                 <>
-                  {report.disk && `${formatBytes(report.disk.freeBytes)} free of ${formatBytes(report.disk.totalBytes)} on this disk · `}
-                  checked {formatDistanceToNow(new Date(report.checkedAt), { addSuffix: true })}
+                  {report.disk && `${t("cleanup.storage.disk", { free: formatBytes(report.disk.freeBytes), total: formatBytes(report.disk.totalBytes) })} · `}
+                  {t("cleanup.storage.checked", { time: formatDistanceToNow(new Date(report.checkedAt), { addSuffix: true, locale: dateLocale() }) })}
                 </>
               ) : (
-                "Looking through the data folder…"
+                t("cleanup.storage.looking")
               )}
             </p>
           </div>
           <Button size="sm" variant="ghost" onClick={onScan} disabled={scanning}>
-            {scanning ? <Spinner /> : <RefreshCw />} {scanning ? "Scanning…" : "Scan again"}
+            {scanning ? <Spinner /> : <RefreshCw />} {scanning ? t("cleanup.storage.scanning") : t("cleanup.storage.scanAgain")}
           </Button>
         </div>
         {report ? <StorageBar report={report} used={used} /> : <Skeleton className="h-2.5 w-full rounded-full" />}
@@ -121,12 +125,14 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t bg-paper-2/60 px-5 py-3 text-xs">
           <span className="flex items-center gap-1.5 font-medium">
             <BroomSparkles className="size-3.5 text-brand-strong" />
-            {reclaim ? `${formatBytes(reclaim)} can be freed safely` : "Nothing piles up right now"}
+            {reclaim ? t("cleanup.storage.reclaim", { size: formatBytes(reclaim) }) : t("cleanup.storage.nothing")}
           </span>
           {last && (
             <span className="text-muted-foreground">
-              Last cleanup {formatDistanceToNow(new Date(last.finishedAt), { addSuffix: true })}
-              {last.automatic && " (automatic)"} freed {formatBytes(last.freedBytes)}
+              {t(last.automatic ? "cleanup.storage.lastAuto" : "cleanup.storage.last", {
+                time: formatDistanceToNow(new Date(last.finishedAt), { addSuffix: true, locale: dateLocale() }),
+                size: formatBytes(last.freedBytes),
+              })}
             </span>
           )}
         </div>
@@ -136,6 +142,7 @@ function StorageCard({ report, scanning, onScan }: { report: CleanupReport | und
 }
 
 function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
+  const { t } = useTranslation("settings");
   const percent = (bytes: number) => (used ? (bytes / used) * 100 : 0);
   const share = (bytes: number) => {
     const p = percent(bytes);
@@ -143,7 +150,7 @@ function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
   };
   return (
     <div className="space-y-3.5">
-      <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label="Storage by area">
+      <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={t("cleanup.storage.byArea")}>
         {report.storage.map((s, i) => (
           <Tooltip key={s.area}>
             <TooltipTrigger asChild>
@@ -180,12 +187,12 @@ function StorageBar({ report, used }: { report: CleanupReport; used: number }) {
 
 type Tone = HealthCheck["status"] | "update";
 
-const TONE: Record<Tone, { icon: typeof CircleCheck; cls: string; label: string }> = {
-  ok: { icon: CircleCheck, cls: "text-success", label: "Fine" },
-  warn: { icon: CircleAlert, cls: "text-warning", label: "Needs a look" },
-  error: { icon: CircleX, cls: "text-destructive", label: "Problem" },
-  update: { icon: CircleArrowDown, cls: "text-brand-strong", label: "Update available" },
-};
+const TONE = {
+  ok: { icon: CircleCheck, cls: "text-success", labelKey: "cleanup.tone.ok" },
+  warn: { icon: CircleAlert, cls: "text-warning", labelKey: "cleanup.tone.warn" },
+  error: { icon: CircleX, cls: "text-destructive", labelKey: "cleanup.tone.error" },
+  update: { icon: CircleArrowDown, cls: "text-brand-strong", labelKey: "cleanup.tone.update" },
+} as const satisfies Record<Tone, { icon: typeof CircleCheck; cls: string; labelKey: string }>;
 
 interface Check {
   id: string;
@@ -195,15 +202,18 @@ interface Check {
   action?: ReactNode;
 }
 
-const openSystem = (
-  <Button asChild size="xs" variant="outline">
-    <Link to="/settings/system">
-      Open <ArrowUpRight />
-    </Link>
-  </Button>
-);
+function OpenSystem() {
+  const { t } = useTranslation("common");
+  return (
+    <Button asChild size="xs" variant="outline">
+      <Link to="/settings/system">
+        {t("actions.open")} <ArrowUpRight />
+      </Link>
+    </Button>
+  );
+}
 
-const unknown = (id: string, name: string): Check => ({ id, name, tone: "warn", detail: "Couldn't be checked" });
+const unknown = (id: string, name: string): Check => ({ id, name, tone: "warn", detail: translate("settings:cleanup.check.unknown") });
 
 function SelfCheck({
   report,
@@ -215,41 +225,46 @@ function SelfCheck({
   failed: boolean;
   rescan: UseMutationResult<CleanupReport, Error, void>;
 }) {
+  const { t } = useTranslation("settings");
   const doctor = useDoctor();
   const permissions = usePermissions();
   const updates = useToolUpdates();
+  const openSystem = <OpenSystem />;
 
   // null = still being checked.
   const tools = (): Check | null => {
-    if (!doctor.data) return doctor.isError ? unknown("tools", "Tools") : null;
+    const name = t("cleanup.check.tools");
+    if (!doctor.data) return doctor.isError ? unknown("tools", name) : null;
     const broken = doctor.data.dependencies.filter((d) => d.required && !d.ok);
-    if (!broken.length) return { id: "tools", name: "Tools", tone: "ok", detail: `${doctor.data.dependencies.filter((d) => d.ok).length} tools ready` };
-    return { id: "tools", name: "Tools", tone: "error", detail: `${broken.map((d) => d.name).join(", ")} ${broken.length === 1 ? "doesn't" : "don't"} work`, action: openSystem };
+    if (!broken.length) return { id: "tools", name, tone: "ok", detail: t("cleanup.check.toolsReady", { count: doctor.data.dependencies.filter((d) => d.ok).length }) };
+    return { id: "tools", name, tone: "error", detail: t("cleanup.check.toolsBroken", { count: broken.length, names: broken.map((d) => d.name).join(", ") }), action: openSystem };
   };
   const allowed = (): Check | null => {
-    if (!permissions.data) return permissions.isError ? unknown("permissions", "Permissions") : null;
+    const name = t("system.permissions.title");
+    if (!permissions.data) return permissions.isError ? unknown("permissions", name) : null;
     const missing = permissions.data.permissions.filter((p) => !p.ok);
-    if (!missing.length) return { id: "permissions", name: "Permissions", tone: "ok", detail: "Everything is allowed" };
+    if (!missing.length) return { id: "permissions", name, tone: "ok", detail: t("system.perm.allAllowed") };
     return {
       id: "permissions",
-      name: "Permissions",
+      name,
       tone: missing.some((p) => p.required) ? "error" : "warn",
-      detail: `${missing.length} ${missing.length === 1 ? "needs" : "need"} attention`,
+      detail: t("cleanup.check.needAttention", { count: missing.length }),
       action: openSystem,
     };
   };
   const upToDate = (): Check | null => {
-    if (!updates.data) return updates.isError ? unknown("updates", "Updates") : null;
-    if (!updates.due.length) return { id: "updates", name: "Updates", tone: "ok", detail: "Everything is up to date" };
+    const name = t("system.updates.title");
+    if (!updates.data) return updates.isError ? unknown("updates", name) : null;
+    if (!updates.due.length) return { id: "updates", name, tone: "ok", detail: t("system.updates.allUpToDate") };
     const updating = updates.update.isPending && updates.update.variables === undefined;
     return {
       id: "updates",
-      name: "Updates",
+      name,
       tone: "update",
-      detail: updates.due.map((t) => `${t.name} ${t.latest ?? ""}`.trim()).join(", "),
+      detail: updates.due.map((tool) => `${tool.name} ${tool.latest ?? ""}`.trim()).join(", "),
       action: (
         <Button size="xs" onClick={() => updates.update.mutate(undefined)} disabled={updates.update.isPending}>
-          {updating ? <Spinner className="size-3" /> : <ArrowDown />} {updating ? "Updating…" : "Update"}
+          {updating ? <Spinner className="size-3" /> : <ArrowDown />} {updating ? t("system.updates.updating") : t("system.updates.update")}
         </Button>
       ),
     };
@@ -271,20 +286,20 @@ function SelfCheck({
     <SettingsGroup
       title={
         <span className="flex items-center gap-2">
-          Self check
+          {t("cleanup.check.title")}
           {known.length === checks.length && (
             <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", problems ? "bg-warning/10 text-warning" : "bg-success/10 text-success")}>
-              {problems ? `${problems} ${problems === 1 ? "needs" : "need"} a look` : "All good"}
+              {problems ? t("cleanup.check.needLook", { count: problems }) : t("cleanup.check.allGood")}
             </span>
           )}
         </span>
       }
       icon={<Stethoscope />}
-      description="Tools, permissions, updates and the data folder, checked in one go."
+      description={t("cleanup.check.description")}
       bodyClassName="py-4"
       actions={
         <Button size="sm" variant="ghost" onClick={recheck} disabled={busy}>
-          {busy ? <Spinner /> : <RefreshCw />} Re-check
+          {busy ? <Spinner /> : <RefreshCw />} {t("system.perm.recheck")}
         </Button>
       }
     >
@@ -304,6 +319,7 @@ function SelfCheck({
 }
 
 function CheckTile({ check }: { check: Check }) {
+  const { t } = useTranslation("settings");
   const tone = TONE[check.tone];
   const Icon = tone.icon;
   return (
@@ -314,7 +330,7 @@ function CheckTile({ check }: { check: Check }) {
         check.tone === "warn" && "border-warning/25",
       )}
     >
-      <Icon className={cn("size-5 shrink-0", tone.cls)} aria-label={tone.label} />
+      <Icon className={cn("size-5 shrink-0", tone.cls)} aria-label={t(tone.labelKey)} />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium">{check.name}</p>
         <p className="truncate text-xs text-muted-foreground" title={check.detail}>
@@ -331,12 +347,13 @@ function CheckTile({ check }: { check: Check }) {
 /* ------------------------------------------------------------------ */
 
 function AutoCleanup({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch } = useSettingsPatch();
   return (
-    <SettingsGroup title="Automatic cleanup" icon={<CalendarClock />} description="Let Godmode tidy up after itself.">
+    <SettingsGroup title={t("cleanup.auto.title")} icon={<CalendarClock />} description={t("cleanup.auto.description")}>
       <SettingRow
-        label="Clean up automatically"
-        description="Once a day, while no agent is working, Godmode removes what is recommended above — worktrees once their task has been finished for a week. The trash and VM downloads only go when you pick them."
+        label={t("cleanup.auto.label")}
+        description={t("cleanup.auto.labelDescription")}
         htmlFor="maintenance-auto-cleanup"
       >
         <Switch id="maintenance-auto-cleanup" checked={settings.maintenance.autoCleanup} onCheckedChange={(on) => patch({ maintenance: { autoCleanup: on } })} />

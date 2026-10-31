@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, Stack } from "expo-router";
 import { memo, useCallback, useMemo } from "react";
 import { Alert, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Task } from "@godmode/shared";
 import { TaskRow } from "@/components/task-row";
 import { EmptyState, ErrorState, Hairline, SkeletonRows, T, tap } from "@/components/ui";
 import { api, errorText } from "@/lib/api";
 import { useAgents } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { tasksInProject, useProjectIndex, useWorkspace } from "@/lib/workspace";
@@ -15,6 +17,7 @@ import { radius, space, useColors } from "@/lib/theme";
 
 /** Tasks taken off the board of the picked workspace (or project), the latest archived first. */
 export default function ArchivedTasks() {
+  const { t } = useTranslation("tasks");
   const { id: workspaceId, projectId, workspaces } = useWorkspace();
   const projects = useProjectIndex();
   const tasks = useQuery({ queryKey: qk.taskList(workspaceId, true), queryFn: () => api.tasks.list({ workspaceId, archived: true }) });
@@ -41,7 +44,7 @@ export default function ArchivedTasks() {
 
   return (
     <>
-      <Stack.Title>Archived tasks</Stack.Title>
+      <Stack.Title>{t("archivedTasks.title")}</Stack.Title>
       <FlashList
         data={data}
         keyExtractor={(t) => t.id}
@@ -54,9 +57,9 @@ export default function ArchivedTasks() {
           tasks.isLoading ? (
             <SkeletonRows count={6} avatar={40} />
           ) : tasks.isError ? (
-            <ErrorState title="Couldn't load archived tasks" error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
+            <ErrorState title={t("archivedTasks.loadFailed")} error={errorText(tasks.error)} onRetry={() => void tasks.refetch()} />
           ) : (
-            <EmptyState icon="archive" title="Nothing archived yet" body="Archive finished work to keep the board focused: long-press a task. Archived tasks keep everything and come back in one tap." />
+            <EmptyState icon="archive" title={t("archivedTasks.emptyTitle")} body={t("archivedTasks.emptyBody")} />
           )
         }
       />
@@ -71,13 +74,14 @@ function restoreTask(id: string) {
   queryClient.setQueriesData<Task[]>({ queryKey: [...qk.tasks, "list"], predicate: (q) => q.queryKey[3] === "archived" }, (list) => list?.filter((t) => t.id !== id));
   api.tasks
     .update(id, { archived: false })
-    .catch((err) => Alert.alert("Couldn't put the task back", errorText(err)))
+    .catch((err) => Alert.alert(t("tasks:archivedTasks.restoreFailed"), errorText(err)))
     .finally(() => void queryClient.invalidateQueries({ queryKey: qk.tasks }));
 }
 
 /** Long press on iOS: put it back on the board. Android has no such menu, so the row carries a Restore button. */
 const ArchivedTask = memo(function ArchivedTask({ task, agent, workspaceName, projectName }: { task: Task; agent?: Agent; workspaceName?: string; projectName?: string }) {
   const c = useColors();
+  const { t } = useTranslation("tasks");
   const row = <TaskRow task={task} agent={agent} workspaceName={workspaceName} projectName={projectName} />;
   if (process.env.EXPO_OS !== "ios") {
     return (
@@ -85,7 +89,7 @@ const ArchivedTask = memo(function ArchivedTask({ task, agent, workspaceName, pr
         <View style={{ flex: 1, minWidth: 0 }}>{row}</View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Put ${task.title} back on the board`}
+          accessibilityLabel={t("archivedTasks.restoreA11y", { title: task.title })}
           hitSlop={8}
           onPress={() => {
             tap();
@@ -94,7 +98,7 @@ const ArchivedTask = memo(function ArchivedTask({ task, agent, workspaceName, pr
           style={({ pressed }) => [styles.action, { backgroundColor: c.sunken, opacity: pressed ? 0.6 : 1 }]}
         >
           <T variant="footnote" style={{ fontWeight: "600" }}>
-            Restore
+            {t("archivedTasks.restore")}
           </T>
         </Pressable>
       </View>
@@ -107,7 +111,7 @@ const ArchivedTask = memo(function ArchivedTask({ task, agent, workspaceName, pr
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        <Link.MenuAction title="Put back on the board" icon="arrow.uturn.backward" onPress={() => restoreTask(task.id)} />
+        <Link.MenuAction title={t("archivedTasks.putBack")} icon="arrow.uturn.backward" onPress={() => restoreTask(task.id)} />
       </Link.Menu>
     </Link>
   );

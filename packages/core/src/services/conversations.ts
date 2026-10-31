@@ -37,6 +37,7 @@ import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRu
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
 import { displayToolName } from "../runner/stream";
+import { generateChatTitle } from "../runner/chatTitle";
 import { normalizeWorkingDirectory } from "./folders";
 import { projectOfChat } from "./projects";
 import { parseComputerTarget } from "../computer/targets";
@@ -45,6 +46,7 @@ import { getSettings } from "./settings";
 import { clearQueue, listQueue } from "./messageQueue";
 import { requireLicense } from "../license/license";
 import { claudeConfigDir } from "./claudeUpdate";
+import { matchExpr, parseQuery } from "./searchQuery";
 import { continueConversation, pauseOf, PAUSE_QUESTION_JOIN, PAUSE_QUESTION_SQL, toPause, type PauseQuestionCols } from "./pauses";
 
 const log = logger("chat");
@@ -89,10 +91,8 @@ interface ConversationRow extends PauseQuestionCols {
   followup_created_at?: string | null;
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
-  paused_budget_scope?: "agent" | "team" | null;
   unread_run_id?: string | null;
   unread_status?: string | null;
-  paused_budget_usd?: number | null;
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
@@ -193,8 +193,6 @@ function toConversation(r: ConversationRow): Conversation {
               limit_name: r.paused_limit ?? null,
               resume_at: r.paused_resume_at ?? null,
               auto: r.paused_auto ?? 0,
-              budget_scope: r.paused_budget_scope ?? null,
-              budget_usd: r.paused_budget_usd ?? null,
             },
             r,
           )
@@ -223,7 +221,6 @@ const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id =
 const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
 const PAUSE_SQL =
   "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, " +
-  "p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd, " +
   PAUSE_QUESTION_SQL;
 // A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
 // the asking agent or its chat is deleted the link goes null by itself.
@@ -507,13 +504,12 @@ export function listConversations(
     where.push("(c.project_id = ? OR (c.project_id IS NULL AND c.agent_id IN (SELECT id FROM agents WHERE project_id = ?)))");
     params.push(opts.projectId, opts.projectId);
   }
-  // Every word, in the title or in a message ("invoice march" finds "March invoice review"); at most six words.
-  for (const word of (opts.search ?? "").trim().split(/\s+/).filter(Boolean).slice(0, 6)) {
-    const like = `%${word.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
+  for (const term of parseQuery(opts.search ?? "").slice(0, 6)) {
+    const expr = matchExpr([term]);
     where.push(
-      "(c.title LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.conversation_id = c.id AND m2.content LIKE ? ESCAPE '\\'))",
+      "(c.rowid IN (SELECT rowid FROM search_titles WHERE search_titles MATCH ?) OR c.id IN (SELECT m2.conversation_id FROM search_messages s2 JOIN messages m2 ON m2.rowid = s2.rowid WHERE search_messages MATCH ?))",
     );
-    params.push(like, like);
+    params.push(expr, expr);
   }
   const limit = Math.min(Math.max(1, Math.floor(opts.limit ?? 100)), 500);
   params.push(limit);
@@ -636,6 +632,25 @@ export function markConversationsRead(ids: string[] | "all"): number {
   return rows.length;
 }
 
+/**
+ * "Mark as unread": the chat's latest run counts as new again until the human opens the chat. A failed run is only
+ * taken when there is no other, so a reminder doesn't bring the failure back to "Needs you". Private chats stay unmarked.
+ */
+export function markConversationsUnread(ids: string[]): number {
+  let marked = 0;
+  for (const id of ids) {
+    const r = get<{ run_id: string }>(
+      `SELECT r.id AS run_id FROM conversations c JOIN runs r ON r.conversation_id = c.id
+       WHERE c.id = ? AND c.unread_run_id IS NULL AND c.private = 0 ORDER BY r.status = 'failed', r.created_at DESC, r.rowid DESC LIMIT 1`,
+      id,
+    );
+    if (!r || !sql("UPDATE conversations SET unread_run_id = ? WHERE id = ? AND unread_run_id IS NULL", r.run_id, id).changes) continue;
+    marked++;
+    emitConversationUpdated(id);
+  }
+  return marked;
+}
+
 export async function deleteConversation(id: string): Promise<void> {
   const row = requireConversationRow(id);
   // First, so the run that is cancelled below doesn't hand over to the queue.
@@ -738,8 +753,8 @@ export function chatGoal(conversationId: string, configDir?: string | null): str
 }
 
 /**
- * Wipe a private chat: its messages, uploads, run logs and Claude Code session go, and its runs keep only what they
- * cost (budgets count it). Other chats are left alone.
+ * Wipe a private chat: its messages, uploads, run logs and Claude Code session go, and its runs keep only their
+ * numbers. Other chats are left alone.
  */
 export async function discardPrivateChat(id: string): Promise<boolean> {
   const row = conversationRow(id);
@@ -987,8 +1002,6 @@ export async function sendMessage(
     files?: Attachment[];
     /** Who wrote it when it wasn't the human: an automation, an agent handing work over, the task board. */
     source?: MessageSource;
-    /** The human started it by hand (Run now): a used-up monthly budget doesn't hold it. */
-    byHuman?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
@@ -1018,7 +1031,6 @@ export async function sendMessage(
       voice: input.voice ?? false,
       userMessageId: message.id,
       runId: input.runId,
-      byHuman: input.byHuman,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);
@@ -1039,7 +1051,34 @@ export async function sendMessage(
   const restore = bool(conv.archived) && (input.trigger ?? "chat") === "chat" && conv.origin !== "task";
   setConversationState(conversationId, { lastMessageAt: message.createdAt, archived: restore ? false : undefined });
   emitConversationUpdated(conversationId);
+  if ((input.trigger ?? "chat") === "chat" && !input.marker && !input.source && (conv.origin === "chat" || conv.origin === "api")) {
+    nameChat(conversationId, conv.title, content, attachments);
+  }
   return { message: getMessage(message.id), run: started };
+}
+
+function placeholderTitles(content: string, attachments: Attachment[]): Set<string> {
+  const titles = new Set([DEFAULT_CONVERSATION_TITLE]);
+  if (content) titles.add(titleFromContent(content));
+  if (attachments[0]) titles.add(titleFromContent(attachments[0].name));
+  return titles;
+}
+
+function nameChat(conversationId: string, current: string, content: string, attachments: Attachment[]) {
+  const placeholders = placeholderTitles(content, attachments);
+  if (!placeholders.has(current)) return;
+  void generateChatTitle(
+    content,
+    attachments.map((a) => a.name),
+  )
+    .then((title) => {
+      if (!title || placeholders.has(title)) return;
+      const row = get<{ title: string }>("SELECT title FROM conversations WHERE id = ?", conversationId);
+      if (!row || !placeholders.has(row.title)) return;
+      setConversationState(conversationId, { title });
+      emitConversationUpdated(conversationId);
+    })
+    .catch((err) => log.warn(`could not name conversation ${conversationId}`, err));
 }
 
 /** Create a conversation for the agent (default agent if omitted) and send the first message. */
@@ -1184,7 +1223,6 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   const meta = [
     finishedRun.status,
     finishedRun.numTurns != null ? `${finishedRun.numTurns} turns` : null,
-    finishedRun.costUsd != null && getSettings().runner.spendTracking ? `$${finishedRun.costUsd.toFixed(4)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

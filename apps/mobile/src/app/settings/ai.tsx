@@ -1,34 +1,25 @@
 import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
-import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, effortForModel, findModel, type Effort } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, ULTRACODE_HINT_DE, effortForModel, findModel, type Effort } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
+import { Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { useModelCatalog } from "@/lib/composer";
+import { t, currentLanguage } from "@/lib/i18n";
 import { EFFORT_SHORT, patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
 
 const TIMEOUTS = [0, 5, 10, 15, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 1440] as const;
 
 function minutes(n: number): string {
-  if (n === 0) return "None";
+  if (n === 0) return t("common:status.none");
   if (n < 60) return `${n} min`;
   const h = n / 60;
   return Number.isInteger(h) ? `${h} h` : `${h.toFixed(1)} h`;
 }
 
-/** "50", "1,000", "1.000,50" or "12,5" in dollars; empty = no limit; anything else is ignored. */
-function money(input: string): number | null | undefined {
-  const raw = input.replace(/[\s$]/g, "");
-  if (!raw) return null;
-  if (!/^[0-9.,]+$/.test(raw)) return undefined;
-  const last = Math.max(raw.lastIndexOf("."), raw.lastIndexOf(","));
-  const decimals = last >= 0 && raw.length - last - 1 <= 2 ? raw.length - last - 1 : 0;
-  const digits = raw.replace(/[.,]/g, "");
-  const n = Number(digits) / 10 ** decimals;
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : undefined;
-}
-
 export default function ModelAndLimits() {
+  const { t } = useTranslation(["settings", "common"]);
   const settings = useSettings();
   const catalog = useModelCatalog();
   const s = settings.data;
@@ -36,7 +27,7 @@ export default function ModelAndLimits() {
   if (!s) {
     return (
       <View style={styles.loading}>
-        <Stack.Screen options={{ title: "AI & Claude" }} />
+        <Stack.Screen options={{ title: t("overview.links.ai") }} />
         <ActivityIndicator />
       </View>
     );
@@ -50,10 +41,6 @@ export default function ModelAndLimits() {
   const options = [...(current ? [] : [{ value: r.model, label: r.model }]), ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description }))];
   const efforts = current?.efforts.length ? current.efforts : null;
   const effort = efforts ? (effortForModel(efforts, r.effort) ?? r.effort) : r.effort;
-  const budget = (key: "defaultMaxBudgetUsd" | "monthlyBudgetUsd") => (text: string) => {
-    const value = money(text);
-    if (value !== undefined) void patchSettings({ runner: { [key]: value } });
-  };
 
   return (
     <ScrollView
@@ -62,28 +49,28 @@ export default function ModelAndLimits() {
       automaticallyAdjustKeyboardInsets
       contentContainerStyle={styles.content}
     >
-      <Stack.Screen options={{ title: "AI & Claude" }} />
+      <Stack.Screen options={{ title: t("overview.links.ai") }} />
       <CloseButton />
 
-      <Group title="Default model" footer="Agents without a model of their own use this one. Change it per agent, or per chat from the composer.">
-        <PickerRow icon="sparkles" title="Model" value={current?.id ?? r.model} options={options} onChange={(model) => void patchSettings({ runner: { model } })} />
+      <Group title={t("ai.defaultModel.title")} footer={t("ai.defaultModel.footer")}>
+        <PickerRow icon="sparkles" title={t("ai.defaultModel.model")} value={current?.id ?? r.model} options={options} onChange={(model) => void patchSettings({ runner: { model } })} />
         {efforts ? (
           <SegmentRow
-            title="Effort"
-            detail="How long Claude thinks before it acts."
+            title={t("ai.defaultModel.effort")}
+            detail={t("ai.defaultModel.effortDetail")}
             value={effort}
             options={efforts.map((e) => ({ value: e, label: EFFORT_SHORT[e] }))}
             onChange={(next: Effort) => void patchSettings({ runner: { effort: next } })}
           />
         ) : null}
-        {current?.ultracode ? <SwitchRow icon="workflow" title="Ultracode" detail={ULTRACODE_HINT} value={r.ultracode} onChange={(ultracode) => void patchSettings({ runner: { ultracode } })} /> : null}
+        {current?.ultracode ? <SwitchRow icon="workflow" title="Ultracode" detail={currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT} value={r.ultracode} onChange={(ultracode) => void patchSettings({ runner: { ultracode } })} /> : null}
         <PickerRow
           icon="refresh"
-          title="Fallback"
-          detail="Used when the default model is overloaded."
+          title={t("ai.defaultModel.fallback")}
+          detail={t("ai.defaultModel.fallbackDetail")}
           value={fallback?.id ?? (r.fallbackModel || "none")}
           options={[
-            { value: "none", label: "None" },
+            { value: "none", label: t("common:status.none") },
             ...(r.fallbackModel && !fallback ? [{ value: r.fallbackModel, label: r.fallbackModel }] : []),
             ...models.filter((m) => m.id !== current?.id).map((m) => ({ value: m.id, label: m.label })),
           ]}
@@ -91,11 +78,11 @@ export default function ModelAndLimits() {
         />
       </Group>
 
-      <Group title="Work" footer="Runs over the limit wait in line. A run that takes longer than the timeout is stopped.">
-        <StepperRow icon="cpu" title="Parallel runs" value={r.maxConcurrentRuns} min={1} max={32} onChange={(maxConcurrentRuns) => void patchSettings({ runner: { maxConcurrentRuns } })} />
+      <Group title={t("ai.work.title")} footer={t("ai.work.footer")}>
+        <StepperRow icon="cpu" title={t("ai.work.parallel")} value={r.maxConcurrentRuns} min={1} max={32} onChange={(maxConcurrentRuns) => void patchSettings({ runner: { maxConcurrentRuns } })} />
         <StepperRow
           icon="clock"
-          title="Timeout per run"
+          title={t("ai.work.timeout")}
           value={r.runTimeoutMinutes}
           min={TIMEOUTS[0]}
           max={TIMEOUTS[TIMEOUTS.length - 1]}
@@ -105,62 +92,39 @@ export default function ModelAndLimits() {
         />
         <SwitchRow
           icon="play"
-          title="Continue after usage limits"
-          detail="A run that hit Claude's limit picks up by itself once it resets."
+          title={t("ai.work.continueLimit")}
+          detail={t("ai.work.continueLimitDetail")}
           value={r.autoContinueOnLimit}
           onChange={(autoContinueOnLimit) => void patchSettings({ runner: { autoContinueOnLimit } })}
         />
         <SwitchRow
           icon="refresh"
-          title="Continue cut-off work"
-          detail="Work cut off by a restart or a lost internet connection picks up by itself once Godmode and the connection are back."
+          title={t("ai.work.resume")}
+          detail={t("ai.work.resumeDetail")}
           value={r.resumeAfterRestart ?? true}
           onChange={(resumeAfterRestart) => void patchSettings({ runner: { resumeAfterRestart } })}
         />
       </Group>
 
-      <Group title="Long chats" footer="A chat that fills this much of the model's memory is summarized by itself and goes on from the summary. Earlier keeps every step faster and cheaper, later keeps more detail. Compress any chat by hand with the ring next to the model.">
+      <Group title={t("ai.compact.title")} footer={t("ai.compact.footer")}>
         <PickerRow
           icon="layers"
-          title="Compress by itself"
+          title={t("ai.compact.auto")}
           value={r.autoCompactPercent === undefined ? String(DEFAULT_AUTO_COMPACT_PERCENT) : r.autoCompactPercent === null ? "claude" : String(r.autoCompactPercent)}
           options={[
-            ...[40, 50, 60, 70, 80].map((p) => ({ value: String(p), label: `At ${p}%${p === DEFAULT_AUTO_COMPACT_PERCENT ? " (default)" : ""}` })),
-            { value: "claude", label: "When nearly full" },
-            { value: "0", label: "Never by itself" },
+            ...[40, 50, 60, 70, 80].map((p) => ({ value: String(p), label: p === DEFAULT_AUTO_COMPACT_PERCENT ? t("ai.compact.atDefault", { percent: p }) : t("ai.compact.at", { percent: p }) })),
+            { value: "claude", label: t("ai.compact.nearlyFull") },
+            { value: "0", label: t("ai.compact.never") },
           ]}
           onChange={(v) => void patchSettings({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
         />
       </Group>
 
-      <Group
-        title="Budgets"
-        footer={
-          r.spendTracking
-            ? "Used up, unattended work waits until next month. Leave empty for no limit."
-            : "With a Claude subscription, leave this off: Claude Code reports API prices you don't pay."
-        }
-      >
-        <SwitchRow
-          icon="dollar"
-          title="Budgets and spend"
-          detail="Show what runs cost and set monthly budgets."
-          value={r.spendTracking ?? false}
-          onChange={(spendTracking) => void patchSettings({ runner: { spendTracking } })}
-        />
-        {r.spendTracking ? (
-          <FieldRow label="Per run" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.defaultMaxBudgetUsd ? String(r.defaultMaxBudgetUsd) : ""} onCommit={budget("defaultMaxBudgetUsd")} />
-        ) : null}
-        {r.spendTracking ? (
-          <FieldRow label="Team per month" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.monthlyBudgetUsd ? String(r.monthlyBudgetUsd) : ""} onCommit={budget("monthlyBudgetUsd")} />
-        ) : null}
-      </Group>
-
-      <Group title="Watchdog" footer="Stops runs that stall or go in circles, so they don't burn time and tokens.">
-        <SwitchRow icon="shield" title="Watchdog" value={r.watchdog} onChange={(watchdog) => void patchSettings({ runner: { watchdog } })} />
+      <Group title={t("ai.watchdog.title")} footer={t("ai.watchdog.footer")}>
+        <SwitchRow icon="shield" title={t("ai.watchdog.title")} value={r.watchdog} onChange={(watchdog) => void patchSettings({ runner: { watchdog } })} />
         <StepperRow
           icon="pulse"
-          title="Stalled after"
+          title={t("ai.watchdog.stalled")}
           value={r.stallMinutes}
           min={3}
           max={240}
@@ -170,7 +134,7 @@ export default function ModelAndLimits() {
         />
         <StepperRow
           icon="refresh"
-          title="Same step repeated"
+          title={t("ai.watchdog.repeated")}
           value={r.loopRepeats}
           min={3}
           max={50}

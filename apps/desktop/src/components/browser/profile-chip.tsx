@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Agent, BrowserProfile } from "@godmode/shared";
 import { Check, ChevronDown, Globe, Loader2, Plus, Settings2 } from "lucide-react";
@@ -12,6 +13,7 @@ import { agentBrowserProfile } from "@/components/chat/browser-panel";
 import { api } from "@/lib/api";
 import { useSettings, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { CreateProfileDialog } from "./profile-list";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
@@ -48,6 +50,8 @@ export function BrowserProfileChip({
   onChange: (profileId: string | null) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const { t } = useTranslation("browser");
+  const { intlLocale } = useLocale();
   const { data: settings } = useSettings();
   const enabled = !!agent?.browser.enabled && settings?.browser.enabled !== false;
   const { data: profiles = [] } = useQuery({ queryKey: qk.browserProfiles, queryFn: api.browser.profiles, enabled });
@@ -59,25 +63,31 @@ export function BrowserProfileChip({
   const project = effectiveProject(agent, projectId, useProjectIndex())?.project ?? null;
   if (!enabled || !agent) return null;
 
-  const scopeName = (p: BrowserProfile) => (p.workspaceId ? (workspaces.find((w) => w.id === p.workspaceId)?.name ?? "Workspace") : "Global");
+  const scopeName = (p: BrowserProfile) => (p.workspaceId ? (workspaces.find((w) => w.id === p.workspaceId)?.name ?? t("scope.workspace")) : t("scope.global"));
   const own = value ? (profiles.find((p) => p.id === value) ?? null) : null;
   const fallback = agentBrowserProfile(agent, profiles, null, workspaceId, project);
-  const fallbackFrom = !fallback
-    ? "Loading profiles…"
+  const fromKind = !fallback
+    ? "loading"
     : agent.browser.profileId === fallback.id
-      ? `Pinned in ${agent.name}'s settings`
+      ? "pinned"
       : project?.browserProfileId === fallback.id
-        ? `Set for the ${project.name} project`
+        ? "project"
         : fallback.workspaceId
-        ? `Default of the ${scopeName(fallback)} workspace`
-        : "Your default profile";
+        ? "workspace"
+        : "default";
+  const fromVars = { agent: agent.name, project: project?.name ?? "", workspace: fallback ? scopeName(fallback) : "" };
+  const fallbackFrom = t(`chip.from.${fromKind}`, fromVars);
   const shown = own ?? (fallback && (fallback.workspaceId || !fallback.isDefault) ? fallback : null);
 
   const pick = (profileId: string | null) => {
     setOpen(false);
     if (profileId !== value) void onChange(profileId);
   };
-  const tooltip = own ? `This chat browses in ${own.name}` : fallback ? `Browses in ${fallback.name} — ${fallbackFrom.toLowerCase()}` : "Browser profile";
+  const tooltip = own
+    ? t("chip.tooltipOwn", { name: own.name })
+    : fallback
+      ? t("chip.tooltipFallback", { name: fallback.name, from: t(`chip.fromLower.${fromKind}`, fromVars) })
+      : t("chip.title");
   const icon = busy ? <Loader2 className="size-3.5 shrink-0 animate-spin" /> : <Globe className="size-3.5 shrink-0 text-muted-foreground" />;
 
   return (
@@ -89,7 +99,7 @@ export function BrowserProfileChip({
               {shown ? (
                 <button
                   type="button"
-                  aria-label={`Browser profile: ${shown.name}${own ? "" : " (default)"}`}
+                  aria-label={own ? t("chip.ariaCurrent", { name: shown.name }) : t("chip.ariaCurrentDefault", { name: shown.name })}
                   className={cn(
                     "flex h-8 max-w-[12rem] min-w-14 shrink items-center gap-1.5 rounded-lg border pr-1.5 pl-2 text-[13px] transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
                     own ? "bg-card hover:bg-accent" : "border-dashed text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -104,14 +114,14 @@ export function BrowserProfileChip({
                 <Button
                   type="button"
                   variant="ghost"
-                  aria-label="Browser profile"
+                  aria-label={t("chip.title")}
                   className={cn(
                     "h-8 gap-1.5 rounded-lg px-2 text-[13px] font-normal text-muted-foreground hover:text-foreground has-[>svg]:px-2 [&_svg:not([class*='size-'])]:size-4",
                     open && "bg-accent text-foreground",
                   )}
                 >
                   {busy ? <Loader2 className="animate-spin" /> : <Globe />}
-                  <span className="@max-sm/composer:sr-only">Browser</span>
+                  <span className="@max-sm/composer:sr-only">{t("chip.button")}</span>
                 </Button>
               )}
             </PopoverTrigger>
@@ -120,37 +130,37 @@ export function BrowserProfileChip({
         </Tooltip>
         <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
           <div className="border-b px-3 pt-2.5 pb-2">
-            <p className="text-[13px] font-medium">Browser profile</p>
-            <p className="text-xs text-muted-foreground">Runs in this chat browse with this profile's cookies and logins.</p>
+            <p className="text-[13px] font-medium">{t("chip.title")}</p>
+            <p className="text-xs text-muted-foreground">{t("chip.description")}</p>
           </div>
           <Command>
-            {profiles.length > 6 && <CommandInput placeholder="Find a profile…" />}
+            {profiles.length > 6 && <CommandInput placeholder={t("chip.find")} />}
             <CommandList className="max-h-72">
-              <CommandEmpty>No profile with that name.</CommandEmpty>
+              <CommandEmpty>{t("chip.noMatch")}</CommandEmpty>
               <CommandGroup>
                 <CommandItem value={`__default ${fallback?.name ?? ""}`} onSelect={() => pick(null)} className="gap-2.5 py-2">
                   <ProfileTile profile={fallback} quiet />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate">{fallback && fallback.name.toLowerCase() !== "default" ? `Default — ${fallback.name}` : "Default"}</span>
+                    <span className="block truncate">{fallback && fallback.name.toLowerCase() !== "default" ? t("chip.defaultNamed", { name: fallback.name }) : t("chip.default")}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">{fallbackFrom}</span>
                   </span>
-                  {!value && <Check className="size-4" aria-label="Selected" />}
+                  {!value && <Check className="size-4" aria-label={t("chip.selected")} />}
                 </CommandItem>
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup heading="Browse in">
+              <CommandGroup heading={t("chip.browseIn")}>
                 {profiles.map((p) => (
                   <CommandItem key={p.id} value={`${p.name} ${p.id}`} onSelect={() => pick(p.id)} className="gap-2.5 py-2">
                     <ProfileTile profile={p} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{p.name}</span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {[p.running ? "Running" : null, scopeName(p), p.cookieCount ? `${p.cookieCount.toLocaleString()} cookies` : "No sessions yet"]
+                        {[p.running ? t("chip.running") : null, scopeName(p), p.cookieCount ? t("cookies", { count: p.cookieCount, n: p.cookieCount.toLocaleString(intlLocale) }) : t("chip.noSessions")]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>
                     </span>
-                    {own?.id === p.id && <Check className="size-4" aria-label="Selected" />}
+                    {own?.id === p.id && <Check className="size-4" aria-label={t("chip.selected")} />}
                   </CommandItem>
                 ))}
               </CommandGroup>
@@ -167,7 +177,7 @@ export function BrowserProfileChip({
                 setCreating(true);
               }}
             >
-              <Plus /> New profile
+              <Plus /> {t("page.newProfile")}
             </Button>
             <Button
               type="button"
@@ -179,7 +189,7 @@ export function BrowserProfileChip({
                 navigate(own ? `/browser?profile=${own.id}` : "/browser");
               }}
             >
-              <Settings2 /> Manage
+              <Settings2 /> {t("chip.manage")}
             </Button>
           </div>
         </PopoverContent>

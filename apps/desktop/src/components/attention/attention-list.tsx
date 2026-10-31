@@ -1,8 +1,9 @@
 import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertTriangle, Coins, KanbanSquare, KeyRound, ListTodo, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
+import { AlertTriangle, KanbanSquare, KeyRound, ListTodo, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
 import type { Agent, AttentionItem, Workspace } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -11,6 +12,7 @@ import { AgentAvatar } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { WorkspaceTile } from "@/components/workspaces/workspace-tile";
+import { useLocale } from "@/i18n/language";
 
 export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   question: MessageCircleQuestion,
@@ -19,7 +21,6 @@ export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   review: KanbanSquare,
   blocked: OctagonAlert,
   paused: Pause,
-  held: Coins,
   failed: AlertTriangle,
   automation: Workflow,
   access: UserPlus,
@@ -29,7 +30,6 @@ const TONE: Partial<Record<AttentionItem["kind"], string>> = {
   question: "text-warning",
   todo: "text-warning",
   login: "text-warning",
-  held: "text-warning",
   blocked: "text-rose-600 dark:text-rose-400",
   failed: "text-destructive",
   automation: "text-destructive",
@@ -61,6 +61,8 @@ export function AttentionList({
 }
 
 function AttentionRow({ item, agent, workspace }: { item: AttentionItem; agent?: Agent; workspace?: Workspace }) {
+  const { t } = useTranslation(["attention", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const Icon = ATTENTION_ICON[item.kind];
   const resume = useMutation({
@@ -69,7 +71,7 @@ function AttentionRow({ item, agent, workspace }: { item: AttentionItem; agent?:
       qc.invalidateQueries({ queryKey: qk.bootstrap });
       qc.invalidateQueries({ queryKey: qk.conversationsAll });
     },
-    onError: (err) => toast.error("Couldn't continue", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("list.continueError"), { description: errorMessage(err) }),
   });
   return (
     <li className="flex min-w-0 items-center gap-3 px-3.5 py-2.5">
@@ -101,17 +103,17 @@ function AttentionRow({ item, agent, workspace }: { item: AttentionItem; agent?:
           )}
           <span className="truncate">
           {item.detail ? `${item.detail} · ` : ""}
-          <time dateTime={item.since}>{formatDistanceToNowStrict(new Date(item.since), { addSuffix: true })}</time>
+          <time dateTime={item.since}>{formatDistanceToNowStrict(new Date(item.since), { addSuffix: true, locale: dateLocale })}</time>
           </span>
         </p>
       </div>
       {item.kind === "paused" && item.conversationId ? (
         <span className="flex shrink-0 items-center gap-1">
           <Button size="xs" variant="ghost" asChild>
-            <Link to={item.link}>Open</Link>
+            <Link to={item.link}>{t("common:actions.open")}</Link>
           </Button>
           <Button size="xs" variant="outline" disabled={resume.isPending} onClick={() => resume.mutate()}>
-            {resume.isPending ? <Spinner /> : <Play className="fill-current" />} Continue
+            {resume.isPending ? <Spinner /> : <Play className="fill-current" />} {t("list.continue")}
           </Button>
         </span>
       ) : (

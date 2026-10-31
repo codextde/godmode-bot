@@ -17,7 +17,7 @@ import { logger } from "../log";
 import { HttpError, newId, now, parseJson } from "../util";
 import { activeMainRun, recordEvent, settleIfFinished } from "../automations/events";
 import { deliverFollowup } from "../messaging/bridge";
-import { restartAgainNote, restartContext, type CutOffCause, type CutOffHandoff } from "../runner/prompt";
+import { backgroundContext, restartAgainNote, restartContext, unfinishedContext, type CutOffCause, type CutOffHandoff, type StoppedWork } from "../runner/prompt";
 import { activeRunForConversation } from "../runner/runner";
 import { taskForConversation } from "../tasks/service";
 import { audit } from "./audit";
@@ -48,6 +48,12 @@ const ERRORED =
  * try again itself, and the refusal lasts a minute or two: a try right away fails the same way.
  */
 const REFUSED = /^Failed to authenticate\. API Error: 403\b/i;
+/** Turns that go on after stopped background work: not a handoff (its answer went back already), a dream or a check. */
+const BACKGROUND_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine"]);
+/** Continued this often in a row for stopped background work without a word from the human, the chat is left alone. */
+const MAX_BACKGROUND_IN_A_ROW = 2;
+const UNFINISHED_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["routine", "followup", "call"]);
+const MAX_UNFINISHED_IN_A_ROW = 2;
 const OFFLINE_RESUMABLE: ReadonlySet<RunTrigger> = new Set(["chat", "manual", "api", "followup", "call", "routine", "delegation"]);
 /** Minutes to wait before each try in a row: a connection that just dropped often drops again right away. */
 const OFFLINE_BACKOFF_MIN = [0, 2, 5, 15, 30];
@@ -62,6 +68,8 @@ const LABELS: Record<CutOffCause, string> = {
   restart: "Continued after Godmode restarted",
   offline: "Continued once Claude could be reached again",
   error: "Tried again after Claude Code stopped with an error",
+  background: "Continued after background work was stopped",
+  unfinished: "Continued: the last turn stopped before the work was done",
 };
 
 interface RunRow {
@@ -218,16 +226,21 @@ function orphaned(r: RunRow, continued: Set<string>): string | null {
   return null;
 }
 
-async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string | undefined, cause: CutOffCause): Promise<Run> {
+async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string | undefined, cause: CutOffCause, stopped: StoppedWork[] = []): Promise<Run> {
   const conv = getConversationSummary(r.conversation_id);
   const blocks = parseJson<MessageBlock[]>(get<{ blocks: string }>("SELECT blocks FROM messages WHERE run_id = ? AND role = 'assistant'", r.id)?.blocks, []);
-  let mode: RetryMode = retryModeOf(blocks);
+  let mode: RetryMode = cause === "background" || cause === "unfinished" ? "continue" : retryModeOf(blocks);
   if (mode === "continue" && !conv.claudeSessionId) mode = "again";
   const endedAt = r.finished_at ?? r.created_at;
+  const userName = getSettings().general.userName;
   const prompt =
-    mode === "continue"
-      ? restartContext({ userName: getSettings().general.userName, endedAt, startedBy: r.trigger, handoffs, cause, error: r.error ?? undefined })
-      : restartAgainNote({ endedAt, cause }) + r.prompt;
+    cause === "background"
+      ? backgroundContext({ userName, endedAt, startedBy: r.trigger, work: stopped })
+      : cause === "unfinished"
+        ? unfinishedContext({ userName, endedAt, startedBy: r.trigger })
+        : mode === "continue"
+        ? restartContext({ userName, endedAt, startedBy: r.trigger, handoffs, cause, error: r.error ?? undefined })
+        : restartAgainNote({ endedAt, cause }) + r.prompt;
   const masked = mode === "again" && /•{4,}/.test(r.prompt);
   // The work it hands on waits for the turn that continues the one that handed it over.
   const parentRunId = r.parent_run_id ? latestContinuation(r.parent_run_id) : null;
@@ -246,6 +259,47 @@ async function continueOne(r: RunRow, handoffs: CutOffHandoff[], runId: string |
   if (PLATFORMS.has(conv.origin)) void deliverFollowup(r.conversation_id, run.id).catch((err) => log.warn(`could not deliver run ${run.id}`, err));
   audit("godmode", "run.resume", r.conversation_id, { runId: r.id, newRunId: run.id, mode, cause });
   return run;
+}
+
+/**
+ * A turn ended while background work it started (a subagent, a command, a workflow) still ran, and the end of the
+ * process stopped it: Godmode continues the chat with a note about it, at most twice in a row without a word from the
+ * human. Only after a turn that succeeded, not a ticket's, a handoff's or a runner's, and with `resumeAfterRestart` on.
+ */
+export async function continueStoppedBackground(runId: string, work: StoppedWork[]): Promise<Run | null> {
+  if (!work.length || !getSettings().runner.resumeAfterRestart) return null;
+  const r = get<RunRow>(
+    `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
+     WHERE r.id = ? AND r.status = 'succeeded' AND c.runner_id IS NULL AND c.claude_session_id IS NOT NULL`,
+    runId,
+  );
+  if (!r || !BACKGROUND_RESUMABLE.has(r.trigger) || taskForConversation(r.conversation_id) || blocked(r)) return null;
+  if (continuedInARow(r, MAX_BACKGROUND_IN_A_ROW) >= MAX_BACKGROUND_IN_A_ROW) {
+    log.info(`run ${runId}: background work was stopped again, leaving the chat to the human`);
+    return null;
+  }
+  return continueOne(r, [], undefined, "background", work);
+}
+
+export async function continueUnfinished(runId: string, answer: string, judge: (task: string, answer: string) => Promise<boolean | null>): Promise<Run | null> {
+  const eligible = () => {
+    const r = get<RunRow>(
+      `SELECT r.* FROM runs r JOIN conversations c ON c.id = r.conversation_id
+       WHERE r.id = ? AND r.status = 'succeeded' AND c.runner_id IS NULL AND c.claude_session_id IS NOT NULL`,
+      runId,
+    );
+    if (!r || !UNFINISHED_RESUMABLE.has(r.trigger) || taskForConversation(r.conversation_id) || blocked(r)) return null;
+    return continuedInARow(r, MAX_UNFINISHED_IN_A_ROW) >= MAX_UNFINISHED_IN_A_ROW ? null : r;
+  };
+  const before = eligible();
+  if (!before) return null;
+  const first = autoChain(before, MAX_UNFINISHED_IN_A_ROW).at(-1);
+  const task = (first && get<{ prompt: string }>("SELECT prompt FROM runs WHERE id = ?", first)?.prompt) || before.prompt;
+  if (!(await judge(task, answer))) return null;
+  const r = eligible();
+  if (!r) return null;
+  log.info(`run ${runId}: the turn ended before its work was done, continuing it`);
+  return continueOne(r, [], undefined, "unfinished");
 }
 
 /** The automation's activity shows the turn that goes on, and its status follows it. */
@@ -286,9 +340,13 @@ function cutOffHandoffs(runId: string, depth = 0): RunRow[] {
 
 /** How many turns before this one Godmode continued by itself, one after the other. */
 function continuedInARow(r: RunRow, max = MAX_IN_A_ROW): number {
-  let n = 0;
+  return autoChain(r, max).length;
+}
+
+function autoChain(r: RunRow, max: number): string[] {
+  const chain: string[] = [];
   let id = r.id;
-  while (n < max) {
+  while (chain.length < max) {
     const previous = get<{ run_id: string }>(
       `SELECT json_extract(b.value, '$.runId') AS run_id FROM messages m, json_each(m.blocks) b
        WHERE m.conversation_id = ? AND m.run_id = ? AND m.role = 'system'
@@ -297,10 +355,10 @@ function continuedInARow(r: RunRow, max = MAX_IN_A_ROW): number {
       id,
     )?.run_id;
     if (!previous) break;
-    n++;
+    chain.push(previous);
     id = previous;
   }
-  return n;
+  return chain;
 }
 
 function depthOf(parentRunId: string | null): number {

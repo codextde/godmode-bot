@@ -72,7 +72,6 @@ import {
   restoreFiles,
   snapshotMemory,
 } from "./files";
-import { exhaustedBudget } from "../services/budgets";
 import { licenseBlocks } from "../license/license";
 import { standInHold } from "../remote/standIn";
 import { MAX_REWRITES, MAX_TIDY_CHANGES, RECENT_DAYS, applyTidy, canUndoWorkspace, undoWorkspace, workspaceChangedSince, workspaceInventory, type TidyOperation } from "./workspace";
@@ -970,8 +969,7 @@ async function dreamIfIdle(agent: Agent, settings: Settings, at: Date): Promise<
     return false;
   }
   deferred.delete(agent.id);
-  // Dreams cost money too: none on schedule while a monthly budget is used up (Dream now still works).
-  if (exhaustedBudget(agent) || licenseBlocks()) return false;
+  if (licenseBlocks()) return false;
   const held = standInHold(agent.id);
   if (held) {
     log.info(`no scheduled dream for ${agent.slug}: ${held}`);
@@ -1023,7 +1021,7 @@ async function sweepOverflowing(at: Date): Promise<string[]> {
     try {
       if (deferred.has(agent.id) || at.getTime() - (earlyFailed.get(agent.id) ?? -Infinity) < EARLY_DREAM_EVERY_MS) continue;
       if (!memoryOverflowing(agent, settings, at) || !agentIdle(agent.id, at)) continue;
-      if (exhaustedBudget(agent) || licenseBlocks() || standInHold(agent.id)) continue;
+      if (licenseBlocks() || standInHold(agent.id)) continue;
       await startDream(agent.id, "size");
       started.push(agent.id);
     } catch (err) {

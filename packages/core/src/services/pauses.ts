@@ -59,11 +59,6 @@ export interface PausedRow {
   retries: number;
   depth: number;
   voice: number;
-  /** `budget` pauses: whose monthly budget holds the run, and how much it was. */
-  budget_scope?: "agent" | "team" | null;
-  budget_usd?: number | null;
-  /** 1: the human started it or let it run — a used-up budget doesn't hold it again. */
-  exempt?: number;
   created_at: string;
 }
 
@@ -82,7 +77,7 @@ export const PAUSE_QUESTION_JOIN = "LEFT JOIN questions pq ON pq.run_id = p.run_
 export const PAUSE_QUESTION_SQL = "pq.id AS paused_question_id, pq.kind AS paused_question_kind, pq.title AS paused_question_title";
 
 export function toPause(
-  r: Pick<PausedRow, "run_id" | "reason" | "limit_name" | "resume_at" | "auto" | "created_at" | "budget_scope" | "budget_usd">,
+  r: Pick<PausedRow, "run_id" | "reason" | "limit_name" | "resume_at" | "auto" | "created_at">,
   q: PauseQuestionCols = {},
 ): RunPause {
   return {
@@ -93,7 +88,6 @@ export function toPause(
     resumeAt: r.resume_at,
     auto: bool(r.auto),
     ...(r.reason === "question" ? { question: q.paused_question_id ? { id: q.paused_question_id, kind: q.paused_question_kind ?? "question", title: q.paused_question_title ?? "" } : null } : {}),
-    ...(r.reason === "budget" ? { budget: r.budget_scope ? { scope: r.budget_scope, limitUsd: r.budget_usd ?? 0 } : null } : {}),
   };
 }
 
@@ -118,10 +112,11 @@ function changed(row: Pick<PausedRow, "conversation_id">) {
   arm();
 }
 
-export function savePause(row: PausedRow): void {
+/** `quiet`: the run goes on right away on another Claude account, nobody needs to hear about the limit. */
+export function savePause(row: PausedRow, { quiet = false } = {}): void {
   insert("paused_runs", { ...row });
   changed(row);
-  if (row.reason === "limit") announceLimit(row);
+  if (row.reason === "limit" && !quiet) announceLimit(row);
 }
 
 export function dropPause(row: Pick<PausedRow, "run_id" | "conversation_id">): void {
@@ -238,8 +233,7 @@ export async function pauseAgent(agentId: string): Promise<number> {
 
 /** Continue every paused run of the agent. Returns how many continued. Runs that wait for an answer need that answer. */
 export function continueAgent(agentId: string): number {
-  // Not runs held for a budget: letting those through is its own decision (Let it run, or the budget's own button).
-  const rows = all<PausedRow>("SELECT * FROM paused_runs WHERE agent_id = ? AND reason NOT IN ('question', 'budget') ORDER BY created_at", agentId);
+  const rows = all<PausedRow>("SELECT * FROM paused_runs WHERE agent_id = ? AND reason != 'question' ORDER BY created_at", agentId);
   if (!rows.length && get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", agentId)?.n) {
     const name = get<{ name: string }>("SELECT name FROM agents WHERE id = ?", agentId)?.name ?? "The agent";
     throw new HttpError(409, `${name} is waiting for your answer — answer the question to continue.`, "needs_answer");
@@ -283,7 +277,7 @@ export function sweep(): void {
   for (const row of all<PausedRow>("SELECT * FROM paused_runs WHERE auto = 1 AND resume_at IS NOT NULL AND resume_at <= ? ORDER BY created_at", now())) {
     try {
       resumeRun(row, "auto");
-      log.info(`run ${row.run_id} continues: ${row.reason === "budget" ? "a new month started" : "the limit has reset"}`);
+      log.info(`run ${row.run_id} continues by itself`);
     } catch (err) {
       if (err instanceof HttpError && err.code === "shutting_down") continue;
       stopContinuing(row, err instanceof Error ? err.message : String(err));

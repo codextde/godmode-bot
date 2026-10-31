@@ -1,0 +1,79 @@
+{
+  "actions": {
+    "add": "Add",
+    "apply": "Apply",
+    "back": "Back",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "continue": "Continue",
+    "copy": "Copy",
+    "copied": "Copied",
+    "create": "Create",
+    "delete": "Delete",
+    "disable": "Disable",
+    "done": "Done",
+    "edit": "Edit",
+    "enable": "Enable",
+    "next": "Next",
+    "open": "Open",
+    "refresh": "Refresh",
+    "remove": "Remove",
+    "rename": "Rename",
+    "retry": "Try again",
+    "save": "Save",
+    "search": "Search",
+    "send": "Send",
+    "showLess": "Show less",
+    "showMore": "Show more",
+    "skip": "Skip",
+    "stop": "Stop",
+    "tryAgain": "Try again",
+    "undo": "Undo"
+  },
+  "status": {
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "failed": "Failed",
+    "on": "On",
+    "off": "Off",
+    "none": "None",
+    "unknown": "Unknown",
+    "running": "Running",
+    "queued": "Queued",
+    "succeeded": "Succeeded",
+    "cancelled": "Cancelled"
+  },
+  "words": {
+    "yes": "Yes",
+    "no": "No",
+    "or": "or",
+    "and": "and",
+    "optional": "optional",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "never": "Never",
+    "all": "All",
+    "name": "Name",
+    "description": "Description",
+    "settings": "Settings",
+    "agent": "Agent",
+    "agents": "Agents"
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "couldNotSave": "Could not save",
+    "couldNotLoad": "Could not load"
+  },
+  "language": {
+    "system": "System",
+    "en": "English",
+    "de": "Deutsch"
+  },
+  "tray": {
+    "open": "Open Godmode",
+    "newChat": "New chat",
+    "quit": "Quit Godmode"
+  }
+}

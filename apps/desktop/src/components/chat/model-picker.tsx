@@ -1,12 +1,11 @@
 import { useId, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, Cpu, RotateCw, Workflow } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   DEFAULT_MODEL,
-  EFFORT_LABELS,
   EFFORT_OPTIONS,
-  ULTRACODE_HINT,
   effortForModel,
   findModel,
   type Agent,
@@ -20,6 +19,7 @@ import { api, errorMessage } from "@/lib/api";
 import { useModelCatalog, useSettings } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { t } from "@/i18n";
 
 export interface ModelChoice {
   /** null = the agent's model */
@@ -30,16 +30,8 @@ export interface ModelChoice {
   ultracode: boolean | null;
 }
 
-const EFFORT_HINTS: Record<Effort, string> = {
-  low: "Quick answers with little deliberation.",
-  medium: "Balanced speed and depth.",
-  high: "Thinks problems through before acting.",
-  xhigh: "Extra deliberation for hard, multi-step work.",
-  max: "Thinks as long as it needs. Slowest, most tokens.",
-};
-
 function customModel(id: string, ultracode: boolean): ClaudeModel {
-  return { id, resolvedModel: id, label: id, description: "Custom model id", efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
+  return { id, resolvedModel: id, label: id, description: t("chat:modelPicker.customModel"), efforts: [...EFFORT_OPTIONS], ultracode, latest: true };
 }
 
 /** What a chat runs with: its override, else the agent's, else the global default. */
@@ -51,7 +43,7 @@ export function useEffectiveModel(agent: Agent | undefined, choice: ModelChoice)
   const baseId = agent?.model?.trim() || settings?.runner.model?.trim() || DEFAULT_MODEL;
   const base = findModel(catalog.models, baseId) ?? customModel(baseId, anyUltracode);
   const current = choice.model ? (findModel(catalog.models, choice.model) ?? customModel(choice.model, anyUltracode)) : base;
-  const baseEffort = agent?.effort ?? settings?.runner.effort ?? "high";
+  const baseEffort = agent?.effort ?? settings?.runner.effort ?? "medium";
   const effort = effortForModel(current.efforts, choice.effort ?? baseEffort);
   const baseUltracode = agent?.ultracode ?? settings?.runner.ultracode ?? false;
   const ultracode = current.ultracode && (choice.ultracode ?? baseUltracode);
@@ -73,6 +65,7 @@ function EffortGlyph({ level, count }: { level: number; count: number }) {
 }
 
 function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; value: Effort; onChange: (e: Effort) => void }) {
+  const { t } = useTranslation("chat");
   const [hover, setHover] = useState<number | null>(null);
   const active = levels.indexOf(value);
   const shown = levels[hover ?? active] ?? value;
@@ -91,17 +84,17 @@ function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; v
   return (
     <div>
       <div className="flex items-baseline justify-between">
-        <span className="text-[13px] font-medium">Effort</span>
-        <span className={cn("text-xs tabular-nums transition-colors", hover !== null ? "text-muted-foreground" : "text-foreground")}>{EFFORT_LABELS[shown]}</span>
+        <span className="text-[13px] font-medium">{t("modelPicker.effort")}</span>
+        <span className={cn("text-xs tabular-nums transition-colors", hover !== null ? "text-muted-foreground" : "text-foreground")}>{t(`effort.${shown}`)}</span>
       </div>
-      <div role="radiogroup" aria-label="Effort" onKeyDown={onKeyDown} onMouseLeave={() => setHover(null)} className="-mx-0.5 mt-1.5 flex">
+      <div role="radiogroup" aria-label={t("modelPicker.effort")} onKeyDown={onKeyDown} onMouseLeave={() => setHover(null)} className="-mx-0.5 mt-1.5 flex">
         {levels.map((level, i) => (
           <button
             key={level}
             type="button"
             role="radio"
             aria-checked={i === active}
-            aria-label={EFFORT_LABELS[level]}
+            aria-label={t(`effort.${level}`)}
             tabIndex={i === active ? 0 : -1}
             onMouseEnter={() => setHover(i)}
             onClick={() => level !== value && onChange(level)}
@@ -117,10 +110,10 @@ function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; v
         ))}
       </div>
       <div className="flex justify-between text-[10.5px] text-muted-foreground/80">
-        <span>Faster</span>
-        <span>Deeper</span>
+        <span>{t("modelPicker.faster")}</span>
+        <span>{t("modelPicker.deeper")}</span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{EFFORT_HINTS[shown]}</p>
+      <p className="mt-2 text-xs text-muted-foreground">{t(`modelPicker.effortHint.${shown}`)}</p>
     </div>
   );
 }
@@ -136,6 +129,7 @@ export function ModelPicker({
   onChange: (patch: Partial<ModelChoice>) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("chat");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [showOlder, setShowOlder] = useState(false);
@@ -161,7 +155,7 @@ export function ModelPicker({
     try {
       qc.setQueryData(qk.models, await api.models.get(true));
     } catch (err) {
-      toast.error("Couldn't reload models", { description: errorMessage(err) });
+      toast.error(t("modelPicker.reloadError"), { description: errorMessage(err) });
     } finally {
       setRefreshing(false);
     }
@@ -178,7 +172,7 @@ export function ModelPicker({
     next.focus();
   };
 
-  const summary = [current.label, effort && `${EFFORT_LABELS[effort]} effort`, ultracode && "Ultracode"].filter(Boolean).join(" · ");
+  const summary = [current.label, effort && t("modelPicker.effortSummary", { effort: t(`effort.${effort}`) }), ultracode && "Ultracode"].filter(Boolean).join(" · ");
 
   return (
     <Popover
@@ -193,7 +187,7 @@ export function ModelPicker({
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={`Model: ${summary}`}
+              aria-label={t("modelPicker.modelSummary", { summary })}
               className={cn(
                 "flex h-8 min-w-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted-foreground transition",
                 "hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none data-[state=open]:bg-accent data-[state=open]:text-foreground",
@@ -222,24 +216,24 @@ export function ModelPicker({
         }}
       >
         <div className="flex items-center justify-between px-3 pt-2.5 pb-1">
-          <span className="eyebrow">Model</span>
+          <span className="eyebrow">{t("modelPicker.model")}</span>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 type="button"
                 onClick={() => void refresh()}
                 disabled={refreshing}
-                aria-label="Reload models from Claude Code"
+                aria-label={t("modelPicker.reloadModels")}
                 className="grid size-6 place-items-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none disabled:opacity-60"
               >
                 <RotateCw className={cn("size-3.5", refreshing && "animate-spin")} />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Reload from Claude Code</TooltipContent>
+            <TooltipContent>{t("modelPicker.reload")}</TooltipContent>
           </Tooltip>
         </div>
 
-        <div role="menu" aria-label="Models" onKeyDown={onListKeyDown} className="max-h-[min(22rem,50vh)] overflow-y-auto px-1.5 pb-1.5">
+        <div role="menu" aria-label={t("modelPicker.models")} onKeyDown={onListKeyDown} className="max-h-[min(22rem,50vh)] overflow-y-auto px-1.5 pb-1.5">
           {latest.map((m) => (
             <ModelOption
               key={m.id}
@@ -262,7 +256,7 @@ export function ModelPicker({
                 onClick={() => setShowOlder((v) => !v)}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground outline-none transition hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground"
               >
-                <span className="flex-1">Older models</span>
+                <span className="flex-1">{t("modelPicker.olderModels")}</span>
                 <span className="tabular-nums opacity-70">{older.length}</span>
                 <ChevronDown className={cn("size-3.5 transition-transform", showOlder && "rotate-180")} />
               </button>
@@ -283,7 +277,7 @@ export function ModelPicker({
           )}
           {special.length > 0 && (
             <>
-              <p className="px-2 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">Special tasks</p>
+              <p className="px-2 pt-2 pb-1 text-[11px] font-medium text-muted-foreground">{t("modelPicker.specialTasks")}</p>
               {special.map((m) => (
                 <ModelOption
                   key={m.id}
@@ -304,7 +298,7 @@ export function ModelPicker({
             <EffortMeter levels={current.efforts} value={effort} onChange={pickEffort} />
           ) : (
             <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Effort</span> isn't adjustable for {current.label}.
+              <Trans t={t} i18nKey="modelPicker.effortFixed" values={{ model: current.label }} components={{ b: <span className="font-medium text-foreground" /> }} />
             </p>
           )}
         </div>
@@ -318,13 +312,13 @@ export function ModelPicker({
               <Switch id={ultracodeId} checked={ultracode} onCheckedChange={pickUltracode} aria-describedby={`${ultracodeId}-hint`} />
             </div>
             <p id={`${ultracodeId}-hint`} className="mt-1.5 text-xs text-muted-foreground">
-              {ULTRACODE_HINT}
+              {t("modelPicker.ultracodeHint")}
             </p>
           </div>
         ) : (
           anyUltracode && (
             <p className="border-t px-3 py-2.5 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Ultracode</span> isn't available for {current.label}.
+              <Trans t={t} i18nKey="modelPicker.ultracodeUnavailable" values={{ model: current.label }} components={{ b: <span className="font-medium text-foreground" /> }} />
             </p>
           )
         )}
@@ -335,16 +329,16 @@ export function ModelPicker({
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={cn("size-1.5 shrink-0 rounded-full", catalog.source === "claude" ? "bg-success" : "bg-warning")} />
                 <span className="truncate">
-                  {catalog.source === "claude" ? `Claude Code ${catalog.claudeVersion ?? ""}`.trim() : "Built-in list"}
+                  {catalog.source === "claude" ? `Claude Code ${catalog.claudeVersion ?? ""}`.trim() : t("modelPicker.builtInList")}
                 </span>
               </span>
             </TooltipTrigger>
             <TooltipContent className="max-w-64">
               {catalog.source === "claude"
-                ? "The same models Claude Code offers in /model — updated when Claude Code updates."
+                ? t("modelPicker.sourceClaude")
                 : catalog.error
-                  ? `Claude Code couldn't be asked: ${catalog.error}`
-                  : "Loading the list from Claude Code…"}
+                  ? t("modelPicker.sourceError", { error: catalog.error })
+                  : t("modelPicker.sourceLoading")}
             </TooltipContent>
           </Tooltip>
           {overridden && (
@@ -353,7 +347,7 @@ export function ModelPicker({
               onClick={() => onChange({ model: null, effort: null, ultracode: null })}
               className="ml-auto shrink-0 rounded-md px-1.5 py-0.5 font-medium text-foreground/80 transition hover:bg-accent hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
-              Use {agent ? `${agent.name}'s` : "agent"} default
+              {agent ? t("modelPicker.useAgentDefault", { name: agent.name }) : t("modelPicker.useDefault")}
             </button>
           )}
         </div>
@@ -379,6 +373,7 @@ function ModelOption({
   onSelect: () => void;
   ref?: Ref<HTMLButtonElement>;
 }) {
+  const { t } = useTranslation("chat");
   return (
     <button
       ref={ref}
@@ -398,7 +393,7 @@ function ModelOption({
         <span className="flex items-center gap-2">
           <span className={cn("truncate text-[13px]", selected ? "font-semibold" : "font-medium")}>{model.label}</span>
           {isDefault && (
-            <span className="shrink-0 rounded-[4px] border px-1 text-[10px] leading-4 text-muted-foreground">Default</span>
+            <span className="shrink-0 rounded-[4px] border px-1 text-[10px] leading-4 text-muted-foreground">{t("modelPicker.default")}</span>
           )}
         </span>
         {!compact && model.description && <span className="mt-0.5 block truncate text-xs text-muted-foreground">{model.description}</span>}

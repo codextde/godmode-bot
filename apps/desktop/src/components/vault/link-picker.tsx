@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -36,9 +37,10 @@ export function LinkPicker({
   loading?: boolean;
   noneLabel: string;
   searchPlaceholder: string;
-  noun: string;
+  noun: "login" | "code";
   autoFocus?: boolean;
 }) {
+  const { t } = useTranslation("vault");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -50,7 +52,7 @@ export function LinkPicker({
 
   const { suggested, rest, total, hidden } = useMemo(() => {
     const tokens = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const hits = tokens.length ? indexed.filter((x) => tokens.every((t) => x.haystack.includes(t))).map((x) => x.item) : items;
+    const hits = tokens.length ? indexed.filter((x) => tokens.every((tok) => x.haystack.includes(tok))).map((x) => x.item) : items;
     const top = hits.filter((i) => i.suggested || i.id === value).slice(0, LIMIT);
     const others = hits.filter((i) => !i.suggested && i.id !== value).slice(0, LIMIT - top.length);
     return { suggested: top, rest: others, total: hits.length, hidden: hits.length - top.length - others.length };
@@ -92,10 +94,10 @@ export function LinkPicker({
           <CommandList className="max-h-[min(20rem,50vh)] scroll-py-1">
             {loading ? (
               <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
-                <Spinner /> Loading {noun}s…
+                <Spinner /> {t(`linkPicker.${noun}.loading`)}
               </div>
             ) : (
-              <CommandEmpty>No {noun} matches “{query}”.</CommandEmpty>
+              <CommandEmpty>{t(`linkPicker.${noun}.empty`, { query })}</CommandEmpty>
             )}
             {!query && (
               <CommandGroup>
@@ -105,14 +107,14 @@ export function LinkPicker({
               </CommandGroup>
             )}
             {suggested.length > 0 && (
-              <CommandGroup heading={query ? "Best matches" : "Suggested"}>
+              <CommandGroup heading={query ? t("linkPicker.bestMatches") : t("linkPicker.suggested")}>
                 {suggested.map((item) => (
                   <ItemRow key={item.id} item={item} selected={item.id === value} onSelect={pick} />
                 ))}
               </CommandGroup>
             )}
             {rest.length > 0 && (
-              <CommandGroup heading={query ? (suggested.length ? "Other matches" : `${total.toLocaleString()} ${total === 1 ? "match" : "matches"}`) : `All ${noun}s`}>
+              <CommandGroup heading={query ? (suggested.length ? t("linkPicker.otherMatches") : t("linkPicker.matches", { count: total })) : t(`linkPicker.${noun}.all`)}>
                 {rest.map((item) => (
                   <ItemRow key={item.id} item={item} selected={item.id === value} onSelect={pick} />
                 ))}
@@ -120,7 +122,7 @@ export function LinkPicker({
             )}
             {hidden > 0 && (
               <p className="px-3 pt-1 pb-3 text-xs text-muted-foreground">
-                {hidden.toLocaleString()} more {query ? "matches" : `${noun}s`}. Keep typing to narrow it down.
+                {query ? t("linkPicker.moreMatches", { count: hidden }) : t(`linkPicker.${noun}.more`, { count: hidden })}
               </p>
             )}
           </CommandList>

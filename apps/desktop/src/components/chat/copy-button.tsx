@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -24,7 +25,7 @@ export async function copyText(text: string): Promise<boolean> {
 
 export function CopyButton({
   text,
-  label = "Copy",
+  label,
   className,
   size = "icon-xs",
   showLabel = false,
@@ -35,7 +36,9 @@ export function CopyButton({
   size?: "icon-xs" | "icon-sm" | "xs";
   showLabel?: boolean;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
+  const shown = copied ? t("actions.copied") : (label ?? t("actions.copy"));
   const onClick = async () => {
     if (await copyText(text)) {
       setCopied(true);
@@ -49,18 +52,18 @@ export function CopyButton({
       variant="ghost"
       size={showLabel ? "xs" : size}
       onClick={onClick}
-      aria-label={copied ? "Copied" : label}
+      aria-label={shown}
       className={cn("text-muted-foreground hover:text-foreground", className)}
     >
       {icon}
-      {showLabel && <span>{copied ? "Copied" : label}</span>}
+      {showLabel && <span>{shown}</span>}
     </Button>
   );
   if (showLabel) return button;
   return (
     <Tooltip>
       <TooltipTrigger asChild>{button}</TooltipTrigger>
-      <TooltipContent>{copied ? "Copied" : label}</TooltipContent>
+      <TooltipContent>{shown}</TooltipContent>
     </Tooltip>
   );
 }

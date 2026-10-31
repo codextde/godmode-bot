@@ -2,14 +2,17 @@ import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
 import { memo, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { fileNameSummary, taskEventText, type Agent, type Task, type TaskEvent, type TaskEventKind } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { fileNameSummary, type Agent, type Task, type TaskEvent, type TaskEventKind } from "@godmode/shared";
 import { Icon, type IconName } from "./icon";
 import { Markdown } from "./markdown";
 import { Skeleton, T, tap } from "./ui";
 import { ApiError, api } from "@/lib/api";
 import { whenText } from "@/lib/format";
+import type { TFunction } from "i18next";
+import { currentLanguage, dateLocale } from "@/lib/i18n";
+import { STATUS_META } from "./task-row";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's timeline icons (task-timeline.tsx), all quiet. */
@@ -42,6 +45,7 @@ const SKELETON = ["72%", "56%", "64%"] as const;
  * human's feedback, notes agents left, pull requests, questions and answers. The latest 50, earlier ones on request.
  */
 export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task: Task; agents: Agent[] | undefined }) {
+  const { t } = useTranslation(["components", "common"]);
   const events = useQuery({ queryKey: qk.taskEvents(task.id), queryFn: () => api.tasks.events(task.id) });
   const [all, setAll] = useState(false);
   // A computer on an older Godmode keeps no timeline: who filed it is all there is to show.
@@ -51,21 +55,21 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
   const shown = useMemo(() => (list && hidden ? list.slice(hidden) : (list ?? [])), [list, hidden]);
   const filer =
     task.createdBy === "user"
-      ? "You"
+      ? null
       : task.createdBy === "system"
         ? "Godmode"
-        : (agents?.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? "An agent that no longer exists");
+        : (agents?.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? t("taskTimeline.goneAgent"));
 
   if (!list && !none) {
     if (events.isError) {
       return (
         <View style={styles.failed}>
           <T variant="footnote" muted style={{ flexShrink: 1 }}>
-            {"Couldn't load the activity."}
+            {t("taskTimeline.loadFailed")}
           </T>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Try loading the activity again"
+            accessibilityLabel={t("taskTimeline.retryLabel")}
             hitSlop={10}
             onPress={() => {
               tap();
@@ -74,14 +78,14 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
             style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
           >
             <T variant="footnote" style={{ fontWeight: "500" }}>
-              Try again
+              {t("common:actions.tryAgain")}
             </T>
           </Pressable>
         </View>
       );
     }
     return (
-      <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel="Loading the activity">
+      <View style={styles.loading} accessibilityRole="progressbar" accessibilityLabel={t("taskTimeline.loading")}>
         {SKELETON.map((width) => (
           <Skeleton key={width} width={width} height={14} />
         ))}
@@ -91,12 +95,12 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
 
   return (
     <View accessibilityRole="list" style={{ paddingHorizontal: 4 }}>
-      <Line icon="dot" text={filer === "You" ? "You filed this" : `${filer} filed this`} at={task.createdAt} last={!shown.length && !hidden} />
+      <Line icon="dot" text={filer === null ? t("taskTimeline.youFiled") : t("taskTimeline.filedBy", { name: filer })} at={task.createdAt} last={!shown.length && !hidden} />
       {hidden > 0 && (
         <Line icon="more">
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Show ${hidden} earlier ${hidden === 1 ? "event" : "events"}`}
+            accessibilityLabel={t("taskTimeline.showEarlierLabel", { count: hidden })}
             hitSlop={10}
             onPress={() => {
               tap();
@@ -105,7 +109,7 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
             style={({ pressed }) => [styles.earlier, { opacity: pressed ? 0.6 : 1 }]}
           >
             <T variant="subhead" muted style={{ fontWeight: "500" }}>
-              Show earlier activity ({hidden})
+              {t("taskTimeline.showEarlier", { count: hidden })}
             </T>
           </Pressable>
         </Line>
@@ -117,17 +121,98 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
   );
 });
 
+const ticketList = (numbers: readonly number[]) => {
+  const items = numbers.map((n) => `#${n}`);
+  if (items.length < 2) return items.join("");
+  return `${items.slice(0, -1).join(", ")} ${currentLanguage() === "de" ? "und" : "and"} ${items.at(-1)}`;
+};
+
+function eventText(e: TaskEvent, t: TFunction<"components">): string {
+  const who = e.actor === "user" ? "you" : "other";
+  const a = e.actor === "user" ? t("taskTimeline.event.actor.you") : e.actor === "system" ? "Godmode" : e.actorName || t("taskTimeline.event.actor.agent");
+  const label = (s: keyof typeof STATUS_META) => STATUS_META[s]?.label ?? s;
+  switch (e.kind) {
+    case "status": {
+      const { from, to } = e.data;
+      if (to === "done") return from === "in_review" ? t(`taskTimeline.event.approved.${who}`, { a }) : t(`taskTimeline.event.markedDone.${who}`, { a });
+      if (to === "cancelled") return t(`taskTimeline.event.cancelled.${who}`, { a });
+      if (from === "done" || from === "cancelled") return t(`taskTimeline.event.reopened.${who}`, { a });
+      if (to === "blocked") return t(`taskTimeline.event.movedBlocked.${who}`, { a });
+      if (from === "blocked" && to === "todo") return t(`taskTimeline.event.restarted.${who}`, { a });
+      if (from === "in_progress" && to === "backlog") return t(`taskTimeline.event.stopped.${who}`, { a });
+      return t(`taskTimeline.event.moved.${who}`, { a, from: label(from), to: label(to) });
+    }
+    case "assigned": {
+      const { from, to, fromName, toName } = e.data;
+      if (!from) return t(`taskTimeline.event.assignedTo.${who}`, { a, name: toName || t("taskTimeline.event.fallback.anAgent") });
+      if (!to) return t(`taskTimeline.event.tookOff.${who}`, { a, name: fromName || t("taskTimeline.event.fallback.theAgent") });
+      return t(`taskTimeline.event.handed.${who}`, { a, from: fromName || t("taskTimeline.event.fallback.anAgent"), to: toName || t("taskTimeline.event.fallback.anotherAgent") });
+    }
+    case "archived":
+      return e.data.archived ? t(`taskTimeline.event.archived.${who}`, { a }) : t(`taskTimeline.event.restored.${who}`, { a });
+    case "started":
+      if (e.data.subtasks?.length) return t(`taskTimeline.event.pickedUpSubtasks.${who}`, { a, list: ticketList(e.data.subtasks), count: e.data.subtasks.length });
+      if (e.data.retry) return e.data.retry > 1 ? t(`taskTimeline.event.retryMore.${who}`, { a }) : t(`taskTimeline.event.retry.${who}`, { a });
+      if (!e.data.again) return t(`taskTimeline.event.started.${who}`, { a });
+      if (e.data.trigger === "followup") return t(`taskTimeline.event.continuedPlanned.${who}`, { a });
+      if (e.data.trigger === "heartbeat") return t(`taskTimeline.event.heartbeat.${who}`, { a });
+      if (e.data.trigger === "task") return t(`taskTimeline.event.startedOver.${who}`, { a });
+      return t(`taskTimeline.event.pickedUp.${who}`, { a });
+    case "waiting":
+      if (e.data.subtasks?.length) return t(`taskTimeline.event.waitingFor.${who}`, { a, list: ticketList(e.data.subtasks) });
+      return t(`taskTimeline.event.waitingContinues.${who}`, { a, when: e.data.dueAt ? whenText(e.data.dueAt) : t("taskTimeline.event.later") });
+    case "delivered":
+      return e.data.pullRequest ? t(`taskTimeline.event.deliveredPr.${who}`, { a, number: e.data.pullRequest }) : t(`taskTimeline.event.delivered.${who}`, { a });
+    case "blocked":
+      switch (e.data.kind) {
+        case "needs_input":
+          return t(`taskTimeline.event.needsInput.${who}`, { a });
+        case "failed":
+          return t("taskTimeline.event.blockedFailed");
+        case "stopped":
+          return t("taskTimeline.event.stoppedEarly");
+        case "interrupted":
+          return t("taskTimeline.event.blockedInterrupted");
+        case "publish":
+          return t("taskTimeline.event.blockedPublish");
+        case "setup":
+          return t("taskTimeline.event.blockedSetup");
+        default:
+          return t(`taskTimeline.event.movedBlocked.${who}`, { a });
+      }
+    case "feedback":
+      if (e.data.on === "in_review") return t(`taskTimeline.event.requestedChanges.${who}`, { a });
+      if (e.data.on === "blocked") return t(`taskTimeline.event.answered.${who}`, { a });
+      if (e.data.on === "done" || e.data.on === "cancelled") return t(`taskTimeline.event.reopenedMessage.${who}`, { a });
+      return t(`taskTimeline.event.wrote.${who}`, { a });
+    case "note":
+      return t(`taskTimeline.event.noted.${who}`, { a });
+    case "pr_opened":
+      return e.data.number ? t("taskTimeline.event.prOpened", { number: e.data.number }) : t("taskTimeline.event.branchPushed");
+    case "pr_merged":
+      if (e.data.auto) return t("taskTimeline.event.prMergedAuto", { number: e.data.number });
+      return e.actor === "user" ? t(`taskTimeline.event.mergedPr.${who}`, { a, number: e.data.number }) : t("taskTimeline.event.prMerged", { number: e.data.number });
+    case "pr_closed":
+      return t("taskTimeline.event.prClosed", { number: e.data.number });
+    case "asked":
+      if (e.data.kind === "task") return t(`taskTimeline.event.askedTask.${who}`, { a });
+      return e.data.kind === "approval" ? t(`taskTimeline.event.askedOk.${who}`, { a }) : t(`taskTimeline.event.asked.${who}`, { a });
+    case "answered":
+      if (e.data.kind === "task") return e.data.status === "declined" ? t(`taskTimeline.event.taskDeclined.${who}`, { a }) : t(`taskTimeline.event.taskDone.${who}`, { a });
+      return e.data.status === "approved" ? t(`taskTimeline.event.approvedPlain.${who}`, { a }) : e.data.status === "declined" ? t(`taskTimeline.event.declined.${who}`, { a }) : t(`taskTimeline.event.answered.${who}`, { a });
+  }
+}
+
 /** `current`: a delivery whose result is the one the ticket shows above. */
 const EventRow = memo(function EventRow({ event: e, current, last }: { event: TaskEvent; current: boolean; last: boolean }) {
+  const { t } = useTranslation("components");
   const [open, setOpen] = useState(false);
-  const spendTracking = useSpendTracking();
-  const text = taskEventText(e, { you: "You", youObject: "you", when: whenText });
+  const text = eventText(e, t);
 
   if (e.kind === "delivered") {
     const meta = [
       e.data.durationMs ? `${Math.max(1, Math.round(e.data.durationMs / 60_000))}m` : null,
-      spendTracking && e.data.costUsd ? `$${e.data.costUsd.toFixed(2)}` : null,
-      current ? "the result above" : null,
+      current ? t("taskTimeline.resultAbove") : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -138,7 +223,7 @@ const EventRow = memo(function EventRow({ event: e, current, last }: { event: Ta
             {meta}
           </T>
         ) : null}
-        {!current && e.body ? <Toggle open={open} onPress={() => setOpen((v) => !v)} more="Show this result" less="Hide this result" /> : null}
+        {!current && e.body ? <Toggle open={open} onPress={() => setOpen((v) => !v)} more={t("taskTimeline.showResult")} less={t("taskTimeline.hideResult")} /> : null}
         {!current && e.body && open ? <Body text={e.body} whole /> : null}
       </Line>
     );
@@ -147,7 +232,7 @@ const EventRow = memo(function EventRow({ event: e, current, last }: { event: Ta
   return (
     <Line icon={ICONS[e.kind] ?? "dot"} text={text} strong={e.kind === "feedback" || e.kind === "asked"} danger={e.kind === "blocked"} at={e.createdAt} last={last}>
       {e.body && BODIED.includes(e.kind) ? (
-        <Body text={e.body} note={e.kind === "feedback" && e.data.files.length > 0 ? `Files: ${fileNameSummary(e.data.files)}` : undefined} />
+        <Body text={e.body} note={e.kind === "feedback" && e.data.files.length > 0 ? t("taskTimeline.files", { files: fileNameSummary(e.data.files) }) : undefined} />
       ) : null}
     </Line>
   );
@@ -173,6 +258,7 @@ function Line({
   children?: ReactNode;
 }) {
   const c = useColors();
+  useTranslation();
   return (
     <View style={styles.line}>
       <View style={styles.rail}>
@@ -189,7 +275,7 @@ function Line({
             </T>
             {at ? (
               <T variant="caption" muted style={styles.time}>
-                {formatDistanceToNowStrict(new Date(at), { addSuffix: true })}
+                {formatDistanceToNowStrict(new Date(at), { addSuffix: true, locale: dateLocale() })}
               </T>
             ) : null}
           </View>
@@ -203,6 +289,7 @@ function Line({
 /** An event's text in a quiet box; a long one is cut until it's asked for (`whole`: never cut). */
 function Body({ text, note, whole }: { text: string; note?: string; whole?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("common");
   const [tall, setTall] = useState(false);
   const [open, setOpen] = useState(false);
   return (
@@ -217,7 +304,7 @@ function Body({ text, note, whole }: { text: string; note?: string; whole?: bool
           {note}
         </T>
       ) : null}
-      {tall ? <Toggle open={open} onPress={() => setOpen((v) => !v)} more="Show more" less="Show less" /> : null}
+      {tall ? <Toggle open={open} onPress={() => setOpen((v) => !v)} more={t("actions.showMore")} less={t("actions.showLess")} /> : null}
     </View>
   );
 }

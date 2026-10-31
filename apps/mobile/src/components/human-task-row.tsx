@@ -1,10 +1,12 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
-import { HUMAN_TASK_WORDS, humanTaskRef, type Agent, type HumanTask } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { humanTaskRef, type Agent, type HumanTask } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { Badge, Row, T, tap, type Tone } from "./ui";
 import { shortTime } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** `fromChat`: opened from that chat, so "Open the chat" goes back to it instead of opening it twice. */
@@ -15,29 +17,29 @@ export function openHumanTask(id: string, fromChat?: string | null) {
 
 /** Where a task stands, in the words of its kind and the desktop's tones: a decision is "Answered", an approval "Approved". */
 export function humanStatus(task: Pick<HumanTask, "status" | "kind">): { label: string; tone: Tone } {
-  const words = HUMAN_TASK_WORDS[task.kind];
   switch (task.status) {
     case "backlog":
-      return { label: "Backlog", tone: "neutral" };
+      return { label: t("components:humanTaskRow.status.backlog"), tone: "neutral" };
     case "open":
-      return { label: "To do", tone: "neutral" };
+      return { label: t("components:humanTaskRow.status.open"), tone: "neutral" };
     case "doing":
-      return { label: "Doing", tone: "brand" };
+      return { label: t("components:humanTaskRow.status.doing"), tone: "brand" };
     case "done":
-      return { label: words.wasDone, tone: "emerald" };
+      return { label: t(`components:humanTaskRow.wasDone.${task.kind}`), tone: "emerald" };
     case "declined":
-      return { label: words.wasDeclined, tone: task.kind === "decision" ? "neutral" : "rose" };
+      return { label: t(`components:humanTaskRow.wasDeclined.${task.kind}`), tone: task.kind === "decision" ? "neutral" : "rose" };
     default:
-      return { label: "Taken back", tone: "neutral" };
+      return { label: t("components:humanTaskRow.status.takenBack"), tone: "neutral" };
   }
 }
 
 /** Something an agent needs from the human — a thing to do, an answer, an OK: what, who asked and for which ticket. */
 export function HumanTaskRow({ task, agent }: { task: HumanTask; agent?: Agent }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const status = humanStatus(task);
-  const from = task.agentName ?? agent?.name ?? (task.agentId ? "An agent" : "You");
-  const meta = [humanTaskRef(task), task.kind !== "task" ? HUMAN_TASK_WORDS[task.kind].label : null, from, task.taskNumber != null ? `ticket #${task.taskNumber}` : null]
+  const from = task.agentName ?? agent?.name ?? (task.agentId ? t("humanTaskRow.anAgent") : t("humanTaskRow.you"));
+  const meta = [humanTaskRef(task), task.kind !== "task" ? t(`humanTaskRow.kind.${task.kind}`) : null, from, task.taskNumber != null ? t("humanTaskRow.ticket", { number: task.taskNumber }) : null]
     .filter(Boolean)
     .join(" · ");
   return (
@@ -60,7 +62,7 @@ export function HumanTaskRow({ task, agent }: { task: HumanTask; agent?: Agent }
         </Row>
         <Row style={{ gap: space.sm }}>
           <Badge label={status.label} tone={status.tone} live={task.status === "doing"} />
-          {task.priority === "high" && task.status !== "done" ? <Badge label="Urgent" tone="rose" /> : null}
+          {task.priority === "high" && task.status !== "done" ? <Badge label={t("humanTaskRow.urgent")} tone="rose" /> : null}
           <T variant="footnote" muted numberOfLines={1} style={{ flex: 1 }}>
             {meta}
           </T>

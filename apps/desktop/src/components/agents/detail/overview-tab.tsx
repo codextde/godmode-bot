@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Activity, ArrowRight, Coins, Gauge, Pencil, Timer } from "lucide-react";
+import { Activity, ArrowRight, Gauge, Pencil, Timer } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Agent, Run } from "@godmode/shared";
 import { useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
@@ -10,25 +11,24 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RunRow } from "@/components/runs/run-row";
 import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
-import { formatCost, formatDuration } from "@/components/runs/run-status";
+import { formatDuration } from "@/components/runs/run-status";
 import { RunTaskDialog } from "../agent-actions";
 import { Plate } from "./plate";
-import { useBudgets, useSpendTracking } from "@/lib/hooks";
+import { useBootstrap } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
-import { BudgetMeter } from "@/components/budgets/budget-meter";
 
 export function OverviewTab({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("agents");
   const runsQ = useRuns(agent.id);
   const [selected, setSelected] = useState<Run | null>(null);
   const [runTask, setRunTask] = useState(false);
   const easy = useEasyMode();
-  const spendTracking = useSpendTracking();
+  const activityOn = useBootstrap().data?.settings.activity.enabled !== false;
   const runs = runsQ.data ?? [];
 
   const stats = useMemo(() => {
     const succeeded = runs.filter((r) => r.status === "succeeded").length;
     const failed = runs.filter((r) => r.status === "failed").length;
-    const cost = runs.reduce((s, r) => s + (r.costUsd ?? 0), 0);
     const durations = runs.map((r) => r.durationMs).filter((d): d is number => d != null && d > 0);
     const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
     // Runs per day over the last 14 days
@@ -38,15 +38,14 @@ export function OverviewTab({ agent }: { agent: Agent }) {
     start.setHours(0, 0, 0, 0);
     const startMs = start.getTime() - (days - 1) * 86_400_000;
     for (const r of runs) {
-      const t = new Date(r.startedAt ?? r.createdAt).getTime();
-      const idx = Math.floor((t - startMs) / 86_400_000);
+      const at = new Date(r.startedAt ?? r.createdAt).getTime();
+      const idx = Math.floor((at - startMs) / 86_400_000);
       if (idx >= 0 && idx < days) buckets[idx]++;
     }
     return {
       total: runs.length,
       successRate: succeeded + failed > 0 ? succeeded / (succeeded + failed) : null,
       failed,
-      cost,
       avg,
       buckets,
     };
@@ -55,36 +54,36 @@ export function OverviewTab({ agent }: { agent: Agent }) {
   return (
     <div className="space-y-6">
       <Plate agent={agent} onRunTask={() => setRunTask(true)} />
-      <AgentBudget agent={agent} />
       <RunTaskDialog agent={agent} open={runTask} onOpenChange={setRunTask} />
 
-      <div className={cn("grid gap-3", spendTracking ? "grid-cols-2 @4xl:grid-cols-4" : "grid-cols-3")}>
+      <div className="grid grid-cols-3 gap-3">
         <Kpi
           icon={<Activity />}
-          label={easy ? (runs.length >= 200 ? "Jobs (last 200)" : "Jobs done") : runs.length >= 200 ? "Runs (last 200)" : "Total runs"}
+          label={easy ? (runs.length >= 200 ? t("overviewTab.jobsLast200") : t("overviewTab.jobsDone")) : runs.length >= 200 ? t("overviewTab.runsLast200") : t("overviewTab.totalRuns")}
           value={runsQ.isLoading ? null : String(stats.total)}
           extra={<Sparkbars values={stats.buckets} />}
         />
         <Kpi
           icon={<Gauge />}
-          label="Success rate"
+          label={t("overviewTab.successRate")}
           value={runsQ.isLoading ? null : stats.successRate == null ? "—" : `${Math.round(stats.successRate * 100)}%`}
-          hint={stats.failed ? `${stats.failed} failed` : undefined}
+          hint={stats.failed ? t("overviewTab.failed", { count: stats.failed }) : undefined}
           tone={stats.successRate != null && stats.successRate < 0.8 ? "warn" : undefined}
         />
-        {spendTracking && <Kpi icon={<Coins />} label="Total cost" value={runsQ.isLoading ? null : formatCost(stats.cost)} />}
-        <Kpi icon={<Timer />} label={easy ? "Average time" : "Avg duration"} value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
+        <Kpi icon={<Timer />} label={easy ? t("overviewTab.averageTime") : t("overviewTab.avgDuration")} value={runsQ.isLoading ? null : formatDuration(stats.avg)} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 rounded-xl border bg-card p-2 shadow-card">
           <div className="flex items-center justify-between px-3 pt-2 pb-1">
-            <h2 className="text-sm font-medium tracking-[-0.01em]">{easy ? "Recent work" : "Recent runs"}</h2>
-            <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
-              <Link to={`/activity?agent=${agent.id}`}>
-                All activity <ArrowRight />
-              </Link>
-            </Button>
+            <h2 className="text-sm font-medium tracking-[-0.01em]">{easy ? t("overviewTab.recentWork") : t("overviewTab.recentRuns")}</h2>
+            {activityOn && (
+              <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
+                <Link to={`/activity?agent=${agent.id}`}>
+                  {t("overviewTab.allActivity")} <ArrowRight />
+                </Link>
+              </Button>
+            )}
           </div>
           {runsQ.isLoading ? (
             <div className="space-y-1 p-2">
@@ -94,11 +93,11 @@ export function OverviewTab({ agent }: { agent: Agent }) {
             </div>
           ) : runsQ.isError ? (
             <p className="p-4 text-sm text-muted-foreground">
-              {easy ? "Couldn't load its recent work" : "Couldn't load runs"}: {errorMessage(runsQ.error)}
+              {easy ? t("overviewTab.workLoadError", { error: errorMessage(runsQ.error) }) : t("overviewTab.runsLoadError", { error: errorMessage(runsQ.error) })}
             </p>
           ) : runs.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              {easy ? "Nothing yet. Start a chat or give it a task, and everything it does shows up here." : "No runs yet. Start a chat or give it a task — every run shows up here."}
+              {easy ? t("overviewTab.emptyEasy") : t("overviewTab.emptyPro")}
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -112,9 +111,9 @@ export function OverviewTab({ agent }: { agent: Agent }) {
         <div className="space-y-6">
           <section className="rounded-xl border bg-card p-4 shadow-card">
             <div className="mb-2 flex items-center justify-between">
-              <h2 className="text-sm font-medium tracking-[-0.01em]">Instructions</h2>
+              <h2 className="text-sm font-medium tracking-[-0.01em]">{t("overviewTab.instructions")}</h2>
               <Button variant="ghost" size="icon-xs" asChild className="text-muted-foreground">
-                <Link to={`/agents/${agent.id}/settings`} aria-label="Edit instructions">
+                <Link to={`/agents/${agent.id}/settings`} aria-label={t("overviewTab.editInstructions")}>
                   <Pencil />
                 </Link>
               </Button>
@@ -124,7 +123,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
                 <Markdown className="text-[13px] text-muted-foreground">{agent.instructions}</Markdown>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No instructions yet — it works from your messages alone.</p>
+              <p className="text-sm text-muted-foreground">{t("overviewTab.noInstructions")}</p>
             )}
           </section>
         </div>
@@ -182,31 +181,5 @@ function Sparkbars({ values }: { values: number[] }) {
         />
       ))}
     </div>
-  );
-}
-
-/** The agent's monthly budget (only when it has one, or the team's is used up). */
-function AgentBudget({ agent }: { agent: Agent }) {
-  const { data } = useBudgets();
-  if (!data) return null;
-  const own = data.agents.find((b) => b.agentId === agent.id);
-  const teamOut = data.team.state === "exhausted";
-  if (!own?.budgetUsd && !teamOut) return null;
-  return (
-    <section aria-label="Budget" className="rounded-xl border bg-card p-4 shadow-card">
-      <h2 className="mb-2 text-sm font-medium tracking-[-0.01em]">Budget</h2>
-      {own?.budgetUsd ? (
-        <BudgetMeter status={own} resetsAt={data.resetsAt} whose={`${agent.name}'s`} setLink={`/agents/${agent.id}/settings#permissions`} release={{ scope: "agent", agentId: agent.id }} />
-      ) : null}
-      {teamOut && (
-        <p className={cn("text-[13px] text-muted-foreground", own?.budgetUsd && "mt-2")}>
-          The team's budget for this month is used up too —{" "}
-          <Link to="/settings/ai" className="underline-offset-2 hover:text-foreground hover:underline">
-            see Settings
-          </Link>
-          .
-        </p>
-      )}
-    </section>
   );
 }

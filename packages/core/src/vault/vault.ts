@@ -457,7 +457,14 @@ function loadKnownSecrets() {
     }
     for (const row of all<{ key: string; value_enc: string }>("SELECT key, value_enc FROM secrets")) {
       try {
-        rememberSecret(decrypt(dek, row.value_enc, `secrets:${row.key}`));
+        const value = decrypt(dek, row.value_enc, `secrets:${row.key}`);
+        rememberSecret(value);
+        // A Claude account's OAuth block: its tokens are what runs see (claudeAccounts.ts).
+        if (row.key.startsWith("claude_account:")) {
+          const block = JSON.parse(value) as { accessToken?: string; refreshToken?: string };
+          rememberSecret(block.accessToken);
+          rememberSecret(block.refreshToken);
+        }
       } catch {
         /* ignore */
       }

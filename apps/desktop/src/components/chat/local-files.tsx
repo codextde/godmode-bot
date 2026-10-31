@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { BookOpen, ChevronLeft, ChevronRight, Copy, Download, Folder, FolderOpen, ImageOff, Maximize2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ChatFile } from "@godmode/shared";
 import { fileRefs } from "@godmode/shared";
@@ -19,6 +20,7 @@ import { fileIcon } from "./attachments";
 import { downloadCoreFile, useCoreFileUrl } from "./core-file";
 import { Lightbox } from "./lightbox";
 import { MarkdownReader } from "./markdown-reader";
+import { SidePanelScope, lineOf, useChatSidePanel } from "@/components/side-panel/store";
 
 /* ------------------------------------------------------------------ */
 /* Which of the paths a message names exist                             */
@@ -103,7 +105,7 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
     if (!data?.files.length) return null;
     const files = runnerId
       ? data.files.map((f) =>
-          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null } : f,
+          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null, text: f.text ? onRunner(f.text, runnerId) : null } : f,
         )
       : data.files;
     const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
@@ -114,8 +116,6 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
 /* ------------------------------------------------------------------ */
 /* Shown in the chat                                                    */
 /* ------------------------------------------------------------------ */
-
-const SHOW_IN_FOLDER = isMac ? "Show in Finder" : "Show in folder";
 
 const MessageScope = createContext<{ local: boolean; preview: (path: string) => void; read: (path: string) => void }>({
   local: false,
@@ -128,18 +128,22 @@ const MessageScope = createContext<{ local: boolean; preview: (path: string) => 
  * runner, which this computer's file manager can't show — copies the path.
  */
 function useShowInFolder(): (file: ChatFile) => { label: string; icon: LucideIcon; show: () => void } {
+  const { t } = useTranslation("chat");
   const { local } = useContext(MessageScope);
   return useCallback(
     (file: ChatFile) => {
-      if (!local || file.remote) return { label: "Copy path", icon: Copy, show: () => void copyText(file.path, "Path copied") };
+      if (!local || file.remote) return { label: t("folderPicker.copyPath"), icon: Copy, show: () => void copyText(file.path, t("folderPicker.pathCopied")) };
       const show = () =>
         void api.files.reveal(file.path).catch((err) => {
           const gone = err instanceof ApiRequestError && err.status === 404;
-          toast.error(gone ? `${file.name} doesn't exist anymore` : `Couldn't open ${isMac ? "Finder" : "the file manager"}`, gone ? undefined : { description: errorMessage(err) });
+          toast.error(
+            gone ? t("files.gone", { name: file.name }) : isMac ? t("files.finderError") : t("files.fileManagerError"),
+            gone ? undefined : { description: errorMessage(err) },
+          );
         });
-      return { label: SHOW_IN_FOLDER, icon: FolderOpen, show };
+      return { label: isMac ? t("files.showInFinder") : t("files.showInFolder"), icon: FolderOpen, show };
     },
-    [local],
+    [local, t],
   );
 }
 
@@ -170,6 +174,7 @@ function Reader({ files, path, onChange }: { files: MessageFiles; path: string |
 
 /** A Markdown file: a click asks whether to read it here or show it in its folder. */
 function MarkdownLink({ file, className, children }: { file: ChatFile; className: string; children: ReactNode }) {
+  const { t } = useTranslation("chat");
   const { read, local } = useContext(MessageScope);
   const { label, icon: ShowIcon, show } = useShowInFolder()(file);
   return (
@@ -182,7 +187,7 @@ function MarkdownLink({ file, className, children }: { file: ChatFile; className
       <DropdownMenuContent align="start" className="w-56" onClick={(e) => e.stopPropagation()}>
         <DropdownMenuLabel className="truncate font-mono text-[11px] font-normal text-muted-foreground">{file.name}</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => read(file.path)}>
-          <BookOpen /> Open preview
+          <BookOpen /> {t("files.openPreview")}
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={show}>
           <ShowIcon /> {label}
@@ -190,8 +195,8 @@ function MarkdownLink({ file, className, children }: { file: ChatFile; className
         {local && !file.remote && (
           <>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void copyText(file.path, "Path copied")}>
-              <Copy /> Copy path
+            <DropdownMenuItem onSelect={() => void copyText(file.path, t("folderPicker.pathCopied"))}>
+              <Copy /> {t("folderPicker.copyPath")}
             </DropdownMenuItem>
           </>
         )}
@@ -203,6 +208,10 @@ function MarkdownLink({ file, className, children }: { file: ChatFile; className
 /** A file or folder named in a message; `chip` when it was written as code or a bare path. */
 export function FileLink({ file, chip, children }: { file: ChatFile; chip?: boolean; children?: ReactNode }) {
   const { label, show } = useShowInFolder()(file);
+  const side = useContext(SidePanelScope);
+  const showSide = useChatSidePanel((s) => s.show);
+  const { t } = useTranslation("chat");
+  const { local } = useContext(MessageScope);
   const Icon = file.kind === "folder" ? Folder : fileIcon(file.image ? "image/" : "", file.name);
   // The icon stays with the first letter: a long path wraps as a whole, and must not leave its icon behind.
   const start = typeof children === "string" ? [...children][0] : undefined;
@@ -226,6 +235,28 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
       {children}
     </>
   );
+  if (file.text && side) {
+    const current = side.current;
+    const open = (e: MouseEvent | KeyboardEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if ("metaKey" in e && (e.metaKey || e.ctrlKey)) return show();
+      showSide(side.conversationId, { kind: "file", file, line: lineOf(file.ref), local });
+    };
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        title={t("files.sideHint", { action: label, path: file.path })}
+        aria-current={current?.kind === "file" && current.file.path === file.path ? "true" : undefined}
+        className={className}
+        onClick={open}
+        onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
+      >
+        {content}
+      </span>
+    );
+  }
   if (file.markdown) {
     return (
       <MarkdownLink file={file} className={className}>
@@ -265,13 +296,14 @@ const NAME_END = 9;
 
 /** A picture a message names, right in the chat: a click (or its button) opens the preview. */
 export function Picture({ file }: { file: ChatFile }) {
+  const { t } = useTranslation("chat");
   const { preview } = useContext(MessageScope);
   const { label, icon: ShowIcon, show } = useShowInFolder()(file);
   const blob = useCoreFileUrl(file.image ?? undefined, true);
   if (blob.failed) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-lg border border-dashed px-2.5 py-1.5 text-xs text-muted-foreground">
-        <ImageOff className="size-3.5" /> {file.name} isn't available anymore
+        <ImageOff className="size-3.5" /> {t("files.unavailable", { name: file.name })}
       </span>
     );
   }
@@ -280,7 +312,7 @@ export function Picture({ file }: { file: ChatFile }) {
       <button
         type="button"
         onClick={() => preview(file.path)}
-        aria-label={`Preview ${file.name}`}
+        aria-label={t("files.previewNamed", { name: file.name })}
         className="gm-shot-image flex cursor-zoom-in justify-center bg-muted/40 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:ring-inset"
       >
         {blob.src ? (
@@ -294,7 +326,7 @@ export function Picture({ file }: { file: ChatFile }) {
           <span className="truncate">{file.name.slice(0, -NAME_END)}</span>
           <span className="shrink-0">{file.name.slice(-NAME_END)}</span>
         </span>
-        <TileAction label="Preview" onClick={() => preview(file.path)}>
+        <TileAction label={t("files.preview")} onClick={() => preview(file.path)}>
           <Maximize2 />
         </TileAction>
         <TileAction label={label} onClick={show}>
@@ -307,6 +339,7 @@ export function Picture({ file }: { file: ChatFile }) {
 
 /** The pictures of a message at full size, one at a time: ← and → step through them. */
 function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; path: string | null; onChange: (path: string | null) => void }) {
+  const { t } = useTranslation("chat");
   const showFor = useShowInFolder();
   const index = pictures.findIndex((p) => p.path === path);
   const current = pictures[index];
@@ -348,13 +381,13 @@ function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; pa
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {many && (
               <>
-                <Button type="button" variant="ghost" size="icon-xs" aria-label="Previous picture" className="size-7" onClick={() => step(-1)}>
+                <Button type="button" variant="ghost" size="icon-xs" aria-label={t("files.previousPicture")} className="size-7" onClick={() => step(-1)}>
                   <ChevronLeft className="size-4" />
                 </Button>
                 <span className="min-w-10 text-center text-xs text-muted-foreground tabular-nums">
                   {index + 1} / {pictures.length}
                 </span>
-                <Button type="button" variant="ghost" size="icon-xs" aria-label="Next picture" className="mr-1 size-7" onClick={() => step(1)}>
+                <Button type="button" variant="ghost" size="icon-xs" aria-label={t("files.nextPicture")} className="mr-1 size-7" onClick={() => step(1)}>
                   <ChevronRight className="size-4" />
                 </Button>
               </>
@@ -364,7 +397,7 @@ function PicturePreview({ pictures, path, onChange }: { pictures: ChatFile[]; pa
             </Button>
             {!isTauri && file.image && (
               <Button type="button" variant="ghost" size="sm" className="h-7 gap-1.5 px-2.5 text-xs" onClick={() => void downloadCoreFile(file.image!, file.name)}>
-                <Download className="size-3.5" /> Save
+                <Download className="size-3.5" /> {t("files.save")}
               </Button>
             )}
           </span>

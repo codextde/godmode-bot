@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import type { InterfaceMode } from "@godmode/shared";
 import { INTERFACE_MODES } from "@godmode/shared";
 import { MODE_BLURB, MODE_LABEL } from "@/lib/mode";
@@ -7,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 /** Easy or Professional, as two cards with a sketch of how much the sidebar holds. */
 export function ModePicker({ value, onChange, className }: { value: InterfaceMode; onChange: (mode: InterfaceMode) => void; className?: string }) {
+  const { t } = useTranslation("settings");
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
     if (!step) return;
@@ -16,7 +18,7 @@ export function ModePicker({ value, onChange, className }: { value: InterfaceMod
     e.currentTarget.querySelector<HTMLButtonElement>(`[data-mode="${next}"]`)?.focus();
   };
   return (
-    <div role="radiogroup" aria-label="Interface mode" onKeyDown={onKeyDown} className={cn("grid gap-3 sm:grid-cols-2", className)}>
+    <div role="radiogroup" aria-label={t("modePicker.label")} onKeyDown={onKeyDown} className={cn("grid gap-3 sm:grid-cols-2", className)}>
       {INTERFACE_MODES.map((mode) => {
         const active = value === mode;
         return (
@@ -47,7 +49,7 @@ export function ModePicker({ value, onChange, className }: { value: InterfaceMod
               <span className="min-w-0 space-y-1">
                 <span className="flex items-center gap-2 text-sm font-medium tracking-[-0.01em]">
                   {MODE_LABEL[mode]}
-                  {mode === "pro" && <span className="text-[11px] font-normal text-muted-foreground">Default</span>}
+                  {mode === "pro" && <span className="text-[11px] font-normal text-muted-foreground">{t("modePicker.default")}</span>}
                 </span>
                 <span className="block text-xs leading-relaxed text-muted-foreground">{MODE_BLURB[mode]}</span>
               </span>

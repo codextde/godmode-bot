@@ -101,7 +101,7 @@ describe("runner end-to-end with fake claude", () => {
     expect(argValue(inv, "--output-format")).toBe("stream-json");
     expect(argValue(inv, "--input-format")).toBe("text");
     expect(argValue(inv, "--model")).toBe("claude-opus-5-5");
-    expect(argValue(inv, "--effort")).toBe("high");
+    expect(argValue(inv, "--effort")).toBe("medium");
     expect(argValue(inv, "--fallback-model")).toBe(DEFAULT_FALLBACK_MODEL);
     expect(argValue(inv, "--setting-sources")).toBe("project,local");
     expect(argValue(inv, "--append-system-prompt")).toContain("vault_fill_login");

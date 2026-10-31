@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Trans, useTranslation } from "react-i18next";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ArrowDownWideNarrow, Brain, Search, Unplug, X } from "lucide-react";
 import type { Agent, AgentNote } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,8 @@ import { plural } from "./use-files";
 type Sort = "folder" | "modified" | "size";
 
 export function NotesPane({ agent, selected, onSelect }: { agent: Agent; selected: string | null; onSelect: (note: AgentNote) => void }) {
+  const { t } = useTranslation("files");
+  const { dateLocale } = useLocale();
   const notes = useQuery({ queryKey: qk.agentNotes(agent.id), queryFn: () => api.agents.notes(agent.id), staleTime: 30_000 });
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<Sort>("folder");
@@ -45,25 +49,25 @@ export function NotesPane({ agent, selected, onSelect }: { agent: Agent; selecte
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter notes" className="h-8 pl-8 text-[13px]" aria-label="Filter notes" />
+          <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("notes.filter")} className="h-8 pl-8 text-[13px]" aria-label={t("notes.filter")} />
           {filter && (
-            <button type="button" aria-label="Clear" onClick={() => setFilter("")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent">
+            <button type="button" aria-label={t("notes.clear")} onClick={() => setFilter("")} className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:bg-accent">
               <X className="size-3.5" />
             </button>
           )}
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Sort notes">
+            <Button variant="ghost" size="icon-sm" aria-label={t("notes.sort")}>
               <ArrowDownWideNarrow />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("notes.sortBy")}</DropdownMenuLabel>
             <DropdownMenuRadioGroup value={sort} onValueChange={(v) => setSort(v as Sort)}>
-              <DropdownMenuRadioItem value="folder">Folder</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="modified">Last changed</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="size">Size</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="folder">{t("notes.folder")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="modified">{t("notes.modified")}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="size">{t("notes.size")}</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -77,9 +81,9 @@ export function NotesPane({ agent, selected, onSelect }: { agent: Agent; selecte
         >
           <Unplug className="size-3.5 shrink-0 text-warning" />
           <span className="flex-1">
-            <span className="font-medium">{plural(unlinked, "memory note")}</span> without a link from MEMORY.md
+            <Trans t={t} i18nKey="notes.unlinked" values={{ notes: plural(unlinked, "memoryNote") }} components={{ b: <span className="font-medium" /> }} />
           </span>
-          <span className="text-muted-foreground">{onlyUnlinked ? "Show all" : "Show only these"}</span>
+          <span className="text-muted-foreground">{onlyUnlinked ? t("notes.showAll") : t("notes.showOnly")}</span>
         </button>
       )}
 
@@ -93,11 +97,11 @@ export function NotesPane({ agent, selected, onSelect }: { agent: Agent; selecte
         ) : notes.isError ? (
           <p className="p-4 text-sm text-destructive">{errorMessage(notes.error)}</p>
         ) : !shown ? (
-          <p className="px-4 py-8 text-center text-sm text-muted-foreground">{needle ? "No note matches." : "No notes yet."}</p>
+          <p className="px-4 py-8 text-center text-sm text-muted-foreground">{needle ? t("notes.noMatch") : t("notes.empty")}</p>
         ) : (
           groups.map((g) => (
             <section key={g.title ?? "all"} className="px-1.5 pt-2 pb-1">
-              {g.title && <p className="truncate px-2 pb-1 font-mono text-[11px] text-muted-foreground">{g.title === "Memory" ? "Memory" : `${g.title}/`}</p>}
+              {g.title && <p className="truncate px-2 pb-1 font-mono text-[11px] text-muted-foreground">{g.title === "Memory" ? t("notes.memory") : `${g.title}/`}</p>}
               <ul>
                 {g.notes.map((n) => (
                   <li key={n.path}>
@@ -113,7 +117,7 @@ export function NotesPane({ agent, selected, onSelect }: { agent: Agent; selecte
                       </span>
                       <span className="shrink-0 text-right text-[11px] text-muted-foreground tabular-nums">
                         <span className="block">{formatBytes(n.bytes)}</span>
-                        <span className="block">{formatDistanceToNowStrict(new Date(n.modifiedAt))}</span>
+                        <span className="block">{formatDistanceToNowStrict(new Date(n.modifiedAt), { locale: dateLocale })}</span>
                       </span>
                     </button>
                   </li>

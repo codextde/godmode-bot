@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ellipsis, Hand, Pencil, Smartphone, Trash2, WifiOff } from "lucide-react";
 import { androidSummary, type AndroidDevice } from "@godmode/shared";
@@ -45,12 +46,13 @@ function Thumbnail({ device }: { device: AndroidDevice }) {
 }
 
 export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice; onEdit: () => void; onForget: () => void }) {
+  const { t } = useTranslation("android");
   const qc = useQueryClient();
   const connected = device.state === "connected";
   const disconnect = useMutation({
     mutationFn: () => api.android.disconnect(device.id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: qk.android }),
-    onError: (e) => toastApiError(e, "Couldn't disconnect", qc),
+    onError: (e) => toastApiError(e, t("deviceCard.disconnectFailed"), qc),
   });
 
   return (
@@ -58,14 +60,14 @@ export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice
       {connected && (
       <Link
         to={`/android/${device.id}`}
-        aria-label={`Open ${device.name}`}
+        aria-label={t("deviceCard.open", { name: device.name })}
         className="group/preview relative flex h-56 items-center justify-center overflow-hidden rounded-t-xl border-b bg-paper-2 py-4 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
         <Thumbnail device={device} />
         {connected && (
           <span className="absolute inset-0 grid place-items-center bg-black/0 opacity-0 transition group-hover/preview:bg-black/20 group-hover/preview:opacity-100 group-focus-visible/preview:opacity-100">
             <span className="glass inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-foreground">
-              <Hand className="size-3.5" /> Take control
+              <Hand className="size-3.5" /> {t("deviceCard.takeControl")}
             </span>
           </span>
         )}
@@ -76,7 +78,7 @@ export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice
         {!connected && (
           <Link
             to={`/android/${device.id}`}
-            aria-label={`Open ${device.name}`}
+            aria-label={t("deviceCard.open", { name: device.name })}
             className="grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 text-muted-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
             <Smartphone className="size-5" />
@@ -90,27 +92,27 @@ export function DeviceCard({ device, onEdit, onForget }: { device: AndroidDevice
           <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted-foreground">
             <span className="truncate">{androidSummary(device)}</span>
             <BatteryPill battery={connected ? device.battery : null} />
-            {!connected && device.lastSeenAt && <span>Last seen {timeAgo(device.lastSeenAt)}</span>}
+            {!connected && device.lastSeenAt && <span>{t("deviceCard.lastSeen", { time: timeAgo(device.lastSeenAt) })}</span>}
           </p>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="-mr-1.5 text-muted-foreground" aria-label={`More for ${device.name}`}>
+            <Button variant="ghost" size="icon-sm" className="-mr-1.5 text-muted-foreground" aria-label={t("deviceCard.more", { name: device.name })}>
               <Ellipsis />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onSelect={onEdit}>
-              <Pencil /> Rename and describe
+              <Pencil /> {t("deviceCard.rename")}
             </DropdownMenuItem>
             {connected && device.connection === "wifi" && (
               <DropdownMenuItem onSelect={() => disconnect.mutate()}>
-                <WifiOff /> Disconnect Wi-Fi
+                <WifiOff /> {t("deviceCard.disconnectWifi")}
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" disabled={device.state !== "disconnected"} onSelect={onForget}>
-              <Trash2 /> Forget phone
+              <Trash2 /> {t("deviceCard.forget")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

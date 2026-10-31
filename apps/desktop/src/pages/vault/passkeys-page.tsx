@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Fingerprint, Globe, Lock, Search, SearchX, Settings2, Trash2, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import type { Passkey } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
@@ -14,6 +15,7 @@ import { ConfirmDeleteDialog } from "@/components/vault/confirm-dialog";
 import { Favicon } from "@/components/vault/favicon";
 import { ScopeFilterSelect } from "@/components/vault/workspace-select";
 import { isVaultLocked, toastApiError } from "@/components/vault/vault-utils";
+import { useLocale } from "@/i18n/language";
 import { api, errorMessage } from "@/lib/api";
 import { useAllAgents, useSettings, useVaultStatus } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
@@ -24,6 +26,7 @@ import { toast } from "sonner";
 const GRID = "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto]";
 
 export default function PasskeysPage() {
+  const { t } = useTranslation(["vault", "common"]);
   const qc = useQueryClient();
   const sidebarScope = useUi((s) => s.workspace);
   const [scope, setScope] = useState(sidebarScope);
@@ -52,10 +55,10 @@ export default function PasskeysPage() {
     onSuccess: (_r, id) => {
       qc.setQueriesData<Passkey[]>({ queryKey: qk.passkeys }, (old) => (Array.isArray(old) ? old.filter((p) => p.id !== id) : old));
       void qc.invalidateQueries({ queryKey: qk.passkeys });
-      toast.success("Passkey deleted");
+      toast.success(t("passkeysPage.deleted"));
       setToDelete(null);
     },
-    onError: (e) => toastApiError(e, "Could not delete passkey", qc),
+    onError: (e) => toastApiError(e, t("passkeysPage.deleteFailed"), qc),
   });
 
   return (
@@ -68,13 +71,13 @@ export default function PasskeysPage() {
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/settings/browser">
                     <StatusDot status={enabled && !vaultLocked ? "ok" : enabled ? "warn" : "idle"} className="size-1.5" />
-                    {!enabled ? "Off" : vaultLocked ? "Paused, vault locked" : "On in the browser"}
+                    {!enabled ? t("common:status.off") : vaultLocked ? t("passkeysPage.paused") : t("passkeysPage.on")}
                     <Settings2 className="text-muted-foreground" />
                   </Link>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                {!enabled ? "Chrome's own passkey dialogs are used instead" : vaultLocked ? "Unlock the vault to use passkeys in the browser" : "Each browser profile signs in with its own passkeys"}
+                {!enabled ? t("passkeysPage.offHint") : vaultLocked ? t("passkeysPage.pausedHint") : t("passkeysPage.onHint")}
               </TooltipContent>
             </Tooltip>
           )
@@ -87,10 +90,10 @@ export default function PasskeysPage() {
               <InputGroupAddon>
                 <Search />
               </InputGroupAddon>
-              <InputGroupInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search sites or accounts…" aria-label="Search passkeys" />
+              <InputGroupInput value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t("passkeysPage.searchPlaceholder")} aria-label={t("passkeysPage.searchLabel")} />
               {search && (
                 <InputGroupAddon align="inline-end">
-                  <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setSearch("")}>
+                  <InputGroupButton size="icon-xs" aria-label={t("passwordImport.clearSearch")} onClick={() => setSearch("")}>
                     <X />
                   </InputGroupButton>
                 </InputGroupAddon>
@@ -99,7 +102,7 @@ export default function PasskeysPage() {
             <ScopeFilterSelect value={scope} onChange={setScope} />
             {list.data && (
               <span className="ml-auto text-xs text-muted-foreground tabular-nums">
-                {passkeys.length} {passkeys.length === 1 ? "passkey" : "passkeys"}
+                {t("passkeysPage.count", { count: passkeys.length })}
               </span>
             )}
           </div>
@@ -120,23 +123,23 @@ export default function PasskeysPage() {
         ) : list.isError && !list.data ? (
           <EmptyState
             icon={<Lock />}
-            title={isVaultLocked(list.error) ? "The vault is locked" : "Couldn't load passkeys"}
-            description={isVaultLocked(list.error) ? "Unlock the vault to see your passkeys." : errorMessage(list.error)}
+            title={isVaultLocked(list.error) ? t("cardsPage.lockedTitle") : t("passkeysPage.loadFailed")}
+            description={isVaultLocked(list.error) ? t("passkeysPage.lockedDescription") : errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                Try again
+                {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : !hasEntries ? (
           <EmptyState
             icon={<Fingerprint />}
-            title={scope === "all" ? "No passkeys yet" : "No passkeys in this scope"}
-            description="When a site in Godmode's browser offers to create a passkey — for an agent, or for you in the live view — it's saved here, sealed in the vault. From then on agents sign in with it by themselves."
+            title={scope === "all" ? t("passkeysPage.emptyTitle") : t("passkeysPage.emptyScopeTitle")}
+            description={t("passkeysPage.emptyDescription")}
             action={
               <Button variant="outline" asChild>
                 <Link to="/browser">
-                  <Globe /> Open the browser
+                  <Globe /> {t("passkeysPage.openBrowser")}
                 </Link>
               </Button>
             }
@@ -144,21 +147,21 @@ export default function PasskeysPage() {
         ) : passkeys.length === 0 ? (
           <EmptyState
             icon={<SearchX />}
-            title={`Nothing matches “${search.trim()}”`}
-            description="Try another site or account name."
+            title={t("nothingMatchesQuery", { query: search.trim() })}
+            description={t("passkeysPage.noMatchDescription")}
             action={
               <Button variant="outline" onClick={() => setSearch("")}>
-                Clear search
+                {t("passwordImport.clearSearch")}
               </Button>
             }
           />
         ) : (
           <div className="@container animate-in overflow-hidden rounded-xl border bg-card shadow-card fade-in-0">
             <div className={cn(GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
-              <span className="pl-12">Site</span>
-              <span>Account</span>
-              <span>Last used</span>
-              <span>Scope</span>
+              <span className="pl-12">{t("passkeysPage.columns.site")}</span>
+              <span>{t("totpForm.account")}</span>
+              <span>{t("totpEdit.lastUsed")}</span>
+              <span>{t("passkeysPage.columns.scope")}</span>
               <span className="w-8" />
             </div>
             <ul>
@@ -180,18 +183,14 @@ export default function PasskeysPage() {
       <ConfirmDeleteDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
-        title={`Delete the passkey for ${toDelete?.rpId ?? "this site"}?`}
+        title={toDelete?.rpId ? t("passkeysPage.deleteTitle", { site: toDelete.rpId }) : t("passkeysPage.deleteTitleGeneric")}
         description={
-          <>
-            Agents won't be able to sign in to <strong className="text-foreground">{toDelete?.rpId}</strong>
-            {toDelete?.userName ? (
-              <>
-                {" "}
-                as <strong className="text-foreground">{toDelete.userName}</strong>
-              </>
-            ) : null}{" "}
-            with it anymore. The site still lists it until you remove it there too. Make sure the account has another way to sign in.
-          </>
+          <Trans
+            t={t}
+            i18nKey={toDelete?.userName ? "passkeysPage.deleteDescriptionUser" : "passkeysPage.deleteDescription"}
+            values={{ site: toDelete?.rpId, user: toDelete?.userName }}
+            components={{ strong: <strong className="text-foreground" /> }}
+          />
         }
         pending={del.isPending}
         onConfirm={() => toDelete && del.mutate(toDelete.id)}
@@ -213,8 +212,10 @@ function PasskeyRow({
   first: boolean;
   onDelete: () => void;
 }) {
-  const lastUsed = p.lastUsedAt ? formatDistanceToNow(new Date(p.lastUsedAt), { addSuffix: true }) : null;
-  const created = formatDistanceToNow(new Date(p.createdAt), { addSuffix: true });
+  const { t } = useTranslation(["vault", "common"]);
+  const { dateLocale } = useLocale();
+  const lastUsed = p.lastUsedAt ? formatDistanceToNow(new Date(p.lastUsedAt), { addSuffix: true, locale: dateLocale }) : null;
+  const created = formatDistanceToNow(new Date(p.createdAt), { addSuffix: true, locale: dateLocale });
   return (
     <li className={cn(GRID, "group px-4 py-3 transition-colors hover:bg-muted/40", !first && "border-t")}>
       <div className="flex min-w-0 items-center gap-3">
@@ -222,28 +223,27 @@ function PasskeyRow({
         <div className="min-w-0">
           <div className="truncate text-sm font-medium">{p.rpId}</div>
           <div className="truncate text-xs text-muted-foreground">
-            Created {created}
-            {createdBy ? ` by ${createdBy}` : ""}
-            {profile ? ` · ${profile} profile` : ""}
+            {createdBy ? t("passkeysPage.createdBy", { when: created, agent: createdBy }) : t("passkeysPage.created", { when: created })}
+            {profile ? ` · ${t("passkeysPage.profile", { name: profile })}` : ""}
           </div>
-          <div className="mt-0.5 truncate text-xs text-muted-foreground @3xl:hidden">{p.userName || p.userDisplayName || "Unnamed account"}</div>
+          <div className="mt-0.5 truncate text-xs text-muted-foreground @3xl:hidden">{p.userName || p.userDisplayName || t("passkeysPage.unnamed")}</div>
         </div>
       </div>
       <div className="hidden min-w-0 @3xl:block">
-        <div className="truncate text-sm">{p.userName || p.userDisplayName || <span className="text-muted-foreground italic">Unnamed account</span>}</div>
+        <div className="truncate text-sm">{p.userName || p.userDisplayName || <span className="text-muted-foreground italic">{t("passkeysPage.unnamed")}</span>}</div>
         {p.userDisplayName && p.userDisplayName !== p.userName && <div className="truncate text-xs text-muted-foreground">{p.userDisplayName}</div>}
       </div>
-      <div className="hidden text-sm text-muted-foreground @3xl:block">{lastUsed ?? "Never"}</div>
+      <div className="hidden text-sm text-muted-foreground @3xl:block">{lastUsed ?? t("common:words.never")}</div>
       <div className="hidden @3xl:block">
         <ScopeBadge workspaceId={p.workspaceId} />
       </div>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className="text-muted-foreground opacity-60 group-hover:opacity-100 hover:text-destructive" aria-label={`Delete passkey for ${p.rpId}`} onClick={onDelete}>
+          <Button variant="ghost" size="icon-sm" className="text-muted-foreground opacity-60 group-hover:opacity-100 hover:text-destructive" aria-label={t("passkeysPage.deleteFor", { site: p.rpId })} onClick={onDelete}>
             <Trash2 />
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Delete passkey</TooltipContent>
+        <TooltipContent>{t("passkeysPage.delete")}</TooltipContent>
       </Tooltip>
     </li>
   );

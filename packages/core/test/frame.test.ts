@@ -36,7 +36,7 @@ describe("what the agent is doing, in plain words", () => {
     expect(toolActivity("mcp__godmode__task_create", {})).toBe("Filing a task…");
     expect(toolActivity("mcp__linear__create_issue", {})).toBe("Using Linear…");
     expect(toolActivity("Bash", { command: "rm -rf /tmp/x" })).toBe("Running a command…");
-    expect(gatewayDone("spend_overview")).toBe("Checked what the team costs");
+    expect(gatewayDone("vm_power")).toBe("Switched a VM on or off");
   });
 
   test("a saved secret is masked before a value is shortened", () => {

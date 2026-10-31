@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import { Plus, RefreshCw, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { useSshServers } from "@/lib/hooks";
 
 /** SSH servers agents sign in to: add, test, run a command, assign them. */
 export default function SshPage() {
+  const { t } = useTranslation(["ssh", "common"]);
   const [params, setParams] = useSearchParams();
   const list = useSshServers();
   const servers = list.data ?? [];
@@ -60,11 +62,11 @@ export default function SshPage() {
     <div className="relative">
       <PageHeader
         icon={<Server />}
-        title="SSH servers"
-        description="Remote machines your agents sign in to and control. Passwords and keys stay in the vault — the AI never sees them."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           <Button onClick={openAdd}>
-            <Plus /> Add server
+            <Plus /> {t("page.addServer")}
           </Button>
         }
       />
@@ -78,22 +80,22 @@ export default function SshPage() {
         ) : list.isError ? (
           <EmptyState
             icon={<Server />}
-            title="Couldn't load your servers"
+            title={t("page.loadError")}
             description={errorMessage(list.error)}
             action={
               <Button variant="outline" onClick={() => list.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
         ) : servers.length === 0 ? (
           <EmptyState
             icon={<Server />}
-            title="Let agents work on your servers"
-            description="Save a server once and a chat or agent can sign in, run commands, edit files and move them back and forth. Godmode signs in for them — the password or key never reaches the AI."
+            title={t("page.emptyTitle")}
+            description={t("page.emptyDescription")}
             action={
               <Button onClick={openAdd}>
-                <Plus /> Add server
+                <Plus /> {t("page.addServer")}
               </Button>
             }
           />

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, router, Stack } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, RefreshControl, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { HeaderActions } from "@/components/header-actions";
 import { ConversationRow } from "@/components/rows";
@@ -14,6 +15,7 @@ import { api, errorText } from "@/lib/api";
 import { chatSource, SOURCES, sourceStats, TABS, useChatFilters, type ChatSource, type RecentTab } from "@/lib/chat-filters";
 import { chatBucket, chatDayLabel, continuesAt } from "@/lib/desktop-parity";
 import { CHAT_LIST_LIMIT, useAgents } from "@/lib/hooks";
+import { t } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
@@ -23,18 +25,9 @@ import { radius, space, useColors } from "@/lib/theme";
 type Tab = RecentTab;
 type Item = { kind: "header"; key: string; title: string } | { kind: "chat"; key: string; conversation: Conversation; divided: boolean };
 
-const EMPTY: Record<Tab, { icon: IconName; title: string; body: string }> = {
-  all: { icon: "chats", title: "No chats yet", body: "New chats you start land in this list, on your computer too." },
-  running: { icon: "bolt", title: "Nothing running", body: "Chats that work or wait for you show up here." },
-  scheduled: { icon: "clock", title: "Nothing scheduled", body: "When an agent plans to check back later, the chat waits here." },
-  done: { icon: "check", title: "Nothing finished yet", body: "Finished chats land here." },
-};
+const EMPTY_ICON: Record<Tab, IconName> = { all: "chats", running: "bolt", scheduled: "clock", done: "check" };
 
-const EMPTY_SOURCE: Record<ChatSource, { icon: IconName; title: string; body: string }> = {
-  mine: { icon: "chats", title: "No chats from you yet", body: "Chats you start show up here. Automations and agents have their own tabs." },
-  automations: { icon: "clock", title: "No automation chats", body: "When an automation runs, its chat lands here." },
-  agents: { icon: "user", title: "No agent chats", body: "Handovers, board tasks and heartbeats agents start themselves land here." },
-};
+const EMPTY_SOURCE_ICON: Record<ChatSource, IconName> = { mine: "chats", automations: "clock", agents: "user" };
 
 /** The chats a run works on right now, and the ones waiting for a free slot. */
 function useChatRuns(): { running: Set<string>; queued: Set<string> } {
@@ -51,6 +44,7 @@ function useChatRuns(): { running: Set<string>; queued: Set<string> } {
 }
 
 export default function Chats() {
+  const { t } = useTranslation("tabs");
   const [search, setSearch] = useState("");
   // The search reads every message on the computer: ask once the typing pauses.
   const [q, setQ] = useState("");
@@ -103,7 +97,7 @@ export default function Chats() {
     tap();
     api.conversations
       .read(unread.slice(0, 500))
-      .catch((err) => Alert.alert("Couldn't mark the chats read", errorText(err)))
+      .catch((err) => Alert.alert(t("chats.markReadFailed"), errorText(err)))
       .finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }));
   };
 
@@ -123,13 +117,13 @@ export default function Chats() {
     const out: Item[] = [];
     let day: string | null = null;
     for (const conversation of matching) {
-      const label = dated ? (conversation.pinned ? "Pinned" : chatDayLabel(conversation.lastMessageAt ?? conversation.createdAt, now)) : null;
+      const label = dated ? (conversation.pinned ? t("chats.pinned") : chatDayLabel(conversation.lastMessageAt ?? conversation.createdAt, now)) : null;
       if (label && label !== day) out.push({ kind: "header", key: `h-${label}`, title: label });
       out.push({ kind: "chat", key: conversation.id, conversation, divided: out.length > 0 && out[out.length - 1]!.kind === "chat" });
       day = label;
     }
     return out;
-  }, [visible, tab, live, q]);
+  }, [visible, tab, live, q, t]);
 
   const renderItem: ListRenderItem<Item> = useCallback(
     ({ item }) => {
@@ -155,19 +149,19 @@ export default function Chats() {
   const scopeName = project?.name ?? workspace?.name ?? null;
   const empty =
     tab === "all" && source !== "all"
-      ? EMPTY_SOURCE[source]
+      ? { icon: EMPTY_SOURCE_ICON[source], title: t(`chats.emptySource.${source}.title`), body: t(`chats.emptySource.${source}.body`) }
       : tab === "all" && scopeName
-        ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, body: "New chats you start here land in this list." }
-        : EMPTY[tab];
+        ? { icon: EMPTY_ICON.all, title: t("chats.emptyScope.title", { name: scopeName }), body: t("chats.emptyScope.body") }
+        : { icon: EMPTY_ICON[tab], title: t(`chats.empty.${tab}.title`), body: t(`chats.empty.${tab}.body`) };
 
   return (
     <>
-      <Stack.Title large>Chats</Stack.Title>
-      <Stack.SearchBar placeholder="Search chats" hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
+      <Stack.Title large>{t("chats.title")}</Stack.Title>
+      <Stack.SearchBar placeholder={t("chats.search")} hideWhenScrolling={false} onChangeText={(e) => setSearch(e.nativeEvent.text)} onCancelButtonPress={() => setSearch("")} />
       <HeaderActions
         actions={[
-          { icon: "archive", label: "Archived chats", onPress: () => router.push("/archived") },
-          { icon: "compose", label: "New chat", onPress: () => router.push("/compose") },
+          { icon: "archive", label: t("chats.archived"), onPress: () => router.push("/archived") },
+          { icon: "compose", label: t("home.newChat"), onPress: () => router.push("/compose") },
         ]}
       />
       <FlashList
@@ -188,30 +182,30 @@ export default function Chats() {
             </Row>
             {!q && (
               <SegmentedTabs
-                label="Who started the chats"
+                label={t("chats.sourceLabel")}
                 value={source}
                 onChange={setSource}
                 tabs={SOURCES.map((s) => {
                   const { unread: n, needsYou } = sources[s.value];
                   return {
                     value: s.value,
-                    label: s.label,
-                    accessibilityHint: s.hint,
+                    label: t(`chats.source.${s.value}.label`),
+                    accessibilityHint: t(`chats.source.${s.value}.hint`),
                     dot: s.value === "all" ? null : needsYou > 0 ? "warning" : n > 0 ? "brand" : null,
                   };
                 })}
               />
             )}
             <SegmentedTabs
-              label="Filter recent chats"
+              label={t("chats.filterLabel")}
               value={tab}
               onChange={setTab}
-              tabs={TABS.map((t) => ({
-                value: t.value,
-                label: t.label,
-                accessibilityHint: t.hint,
-                count: t.value === "running" || t.value === "scheduled" ? counts[t.value] : 0,
-                tone: t.value === "running" ? (counts.needsYou > 0 ? "warning" : "brand") : "neutral",
+              tabs={TABS.map((f) => ({
+                value: f.value,
+                label: t(`chats.filter.${f.value}.label`),
+                accessibilityHint: t(`chats.filter.${f.value}.hint`),
+                count: f.value === "running" || f.value === "scheduled" ? counts[f.value] : 0,
+                tone: f.value === "running" ? (counts.needsYou > 0 ? "warning" : "brand") : "neutral",
               }))}
             />
           </View>
@@ -221,9 +215,9 @@ export default function Chats() {
           list.isLoading ? (
             <SkeletonRows count={8} />
           ) : list.isError ? (
-            <ErrorState title="Couldn't load your chats" error={errorText(list.error)} onRetry={() => void list.refetch()} />
+            <ErrorState title={t("chats.loadError")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
           ) : q ? (
-            <EmptyState icon="search" title="Nothing found" body={`No chat mentions “${q}”.`} />
+            <EmptyState icon="search" title={t("chats.noResults.title")} body={t("chats.noResults.body", { query: q })} />
           ) : (
             <EmptyState icon={empty.icon} title={empty.title} body={empty.body} />
           )
@@ -235,10 +229,11 @@ export default function Chats() {
 
 function MarkRead({ onPress }: { onPress: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("tabs");
   return (
     <Pressable accessibilityRole="button" hitSlop={8} onPress={onPress} style={({ pressed }) => ({ marginLeft: "auto", opacity: pressed ? 0.5 : 1 })}>
       <T variant="footnote" color={c.textMuted} style={{ fontWeight: "500" }}>
-        Mark all read
+        {t("chats.markAllRead")}
       </T>
     </Pressable>
   );
@@ -247,6 +242,7 @@ function MarkRead({ onPress }: { onPress: () => void }) {
 /** The archive, with how many of its chats still have work ahead. */
 function ArchivedLink({ ongoing }: { ongoing: number }) {
   const c = useColors();
+  const { t } = useTranslation("tabs");
   return (
     <Pressable
       accessibilityRole="button"
@@ -258,11 +254,11 @@ function ArchivedLink({ ongoing }: { ongoing: number }) {
     >
       <Icon name="archive" size={15} color={c.textMuted} />
       <T variant="subhead" muted style={{ flex: 1 }}>
-        Archived chats
+        {t("chats.archived")}
       </T>
       {ongoing > 0 && (
         <View
-          accessibilityLabel={`${ongoing === 1 ? "1 archived chat still has" : `${ongoing} archived chats still have`} work ahead`}
+          accessibilityLabel={t("chats.archivedOngoing", { count: ongoing })}
           style={{ flexDirection: "row", alignItems: "center", gap: 4, height: 20, paddingHorizontal: 7, borderRadius: radius.pill, backgroundColor: c.sunken }}
         >
           <Icon name="clock" size={10} color={c.brandStrong} />
@@ -287,7 +283,7 @@ function DayTitle({ title }: { title: string }) {
 function changeChat(id: string, patch: { pinned?: boolean; archived?: boolean }) {
   api.conversations
     .update(id, patch)
-    .catch((err) => Alert.alert("Couldn't change the chat", errorText(err)))
+    .catch((err) => Alert.alert(t("tabs:chats.changeFailed"), errorText(err)))
     .finally(() => {
       void queryClient.invalidateQueries({ queryKey: qk.conversations });
       if (patch.archived !== undefined) void queryClient.invalidateQueries({ queryKey: ["archived-count"] });
@@ -309,18 +305,19 @@ const ChatItem = memo(function ChatItem({
   queued: boolean;
   project?: Project;
 }) {
+  const { t } = useTranslation(["tabs", "common"]);
   const update = { mutate: (patch: { pinned?: boolean; archived?: boolean }) => changeChat(conversation.id, patch) };
   const remove = () =>
-    Alert.alert("Delete this chat?", "It's removed on your computer too.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("chats.deleteDialog.title"), t("chats.deleteDialog.body"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("common:actions.delete"),
         style: "destructive",
         onPress: () =>
           void api.conversations
             .delete(conversation.id)
             .then(() => queryClient.invalidateQueries({ queryKey: qk.conversations }))
-            .catch((err) => Alert.alert("Couldn't delete the chat", errorText(err))),
+            .catch((err) => Alert.alert(t("chats.deleteFailed"), errorText(err))),
       },
     ]);
 
@@ -333,10 +330,14 @@ const ChatItem = memo(function ChatItem({
       </Link.Trigger>
       <Link.Preview />
       <Link.Menu>
-        {conversation.unread ? <Link.MenuAction title="Mark as read" icon="checkmark.message" onPress={() => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} /> : null}
-        <Link.MenuAction title={conversation.pinned ? "Unpin" : "Pin"} icon={conversation.pinned ? "pin.slash" : "pin"} onPress={() => update.mutate({ pinned: !conversation.pinned })} />
-        <Link.MenuAction title="Archive" icon="archivebox" onPress={() => update.mutate({ archived: true })} />
-        <Link.MenuAction title="Delete" icon="trash" destructive onPress={remove} />
+        {conversation.unread ? (
+          <Link.MenuAction title={t("chats.menu.markRead")} icon="checkmark.message" onPress={() => void api.conversations.read([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
+        ) : (
+          <Link.MenuAction title={t("chats.menu.markUnread")} icon="message.badge" onPress={() => void api.conversations.unread([conversation.id]).finally(() => void queryClient.invalidateQueries({ queryKey: qk.conversations }))} />
+        )}
+        <Link.MenuAction title={conversation.pinned ? t("chats.menu.unpin") : t("chats.menu.pin")} icon={conversation.pinned ? "pin.slash" : "pin"} onPress={() => update.mutate({ pinned: !conversation.pinned })} />
+        <Link.MenuAction title={t("chats.menu.archive")} icon="archivebox" onPress={() => update.mutate({ archived: true })} />
+        <Link.MenuAction title={t("common:actions.delete")} icon="trash" destructive onPress={remove} />
       </Link.Menu>
     </Link>
   );

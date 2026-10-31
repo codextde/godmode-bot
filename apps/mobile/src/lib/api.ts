@@ -60,11 +60,10 @@ import type {
   GoalInput,
   HeartbeatBeat,
   RoutineInput,
-  SpendPeriod,
-  SpendReport,
 } from "@godmode/shared";
 import { CloudErrorCode, LICENSE_REQUIRED, isPhoneUrlAllowed } from "@godmode/shared";
 import type { PendingFile, UploadFile } from "./attachments";
+import { t } from "./i18n";
 import { useLive } from "./live";
 import { withPending } from "./pending-queue";
 import { accepts, baseUrl, candidateOrder, computerOf, removedBy, type Candidate } from "./peers";
@@ -85,13 +84,14 @@ export class ApiError extends Error {
 }
 
 /** New work is refused until the computer has an active licence; it is added there, not on the phone. */
-const LICENSE_MESSAGE = "Godmode needs an active licence on your computer. Add your licence key in Godmode there, under Settings → License.";
+const licenseMessage = () => t("system:api.license");
 
 /** An older Godmode on the computer refuses what the phone asked for (`device_forbidden`). */
-export const UPDATE_DESKTOP_MESSAGE = "Update Godmode on your computer to do this from your phone.";
 
-export const OFFLINE_MESSAGE = "Can't reach your computer. Check that it's awake and connected to Tailscale or Godmode Cloud.";
-const NO_ANSWER_MESSAGE = "No answer from your computer. Check whether it went through before trying again.";
+export const updateDesktopMessage = () => t("system:api.updateDesktop");
+
+const offlineMessage = () => t("system:api.offline");
+const noAnswerMessage = () => t("system:api.noAnswer");
 
 async function send(url: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController();
@@ -115,7 +115,7 @@ async function failure(res: Response): Promise<{ error?: string; code?: string }
 
 async function errorFrom(res: Response): Promise<ApiError> {
   const { error, code } = await failure(res);
-  return new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
+  return new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code);
 }
 
 /** Only Godmode on the computer answers this; it means the phone's key is no longer accepted. */
@@ -288,7 +288,7 @@ export function retryAddresses() {
  */
 export async function request<T>(method: string, path: string, body?: unknown, minTimeoutMs = 0): Promise<T> {
   const connection = useSession.getState().connection;
-  if (!connection) throw new ApiError(401, "This phone isn't paired.", "not_paired");
+  if (!connection) throw new ApiError(401, t("system:api.notPaired"), "not_paired");
   const headers: Record<string, string> = { authorization: `Bearer ${connection.token}`, accept: "application/json" };
   const form = body instanceof FormData;
   if (body !== undefined && !form) headers["content-type"] = "application/json";
@@ -309,7 +309,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     } catch {
       forget(base);
       if (method === "GET") continue;
-      throw new ApiError(0, NO_ANSWER_MESSAGE, "timeout");
+      throw new ApiError(0, noAnswerMessage(), "timeout");
     }
     if (res.ok) {
       useSession.getState().setActive(base, found);
@@ -320,7 +320,7 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     if (isRemoved(res.status, code)) {
       if (removedBy(connection, found)) {
         await useSession.getState().disconnect("removed");
-        throw new ApiError(401, "This phone was removed from Godmode.", "unauthorized");
+        throw new ApiError(401, t("system:api.removed"), "unauthorized");
       }
       // Another computer of the group that doesn't have this phone's key yet; it refused before doing anything.
       forget(base, true);
@@ -328,15 +328,15 @@ export async function request<T>(method: string, path: string, body?: unknown, m
     }
     if (!isUnreachable(res.status, code)) {
       useSession.getState().setActive(base, found);
-      if (code === LICENSE_REQUIRED) throw new ApiError(res.status, LICENSE_MESSAGE, code);
-      throw new ApiError(res.status, error ?? `Request failed (${res.status})`, code);
+      if (code === LICENSE_REQUIRED) throw new ApiError(res.status, licenseMessage(), code);
+      throw new ApiError(res.status, error ?? t("system:api.requestFailed", { status: res.status }), code);
     }
     forget(base);
     // 502/504: the request may have reached the computer (the link dropped on the way back, or it answered oddly).
-    if (method !== "GET" && (res.status === 502 || res.status === 504)) throw new ApiError(res.status, error ?? NO_ANSWER_MESSAGE, code ?? "timeout");
+    if (method !== "GET" && (res.status === 502 || res.status === 504)) throw new ApiError(res.status, error ?? noAnswerMessage(), code ?? "timeout");
     if (error) refused ??= new ApiError(res.status, error, code);
   }
-  throw refused ?? new ApiError(0, OFFLINE_MESSAGE, "offline");
+  throw refused ?? new ApiError(0, offlineMessage(), "offline");
 }
 
 const get = <T>(path: string, query?: Query) => request<T>("GET", path + qs(query));
@@ -365,7 +365,7 @@ export function deviceName(): string {
 
 /** Trade the scanned code for this phone's own token, trying each address in the code. */
 export async function pairWith(payload: MobilePairingPayload): Promise<Connection> {
-  if (payload.exp * 1000 < Date.now()) throw new ApiError(401, "This code has expired. Show a new one on your computer.", "pairing_invalid");
+  if (payload.exp * 1000 < Date.now()) throw new ApiError(401, t("system:api.codeExpired"), "pairing_invalid");
   const body = JSON.stringify({
     code: payload.code,
     name: deviceName(),
@@ -374,7 +374,7 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
     appVersion: Constants.expoConfig?.version ?? null,
   });
   const urls = [...new Set(payload.urls.filter(isPhoneUrlAllowed).map(baseUrl))];
-  if (!urls.length) throw new ApiError(400, "This code points somewhere Godmode doesn't send your phone's key.", "pairing_invalid");
+  if (!urls.length) throw new ApiError(400, t("system:api.codeUntrusted"), "pairing_invalid");
   let offline = true;
   let refused: ApiError | null = null;
   for (const base of urls) {
@@ -392,7 +392,7 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
     offline = false;
     if (!res.ok) throw await errorFrom(res);
     const result = (await res.json()) as MobilePairResult;
-    if (result.instance.id !== payload.id) throw new ApiError(409, "A different computer answered. Scan the code again.", "instance_mismatch");
+    if (result.instance.id !== payload.id) throw new ApiError(409, t("system:api.differentComputer"), "instance_mismatch");
     return {
       token: result.token,
       deviceId: result.device.id,
@@ -409,14 +409,14 @@ export async function pairWith(payload: MobilePairingPayload): Promise<Connectio
   if (refused) throw refused;
   throw new ApiError(
     0,
-    offline ? "Can't reach your computer. Turn on Tailscale on this phone with the computer's account, or link the computer to Godmode Cloud." : OFFLINE_MESSAGE,
+    offline ? t("system:api.offlinePairing") : offlineMessage(),
     "offline",
   );
 }
 
 /** What the phone may change of the settings, by section (the computer refuses the rest). */
 export type SettingsPatch = {
-  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "mode">>;
+  general?: Partial<Pick<Settings["general"], "userName" | "desktopNotifications" | "theme" | "mode" | "language" | "timeFormat">>;
   runner?: Partial<Omit<Settings["runner"], "claudePath" | "extraArgs" | "bypassPermissions">>;
   browser?: Partial<Pick<Settings["browser"], "enabled" | "headless" | "keepAliveMinutes" | "liveView" | "stealth" | "muteAudio">>;
   computer?: Partial<Pick<Settings["computer"], "enabled" | "allowForeground" | "agentCursor" | "liveView" | "liveViewFps">>;
@@ -520,10 +520,6 @@ export const api = {
   /** What the team did between `since` and `until` (Home's "while you were away"). */
   away: (since: string, until?: string) => get<AwaySummary>("/api/away", until ? { since, until } : { since }),
 
-  spend: {
-    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", agentId ? { period, agentId } : { period }),
-  },
-
   goals: {
     /** A workspace's goals with the global ones, or every goal (null). */
     list: (workspaceId: string | null) => get<Goal[]>("/api/goals", { workspaceId: workspaceId ?? "all" }),
@@ -572,6 +568,8 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
     /** "Mark all read": every chat, or these. */
     read: (ids: string[] | "all") => post<{ read: number }>("/api/conversations/read", { ids }),
+    /** Show these chats as new again until they are opened. */
+    unread: (ids: string[]) => post<{ unread: number }>("/api/conversations/unread", { ids }),
     /** Continue the chat's paused run where it stopped. */
     continue: (id: string) => post<Run>(`/api/conversations/${id}/continue`),
     /** Make the chat's run stand still; it continues where it stopped. */

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { MOD_ICONS, modState, type Mod } from "@godmode/shared";
 import { CopyButton } from "@/components/chat/copy-button";
 import {
@@ -53,6 +54,7 @@ export function ModSheet({
   const [last, setLast] = useState(mod);
   if (mod && mod !== last) setLast(mod);
   const shown = mod ?? last;
+  const { t } = useTranslation(["mods", "common"]);
   const unsaved = useRef(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -97,11 +99,11 @@ export function ModSheet({
       <AlertDialog open={confirming} onOpenChange={setConfirming}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
-            <AlertDialogDescription>What you changed in “{shown?.title}” since the last save is lost when you close it.</AlertDialogDescription>
+            <AlertDialogTitle>{t("sheet.discardTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("sheet.discardDescription", { title: shown?.title })}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogCancel>{t("sheet.keepEditing")}</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={() => {
@@ -109,7 +111,7 @@ export function ModSheet({
                 onClose();
               }}
             >
-              Discard
+              {t("sheet.discard")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -135,6 +137,7 @@ function ModSheetBody({
   actions: ModActions;
   onUnsavedChange: (unsaved: boolean) => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
   const { data: agents = [] } = useAllAgents();
   const draft = useModDraft(mod);
   const [optionsDirty, setOptionsDirty] = useState(false);
@@ -159,7 +162,7 @@ function ModSheetBody({
   return (
     <Tabs value={shownTab} onValueChange={(value) => onTabChange(value as ModTab)} className="@container flex h-full min-h-0 flex-col gap-0">
       <SheetTitle className="sr-only">{mod.title}</SheetTitle>
-      <SheetDescription className="sr-only">A plugin: what it does and who it runs for, its options and its {source ? "contents" : "code"}.</SheetDescription>
+      <SheetDescription className="sr-only">{source ? t("sheet.descriptionContents") : t("sheet.descriptionCode")}</SheetDescription>
 
       <header className="shrink-0 border-b bg-paper-2 px-5 pt-5">
         <div className="flex items-start gap-3.5">
@@ -168,10 +171,10 @@ function ModSheetBody({
             <TitleField mod={mod} actions={actions} />
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="inline-flex h-6 max-w-full min-w-0 items-center rounded-md border bg-card pl-2 font-mono text-[11.5px] text-foreground/85">
-                <span className="truncate" title="The plugin's name. It stays as it is: the plugin's own code refers to it.">
+                <span className="truncate" title={t("sheet.nameHint")}>
                   {mod.name}
                 </span>
-                <CopyButton text={mod.name} label="Copy the plugin name" className="size-[22px]" />
+                <CopyButton text={mod.name} label={t("sheet.copyName")} className="size-[22px]" />
               </span>
               <ModStateBadge state={state} />
               {source && (
@@ -194,34 +197,34 @@ function ModSheetBody({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5 pt-1">
-            <Switch checked={mod.enabled} onCheckedChange={(on) => actions.toggle(mod, on)} aria-label={`Switch on ${mod.title}`} className="mr-1.5" />
+            <Switch checked={mod.enabled} onCheckedChange={(on) => actions.toggle(mod, on)} aria-label={t("card.switchOnAria", { title: mod.title })} className="mr-1.5" />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" className="-mr-1.5 text-muted-foreground" aria-label="Close" onClick={onClose}>
+                <Button variant="ghost" size="icon-sm" className="-mr-1.5 text-muted-foreground" aria-label={t("common:actions.close")} onClick={onClose}>
                   <X />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Close</TooltipContent>
+              <TooltipContent>{t("common:actions.close")}</TooltipContent>
             </Tooltip>
           </div>
         </div>
 
         <TabsList variant="line" className="mt-3 -ml-3.5 justify-start">
           <TabsTrigger value="overview" className="flex-none px-2.5">
-            Overview
+            {t("sheet.overview")}
           </TabsTrigger>
           <TabsTrigger value="options" className="flex-none px-2.5">
-            Options
+            {t("card.options")}
             {mod.options.length > 0 && <Count>{mod.options.length}</Count>}
             {optionsDirty && <UnsavedDot />}
           </TabsTrigger>
           {source ? (
             <TabsTrigger value="contents" className="flex-none px-2.5">
-              Contents
+              {t("card.contents")}
             </TabsTrigger>
           ) : (
             <TabsTrigger value="code" className="flex-none px-2.5">
-              Code
+              {t("card.code")}
               <Count>{Object.keys(draft.files).length}</Count>
               {draft.isDirty && <UnsavedDot />}
             </TabsTrigger>
@@ -246,7 +249,7 @@ function ModSheetBody({
             mod={mod}
             draft={draft}
             actions={actions}
-            author={modAuthor(mod, agents)?.name ?? "An agent"}
+            author={modAuthor(mod, agents)?.name ?? t("sheet.anAgent")}
             activePath={file.path}
             jump={jump}
             onOpenFile={openFile}
@@ -262,11 +265,13 @@ function Count({ children }: { children: number }) {
 }
 
 function UnsavedDot() {
-  return <span role="img" aria-label="Unsaved changes" className="size-1.5 rounded-full bg-foreground/60" />;
+  const { t } = useTranslation("mods");
+  return <span role="img" aria-label={t("sheet.unsaved")} className="size-1.5 rounded-full bg-foreground/60" />;
 }
 
 /** The title, edited in place: it saves when the field is left or Enter is pressed, and Escape takes the edit back. */
 function TitleField({ mod, actions }: { mod: Mod; actions: ModActions }) {
+  const { t } = useTranslation("mods");
   const [text, setText] = useState(mod.title);
   const focused = useRef(false);
   useEffect(() => {
@@ -275,7 +280,7 @@ function TitleField({ mod, actions }: { mod: Mod; actions: ModActions }) {
 
   return (
     <input
-      aria-label="Title"
+      aria-label={t("sheet.titleLabel")}
       value={text}
       maxLength={MAX_TITLE}
       onChange={(e) => setText(e.target.value)}
@@ -300,6 +305,7 @@ function TitleField({ mod, actions }: { mod: Mod; actions: ModActions }) {
 }
 
 function IconPicker({ mod, actions }: { mod: Mod; actions: ModActions }) {
+  const { t } = useTranslation("mods");
   const [open, setOpen] = useState(false);
   const state = modState(mod);
   return (
@@ -309,22 +315,22 @@ function IconPicker({ mod, actions }: { mod: Mod; actions: ModActions }) {
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label="Change the icon"
+              aria-label={t("sheet.changeIcon")}
               className="rounded-lg transition outline-none hover:opacity-80 focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
               <ModIconTile icon={mod.icon} state={state} raised />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Change the icon</TooltipContent>
+        <TooltipContent>{t("sheet.changeIcon")}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" className="w-auto p-2">
-        <div role="group" aria-label="Icon" className="grid grid-cols-4 gap-1">
+        <div role="group" aria-label={t("sheet.icon")} className="grid grid-cols-4 gap-1">
           {MOD_ICONS.map((icon) => (
             <button
               key={icon}
               type="button"
-              aria-label={MOD_ICON_LABEL[icon]}
+              aria-label={t(MOD_ICON_LABEL[icon])}
               aria-pressed={icon === mod.icon}
               onClick={() => {
                 if (icon !== mod.icon) actions.update.mutate({ mod, patch: { icon } });

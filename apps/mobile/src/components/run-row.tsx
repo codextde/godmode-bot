@@ -1,42 +1,42 @@
 import { router } from "expo-router";
 import { memo } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
-import { formatUsd } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Badge, Row, T, tap, type Tone } from "./ui";
 import { activityText, shortTime } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { useRunActivity } from "@/lib/live";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's labels and tones (run-status.tsx). */
-const STATUS_META: Record<RunStatus, { label: string; tone: Tone }> = {
-  queued: { label: "Queued", tone: "neutral" },
-  running: { label: "Running", tone: "brand" },
-  paused: { label: "Paused", tone: "warning" },
-  succeeded: { label: "Succeeded", tone: "success" },
-  failed: { label: "Failed", tone: "danger" },
-  cancelled: { label: "Cancelled", tone: "neutral" },
+const STATUS_META: Record<RunStatus, { tone: Tone }> = {
+  queued: { tone: "neutral" },
+  running: { tone: "brand" },
+  paused: { tone: "warning" },
+  succeeded: { tone: "success" },
+  failed: { tone: "danger" },
+  cancelled: { tone: "neutral" },
 };
 
 export function runStatusLabel(status: RunStatus): string {
-  return STATUS_META[status]?.label ?? status;
+  return STATUS_META[status] ? t(`components:runRow.status.${status}`) : status;
 }
 
 /** What started a run, in the desktop's words. */
 export const TRIGGER_LABEL: Record<RunTrigger, string> = {
-  chat: "Chat",
-  routine: "Automation",
-  check: "Condition check",
-  dream: "Dream",
-  delegation: "Delegation",
-  manual: "Manual",
+  get chat() { return t("components:runRow.trigger.chat"); },
+  get routine() { return t("components:runRow.trigger.routine"); },
+  get check() { return t("components:runRow.trigger.check"); },
+  get dream() { return t("components:runRow.trigger.dream"); },
+  get delegation() { return t("components:runRow.trigger.delegation"); },
+  get manual() { return t("components:runRow.trigger.manual"); },
   api: "API",
-  task: "Task",
-  followup: "Follow-up",
-  heartbeat: "Heartbeat",
-  call: "Phone call",
+  get task() { return t("components:runRow.trigger.task"); },
+  get followup() { return t("components:runRow.trigger.followup"); },
+  get heartbeat() { return t("components:runRow.trigger.heartbeat"); },
+  get call() { return t("components:runRow.trigger.call"); },
 };
 
 /** A run still ahead of its end: working, or waiting for its turn. */
@@ -89,25 +89,25 @@ export function openRun(id: string) {
  */
 export function RunStatusBadge({ run, status = run.status, waitingFor }: { run: Run; status?: RunStatus; waitingFor?: "answer" | "approval" | null }) {
   const asked = waitingFor ?? (run.pause?.reason === "question" ? (run.pause.question?.kind === "approval" ? "approval" : "answer") : null);
-  if (status === "paused" && asked) return <Badge label={asked === "approval" ? "Needs your OK" : "Needs your answer"} tone="warning" />;
-  const meta = STATUS_META[status] ?? STATUS_META.queued;
-  return <Badge label={meta.label} tone={meta.tone} live={status === "running"} />;
+  const { t } = useTranslation("components");
+  if (status === "paused" && asked) return <Badge label={asked === "approval" ? t("runRow.needsOk") : t("runRow.needsAnswer")} tone="warning" />;
+  const known = STATUS_META[status] ? status : "queued";
+  return <Badge label={t(`runRow.status.${known}`)} tone={STATUS_META[known].tone} live={status === "running"} />;
 }
 
 /** One run in a list: what was asked, how it went, who did it, what started it and what it took. Tapping it opens the run. */
 export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: Agent }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const live = isLiveRun(run);
   // Only a row that is working listens for what its agent does right now.
   const activity = useRunActivity(live ? run.id : undefined);
-  const spendTracking = useSpendTracking();
   const finished = run.status === "succeeded" || run.status === "failed" || run.status === "cancelled";
   const meta = [
-    agent?.name ?? "Agent",
-    TRIGGER_LABEL[run.trigger] ?? "Manual",
+    agent?.name ?? t("common:words.agent"),
+    TRIGGER_LABEL[run.trigger] ?? TRIGGER_LABEL.manual,
     shortTime(run.createdAt),
     finished && run.durationMs != null ? formatDuration(run.durationMs) : null,
-    spendTracking && run.costUsd ? formatUsd(run.costUsd) : null,
   ].filter(Boolean);
   const error = run.status === "failed" ? firstLine(run.error, 200) : "";
 
@@ -117,7 +117,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Row style={{ gap: space.sm }}>
           <T variant="callout" numberOfLines={1} style={{ flex: 1, fontSize: 16, fontWeight: "500", letterSpacing: -0.16 }}>
-            {firstLine(run.prompt) || "No prompt"}
+            {firstLine(run.prompt) || t("runRow.noPrompt")}
           </T>
           <RunStatusBadge run={run} />
         </Row>
@@ -130,7 +130,7 @@ export const RunRow = memo(function RunRow({ run, agent }: { run: Run; agent?: A
           </T>
         ) : live ? (
           <T variant="footnote" color={c.brandStrong} numberOfLines={1}>
-            {run.status === "queued" ? "Waiting to start" : activityText(activity)}
+            {run.status === "queued" ? t("runRow.waitingToStart") : activityText(activity)}
           </T>
         ) : null}
       </View>

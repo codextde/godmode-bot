@@ -1,5 +1,6 @@
 import { Stack } from "expo-router";
 import { RefreshControl, ScrollView, StyleSheet, useWindowDimensions, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { ScreenTile } from "@/components/screen-tile";
 import { EmptyState, LoadingState, SectionTitle } from "@/components/ui";
 import { isLive, useLiveScreens, type LiveScreen } from "@/lib/screens";
@@ -7,6 +8,7 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { space } from "@/lib/theme";
 
 export default function Screens() {
+  const { t } = useTranslation("tabs");
   const { screens, loading, refetch } = useLiveScreens();
   const pull = usePullRefresh(refetch);
   const { width } = useWindowDimensions();
@@ -16,9 +18,9 @@ export default function Screens() {
   const live = screens.filter(isLive);
   const idle = screens.filter((s) => !isLive(s));
   const groups: [string, LiveScreen[]][] = [
-    ["Browsers", idle.filter((s) => s.kind === "browser")],
-    ["Virtual machines", idle.filter((s) => s.kind === "vm")],
-    ["Android phones", idle.filter((s) => s.kind === "android")],
+    [t("screens.browsers"), idle.filter((s) => s.kind === "browser")],
+    [t("screens.vms"), idle.filter((s) => s.kind === "vm")],
+    [t("screens.android"), idle.filter((s) => s.kind === "android")],
   ];
 
   return (
@@ -27,11 +29,11 @@ export default function Screens() {
       contentContainerStyle={styles.content}
       refreshControl={<RefreshControl {...pull} />}
     >
-      <Stack.Title large>Screens</Stack.Title>
+      <Stack.Title large>{t("screens.title")}</Stack.Title>
 
       {live.length > 0 ? (
         <View style={styles.section}>
-          <SectionTitle title="Live now" />
+          <SectionTitle title={t("screens.liveNow")} />
           <View style={styles.grid}>
             {live.map((s) => (
               <ScreenTile key={s.key} screen={s} style={tileSize(width > 700 ? (width - space.lg * 2 - space.md) / 2 : width - space.lg * 2)} />
@@ -39,12 +41,12 @@ export default function Screens() {
           </View>
         </View>
       ) : loading ? (
-        <LoadingState label="Looking for screens…" />
+        <LoadingState label={t("screens.loading")} />
       ) : (
         <EmptyState
           icon="screens"
-          title="Nothing on screen right now"
-          body="When an agent browses, works in a VM, on an Android phone or on a screen you shared, you can watch it here live."
+          title={t("screens.empty.title")}
+          body={t("screens.empty.body")}
         />
       )}
 

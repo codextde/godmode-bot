@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CharacterMood, Message } from "@godmode/shared";
 import { useMissingLogins } from "@/lib/hooks";
 import { useConversationFinishedRun, type LiveRun } from "@/stores/live";
+import { t } from "@/i18n";
 import { describeTool, type ToolKind } from "./tool-meta";
 
 export interface AgentMood {
@@ -14,32 +15,32 @@ export interface AgentMood {
 const HAPPY_MS = 3_000;
 const IDLE: AgentMood = { mood: "idle", label: null };
 
-const TOOL_LABEL: Partial<Record<ToolKind, string>> = {
-  browser: "Working in the browser…",
-  computer: "Using the computer…",
-  vault: "Signing in…",
-  delegate: "Asking a teammate…",
-  agents: "Setting up agents…",
-  shell: "Running commands…",
-  file: "Working on files…",
-  web: "Looking things up…",
-  subagent: "Working with helpers…",
-  plan: "Making a plan…",
-};
+const TOOL_LABEL = {
+  browser: "chat:mood.tool.browser",
+  computer: "chat:mood.tool.computer",
+  vault: "chat:mood.tool.vault",
+  delegate: "chat:mood.tool.delegate",
+  agents: "chat:mood.tool.agents",
+  shell: "chat:mood.tool.shell",
+  file: "chat:mood.tool.file",
+  web: "chat:mood.tool.web",
+  subagent: "chat:mood.tool.subagent",
+  plan: "chat:mood.tool.plan",
+} as const satisfies Partial<Record<ToolKind, string>>;
 
 /** What a streaming run looks like on the character: pondering while it writes, busy while tools run. */
 export function liveMood(live: LiveRun | null): AgentMood {
-  if (!live) return { mood: "thinking", label: "Thinking…" };
-  if (live.status === "queued") return { mood: "idle", label: "Queued" };
+  if (!live) return { mood: "thinking", label: t("chat:mood.thinking") };
+  if (live.status === "queued") return { mood: "idle", label: t("common:status.queued") };
   const last = live.blocks[live.blocks.length - 1];
   if (last?.type === "tool_use" && last.result === undefined) {
     const kind = describeTool(last.name, last.input).kind;
-    if (kind === "missing-login") return { mood: "attention", label: "Needs you" };
-    return { mood: "working", label: TOOL_LABEL[kind] ?? "Working…" };
+    if (kind === "missing-login") return { mood: "attention", label: t("chat:mood.needsYou") };
+    return { mood: "working", label: kind in TOOL_LABEL ? t(TOOL_LABEL[kind as keyof typeof TOOL_LABEL]) : t("chat:status.working") };
   }
-  if (live.activity) return { mood: "working", label: "Working…" };
-  if (last?.type === "text") return { mood: "thinking", label: "Writing…" };
-  return { mood: "thinking", label: "Thinking…" };
+  if (live.activity) return { mood: "working", label: t("chat:status.working") };
+  if (last?.type === "text") return { mood: "thinking", label: t("chat:mood.writing") };
+  return { mood: "thinking", label: t("chat:mood.thinking") };
 }
 
 /**
@@ -65,11 +66,11 @@ export function useConversationMood(conversationId: string, messages: Message[],
   }, [missing, messages]);
 
   if (live) return liveMood(live);
-  if (waiting) return { mood: "attention", label: "Needs you" };
-  if (celebrating) return { mood: "happy", label: "Done" };
+  if (waiting) return { mood: "attention", label: t("chat:mood.needsYou") };
+  if (celebrating) return { mood: "happy", label: t("chat:mood.done") };
   const last = messages[messages.length - 1];
   const failed =
     finished?.status === "failed" || (last?.role === "assistant" && last.blocks.some((b) => b.type === "error") && finished?.status !== "succeeded");
-  if (failed) return { mood: "error", label: "Hit a snag" };
+  if (failed) return { mood: "error", label: t("chat:mood.hitSnag") };
   return IDLE;
 }

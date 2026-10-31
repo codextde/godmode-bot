@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { KeyboardAvoidingView, useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -15,7 +16,6 @@ import {
   type MessageBlock,
   type QueuedMessage,
   type RetryMode,
-  budgetPauseTitle,
   retryHelps,
   retryModeOf,
   runEndOf,
@@ -45,6 +45,8 @@ import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
+import { currentLanguage } from "@/lib/i18n";
+import { useTypewriter } from "@/lib/typewriter";
 
 type Item =
   | { key: string; role: "intro" }
@@ -94,6 +96,7 @@ function SystemNote({ content }: { content: string }) {
 }
 
 export default function Chat() {
+  const { t } = useTranslation(["chat", "common"]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
   const keyboardOpen = useKeyboardState((s) => s.isVisible);
@@ -156,8 +159,8 @@ export default function Chat() {
     !!gauge && gauge.tone !== "calm" && gauge.compressible && !compressing && (compressHiddenAt === null || gauge.tokens > compressHiddenAt * 1.2) ? gauge : null;
 
   const scope = useMemo<ChatScopeValue>(
-    () => ({ conversationId: id, agentName: agent?.name ?? "The agent", openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
-    [id, agent?.name, pause],
+    () => ({ conversationId: id, agentName: agent?.name ?? t("thread.theAgent"), openQuestionId: (pause?.reason === "question" && pause.question?.id) || null }),
+    [id, agent?.name, pause, t],
   );
 
   const send = async (content: string, files: PendingFile[]) => {
@@ -216,7 +219,7 @@ export default function Chat() {
       queryClient.setQueryData<ConversationWithMessages>(key, (old) =>
         old ? { ...old, messages: old.messages.filter((m) => m.id !== tempId), queue: old.queue.filter((m: QueuedMessage) => m.id !== queueId) } : old,
       );
-      Alert.alert("Message not sent", errorText(err));
+      Alert.alert(t("thread.notSent"), errorText(err));
       throw err;
     }
   };
@@ -224,7 +227,7 @@ export default function Chat() {
   const onLost = useCallback((text: string) => composer.current?.insert(text), []);
 
   const stop = () => {
-    if (run) void api.runs.cancel(run.id).catch((err) => Alert.alert("Couldn't stop", errorText(err)));
+    if (run) void api.runs.cancel(run.id).catch((err) => Alert.alert(t("thread.stopFailed"), errorText(err)));
   };
 
   const resume = () => {
@@ -232,7 +235,7 @@ export default function Chat() {
     api.conversations
       .continue(id)
       .then((continued) => useLive.getState().runStarted(continued))
-      .catch((err) => Alert.alert("Couldn't continue", errorText(err)));
+      .catch((err) => Alert.alert(t("thread.continueFailed"), errorText(err)));
   };
 
   // The latest turn ended early (failed, stopped, cut off): one tap picks it up — when nothing else would happen first.
@@ -253,7 +256,7 @@ export default function Chat() {
       .catch((err) => {
         // Something else moved the chat on (another tap, the computer): show that instead of an error.
         if (err instanceof ApiError && err.code === "stale") void queryClient.invalidateQueries({ queryKey: qk.conversation(id) });
-        else Alert.alert("Couldn't pick this up", errorText(err));
+        else Alert.alert(t("thread.retryFailed"), errorText(err));
       })
       .finally(() => setRetrying(false));
   };
@@ -268,15 +271,15 @@ export default function Chat() {
         return true;
       })
       .catch((err) => {
-        Alert.alert("Couldn't change the chat", errorText(err));
+        Alert.alert(t("thread.changeFailed"), errorText(err));
         return false;
       });
 
   const remove = () =>
-    Alert.alert("Delete this chat?", "It's removed on your computer too.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("thread.deleteTitle"), t("thread.deleteMessage"), [
+      { text: t("common:actions.cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("common:actions.delete"),
         style: "destructive",
         onPress: () =>
           void api.conversations
@@ -285,29 +288,29 @@ export default function Chat() {
               void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
               router.back();
             })
-            .catch((err) => Alert.alert("Couldn't delete the chat", errorText(err))),
+            .catch((err) => Alert.alert(t("thread.deleteFailed"), errorText(err))),
       },
     ]);
 
   const rename = () => {
     if (process.env.EXPO_OS !== "ios") return setRenaming(true);
-    Alert.prompt("Rename chat", undefined, (text) => text.trim() && void change({ title: text.trim() }), "plain-text", conversation.data?.title ?? "");
+    Alert.prompt(t("thread.rename"), undefined, (text) => text.trim() && void change({ title: text.trim() }), "plain-text", conversation.data?.title ?? "");
   };
 
-  const title = conversation.data?.title || "Chat";
+  const title = useTypewriter(conversation.data?.title || t("thread.fallbackTitle"));
   const primary = screens[0];
   const data = conversation.data;
   const menu: HeaderMenuItem[] = data
     ? [
         ...(running && !paused
-          ? [{ icon: "pause" as const, title: "Pause", onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert("Couldn't pause", errorText(err))) }]
+          ? [{ icon: "pause" as const, title: t("thread.menu.pause"), onPress: () => void api.conversations.pause(id).catch((err) => Alert.alert(t("thread.pauseFailed"), errorText(err))) }]
           : []),
-        { icon: "pencil", title: "Rename", onPress: rename },
-        { icon: "pin", title: data.pinned ? "Unpin" : "Pin", onPress: () => void change({ pinned: !data.pinned }) },
+        { icon: "pencil", title: t("common:actions.rename"), onPress: rename },
+        { icon: "pin", title: data.pinned ? t("thread.menu.unpin") : t("thread.menu.pin"), onPress: () => void change({ pinned: !data.pinned }) },
         data.archived
-          ? { icon: "unarchive", title: "Unarchive", onPress: () => void change({ archived: false }) }
-          : { icon: "archive", title: "Archive", onPress: () => void change({ archived: true }).then((done) => done && router.back()) },
-        { icon: "trash", title: "Delete", destructive: true, onPress: remove },
+          ? { icon: "unarchive", title: t("thread.menu.unarchive"), onPress: () => void change({ archived: false }) }
+          : { icon: "archive", title: t("thread.menu.archive"), onPress: () => void change({ archived: true }).then((done) => done && router.back()) },
+        { icon: "trash", title: t("common:actions.delete"), destructive: true, onPress: remove },
       ]
     : [];
 
@@ -321,11 +324,11 @@ export default function Chat() {
         case "user":
           return <UserMessage message={item.message} />;
         case "live":
-          return <LiveMessage conversationId={id} runId={runId} />;
+          return <LiveMessage conversationId={id} runId={runId} agent={agent} />;
         case "note":
           return <SystemNote content={item.content} />;
         default:
-          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} />;
+          return <AssistantMessage blocks={item.blocks} content={item.content} streaming={item.streaming} agent={agent} />;
       }
     },
     [agent, id, runId],
@@ -335,14 +338,14 @@ export default function Chat() {
     <>
       <Stack.Title>{title}</Stack.Title>
       <HeaderActions
-        actions={primary ? [{ icon: "eye", label: "Watch the agent's screen", onPress: () => router.push(screenHref(primary)) }] : []}
+        actions={primary ? [{ icon: "eye", label: t("thread.watchScreen"), onPress: () => router.push(screenHref(primary)) }] : []}
         menu={menu}
       />
       <KeyboardAvoidingView behavior="translate-with-padding" style={{ flex: 1 }}>
         {!conversation.data ? (
           <View style={{ flex: 1 }}>
             {conversation.isError ? (
-              <ErrorState title="Couldn't open this chat" error={errorText(conversation.error)} onRetry={() => void conversation.refetch()} />
+              <ErrorState title={t("thread.openFailed")} error={errorText(conversation.error)} onRetry={() => void conversation.refetch()} />
             ) : (
               <ChatSkeleton />
             )}
@@ -365,28 +368,27 @@ export default function Chat() {
             />
           </ChatScope.Provider>
         )}
-        {forYou.data?.some((t) => !t.questionId) ? <ForYouStrip tasks={forYou.data.filter((t) => !t.questionId)} /> : null}
+        {forYou.data?.some((task) => !task.questionId) ? <ForYouStrip tasks={forYou.data.filter((task) => !task.questionId)} /> : null}
         {run && primary ? <ChatLiveStrip screen={primary} runId={run.id} /> : null}
         {paused?.reason === "question" ? (
-          <AskingStrip agentName={agent?.name ?? "The agent"} approval={paused.question?.kind === "approval"} />
+          <AskingStrip agentName={agent?.name ?? t("thread.theAgent")} approval={paused.question?.kind === "approval"} />
         ) : paused ? (
           <PausedStrip
-            limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null}
-            held={paused.reason === "budget" && paused.budget ? budgetPauseTitle(paused.budget, agent?.name ?? "The agent", paused.pausedAt) : null}
+            limit={paused.reason === "limit" ? (paused.limit ?? t("thread.usageLimit")) : null}
             auto={paused.auto}
             onContinue={resume}
           />
         ) : ended ? (
           <EndedStrip mode={ended.mode} onRetry={retry} busy={retrying} />
         ) : followup ? (
-          <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? "The agent"} />
+          <FollowupStrip conversationId={id} followup={followup} agentName={agent?.name ?? t("thread.theAgent")} />
         ) : longChat ? (
           <LongChatStrip pct={longChat.share === null ? null : Math.round(longChat.share * 100)} full={longChat.tone === "full"} onCompress={() => void send("/compress", [])} onHide={() => setCompressHiddenAt(longChat.tokens)} />
         ) : null}
         <QueueTray
           conversationId={id}
           queue={queue}
-          agentName={agent?.name ?? "The agent"}
+          agentName={agent?.name ?? t("thread.theAgent")}
           running={!!run && !paused}
           paused={paused?.reason ?? null}
           onLost={onLost}
@@ -400,21 +402,21 @@ export default function Chat() {
             onSend={send}
             onStop={stop}
             running={!!run && !paused}
-            sendLabel={waiting ? "Send answer" : paused ? (paused.reason === "user" ? "Send and continue" : "Queue message") : queueing ? "Queue message" : null}
+            sendLabel={waiting ? t("thread.send.answer") : paused ? (paused.reason === "user" ? t("thread.send.andContinue") : t("thread.send.queue")) : queueing ? t("thread.send.queue") : null}
             placeholder={
               !agent
-                ? "Message"
+                ? t("thread.placeholder.message")
                 : waiting
-                  ? `Answer ${agent.name}`
+                  ? t("thread.placeholder.answer", { name: agent.name })
                   : paused?.reason === "user"
-                    ? `Tell ${agent.name} how to go on`
+                    ? t("thread.placeholder.howToGoOn", { name: agent.name })
                     : paused?.reason === "limit"
-                      ? `Message ${agent.name} — goes along after the reset`
+                      ? t("thread.placeholder.afterReset", { name: agent.name })
                       : paused
-                        ? `Message ${agent.name} — goes along when it continues`
+                        ? t("thread.placeholder.whenContinues", { name: agent.name })
                         : run
-                          ? `Queue a message for ${agent.name}`
-                          : `Message ${agent.name}, or / for commands`
+                          ? t("thread.placeholder.queue", { name: agent.name })
+                          : t("thread.placeholder.default", { name: agent.name })
             }
             disabled={agent ? !agent.enabled : false}
             trailing={
@@ -439,12 +441,12 @@ export default function Chat() {
 }
 
 /** The answer being written: it alone renders with every word that arrives. */
-const LiveMessage = memo(function LiveMessage({ conversationId, runId }: { conversationId: string; runId?: string }) {
+const LiveMessage = memo(function LiveMessage({ conversationId, runId, agent }: { conversationId: string; runId?: string; agent?: Agent }) {
   const blocks = useLive((s) => {
     const draft = s.drafts[conversationId];
     return draft && draft.runId === runId ? draft.blocks : NO_BLOCKS;
   });
-  return <AssistantMessage blocks={blocks} streaming />;
+  return <AssistantMessage blocks={blocks} streaming agent={agent} />;
 });
 
 function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string }) {
@@ -454,6 +456,7 @@ function ChatLiveStrip({ screen, runId }: { screen: LiveScreen; runId: string })
 /** At the top while older messages exist: they load when the list gets there, or with a tap when that failed. */
 function Earlier({ conversationId }: { conversationId: string }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   const [failed, setFailed] = useState(false);
   const load = () => {
     setFailed(false);
@@ -464,10 +467,10 @@ function Earlier({ conversationId }: { conversationId: string }) {
     loadEarlier(conversationId).catch(() => setFailed(true));
   }, [conversationId]);
   return (
-    <Pressable onPress={load} disabled={!failed} accessibilityRole="button" accessibilityLabel={failed ? "Load earlier messages" : "Loading earlier messages"} style={styles.earlier}>
+    <Pressable onPress={load} disabled={!failed} accessibilityRole="button" accessibilityLabel={failed ? t("thread.earlier.load") : t("thread.earlier.loading")} style={styles.earlier}>
       {failed ? <Icon name="refresh" size={12} color={c.textMuted} /> : <ActivityIndicator size="small" color={c.textFaint} />}
       <T variant="caption" muted>
-        {failed ? "Couldn't load earlier messages. Tap to try again" : "Earlier messages"}
+        {failed ? t("thread.earlier.failed") : t("thread.earlier.title")}
       </T>
     </Pressable>
   );
@@ -476,6 +479,7 @@ function Earlier({ conversationId }: { conversationId: string }) {
 /** Android has no text prompt of its own. */
 function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: string; onClose: () => void; onSave: (title: string) => void }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   const [text, setText] = useState(title);
   useEffect(() => {
     if (open) setText(title);
@@ -486,10 +490,10 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
   };
   return (
     <Modal visible={open} transparent animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <Pressable accessibilityLabel="Close" onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
+      <Pressable accessibilityLabel={t("common:actions.close")} onPress={onClose} style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} />
       <View style={styles.dialogWrap} pointerEvents="box-none">
         <View style={[styles.dialog, { backgroundColor: c.surface }]} accessibilityViewIsModal>
-          <T variant="headline">Rename chat</T>
+          <T variant="headline">{t("thread.rename")}</T>
           <TextInput
             autoFocus
             value={text}
@@ -498,12 +502,12 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
             returnKeyType="done"
             maxLength={200}
             selectTextOnFocus
-            accessibilityLabel="Chat title"
+            accessibilityLabel={t("thread.renameLabel")}
             style={[type.body, styles.dialogInput, { color: c.text, backgroundColor: c.sunken }]}
           />
           <View style={{ flexDirection: "row", gap: space.sm }}>
-            <Button title="Cancel" variant="secondary" onPress={onClose} style={{ flex: 1 }} />
-            <Button title="Save" onPress={save} disabled={!text.trim()} style={{ flex: 1 }} />
+            <Button title={t("common:actions.cancel")} variant="secondary" onPress={onClose} style={{ flex: 1 }} />
+            <Button title={t("common:actions.save")} onPress={save} disabled={!text.trim()} style={{ flex: 1 }} />
           </View>
         </View>
       </View>
@@ -514,14 +518,15 @@ function RenameDialog({ open, title, onClose, onSave }: { open: boolean; title: 
 /** Above the composer while the agent plans to come back to the chat on its own. */
 function FollowupStrip({ conversationId, followup, agentName }: { conversationId: string; followup: ConversationFollowup; agentName: string }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   const [open, setOpen] = useState(false);
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: qk.conversation(conversationId) });
     void queryClient.invalidateQueries({ queryKey: qk.conversations, predicate: (q) => q.queryKey[1] !== "detail" });
   };
   const failed = (title: string) => (err: unknown) =>
-    Alert.alert(title, err instanceof ApiError && err.code === "device_forbidden" ? "Update Godmode on your computer to change follow-ups from the phone." : errorText(err));
-  const move = (dueAt: Date) => void api.conversations.followup.move(conversationId, dueAt.toISOString()).then(refresh).catch(failed("Couldn't move the follow-up"));
+    Alert.alert(title, err instanceof ApiError && err.code === "device_forbidden" ? t("thread.followup.updateDesktop") : errorText(err));
+  const move = (dueAt: Date) => void api.conversations.followup.move(conversationId, dueAt.toISOString()).then(refresh).catch(failed(t("thread.followup.moveFailed")));
   const inAnHour = new Date(Date.now() + 3600_000);
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -529,7 +534,7 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
   const items: HeaderMenuItem[] = [
     {
       icon: "play",
-      title: "Continue now",
+      title: t("thread.followup.continueNow"),
       onPress: () =>
         void api.conversations.followup
           .runNow(conversationId)
@@ -537,22 +542,22 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
             useLive.getState().runStarted(started);
             refresh();
           })
-          .catch(failed("Couldn't continue now")),
+          .catch(failed(t("thread.followup.continueNowFailed"))),
     },
-    { icon: "clock", title: "In an hour", onPress: () => move(inAnHour) },
-    { icon: "clock", title: "Tomorrow at 09:00", onPress: () => move(tomorrow) },
+    { icon: "clock", title: t("thread.followup.inAnHour"), onPress: () => move(inAnHour) },
+    { icon: "clock", title: t("thread.followup.tomorrow"), onPress: () => move(tomorrow) },
     {
       icon: "close",
-      title: "Cancel the follow-up",
+      title: t("thread.followup.cancel"),
       destructive: true,
-      onPress: () => void api.conversations.followup.cancel(conversationId).then(refresh).catch(failed("Couldn't cancel the follow-up")),
+      onPress: () => void api.conversations.followup.cancel(conversationId).then(refresh).catch(failed(t("thread.followup.cancelFailed"))),
     },
   ];
   return (
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${agentName} continues ${whenText(followup.dueAt)}. Change`}
+        accessibilityLabel={t("thread.followup.a11y", { name: agentName, when: whenText(followup.dueAt) })}
         onPress={() => {
           tap();
           setOpen(true);
@@ -562,12 +567,12 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
         <Icon name="clock" size={15} color={c.textMuted} />
         <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
           <T variant="footnote" style={{ fontWeight: "600" }}>
-            Continues {whenText(followup.dueAt)}
+            {t("thread.followup.continues", { when: whenText(followup.dueAt) })}
           </T>
           {followup.note ? `  ${followup.note}` : ""}
         </T>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          Change
+          {t("thread.followup.change")}
         </T>
       </Pressable>
       <MenuSheet items={items} open={open} onClose={() => setOpen(false)} />
@@ -577,6 +582,7 @@ function FollowupStrip({ conversationId, followup, agentName }: { conversationId
 
 /** Shaped like a chat while its messages load: a long chat takes a moment over the phone's connection. */
 function ChatSkeleton() {
+  const { t } = useTranslation("chat");
   const widths = [["62%", 0], ["84%", 1], ["48%", 0], ["90%", 1], ["70%", 1]] as const;
   return (
     <ScrollView
@@ -584,7 +590,7 @@ function ChatSkeleton() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={styles.skeleton}
       accessibilityRole="progressbar"
-      accessibilityLabel="Loading the chat"
+      accessibilityLabel={t("thread.loading")}
     >
       <View style={{ alignItems: "center", gap: 10, paddingBottom: space.lg }}>
         <Skeleton width={88} height={88} radius={30} />
@@ -607,6 +613,7 @@ function ChatSkeleton() {
 /** Above the composer while the agent waits for something only the human can do. */
 function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   const first = tasks[0]!;
   return (
     <Pressable
@@ -617,13 +624,13 @@ function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
       <Icon name="person" size={15} color={c.warning} />
       <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
         <T variant="footnote" style={{ fontWeight: "600" }}>
-          {first.kind === "decision" ? "Waiting for your answer: " : "Waiting for you: "}
+          {first.kind === "decision" ? t("thread.forYou.answer") : t("thread.forYou.you")}
         </T>
         {first.title}
-        {tasks.length > 1 ? ` and ${tasks.length - 1} more` : ""}
+        {tasks.length > 1 ? t("thread.forYou.more", { count: tasks.length - 1 }) : ""}
       </T>
       <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-        Open
+        {t("common:actions.open")}
       </T>
     </Pressable>
   );
@@ -632,32 +639,30 @@ function ForYouStrip({ tasks }: { tasks: HumanTask[] }) {
 /** Above the composer while the chat's run waits for the human's answer: the reply in the composer is the answer. */
 function AskingStrip({ agentName, approval }: { agentName: string; approval: boolean }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <View style={[styles.paused, { backgroundColor: c.warningSoft, borderColor: c.warning }]}>
       <Icon name="warning" size={15} color={c.warning} />
       <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
-        {approval ? `${agentName} needs your OK — reply below` : `${agentName} is waiting for your answer — reply below`}
+        {approval ? t("thread.asking.approval", { name: agentName }) : t("thread.asking.question", { name: agentName })}
       </T>
     </View>
   );
 }
 
 /** Above the composer while the chat's run stands still. */
-function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; held: string | null; auto: boolean; onContinue: () => void }) {
+function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Icon name={limit || held ? "clock" : "pause"} size={15} color={limit || held ? c.warning : c.textMuted} />
+      <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {held
-          ? `${held} — raise the budget on your computer, or let it run.`
-          : limit
-            ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}`
-            : "Paused — continues where it stopped"}
+        {limit ? (auto ? t("thread.paused.limitAuto", { limit }) : t("thread.paused.limit", { limit })) : t("thread.paused.user")}
       </T>
-      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={held ? "Let it run" : "Continue"}>
+      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("common:actions.continue")}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {held ? "Let it run" : limit ? "Try now" : "Continue"}
+          {limit ? t("thread.paused.tryNow") : t("common:actions.continue")}
         </T>
       </Pressable>
     </View>
@@ -681,18 +686,19 @@ function endedTurn(conv: ConversationWithMessages): { runId: string; mode: Retry
 /** Above the composer once the chat gets long. */
 function LongChatStrip({ pct, full, onCompress, onHide }: { pct: number | null; full: boolean; onCompress: () => void; onHide: () => void }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <View style={[styles.paused, { backgroundColor: full ? c.dangerSoft : c.warningSoft, borderColor: c.border }]}>
       <Icon name="layers" size={15} color={full ? c.danger : c.warning} />
       <T variant="footnote" style={{ flex: 1 }} numberOfLines={2}>
-        This chat is getting long{pct !== null ? ` · ${pct}%` : ""}
+        {pct !== null ? t("thread.longChat.titlePct", { pct }) : t("thread.longChat.title")}
       </T>
-      <Pressable onPress={() => { tap(); onCompress(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Compress the chat">
+      <Pressable onPress={() => { tap(); onCompress(); }} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("thread.longChat.compressA11y")}>
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          Compress
+          {t("thread.longChat.compress")}
         </T>
       </Pressable>
-      <Pressable onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel="Hide">
+      <Pressable onPress={onHide} hitSlop={10} accessibilityRole="button" accessibilityLabel={t("thread.longChat.hide")}>
         <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
       </Pressable>
     </View>
@@ -702,23 +708,24 @@ function LongChatStrip({ pct, full, onCompress, onHide }: { pct: number | null; 
 /** Above the composer when the last turn ended early. */
 function EndedStrip({ mode, onRetry, busy }: { mode: RetryMode; onRetry: () => void; busy: boolean }) {
   const c = useColors();
+  const { t } = useTranslation(["chat", "common"]);
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
       <Icon name="warning" size={15} color={c.textMuted} />
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {mode === "continue" ? "Stopped before it was done" : "Didn't get through"}
+        {mode === "continue" ? t("thread.ended.stopped") : t("thread.ended.failed")}
       </T>
       <Pressable
         onPress={onRetry}
         disabled={busy}
         hitSlop={10}
         accessibilityRole="button"
-        accessibilityLabel={mode === "continue" ? "Continue" : "Try again"}
+        accessibilityLabel={mode === "continue" ? t("common:actions.continue") : t("common:actions.tryAgain")}
         accessibilityState={{ busy, disabled: busy }}
         style={{ opacity: busy ? 0.5 : 1 }}
       >
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {mode === "continue" ? "Continue" : "Try again"}
+          {mode === "continue" ? t("common:actions.continue") : t("common:actions.tryAgain")}
         </T>
       </Pressable>
     </View>
@@ -730,7 +737,7 @@ function Intro({ agent, conversationId, running }: { agent: Agent; conversationI
   const c = useColors();
   // The phone doesn't know the human's name, so the greeting says "there".
   const greeting = useMemo(
-    () => characterGreeting({ name: agent.name, personality: agent.personality ?? "", seed: conversationId }),
+    () => characterGreeting({ name: agent.name, personality: agent.personality ?? "", seed: conversationId, lang: currentLanguage() }),
     [agent.name, agent.personality, conversationId],
   );
   return (

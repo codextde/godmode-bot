@@ -4,23 +4,44 @@ import type { Task, TaskBlockedKind, TaskPriority, TaskStatus, TaskType, Workspa
 import { isWaiting, waitsForSubtasks } from "@godmode/shared";
 import { followupWhen } from "@/components/chat/followup";
 import { cn } from "@/lib/utils";
+import { currentLanguage, intlLocale, t } from "@/i18n";
 
 export const BOARD_COLUMNS: TaskStatus[] = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 
-export const STATUS_META: Record<TaskStatus, { label: string; hint: string; tone: string }> = {
-  backlog: { label: "Backlog", hint: "Parked. Assigning an agent here never starts it.", tone: "text-muted-foreground" },
-  todo: { label: "Todo", hint: "Queued. A task here with an agent starts that agent — the most urgent first.", tone: "text-foreground/70" },
-  in_progress: { label: "In progress", hint: "The agent is working on it.", tone: "text-amber-500" },
-  in_review: { label: "In review", hint: "Delivered — waiting for your review.", tone: "text-emerald-500" },
-  blocked: { label: "Blocked", hint: "Stalled: the agent needs something, the run failed or was stopped, or publishing didn't work.", tone: "text-rose-500" },
-  done: { label: "Done", hint: "Completed. Set automatically when the pull request merges.", tone: "text-sky-500" },
-  cancelled: { label: "Cancelled", hint: "Decided not to do it.", tone: "text-muted-foreground" },
+const statusMeta = (status: TaskStatus, tone: string) => ({
+  get label() {
+    return t(`tasks:status.${status}.label`);
+  },
+  get hint() {
+    return t(`tasks:status.${status}.hint`);
+  },
+  tone,
+});
+
+export const STATUS_META: Record<TaskStatus, { readonly label: string; readonly hint: string; tone: string }> = {
+  backlog: statusMeta("backlog", "text-muted-foreground"),
+  todo: statusMeta("todo", "text-foreground/70"),
+  in_progress: statusMeta("in_progress", "text-amber-500"),
+  in_review: statusMeta("in_review", "text-emerald-500"),
+  blocked: statusMeta("blocked", "text-rose-500"),
+  done: statusMeta("done", "text-sky-500"),
+  cancelled: statusMeta("cancelled", "text-muted-foreground"),
 };
 
-export const TYPE_META: Record<TaskType, { label: string; hint: string; icon: ComponentType<{ className?: string }> }> = {
-  general: { label: "Task", hint: "The agent does it and reports back.", icon: ClipboardList },
-  coding: { label: "Coding", hint: "Works on its own branch and worktree, opens a pull request.", icon: CodeXml },
-  research: { label: "Research", hint: "The agent investigates and writes a report.", icon: Telescope },
+const typeMeta = (type: TaskType, icon: ComponentType<{ className?: string }>) => ({
+  get label() {
+    return t(`tasks:type.${type}.label`);
+  },
+  get hint() {
+    return t(`tasks:type.${type}.hint`);
+  },
+  icon,
+});
+
+export const TYPE_META: Record<TaskType, { readonly label: string; readonly hint: string; icon: ComponentType<{ className?: string }> }> = {
+  general: typeMeta("general", ClipboardList),
+  coding: typeMeta("coding", CodeXml),
+  research: typeMeta("research", Telescope),
 };
 
 /** Linear-style status glyph: dashed ring, ring, half, three quarters, ban, check, cross. */
@@ -93,10 +114,10 @@ export function pauseLabel(task: Task): string | null {
   if (task.status !== "in_progress" || !task.pause) return null;
   if (task.pause.reason === "question") {
     const title = task.pause.question?.title ?? "";
-    return `${task.pause.question?.kind === "approval" ? "Needs your OK" : "Needs your answer"}${title ? `: ${title}` : ""}`;
+    if (task.pause.question?.kind === "approval") return title ? t("tasks:pause.needsOkTitle", { title }) : t("tasks:pause.needsOk");
+    return title ? t("tasks:pause.needsAnswerTitle", { title }) : t("tasks:pause.needsAnswer");
   }
-  if (task.pause.reason === "budget") return task.pause.budget?.scope === "team" ? "Held — the team's budget is used up" : "Held — its agent's budget is used up";
-  return task.pause.reason === "limit" ? `Waiting — Claude's ${task.pause.limit ?? "usage limit"} is reached` : "Paused";
+  return task.pause.reason === "limit" ? t("tasks:pause.limit", { limit: task.pause.limit ?? t("tasks:pause.usageLimit") }) : t("tasks:pause.paused");
 }
 
 /** "owner/repo" of a clone URL (https, ssh or git@host:owner/repo), or its last path segment. */
@@ -128,12 +149,19 @@ export function taskRepoLabel(task: Task, fallback: WorkspaceSource | undefined)
   return fallback ? sourceLabel(fallback) : "";
 }
 
-export const PRIORITY_META: Record<TaskPriority, { label: string; tone: string }> = {
-  urgent: { label: "Urgent", tone: "text-rose-600 dark:text-rose-400" },
-  high: { label: "High", tone: "text-foreground/80" },
-  medium: { label: "Medium", tone: "text-foreground/70" },
-  low: { label: "Low", tone: "text-muted-foreground" },
-  none: { label: "No priority", tone: "text-muted-foreground" },
+const priorityMeta = (priority: TaskPriority, tone: string) => ({
+  get label() {
+    return t(`tasks:priority.${priority}`);
+  },
+  tone,
+});
+
+export const PRIORITY_META: Record<TaskPriority, { readonly label: string; tone: string }> = {
+  urgent: priorityMeta("urgent", "text-rose-600 dark:text-rose-400"),
+  high: priorityMeta("high", "text-foreground/80"),
+  medium: priorityMeta("medium", "text-foreground/70"),
+  low: priorityMeta("low", "text-muted-foreground"),
+  none: priorityMeta("none", "text-muted-foreground"),
 };
 
 /** Linear-style priority glyph: a filled square with "!" for urgent, three / two / one bars, three dots for none. */
@@ -168,23 +196,30 @@ export function PriorityIcon({ priority, className }: { priority: TaskPriority; 
 }
 
 /** What each kind of block tells the human, and the way on it offers. */
-export const BLOCKED_META: Record<TaskBlockedKind, { title: (agent: string) => string; cardPrefix: string }> = {
-  needs_input: { title: (agent) => `${agent} needs something from you`, cardPrefix: "Needs you:" },
-  failed: { title: () => "The run failed", cardPrefix: "Failed:" },
-  stopped: { title: () => "Stopped", cardPrefix: "Stopped:" },
-  interrupted: { title: () => "Interrupted by a restart", cardPrefix: "Interrupted:" },
-  publish: { title: () => "Couldn't publish the work", cardPrefix: "Publishing failed:" },
-  setup: { title: () => "Couldn't set it up", cardPrefix: "Setup:" },
-  manual: { title: () => "Blocked", cardPrefix: "" },
+const blockedMeta = (kind: Exclude<TaskBlockedKind, "manual">) => ({
+  title: (agent: string) => t(`tasks:blocked.${kind}.title`, { agent }),
+  get cardPrefix() {
+    return t(`tasks:blocked.${kind}.cardPrefix`);
+  },
+});
+
+export const BLOCKED_META: Record<TaskBlockedKind, { title: (agent: string) => string; readonly cardPrefix: string }> = {
+  needs_input: blockedMeta("needs_input"),
+  failed: blockedMeta("failed"),
+  stopped: blockedMeta("stopped"),
+  interrupted: blockedMeta("interrupted"),
+  publish: blockedMeta("publish"),
+  setup: blockedMeta("setup"),
+  manual: { title: () => t("tasks:blocked.manual.title"), cardPrefix: "" },
 };
 
 /** "Waiting — continues tomorrow at 10:00" for a ticket that waits for the time its agent set. */
 export function waitingLabel(task: Task): string | null {
   if (waitsForSubtasks(task)) {
     const { open, blocked } = task.subtasks!;
-    return `Waiting for ${open === 1 ? "1 part" : `${open} parts`}${blocked ? ` · ${blocked} blocked` : ""}`;
+    return blocked ? t("tasks:waiting.partsBlocked", { count: open, blocked }) : t("tasks:waiting.parts", { count: open });
   }
-  return isWaiting(task) && task.followup ? `Waiting — continues ${followupWhen(task.followup.dueAt)}` : null;
+  return isWaiting(task) && task.followup ? t("tasks:waiting.continues", { when: followupWhen(task.followup.dueAt) }) : null;
 }
 
 /** The approve mutation (tasks page); its variables are the ticket being approved. */
@@ -211,13 +246,14 @@ export function daysUntil(day: string, now = new Date()): number {
 /** "Today", "Tomorrow", "Yesterday", "Fri 9 Oct", "9 Oct 2027". */
 export function dueLabel(day: string, now = new Date()): string {
   const n = daysUntil(day, now);
-  if (n === 0) return "Today";
-  if (n === 1) return "Tomorrow";
-  if (n === -1) return "Yesterday";
+  if (n === 0) return t("common:words.today");
+  if (n === 1) return t("tasks:due.tomorrow");
+  if (n === -1) return t("common:words.yesterday");
   const d = dayOf(day);
+  const locale = currentLanguage() === "de" ? intlLocale() : "en-GB";
   return d.getFullYear() === now.getFullYear()
-    ? d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }).replace(",", "")
-    : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+    ? d.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" }).replace(",", "")
+    : d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
 }
 
 const LABEL_TONES = [
@@ -239,14 +275,8 @@ export function labelTone(label: string): string {
 /** "45s", "12m", "1h 04m". */
 export function formatWork(ms: number): string {
   const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
+  if (s < 60) return t("tasks:work.seconds", { n: s });
   const m = Math.round(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
-}
-
-/** "$0.84", "<$0.01". */
-export function formatCost(usd: number): string {
-  if (usd > 0 && usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
+  if (m < 60) return t("tasks:work.minutes", { n: m });
+  return t("tasks:work.hours", { h: Math.floor(m / 60), m: String(m % 60).padStart(2, "0") });
 }

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { RoutineTriggerType } from "@godmode/shared";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -7,12 +8,13 @@ import { EASY_TRIGGER_TEXT, TRIGGER_ORDER, TRIGGER_TYPES } from "./trigger-meta"
 
 /** Four cards: what starts the automation. */
 export function TriggerPicker({ value, onChange, className }: { value: RoutineTriggerType; onChange: (type: RoutineTriggerType) => void; className?: string }) {
+  const { t } = useTranslation("automations");
   const easy = useEasyMode();
   return (
     <RadioGroup
       value={value}
       onValueChange={(v) => onChange(v as RoutineTriggerType)}
-      aria-label="What starts this automation"
+      aria-label={t("trigger.pickerLabel")}
       className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2", className)}
     >
       {TRIGGER_ORDER.map((type) => {

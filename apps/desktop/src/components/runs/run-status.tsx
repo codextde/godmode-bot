@@ -1,7 +1,9 @@
 import type { RunStatus, RunTrigger } from "@godmode/shared";
 import { findModel } from "@godmode/shared";
 import { AlarmClock, Ban, CheckCircle2, CirclePause, Clock3, Hand, HeartPulse, MessageSquare, Moon, Phone, Plug, Radar, Share2, SquareKanban, Workflow, XCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Orb } from "@/components/aicss/Orb";
+import { t } from "@/i18n";
 import { useModelCatalog } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 
@@ -26,14 +28,6 @@ export function formatElapsed(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function formatCost(usd: number | null | undefined): string {
-  if (usd == null || !Number.isFinite(usd)) return "—";
-  if (usd === 0) return "$0";
-  if (usd < 0.01) return "<$0.01";
-  if (usd < 10) return `$${usd.toFixed(2)}`;
-  return `$${usd.toFixed(0)}`;
-}
-
 export function formatTokens(n: number | null | undefined): string {
   if (n == null) return "—";
   if (n < 1000) return String(n);
@@ -43,17 +37,54 @@ export function formatTokens(n: number | null | undefined): string {
 
 /** Label lookup: "Opus 5.5" for model ids and aliases Claude Code knows, the raw id otherwise. */
 export function useModelLabel(): (id: string | null | undefined) => string {
+  const { t } = useTranslation("runs");
   const { catalog } = useModelCatalog();
-  return (id) => (id ? (findModel(catalog.models, id)?.label ?? id) : "Default");
+  return (id) => (id ? (findModel(catalog.models, id)?.label ?? id) : t("model.default"));
 }
 
 const STATUS_META: Record<RunStatus, { label: string; className: string; dot: string }> = {
-  queued: { label: "Queued", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
-  running: { label: "Running", className: "border-brand/25 bg-brand-soft text-brand-strong", dot: "bg-brand animate-live-dot" },
-  paused: { label: "Paused", className: "border-warning/30 bg-warning/[0.07] text-warning", dot: "bg-warning" },
-  succeeded: { label: "Succeeded", className: "border-success/20 bg-success/[0.08] text-success", dot: "bg-success" },
-  failed: { label: "Failed", className: "border-destructive/20 bg-destructive/[0.06] text-destructive", dot: "bg-destructive" },
-  cancelled: { label: "Cancelled", className: "border-border bg-secondary text-muted-foreground", dot: "bg-muted-foreground/60" },
+  queued: {
+    className: "border-border bg-secondary text-muted-foreground",
+    dot: "bg-muted-foreground/60",
+    get label() {
+      return t("common:status.queued");
+    },
+  },
+  running: {
+    className: "border-brand/25 bg-brand-soft text-brand-strong",
+    dot: "bg-brand animate-live-dot",
+    get label() {
+      return t("common:status.running");
+    },
+  },
+  paused: {
+    className: "border-warning/30 bg-warning/[0.07] text-warning",
+    dot: "bg-warning",
+    get label() {
+      return t("runs:status.paused");
+    },
+  },
+  succeeded: {
+    className: "border-success/20 bg-success/[0.08] text-success",
+    dot: "bg-success",
+    get label() {
+      return t("common:status.succeeded");
+    },
+  },
+  failed: {
+    className: "border-destructive/20 bg-destructive/[0.06] text-destructive",
+    dot: "bg-destructive",
+    get label() {
+      return t("common:status.failed");
+    },
+  },
+  cancelled: {
+    className: "border-border bg-secondary text-muted-foreground",
+    dot: "bg-muted-foreground/60",
+    get label() {
+      return t("common:status.cancelled");
+    },
+  },
 };
 
 export function runStatusLabel(status: RunStatus): string {
@@ -62,8 +93,9 @@ export function runStatusLabel(status: RunStatus): string {
 
 /** Compact pill: coloured dot + label. `waitingFor`: a paused run that waits for the human's answer says so. */
 export function RunStatusBadge({ status, className, waitingFor }: { status: RunStatus; className?: string; waitingFor?: "answer" | "approval" | null }) {
+  const { t } = useTranslation("runs");
   const meta = STATUS_META[status] ?? STATUS_META.queued;
-  const label = status === "paused" && waitingFor ? (waitingFor === "approval" ? "Needs your OK" : "Needs your answer") : meta.label;
+  const label = status === "paused" && waitingFor ? (waitingFor === "approval" ? t("status.needsOk") : t("status.needsAnswer")) : meta.label;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-[5px] border px-2 py-0.5 text-[11px] font-medium", meta.className, className)}>
       <span className={cn("size-1.5 rounded-full", meta.dot)} />
@@ -74,42 +106,99 @@ export function RunStatusBadge({ status, className, waitingFor }: { status: RunS
 
 /** Icon-only status (running shows the working orb). */
 export function RunStatusIcon({ status, className }: { status: RunStatus; className?: string }) {
+  useTranslation();
   const cls = cn("size-4 shrink-0", className);
   switch (status) {
     case "running":
       return (
         <span className={cn(cls, "grid place-items-center")}>
-          <Orb variant="S3" size={16} label="Running" />
+          <Orb variant="S3" size={16} label={runStatusLabel("running")} />
         </span>
       );
     case "queued":
-      return <Clock3 className={cn(cls, "text-muted-foreground")} aria-label="Queued" />;
+      return <Clock3 className={cn(cls, "text-muted-foreground")} aria-label={runStatusLabel("queued")} />;
     case "paused":
-      return <CirclePause className={cn(cls, "text-warning")} aria-label="Paused" />;
+      return <CirclePause className={cn(cls, "text-warning")} aria-label={runStatusLabel("paused")} />;
     case "succeeded":
-      return <CheckCircle2 className={cn(cls, "text-success")} aria-label="Succeeded" />;
+      return <CheckCircle2 className={cn(cls, "text-success")} aria-label={runStatusLabel("succeeded")} />;
     case "failed":
-      return <XCircle className={cn(cls, "text-destructive")} aria-label="Failed" />;
+      return <XCircle className={cn(cls, "text-destructive")} aria-label={runStatusLabel("failed")} />;
     case "cancelled":
-      return <Ban className={cn(cls, "text-muted-foreground")} aria-label="Cancelled" />;
+      return <Ban className={cn(cls, "text-muted-foreground")} aria-label={runStatusLabel("cancelled")} />;
   }
 }
 
 const TRIGGER_META: Record<RunTrigger, { label: string; icon: typeof MessageSquare }> = {
-  chat: { label: "Chat", icon: MessageSquare },
-  routine: { label: "Automation", icon: Workflow },
-  check: { label: "Condition check", icon: Radar },
-  dream: { label: "Dream", icon: Moon },
-  delegation: { label: "Delegation", icon: Share2 },
-  manual: { label: "Manual", icon: Hand },
-  api: { label: "API", icon: Plug },
-  task: { label: "Task", icon: SquareKanban },
-  followup: { label: "Follow-up", icon: AlarmClock },
-  heartbeat: { label: "Heartbeat", icon: HeartPulse },
-  call: { label: "Phone call", icon: Phone },
+  chat: {
+    icon: MessageSquare,
+    get label() {
+      return t("runs:trigger.chat");
+    },
+  },
+  routine: {
+    icon: Workflow,
+    get label() {
+      return t("runs:trigger.routine");
+    },
+  },
+  check: {
+    icon: Radar,
+    get label() {
+      return t("runs:trigger.check");
+    },
+  },
+  dream: {
+    icon: Moon,
+    get label() {
+      return t("runs:trigger.dream");
+    },
+  },
+  delegation: {
+    icon: Share2,
+    get label() {
+      return t("runs:trigger.delegation");
+    },
+  },
+  manual: {
+    icon: Hand,
+    get label() {
+      return t("runs:trigger.manual");
+    },
+  },
+  api: {
+    icon: Plug,
+    get label() {
+      return t("runs:trigger.api");
+    },
+  },
+  task: {
+    icon: SquareKanban,
+    get label() {
+      return t("runs:trigger.task");
+    },
+  },
+  followup: {
+    icon: AlarmClock,
+    get label() {
+      return t("runs:trigger.followup");
+    },
+  },
+  heartbeat: {
+    icon: HeartPulse,
+    get label() {
+      return t("runs:trigger.heartbeat");
+    },
+  },
+  call: {
+    icon: Phone,
+    get label() {
+      return t("runs:trigger.call");
+    },
+  },
 };
 
 export function TriggerBadge({ trigger, className }: { trigger: RunTrigger; className?: string }) {
+  useTranslation();
   const meta = TRIGGER_META[trigger] ?? TRIGGER_META.manual;
   const Icon = meta.icon;
   return (

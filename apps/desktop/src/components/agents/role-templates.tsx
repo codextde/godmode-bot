@@ -1,29 +1,17 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { CalendarClock, Layers, Plus, Search, SearchX, Sparkles, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { AgentTemplate, AgentTemplateCategory } from "@godmode/shared";
 import { AGENT_TEMPLATE_CATEGORIES, AGENT_TEMPLATE_CATEGORY_LABELS } from "@godmode/shared";
+import { t as translate } from "@/i18n";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cronToHuman } from "@/components/agents/cron";
+import { templateText } from "@/lib/templates";
 import { cn } from "@/lib/utils";
-
-const SHORT_LABELS: Record<AgentTemplateCategory, string> = {
-  leadership: "Leadership",
-  finance: "Finance",
-  legal: "Legal",
-  people: "People",
-  marketing: "Marketing",
-  sales: "Sales",
-  customer: "Customer service",
-  ecommerce: "E-commerce",
-  product: "Product & design",
-  engineering: "Engineering & IT",
-  data: "Data",
-  operations: "Operations",
-};
 
 type Filter = AgentTemplateCategory | "all" | "all-in-one";
 
@@ -37,7 +25,10 @@ const wordStarts = (query: string) =>
     .filter(Boolean)
     .map((term) => new RegExp(`(^|[^\\p{L}\\p{N}])${escape(term)}`, "iu"));
 
-const searchText = (t: AgentTemplate) => [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? [])].join(" ");
+const searchText = (t: AgentTemplate) => {
+  const shown = templateText(t);
+  return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`agents:roleTemplates.category.${t.category}`), ...(shown.covers ?? [])].join(" ");
+};
 
 /**
  * Every role a company has, by department: one agent per job, or one all-in-one agent per department that covers
@@ -48,9 +39,9 @@ export function RoleTemplates({
   loading,
   onPick,
   onDescribe,
-  title = "Or hire one role",
-  description = "One agent per job, or one all-in-one agent that runs a whole department.",
-  blankLabel = "Blank agent",
+  title,
+  description,
+  blankLabel,
 }: {
   templates: AgentTemplate[];
   loading: boolean;
@@ -60,10 +51,11 @@ export function RoleTemplates({
   description?: string;
   blankLabel?: string;
 }) {
+  const { t: tr, i18n } = useTranslation("agents");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => templates.filter((t) => terms.every((re) => re.test(searchText(t)))), [templates, terms]);
+  const found = useMemo(() => templates.filter((t) => terms.every((re) => re.test(searchText(t)))), [templates, terms, i18n.language]);
   const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers : t.category === f);
   const shown = found.filter((t) => inFilter(t, filter));
   const grouped = AGENT_TEMPLATE_CATEGORIES.map((c) => ({ category: c, items: shown.filter((t) => t.category === c) })).filter((g) => g.items.length > 0);
@@ -75,31 +67,31 @@ export function RoleTemplates({
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
         <div>
           <h2 id="roles-title" className="text-lg font-medium tracking-[-0.02em]">
-            {title}
+            {title ?? tr("roleTemplates.title")}
           </h2>
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-sm text-muted-foreground">{description ?? tr("roleTemplates.description")}</p>
         </div>
         <div className="flex w-full items-center gap-2 @xl:w-auto">
           <InputGroup className="flex-1 @xl:w-72">
             <InputGroupAddon>
               <Search />
             </InputGroupAddon>
-            <InputGroupInput placeholder="Search roles…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search roles" />
+            <InputGroupInput placeholder={tr("roleTemplates.searchPlaceholder")} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={tr("roleTemplates.searchLabel")} />
             {query && (
               <InputGroupAddon align="inline-end">
-                <InputGroupButton size="icon-xs" aria-label="Clear search" onClick={() => setQuery("")}>
+                <InputGroupButton size="icon-xs" aria-label={tr("roleTemplates.clearSearch")} onClick={() => setQuery("")}>
                   <X />
                 </InputGroupButton>
               </InputGroupAddon>
             )}
           </InputGroup>
           <Button variant="outline" onClick={() => onPick("scratch")}>
-            <Plus /> {blankLabel}
+            <Plus /> {blankLabel ?? tr("roleTemplates.blank")}
           </Button>
         </div>
       </div>
 
-      <div role="tablist" aria-label="Department" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 @5xl:flex-wrap">
+      <div role="tablist" aria-label={tr("roleTemplates.department")} className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 @5xl:flex-wrap">
         {chips.map((c) => {
           const count = counts(c);
           if (c !== "all" && c !== filter && !count) return null;
@@ -117,7 +109,7 @@ export function RoleTemplates({
               )}
             >
               {c === "all-in-one" && <Layers className="size-3" />}
-              {c === "all" ? "All" : c === "all-in-one" ? "All-in-one" : SHORT_LABELS[c]}
+              {c === "all" ? tr("roleTemplates.all") : c === "all-in-one" ? tr("roleTemplates.allInOne") : tr(`roleTemplates.categoryShort.${c}`)}
               <span className={cn("tabular-nums", active ? "text-background/60" : "text-muted-foreground/70")}>{count}</span>
             </button>
           );
@@ -140,11 +132,11 @@ export function RoleTemplates({
       ) : shown.length === 0 ? (
         <EmptyState
           icon={<SearchX />}
-          title={query ? `No role matches “${query.trim()}”` : "No roles here yet"}
-          description="Describe the job in your own words and Godmode sets the agent up for you."
+          title={query ? tr("roleTemplates.noMatch", { query: query.trim() }) : tr("roleTemplates.noRoles")}
+          description={tr("roleTemplates.emptyDescription")}
           action={
             <Button variant="outline" onClick={() => onDescribe(query.trim())}>
-              <Sparkles /> Describe it instead
+              <Sparkles /> {tr("roleTemplates.describeInstead")}
             </Button>
           }
         />
@@ -153,7 +145,7 @@ export function RoleTemplates({
           {grouped.map((g) => (
             <div key={g.category} aria-labelledby={`dept-${g.category}`}>
               <h3 id={`dept-${g.category}`} className="mb-3 flex items-baseline gap-2 text-sm font-medium tracking-[-0.01em]">
-                {AGENT_TEMPLATE_CATEGORY_LABELS[g.category]}
+                {tr(`roleTemplates.category.${g.category}`)}
                 <span className="text-xs font-normal text-muted-foreground tabular-nums">{g.items.length}</span>
               </h3>
               <TemplateGrid templates={g.items} onPick={onPick} />
@@ -177,7 +169,9 @@ function TemplateGrid({ templates, onPick }: { templates: AgentTemplate[]; onPic
   );
 }
 
-function TemplateCard({ template, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
+function TemplateCard({ template: source, index, onPick }: { template: AgentTemplate; index: number; onPick: () => void }) {
+  const { t } = useTranslation("agents");
+  const template = templateText(source);
   const allInOne = !!template.covers?.length;
   return (
     <motion.button
@@ -196,17 +190,17 @@ function TemplateCard({ template, index, onPick }: { template: AgentTemplate; in
         <span className="block truncate font-medium tracking-[-0.01em]">{template.name}</span>
         <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           {template.role}
-          {template.leads && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium">Leads a team</span>}
+          {template.leads && <span className="rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium">{t("roleTemplates.leadsTeam")}</span>}
           {allInOne && (
             <span className="inline-flex items-center gap-1 rounded-[5px] border border-brand/25 bg-brand/10 px-1.5 py-px text-[10px] font-medium text-foreground">
-              <Layers className="size-2.5" /> All-in-one
+              <Layers className="size-2.5" /> {t("roleTemplates.allInOne")}
             </span>
           )}
         </span>
         <span className="mt-1.5 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{template.description}</span>
         {allInOne && (
           <span className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
-            <span className="font-medium text-foreground/80">{template.covers!.length} jobs:</span> {template.covers!.join(" · ")}
+            <span className="font-medium text-foreground/80">{t("roleTemplates.jobs", { count: template.covers!.length })}</span> {template.covers!.join(" · ")}
           </span>
         )}
         {template.routine && (
