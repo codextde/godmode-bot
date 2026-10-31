@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SYSTEM_CLAUDE_ACCOUNT, type Agent } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
@@ -27,7 +28,11 @@ function addAccount(id: string, email: string, token: string, expiresAt = Date.n
 
 const lastInvocation = () => invocations(env).at(-1)!;
 
+const realConfigDir = process.env.CLAUDE_CONFIG_DIR;
+
 beforeAll(async () => {
+  // The system login is an empty Claude config here: its usage is unknown on every machine, never this computer's.
+  process.env.CLAUDE_CONFIG_DIR = mkdtempSync(join(tmpdir(), "godmode-claude-config-"));
   env = await setupEnv("godmode-claude-accounts-");
   await vault.setup("correct horse battery staple", false);
   agent = await makeAgent({ name: "Accounts Bot" });
@@ -36,7 +41,7 @@ beforeAll(async () => {
     const url = String(input instanceof Request ? input.url : input);
     if (url.startsWith("https://api.anthropic.com/api/oauth/usage")) {
       const token = new Headers(init?.headers).get("Authorization")?.replace("Bearer ", "") ?? "";
-      const percent = usageByToken.get(token) ?? 99;
+      const percent = usageByToken.get(token) ?? 10;
       return Response.json({ five_hour: { utilization: percent, resets_at: new Date(Date.now() + 3600_000).toISOString() }, seven_day: { utilization: 5, resets_at: null } });
     }
     if (url.startsWith("https://platform.claude.com/v1/oauth/token")) {
@@ -50,6 +55,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   globalThis.fetch = realFetch;
+  if (realConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+  else process.env.CLAUDE_CONFIG_DIR = realConfigDir;
   stopPauses();
   await env.close();
 });

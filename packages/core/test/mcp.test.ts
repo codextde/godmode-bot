@@ -1542,6 +1542,7 @@ describe("settings tools", () => {
     expect(agentSettingKeys().sort()).toEqual(
       [
         "general.theme",
+        "general.timeFormat",
         "general.palette",
         "general.mode",
         "general.minimizeToTray",
