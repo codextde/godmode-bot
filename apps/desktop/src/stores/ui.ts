@@ -52,6 +52,8 @@ interface UiState {
   workspacesSort: WorkspacesSort;
   /** Sidebar sections shown as full lists (the rest are a row of icons). */
   expandedNav: string[];
+  /** The "Try something like" suggestions on Home were closed. */
+  hideSuggestions: boolean;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
   /** The human came back after a while: from when to when they were away (Home sums up what happened). Not kept. */
@@ -78,6 +80,7 @@ interface UiState {
   setWorkspacesView: (v: WorkspacesView) => void;
   setWorkspacesSort: (v: WorkspacesSort) => void;
   setAway: (away: { since: string; until: string } | null) => void;
+  setHideSuggestions: (v: boolean) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -106,6 +109,7 @@ export const useUi = create<UiState>()(
       workspacesView: "grid",
       workspacesSort: "name",
       away: null,
+      hideSuggestions: false,
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
@@ -140,6 +144,7 @@ export const useUi = create<UiState>()(
       toggleNavCollapsed: (key) =>
         set((s) => ({ collapsedNav: s.collapsedNav.includes(key) ? s.collapsedNav.filter((k) => k !== key) : [...s.collapsedNav, key] })),
       setAway: (away) => set({ away }),
+      setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.
@@ -165,6 +170,7 @@ export const useUi = create<UiState>()(
         collapsedNav: s.collapsedNav,
         workspacesView: s.workspacesView,
         workspacesSort: s.workspacesSort,
+        hideSuggestions: s.hideSuggestions,
       }),
     },
   ),
