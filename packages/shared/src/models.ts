@@ -664,6 +664,7 @@ export interface ToolTask {
   lastTool?: string;
   /** A subagent's final report, from Claude Code's notification that it ended. */
   summary?: string;
+  model?: string;
 }
 
 export interface ToolTaskAgent {

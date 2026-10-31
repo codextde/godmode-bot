@@ -153,12 +153,14 @@ export const Character = memo(function Character({
   mood = "idle",
   size = 40,
   seed,
+  faceScale: scaleOverride,
   style,
 }: {
   character: AgentCharacter;
   color: string;
   mood?: CharacterMood;
   size?: number;
+  faceScale?: number;
   /** Staggers the animations so a list of characters doesn't breathe and blink in unison. */
   seed?: string;
   style?: StyleProp<ViewStyle>;
@@ -168,7 +170,7 @@ export const Character = memo(function Character({
   const still = reduceMotion || !focused;
   const lively = size >= LIVELY_SIZE;
   const outline = useIsDark() ? OUTLINE.dark : OUTLINE.light;
-  const faceScale = size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1;
+  const faceScale = scaleOverride ?? (size <= 28 ? 1.25 : size <= 44 ? 1.1 : 1);
   const open = drawing(character, color, mood, faceScale);
   const blinks = lively && !still && canBlink(character, mood);
   const closed = blinks ? drawing({ ...character, eyes: "lines" }, color, mood, faceScale) : null;
