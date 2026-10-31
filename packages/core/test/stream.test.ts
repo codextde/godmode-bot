@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { MessageBlock } from "@godmode/shared";
 import { isPlaceholderReply } from "@godmode/shared";
-import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, detectLoginFailure, displayToolName, redactBlocks, toolResultContent, usedBrowser } from "../src/runner/stream";
+import { MAX_MESSAGE_IMAGE_BASE64, MAX_TOOL_IMAGE_BASE64, StreamAccumulator, cutOffBackgroundWork, detectLoginFailure, displayToolName, redactBlocks, toolResultContent, usedBrowser } from "../src/runner/stream";
 
 function events(name: string): unknown[] {
   return readFileSync(join(import.meta.dir, "fixtures", name), "utf8")
@@ -598,6 +598,53 @@ describe("StreamAccumulator — screenshots of a long run", () => {
     const acc = new StreamAccumulator();
     for (let i = 0; i < count - 1; i++) screenshot(acc, i);
     expect(images(acc.blocks).every(Boolean)).toBe(true);
+  });
+});
+
+describe("cutOffBackgroundWork — background work the end of the process stopped", () => {
+  const sys = (subtype: string, extra: Record<string, unknown>) => ({ type: "system", subtype, session_id: "s", ...extra });
+  const result = { type: "result", subtype: "success", is_error: false, result: "done", session_id: "s" };
+  const started = (id: string, extra: Record<string, unknown> = {}) => sys("task_started", { task_id: id, description: `work ${id}`, task_type: "local_bash", is_backgrounded: true, ...extra });
+  const killed = (id: string) => [sys("task_updated", { task_id: id, patch: { status: "killed", end_time: 1 } }), sys("task_notification", { task_id: id, status: "stopped", summary: `work ${id}` })];
+
+  test("a subagent's commands still running after the last result, then killed as the process ended", () => {
+    const work = cutOffBackgroundWork(events("stream-background-stopped.jsonl"));
+    expect(work).toEqual([
+      { id: "bcqv80wt3", kind: "local_bash", description: "Rerun full core suite", subagent: "Remove spend/cost feature" },
+      { id: "b5dp9brmy", kind: "local_bash", description: "Wait for core test rerun to finish", subagent: "Remove spend/cost feature" },
+    ]);
+    expect(feed(events("stream-background-stopped.jsonl")).cutOffWork()).toEqual(work);
+  });
+
+  test("the main agent's own background work and subagents count too", () => {
+    const work = cutOffBackgroundWork([started("b1"), started("a1", { task_type: "local_agent", description: "Research" }), result, ...killed("b1"), ...killed("a1")]);
+    expect(work).toEqual([
+      { id: "b1", kind: "local_bash", description: "work b1", subagent: null },
+      { id: "a1", kind: "local_agent", description: "Research", subagent: null },
+    ]);
+  });
+
+  test("work that completed normally is not cut off", () => {
+    expect(cutOffBackgroundWork([started("b1"), sys("task_updated", { task_id: "b1", patch: { status: "completed" } }), sys("task_notification", { task_id: "b1", status: "completed" }), result])).toEqual([]);
+    expect(cutOffBackgroundWork(events("stream-workflow.jsonl"))).toEqual([]);
+  });
+
+  test("work the agent stopped itself (TaskStop) during the turn is not cut off", () => {
+    expect(cutOffBackgroundWork([started("b1"), ...killed("b1"), sys("background_tasks_changed", { tasks: [] }), result])).toEqual([]);
+    // Stopped between two turns of the same process, then the run went on: still no cut.
+    expect(cutOffBackgroundWork([started("b1"), result, ...killed("b1"), result])).toEqual([]);
+  });
+
+  test("no background work, or no result at all", () => {
+    expect(cutOffBackgroundWork(events("stream-tooluse.jsonl"))).toEqual([]);
+    expect(cutOffBackgroundWork([])).toEqual([]);
+    expect(cutOffBackgroundWork([started("b1")])).toEqual([]);
+  });
+
+  test("a task only known from the kill keeps its summary as description", () => {
+    expect(cutOffBackgroundWork([result, sys("task_notification", { task_id: "m1", status: "stopped", summary: "Watch the deploy" })])).toEqual([
+      { id: "m1", kind: "task", description: "Watch the deploy", subagent: null },
+    ]);
   });
 });
 

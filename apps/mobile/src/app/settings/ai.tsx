@@ -97,7 +97,7 @@ export default function ModelAndLimits() {
         <SwitchRow
           icon="refresh"
           title="Continue cut-off work"
-          detail="Work cut off by a restart or a lost internet connection picks up by itself once Godmode and the connection are back."
+          detail="Work cut off by a restart, a lost internet connection or the end of a turn picks up by itself once Godmode and the connection are back."
           value={r.resumeAfterRestart ?? true}
           onChange={(resumeAfterRestart) => void patchSettings({ runner: { resumeAfterRestart } })}
         />
