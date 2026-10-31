@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useArtifact, useChatArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { PANEL } from "@/lib/motion";
+import { PANEL, useReduceAnimations } from "@/lib/motion";
 import { ArtifactView, ago } from "./artifact-view";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
@@ -42,6 +42,7 @@ export function artifactIdOf(block: ToolUseBlock): string | null {
 }
 
 export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const reduce = useReduceAnimations();
   const scope = useContext(ArtifactScope);
   const show = useArtifactPanel((s) => s.show);
   const id = artifactIdOf(block);
@@ -62,7 +63,9 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
   const isOpen = !!scope && scope.openId === id;
 
   return (
-    <div
+    <motion.div
+      initial={reduce ? false : { opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
       className={cn(
         "group flex items-center gap-3 rounded-xl border bg-card p-2.5 pr-3 shadow-card transition",
         failed && "border-destructive/30",
@@ -107,7 +110,7 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
           </Button>
         )
       )}
-    </div>
+    </motion.div>
   );
 }
 

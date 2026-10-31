@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
+import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ChevronRight, Globe, Plus, ShieldCheck } from "lucide-react";
 import type { Agent, MessagingConnection, MessagingProvider } from "@godmode/shared";
@@ -16,6 +17,7 @@ import { api } from "@/lib/api";
 import { useAllAgents } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 export function useMessagingConnections() {
   return useQuery({ queryKey: qk.messagingList, queryFn: api.messaging.list });
@@ -23,6 +25,7 @@ export function useMessagingConnections() {
 
 /** The bots people use to talk to agents, and the platforms to add one on. */
 export function MessagingOverview() {
+  const reduce = useReduceAnimations();
   const [params, setParams] = useSearchParams();
   const connections = useMessagingConnections();
   const agents = useAllAgents();
@@ -57,10 +60,10 @@ export function MessagingOverview() {
             <section className="space-y-3">
               <h3 className="eyebrow">Your bots</h3>
               <ul className="space-y-2">
-                {list.map((c) => (
-                  <li key={c.id}>
+                {list.map((c, i) => (
+                  <motion.li key={c.id} initial={reduce ? false : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
                     <ConnectionCard connection={c} agents={agents.data ?? []} onOpen={() => setParam("connection", c.id)} />
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
             </section>

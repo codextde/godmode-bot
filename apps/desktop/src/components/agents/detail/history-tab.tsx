@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
 import { GitCommitHorizontal, History } from "lucide-react";
 import type { Agent, GitCommit } from "@godmode/shared";
@@ -8,6 +9,7 @@ import { qk } from "@/lib/queryKeys";
 import { EmptyState } from "@/components/common";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** isomorphic-git reports seconds; accept ISO strings and ms too. */
 function commitDate(ts: string): Date {
@@ -25,6 +27,7 @@ function dayLabel(d: Date) {
 }
 
 export function HistoryTab({ agent }: { agent: Agent }) {
+  const reduce = useReduceAnimations();
   const q = useQuery({ queryKey: qk.agentCommits(agent.id), queryFn: () => api.agents.commits(agent.id) });
 
   const groups = useMemo(() => {
@@ -59,6 +62,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
     );
   }
 
+  let index = 0;
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
@@ -72,9 +76,13 @@ export function HistoryTab({ agent }: { agent: Agent }) {
             {g.commits.map((c) => {
               const [title, ...rest] = c.message.trim().split("\n");
               const body = rest.join("\n").trim();
+              const i = index++;
               return (
-                <li
+                <motion.li
                   key={c.oid}
+                  initial={reduce ? false : { opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: Math.min(i, 20) * 0.02 }}
                   className="group relative rounded-lg px-3 py-2.5 transition hover:bg-accent/50"
                 >
                   <span className="absolute top-3.5 -left-[31px] grid size-4 place-items-center rounded-full border bg-card text-muted-foreground">
@@ -93,7 +101,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
                     <code className="rounded-[4px] border bg-secondary px-1 font-mono">{c.oid.slice(0, 7)}</code>
                     <CopyButton text={c.oid} label="Copy commit hash" className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100" />
                   </div>
-                </li>
+                </motion.li>
               );
             })}
           </ol>

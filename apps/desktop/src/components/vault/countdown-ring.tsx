@@ -35,7 +35,7 @@ export function CountdownRing({
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={c * (1 - p)}
-          className={cn("transition-[stroke] duration-250", urgent ? "stroke-destructive" : soon ? "stroke-warning" : "stroke-brand")}
+          className={cn("transition-[stroke] duration-500 calm-motion:duration-250", urgent ? "stroke-destructive" : soon ? "stroke-warning" : "stroke-brand")}
         />
       </svg>
       <span className={cn("absolute font-mono text-[11px] font-medium tabular-nums", urgent ? "text-destructive" : soon ? "text-warning" : "text-muted-foreground")}>

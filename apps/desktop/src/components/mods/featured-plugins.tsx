@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Download, ExternalLink, Sparkles, Terminal } from "lucide-react";
 import type { Mod, ModCatalogEntry } from "@godmode/shared";
 import { QueryError } from "@/components/integrations/query-error";
@@ -10,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useModCatalog } from "@/lib/hooks";
 import { GitHubMark, ModIconTile } from "./mod-parts";
 import type { ModActions } from "./use-mod-actions";
+import { useReduceAnimations } from "@/lib/motion";
 
 const GRID = "grid grid-cols-1 gap-4 @3xl:grid-cols-2";
 
@@ -68,10 +70,11 @@ export function FeaturedPlugins({ mods, actions, onOpen }: { mods: Mod[]; action
         </div>
       ) : (
         <div className={GRID}>
-          {entries.map((entry) => (
+          {entries.map((entry, i) => (
             <FeaturedCard
               key={entry.id}
               entry={entry}
+              index={i}
               installed={installed.get(entry.id)}
               installing={installing.has(entry.id)}
               onPreview={() => setPreviewId(entry.id)}
@@ -113,6 +116,7 @@ function RepoLine({ entry }: { entry: ModCatalogEntry }) {
 
 function FeaturedCard({
   entry,
+  index,
   installed,
   installing,
   onPreview,
@@ -120,15 +124,20 @@ function FeaturedCard({
   onOpen,
 }: {
   entry: ModCatalogEntry;
+  index: number;
   installed: Mod | undefined;
   installing: boolean;
   onPreview: () => void;
   onInstall: () => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const reduce = useReduceAnimations();
   return (
-    <article
-      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-colors hover:border-foreground/15"
+    <motion.article
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 8) * 0.04 }}
+      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <div className="flex items-start gap-3.5 p-4 pb-3">
         <ModIconTile icon={entry.icon} raised />
@@ -185,7 +194,7 @@ function FeaturedCard({
           </Button>
         )}
       </div>
-    </article>
+    </motion.article>
   );
 }
 

@@ -9,11 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { EASE_OUT } from "@/lib/motion";
+import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { ActivatePanel } from "./activate";
 
 /** Replaces the app while the licence refuses new runs; a working key takes it away without a reload. */
 export function LicenseGate({ state }: { state: LicenseState }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   const refresh = useMutation({
     mutationFn: api.license.refresh,
@@ -32,7 +33,7 @@ export function LicenseGate({ state }: { state: LicenseState }) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: EASE_OUT }}
+          transition={{ duration: reduce ? 0.25 : 0.5, ease: EASE_OUT }}
           className="flex flex-col items-center text-center"
         >
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} mood="idle" follow title="Godmode" />
@@ -48,7 +49,7 @@ export function LicenseGate({ state }: { state: LicenseState }) {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, delay: 0.08, ease: EASE_OUT }}
+          transition={{ duration: reduce ? 0.25 : 0.5, delay: 0.08, ease: EASE_OUT }}
           className="mt-8 rounded-2xl border bg-card p-6 shadow-float sm:p-7"
         >
           <ActivatePanel source="gate" />

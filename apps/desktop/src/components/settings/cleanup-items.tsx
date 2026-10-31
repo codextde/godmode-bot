@@ -44,6 +44,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { SettingsGroup } from "./settings-kit";
+import { useReduceAnimations } from "@/lib/motion";
 
 const ICONS: Record<CleanupId, ComponentType<{ className?: string }>> = {
   "temp-files": FileClock,
@@ -80,6 +81,7 @@ function toastRun(run: CleanupRun) {
 
 /** What can go, picked by the human: recommended items are preselected, the rest needs a look first. */
 export function CleanupItems({ report, refreshing }: { report: CleanupReport; refreshing: boolean }) {
+  const reduce = useReduceAnimations();
   const qc = useQueryClient();
   // null = the recommended selection, which follows the report until the human changes it.
   const [picked, setPicked] = useState<Set<CleanupId> | null>(null);
@@ -139,8 +141,8 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
           </div>
         </div>
       )}
-      {items.map((item) => (
-        <div key={item.id}>
+      {items.map((item, i) => (
+        <motion.div key={item.id} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
           <ItemRow
             item={item}
             checked={selected.has(item.id)}
@@ -149,7 +151,7 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
             onExpand={() => setOpen(open === item.id ? null : item.id)}
             busy={run.isPending && selected.has(item.id)}
           />
-        </div>
+        </motion.div>
       ))}
       {clean.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3.5 text-xs text-muted-foreground">

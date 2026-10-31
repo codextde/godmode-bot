@@ -194,7 +194,7 @@ export function CaptchaSolving({ browser }: { browser: BrowserSettings }) {
               <div className="flex items-center gap-3">
                 {limit > 0 && (
                   <div className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-secondary @xl:block" aria-hidden>
-                    <div className={cn("h-full rounded-full bg-brand transition-[width,background-color]", used >= limit && "bg-warning")} style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} />
+                    <div className={cn("h-full rounded-full bg-brand transition-all calm-motion:transition-[width,background-color]", used >= limit && "bg-warning")} style={{ width: `${Math.min(100, (used / limit) * 100)}%` }} />
                   </div>
                 )}
                 <NumberField

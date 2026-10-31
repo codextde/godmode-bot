@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router";
+import { motion } from "motion/react";
 import { Boxes, Server, Wrench } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ApiToolsTab, useApiTools } from "@/components/integrations/api-tools-tab";
 import { ComposioTab, useComposioConnections, useComposioStatus } from "@/components/integrations/composio-tab";
 import { McpServersTab, useMcpServers } from "@/components/integrations/mcp-servers-tab";
 import { NoConnectorsNote } from "@/components/integrations/no-connectors-note";
+import { useReduceAnimations } from "@/lib/motion";
 
 const TABS = ["composio", "tools", "mcp"] as const;
 type Tab = (typeof TABS)[number];
@@ -49,16 +51,31 @@ export function IntegrationsOverview() {
           <TabTrigger value="mcp" icon={<Server />} label="MCP servers" count={counts.mcp} />
         </TabsList>
         <TabsContent value="composio">
-          <ComposioTab />
+          <FadeIn>
+            <ComposioTab />
+          </FadeIn>
         </TabsContent>
         <TabsContent value="tools">
-          <ApiToolsTab />
+          <FadeIn>
+            <ApiToolsTab />
+          </FadeIn>
         </TabsContent>
         <TabsContent value="mcp">
-          <McpServersTab />
+          <FadeIn>
+            <McpServersTab />
+          </FadeIn>
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function FadeIn({ children }: { children: ReactNode }) {
+  const reduce = useReduceAnimations();
+  return (
+    <motion.div initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+      {children}
+    </motion.div>
   );
 }
 

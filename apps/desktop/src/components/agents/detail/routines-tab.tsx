@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "motion/react";
 import { Blocks, CalendarDays, Plus, Radar, Sun, Workflow } from "lucide-react";
 import type { Agent, Routine } from "@godmode/shared";
 import { useRoutines } from "@/lib/hooks";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RoutineDialog, type RoutineDraft } from "../routine-dialog";
 import { RoutineItem } from "../routine-item";
+import { useReduceAnimations } from "@/lib/motion";
 
 const QUICK_STARTS: { icon: typeof Sun; label: string; draft: Partial<RoutineDraft> }[] = [
   { icon: Sun, label: "Every morning", draft: { name: "Morning check-in", triggerType: "schedule", cron: "0 8 * * *" } },
@@ -18,6 +20,7 @@ const QUICK_STARTS: { icon: typeof Sun; label: string; draft: Partial<RoutineDra
 ];
 
 export function RoutinesTab({ agent }: { agent: Agent }) {
+  const reduce = useReduceAnimations();
   const q = useRoutines(agent.id);
   const easy = useEasyMode();
   const [dialog, setDialog] = useState<{ key: string; open: boolean; routine: Routine | null; initial?: Partial<RoutineDraft> } | null>(null);
@@ -63,10 +66,10 @@ export function RoutinesTab({ agent }: { agent: Agent }) {
         />
       ) : (
         <div className="space-y-3">
-          {routines.map((r) => (
-            <div key={r.id}>
+          {routines.map((r, i) => (
+            <motion.div key={r.id} layout={!reduce} initial={reduce ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 10) * 0.03 }}>
               <RoutineItem routine={r} onEdit={(routine) => setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine })} />
-            </div>
+            </motion.div>
           ))}
         </div>
       )}

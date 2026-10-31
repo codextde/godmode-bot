@@ -20,9 +20,11 @@ import { api, errorMessage } from "@/lib/api";
 import { useBootstrap, useVmStatus, useVms } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useReduceAnimations } from "@/lib/motion";
 
 /** macOS VMs agents work in: create, start/stop, open their screen, assign them. */
 export default function VmsPage() {
+  const reduce = useReduceAnimations();
   const [params, setParams] = useSearchParams();
   const { data: boot } = useBootstrap();
   const status = useVmStatus();
@@ -140,13 +142,14 @@ export default function VmsPage() {
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-2">
                 <AnimatePresence initial={false}>
-                  {vms.map((vm) => (
+                  {vms.map((vm, i) => (
                     <motion.div
                       key={vm.id}
                       layout="position"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.97 }}
+                      transition={reduce ? undefined : { delay: Math.min(i, 8) * 0.03 }}
                       className="min-w-0"
                     >
                       <VmCard

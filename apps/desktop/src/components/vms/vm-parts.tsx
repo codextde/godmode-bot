@@ -140,7 +140,7 @@ export function VmProgressBar({ percent, className, label }: { percent: number |
           transition={{ duration: 1.6, ease: [0.4, 0, 0.2, 1], repeat: Infinity }}
         />
       ) : (
-        <span className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-250 ease-out" style={{ width: `${value}%` }} />
+        <span className="absolute inset-y-0 left-0 rounded-full bg-brand transition-[width] duration-700 calm-motion:duration-250 ease-out" style={{ width: `${value}%` }} />
       )}
     </div>
   );

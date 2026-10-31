@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Plus, Puzzle } from "lucide-react";
 import { MOD_CATEGORIES, MOD_CATEGORY_LABELS, type Mod, type ModCategory, type ModOption, type ModTemplate } from "@godmode/shared";
 import { CodeBlock } from "@/components/aicss/CodeBlock";
@@ -12,11 +13,13 @@ import { useModTemplates } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { ModIconTile, hooksModulePath, sortedPaths } from "./mod-parts";
 import type { ModActions } from "./use-mod-actions";
+import { useReduceAnimations } from "@/lib/motion";
 
 const GRID = "grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3";
 
 /** Small plugins Godmode ships: browse by category, read one through, add it. */
 export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; actions: ModActions; onOpen: (mod: Mod) => void; onAdded: (mod: Mod) => void }) {
+  const reduce = useReduceAnimations();
   const templates = useModTemplates();
   const [category, setCategory] = useState<ModCategory | "">("");
   const [previewId, setPreviewId] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
                   active ? "border-transparent text-primary-foreground" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
-                {active && <span className="absolute -inset-px rounded-md bg-primary" />}
+                {active && <motion.span layoutId={reduce ? undefined : "mod-cat"} className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
                 <span className="relative">{c ? MOD_CATEGORY_LABELS[c] : "All"}</span>
               </button>
             );
@@ -90,10 +93,11 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
         <p className="rounded-xl border border-dashed bg-card/50 px-4 py-6 text-center text-sm text-muted-foreground">The gallery is empty on this version of Godmode.</p>
       ) : (
         <div className={GRID}>
-          {visible.map((t) => (
+          {visible.map((t, i) => (
             <TemplateCard
               key={t.id}
               template={t}
+              index={i}
               installed={installed.get(t.id)}
               adding={addingId === t.id}
               onPreview={() => setPreviewId(t.id)}
@@ -122,6 +126,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
 
 function TemplateCard({
   template: t,
+  index,
   installed,
   adding,
   onPreview,
@@ -129,15 +134,20 @@ function TemplateCard({
   onOpen,
 }: {
   template: ModTemplate;
+  index: number;
   installed: Mod | undefined;
   adding: boolean;
   onPreview: () => void;
   onAdd: () => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const reduce = useReduceAnimations();
   return (
-    <article
-      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-colors hover:border-foreground/15"
+    <motion.article
+      initial={reduce ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: Math.min(index, 12) * 0.03 }}
+      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 full-motion:hover:shadow-float"
     >
       <div className="flex items-start gap-3">
         <ModIconTile icon={t.icon} size="sm" />
@@ -189,7 +199,7 @@ function TemplateCard({
           </Button>
         )}
       </div>
-    </article>
+    </motion.article>
   );
 }
 
