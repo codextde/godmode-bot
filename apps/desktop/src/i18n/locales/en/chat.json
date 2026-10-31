@@ -189,6 +189,7 @@
       "createdProjectNamed": "Created project {{name}}",
       "createdProject": "Created project",
       "updatedProject": "Updated a project",
+      "deletedProject": "Deleted a project",
       "sentNotification": "Sent you a notification",
       "willContinue": "Will continue {{when}}",
       "cancelledFollowup": "Cancelled its follow-up",
