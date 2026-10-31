@@ -113,8 +113,22 @@
     "switchTo": {
       "light": "Zum hellen Modus wechseln",
       "dark": "Zum dunklen Modus wechseln"
-    },
-    "followingSystem": "Folgt deinem System, bis du eins auswählst"
+    }
+  },
+  "usage": {
+    "title": "Verbleibende Claude-Nutzung",
+    "fiveHour": "5-Stunden-Fenster",
+    "week": "Diese Woche",
+    "left": "{{percent}} % übrig",
+    "label": "Claude-Nutzung: {{fiveHour}} % des 5-Stunden-Limits und {{week}} % des Wochenlimits übrig",
+    "notStarted": "Beginnt mit deiner nächsten Nachricht",
+    "resetsSoon": "Setzt sich gleich zurück",
+    "resetsIn": "Zurückgesetzt um {{time}} (in {{duration}})",
+    "resetsOn": "Zurückgesetzt {{when}}",
+    "hours": "{{h}} Std. {{m}} Min.",
+    "minutes": "{{m}} Min.",
+    "stale": "Gerade nicht aktualisierbar – zeigt den letzten Stand",
+    "hint": "Äußerer Ring: 5 Stunden · innerer Ring: Woche. Klicken zum Aktualisieren."
   },
   "claudeSignedOut": {
     "keyRefused": "Claude hat deinen Anthropic-API-Schlüssel abgelehnt.",

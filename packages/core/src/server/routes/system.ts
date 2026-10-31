@@ -14,6 +14,7 @@ import { listAttention } from "../../services/attention";
 import { runDoctor, installDependency } from "../../services/doctor";
 import { cancelClaudeLogin, claudeLoginStatus, copyClaudeLoginLink, recheckClaudeSignedOut, startClaudeLogin, submitClaudeLoginCode } from "../../services/claudeLogin";
 import { claudeUpdateStatus, updateClaude } from "../../services/claudeUpdate";
+import { claudeUsage } from "../../services/claudeUsage";
 import { PERMISSION_IDS, PRIVACY_IDS, checkPermissions, fixPermission, openPrivacySettings, resetPrivacy } from "../../services/permissions";
 import { TOOL_IDS, checkUpdates } from "../../services/updates";
 import { cleanUp, fixAll, inTurn, installUpdates, maintenanceStatus } from "../../services/maintenance";
@@ -112,6 +113,7 @@ export function registerSystemRoutes(app: Hono) {
   });
   app.post("/api/doctor/claude-login/copy", async (c) => c.json(await copyClaudeLoginLink()));
   app.delete("/api/doctor/claude-login", (c) => c.json(cancelClaudeLogin()));
+  app.get("/api/doctor/claude-usage", async (c) => c.json(await claudeUsage(c.req.query("refresh") === "1")));
   app.get("/api/doctor/claude-update", async (c) => c.json(await claudeUpdateStatus(c.req.query("refresh") === "1")));
   app.post("/api/doctor/claude-update", async (c) => {
     disableIdleTimeout(c);
