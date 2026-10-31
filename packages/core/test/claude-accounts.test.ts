@@ -184,6 +184,36 @@ describe("Claude accounts", () => {
     expect((await waitForRun(started.run.id, 20_000)).status).toBe("succeeded");
   });
 
+  test("a limit never switches to an account the run can't start on; it waits for the reset instead", async () => {
+    updateSettings({ runner: { accountSwitchPercent: 100 } });
+    addAccount("cla_broken", "broken@example.com", "revoked", Date.now() + 60_000);
+    vault.setAppSecret("claude_account:cla_broken", JSON.stringify({ accessToken: "revoked", refreshToken: "refresh-revoked", expiresAt: Date.now() + 60_000 }));
+    writeFileSync(join(env.stateDir, "limit"), String(Math.floor(Date.now() / 1000) + 3600));
+    writeFileSync(join(env.stateDir, "limit-token"), "system");
+    const started = await startChat({ agentId: agent.id, content: "LIMIT_HIT no spare" });
+    await until(() => getRun(started.run.id).status === "paused", 15_000, "the run to pause");
+    expect(Date.parse(getConversation(started.conversation.id).paused!.resumeAt!)).toBeGreaterThan(Date.now() + 50 * 60_000);
+    expect(invocations(env).filter((i) => i.prompt.includes("LIMIT_HIT no spare"))).toHaveLength(1);
+    const { cancelRun } = await import("../src/runner/runner");
+    await cancelRun(started.run.id, "test done");
+  });
+
+  test("account tokens are masked like any saved secret", async () => {
+    addAccount("cla_mask", "mask@example.com", "tok-mask-0123456789abcdef");
+    setDefaultClaudeAccount("cla_mask");
+    await accountForRun(null);
+    expect(vault.redact("env: CLAUDE_CODE_OAUTH_TOKEN=tok-mask-0123456789abcdef")).not.toContain("tok-mask-0123456789abcdef");
+    expect(vault.redact("refresh-tok-mask-0123456789abcdef")).not.toContain("refresh-tok-mask-0123456789abcdef");
+  });
+
+  test("a workspace whose accounts can't be used says so and runs on this computer's login", async () => {
+    addAccount("cla_off", "off@example.com", "tok-off");
+    sql("UPDATE claude_accounts SET needs_sign_in = 1 WHERE id = 'cla_off'");
+    const ws = createWorkspace({ name: "Only off", claudeAccounts: { ids: ["cla_off"], defaultId: "cla_off" } });
+    const picked = await accountForRun(ws.id);
+    expect(picked).toMatchObject({ id: SYSTEM_CLAUDE_ACCOUNT, token: null, outsidePool: true });
+  });
+
   test("a workspace choice is cleaned of unknown accounts", () => {
     expect(cleanWorkspaceAccounts({ ids: [], defaultId: "x" })).toBeNull();
     expect(cleanWorkspaceAccounts({ ids: ["nope"], defaultId: "nope" })).toBeNull();

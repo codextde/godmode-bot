@@ -10,7 +10,7 @@
  * account once the default is at the switch threshold, and a run that hits a usage limit continues right away on an
  * account with room left instead of waiting for the reset.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -26,7 +26,7 @@ import { all, deleteMeta, get, getMeta, insert, run, setMeta, update } from "../
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { badRequest, childEnv, newId, notFound, now, parseJson } from "../util";
-import { getAppSecret, isUnlocked, setAppSecret } from "../vault/vault";
+import { getAppSecret, isUnlocked, rememberSecret, setAppSecret } from "../vault/vault";
 import { claudeConfigDir } from "./claudeUpdate";
 import { claudeUsage, keychainService, parseCredentials, parseUsage } from "./claudeUsage";
 import { resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
@@ -39,8 +39,12 @@ const TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 const CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 const USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const BETA = "oauth-2025-04-20";
-/** A run gets a token that lasts at least this long; a longer one is refreshed first. */
-const REFRESH_AHEAD_MS = 2 * 60 * 60_000;
+/** A run without a timeout gets a token that lasts at least this long. */
+const NO_TIMEOUT_AHEAD_MS = 6 * 60 * 60_000;
+/** Never hand out a token that runs out sooner than this. */
+const MIN_LIFETIME_MS = 10 * 60_000;
+/** The keepalive refreshes tokens this close to running out (no run still uses them by then). */
+const KEEPALIVE_AHEAD_MS = 30 * 60_000;
 const USAGE_FRESH_MS = 60_000;
 /** Picking an account for a run waits this long at most for fresh usage. */
 const USAGE_WAIT_MS = 5_000;
@@ -51,6 +55,7 @@ const KEEPALIVE_MS = 30 * 60_000;
 const DEFAULT_META = "claude.accounts.default";
 const SYSTEM_LIMIT_META = "claude.accounts.system_limited";
 const URL_RE = /https:\/\/\S+/;
+const CANCELLED = "Cancelled.";
 
 interface AccountRow {
   id: string;
@@ -78,6 +83,20 @@ export interface RunAccount {
   id: string;
   label: string;
   token: string | null;
+  /** None of the workspace's accounts could be used: it runs on the computer's own login instead. */
+  outsidePool?: boolean;
+}
+
+/** A run's token must outlast the run: its timeout plus a margin. */
+function runAheadMs(): number {
+  const minutes = getSettings().runner.runTimeoutMinutes;
+  return minutes > 0 ? Math.max(2 * 60 * 60_000, (minutes + 15) * 60_000) : NO_TIMEOUT_AHEAD_MS;
+}
+
+/** The tokens are masked wherever saved secrets are: transcripts, run logs, pushes. */
+function remember(block: OAuthBlock) {
+  rememberSecret(block.accessToken);
+  rememberSecret(block.refreshToken);
 }
 
 const secretKey = (id: string) => `claude_account:${id}`;
@@ -230,7 +249,9 @@ function readTokens(id: string): OAuthBlock | null {
   try {
     const raw = getAppSecret(secretKey(id));
     const block = raw ? (JSON.parse(raw) as OAuthBlock) : null;
-    return block && typeof block.accessToken === "string" && block.accessToken ? block : null;
+    if (!block || typeof block.accessToken !== "string" || !block.accessToken) return null;
+    remember(block);
+    return block;
   } catch (err) {
     log.warn(`could not read the tokens of Claude account ${id}`, err);
     return null;
@@ -246,9 +267,24 @@ function markSignedOut(id: string, why: string) {
   changed();
 }
 
-/** A run on this account found it signed out (the token was revoked or ran out). */
-export function noteClaudeAccountSignedOut(id: string) {
-  if (id !== SYSTEM_CLAUDE_ACCOUNT) markSignedOut(id, "a run was refused");
+/**
+ * A run on this account was refused. Often its token only ran out: a refresh that works keeps the account; one Claude
+ * rejects marks it for a new sign-in.
+ */
+export async function noteClaudeAccountSignedOut(id: string): Promise<void> {
+  if (id === SYSTEM_CLAUDE_ACCOUNT) return;
+  const block = readTokens(id);
+  if (!block) return;
+  await refreshOnce(id, block);
+}
+
+function refreshOnce(id: string, block: OAuthBlock): Promise<OAuthBlock | null> {
+  let pending = refreshing.get(id);
+  if (!pending) {
+    pending = refreshTokens(id, block).finally(() => refreshing.delete(id));
+    refreshing.set(id, pending);
+  }
+  return pending;
 }
 
 async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock | null> {
@@ -256,6 +292,8 @@ async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock 
     markSignedOut(id, "no refresh token");
     return null;
   }
+  // The server spends the old refresh token: only refresh when the new one can be saved.
+  if (!isUnlocked()) return null;
   try {
     const res = await fetch(TOKEN_URL, {
       method: "POST",
@@ -276,8 +314,12 @@ async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock 
       refreshToken: body.refresh_token || block.refreshToken,
       expiresAt: Date.now() + body.expires_in * 1000,
     };
-    // The old refresh token may be spent now: the new one is saved before anything else.
+    // Removed or signed in again meanwhile: those tokens win.
+    const current = readTokens(id);
+    if (!current || current.refreshToken !== block.refreshToken || !get("SELECT id FROM claude_accounts WHERE id = ?", id)) return current;
+    // The old refresh token is spent now: the new one is saved before anything else.
     setAppSecret(secretKey(id), JSON.stringify(next));
+    remember(next);
     return next;
   } catch (err) {
     log.warn(`refreshing Claude account ${id} failed`, { error: err instanceof Error ? err.message : String(err) });
@@ -286,19 +328,14 @@ async function refreshTokens(id: string, block: OAuthBlock): Promise<OAuthBlock 
 }
 
 /** A working access token for a stored account, refreshed when it runs out soon; null when there is none. */
-async function accessToken(id: string, aheadMs = REFRESH_AHEAD_MS): Promise<string | null> {
+async function accessToken(id: string, aheadMs = runAheadMs()): Promise<string | null> {
   const block = readTokens(id);
   if (!block) return null;
   const expires = typeof block.expiresAt === "number" ? block.expiresAt : null;
   if (expires === null || expires - Date.now() > aheadMs) return block.accessToken;
-  let pending = refreshing.get(id);
-  if (!pending) {
-    pending = refreshTokens(id, block).finally(() => refreshing.delete(id));
-    refreshing.set(id, pending);
-  }
-  const fresh = await pending;
-  if (fresh) return fresh.accessToken;
-  return expires > Date.now() + 60_000 ? block.accessToken : null;
+  const fresh = await refreshOnce(id, block);
+  if (fresh && typeof fresh.expiresAt === "number" && fresh.expiresAt - Date.now() > MIN_LIFETIME_MS) return fresh.accessToken;
+  return expires > Date.now() + MIN_LIFETIME_MS ? block.accessToken : null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -387,11 +424,10 @@ function ranked(candidates: ClaudeAccount[]): ClaudeAccount[] {
   const threshold = getSettings().runner.accountSwitchPercent ?? 90;
   const room = (a: ClaudeAccount) => !a.limitedUntil && (binding(a.usage) ?? 0) < threshold;
   const [def, ...rest] = list;
-  if (def && room(def)) return list;
   // Known room first; an account whose usage is unknown comes after them.
   const use = (a: ClaudeAccount) => binding(a.usage) ?? threshold - 0.5;
   const byUse = (x: ClaudeAccount, y: ClaudeAccount) => use(x) - use(y);
-  const free = rest.filter(room).sort(byUse);
+  const free = [...(def && room(def) ? [def] : []), ...rest.filter(room).sort(byUse)];
   const open = list.filter((a) => !room(a) && !a.limitedUntil).sort(byUse);
   // All at their limit: the one that resets first.
   const limited = list.filter((a) => a.limitedUntil).sort((x, y) => Date.parse(x.limitedUntil!) - Date.parse(y.limitedUntil!));
@@ -407,7 +443,8 @@ export async function accountForRun(workspaceId: string | null): Promise<RunAcco
   if (getSettings().runner.accountAutoSwitch && Date.now() - usageRefreshedAt > 3 * USAGE_FRESH_MS) {
     await Promise.race([refreshClaudeUsage(), new Promise((r) => setTimeout(r, USAGE_WAIT_MS))]).catch(() => {});
   }
-  for (const a of ranked(pool(workspaceId))) {
+  const candidates = pool(workspaceId);
+  for (const a of ranked(candidates)) {
     if (a.system) {
       setMeta("claude.accounts.system_used", now());
       return { id: a.id, label: label(a), token: null };
@@ -417,7 +454,8 @@ export async function accountForRun(workspaceId: string | null): Promise<RunAcco
     run("UPDATE claude_accounts SET last_used_at = ? WHERE id = ?", now(), a.id);
     return { id: a.id, label: label(a), token };
   }
-  return null;
+  if (candidates.some((a) => a.system)) return null;
+  return { id: SYSTEM_CLAUDE_ACCOUNT, label: label(listClaudeAccounts()[0]!), token: null, outsidePool: true };
 }
 
 /** Points the run's Claude Code at the account: its token wins over a stored login and the vault's API key. */
@@ -432,14 +470,18 @@ export function applyAccountEnv(env: Record<string, string | undefined>, account
  * A usage limit stopped a run on the account: it stays aside until the limit resets. Returns the account the run can go
  * on with right away, or null when none has room (or auto-switch is off).
  */
-export function noteAccountLimit(id: string, resumeAt: string | null, workspaceId: string | null): { id: string; label: string } | null {
+export async function noteAccountLimit(id: string, resumeAt: string | null, workspaceId: string | null): Promise<{ id: string; label: string; stop?: boolean } | null> {
   const until = resumeAt && Date.parse(resumeAt) > Date.now() ? resumeAt : new Date(Date.now() + LIMIT_FALLBACK_MS).toISOString();
   if (id === SYSTEM_CLAUDE_ACCOUNT) setMeta(SYSTEM_LIMIT_META, until);
   else run("UPDATE claude_accounts SET limited_until = ? WHERE id = ?", until, id);
   changed();
   if (!getSettings().runner.accountAutoSwitch) return null;
-  const next = ranked(pool(workspaceId)).find((a) => a.id !== id && !a.limitedUntil);
-  return next ? { id: next.id, label: label(next) } : null;
+  for (const a of ranked(pool(workspaceId))) {
+    if (a.id === id || a.limitedUntil) continue;
+    // Only an account the run can really start on: otherwise it would land on the limited one again.
+    if (a.system || (await accessToken(a.id))) return { id: a.id, label: label(a) };
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -540,7 +582,7 @@ export function submitAccountLoginCode(code: string): ClaudeAccountLogin {
 }
 
 export function cancelAccountLogin(): ClaudeAccountLogin {
-  if (session) void finish(session, null, "Cancelled.");
+  if (session) void finish(session, null, CANCELLED);
   setStatus({ state: "idle", url: null, message: null, accountId: null });
   return status;
 }
@@ -577,6 +619,11 @@ async function finish(s: LoginSession, code: number | null, message?: string) {
   } catch {
     /* already gone */
   }
+  if (message === CANCELLED) {
+    await discard(s.dir);
+    setStatus({ state: "idle", url: null, message: null, accountId: null });
+    return;
+  }
   if (code !== 0 || message) {
     await discard(s.dir);
     const tail = stripAnsi(s.output)
@@ -610,6 +657,7 @@ function saveAccount(block: OAuthBlock, who: Identity, accountId: string | null)
     (who.email ? get<AccountRow>("SELECT * FROM claude_accounts WHERE email = ?", who.email) : null);
   const id = existing?.id ?? newId("cla");
   setAppSecret(secretKey(id), JSON.stringify(block));
+  remember(block);
   const fields = { email: who.email, name: who.name, organization: who.organization, plan: block.subscriptionType ?? null, needs_sign_in: 0 };
   if (existing) update("claude_accounts", id, fields);
   else insert("claude_accounts", { id, ...fields, limited_until: null, last_used_at: null, created_at: now() });
@@ -629,9 +677,12 @@ export function startClaudeAccounts() {
   if (keepalive || config().role === "runner") return;
   keepalive = setInterval(() => {
     if (!isUnlocked()) return;
-    for (const r of rows()) if (!r.needs_sign_in) void accessToken(r.id).catch(() => null);
+    for (const r of rows()) if (!r.needs_sign_in) void accessToken(r.id, KEEPALIVE_AHEAD_MS).catch(() => null);
   }, KEEPALIVE_MS);
   keepalive.unref?.();
+  // A sign-in Godmode was stopped in the middle of leaves its config (and keychain item) behind.
+  const root = join(config().dataDir, "claude-accounts");
+  if (existsSync(root)) for (const name of readdirSync(root)) if (name.startsWith("login_")) void discard(join(root, name)).catch(() => null);
 }
 
 export function stopClaudeAccounts() {

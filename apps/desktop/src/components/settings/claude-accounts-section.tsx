@@ -158,7 +158,7 @@ function useAccountLogin(login: ClaudeAccountLogin | undefined) {
   const prev = useRef(state);
   useEffect(() => {
     if (prev.current === "waiting" && state === "done") toast.success(t("accounts.added", { email: login?.message ?? "" }));
-    if (prev.current === "waiting" && state === "failed" && login?.message !== "Cancelled.") {
+    if (prev.current === "waiting" && state === "failed") {
       toast.error(t("accounts.signInFailed"), { description: login?.message ?? undefined });
     }
     prev.current = state;
