@@ -813,8 +813,6 @@
     "voiceOff": "Voice is off — enable it in Settings",
     "stopDictation": "Stop dictation (Esc)",
     "dictate": "Dictate",
-    "readingAloud": "Reading replies aloud — click to turn off",
-    "readAloud": "Read replies aloud",
     "transcribing": "Transcribing…",
     "workingQueued": "Working — new messages are queued",
     "newLine": "new line",
@@ -1153,7 +1151,6 @@
     "continueWithNew": "Message {{name}} to continue with new instructions…",
     "goesAlongLimit": "Message {{name}} — it goes along when the limit resets",
     "messageOrCommands": "Message {{name}} — or type / for commands",
-    "footer": "Agents act for you with your saved logins — secrets are filled into the browser, never shown to the AI.",
     "switchedOff": "{{name}} is switched off",
     "switchedOffHint": "It doesn't answer, run its automations or take handoffs until you switch it on.",
     "switchOn": "Switch on",
@@ -1166,5 +1163,64 @@
       "learned": "What have you learned so far?"
     },
     "yourAgent": "Your agent"
+  },
+  "pullRequest": {
+    "title": "Pull request",
+    "lastLoaded": "Last loaded {{ago}}",
+    "updated": "Updated {{ago}}",
+    "refresh": "Refresh",
+    "openOnGithub": "Open on GitHub",
+    "close": "Close",
+    "tryAgain": "Try again",
+    "errors": {
+      "rateLimited": "GitHub only allows a certain number of looks per hour, and they're used up for now.",
+      "rateLimitedUntil": "GitHub only allows a certain number of looks per hour, and they're used up until {{time}}.",
+      "notFound": "GitHub can't find this pull request. If it's private, this computer needs to be signed in to GitHub: run “gh auth login” in Terminal.",
+      "unauthorized": "GitHub didn't accept this computer's GitHub login. Run “gh auth login” in Terminal to sign in again.",
+      "other": "Couldn't load it from GitHub: {{message}}"
+    },
+    "states": {
+      "open": "Open",
+      "draft": "Draft",
+      "merged": "Merged",
+      "closed": "Closed"
+    },
+    "when": {
+      "merged": "merged {{ago}}",
+      "closed": "closed {{ago}}",
+      "opened": "opened {{ago}}"
+    },
+    "stale": "GitHub's hourly limit is used up, so this is what was loaded {{ago}}.",
+    "staleUntil": "GitHub's hourly limit is used up, so this is what was loaded {{ago}}. It refreshes after {{time}}.",
+    "signedOut": "This computer isn't signed in to GitHub, so GitHub allows only a few looks per hour. Run “gh auth login” in Terminal for more.",
+    "files_one": "{{count}} file",
+    "files_other": "{{count}} files",
+    "commits_one": "{{count}} commit",
+    "commits_other": "{{count}} commits",
+    "conflicts": "Has conflicts with the base branch",
+    "blocked": "Can't be merged yet: a required review or check is missing",
+    "sections": {
+      "description": "Description",
+      "reviews": "Reviews",
+      "checks": "Checks",
+      "files": "Files"
+    },
+    "showLess": "Show less",
+    "showAll": "Show all",
+    "showFewer": "Show fewer",
+    "showAllCount": "Show all {{count}}",
+    "review": {
+      "approved": "approved",
+      "changes_requested": "wants changes",
+      "commented": "commented"
+    },
+    "checks": {
+      "failed": "{{count}} failed",
+      "running": "{{count}} running",
+      "passed": "{{count}} passed",
+      "skipped": "{{count}} skipped"
+    },
+    "moreOnGithub": "{{count}} more on GitHub",
+    "linkHint": "Show beside the chat · ⌘-click opens GitHub"
   }
 }

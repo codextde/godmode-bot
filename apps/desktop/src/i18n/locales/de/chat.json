@@ -813,8 +813,6 @@
     "voiceOff": "Sprache ist aus – schalte sie in den Einstellungen ein",
     "stopDictation": "Diktat beenden (Esc)",
     "dictate": "Diktieren",
-    "readingAloud": "Antworten werden vorgelesen – zum Ausschalten klicken",
-    "readAloud": "Antworten vorlesen",
     "transcribing": "Wird transkribiert…",
     "workingQueued": "Arbeitet – neue Nachrichten kommen in die Warteschlange",
     "newLine": "neue Zeile",
@@ -1153,7 +1151,6 @@
     "continueWithNew": "Schreib {{name}}, um mit neuen Anweisungen weiterzumachen…",
     "goesAlongLimit": "Schreib {{name}} – geht mit, wenn das Limit zurückgesetzt wird",
     "messageOrCommands": "Schreib {{name}} – oder tipp / für Befehle",
-    "footer": "Agenten handeln mit deinen gespeicherten Logins für dich – Geheimnisse werden in den Browser eingetragen und nie der KI gezeigt.",
     "switchedOff": "{{name}} ist ausgeschaltet",
     "switchedOffHint": "Antwortet nicht, führt keine Automationen aus und nimmt keine Übergaben an, bis du ihn einschaltest.",
     "switchOn": "Einschalten",
@@ -1166,5 +1163,64 @@
       "learned": "Was hast du bisher gelernt?"
     },
     "yourAgent": "Dein Agent"
+  },
+  "pullRequest": {
+    "title": "Pull Request",
+    "lastLoaded": "Zuletzt geladen {{ago}}",
+    "updated": "Aktualisiert {{ago}}",
+    "refresh": "Aktualisieren",
+    "openOnGithub": "Auf GitHub öffnen",
+    "close": "Schließen",
+    "tryAgain": "Erneut versuchen",
+    "errors": {
+      "rateLimited": "GitHub erlaubt nur eine bestimmte Zahl an Abrufen pro Stunde, und die sind gerade aufgebraucht.",
+      "rateLimitedUntil": "GitHub erlaubt nur eine bestimmte Zahl an Abrufen pro Stunde, und die sind bis {{time}} aufgebraucht.",
+      "notFound": "GitHub findet diesen Pull Request nicht. Ist er privat, muss dieser Computer bei GitHub angemeldet sein: Führe „gh auth login“ im Terminal aus.",
+      "unauthorized": "GitHub hat die GitHub-Anmeldung dieses Computers nicht akzeptiert. Führe „gh auth login“ im Terminal aus, um dich neu anzumelden.",
+      "other": "Konnte nicht von GitHub geladen werden: {{message}}"
+    },
+    "states": {
+      "open": "Offen",
+      "draft": "Entwurf",
+      "merged": "Gemergt",
+      "closed": "Geschlossen"
+    },
+    "when": {
+      "merged": "gemergt {{ago}}",
+      "closed": "geschlossen {{ago}}",
+      "opened": "eröffnet {{ago}}"
+    },
+    "stale": "Das stündliche Limit von GitHub ist aufgebraucht, das hier wurde {{ago}} geladen.",
+    "staleUntil": "Das stündliche Limit von GitHub ist aufgebraucht, das hier wurde {{ago}} geladen. Es aktualisiert sich nach {{time}}.",
+    "signedOut": "Dieser Computer ist nicht bei GitHub angemeldet, deshalb erlaubt GitHub nur wenige Abrufe pro Stunde. Führe „gh auth login“ im Terminal aus, um mehr zu bekommen.",
+    "files_one": "{{count}} Datei",
+    "files_other": "{{count}} Dateien",
+    "commits_one": "{{count}} Commit",
+    "commits_other": "{{count}} Commits",
+    "conflicts": "Hat Konflikte mit dem Basis-Branch",
+    "blocked": "Kann noch nicht gemergt werden: Ein nötiges Review oder ein Check fehlt",
+    "sections": {
+      "description": "Beschreibung",
+      "reviews": "Reviews",
+      "checks": "Checks",
+      "files": "Dateien"
+    },
+    "showLess": "Weniger anzeigen",
+    "showAll": "Alles anzeigen",
+    "showFewer": "Weniger anzeigen",
+    "showAllCount": "Alle {{count}} anzeigen",
+    "review": {
+      "approved": "hat zugestimmt",
+      "changes_requested": "wünscht Änderungen",
+      "commented": "hat kommentiert"
+    },
+    "checks": {
+      "failed": "{{count}} fehlgeschlagen",
+      "running": "{{count}} laufen",
+      "passed": "{{count}} bestanden",
+      "skipped": "{{count}} übersprungen"
+    },
+    "moreOnGithub": "{{count}} weitere auf GitHub",
+    "linkHint": "Neben dem Chat anzeigen · ⌘-Klick öffnet GitHub"
   }
 }

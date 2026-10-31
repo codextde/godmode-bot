@@ -12,6 +12,7 @@ import { useAgents, useNow } from "@/lib/hooks";
 import { t } from "@/lib/i18n";
 import type { LiveRun } from "@/lib/live";
 import { alpha, radius, space, useColors } from "@/lib/theme";
+import { useTypewriter } from "@/lib/typewriter";
 
 const ORIGIN_LABEL: Partial<Record<Conversation["origin"], string>> = {
   get routine() { return t("components:rows.origin.routine"); },
@@ -75,6 +76,7 @@ export function ConversationRow({
   const handedBy = from ?? (conversation.delegatedFrom ? byId.get(conversation.delegatedFrom.agentId) : undefined);
   const origin = conversation.origin === "delegation" && handedBy ? t("rows.from", { name: handedBy.name }) : ORIGIN_LABEL[conversation.origin];
   const status = chatStatus(conversation, { running, queued });
+  const title = useTypewriter(conversation.title || t("rows.newChat"));
   const unread = conversation.unread;
   const statusColor = status?.tone === "warning" ? c.warning : status?.tone === "brand" ? c.brandStrong : c.textMuted;
   return (
@@ -84,7 +86,7 @@ export function ConversationRow({
         <Row style={{ gap: space.sm }}>
           {conversation.pinned && <Icon name="pin" size={11} color={c.textMuted} />}
           <T variant="headline" numberOfLines={1} style={{ flexShrink: 1, fontSize: 16, fontWeight: unread ? "700" : undefined }}>
-            {conversation.title || t("rows.newChat")}
+            {title}
           </T>
           {unread ? (
             <View

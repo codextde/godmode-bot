@@ -55,7 +55,8 @@
       "openChat": "Öffne den Chat, um zu antworten",
       "approve": "Freigeben",
       "decline": "Ablehnen"
-    }
+    },
+    "hideSuggestions": "Vorschläge ausblenden"
   },
   "chats": {
     "title": "Chats",

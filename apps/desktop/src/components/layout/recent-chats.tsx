@@ -2,10 +2,9 @@ import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { AlarmClock, Archive, Bot, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
+import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -15,15 +14,28 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LiveDot } from "@/components/aicss/Motion";
 import { NavSectionHeader } from "@/components/layout/nav-section-header";
 import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
+import { AnimatedTitle } from "@/components/chat/animated-title";
 import { api } from "@/lib/api";
 import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
 import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { isMac, modKey } from "@/lib/desktop";
 import { useLive } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
 import { dateLocale, intlLocale, t as translate } from "@/i18n";
@@ -79,6 +91,7 @@ export function RecentChats() {
   const setRecentSource = useUi((s) => s.setRecentSource);
   const open = useUi((s) => !s.collapsedNav.includes("recent"));
   const toggleOpen = useUi((s) => s.toggleNavCollapsed);
+  const foldedGroups = useUi((s) => s.collapsedNav);
 
   const unarchived = conversations.filter((c) => !c.archived);
   const sources = sourceStats(unarchived);
@@ -92,104 +105,187 @@ export function RecentChats() {
   }
   const [limit, setLimit] = useState(PAGE);
   useEffect(() => setLimit(PAGE), [recentTab, recentSource, scope]);
+  const grouped = recentTab === "all";
+  const rank = (c: Conversation) => (grouped ? BUCKET_RANK[bucketOf(c)] : 0);
   const matching = visible
     .filter((c) => recentTab === "all" || bucketOf(c) === recentTab)
-    .sort((a, b) =>
-      recentTab === "scheduled"
-        ? continuesAt(a).localeCompare(continuesAt(b))
-        : Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt),
+    .sort(
+      (a, b) =>
+        rank(a) - rank(b) ||
+        (recentTab === "scheduled" || (grouped && bucketOf(a) === "scheduled")
+          ? continuesAt(a).localeCompare(continuesAt(b))
+          : Number(b.pinned) - Number(a.pinned) || (b.lastMessageAt ?? b.createdAt).localeCompare(a.lastMessageAt ?? a.createdAt)),
     );
-  const items = matching.slice(0, limit);
-  const more = matching.length - items.length;
-  // Long lists read by day; the running and scheduled tabs are short and ordered by what comes next.
-  const dated = recentTab === "all" || recentTab === "done";
   const dayOf = (c: Conversation) => (c.pinned ? t("recent.pinned") : dayLabel(c.lastMessageAt ?? c.createdAt));
+  const runningLabel = t("recent.tabs.running.label");
+  const groupOf = (c: Conversation): string | null => {
+    if (grouped) {
+      const bucket = bucketOf(c);
+      if (bucket === "running") return runningLabel;
+      if (bucket === "scheduled") return t("recent.tabs.scheduled.label");
+      return dayOf(c);
+    }
+    return recentTab === "done" ? dayOf(c) : null;
+  };
+  const groupSize = new Map<string, number>();
+  for (const c of matching) {
+    const g = groupOf(c);
+    if (g) groupSize.set(g, (groupSize.get(g) ?? 0) + 1);
+  }
+  type Row = { c: Conversation; heading: string | null; folded: boolean };
+  const rows: Row[] = [];
+  let more = 0;
+  let shown = 0;
+  let previous: string | null | undefined;
+  for (const c of matching) {
+    const group = groupOf(c);
+    const starts = group !== previous;
+    previous = group;
+    const folded = !!group && foldedGroups.includes(`recent:${group}`);
+    if (folded) {
+      if (starts) rows.push({ c, heading: group, folded });
+      continue;
+    }
+    if (shown >= limit) {
+      more++;
+      continue;
+    }
+    shown++;
+    rows.push({ c, heading: starts ? group : null, folded });
+  }
+  const slots = rows.flatMap((r) => (r.folded ? [] : [r.c.id])).slice(0, 9);
+  const slotsRef = useRef(slots);
+  slotsRef.current = slots;
+  const holding = useModifierHeld();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (!mod || e.shiftKey || e.altKey || !/^Digit[1-9]$/.test(e.code)) return;
+      if ((e.target as HTMLElement | null)?.closest?.("[role=application],[role=dialog],[role=alertdialog]")) return;
+      const id = slotsRef.current[Number(e.code.slice(5)) - 1];
+      if (!id) return;
+      e.preventDefault();
+      navigate(`/chat/${id}`);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navigate]);
+  const unreadIds = visible.flatMap((c) => (c.unread ? [c.id] : []));
+  const markAllRead = unreadIds.length
+    ? () => void api.conversations.read(scope === "all" ? "all" : unreadIds).catch(() => undefined)
+    : undefined;
 
   if (unarchived.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
   return (
-    <SidebarGroup className="group-data-[collapsible=icon]:hidden">
-      <div className="flex items-center justify-between gap-2">
-        <NavSectionHeader label={t("recent.title")} open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} quiet />
-        {!open && (counts.running > 0 || needsYou > 0) && (
-          <span className="mr-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
-            {needsYou > 0 && (
-              <span className="flex items-center gap-1 text-warning">
-                <span className="size-1.5 rounded-full bg-current" aria-hidden />
-                {t("counts.needsYou", { count: needsYou })}
-              </span>
-            )}
-            {counts.running > 0 && (
-              <span className="flex items-center gap-1 text-brand-strong">
-                <span className="size-1.5 rounded-full bg-current" aria-hidden />
-                {t("recent.running", { count: counts.running })}
-              </span>
-            )}
-          </span>
+    <SidebarGroup className="pt-0 group-data-[collapsible=icon]:hidden">
+      <div className="sticky top-0 z-10 -mx-2 flex items-center justify-between gap-2 bg-sidebar px-2">
+        <NavSectionHeader label={t("recent.title")} open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} />
+        {open ? (
+          <RecentFilter
+            tab={recentTab}
+            onTab={setRecentTab}
+            source={recentSource}
+            onSource={setRecentSource}
+            counts={counts}
+            needsYou={needsYou}
+            stats={sources}
+            onMarkAllRead={markAllRead}
+          />
+        ) : (
+          (counts.running > 0 || needsYou > 0) && (
+            <span className="mr-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
+              {needsYou > 0 && (
+                <span className="flex items-center gap-1 text-warning">
+                  <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                  {t("counts.needsYou", { count: needsYou })}
+                </span>
+              )}
+              {counts.running > 0 && (
+                <span className="flex items-center gap-1 text-brand-strong">
+                  <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                  {t("recent.running", { count: counts.running })}
+                </span>
+              )}
+            </span>
+          )
         )}
       </div>
-      {open && visible.some((c) => c.unread) && (
-        <button
-          type="button"
-          onClick={() =>
-            void api.conversations.read(scope === "all" ? "all" : visible.flatMap((c) => (c.unread ? [c.id] : []))).catch(() => undefined)
-          }
-          className="absolute top-3.5 right-3 text-[11px] text-muted-foreground transition hover:text-foreground"
-        >
-          {t("recent.markAllRead")}
-        </button>
-      )}
       {open && (
-        <>
-          <RecentTabs value={recentTab} onChange={setRecentTab} counts={counts} needsYou={needsYou}>
-            <SourceTabs value={recentSource} onChange={setRecentSource} stats={sources} />
-          </RecentTabs>
-          <SidebarGroupContent id="recent-chats-panel" role="tabpanel" aria-labelledby={`recent-tab-${recentTab}`}>
-            <SidebarMenu>
-              {items.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
-              {items.map((c, i) => {
-                const day = dated && (i === 0 || dayOf(items[i - 1]!) !== dayOf(c)) ? dayOf(c) : null;
-                const agent = agents.find((a) => a.id === c.agentId);
-                const workspaceId = c.workspaceId ?? agent?.workspaceId;
-                const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
-                const projectId = !workspace && !scopeProject ? chatProject(c, agents) : null;
-                const project = projectId ? projectIndex.get(projectId)?.project : undefined;
-                const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
-                const queued = !running && queuedConversations.has(c.id);
-                return (
-                  <Fragment key={c.id}>
-                  {day && (
-                    <li role="presentation" className={cn("px-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/80", i > 0 ? "pt-3" : "pt-1")}>
-                      {day}
-                    </li>
-                  )}
+        <SidebarGroupContent id="recent-chats-panel">
+          <SidebarMenu>
+            {matching.length === 0 && <EmptyTab tab={recentTab} source={recentSource} scopeName={scopeName} hasArchived={hasArchived} />}
+            {rows.map(({ c, heading, folded }, i) => {
+              const headingNode = heading && (
+                <GroupHeading
+                  label={heading}
+                  first={i === 0}
+                  live={heading === runningLabel}
+                  folded={folded}
+                  count={groupSize.get(heading) ?? 0}
+                  onToggle={() => toggleOpen(`recent:${heading}`)}
+                />
+              );
+              if (folded) return <Fragment key={`group-${heading}`}>{headingNode}</Fragment>;
+              const slot = holding ? slots.indexOf(c.id) : -1;
+              const agent = agents.find((a) => a.id === c.agentId);
+              const workspaceId = c.workspaceId ?? agent?.workspaceId;
+              const workspace = scope === "all" && workspaceId ? workspaces.find((w) => w.id === workspaceId) : undefined;
+              const projectId = !workspace && !scopeProject ? chatProject(c, agents) : null;
+              const project = projectId ? projectIndex.get(projectId)?.project : undefined;
+              const running = runningConversations.has(c.id) || (c.running && !queuedConversations.has(c.id));
+              const queued = !running && queuedConversations.has(c.id);
+              const detail = running && !c.paused ? null : chatStatus(c, { running, queued });
+              const unread = c.unread && conversationId !== c.id;
+              const when = c.lastMessageAt ?? c.createdAt;
+              const hover = [
+                originLine(c, agents) ?? agent?.name ?? t("common:words.agent"),
+                workspace?.name ?? project?.name,
+                formatDistanceToNowStrict(new Date(when), { addSuffix: true, locale: dateLocale() }),
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <Fragment key={c.id}>
+                  {headingNode}
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       asChild
                       isActive={conversationId === c.id}
                       className="h-auto py-1.5 group-focus-within/menu-item:pr-15! group-hover/menu-item:pr-15! group-has-data-[sidebar=menu-action]/menu-item:pr-2 max-md:pr-15! data-[active=true]:bg-card data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border"
                     >
-                      <Link to={`/chat/${c.id}`} className="flex items-start gap-2">
+                      <Link to={`/chat/${c.id}`} title={hover} className="flex items-start gap-2">
                         <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1">
-                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || t("shell.newChat")}</span>
-                            {c.unread && conversationId !== c.id && (
+                            <span className={cn("min-w-0 flex-1 truncate text-[13px]", unread && "font-semibold text-foreground")}>
+                              <AnimatedTitle text={c.title || t("shell.newChat")} />
+                            </span>
+                            {unread ? (
                               <span
-                                className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}
+                                className={cn("size-1.5 shrink-0 rounded-full", c.unread!.failed ? "bg-destructive" : "bg-brand-strong")}
                                 role="img"
-                                aria-label={c.unread.failed ? t("recent.failedHere") : t("recent.newReply")}
+                                aria-label={c.unread!.failed ? t("recent.failedHere") : t("recent.newReply")}
                               />
-                            )}
+                            ) : null}
                             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
+                            {slot >= 0 ? (
+                              <kbd className="ml-0.5 shrink-0 rounded-[4px] bg-foreground/8 px-1 font-mono text-[10px] leading-4 text-foreground/80 tabular-nums">
+                                {modKey}
+                                {slot + 1}
+                              </kbd>
+                            ) : (
+                              running &&
+                              !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                            )}
                           </span>
                           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                             {workspace && <WorkspaceChip workspace={workspace} />}
                             {project && <WorkspaceChip workspace={project} kind="project" />}
                             <span className="block min-w-0 flex-1 truncate">
-                              {chatStatus(c, { running, queued }) ?? (
+                              {detail ?? (
                                 <>
-                                  {originLine(c, agents) ?? agent?.name ?? t("common:words.agent")} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false, locale: dateLocale() })}
+                                  {originLine(c, agents) ?? agent?.name ?? t("common:words.agent")} · {formatDistanceToNowStrict(new Date(when), { addSuffix: false, locale: dateLocale() })}
                                 </>
                               )}
                             </span>
@@ -224,57 +320,125 @@ export function RecentChats() {
                       <TooltipContent side="top">{t("common:actions.delete")}</TooltipContent>
                     </Tooltip>
                   </SidebarMenuItem>
-                  </Fragment>
-                );
-              })}
-              {more > 0 && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    onClick={() => setLimit((n) => n + PAGE)}
-                    className="mt-1 gap-2 text-[12.5px] text-muted-foreground [&>svg]:size-3.5"
-                  >
-                    <ChevronDown />
-                    <span>
-                      <Trans t={t} i18nKey="recent.showMore" values={{ count: Math.min(more, PAGE), total: more }} components={{ muted: <span className="ml-1 text-muted-foreground/60" /> }} />
-                    </span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              {hasArchived && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    size="sm"
-                    isActive={pathname === "/archived"}
-                    className="mt-1 gap-2 text-[12.5px] text-muted-foreground data-[active=true]:bg-card data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border [&>svg]:size-3.5"
-                  >
-                    <Link to="/archived">
-                      <Archive />
-                      <span>{t("nav.archivedChats")}</span>
-                      {archivedOngoing > 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="ml-auto flex h-4 items-center gap-1 rounded-full bg-foreground/6 px-1.5 text-[10px] leading-none tabular-nums">
-                              <AlarmClock className="size-2.5 text-brand-strong" aria-hidden />
-                              {archivedOngoing}
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top">
-                            {t("recent.archivedOngoing", { count: archivedOngoing })}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </>
+                </Fragment>
+              );
+            })}
+            {more > 0 && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  size="sm"
+                  onClick={() => setLimit((n) => n + PAGE)}
+                  className="mt-1 gap-2 text-[12.5px] text-muted-foreground [&>svg]:size-3.5"
+                >
+                  <ChevronDown />
+                  <span>
+                    <Trans t={t} i18nKey="recent.showMore" values={{ count: Math.min(more, PAGE), total: more }} components={{ muted: <span className="ml-1 text-muted-foreground/60" /> }} />
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+            {hasArchived && (
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  size="sm"
+                  isActive={pathname === "/archived"}
+                  className="mt-1 gap-2 text-[12.5px] text-muted-foreground data-[active=true]:bg-card data-[active=true]:text-foreground data-[active=true]:shadow-card data-[active=true]:ring-1 data-[active=true]:ring-border [&>svg]:size-3.5"
+                >
+                  <Link to="/archived">
+                    <Archive />
+                    <span>{t("nav.archivedChats")}</span>
+                    {archivedOngoing > 0 && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="ml-auto flex h-4 items-center gap-1 rounded-full bg-foreground/6 px-1.5 text-[10px] leading-none tabular-nums">
+                            <AlarmClock className="size-2.5 text-brand-strong" aria-hidden />
+                            {archivedOngoing}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="top">
+                          {t("recent.archivedOngoing", { count: archivedOngoing })}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            )}
+          </SidebarMenu>
+        </SidebarGroupContent>
       )}
       {deleteDialog}
     </SidebarGroup>
+  );
+}
+
+function useModifierHeld(): boolean {
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    const key = isMac ? "Meta" : "Control";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reset = () => {
+      clearTimeout(timer);
+      setHeld(false);
+    };
+    const down = (e: KeyboardEvent) => {
+      if (e.key === key) {
+        if (e.repeat) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => setHeld(true), 300);
+      } else if (!/^Digit[1-9]$/.test(e.code)) reset();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === key || !(isMac ? e.metaKey : e.ctrlKey)) reset();
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", reset);
+    return () => {
+      reset();
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
+  return held;
+}
+
+function GroupHeading({
+  label,
+  first,
+  live,
+  folded,
+  count,
+  onToggle,
+}: {
+  label: string;
+  first: boolean;
+  live: boolean;
+  folded: boolean;
+  count: number;
+  onToggle: () => void;
+}) {
+  return (
+    <li role="presentation" className={cn("px-0.5", first ? "pt-0.5" : "pt-2")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        className="group/heading flex h-5 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[10.5px] font-medium text-muted-foreground/80 outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      >
+        {live && <LiveDot className="size-1.5 bg-brand-strong" />}
+        {label}
+        {folded && <span className="font-normal text-muted-foreground/60 tabular-nums">{count}</span>}
+        <ChevronDown
+          className={cn(
+            "size-3 transition",
+            folded ? "-rotate-90" : "opacity-0 group-hover/heading:opacity-100 group-focus-visible/heading:opacity-100",
+          )}
+        />
+      </button>
+    </li>
   );
 }
 
@@ -307,12 +471,6 @@ function WorkspaceChip({ workspace, kind = "workspace" }: { workspace: Pick<Work
     </span>
   );
 }
-
-const TAB_LIST = "flex gap-px rounded-lg border bg-secondary/70 p-0.5";
-const TAB =
-  "relative flex h-6.5 min-w-0 flex-auto items-center justify-center gap-1 rounded-md px-1.5 text-[11.5px] font-medium outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50";
-const TAB_PILL = "absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent";
-const TAB_SPRING = { type: "spring", stiffness: 460, damping: 36 } as const;
 
 type ChatSource = Exclude<RecentSource, "all">;
 
@@ -347,68 +505,6 @@ function sourceStats(chats: Conversation[]): Record<RecentSource, SourceStat> {
 
 const SOURCES = [{ value: "mine" }, { value: "automations" }, { value: "agents" }, { value: "all" }] as const satisfies readonly { value: RecentSource }[];
 
-function SourceTabs({
-  value,
-  onChange,
-  stats,
-}: {
-  value: RecentSource;
-  onChange: (source: RecentSource) => void;
-  stats: Record<RecentSource, SourceStat>;
-}) {
-  const { t } = useTranslation("layout");
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-    if (!delta) return;
-    e.preventDefault();
-    const next = (SOURCES.findIndex((s) => s.value === value) + delta + SOURCES.length) % SOURCES.length;
-    onChange(SOURCES[next].value);
-    refs.current[next]?.focus();
-  };
-
-  return (
-    <div role="tablist" aria-label={t("recent.sourcesLabel")} onKeyDown={onKeyDown} className={cn(TAB_LIST, "mb-1")}>
-      {SOURCES.map((s, i) => {
-        const active = s.value === value;
-        const { unread, needsYou } = stats[s.value];
-        const signal = !active && s.value !== "all" && (needsYou > 0 ? "needs" : unread > 0 ? "unread" : null);
-        const hint = t(`recent.sources.${s.value}.hint`);
-        return (
-          <Tooltip key={s.value}>
-            <TooltipTrigger asChild>
-              <button
-                ref={(el) => {
-                  refs.current[i] = el;
-                }}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                tabIndex={active ? 0 : -1}
-                onClick={() => onChange(s.value)}
-                className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-              >
-                {active && <motion.span layoutId="recent-source-pill" className={TAB_PILL} transition={TAB_SPRING} />}
-                <span className="relative truncate">{t(`recent.sources.${s.value}.label`)}</span>
-                {signal && (
-                  <span
-                    className={cn("relative size-1.5 shrink-0 rounded-full", signal === "needs" ? "bg-warning" : "bg-brand-strong")}
-                    role="img"
-                    aria-label={signal === "needs" ? t("recent.waitingForYou") : t("recent.newReplies")}
-                  />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              {needsYou > 0 ? t("recent.hintNeedsYou", { hint, count: needsYou }) : unread > 0 ? t("recent.hintUnread", { hint, count: unread }) : hint}
-            </TooltipContent>
-          </Tooltip>
-        );
-      })}
-    </div>
-  );
-}
-
 type ChatBucket = Exclude<RecentTab, "all">;
 
 /** Running: working, queued or standing still until someone acts. Scheduled: continues by itself later. Done: the rest. */
@@ -424,82 +520,94 @@ function continuesAt(c: Conversation): string {
 
 const TABS = [{ value: "all" }, { value: "running" }, { value: "scheduled" }, { value: "done" }] as const satisfies readonly { value: RecentTab }[];
 
-function RecentTabs({
-  value,
-  onChange,
+const BUCKET_RANK: Record<ChatBucket, number> = { running: 0, scheduled: 1, done: 2 };
+
+function RecentFilter({
+  tab,
+  onTab,
+  source,
+  onSource,
   counts,
   needsYou,
-  children,
+  stats,
+  onMarkAllRead,
 }: {
-  value: RecentTab;
-  onChange: (tab: RecentTab) => void;
+  tab: RecentTab;
+  onTab: (tab: RecentTab) => void;
+  source: RecentSource;
+  onSource: (source: RecentSource) => void;
   counts: Record<RecentTab, number>;
   needsYou: number;
-  children?: ReactNode;
+  stats: Record<RecentSource, SourceStat>;
+  onMarkAllRead?: () => void;
 }) {
   const { t } = useTranslation("layout");
-  const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
-    if (!delta) return;
-    e.preventDefault();
-    const next = (TABS.findIndex((tab) => tab.value === value) + delta + TABS.length) % TABS.length;
-    onChange(TABS[next].value);
-    refs.current[next]?.focus();
-  };
-
+  const sourceLabel = t(`recent.sources.${source}.label`);
+  const tabLabel = tab === "all" ? null : t(`recent.tabs.${tab}.label`);
+  const elsewhere = SOURCES.some((s) => s.value !== source && s.value !== "all" && (stats[s.value].needsYou > 0 || stats[s.value].unread > 0));
   return (
-    <div className="sticky top-0 z-10 -mx-2 bg-sidebar px-2 pt-1 pb-1.5">
-      {children}
-      <div role="tablist" aria-label={t("recent.tabsLabel")} onKeyDown={onKeyDown} className={TAB_LIST}>
-        {TABS.map((tab, i) => {
-          const active = tab.value === value;
-          const count = tab.value === "running" || tab.value === "scheduled" ? counts[tab.value] : 0;
-          const urgent = tab.value === "running" && needsYou > 0;
-          const hint = t(`recent.tabs.${tab.value}.hint`);
-          return (
-            <Tooltip key={tab.value}>
-              <TooltipTrigger asChild>
-                <button
-                  ref={(el) => {
-                    refs.current[i] = el;
-                  }}
-                  id={`recent-tab-${tab.value}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  aria-controls="recent-chats-panel"
-                  tabIndex={active ? 0 : -1}
-                  onClick={() => onChange(tab.value)}
-                  className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
-                >
-                  {active && <motion.span layoutId="recent-tab-pill" className={TAB_PILL} transition={TAB_SPRING} />}
-                  <span className="relative truncate">{t(`recent.tabs.${tab.value}.label`)}</span>
-                  {count > 0 && (
-                    <span
-                      className={cn(
-                        "relative flex h-3.5 min-w-3.5 items-center justify-center gap-0.5 rounded-full px-1 text-[10px] leading-none tabular-nums",
-                        urgent
-                          ? "bg-warning/15 text-warning"
-                          : tab.value === "running"
-                            ? "bg-brand-strong/12 text-brand-strong"
-                            : active
-                              ? "bg-foreground/8 text-foreground"
-                              : "bg-foreground/6 text-muted-foreground",
-                      )}
-                    >
-                      {tab.value === "running" && !urgent && <span className="size-1 animate-pulse rounded-full bg-current" aria-hidden />}
-                      {count}
-                    </span>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={tabLabel ? t("recent.filterLabelTab", { source: sourceLabel, tab: tabLabel }) : t("recent.filterLabel", { source: sourceLabel })}
+          className="mr-1 flex h-6 min-w-0 items-center gap-1 rounded-md px-1.5 text-[11.5px] text-muted-foreground outline-none transition hover:bg-sidebar-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[state=open]:bg-sidebar-accent data-[state=open]:text-foreground"
+        >
+          {elsewhere && <span className="size-1.5 shrink-0 rounded-full bg-brand-strong" aria-hidden />}
+          <span className="truncate">
+            {sourceLabel}
+            {tabLabel && <span className="text-foreground"> · {tabLabel}</span>}
+          </span>
+          <ChevronDown className="size-3 shrink-0" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground">{t("recent.startedBy")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={source} onValueChange={(v) => onSource(v as RecentSource)}>
+          {SOURCES.map((s) => {
+            const { unread, needsYou: waiting } = stats[s.value];
+            return (
+              <DropdownMenuRadioItem key={s.value} value={s.value} className="flex-col items-start gap-0">
+                <span className="flex w-full items-center gap-1.5">
+                  {t(`recent.sources.${s.value}.label`)}
+                  {s.value !== "all" && (waiting > 0 || unread > 0) && (
+                    <span className={cn("size-1.5 rounded-full", waiting > 0 ? "bg-warning" : "bg-brand-strong")} aria-label={waiting > 0 ? t("recent.waitingForYou") : t("recent.newReplies")} />
                   )}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{urgent ? t("recent.hintNeedsYou", { hint, count: needsYou }) : hint}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </div>
+                </span>
+                <span className="text-[11px] text-muted-foreground">{t(`recent.sources.${s.value}.hint`)}</span>
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[11px] font-medium text-muted-foreground">{t("recent.status")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={tab} onValueChange={(v) => onTab(v as RecentTab)}>
+          {TABS.map((item) => {
+            const count = item.value === "running" || item.value === "scheduled" ? counts[item.value] : 0;
+            const urgent = item.value === "running" && needsYou > 0;
+            return (
+              <DropdownMenuRadioItem key={item.value} value={item.value}>
+                {t(`recent.tabs.${item.value}.label`)}
+                {count > 0 && (
+                  <span className={cn("ml-auto text-[11px] tabular-nums", urgent ? "text-warning" : "text-muted-foreground")}>
+                    {urgent ? t("counts.needsYou", { count: needsYou }) : count}
+                  </span>
+                )}
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+        {onMarkAllRead && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onMarkAllRead}>
+              <CheckCheck />
+              {t("recent.markAllRead")}
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

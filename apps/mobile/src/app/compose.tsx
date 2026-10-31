@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import { CharacterAvatar } from "@/components/character";
+import { Icon } from "@/components/icon";
 import { Composer, type ComposerHandle } from "@/components/composer";
 import { ModelButton } from "@/components/model-button";
 import { ProjectPicker } from "@/components/project-picker";
@@ -12,6 +13,7 @@ import { api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
 import { pickAgent, SUGGESTIONS } from "@/lib/desktop-parity";
 import { useNewChatChoice } from "@/lib/composer";
+import { confirmHideSuggestions, useSuggestions } from "@/lib/suggestions";
 import { useAgents } from "@/lib/hooks";
 import { useLive } from "@/lib/live";
 import { agentsFor, projectsFor, useWorkspace } from "@/lib/workspace";
@@ -21,6 +23,7 @@ import { radius, space, useColors } from "@/lib/theme";
 export default function Compose() {
   const c = useColors();
   const { t } = useTranslation("chat");
+  const hideSuggestions = useSuggestions((s) => s.hidden);
   const { agentId, prompt } = useLocalSearchParams<{ agentId?: string; prompt?: string }>();
   const { data: agents, isLoading } = useAgents();
   const { id: workspaceId, projectId: scopeProject, workspaces } = useWorkspace();
@@ -143,26 +146,42 @@ export default function Compose() {
         allowNone={!current?.projectId}
         hint={projectId ? t("compose.projectHint") : undefined}
       />
-      <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
-        <T variant="eyebrow" muted>
-          {t("compose.try")}
-        </T>
-        {SUGGESTIONS.map(({ text }) => (
-          <Pressable
-            key={text}
-            onPress={() => {
-              tap();
-              setIdea(text);
-              composer.current?.setText(text);
-            }}
-            style={({ pressed }) => [styles.idea, { borderColor: idea === text ? c.borderStrong : c.border, opacity: pressed ? 0.6 : 1 }]}
-          >
-            <T variant="subhead" muted>
-              {text}
+      {hideSuggestions ? null : (
+        <View style={{ paddingHorizontal: space.xl, gap: space.sm }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <T variant="eyebrow" muted>
+              {t("compose.try")}
             </T>
-          </Pressable>
-        ))}
-      </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("compose.hideSuggestions")}
+              hitSlop={10}
+              onPress={() => {
+                tap();
+                confirmHideSuggestions();
+              }}
+              style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+            >
+              <Icon name="close" size={12} weight="semibold" color={c.textFaint} />
+            </Pressable>
+          </View>
+          {SUGGESTIONS.map(({ text }) => (
+            <Pressable
+              key={text}
+              onPress={() => {
+                tap();
+                setIdea(text);
+                composer.current?.setText(text);
+              }}
+              style={({ pressed }) => [styles.idea, { borderColor: idea === text ? c.borderStrong : c.border, opacity: pressed ? 0.6 : 1 }]}
+            >
+              <T variant="subhead" muted>
+                {text}
+              </T>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }

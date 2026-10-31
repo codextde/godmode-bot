@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { isTauri } from "@/lib/core";
-import { PALETTE_DEFS } from "@/lib/palettes";
+import { paletteBlurb } from "@/lib/palettes";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
@@ -111,7 +111,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
             ]}
           />
         </SettingRow>
-        <SettingRow label={t("general.appearance.palette")} description={PALETTE_DEFS[palette].blurb} stacked>
+        <SettingRow label={t("general.appearance.palette")} description={paletteBlurb(palette)} stacked>
           <PalettePicker value={palette} mode={resolved} onChange={setPalette} />
         </SettingRow>
       </SettingsGroup>

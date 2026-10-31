@@ -12,6 +12,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   CardPurchase,
   CardPurchasePatch,
   PaymentCard,
+  PullRequestView,
   PaymentCardInput,
   PaymentCardSecrets,
   AttentionItem,
@@ -514,6 +515,11 @@ export const api = {
     delete: (id: string) => del<{ ok: true }>(`/api/projects/${id}`),
     syncSource: (id: string, sourceId: string) => post<WorkspaceSource>(`/api/projects/${id}/sources/${sourceId}/sync`),
     move: (id: string, input: ProjectMoveInput, grant?: string) => request<ScopeMoveResult>("POST", `/api/projects/${id}/move`, input, withGrant(grant)),
+  },
+
+  github: {
+    pull: (url: string, opts: { background?: boolean; refresh?: boolean } = {}) =>
+      get<PullRequestView>("/api/github/pull", { url, background: opts.background ? 1 : undefined, refresh: opts.refresh ? 1 : undefined }),
   },
 
   tasks: {

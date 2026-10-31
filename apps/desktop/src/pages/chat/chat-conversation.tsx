@@ -38,6 +38,8 @@ import { MoveChatDialog } from "@/components/runners/move-chat";
 import { isOlderRunner, usePlaces, type Place } from "@/lib/places";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
+import { PullRequestScopeProvider, usePullRequestPanel } from "@/components/github/pull-request-link";
+import { PullRequestPanel } from "@/components/github/pull-request-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
 import { QuoteSelection } from "@/components/chat/quote-selection";
@@ -55,7 +57,7 @@ import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces 
 import { ProjectChip } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
-import { speak, useVoicePrefs, useVoiceSession } from "@/lib/voice";
+import { speak, useVoiceSession } from "@/lib/voice";
 import { useConversationLiveRun, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { currentLanguage } from "@/i18n";
@@ -139,23 +141,33 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const artifactId = useArtifactPanel((s) => s.open[conversationId] ?? null);
   const showArtifact = useArtifactPanel((s) => s.show);
   const hideArtifact = useArtifactPanel((s) => s.hide);
+  const pullRequestUrl = usePullRequestPanel((s) => s.open[conversationId] ?? null);
+  const hidePullRequest = usePullRequestPanel((s) => s.hide);
+  useEffect(() => {
+    if (pullRequestUrl) hideArtifact(conversationId);
+  }, [pullRequestUrl, conversationId, hideArtifact]);
+  useEffect(() => {
+    if (artifactId) hidePullRequest(conversationId);
+  }, [artifactId, conversationId, hidePullRequest]);
+  const showPullRequestPanel = wide && !!pullRequestUrl && !artifactId;
   const showArtifactPanel = wide && !!artifactId;
+  const sidePanelTaken = showArtifactPanel || showPullRequestPanel;
   const vmPanel = useUi((s) => s.vmPanel);
   const setVmPanel = useUi((s) => s.setVmPanel);
   const [vmFocus, setVmFocus] = useState(false);
-  const showVmPanel = !!chatVm && !!agent && wide && vmPanel && !showArtifactPanel;
+  const showVmPanel = !!chatVm && !!agent && wide && vmPanel && !sidePanelTaken;
   // Something shared takes the side panel; the browser stays one click away in the header.
-  const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel && !showArtifactPanel;
+  const showComputerPanel = !chatVm && !!computerTarget && !!agent && wide && computerPanel && !sidePanelTaken;
   // Phones are plugged into this computer: a runner's chat has none.
   const navigate = useNavigate();
   const chatPhones = useChatPhones(onRunner ? undefined : conv?.androidDeviceIds, onRunner ? undefined : agent?.androidDeviceIds);
   const phonePanel = useUi((s) => s.phonePanel);
   const setPhonePanel = useUi((s) => s.setPhonePanel);
-  const showPhonePanel = !chatVm && !showComputerPanel && !showArtifactPanel && chatPhones.length > 0 && !!agent && wide && phonePanel;
+  const showPhonePanel = !chatVm && !showComputerPanel && !sidePanelTaken && chatPhones.length > 0 && !!agent && wide && phonePanel;
   // On a runner this computer can't see the chat's tab before frames come: the panel shows while the agent works there.
   const browserActive = !!chatTab || (onRunner && !!live);
   const showBrowserPanel =
-    !chatVm && !!browser && !!agent && wide && !showComputerPanel && !showPhonePanel && !showArtifactPanel && (browserOpened || (browserActive && browserPanel));
+    !chatVm && !!browser && !!agent && wide && !showComputerPanel && !showPhonePanel && !sidePanelTaken && (browserOpened || (browserActive && browserPanel));
   useEffect(() => setBrowserFocus(null), [browser?.id]);
   useEffect(() => {
     if (!computerTarget) setComputerFocus(null);
@@ -446,7 +458,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     onError: (err) => toast.error(t("pause.stopError"), { description: errorMessage(err) }),
   });
 
-  // Read replies aloud: speak-replies toggle, or a dictated message with auto-speak on. Voice mode speaks by itself.
+  // Read replies aloud: a dictated message with auto-speak on. Voice mode speaks by itself.
   const settingsRef = useRef(voiceSettings);
   settingsRef.current = voiceSettings;
   useEffect(
@@ -455,7 +467,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         if (e.type !== "run.finished" || e.run.conversationId !== conversationId) return;
         if (useUi.getState().voiceMode || e.run.status !== "succeeded") return;
         const wasVoice = !!useVoiceSession.getState().voiceRunIds[e.run.id];
-        const wanted = useVoicePrefs.getState().speakReplies || (wasVoice && (settingsRef.current?.autoSpeak ?? true));
+        const wanted = wasVoice && (settingsRef.current?.autoSpeak ?? true);
         if (!wanted) return;
         const runId = e.run.id;
         void qc
@@ -556,6 +568,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
         <ChatFilesScope conversationId={conversationId} runnerId={conv.runnerId}>
           <ArtifactScopeProvider value={{ conversationId, openId: showArtifactPanel ? artifactId : null }}>
+          <PullRequestScopeProvider value={wide ? { conversationId, openUrl: showPullRequestPanel ? pullRequestUrl : null } : null}>
           <QuestionScopeProvider value={{ conversationId, agentName: agent?.name ?? t("turnEnd.theAgent"), openId: waiting?.question?.id ?? null }}>
             <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
               <Thread
@@ -574,6 +587,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               />
             </QuoteSelection>
           </QuestionScopeProvider>
+          </PullRequestScopeProvider>
           </ArtifactScopeProvider>
         </ChatFilesScope>
 
@@ -810,9 +824,6 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                 }
                 onSubmit={(input) => send.mutateAsync({ ...input, queueId: newQueueId() })}
               />
-              <p className="mt-2 hidden text-center text-[11px] text-muted-foreground/80 @2xl:block">
-                {t("conv.footer")}
-              </p>
             </div>
           </div>
         )}
@@ -831,6 +842,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         )}
       </ChatDropZone>
       <AnimatePresence initial={false}>
+        {showPullRequestPanel && (
+          <PullRequestPanel key={`pull-${pullRequestUrl}`} conversationId={conversationId} url={pullRequestUrl!} onHide={() => hidePullRequest(conversationId)} />
+        )}
         {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}
         {showVmPanel && (
           <VmPanel

@@ -85,6 +85,48 @@
       "footer": "Entferne dieses Handy jederzeit auf deinem Computer unter Einstellungen → Handy.",
       "thisPhone": "Dieses Handy",
       "version": "Godmode für {{platform}} {{version}}"
+    },
+    "palette": {
+      "title": "Farbpalette",
+      "detail": "Nur für dieses Handy, hell und dunkel.",
+      "names": {
+        "paper": {
+          "label": "Papier",
+          "blurb": "Warmes Papier am Tag, Anthrazit in der Nacht"
+        },
+        "graphite": {
+          "label": "Graphit",
+          "blurb": "Kühle neutrale Grautöne mit blauem Akzent"
+        },
+        "nord": {
+          "label": "Nord",
+          "blurb": "Arktische Blaugrautöne und Frost"
+        },
+        "solarized": {
+          "label": "Solarized",
+          "blurb": "Ethan Schoonovers klassisches Creme und Petrol"
+        },
+        "rose": {
+          "label": "Rosé",
+          "blurb": "Zartes Rosa mit Himbeer-Akzent"
+        },
+        "forest": {
+          "label": "Wald",
+          "blurb": "Moos, Farn und Rinde"
+        },
+        "ocean": {
+          "label": "Ozean",
+          "blurb": "Meerglas und tiefes Wasser"
+        },
+        "dracula": {
+          "label": "Dracula",
+          "blurb": "Violette Nacht und ein heller Tag dazu"
+        }
+      }
+    },
+    "suggestions": {
+      "title": "Vorschläge anzeigen",
+      "detail": "Ideen wie „Fasse meine ungelesenen E-Mails zusammen“ auf der Startseite und in einem neuen Chat."
     }
   },
   "ai": {

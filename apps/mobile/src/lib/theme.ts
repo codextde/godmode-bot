@@ -1,6 +1,7 @@
 import { useColorScheme, type TextStyle, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkTheme, DefaultTheme, type Theme } from "expo-router";
+import { DEFAULT_PALETTE, PALETTE_DEFS, type Palette, type PaletteMode, type Seeds } from "@godmode/shared";
 import { useAppearance } from "./appearance";
 
 /** Godmode's tokens (apps/desktop/src/index.css): warm paper and anthracite, one quiet green accent. */
@@ -152,8 +153,63 @@ export const type = {
   mono: { fontFamily: fonts.mono, fontSize: 13 },
 } as const;
 
+function rgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function mix(a: string, pct: number, b: string): string {
+  const [x, y] = [rgb(a), rgb(b)];
+  const p = pct / 100;
+  return `#${x.map((v, i) => Math.round(v * p + y[i] * (1 - p)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function paletteColors(seeds: Seeds, mode: PaletteMode): Colors {
+  const base = mode === "dark" ? dark : light;
+  const fg = seeds.foreground;
+  const brandStrong = mode === "light" ? mix(seeds.brand, 72, "#000000") : mix(seeds.brand, 88, "#FFFFFF");
+  return {
+    ...base,
+    background: seeds.background,
+    surface: seeds.card,
+    surfaceAlt: mode === "light" ? seeds.sidebar : mix(seeds.card, 70, seeds.background),
+    sunken: seeds.muted,
+    accent: mix(fg, 4, seeds.muted),
+    popover: seeds.card,
+    text: fg,
+    textMuted: seeds.mutedForeground,
+    textFaint: mix(seeds.mutedForeground, 70, seeds.background),
+    border: alpha(fg, 0.09),
+    borderStrong: alpha(fg, 0.13),
+    input: alpha(fg, 0.13),
+    ring: alpha(fg, 0.28),
+    primary: seeds.primary,
+    onPrimary: seeds.background,
+    brand: seeds.brand,
+    brandStrong,
+    brandSoft: alpha(seeds.brand, 0.13),
+    glassFallback: alpha(seeds.card, mode === "dark" ? 0.94 : 0.92),
+  };
+}
+
+const derived = new Map<string, Colors>();
+
+function colorsFor(palette: Palette, isDark: boolean): Colors {
+  if (palette === DEFAULT_PALETTE) return isDark ? dark : light;
+  const key = `${palette}.${isDark ? "dark" : "light"}`;
+  let c = derived.get(key);
+  if (!c) {
+    const def = PALETTE_DEFS[palette];
+    c = isDark ? paletteColors(def.dark, "dark") : paletteColors(def.light, "light");
+    derived.set(key, c);
+  }
+  return c;
+}
+
 export function useColors(): Colors {
-  return useIsDark() ? dark : light;
+  const isDark = useIsDark();
+  const palette = useAppearance((s) => s.palette);
+  return colorsFor(palette, isDark);
 }
 
 /** The computer's theme; "system" follows this phone. */
@@ -165,7 +221,7 @@ export function useIsDark(): boolean {
 
 export function useNavigationTheme(): Theme {
   const isDark = useIsDark();
-  const c = isDark ? dark : light;
+  const c = useColors();
   const base = isDark ? DarkTheme : DefaultTheme;
   return {
     ...base,

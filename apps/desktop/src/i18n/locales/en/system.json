@@ -46,12 +46,12 @@
   "palettes": {
     "paper": { "label": "Paper", "blurb": "Warm paper by day, anthracite by night" },
     "graphite": { "label": "Graphite", "blurb": "Cool neutral greys with a blue accent" },
-    "nord": { "blurb": "Arctic blue-greys and frost" },
-    "solarized": { "blurb": "Ethan Schoonover's classic cream and teal" },
+    "nord": { "blurb": "Arctic blue-greys and frost", "label": "Nord" },
+    "solarized": { "blurb": "Ethan Schoonover's classic cream and teal", "label": "Solarized" },
     "rose": { "label": "Rosé", "blurb": "Soft blush with a raspberry accent" },
     "forest": { "label": "Forest", "blurb": "Moss, fern and bark" },
     "ocean": { "label": "Ocean", "blurb": "Sea glass and deep water" },
-    "dracula": { "blurb": "Purple night, and a pale day to match" }
+    "dracula": { "blurb": "Purple night, and a pale day to match", "label": "Dracula" }
   },
   "password": {
     "strength": {

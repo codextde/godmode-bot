@@ -31,7 +31,10 @@
     "emails": "Fasse meine ungelesenen E-Mails zusammen",
     "invoices": "Erstelle einen Agenten, der jeden Monat meine Rechnungen herunterlädt",
     "github": "Melde dich bei GitHub an und prüfe meine Mitteilungen",
-    "research": "Recherchiere die Konkurrenz und schreib einen Bericht"
+    "research": "Recherchiere die Konkurrenz und schreib einen Bericht",
+    "hideTitle": "Vorschläge ausblenden?",
+    "hideBody": "Du kannst sie jederzeit unter Einstellungen → App wieder einblenden.",
+    "hide": "Ausblenden"
   },
   "priority": {
     "urgent": "Dringend",

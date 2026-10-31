@@ -31,7 +31,10 @@
     "emails": "Summarize my unread emails",
     "invoices": "Create an agent that downloads my invoices every month",
     "github": "Log into GitHub and check my notifications",
-    "research": "Research competitors and write a report"
+    "research": "Research competitors and write a report",
+    "hideTitle": "Hide suggestions?",
+    "hideBody": "Show them again anytime in Settings → App.",
+    "hide": "Hide"
   },
   "priority": {
     "urgent": "Urgent",

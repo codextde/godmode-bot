@@ -5,7 +5,6 @@
  * Pure browser/runtime code — React bindings live in `hooks/use-voice.ts`.
  */
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import type { VoiceSettings } from "@godmode/shared";
 import { t } from "@/i18n";
 import { api, request } from "./api";
@@ -13,22 +12,6 @@ import { api, request } from "./api";
 /* ------------------------------------------------------------------ */
 /* Stores                                                               */
 /* ------------------------------------------------------------------ */
-
-interface VoicePrefsState {
-  /** Read every assistant reply aloud (composer toggle). */
-  speakReplies: boolean;
-  setSpeakReplies: (v: boolean) => void;
-}
-
-export const useVoicePrefs = create<VoicePrefsState>()(
-  persist(
-    (set) => ({
-      speakReplies: false,
-      setSpeakReplies: (speakReplies) => set({ speakReplies }),
-    }),
-    { name: "godmode-voice" },
-  ),
-);
 
 interface VoiceSessionState {
   /** Voice mode was opened by the user during this app session (guards against a persisted flag on reload). */
