@@ -1864,7 +1864,8 @@
       "title": "Speech to text",
       "browserDescription": "Free, uses your system's speech recognition.",
       "openaiDescription": "OpenAI Whisper-class transcription — more accurate, needs an OpenAI API key.",
-      "providerLabel": "Speech to text provider"
+      "providerLabel": "Speech to text provider",
+      "hexDescription": "Hex transcribes on this Mac — free, private and works offline. English and German."
     },
     "tts": {
       "title": "Text to speech",
@@ -1894,6 +1895,34 @@
       "title": "API keys live in the vault",
       "both": "OpenAI and ElevenLabs",
       "body": "Add your {{providers}} key under <link>Integrations → API keys</link>. Keys are encrypted and never shown again."
+    },
+    "hex": {
+      "description": "Local speech recognition with the Hex app. Nothing leaves this computer.",
+      "refresh": "Check again",
+      "app": "Hex app",
+      "found": "Found",
+      "version": "Version {{version}}",
+      "missingTitle": "Hex isn't installed",
+      "missingBody": "Install Hex 3 or newer, then check again. Godmode starts it in the background by itself; you don't need to open it.",
+      "errorTitle": "Hex didn't work",
+      "model": "Speech model",
+      "modelDescription": "All of these understand English and German. Parakeet v3 is fast and accurate.",
+      "size": "{{size}}",
+      "download": "Model on this Mac",
+      "ready": "Downloaded and ready.",
+      "notDownloaded": "Not downloaded yet ({{size}}). Download it once to dictate with Hex.",
+      "downloadAction": "Download",
+      "downloadFailed": "Couldn't download the Hex model",
+      "phase": {
+        "starting": "Starting Hex…",
+        "downloading": "Downloading… {{percent}} %",
+        "verifying": "Checking the download…",
+        "loading": "Loading the model…"
+      },
+      "languageTitle": "Hex dictates in English and German",
+      "languageBody": "Your voice language is {{language}}. Hex will listen for English — set the language to en-US or de-DE above.",
+      "path": "Location",
+      "pathDescription": "Leave empty to find Hex in Applications. Otherwise the Hex app or its hex program."
     }
   }
 }

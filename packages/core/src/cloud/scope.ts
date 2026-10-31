@@ -37,7 +37,9 @@ const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer
 /** The voice provider's address is where the vault's OpenAI key is sent: pointing it elsewhere needs allowSecrets. */
 const settingsGroups: Rule = (body) => {
   if (!Object.keys(body).every((k) => CLOUD_SETTINGS_GROUPS.has(k))) return { refused: SETTINGS_ONLY };
-  const baseUrl = asObject(body.voice).openaiBaseUrl;
+  const voice = asObject(body.voice);
+  if (voice.hexPath !== undefined && voice.hexPath !== getSettings().voice.hexPath) return { refused: SETTINGS_ONLY };
+  const baseUrl = voice.openaiBaseUrl;
   return baseUrl !== undefined && baseUrl !== getSettings().voice.openaiBaseUrl ? "secrets" : "allowed";
 };
 /** What an agent may do (its permissions) widens what reaches secrets: that needs allowSecrets. */
@@ -407,6 +409,8 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/backup/import", S],
   ["POST", "/api/voice/transcribe", A],
   ["POST", "/api/voice/speak", A],
+  ["GET", "/api/voice/hex", A],
+  ["POST", "/api/voice/hex/prepare", A],
   ["GET", "/api/calls", A],
   ["POST", "/api/calls", refused(COMPUTER_ONLY)],
   ["GET", "/api/calls/setup", A],
