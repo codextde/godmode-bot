@@ -35,6 +35,9 @@ export function __setGhForTests(path: string | null | undefined) {
 
 export class GitError extends Error {}
 
+/** A repository without a single commit yet (just `git init`-ed): there is nothing to branch from. */
+export class EmptyRepoError extends GitError {}
+
 /** New files that look like secrets (env files, keys, keystores); they are never committed, and never pushed. */
 const SECRET_FILE = /(^|\/)(\.env(\.(?!example$|sample$|template$|dist$)[\w.-]+)?|[^/]*\.(pem|key|p12|pfx|keystore|jks)|id_(rsa|dsa|ecdsa|ed25519)|credentials\.json|\.netrc)$/i;
 
@@ -256,6 +259,8 @@ export async function prepareWorktree(opts: {
       // The latest of the remote when it can be reached; offline, the task starts from what the repository has.
       if (url) await gitOk(["fetch", "--quiet", "origin"], main);
     }
+    if (repo.kind === "local" && !(await git(["for-each-ref", "--count=1", "--format=%(refname)", "refs/heads", "refs/remotes"], main)))
+      throw new EmptyRepoError(`${main} has no commits yet — commit once so tasks can branch from it.`);
     const base = opts.base || (await defaultBranch(main, repo.kind === "local"));
     const from = repo.kind === "remote" ? `origin/${base}` : await baseRef(main, base);
     if (!(await hasRef(main, from))) throw new GitError(`The branch "${base}" doesn't exist in ${url || main}.`);

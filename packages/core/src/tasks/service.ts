@@ -90,6 +90,7 @@ import {
   addsLineWith,
   commitWork,
   commitsAhead,
+  EmptyRepoError,
   mergePullRequest,
   needsClone,
   openPullRequest,
@@ -1281,9 +1282,13 @@ export async function dispatch(id: string, resume?: Resume): Promise<void> {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (task.type === "coding") return block(id, `Couldn't create the task's worktree: ${message}`, { kind: "setup" });
-        // Other tasks can do without one: they work next to the workspace's folders, as chats do.
-        log.warn(`task ${id} runs without a worktree: ${message}`);
-        notify("warning", `Task #${task.number} works without its own worktree`, `Couldn't create it: ${message}`, `/tasks?task=${id}`);
+        // Other tasks can do without one: they work next to the workspace's folders, as chats do — in a repository
+        // without commits that is all there is to work on, nothing to warn about.
+        if (err instanceof EmptyRepoError) log.info(`task ${id} runs without a worktree: ${message}`);
+        else {
+          log.warn(`task ${id} runs without a worktree: ${message}`);
+          notify("warning", `Task #${task.number} works without its own worktree`, `Couldn't create it: ${message}`, `/tasks?task=${id}`);
+        }
         workDir = task.branch && existsSync(checkoutDir(id)) ? checkoutDir(id) : null;
       }
     }
