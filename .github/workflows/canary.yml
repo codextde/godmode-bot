@@ -1,0 +1,44 @@
+name: Canary
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "apps/website/**"
+      - "apps/mobile/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: canary
+  cancel-in-progress: true
+
+jobs:
+  tag:
+    name: Tag and build a canary
+    if: github.repository == 'codextde/godmode-bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Tag the commit
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.run_number }}
+        run: |
+          base=$(node -p "require('./apps/desktop/package.json').version.split('-')[0]")
+          IFS=. read -r major minor patch <<< "$base"
+          tag="v$major.$minor.$((patch + 1))-canary.$RUN"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$tag" -f sha="$GITHUB_SHA" --jq .ref
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Start the release build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: gh workflow run release.yml --ref main -f tag="$TAG"
