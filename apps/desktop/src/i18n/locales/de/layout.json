@@ -438,6 +438,7 @@
   },
   "editSidebar": {
     "title": "Seitenleiste bearbeiten",
-    "description": "Wähle, welche Einträge in deiner Seitenleiste erscheinen."
+    "description": "Wähle, welche Einträge in deiner Seitenleiste erscheinen.",
+    "sectionDescription": "Wähle, welche Einträge unter {{section}} erscheinen."
   }
 }
