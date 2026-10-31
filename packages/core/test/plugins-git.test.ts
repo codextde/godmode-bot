@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { GLM_MODELS, modUpdateAvailable } from "@godmode/shared";
@@ -10,7 +11,7 @@ import { getConversation, startChat } from "../src/services/conversations";
 import { listNotifications } from "../src/services/notifications";
 import { waitForRun } from "../src/runner/runner";
 import { callTool } from "../src/mcp/tools";
-import { checkoutPath, checkoutsRoot, gitTarget } from "../src/mods/git";
+import { __setNpmForTests, checkoutPath, checkoutsRoot, gitTarget } from "../src/mods/git";
 import { checkModUpdates, deleteMod, getMod, installMod, listModCatalog, listMods, updateGitMod, updateMod } from "../src/mods/service";
 import { run as sql } from "../src/db";
 import { HttpError } from "../src/util";
@@ -294,6 +295,68 @@ describe("installing from a repository", () => {
     expect(again.invocation.pluginServers["plugin_app_rea"]).toMatchObject({ command: "npx" });
     expect(JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"))).toEqual(written);
     deleteMod(mod.id);
+  });
+
+  test("a plugin its marketplace ships as an npm package runs from the package, also when the repository's manifest names built folders", async () => {
+    const packages = mkdtempSync(join(tmpdir(), "godmode-fake-npm-"));
+    process.env.FAKE_NPM_PACKAGES = packages;
+    __setNpmForTests([process.execPath, join(import.meta.dir, "fixtures", "fake-npm.ts")]);
+    const publish = (version: string, files: Record<string, string>) => {
+      for (const [path, text] of Object.entries(files)) {
+        const file = join(packages, `rea-agents@${version}`, path);
+        mkdirSync(join(file, ".."), { recursive: true });
+        writeFileSync(file, text);
+      }
+    };
+    const skill = "---\nname: reverse-engineer-anything\ndescription: Reverse engineer\n---\nGo.\n";
+    const market = (version: string) => JSON.stringify({ name: "rea", plugins: [{ name: "rea", description: "Reverse engineer anything.", source: { source: "npm", package: "rea-agents", version } }] });
+    const registry = (version: string) =>
+      JSON.stringify({ name: "io.github.acme/rea", version, packages: [{ registryType: "npm", identifier: "rea-agents", version, transport: { type: "stdio" }, packageArguments: [{ type: "positional", value: "mcp" }] }] });
+    // The repository's own manifest names ./skills, which only the published package has.
+    const server = repo({
+      ".claude-plugin/plugin.json": JSON.stringify({ name: "rea", version: "6.8.0", description: "Reverse engineer anything.", skills: "./skills" }),
+      ".claude-plugin/marketplace.json": market("6.8.0"),
+      "server.json": registry("6.8.0"),
+      ".agents/skills/reverse-engineer-anything/SKILL.md": skill,
+    });
+    publish("6.8.0", { "package.json": '{"name":"rea-agents","version":"6.8.0"}', "skills/reverse-engineer-anything/SKILL.md": skill });
+    try {
+      const mod = await installMod({ source: server.url });
+      expect(mod).toMatchObject({ name: "rea", source: { npm: { package: "rea-agents", version: "6.8.0" }, version: "6.8.0" }, check: { ok: true } });
+      expect(mod.contents).toMatchObject({ skills: ["reverse-engineer-anything"], mcpServers: ["rea"] });
+      const dir = join(checkoutPath(mod.id, mod.source!.commit), ".godmode-npm", "node_modules", "rea-agents");
+      const written = JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"));
+      expect(written).toEqual({ name: "rea", version: "6.8.0", description: "Reverse engineer anything.", mcpServers: { rea: { command: "npx", args: ["-y", "rea-agents@6.8.0", "mcp"] } } });
+      const call = JSON.parse(readFileSync(join(packages, "calls.jsonl"), "utf8").trim().split("\n").at(-1)!);
+      expect(call.args).toEqual(expect.arrayContaining(["install", "rea-agents@6.8.0", "--ignore-scripts", "--registry=https://registry.npmjs.org"]));
+
+      const first = await chat(agent.id);
+      expect(pluginDirs(first.invocation.args)).toContain(dir);
+      // A checkout that is gone comes back with its package and the manifest it was installed with.
+      rmSync(join(checkoutsRoot(), mod.id), { recursive: true, force: true });
+      const again = await chat(agent.id);
+      expect(pluginDirs(again.invocation.args)).toContain(dir);
+      expect(JSON.parse(readFileSync(join(dir, ".claude-plugin", "plugin.json"), "utf8"))).toEqual(written);
+
+      // The next release ships its own manifest in the package: that one runs.
+      const shipped = { name: "rea", version: "6.8.1", skills: "./skills", mcpServers: { rea: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/scripts/launcher.mjs"] } } };
+      publish("6.8.1", { "package.json": '{"name":"rea-agents","version":"6.8.1"}', ".claude-plugin/plugin.json": JSON.stringify(shipped), "skills/reverse-engineer-anything/SKILL.md": skill, "scripts/launcher.mjs": "" });
+      server.commitFiles({ ".claude-plugin/marketplace.json": market("6.8.1"), "server.json": registry("6.8.1") });
+      const updated = await updateGitMod(mod.id);
+      expect(updated).toMatchObject({ source: { npm: { version: "6.8.1" }, version: "6.8.1" }, check: { ok: true } });
+      const next = join(checkoutPath(mod.id, updated.source!.commit), ".godmode-npm", "node_modules", "rea-agents");
+      expect(JSON.parse(readFileSync(join(next, ".claude-plugin", "plugin.json"), "utf8"))).toEqual(shipped);
+
+      // A version npm can't find isn't installed, and the one that runs stays.
+      server.commitFiles({ ".claude-plugin/marketplace.json": market("6.9.0") });
+      expect(await status(updateGitMod(mod.id))).toBe(502);
+      expect(getMod(mod.id).source).toMatchObject({ commit: updated.source!.commit, npm: { version: "6.8.1" } });
+      deleteMod(mod.id);
+    } finally {
+      __setNpmForTests(null);
+      delete process.env.FAKE_NPM_PACKAGES;
+      rmSync(packages, { recursive: true, force: true });
+    }
   });
 
   test("an MCP server that needs a setting turns it into an option; a remote one connects by its address", async () => {
