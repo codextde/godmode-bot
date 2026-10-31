@@ -287,7 +287,7 @@ export function AiSection({ settings }: { settings: Settings }) {
         <SettingRow
           label="Continue cut-off work"
           htmlFor="resume-after-restart"
-          description="Chats, automations and handed-over tasks that were working when Godmode quit, updated or crashed pick up where they stopped once it is back (work of the last day). Turns that broke off because Claude couldn't be reached continue once the internet is back. Board tickets always do."
+          description="Chats, automations and handed-over tasks that were working when Godmode quit, updated or crashed pick up where they stopped once it is back (work of the last day). Turns that broke off because Claude couldn't be reached continue once the internet is back, and a turn that ended while its background work still ran picks that up. Board tickets always do."
         >
           <Switch id="resume-after-restart" checked={r.resumeAfterRestart ?? true} onCheckedChange={(resumeAfterRestart) => patch({ runner: { resumeAfterRestart } })} />
         </SettingRow>

@@ -456,8 +456,11 @@ export type PauseReason = "user" | "limit" | "question" | "budget";
 /** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
 export type RetryMode = "continue" | "again";
 
-/** What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, or Claude Code failing on its own. */
-export type RetryCause = "restart" | "offline" | "error";
+/**
+ * What cut off a turn Godmode picks up by itself: a restart, Claude's API out of reach, Claude Code failing on its own,
+ * or background work the end of the turn stopped.
+ */
+export type RetryCause = "restart" | "offline" | "error" | "background";
 
 /** Whose monthly budget holds a run: the agent's own, or the whole team's. */
 export interface PauseBudget {
@@ -1389,7 +1392,7 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
-  /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start. */
+  /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start; so does background work the end of a turn stopped. */
   resumeAfterRestart: boolean;
   /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
   watchdog: boolean;

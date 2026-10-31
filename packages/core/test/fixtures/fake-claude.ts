@@ -7,6 +7,8 @@
  *   (default)   replay stream-partial.jsonl       → "Hello, nice to meet you!"
  *   USE_TOOL    replay stream-tooluse.jsonl       → Bash tool + "DONE"
  *   USE_WORKFLOW  replay stream-workflow.jsonl    → a workflow of two agents in the background, two results
+ *   BG_STOPPED  replay stream-background-stopped.jsonl → a subagent's background commands killed after the last result
+ *              (so does Godmode's note about them, "Background work was stopped …")
  *   SLEEP       emit init, then hang (cancel / timeout tests)
  *   BIG_CONTEXT  one answer whose message fills 421.6k tokens of a 1M window
  *   LOGIN_FAIL  answer with a login-failure sentence
@@ -1254,6 +1256,8 @@ if (slash?.[1] === "clear") {
   if (prompt.includes("MOD_NOTES_FLOOD")) for (let i = 0; i < 300; i++) note("ui_log", "flood", `line ${i}`);
   textTurn("mods ran");
   result("mods ran");
+} else if (prompt.includes("BG_STOPPED") || prompt.includes("Background work was stopped")) {
+  await replay("stream-background-stopped.jsonl");
 } else if (prompt.includes("USE_TOOL")) {
   await replay("stream-tooluse.jsonl");
 } else {

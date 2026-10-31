@@ -402,6 +402,13 @@ restarted").
 * Something new in the chat since, a run already working there, a pause or an automation that already runs again
   (one chat per event) leave it alone; a turn continued three times in a row by itself (one that restarts Godmode) is
   left for the human, and so is what a restored backup marked interrupted (`leaveInterruptedWork`).
+* Background work still running when a turn ends (a subagent waiting on its own command) is stopped as Claude Code
+  exits. `cutOffBackgroundWork` (`runner/stream.ts`) finds it: tasks killed after the turn's last `result`
+  (`task_updated` with `patch.status` `killed`, `task_notification` with `status` `stopped`); what the agent stops
+  itself is stopped before that. After a turn that succeeded (chat, follow-up, call, API or automation; not a ticket's
+  or a handoff's), `continueStoppedBackground` gives the chat a `continue` turn with a `<godmode-continue>` note naming
+  the work and its subagent (`backgroundContext`, marker cause `background`: "Continued after background work was
+  stopped"), at most twice in a row without a new message from the human, under the same setting.
 * Managers continue what is left (older work, setting off) with the `run_continue` tool. They stop a run for good (a paused run that would repeat work already done, also on another computer of the group) with `run_cancel`.
 
 ### Questions and approvals
