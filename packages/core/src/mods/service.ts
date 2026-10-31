@@ -56,14 +56,17 @@ import {
   cloneLatest,
   contentsStartPrograms,
   gitTarget,
+  installNpmPlugin,
   inventory,
   keyFiles,
   latestCommit,
   manifestVersion,
-  pluginDirIn,
+  npmPackageOf,
   pluginMcpServers,
+  readName,
   remoteVersion,
   resolvePlugin,
+  sourceDir,
   validateTarget,
   writeManifest,
 } from "./git";
@@ -180,6 +183,7 @@ function sourceOf(row: Pick<ModRow, "source">): ModSource | null {
     ref,
     path,
     commit: s.commit,
+    npm: npmPackageOf(s.npm),
     version: text(s.version),
     installedAt: text(s.installedAt) ?? "",
     latestCommit: latest && COMMIT.test(latest) ? latest : null,
@@ -732,7 +736,7 @@ export async function importMod(path: unknown, actor = "user"): Promise<Mod> {
 
 /** The folder a run loads for a plugin from a repository. */
 function gitPluginDir(id: string, source: ModSource): string {
-  return pluginDirIn(checkoutPath(id, source.commit), source.path);
+  return sourceDir(checkoutPath(id, source.commit), source);
 }
 
 /** Checkouts being laid down (installs, updates, restores): not tidied away meanwhile. */
@@ -786,7 +790,12 @@ async function layDown(
     if (commit === current) return null;
     const resolved = resolvePlugin(staging, target.path, plugin, fallbackName);
     want(resolved.name);
-    if (resolved.manifest) writeManifest(pluginDirIn(staging, resolved.path), resolved.manifest);
+    const { npm } = resolved;
+    if (npm) await installNpmPlugin(staging, npm);
+    const staged = sourceDir(staging, { path: resolved.path, npm });
+    const shipped = npm ? readName(staged) : null;
+    if (shipped && shipped !== resolved.name) throw conflict(`The npm package ${npm!.package} calls itself "${shipped}" instead of "${resolved.name}".`);
+    if (resolved.manifest && !shipped) writeManifest(staged, resolved.manifest);
     final = checkoutPath(id, commit);
     busyCheckouts.add(final);
     // A checkout of this commit that is still there (a run holds an earlier version) is the same files: it stays.
@@ -794,7 +803,7 @@ async function layDown(
       renameSync(staging, final);
       fresh = true;
     }
-    const dir = pluginDirIn(final, resolved.path);
+    const dir = sourceDir(final, { path: resolved.path, npm });
     const contents = inventory(dir);
     contents.alwaysOnTokens = await alwaysOnTokens(dir, resolved.name).catch(() => null);
     const files = keyFiles(dir);
@@ -806,10 +815,11 @@ async function layDown(
       ref: target.ref,
       path: resolved.path,
       commit,
-      version: manifestVersion(dir),
+      npm,
+      version: manifestVersion(dir) ?? npm?.version ?? null,
       installedAt: ts,
       latestCommit: commit,
-      latestVersion: manifestVersion(dir),
+      latestVersion: manifestVersion(dir) ?? npm?.version ?? null,
       checkedAt: ts,
       checkError: null,
     };
@@ -998,7 +1008,7 @@ async function ensureCheckout(row: ModRow): Promise<void> {
   const source = sourceOf(row);
   if (!source || !SAFE_MOD_ID.test(row.id)) return;
   const final = checkoutPath(row.id, source.commit);
-  if (existsSync(pluginDirIn(final, source.path))) return;
+  if (existsSync(sourceDir(final, source))) return;
   const key = `${row.id}:${source.commit}`;
   let pending = restoring.get(key);
   if (!pending) {
@@ -1007,11 +1017,12 @@ async function ensureCheckout(row: ModRow): Promise<void> {
       busyCheckouts.add(staging);
       try {
         await cloneAt(source.url, source.commit, staging);
+        if (source.npm) await installNpmPlugin(staging, source.npm);
         // A plugin that ships no manifest got one at install: exactly that one comes back, never one derived anew.
         const recorded = parseJson<Record<string, unknown> | null>(filesOf(row)[MOD_MANIFEST_PATH], null);
-        const dir = pluginDirIn(staging, source.path);
+        const dir = sourceDir(staging, source);
         if (recorded && !existsSync(join(dir, ...MOD_MANIFEST_PATH.split("/")))) writeManifest(dir, recorded);
-        if (!existsSync(pluginDirIn(final, source.path))) {
+        if (!existsSync(sourceDir(final, source))) {
           rmSync(final, { recursive: true, force: true });
           renameSync(staging, final);
         }
