@@ -257,7 +257,8 @@
       "tickets": "Tickets",
       "actions": "Actions",
       "navigate": "Navigate",
-      "chats": "Chats"
+      "chats": "Chats",
+      "notes": "Notes"
     },
     "current": "current",
     "inWorkspace": "in {{name}}",
@@ -287,7 +288,7 @@
     "instructions": "Instructions",
     "license": "License",
     "billing": "Billing and usage",
-    "mentioned": "mentioned in a message",
+    "showingFor": "Showing results for “{{query}}”",
     "settingsSections": {
       "general": "General",
       "ai": "AI & Claude",

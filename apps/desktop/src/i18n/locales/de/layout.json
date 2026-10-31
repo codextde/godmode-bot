@@ -257,7 +257,8 @@
       "tickets": "Tickets",
       "actions": "Aktionen",
       "navigate": "Navigieren",
-      "chats": "Chats"
+      "chats": "Chats",
+      "notes": "Notizen"
     },
     "current": "aktuell",
     "inWorkspace": "in {{name}}",
@@ -287,7 +288,7 @@
     "instructions": "Anweisungen",
     "license": "Lizenz",
     "billing": "Abrechnung und Nutzung",
-    "mentioned": "in einer Nachricht erwähnt",
+    "showingFor": "Ergebnisse für „{{query}}“",
     "settingsSections": {
       "general": "Allgemein",
       "ai": "KI & Claude",

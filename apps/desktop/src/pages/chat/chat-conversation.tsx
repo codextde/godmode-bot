@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, AndroidDevice, BrowserProfile, ComputerTarget, ConversationWithMessages, Message, SendMessageInput, SshServer, Vm } from "@godmode/shared";
@@ -74,6 +74,7 @@ export default function ChatConversation() {
 
 function ConversationView({ conversationId }: { conversationId: string }) {
   const { t } = useTranslation(["chat", "common"]);
+  const focusMessage = useSearchParams()[0].get("m");
   const qc = useQueryClient();
   const key = qk.conversation(conversationId);
   const projectIndex = useProjectIndex();
@@ -575,6 +576,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
             <QuoteSelection onQuote={(text) => composerRef.current?.insert(text)} disabled={dreamLog || voiceMode}>
               <Thread
                 messages={visibleMessages}
+                focusId={focusMessage}
                 agent={agent}
                 delegatedFrom={conv.delegatedFrom}
                 inflight={inflight}
