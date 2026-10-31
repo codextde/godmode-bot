@@ -2,7 +2,7 @@ import { Stack } from "expo-router";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { DEFAULT_AUTO_COMPACT_PERCENT, ULTRACODE_HINT, effortForModel, findModel, type Effort } from "@godmode/shared";
 import { CloseButton } from "@/components/close-button";
-import { FieldRow, Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
+import { Group, PickerRow, SegmentRow, StepperRow, SwitchRow } from "@/components/form";
 import { useModelCatalog } from "@/lib/composer";
 import { EFFORT_SHORT, patchSettings, useSettings } from "@/lib/setup";
 import { space } from "@/lib/theme";
@@ -14,18 +14,6 @@ function minutes(n: number): string {
   if (n < 60) return `${n} min`;
   const h = n / 60;
   return Number.isInteger(h) ? `${h} h` : `${h.toFixed(1)} h`;
-}
-
-/** "50", "1,000", "1.000,50" or "12,5" in dollars; empty = no limit; anything else is ignored. */
-function money(input: string): number | null | undefined {
-  const raw = input.replace(/[\s$]/g, "");
-  if (!raw) return null;
-  if (!/^[0-9.,]+$/.test(raw)) return undefined;
-  const last = Math.max(raw.lastIndexOf("."), raw.lastIndexOf(","));
-  const decimals = last >= 0 && raw.length - last - 1 <= 2 ? raw.length - last - 1 : 0;
-  const digits = raw.replace(/[.,]/g, "");
-  const n = Number(digits) / 10 ** decimals;
-  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : undefined;
 }
 
 export default function ModelAndLimits() {
@@ -50,10 +38,6 @@ export default function ModelAndLimits() {
   const options = [...(current ? [] : [{ value: r.model, label: r.model }]), ...models.map((m) => ({ value: m.id, label: m.label, detail: m.description }))];
   const efforts = current?.efforts.length ? current.efforts : null;
   const effort = efforts ? (effortForModel(efforts, r.effort) ?? r.effort) : r.effort;
-  const budget = (key: "defaultMaxBudgetUsd" | "monthlyBudgetUsd") => (text: string) => {
-    const value = money(text);
-    if (value !== undefined) void patchSettings({ runner: { [key]: value } });
-  };
 
   return (
     <ScrollView
@@ -131,29 +115,6 @@ export default function ModelAndLimits() {
           ]}
           onChange={(v) => void patchSettings({ runner: { autoCompactPercent: v === "claude" ? null : Number(v) } })}
         />
-      </Group>
-
-      <Group
-        title="Budgets"
-        footer={
-          r.spendTracking
-            ? "Used up, unattended work waits until next month. Leave empty for no limit."
-            : "With a Claude subscription, leave this off: Claude Code reports API prices you don't pay."
-        }
-      >
-        <SwitchRow
-          icon="dollar"
-          title="Budgets and spend"
-          detail="Show what runs cost and set monthly budgets."
-          value={r.spendTracking ?? false}
-          onChange={(spendTracking) => void patchSettings({ runner: { spendTracking } })}
-        />
-        {r.spendTracking ? (
-          <FieldRow label="Per run" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.defaultMaxBudgetUsd ? String(r.defaultMaxBudgetUsd) : ""} onCommit={budget("defaultMaxBudgetUsd")} />
-        ) : null}
-        {r.spendTracking ? (
-          <FieldRow label="Team per month" prefix="$" keyboardType="decimal-pad" placeholder="No limit" value={r.monthlyBudgetUsd ? String(r.monthlyBudgetUsd) : ""} onCommit={budget("monthlyBudgetUsd")} />
-        ) : null}
       </Group>
 
       <Group title="Watchdog" footer="Stops runs that stall or go in circles, so they don't burn time and tokens.">

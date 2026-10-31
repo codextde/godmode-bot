@@ -168,7 +168,6 @@ describe("device scope", () => {
     expect(deviceMayCall("DELETE", "/api/goals/gol_1")).toBe(true);
     expect(deviceMayCall("GET", "/api/runs/run_1")).toBe(true);
     expect(deviceMayCall("GET", "/api/runs/run_1/log")).toBe(true);
-    expect(deviceMayCall("GET", "/api/spend")).toBe(true);
     expect(deviceMayCall("GET", "/api/away")).toBe(true);
     expect(deviceMayCall("POST", "/api/routines")).toBe(true);
     expect(deviceMayCall("DELETE", "/api/routines/rtn_1")).toBe(true);
@@ -333,14 +332,11 @@ describe("phone access", () => {
 
     const settings = await phone("/api/settings", { bearer: device });
     expect(settings.status).toBe(200);
-    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { appendSystemPrompt: "Commit as me only.", effort: "high", monthlyBudgetUsd: 50 }, memory: { dreaming: { enabled: true } } }));
+    const saved = await phone("/api/settings", json("PUT", { general: { mode: "easy" }, runner: { appendSystemPrompt: "Commit as me only.", effort: "high" }, memory: { dreaming: { enabled: true } } }));
     expect(saved.status).toBe(200);
-    expect(((await saved.json()) as { runner: { appendSystemPrompt: string; monthlyBudgetUsd: number } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only.", monthlyBudgetUsd: 50 });
-    expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: null } }))).status).toBe(200);
-    const tracking = await phone("/api/settings", json("PUT", { runner: { spendTracking: true } }));
-    expect(((await tracking.json()) as { runner: { spendTracking: boolean } }).runner.spendTracking).toBe(true);
-    expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: "on" } }))).status).toBe(403);
-    expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: false } }))).status).toBe(200);
+    expect(((await saved.json()) as { runner: { appendSystemPrompt: string } }).runner).toMatchObject({ appendSystemPrompt: "Commit as me only." });
+    expect((await phone("/api/settings", json("PUT", { runner: { monthlyBudgetUsd: 50 } }))).status).toBe(403);
+    expect((await phone("/api/settings", json("PUT", { runner: { spendTracking: true } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
     const themed = await phone("/api/settings", json("PUT", { general: { theme: "dark" } }));
     expect(((await themed.json()) as { general: { theme: string } }).general.theme).toBe("dark");

@@ -1,6 +1,6 @@
 /**
  * Goals: what the work is for. Tickets serve a goal — its agent is told why with every ticket — and the board shows how
- * far each goal is (tickets done of all, what the work cost).
+ * far each goal is (tickets done of all).
  */
 import type { Goal, GoalInput, GoalStatus } from "@godmode/shared";
 import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH } from "@godmode/shared";
@@ -22,7 +22,6 @@ interface GoalRow {
   total: number;
   done: number;
   open: number;
-  cost: number | null;
 }
 
 const STATUSES: readonly GoalStatus[] = ["active", "achieved", "dropped"];
@@ -34,16 +33,13 @@ const STATUSES: readonly GoalStatus[] = ["active", "achieved", "dropped"];
 function selectFor(scope: string): { sql: string; params: string[] } {
   const where =
     scope === "all" ? "" : scope === "global" ? " AND t.workspace_id IS NULL" : " AND t.workspace_id = ?";
-  const params = scope === "all" || scope === "global" ? [] : [scope, scope, scope, scope];
+  const params = scope === "all" || scope === "global" ? [] : [scope, scope, scope];
   const tickets = `FROM tasks t WHERE t.goal_id = g.id AND t.archived_at IS NULL AND t.status != 'cancelled'${where}`;
-  // What it cost is everything spent for it — archived and cancelled work too (money spent stays spent).
-  const spent = `FROM tasks t WHERE t.goal_id = g.id${where}`;
   return {
     sql: `SELECT g.*,
     (SELECT COUNT(*) ${tickets}) AS total,
     (SELECT COUNT(*) ${tickets} AND t.status = 'done') AS done,
-    (SELECT COUNT(*) ${tickets} AND t.status != 'done') AS open,
-    (SELECT SUM(t.cost_usd) ${spent}) AS cost
+    (SELECT COUNT(*) ${tickets} AND t.status != 'done') AS open
   FROM goals g`,
     params,
   };
@@ -60,7 +56,6 @@ function toModel(r: GoalRow): Goal {
     status: r.status,
     targetDate: r.target_date,
     tickets: { total: r.total ?? 0, done: r.done ?? 0, open: r.open ?? 0 },
-    costUsd: Math.round((r.cost ?? 0) * 100) / 100,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };

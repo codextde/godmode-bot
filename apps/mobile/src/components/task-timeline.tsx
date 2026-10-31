@@ -9,7 +9,6 @@ import { Skeleton, T, tap } from "./ui";
 import { ApiError, api } from "@/lib/api";
 import { whenText } from "@/lib/format";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 /** The desktop's timeline icons (task-timeline.tsx), all quiet. */
@@ -120,13 +119,11 @@ export const TaskTimeline = memo(function TaskTimeline({ task, agents }: { task:
 /** `current`: a delivery whose result is the one the ticket shows above. */
 const EventRow = memo(function EventRow({ event: e, current, last }: { event: TaskEvent; current: boolean; last: boolean }) {
   const [open, setOpen] = useState(false);
-  const spendTracking = useSpendTracking();
   const text = taskEventText(e, { you: "You", youObject: "you", when: whenText });
 
   if (e.kind === "delivered") {
     const meta = [
       e.data.durationMs ? `${Math.max(1, Math.round(e.data.durationMs / 60_000))}m` : null,
-      spendTracking && e.data.costUsd ? `$${e.data.costUsd.toFixed(2)}` : null,
       current ? "the result above" : null,
     ]
       .filter(Boolean)

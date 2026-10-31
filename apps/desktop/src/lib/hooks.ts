@@ -1,4 +1,4 @@
-import type { Agent, Conversation, Project, SpendPeriod } from "@godmode/shared";
+import type { Agent, Conversation, Project } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -20,11 +20,6 @@ export function useLicense(enabled = true) {
 
 export function useSettings() {
   return useQuery({ queryKey: qk.settings, queryFn: api.settings.get });
-}
-
-/** Costs of Claude runs and budgets show only with spend tracking on (off: a Claude subscription, no real money). */
-export function useSpendTracking(): boolean {
-  return useSettings().data?.runner.spendTracking ?? false;
 }
 
 export function useWorkspaces() {
@@ -127,11 +122,6 @@ export function useVaultStatus() {
   return useQuery({ queryKey: qk.vaultStatus, queryFn: api.vault.status });
 }
 
-/** What agents asked the human; "open" ones keep a run standing still until they are answered. */
-export function useSpend(period: SpendPeriod, agentId?: string | null) {
-  return useQuery({ queryKey: qk.spendReport(period, agentId ?? null), queryFn: () => api.spend.report(period, agentId) });
-}
-
 export function useAttention() {
   return useQuery({ queryKey: qk.attention, queryFn: api.attention, staleTime: 2_000 });
 }
@@ -146,10 +136,7 @@ export function useAway(away: { since: string; until: string } | null) {
   });
 }
 
-export function useBudgets() {
-  return useQuery({ queryKey: qk.budgets, queryFn: api.budgets.get });
-}
-
+/** What agents asked the human; "open" ones keep a run standing still until they are answered. */
 export function useQuestions(status = "open") {
   return useQuery({ queryKey: [...qk.questions, status], queryFn: () => api.questions.list({ status }) });
 }

@@ -2,23 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { formatUsd, type Goal } from "@godmode/shared";
+import type { Goal } from "@godmode/shared";
 import { Icon } from "./icon";
 import { Row, T, tap } from "./ui";
 import { api } from "@/lib/api";
 import { daysUntil, dueLabel } from "@/lib/desktop-parity";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 /**
- * The goals the work serves, above the board: how far each is (tickets done of all, what it cost); a tap opens one.
+ * The goals the work serves, above the board: how far each is (tickets done of all); a tap opens one.
  * Achieved and dropped goals fold away behind a count. `bleed`: how far the row reaches past its parent's padding.
  */
 export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | null; bleed?: number }) {
   const c = useColors();
   const goals = useQuery({ queryKey: qk.goals(workspaceId), queryFn: () => api.goals.list(workspaceId) });
-  const spendTracking = useSpendTracking();
   const [showDone, setShowDone] = useState(false);
   if (!goals.data) return null;
   const active = goals.data.filter((g) => g.status === "active");
@@ -38,7 +36,7 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
       contentContainerStyle={[styles.row, { paddingHorizontal: bleed }]}
     >
       {shown.map((g) => (
-        <GoalCard key={g.id} goal={g} spendTracking={spendTracking} />
+        <GoalCard key={g.id} goal={g} />
       ))}
       <View style={styles.side}>
         <Pressable
@@ -73,16 +71,15 @@ export function GoalsStrip({ workspaceId, bleed = 0 }: { workspaceId: string | n
   );
 }
 
-function GoalCard({ goal: g, spendTracking }: { goal: Goal; spendTracking: boolean }) {
+function GoalCard({ goal: g }: { goal: Goal }) {
   const c = useColors();
   const share = g.tickets.total ? Math.round((g.tickets.done / g.tickets.total) * 100) : 0;
   const overdue = g.status === "active" && !!g.targetDate && daysUntil(g.targetDate) < 0;
   const progress = g.tickets.total ? `${g.tickets.done} of ${g.tickets.total} done` : "No tickets yet";
-  const cost = spendTracking && g.costUsd > 0 ? formatUsd(g.costUsd) : null;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={[g.title, g.status === "active" ? null : g.status === "achieved" ? "Achieved" : "Dropped", progress, cost, g.targetDate ? dueLabel(g.targetDate) : null].filter(Boolean).join(", ")}
+      accessibilityLabel={[g.title, g.status === "active" ? null : g.status === "achieved" ? "Achieved" : "Dropped", progress, g.targetDate ? dueLabel(g.targetDate) : null].filter(Boolean).join(", ")}
       accessibilityHint={g.why || undefined}
       onPress={() => {
         tap();
@@ -111,7 +108,7 @@ function GoalCard({ goal: g, spendTracking }: { goal: Goal; spendTracking: boole
       </View>
       <Row style={{ gap: 6 }}>
         <T variant="caption" muted numberOfLines={1} style={[styles.num, { flexShrink: 1 }]}>
-          {cost ? `${progress} · ${cost}` : progress}
+          {progress}
         </T>
         {g.targetDate ? (
           <T variant="caption" color={overdue ? c.warning : c.textMuted} numberOfLines={1} style={[styles.num, { marginLeft: "auto", fontWeight: overdue ? "600" : "400" }]}>

@@ -8,11 +8,10 @@ import { Icon, type IconName } from "./icon";
 import { runStatusLabel, TRIGGER_LABEL } from "./run-row";
 import { Card, Hairline, LiveDot, SectionTitle, SkeletonRows, T, tap } from "./ui";
 import { api, errorText } from "@/lib/api";
-import { formatCost, formatWork } from "@/lib/desktop-parity";
+import { formatWork } from "@/lib/desktop-parity";
 import { activityText } from "@/lib/format";
 import { useLive, useRunActivity } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { alpha, radius, space, useColors, type Colors } from "@/lib/theme";
 
 const SHOWN_RUNS = 10;
@@ -87,7 +86,7 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
   );
 }
 
-/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when, how long and what it cost. */
+/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when and how long. */
 export function AgentHistory({ agent }: { agent: Agent }) {
   const runs = useQuery({ queryKey: qk.agentRuns(agent.id), queryFn: () => api.runs.list({ agentId: agent.id, limit: SHOWN_RUNS }) });
   return (
@@ -132,14 +131,12 @@ const HistoryRow = memo(function HistoryRow({ run }: { run: Run }) {
   const c = useColors();
   const status = useLive((s) => s.runs[run.id]?.run.status) ?? run.status;
   const activity = useRunActivity(status === "running" ? run.id : undefined);
-  const spendTracking = useSpendTracking();
   const finished = status === "succeeded" || status === "failed" || status === "cancelled";
   const when = run.startedAt ?? run.createdAt;
   const meta = [
     TRIGGER_LABEL[run.trigger] ?? "Manual",
     formatDistanceToNowStrict(new Date(when), { addSuffix: true }),
     finished && run.durationMs != null ? formatWork(run.durationMs) : null,
-    spendTracking && run.costUsd ? formatCost(run.costUsd) : null,
   ].filter(Boolean);
   const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || "(no prompt)";
   const error = status === "failed" ? firstLine(run.error) : "";

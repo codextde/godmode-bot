@@ -20,12 +20,11 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCost, formatDuration, formatTokens } from "@/components/runs/run-status";
+import { formatDuration, formatTokens } from "@/components/runs/run-status";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { ApiRequestError, api, errorMessage } from "@/lib/api";
 import { cloudContext } from "@/lib/core";
 import { openExternal } from "@/lib/desktop";
-import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CloudLinkDialog, isLinked, useCloudStatus } from "./cloud-link-dialog";
@@ -343,7 +342,6 @@ function UsageCard() {
   const [range, setRange] = useState<Range>("30");
   const days = Number(range);
   // The answer carries its own range, so the chart never draws old data against a new range while loading.
-  const spendTracking = useSpendTracking();
   const usage = useQuery({
     queryKey: qk.usage(days),
     queryFn: () => api.usage(days).then((summary) => ({ days, summary })),
@@ -374,27 +372,21 @@ function UsageCard() {
         </div>
       ) : (
         <div className={cn("divide-y transition-opacity", usage.isPlaceholderData && "opacity-60")}>
-          <UsageStats usage={data.summary} cost={spendTracking} />
-          <RunsChart usage={data.summary} days={data.days} cost={spendTracking} />
-          {spendTracking && (
-            <p className="py-3 text-xs text-muted-foreground">
-              Costs are as reported by Claude Code. With a Claude subscription this is an equivalent, not a charge.
-            </p>
-          )}
+          <UsageStats usage={data.summary} />
+          <RunsChart usage={data.summary} days={data.days} />
         </div>
       )}
     </SettingsGroup>
   );
 }
 
-function UsageStats({ usage: u, cost }: { usage: UsageSummary; cost: boolean }) {
+function UsageStats({ usage: u }: { usage: UsageSummary }) {
   const input = u.tokens.input + u.tokens.cacheRead + u.tokens.cacheWrite;
   return (
-    <div className={cn("grid gap-x-6 gap-y-4 py-4", cost ? "grid-cols-2 @xl:grid-cols-4" : "grid-cols-3")}>
+    <div className="grid grid-cols-3 gap-x-6 gap-y-4 py-4">
       <Stat label="Runs" value={u.runs.toLocaleString()} />
       <Stat label="Time" value={u.durationMs ? formatDuration(u.durationMs) : "0s"} />
       <Stat label="Tokens" value={formatTokens(input + u.tokens.output)} hint={`${formatTokens(input)} in · ${formatTokens(u.tokens.output)} out`} />
-      {cost && <Stat label="Cost" value={formatCost(u.costUsd)} hint="Reported by Claude Code" />}
     </div>
   );
 }
@@ -410,7 +402,7 @@ function Stat({ label, value, hint }: { label: string; value: ReactNode; hint?: 
 }
 
 /** Runs per day as thin bars on a shared baseline; hovering (or tapping) a day shows its numbers above the chart. */
-function RunsChart({ usage, days, cost }: { usage: UsageSummary; days: number; cost: boolean }) {
+function RunsChart({ usage, days }: { usage: UsageSummary; days: number }) {
   const [active, setActive] = useState<number | null>(null);
   const bars = useMemo(() => dayBars(usage, days), [usage, days]);
   const max = Math.max(1, ...bars.map((b) => b.runs));
@@ -422,7 +414,7 @@ function RunsChart({ usage, days, cost }: { usage: UsageSummary; days: number; c
       <div className="flex items-baseline justify-between gap-3 text-xs">
         <span className="text-muted-foreground">{shown ? formatDay(shown.day) : "Runs per day"}</span>
         <span className="tabular-nums">
-          {shown ? `${shown.runs} ${shown.runs === 1 ? "run" : "runs"}${cost ? ` · ${formatCost(shown.costUsd)}` : ""}` : `Up to ${max} a day`}
+          {shown ? `${shown.runs} ${shown.runs === 1 ? "run" : "runs"}` : `Up to ${max} a day`}
         </span>
       </div>
       <div
@@ -454,7 +446,7 @@ function RunsChart({ usage, days, cost }: { usage: UsageSummary; days: number; c
 }
 
 /** One bar per calendar day of the range, including days without runs (the summary lists only days with some). */
-function dayBars(usage: UsageSummary, days: number): { day: string; runs: number; costUsd: number }[] {
+function dayBars(usage: UsageSummary, days: number): { day: string; runs: number }[] {
   const byDay = new Map(usage.byDay.map((d) => [d.day, d]));
   const keys = new Set(byDay.keys());
   const end = new Date(usage.to).getTime();
@@ -462,7 +454,7 @@ function dayBars(usage: UsageSummary, days: number): { day: string; runs: number
   return [...keys]
     .sort()
     .slice(-days)
-    .map((day) => ({ day, runs: byDay.get(day)?.runs ?? 0, costUsd: byDay.get(day)?.costUsd ?? 0 }));
+    .map((day) => ({ day, runs: byDay.get(day)?.runs ?? 0 }));
 }
 
 /* ------------------------------------------------------------------ */

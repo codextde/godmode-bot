@@ -16,11 +16,10 @@ import { TaskTimeline } from "@/components/task-timeline";
 import { Badge, Button, Card, ErrorState, Row, SectionTitle, Skeleton, T, tap, UnassignedAvatar } from "@/components/ui";
 import { ApiError, api, errorText } from "@/lib/api";
 import { encodeFiles, type PendingFile } from "@/lib/attachments";
-import { BLOCKED_TITLE, dueLabel, formatCost, formatWork, isWorking, PRIORITY_LABEL, taskRepoLabel } from "@/lib/desktop-parity";
+import { BLOCKED_TITLE, dueLabel, formatWork, isWorking, PRIORITY_LABEL, taskRepoLabel } from "@/lib/desktop-parity";
 import { activityText, hostOf } from "@/lib/format";
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { agentsFor, useWorkspace } from "@/lib/workspace";
 import { radius, space, useColors } from "@/lib/theme";
 
@@ -32,7 +31,6 @@ export default function TaskScreen() {
   const seed = useMemo(() => boardTicket(id), [id]);
   const task = useQuery({ queryKey: qk.task(id), queryFn: () => api.tasks.get(id), placeholderData: seed });
   const { data: agents, byId } = useAgents();
-  const spendTracking = useSpendTracking();
   const { workspaces, id: pickedWorkspace } = useWorkspace();
   const [picking, setPicking] = useState(false);
 
@@ -341,7 +339,7 @@ export default function TaskScreen() {
       <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
         Filed by {t.createdBy === "user" ? "you" : (agents?.find((a) => `agent:${a.id}` === t.createdBy)?.name ?? "an agent")} on {format(new Date(t.createdAt), "d MMM yyyy, HH:mm")}
         {t.runCount > 0
-          ? ` · ${agent?.name ?? "The agent"} worked ${formatWork(t.workMs)} in ${t.runCount} run${t.runCount === 1 ? "" : "s"}${spendTracking ? ` · ${formatCost(t.costUsd)}` : ""}${isWorking(t) ? " so far" : ""}`
+          ? ` · ${agent?.name ?? "The agent"} worked ${formatWork(t.workMs)} in ${t.runCount} run${t.runCount === 1 ? "" : "s"}${isWorking(t) ? " so far" : ""}`
           : ""}
         {t.completedAt ? ` · closed ${formatDistanceToNowStrict(new Date(t.completedAt), { addSuffix: true })}` : ""}
       </T>

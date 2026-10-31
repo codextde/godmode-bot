@@ -75,8 +75,6 @@ const permissionsSchema = z
     secretAccess: z.enum(["fill", "reveal"]),
     credentialIds: z.array(id).max(1000).nullable(),
     totpIds: z.array(id).max(1000).nullable(),
-    maxBudgetUsd: z.number().positive().max(10_000).nullable(),
-    monthlyBudgetUsd: z.number().positive().max(1_000_000).nullable(),
   })
   .partial();
 

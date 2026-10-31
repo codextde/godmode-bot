@@ -22,13 +22,12 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const { mode, theme } = (patch.general ?? {}) as { mode?: unknown; theme?: unknown };
   if (mode !== undefined && !INTERFACE_MODES.includes(mode as InterfaceMode)) throw badRequest(`general.mode must be one of ${INTERFACE_MODES.join(", ")}`);
   if (theme !== undefined && !THEMES.includes(theme as Theme)) throw badRequest(`general.theme must be one of ${THEMES.join(", ")}`);
-  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown; spendTracking?: unknown } | undefined;
+  const runner = patch.runner as { appendSystemPrompt?: unknown; ultracode?: unknown } | undefined;
   const instructions = runner?.appendSystemPrompt;
   if (typeof instructions === "string" && instructions.length > MAX_INSTRUCTIONS_LENGTH) {
     throw badRequest(`Instructions for every agent can be at most ${MAX_INSTRUCTIONS_LENGTH.toLocaleString("en-US")} characters`);
   }
   if (runner?.ultracode !== undefined && typeof runner.ultracode !== "boolean") throw badRequest("runner.ultracode must be true or false");
-  if (runner?.spendTracking !== undefined && typeof runner.spendTracking !== "boolean") throw badRequest("runner.spendTracking must be true or false");
   const { effort, model, fallbackModel } = (runner ?? {}) as { effort?: unknown; model?: unknown; fallbackModel?: unknown };
   if (effort !== undefined && !EFFORT_OPTIONS.includes(effort as Effort)) throw badRequest(`runner.effort must be one of ${EFFORT_OPTIONS.join(", ")}`);
   for (const [key, value] of [["model", model], ["fallbackModel", fallbackModel]] as const) {
@@ -39,10 +38,6 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const compactAt = (runner as { autoCompactPercent?: unknown } | undefined)?.autoCompactPercent;
   if (compactAt !== undefined && compactAt !== null && !(typeof compactAt === "number" && Number.isInteger(compactAt) && compactAt >= 0 && compactAt <= 95)) {
     throw badRequest("Auto-compress must be a whole percent between 0 (off) and 95, or empty for Claude Code's own threshold");
-  }
-  const budget = (runner as { monthlyBudgetUsd?: unknown } | undefined)?.monthlyBudgetUsd;
-  if (budget !== undefined && budget !== null && !(typeof budget === "number" && Number.isFinite(budget) && budget > 0 && budget <= 1_000_000)) {
-    throw badRequest("The monthly budget must be an amount above 0, or empty for no budget");
   }
   const memory = patch.memory as { dreaming?: unknown } | undefined;
   if (memory !== undefined && (typeof memory !== "object" || memory === null || Array.isArray(memory))) throw badRequest("Invalid memory settings");

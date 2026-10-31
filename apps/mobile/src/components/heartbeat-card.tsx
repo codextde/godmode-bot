@@ -5,7 +5,6 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
 import {
-  formatUsd,
   heartbeatIntervalText,
   normalizeHeartbeat,
   type Agent,
@@ -22,7 +21,6 @@ import { Button, Card, Hairline, SectionTitle, SkeletonRows, T, tap } from "./ui
 import { api, ApiError, errorText } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { alpha, radius, space, useColors, type Colors } from "@/lib/theme";
 
 const BEATS_PREVIEW = 5;
@@ -242,11 +240,10 @@ function plainText(md: string): string {
 
 function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
   const c = useColors();
-  const spendTracking = useSpendTracking();
   const meta = OUTCOME[b.outcome] ?? OUTCOME.quiet;
   const runState = b.runStatus && b.runStatus !== "succeeded" ? RUN_STATE[b.runStatus] : undefined;
   const checklist = b.runId
-    ? ["Checklist", runState, spendTracking && b.costUsd != null && b.costUsd > 0 ? formatUsd(b.costUsd) : null].filter(Boolean).join(" · ")
+    ? ["Checklist", runState].filter(Boolean).join(" · ")
     : null;
   const chat = b.conversationId;
   return (

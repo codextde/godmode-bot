@@ -45,7 +45,7 @@ import {
 } from "@godmode/shared";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useModelCatalog, useSpendTracking, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useModelCatalog, useSshServers, useVmChoices, useWorkspaces } from "@/lib/hooks";
 import { isMac, modKey } from "@/lib/desktop";
 import { useUi } from "@/stores/ui";
 import { useDraft } from "@/lib/drafts";
@@ -103,9 +103,6 @@ export interface AgentFormValues {
   allowDelegation: boolean;
   delegateTo: string[];
   canManageAgents: boolean;
-  maxBudgetUsd: string;
-  /** What it may cost per calendar month; "" = no budget. */
-  monthlyBudgetUsd: string;
   browserEnabled: boolean;
   browserProfileId: string | null;
   headless: boolean | null;
@@ -147,8 +144,6 @@ export function agentToValues(
     allowDelegation: source?.permissions?.allowDelegation ?? true,
     delegateTo: source?.permissions?.delegateTo ?? [],
     canManageAgents: source?.permissions?.canManageAgents ?? false,
-    maxBudgetUsd: source?.permissions?.maxBudgetUsd != null ? String(source.permissions.maxBudgetUsd) : "",
-    monthlyBudgetUsd: source?.permissions?.monthlyBudgetUsd != null ? String(source.permissions.monthlyBudgetUsd) : "",
     browserEnabled: source?.browser?.enabled ?? true,
     browserProfileId: source?.browser?.profileId ?? null,
     headless: source?.browser?.headless ?? null,
@@ -165,8 +160,6 @@ export function agentToValues(
 }
 
 export function valuesToInput(v: AgentFormValues): AgentInput {
-  const budget = v.maxBudgetUsd.trim() ? Number(v.maxBudgetUsd) : null;
-  const monthly = v.monthlyBudgetUsd.trim() ? Number(v.monthlyBudgetUsd) : null;
   return {
     workspaceId: v.workspaceId,
     projectId: v.workspaceId ? v.projectId : null,
@@ -187,8 +180,6 @@ export function valuesToInput(v: AgentFormValues): AgentInput {
       allowDelegation: v.allowDelegation,
       delegateTo: v.allowDelegation ? v.delegateTo : [],
       canManageAgents: v.canManageAgents,
-      maxBudgetUsd: budget != null && Number.isFinite(budget) && budget > 0 ? budget : null,
-      monthlyBudgetUsd: monthly != null && Number.isFinite(monthly) && monthly > 0 ? monthly : null,
     },
     browser: { enabled: v.browserEnabled, profileId: v.browserProfileId, headless: v.headless },
     computer: { enabled: v.computerEnabled, target: v.computerDisplayId ? { kind: "display", displayId: v.computerDisplayId } : null },
@@ -215,14 +206,6 @@ function slugify(s: string) {
 function validate(v: AgentFormValues): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!v.name.trim()) errors.name = "Give your agent a name";
-  if (v.maxBudgetUsd.trim()) {
-    const n = Number(v.maxBudgetUsd);
-    if (!Number.isFinite(n) || n <= 0) errors.maxBudgetUsd = "Enter a positive amount, or leave empty for no limit";
-  }
-  if (v.monthlyBudgetUsd.trim()) {
-    const n = Number(v.monthlyBudgetUsd);
-    if (!Number.isFinite(n) || n <= 0) errors.monthlyBudgetUsd = "Enter a positive amount, or leave empty for no budget";
-  }
   const names = new Set<string>();
   v.subagents.forEach((s, i) => {
     const n = slugify(s.name);
@@ -288,7 +271,6 @@ export function AgentForm({
 }) {
   const { data: boot } = useBootstrap();
   const { catalog } = useModelCatalog();
-  const spendTracking = useSpendTracking();
   const scope = useUi((s) => s.workspace);
   const scopeProject = useUi((s) => s.project);
   const defaults = useMemo(
@@ -334,7 +316,7 @@ export function AgentForm({
       setShowErrors(true);
       const first = Object.keys(errors)[0];
       const focus = () =>
-        document.getElementById(first === "name" ? "agent-name" : first.startsWith("subagent") ? "subagents-list" : first === "monthlyBudgetUsd" ? "agent-month-budget" : "agent-budget")?.focus();
+        document.getElementById(first === "name" ? "agent-name" : "subagents-list")?.focus();
       // The field may sit in the collapsed advanced options: open them, then focus once they render.
       if (easy && first !== "name" && !advancedOpen) {
         setAdvancedOpen(true);
@@ -380,7 +362,7 @@ export function AgentForm({
     const id = hash.slice(1);
     if (!SECTIONS.some((s) => s.id === id)) return;
     const scroll = () => document.getElementById(id)?.scrollIntoView({ block: "start" });
-    // A link to an advanced section (e.g. #permissions from the budget card) opens the advanced options first.
+    // A link to an advanced section (e.g. #permissions) opens the advanced options first.
     if (easy && isAdvancedSection(id)) {
       setAdvancedOpen(true);
       requestAnimationFrame(() => requestAnimationFrame(scroll));
@@ -630,52 +612,6 @@ export function AgentForm({
             onChange={(v) => set("canManageAgents", v)}
           />
 
-          {spendTracking && (
-            <>
-              <div className="grid gap-1.5 @md:max-w-xs">
-                <Label htmlFor="agent-budget">Max budget per run</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                  <Input
-                    id="agent-budget"
-                    inputMode="decimal"
-                    value={values.maxBudgetUsd}
-                    onChange={(e) => set("maxBudgetUsd", e.target.value.replace(",", "."))}
-                    placeholder="No limit"
-                    aria-invalid={!!err("maxBudgetUsd")}
-                    className="pl-7"
-                  />
-                </div>
-                {err("maxBudgetUsd") ? (
-                  <p className="text-xs text-destructive">{err("maxBudgetUsd")}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">A run stops when it would cost more than this.</p>
-                )}
-              </div>
-              <div className="grid gap-1.5 @md:max-w-xs">
-                <Label htmlFor="agent-month-budget">Monthly budget</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">$</span>
-                  <Input
-                    id="agent-month-budget"
-                    inputMode="decimal"
-                    value={values.monthlyBudgetUsd}
-                    onChange={(e) => set("monthlyBudgetUsd", e.target.value.replace(",", "."))}
-                    placeholder="No budget"
-                    aria-invalid={!!err("monthlyBudgetUsd")}
-                    className="pl-7"
-                  />
-                </div>
-                {err("monthlyBudgetUsd") ? (
-                  <p className="text-xs text-destructive">{err("monthlyBudgetUsd")}</p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    What {values.name.trim() || "it"} may cost in a calendar month. When it's used up, its automations, follow-ups and board tickets wait for you — chats you start still run.
-                  </p>
-                )}
-              </div>
-            </>
-          )}
         </div>
       </FormSection>
 
@@ -916,7 +852,7 @@ export function AgentForm({
                   <span className={cn("mt-0.5 block text-xs", advancedError ? "text-destructive" : "text-muted-foreground")}>
                     {advancedError
                       ? "Something in here needs a fix before you can save."
-                      : `Model, folder, ${spendTracking ? "permissions and budgets" : "permissions"}, browser, computer, servers, tools and subagents. The defaults work well.`}
+                      : "Model, folder, permissions, browser, computer, servers, tools and subagents. The defaults work well."}
                   </span>
                 </span>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
