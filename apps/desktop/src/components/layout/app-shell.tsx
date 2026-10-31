@@ -59,7 +59,7 @@ import { MacPermissionsButton } from "@/components/permissions/mac-permissions";
 import { ClaudeSignedOutBanner } from "@/components/layout/claude-signed-out";
 import { DeviceIndicator, PrimaryOfflineBanner } from "@/components/layout/device-status";
 import { LidModeButton } from "@/components/layout/lid-mode";
-import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { UsageRing } from "@/components/layout/usage-ring";
 import { useTheme } from "@/components/theme-provider";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
@@ -722,7 +722,7 @@ function FooterBar() {
         <TooltipContent>{t("footer.lockVault")}</TooltipContent>
       </Tooltip>
       <LidModeButton />
-      <ThemeToggle />
+      <UsageRing />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
