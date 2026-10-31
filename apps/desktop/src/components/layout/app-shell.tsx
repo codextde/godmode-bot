@@ -291,7 +291,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset className="relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
+      <SidebarInset className="group/inset relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
         <MobileBar attention={inboxCount > 0} />
         <DesktopDragStrip />
         {cloudContext && boot && <CloudVersionNote coreVersion={boot.version} uiVersion={cloudContext.uiVersion} />}
@@ -390,7 +390,7 @@ function MobileBar({ attention }: { attention: boolean }) {
 function DesktopDragStrip() {
   const { isMobile } = useSidebar();
   if (!isTauri || !isMac || isMobile) return null;
-  return <div className="absolute inset-x-0 top-0 z-50 h-7" data-tauri-drag-region />;
+  return <div className="absolute inset-x-0 top-0 z-50 h-7 group-has-[[data-titlebar]]/inset:hidden" data-tauri-drag-region />;
 }
 
 /**

@@ -62,7 +62,7 @@ export function ConversationHeader({
   const qc = useQueryClient();
   const navigate = useNavigate();
   const modelLabel = useModelLabel();
-  const { isMobile } = useSidebar();
+  const { isMobile, state } = useSidebar();
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const id = conversation.id;
@@ -102,9 +102,11 @@ export function ConversationHeader({
 
   return (
     <header
+      data-titlebar
+      data-tauri-drag-region
       className={cn(
         "relative z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background px-3 @xl:px-4",
-        isTauri && isMac && !isMobile && "h-auto pt-7 pb-2",
+        isTauri && isMac && !isMobile && state === "collapsed" && "pl-12 @xl:pl-12",
       )}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
