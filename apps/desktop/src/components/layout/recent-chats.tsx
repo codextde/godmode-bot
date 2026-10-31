@@ -272,7 +272,7 @@ export function RecentChats() {
                               </kbd>
                             ) : (
                               running &&
-                              !c.paused && <LiveDot live={false} className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                              !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
                             )}
                           </span>
                           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
