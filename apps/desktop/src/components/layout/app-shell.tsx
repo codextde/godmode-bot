@@ -230,6 +230,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/ssh", t("system:easyPages.ssh.title")),
   ].filter(shown);
   const workItems = easy ? easyNav : workNav.filter(shown);
+  const machineItems = machineNav.filter(shown);
+  const visible = (items: NavItem[]) => items.filter((item) => !hiddenNav.includes(item.to));
 
   return (
     // Fixed viewport height: pages get a definite `h-full`, so the chat thread scrolls inside itself and the
@@ -285,11 +287,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </SidebarHeader>
 
         <SidebarContent>
-          <NavSection id="work" label={t("shell.sections.work")} items={workItems.filter((item) => !hiddenNav.includes(item.to))} bare />
+          <NavSection id="work" label={t("shell.sections.work")} items={visible(workItems)} defaultOpen action={<EditSidebarButton items={workItems} section={t("shell.sections.work")} />} />
           {easy ? (
-            <NavSection id="more" label={t("shell.sections.more")} items={easyMore} folded="list" action={<EditSidebarButton items={workItems} />} />
+            <NavSection id="more" label={t("shell.sections.more")} items={visible(easyMore)} folded="list" action={<EditSidebarButton items={easyMore} section={t("shell.sections.more")} />} />
           ) : (
-            <NavSection id="machines" label={t("shell.sections.machines")} items={machineNav.filter(shown)} action={<EditSidebarButton items={workItems} />} />
+            <NavSection id="machines" label={t("shell.sections.machines")} items={visible(machineItems)} action={<EditSidebarButton items={machineItems} section={t("shell.sections.machines")} />} />
           )}
           <RecentChats />
         </SidebarContent>
@@ -506,7 +508,6 @@ function NavSection({
   folded = "icons",
   defaultOpen = false,
   action,
-  bare = false,
 }: {
   id: string;
   label: string;
@@ -514,7 +515,6 @@ function NavSection({
   folded?: "icons" | "list";
   defaultOpen?: boolean;
   action?: ReactNode;
-  bare?: boolean;
 }) {
   const { t } = useTranslation("layout");
   const expanded = useUi((s) => (defaultOpen ? !s.collapsedNav.includes(id) : s.expandedNav.includes(id)));
@@ -523,7 +523,7 @@ function NavSection({
   const railed = state === "collapsed" && !isMobile;
   const { pathname } = useLocation();
   const listId = `nav-section-${id}`;
-  const open = bare || expanded || railed;
+  const open = expanded || railed;
   const toggleButton = <NavSectionHeader label={label} open={open} controls={listId} onToggle={() => toggle(id)} quiet={folded === "icons"} />;
   const header = action ? (
     <div className="group/section flex min-w-0 flex-1 items-center justify-between gap-1 pr-1">
@@ -535,8 +535,8 @@ function NavSection({
   );
   if (open)
     return (
-      <SidebarGroup className={cn("py-1", bare && "pt-0")}>
-        {!bare && header}
+      <SidebarGroup className="py-1">
+        {header}
         <SidebarGroupContent id={listId}>
           <SidebarMenu className="group-data-[collapsible=icon]:items-center">
             {items.map((item) => (

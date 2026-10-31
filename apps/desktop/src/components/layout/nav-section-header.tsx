@@ -13,7 +13,7 @@ export function NavSectionHeader({
   open: boolean;
   controls: string;
   onToggle: () => void;
-  /** Show the chevron only on hover. */
+  /** While folded, show the chevron only on hover. */
   quiet?: boolean;
 }) {
   return (
@@ -28,7 +28,7 @@ export function NavSectionHeader({
       <ChevronRight
         className={cn(
           "size-3 transition",
-          quiet && "opacity-0 group-hover/label:opacity-100 group-focus-visible/label:opacity-100",
+          quiet && !open && "opacity-0 group-hover/label:opacity-100 group-focus-visible/label:opacity-100",
           open && "rotate-90",
         )}
       />
