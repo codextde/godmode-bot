@@ -127,11 +127,16 @@ export default function RootLayout() {
   );
 }
 
-/** Follows the computer's theme, also when the desktop, another phone or an agent changes it. */
+/** Follows the computer's theme and palette, also when the desktop, another phone or an agent changes them. */
 function ThemeSync({ paired }: { paired: boolean }) {
-  const { data } = useQuery({ queryKey: qk.settings, queryFn: api.settings.get, enabled: paired, select: (s) => s.general.theme });
+  const { data } = useQuery({ queryKey: qk.settings, queryFn: api.settings.get, enabled: paired, select: (s) => s.general });
+  const theme = data?.theme;
+  const palette = data?.palette;
   useEffect(() => {
-    if (data) useAppearance.getState().setTheme(data);
-  }, [data]);
+    if (theme) useAppearance.getState().setTheme(theme);
+  }, [theme]);
+  useEffect(() => {
+    if (palette) useAppearance.getState().setPalette(palette);
+  }, [palette]);
   return null;
 }

@@ -340,6 +340,9 @@ describe("phone access", () => {
     expect((await phone("/api/settings", json("PUT", { runner: { effort: "high&calc" } }))).status).toBe(400);
     const themed = await phone("/api/settings", json("PUT", { general: { theme: "dark" } }));
     expect(((await themed.json()) as { general: { theme: string } }).general.theme).toBe("dark");
+    const paletted = await phone("/api/settings", json("PUT", { general: { palette: "nord" } }));
+    expect(((await paletted.json()) as { general: { palette: string } }).general.palette).toBe("nord");
+    expect((await phone("/api/settings", json("PUT", { general: { palette: "neon" } }))).status).toBe(403);
     expect((await phone("/api/settings", json("PUT", { runner: { model: "x y" } }))).status).toBe(400);
     for (const patch of [
       { runner: { claudePath: "/tmp/evil" } },
