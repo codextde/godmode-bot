@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
@@ -23,6 +24,7 @@ import { useAllAgents, useMods } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
+import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
@@ -261,24 +263,27 @@ export function MessageBlocks({
 /* ------------------------------------------------------------------ */
 
 function ThinkingItem({ text, active }: { text: string; active: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
   // Easy mode doesn't stream the reasoning; it stays folded, one click away.
   if (active && (easy || !text.trim())) return <ThinkingState />;
-  return <ThinkingReasoning text={text} active={active} summary={easy ? "it through" : undefined} />;
+  return <ThinkingReasoning text={text} active={active} summary={easy ? t("blocks.thoughtSummary") : undefined} />;
 }
 
 /** A message the human sent while the agent worked, where the agent picked it up. */
 function PickedUpMessage({ block }: { block: UserMessageBlock }) {
+  const { t } = useTranslation(["chat", "common"]);
+  const { dateLocale } = useLocale();
   const sent = new Date(block.sentAt);
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }} className="flex flex-col items-end py-1">
       <UserBubble content={block.text} attachments={block.attachments} />
       <span className="mt-1 inline-flex items-center gap-1 pr-1 text-[11px] text-muted-foreground">
         <CornerDownRight className="size-3" aria-hidden />
-        Picked up mid-task
+        {t("blocks.pickedUp")}
         {!Number.isNaN(sent.getTime()) && (
           <time dateTime={block.sentAt} className="tabular-nums">
-            · sent {format(sent, "p")}
+            · {t("blocks.sentAt", { time: format(sent, "p", { locale: dateLocale }) })}
           </time>
         )}
       </span>
@@ -305,6 +310,7 @@ function NoticeItem({ level, text }: { level: "info" | "warning" | "success"; te
 
 /** A note a Claude Code plugin posted: who says it comes first, as a chip that leads to the plugin. */
 function ModNote({ level, text, name }: { level: "info" | "warning" | "success"; text: string; name: string }) {
+  const { t } = useTranslation(["chat", "common"]);
   const { data: mods } = useMods();
   const mod = mods?.find((m) => m.name === name);
   const chip = "inline-flex h-5 max-w-[14rem] shrink-0 items-center gap-1 rounded-[5px] border border-border bg-card px-1.5 text-[11px] font-medium text-foreground";
@@ -319,13 +325,13 @@ function ModNote({ level, text, name }: { level: "info" | "warning" | "success";
       {mod ? (
         <Link
           to={`/plugins?plugin=${mod.id}`}
-          title={`Note from the plugin “${mod.title}”`}
+          title={t("blocks.pluginNote", { name: mod.title })}
           className={cn(chip, "transition outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50")}
         >
           {label}
         </Link>
       ) : (
-        <span className={chip} title={`Note from the plugin “${name}”`}>
+        <span className={chip} title={t("blocks.pluginNote", { name })}>
           {label}
         </span>
       )}
@@ -339,6 +345,7 @@ const PREFORMATTED = /\n[ \t]{2,}\S/;
 
 /** Output of a slash command Claude Code ran locally — markdown when it is markdown, aligned text stays monospace. */
 function CommandOutput({ name, args, output }: { name: string; args: string; output: string }) {
+  const { t } = useTranslation(["chat", "common"]);
   const long = output.length > 1200 || output.split("\n").length > 24;
   const [expanded, setExpanded] = useState(false);
   return (
@@ -351,7 +358,7 @@ function CommandOutput({ name, args, output }: { name: string; args: string; out
       </div>
       <div className={cn("relative px-3.5 py-3", long && !expanded && "max-h-80 overflow-hidden")}>
         {!output ? (
-          <p className="text-sm text-muted-foreground">Done.</p>
+          <p className="text-sm text-muted-foreground">{t("blocks.commandDone")}</p>
         ) : MARKDOWN_HINT.test(output) ? (
           <Markdown className="text-[0.9rem]">{output}</Markdown>
         ) : PREFORMATTED.test(output) ? (
@@ -368,7 +375,7 @@ function CommandOutput({ name, args, output }: { name: string; args: string; out
           aria-expanded={expanded}
           className="flex w-full items-center justify-center gap-1 border-t py-1.5 text-xs text-muted-foreground transition hover:bg-accent/40 hover:text-foreground"
         >
-          {expanded ? "Show less" : "Show all"}
+          {expanded ? t("common:actions.showLess") : t("blocks.showAll")}
           <ChevronRight className={cn("size-3 transition-transform", expanded ? "-rotate-90" : "rotate-90")} />
         </button>
       )}
@@ -439,6 +446,7 @@ function stepRunning(block: ToolUseBlock, streaming: boolean) {
 }
 
 function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext; streaming: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
   const [manual, setManual] = useState<boolean | null>(null);
   const tools = steps.filter((s): s is Extract<Step, { type: "tool" }> => s.type === "tool");
@@ -488,10 +496,12 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
         {easy ? (
           <span className="min-w-0 flex-1">
             <span className={cn("block truncate text-sm font-medium", streaming && "text-shimmer")}>
-              {streaming ? `Working… step ${runningIdx >= 0 ? runningIdx + 1 : tools.length}: ${current.title}` : `Worked through ${tools.length} ${tools.length === 1 ? "step" : "steps"}`}
+              {streaming
+                ? t("blocks.workingStep", { n: runningIdx >= 0 ? runningIdx + 1 : tools.length, title: current.title })
+                : t("blocks.workedThrough", { count: tools.length })}
             </span>
             {failed > 0 && (
-              <span className="block text-xs text-muted-foreground">{failed === 1 ? "1 step didn't work" : `${failed} steps didn't work`}</span>
+              <span className="block text-xs text-muted-foreground">{t("blocks.stepsDidntWork", { count: failed })}</span>
             )}
           </span>
         ) : (
@@ -504,8 +514,8 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
               )}
             </span>
             <span className="block text-xs text-muted-foreground">
-              {tools.length} steps
-              {failed > 0 && <span className="text-destructive"> · {failed} failed</span>}
+              {t("blocks.steps", { count: tools.length })}
+              {failed > 0 && <span className="text-destructive"> · {t("blocks.failedCount", { count: failed })}</span>}
             </span>
           </span>
         )}
@@ -547,6 +557,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
 }
 
 function ThoughtStep({ text, last, easy }: { text: string; last: boolean; easy: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [open, setOpen] = useState(false);
   return (
     <li className="relative pl-9">
@@ -556,7 +567,7 @@ function ThoughtStep({ text, last, easy }: { text: string; last: boolean; easy: 
       </span>
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="w-full py-1.5 text-left">
         {easy && !open ? (
-          <p className="text-[13px] leading-relaxed text-muted-foreground">Thought it through</p>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">{t("blocks.thoughtItThrough")}</p>
         ) : (
           <p className={cn("text-[13px] leading-relaxed text-muted-foreground italic", !open && "line-clamp-2")}>{text.trim()}</p>
         )}
@@ -582,6 +593,7 @@ function ToolStep({
   standalone?: boolean;
   incomplete?: boolean;
 }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [open, setOpen] = useState(false);
   const Icon = meta.icon;
   const failed = !!block.isError;
@@ -616,12 +628,12 @@ function ToolStep({
       </span>
       {meta.kind === "vault" && !failed && (
         <span className="hidden shrink-0 items-center gap-1 rounded-[5px] border border-brand/25 bg-brand-soft px-1.5 py-0.5 text-[10.5px] font-medium text-brand-strong @lg:inline-flex">
-          <Lock className="size-3" /> Secret hidden
+          <Lock className="size-3" /> {t("blocks.secretHidden")}
         </span>
       )}
       {edit && !running && !failed && !easy && <DiffStat rows={edit.rows} />}
-      {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">{easy ? "Didn't work" : "Failed"}</span>}
-      {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">{easy ? "Didn't finish" : "No result"}</span>}
+      {failed && <span className="shrink-0 text-[11px] font-medium text-destructive">{easy ? t("blocks.didntWork") : t("common:status.failed")}</span>}
+      {incomplete && <span className="shrink-0 text-[11px] text-muted-foreground">{easy ? t("blocks.didntFinish") : t("blocks.noResult")}</span>}
       <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground opacity-60 transition group-hover:opacity-100", open && "rotate-90")} />
     </button>
   );
@@ -653,6 +665,7 @@ function ToolStep({
 }
 
 function Screenshot({ image, alt }: { image: string; alt: string }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [zoom, setZoom] = useState(false);
   const src = imageSrc(image);
   return (
@@ -661,7 +674,7 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
         type="button"
         onClick={() => setZoom(true)}
         className="mt-1 mb-1.5 block overflow-hidden rounded-lg border bg-muted/30 shadow-card transition hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
-        aria-label="Enlarge screenshot"
+        aria-label={t("blocks.enlargeScreenshot")}
       >
         <img src={src} alt={alt} loading="lazy" className="max-h-56 w-auto max-w-full object-contain object-top" />
       </button>
@@ -683,13 +696,14 @@ function DiffStat({ rows }: { rows: DiffRow[] }) {
   );
 }
 
-function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null; inputLabel?: string }) {
+function ToolDetails({ block, edit, script = false }: { block: ToolUseBlock; edit?: { file: string; rows: DiffRow[] } | null; script?: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [full, setFull] = useState(false);
   if (edit) {
     return (
       <div className="mt-1 mb-2 space-y-2">
-        <FileDiff file={edit.file || "file"} rows={edit.rows} />
-        {block.isError && block.result && <DetailPanel label="Error" text={block.result} error />}
+        <FileDiff file={edit.file || t("blocks.file")} rows={edit.rows} />
+        {block.isError && block.result && <DetailPanel label={t("blocks.detail.error")} copyLabel={t("blocks.detail.copyError")} text={block.result} error />}
       </div>
     );
   }
@@ -705,19 +719,24 @@ function ToolDetails({ block, edit, inputLabel = "Input" }: { block: ToolUseBloc
       ) : (
         input &&
         input !== "{}" && (
-          <DetailPanel label={inputLabel} text={input} />
+          <DetailPanel
+            label={script ? t("blocks.detail.script") : t("blocks.detail.input")}
+            copyLabel={script ? t("blocks.detail.copyScript") : t("blocks.detail.copyInput")}
+            text={input}
+          />
         )
       )}
       {block.result !== undefined && (
         <DetailPanel
-          label={block.isError ? "Error" : "Result"}
-          text={shown || "(empty)"}
+          label={block.isError ? t("blocks.detail.error") : t("blocks.detail.result")}
+          copyLabel={block.isError ? t("blocks.detail.copyError") : t("blocks.detail.copyResult")}
+          text={shown || t("blocks.detail.empty")}
           copyText={result}
           error={block.isError}
           footer={
             result.length > RESULT_PREVIEW && (
               <Button variant="ghost" size="xs" onClick={() => setFull((f) => !f)} className="text-muted-foreground">
-                {full ? "Show less" : `Show all (${Math.round(result.length / 1000)}k chars)`}
+                {full ? t("common:actions.showLess") : t("blocks.showAllChars", { k: Math.round(result.length / 1000) })}
               </Button>
             )
           }
@@ -750,6 +769,7 @@ function TodoList({ todos }: { todos: { content: string; status: string }[] }) {
 
 /** Easy mode: the to-do list reads as it is; the raw call (input, output, diff) waits behind one more explicit click. */
 function EasyStepDetails({ block, edit }: { block: ToolUseBlock; edit: { file: string; rows: DiffRow[] } | null }) {
+  const { t } = useTranslation(["chat", "common"]);
   const [tech, setTech] = useState(false);
   const todos = todoItems(block.input);
   return (
@@ -757,12 +777,12 @@ function EasyStepDetails({ block, edit }: { block: ToolUseBlock; edit: { file: s
       {todos && <TodoList todos={todos} />}
       <button
         type="button"
-        onClick={() => setTech((t) => !t)}
+        onClick={() => setTech((v) => !v)}
         aria-expanded={tech}
         className="inline-flex items-center gap-1 rounded-md py-0.5 text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
       >
         <ChevronRight className={cn("size-3 transition-transform", tech && "rotate-90")} />
-        {tech ? "Hide technical details" : "Show technical details"}
+        {tech ? t("blocks.hideTechnical") : t("blocks.showTechnical")}
       </button>
       <Collapse open={tech}>
         <ToolDetails block={block} edit={edit} />
@@ -771,12 +791,26 @@ function EasyStepDetails({ block, edit }: { block: ToolUseBlock; edit: { file: s
   );
 }
 
-function DetailPanel({ label, text, copyText, error, footer }: { label: string; text: string; copyText?: string; error?: boolean; footer?: ReactNode }) {
+function DetailPanel({
+  label,
+  copyLabel,
+  text,
+  copyText,
+  error,
+  footer,
+}: {
+  label: string;
+  copyLabel: string;
+  text: string;
+  copyText?: string;
+  error?: boolean;
+  footer?: ReactNode;
+}) {
   return (
     <div className={cn("overflow-hidden rounded-lg border bg-paper-2", error && "border-destructive/30 bg-destructive/5")}>
       <div className="flex h-7 items-center justify-between border-b pr-1 pl-3">
         <span className={cn("text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase", error && "text-destructive")}>{label}</span>
-        <CopyButton text={copyText ?? text} label={`Copy ${label.toLowerCase()}`} />
+        <CopyButton text={copyText ?? text} label={copyLabel} />
       </div>
       <pre className={cn("max-h-72 overflow-auto p-3 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap", error && "text-destructive")}>{text}</pre>
       {footer && <div className="border-t px-1 py-0.5">{footer}</div>}
@@ -788,18 +822,19 @@ function DetailPanel({ label, text, copyText, error, footer }: { label: string; 
 /* Special cards                                                        */
 /* ------------------------------------------------------------------ */
 
-const MISSING_KIND_LABEL: Record<string, string> = {
-  missing_credential: "No saved login",
-  invalid_credential: "Saved login didn't work",
-  missing_totp: "2FA code needed",
-  missing_account: "No account yet",
-  other: "Login needed",
-};
+const MISSING_KIND_LABEL = {
+  missing_credential: "blocks.missing.kind.missingCredential",
+  invalid_credential: "blocks.missing.kind.invalidCredential",
+  missing_totp: "blocks.missing.kind.missingTotp",
+  missing_account: "blocks.missing.kind.missingAccount",
+  other: "blocks.missing.kind.other",
+} as const;
 
 function MissingLoginCard({ block }: { block: ToolUseBlock }) {
+  const { t } = useTranslation(["chat", "common"]);
   const input = (block.input ?? {}) as { service?: string; url?: string; kind?: string; reason?: string };
   const domain = hostOf(input.url) || (input.service ?? "");
-  const service = input.service || domain || "a website";
+  const service = input.service || domain;
   const kind = input.kind ?? "missing_credential";
   const addLogin = `/vault/logins?new=1${domain ? `&domain=${encodeURIComponent(domain)}` : ""}`;
   return (
@@ -815,29 +850,29 @@ function MissingLoginCard({ block }: { block: ToolUseBlock }) {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <h4 className="text-sm font-medium">I need a login for {service}</h4>
+            <h4 className="text-sm font-medium">{service ? t("blocks.missing.needLoginFor", { service }) : t("blocks.missing.needLogin")}</h4>
             <span className="rounded-[5px] bg-warning/12 px-1.5 py-0.5 text-[10.5px] font-medium text-warning">
-              {MISSING_KIND_LABEL[kind] ?? MISSING_KIND_LABEL.other}
+              {t(kind in MISSING_KIND_LABEL ? MISSING_KIND_LABEL[kind as keyof typeof MISSING_KIND_LABEL] : MISSING_KIND_LABEL.other)}
             </span>
           </div>
           {input.reason && <p className="mt-1 text-[13px] text-muted-foreground">{input.reason}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {kind === "missing_totp" ? (
               <Button asChild size="sm">
-                <Link to={`/inbox?link2fa=${encodeURIComponent(domain)}`}>Add 2FA code</Link>
+                <Link to={`/inbox?link2fa=${encodeURIComponent(domain)}`}>{t("blocks.missing.add2fa")}</Link>
               </Button>
             ) : (
               <Button asChild size="sm">
-                <Link to={addLogin}>Add login</Link>
+                <Link to={addLogin}>{t("blocks.missing.addLogin")}</Link>
               </Button>
             )}
             <Button asChild size="sm" variant="ghost" className="text-muted-foreground">
               <Link to="/inbox">
-                Open inbox <ArrowUpRight />
+                {t("blocks.missing.openInbox")} <ArrowUpRight />
               </Link>
             </Button>
           </div>
-          <p className="mt-2 text-[11.5px] text-muted-foreground">Once it's saved, just ask me to try again.</p>
+          <p className="mt-2 text-[11.5px] text-muted-foreground">{t("blocks.missing.tryAgainHint")}</p>
         </div>
       </div>
     </motion.div>
@@ -873,6 +908,7 @@ function useHandedOverRun(parentRunId: string | undefined, agentId: string | und
 }
 
 function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; streaming: boolean; parentRunId?: string }) {
+  const { t } = useTranslation(["chat", "common"]);
   const input = (block.input ?? {}) as { agentId?: string; task?: string; wait?: boolean };
   const agent = useAgentById(input.agentId);
   const easy = useEasyMode();
@@ -888,30 +924,29 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
   const stop = useMutation({
     mutationFn: () => api.runs.cancel(child!.id),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.runs }),
-    onError: (err) => toast.error("Couldn't stop it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("blocks.delegate.stopError"), { description: errorMessage(err) }),
   });
-  const name = agent?.name ?? "the agent";
   const state =
     refused
-      ? { text: "couldn't hand over", tone: "text-destructive" }
+      ? { text: t("blocks.delegate.couldntHandOver"), tone: "text-destructive" }
       : status === "running"
-        ? { text: live?.activity && live.activity !== "Starting…" ? live.activity : "working on it…", tone: "text-shimmer" }
+        ? { text: live?.activity && live.activity !== "Starting…" ? live.activity : t("blocks.delegate.workingOnIt"), tone: "text-shimmer" }
         : status === "queued"
-          ? { text: "queued", tone: "text-muted-foreground" }
+          ? { text: t("blocks.delegate.queued"), tone: "text-muted-foreground" }
           : status === "paused"
-            ? { text: "paused — open its chat to see why", tone: "text-warning" }
+            ? { text: t("blocks.delegate.paused"), tone: "text-warning" }
             : status === "succeeded"
-              ? { text: "done", tone: "text-success", check: true }
+              ? { text: t("blocks.delegate.done"), tone: "text-success", check: true }
               : status === "failed"
-                ? { text: "failed", tone: "text-destructive" }
+                ? { text: t("blocks.delegate.failed"), tone: "text-destructive" }
                 : status === "cancelled"
-                  ? { text: "stopped", tone: "text-muted-foreground" }
+                  ? { text: t("blocks.delegate.stopped"), tone: "text-muted-foreground" }
                   : running
-                    ? { text: "handing over…", tone: "text-shimmer" }
+                    ? { text: t("blocks.delegate.handingOver"), tone: "text-shimmer" }
                     : block.isError
-                      ? { text: "failed", tone: "text-destructive" }
+                      ? { text: t("blocks.delegate.failed"), tone: "text-destructive" }
                       : block.result !== undefined
-                        ? { text: input.wait === false ? "handed over" : "done", tone: "text-success", check: true }
+                        ? { text: input.wait === false ? t("blocks.delegate.handedOver") : t("blocks.delegate.done"), tone: "text-success", check: true }
                         : null;
   return (
     <div className={cn("rounded-xl border bg-card shadow-card", (running || status === "running") && "glow-border", (block.isError || status === "failed") && "border-destructive/30")}>
@@ -925,13 +960,13 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-            <span className="text-muted-foreground">Handed to</span>
+            <span className="text-muted-foreground">{t("blocks.delegate.handedTo")}</span>
             {agent ? (
               <Link to={`/agents/${agent.id}`} className="font-semibold hover:underline">
                 {agent.name}
               </Link>
             ) : (
-              <span className="font-semibold">{easy ? "a teammate" : "another agent"}</span>
+              <span className="font-semibold">{easy ? t("blocks.delegate.aTeammate") : t("blocks.delegate.anotherAgent")}</span>
             )}
             {agent?.role && <span className="text-xs text-muted-foreground">· {agent.role}</span>}
             {state && (
@@ -946,12 +981,12 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               <Button asChild size="xs" variant="outline">
                 <Link to={`/chat/${child.conversationId}`}>
-                  <ArrowUpRight /> Open chat
+                  <ArrowUpRight /> {t("blocks.delegate.openChat")}
                 </Link>
               </Button>
               {working && (
-                <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate()} aria-label={`Stop ${name}'s part`}>
-                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />} Stop
+                <Button size="xs" variant="ghost" className="text-muted-foreground hover:text-destructive" disabled={stop.isPending} onClick={() => stop.mutate()} aria-label={agent ? t("blocks.delegate.stopPart", { name: agent.name }) : t("blocks.delegate.stopAgentPart")}>
+                  {stop.isPending ? <Loader2 className="animate-spin" /> : <Square className="size-2.5 fill-current" />} {t("common:actions.stop")}
                 </Button>
               )}
             </div>
@@ -967,7 +1002,15 @@ function DelegateCard({ block, streaming, parentRunId }: { block: ToolUseBlock; 
             className="flex w-full items-center gap-1.5 px-3.5 py-2 text-left text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
             <ChevronRight className={cn("size-3.5 transition-transform", open && "rotate-90")} />
-            {block.isError ? (easy ? "What went wrong" : "Error details") : `${agent?.name ?? (easy ? "Teammate" : "Agent")}'s result`}
+            {block.isError
+              ? easy
+                ? t("blocks.delegate.whatWentWrong")
+                : t("blocks.delegate.errorDetails")
+              : agent
+                ? t("blocks.delegate.resultOf", { name: agent.name })
+                : easy
+                  ? t("blocks.delegate.teammateResult")
+                  : t("blocks.delegate.agentResult")}
           </button>
           <Collapse open={open}>
             <div className="px-3.5 pb-3.5">
@@ -1004,6 +1047,7 @@ function subagentAnchor(id: string) {
 }
 
 function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBlock; ctx: ToolContext; childBlocks: MessageBlock[]; streaming: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
   const meta = (easy ? describeToolEasy : describeTool)(block.name, block.input, ctx);
   const { task, background, status, running, failed, result } = subagentState(block, streaming);
@@ -1012,15 +1056,21 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
   const expanded = open ?? (running && !background);
   const Icon = meta.icon;
   const steps = Math.max(childBlocks.filter((b) => b.type === "tool_use").length, task?.toolUses ?? 0);
-  const kind = easy ? (background ? "Helper, working in the background" : "Helper") : background ? "Background subagent" : "Subagent";
+  const kind = easy
+    ? background
+      ? t("blocks.subagent.helperBackground")
+      : t("blocks.subagent.helper")
+    : background
+      ? t("blocks.subagent.backgroundSubagent")
+      : t("blocks.subagent.subagent");
   const state = running
-    ? task?.activity || "Starting…"
+    ? task?.activity || t("blocks.starting")
     : failed
-      ? "Failed"
+      ? t("common:status.failed")
       : status === "stopped"
-        ? "Stopped"
+        ? t("blocks.stopped")
         : "";
-  const stats = [steps > 0 && `${steps} steps`, !running && !!task?.durationMs && formatDuration(task.durationMs)].filter(Boolean);
+  const stats = [steps > 0 && t("blocks.steps", { count: steps }), !running && !!task?.durationMs && formatDuration(task.durationMs)].filter(Boolean);
 
   return (
     <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "glow-border")}>
@@ -1060,7 +1110,7 @@ function SubagentCard({ block, ctx, childBlocks, streaming }: { block: ToolUseBl
           ) : null}
           {result && (
             <div className="rounded-lg border bg-paper-2 p-3">
-              <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{background ? "Report" : "Result"}</div>
+              <div className="mb-1.5 text-[10.5px] font-semibold tracking-wider text-muted-foreground uppercase">{background ? t("blocks.subagent.report") : t("blocks.detail.result")}</div>
               <Markdown className="text-[0.85rem]">{result}</Markdown>
             </div>
           )}
@@ -1081,8 +1131,8 @@ function Elapsed({ since, className }: { since: number; className?: string }) {
  */
 function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolContext }) {
   const easy = useEasyMode();
+  const { t } = useTranslation("chat");
   const count = blocks.length;
-  const noun = easy ? "helper" : "subagent";
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -1092,9 +1142,9 @@ function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolCo
       className="rounded-xl border border-dashed bg-card/60 px-3 py-2.5"
     >
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Orb variant="B5" size={14} label={easy ? "Helpers working" : "Subagents working"} />
-        <span className="font-medium text-foreground/80">{count === 1 ? `1 ${noun} is working in the background` : `${count} ${noun}s are working in the background`}</span>
-        <span className="ml-auto hidden @md:inline">Continues when they report back</span>
+        <Orb variant="B5" size={14} label={easy ? t("blocks.background.helpersWorking") : t("blocks.background.subagentsWorking")} />
+        <span className="font-medium text-foreground/80">{easy ? t("blocks.background.helpersInBackground", { count }) : t("blocks.background.subagentsInBackground", { count })}</span>
+        <span className="ml-auto hidden @md:inline">{t("blocks.background.continuesWhen")}</span>
       </div>
       <ul className="mt-2 space-y-0.5">
         {blocks.map((b) => {
@@ -1109,8 +1159,8 @@ function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolCo
               >
                 <CircleDot aria-hidden className="size-3.5 shrink-0 animate-pulse text-foreground/70" />
                 <span className="min-w-0 shrink truncate font-medium">{title}</span>
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{task?.activity || "Starting…"}</span>
-                {!!task?.toolUses && <span className="hidden shrink-0 text-[11px] text-muted-foreground tabular-nums @sm:inline">{task.toolUses} steps</span>}
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{task?.activity || t("blocks.starting")}</span>
+                {!!task?.toolUses && <span className="hidden shrink-0 text-[11px] text-muted-foreground tabular-nums @sm:inline">{t("blocks.steps", { count: task.toolUses })}</span>}
                 {task?.startedAt && <Elapsed since={task.startedAt} />}
                 <ArrowUpRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
               </button>
@@ -1122,7 +1172,12 @@ function BackgroundAgents({ blocks, ctx }: { blocks: ToolUseBlock[]; ctx: ToolCo
   );
 }
 
-const AGENT_STATE_LABEL: Record<ToolTaskAgent["state"], string> = { queued: "Queued", running: "Running", done: "Done", failed: "Failed" };
+const AGENT_STATE_LABEL = {
+  queued: "common:status.queued",
+  running: "common:status.running",
+  done: "chat:blocks.workflow.done",
+  failed: "common:status.failed",
+} as const satisfies Record<ToolTaskAgent["state"], string>;
 
 /** Agents of a workflow by phase, phases in the order their first agent was queued. */
 function agentPhases(agents: ToolTaskAgent[]): { phase: string; agents: ToolTaskAgent[] }[] {
@@ -1132,9 +1187,10 @@ function agentPhases(agents: ToolTaskAgent[]): { phase: string; agents: ToolTask
 }
 
 function WorkflowAgent({ agent, live, easy }: { agent: ToolTaskAgent; live: boolean; easy: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   // An agent still queued or running when its workflow ended never finished.
   const running = live && agent.state === "running";
-  const label = live || agent.state === "done" || agent.state === "failed" ? AGENT_STATE_LABEL[agent.state] : "Not finished";
+  const label = live || agent.state === "done" || agent.state === "failed" ? t(AGENT_STATE_LABEL[agent.state]) : t("blocks.workflow.notFinished");
   return (
     <li className="flex items-center gap-2 text-[13px]">
       {agent.state === "done" ? (
@@ -1155,7 +1211,7 @@ function WorkflowAgent({ agent, live, easy }: { agent: ToolTaskAgent; live: bool
       {easy ? null : running && agent.lastTool ? (
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">{agent.lastTool}</span>
       ) : (
-        !!agent.tokens && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{formatTokens(agent.tokens)} tokens</span>
+        !!agent.tokens && <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{t("blocks.tokens", { tokens: formatTokens(agent.tokens) })}</span>
       )}
     </li>
   );
@@ -1163,13 +1219,14 @@ function WorkflowAgent({ agent, live, easy }: { agent: ToolTaskAgent; live: bool
 
 /** A Claude Code workflow: the agents it runs, by phase, kept up to date while it works. */
 function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: boolean }) {
+  const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
   const [open, setOpen] = useState<boolean | null>(null);
   const [details, setDetails] = useState(false);
   const task = block.task;
   const input = (block.input ?? {}) as { name?: unknown; script?: unknown };
   const name = task?.description || (typeof input.name === "string" ? input.name : "");
-  const kind = easy ? "Team task" : "Workflow";
+  const kind = easy ? t("blocks.workflow.teamTask") : t("blocks.workflow.workflow");
   const title = name || kind;
   // A workflow still running on a turn that has ended was cut off with its run.
   const status = task ? (task.status === "running" && !streaming ? "stopped" : task.status) : null;
@@ -1180,21 +1237,21 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
   const phases = agentPhases(agents);
   const done = agents.filter((a) => a.state === "done").length;
   const state = failed
-    ? "Failed"
+    ? t("common:status.failed")
     : status === "running"
-      ? task?.activity || "Running…"
+      ? task?.activity || t("blocks.workflow.running")
       : status === "completed"
-        ? "Completed"
+        ? t("blocks.workflow.completed")
         : status === "stopped"
-          ? "Stopped"
+          ? t("blocks.stopped")
           : running
-            ? "Starting…"
+            ? t("blocks.starting")
             : block.result === undefined
-              ? "No result"
+              ? t("blocks.noResult")
               : "";
   const stats = [
-    agents.length > 0 && `${done}/${agents.length} ${easy ? "helpers" : "agents"}`,
-    (!easy || details) && !!task?.totalTokens && `${formatTokens(task.totalTokens)} tokens`,
+    agents.length > 0 && (easy ? t("blocks.workflow.helpersRatio", { done, total: agents.length }) : t("blocks.workflow.agentsRatio", { done, total: agents.length })),
+    (!easy || details) && !!task?.totalTokens && t("blocks.tokens", { tokens: formatTokens(task.totalTokens) }),
     !!task?.durationMs && formatDuration(task.durationMs),
   ].filter(Boolean);
   const script = typeof input.script === "string" ? input.script : "";
@@ -1254,13 +1311,13 @@ function WorkflowCard({ block, streaming }: { block: ToolUseBlock; streaming: bo
             className="flex flex-1 items-center gap-1.5 py-2 pl-3.5 text-left font-medium transition hover:text-foreground"
           >
             <ChevronRight className={cn("size-3.5 shrink-0 transition-transform", details && "rotate-90")} />
-            {easy ? "Technical details" : "Details"}
+            {easy ? t("blocks.workflow.technicalDetails") : t("blocks.workflow.details")}
           </button>
           {stats.length > 0 && <span className="min-w-0 truncate tabular-nums">{stats.join(" · ")}</span>}
         </div>
         <Collapse open={details}>
           <div className="px-3 pb-1">
-            <ToolDetails block={script ? { ...block, input: script } : block} inputLabel={script ? "Script" : undefined} />
+            <ToolDetails block={script ? { ...block, input: script } : block} script={!!script} />
           </div>
         </Collapse>
       </div>

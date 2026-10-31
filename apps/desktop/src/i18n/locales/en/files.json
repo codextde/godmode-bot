@@ -1,1 +1,303 @@
-{}
+{
+  "count": {
+    "item_one": "{{n}} item",
+    "item_other": "{{n}} items",
+    "file_one": "{{n}} file",
+    "file_other": "{{n}} files",
+    "note_one": "{{n}} note",
+    "note_other": "{{n}} notes",
+    "memoryNote_one": "{{n}} memory note",
+    "memoryNote_other": "{{n}} memory notes",
+    "agent_one": "{{n}} agent",
+    "agent_other": "{{n}} agents",
+    "thing_one": "{{n}} thing",
+    "thing_other": "{{n}} things"
+  },
+  "reveal": {
+    "finder": "Show in Finder",
+    "folder": "Show in folder",
+    "copyPath": "Copy path"
+  },
+  "toast": {
+    "pathCopied": "Path copied",
+    "revealFailedFinder": "Couldn't open Finder",
+    "revealFailedOther": "Couldn't open the file manager",
+    "putBackOne": "Put back",
+    "putBackMany": "Put {{n}} back",
+    "putBackFailed": "Couldn't put everything back",
+    "putBackFailedDescription": "{{error}} — the rest is in the bin.",
+    "deletedOne": "Deleted {{name}}",
+    "deletedMany": "Deleted {{n}} items",
+    "movedToBin": "{{size}} moved to the bin.",
+    "stayed": "{{items}} stayed.",
+    "stays": "{{name}} stays",
+    "nothingDeleted": "Nothing was deleted",
+    "deleteFailed": "Couldn't delete",
+    "renamedTo": "Renamed to {{name}}",
+    "moved": "Moved {{name}}",
+    "movedMany": "Moved {{n}} items",
+    "pathUpdated": "Updated the path in {{files}}.",
+    "moveFailed": "Couldn't move"
+  },
+  "detail": {
+    "more": "More for {{name}}",
+    "moveTo": "Move to…",
+    "imageFailed": "This picture can't be shown here (too large or not readable).",
+    "namedIn": "Named in {{names}}",
+    "pickTitle": "Pick a file to read or edit it",
+    "pickDescription": "Notes open with a preview; changes are saved into {{name}}'s history, so they can be undone."
+  },
+  "notes": {
+    "filter": "Filter notes",
+    "clear": "Clear",
+    "sort": "Sort notes",
+    "sortBy": "Sort by",
+    "folder": "Folder",
+    "modified": "Last changed",
+    "size": "Size",
+    "memory": "Memory",
+    "unlinked": "<b>{{notes}}</b> without a link from MEMORY.md",
+    "showAll": "Show all",
+    "showOnly": "Show only these",
+    "noMatch": "No note matches.",
+    "empty": "No notes yet."
+  },
+  "overview": {
+    "total": "<b>{{size}}</b> across {{agents}}",
+    "scratch": "{{size}} of it scratch in tmp/, which goes by itself",
+    "counting": "Counting what every agent keeps…",
+    "sortAgents": "Sort agents",
+    "largest": "Largest first",
+    "az": "A–Z",
+    "memoryTitle": "MEMORY.md: {{chars}} of {{limit}} characters",
+    "scratchTitle": "Scratch in workspace/tmp — goes by itself a week after its last change",
+    "inBin": "{{n}} in bin"
+  },
+  "bin": {
+    "restored": "Put back {{name}}",
+    "restoreFailed": "Couldn't put it back",
+    "purgedOne": "Deleted for good",
+    "purgedAll": "Emptied the bin",
+    "freed": "{{size}} freed.",
+    "title": "Recently deleted",
+    "keptWith": "{{items}} · {{size}} · kept {{days}} days, then the daily cleanup removes them.",
+    "kept": "Kept {{days}} days, then the daily cleanup removes them.",
+    "emptyBin": "Empty bin",
+    "emptyTitle": "The bin is empty",
+    "emptyDescription": "What you delete here waits {{days}} days, so you can put it back.",
+    "emptyFolder": "empty folder",
+    "deletedAgo": "deleted {{time}}",
+    "daysLeft_one": "{{count}} day left",
+    "daysLeft_other": "{{count}} days left",
+    "goesToday": "goes today",
+    "putBack": "Put back",
+    "deleteForGoodAria": "Delete {{name}} for good",
+    "confirmEmptyTitle": "Empty {{name}}'s bin?",
+    "confirmDeleteTitle": "Delete {{name}} for good?",
+    "confirmEmptyBody": "{{items}} ({{size}}) are removed for good.",
+    "confirmDeleteBody": "It can't be put back afterwards.",
+    "historyNote": "Files the agent had committed stay in its version history.",
+    "deleteForGood": "Delete for good"
+  },
+  "review": {
+    "kinds": {
+      "build": {
+        "title": "Installed packages and build output",
+        "hint": "Installing or building again brings them back."
+      },
+      "junk": {
+        "title": "Junk files",
+        "hint": "Logs, temporary files and Finder leftovers."
+      },
+      "empty": {
+        "title": "Empty files and folders",
+        "hint": "Nothing in them."
+      },
+      "duplicate": {
+        "title": "Copies",
+        "hint": "The same content lies somewhere else too — the other copy stays."
+      },
+      "large": {
+        "title": "Large files",
+        "hint": "Check whether they are still needed."
+      },
+      "scratch": {
+        "title": "Large scratch in tmp/",
+        "hint": "Goes by itself a week after its last change — delete now to free the space today."
+      },
+      "stale": {
+        "title": "Untouched for 30 days",
+        "hint": "Old reports, exports and experiments: keep what still matters."
+      },
+      "loose": {
+        "title": "Unsorted",
+        "hint": "Loose files at the top: sort them into a folder."
+      },
+      "unlinkedNote": {
+        "title": "Notes nothing links to",
+        "hint": "Memory notes without a link from MEMORY.md are rarely read: link, merge or delete them."
+      },
+      "brokenLink": {
+        "title": "Broken links in memory",
+        "hint": "The memory points at notes that don't exist: fix the link in the note."
+      }
+    },
+    "toLookAt": "{{things}} to look at",
+    "nothingToTidy": "Nothing to tidy",
+    "looking": "Looking through the files…",
+    "couldGo": "{{size}} could go",
+    "checked": "checked {{time}}",
+    "partial": "very large, not everything was looked at",
+    "intro": "Sizes, copies, junk and notes nothing links to.",
+    "checkAgain": "Check again",
+    "tidyTitle": "{{name}}'s files look tidy",
+    "tidyDescription": "No build output, junk, copies or forgotten notes. The nightly dream keeps sorting the workspace too.",
+    "selectAll": "Select all in “{{group}}”",
+    "selected": "<b>{{items}}</b> selected · {{size}} · everything goes to the bin first",
+    "tickHint": "Tick what can go — it waits in the bin for 30 days.",
+    "selectItem": "Select {{path}}",
+    "namedIn": "named in {{names}}",
+    "move": "Move",
+    "open": "Open {{name}}"
+  },
+  "editor": {
+    "readOnly": {
+      "claude": "Generated from the agent's settings — edit the instructions in Settings instead.",
+      "state": "Snapshot written by Godmode — changes would be overwritten.",
+      "runs": "Raw run log — read-only.",
+      "conversations": "Conversation transcript — read-only.",
+      "tooLarge": "This file is too large to edit here."
+    },
+    "dreaming": "{{name}} is dreaming — editing is paused until the dream ends.",
+    "saved": "Saved {{name}}",
+    "saveFailed": "Couldn't save {{name}}",
+    "conflictToast": "{{name}} changed while you were editing",
+    "conflictToastDescription": "Reload it, or overwrite it with your version.",
+    "empty": "Empty file.",
+    "contentsAria": "Contents of {{path}}",
+    "missingPlaceholder": "This file doesn't exist yet — start typing to create it.",
+    "unsaved": "Unsaved changes",
+    "viewMode": "View mode",
+    "source": "Source",
+    "sideBySide": "Side by side",
+    "split": "Split",
+    "preview": "Preview",
+    "revert": "Revert",
+    "openSettings": "Open settings",
+    "conflict": "<b>{{name}} changed while you were editing</b> — {{agent}} may have rewritten it. Reload to see the new version (your edits are discarded), or overwrite it with yours.",
+    "reload": "Reload",
+    "overwrite": "Overwrite",
+    "tooLargeTitle": "Too large to open here",
+    "notText": "Not a text file",
+    "unreadableHint": "Move, rename or delete it from the list.",
+    "openFailed": "Couldn't open this file: {{error}}",
+    "lines_one": "{{n}} line",
+    "lines_other": "{{n}} lines",
+    "words_one": "{{n}} word",
+    "words_other": "{{n}} words",
+    "loaded": "loaded {{time}}"
+  },
+  "browse": {
+    "folderNotes": {
+      "tmp": "Scratch — goes by itself",
+      "uploads": "Your attachments",
+      "conversations": "Chat transcripts",
+      "runs": "Run logs",
+      "state": "Settings snapshot",
+      "memory": "Notes the agent reads",
+      "workspace": "What the agent makes"
+    },
+    "breadcrumbAria": "Folder",
+    "sort": "Sort",
+    "sortBy": "Sort by",
+    "size": "Size",
+    "modified": "Last changed",
+    "new": "New",
+    "note": "Note",
+    "folder": "Folder",
+    "filterPlaceholder": "Filter, or search every file and note",
+    "filterAria": "Filter and search",
+    "clear": "Clear",
+    "selected": "{{items}} selected",
+    "move": "Move",
+    "clearSelection": "Clear selection",
+    "selectAll": "Select all",
+    "colChanged": "Changed",
+    "noMatch": "Nothing here matches.",
+    "emptyFolder": "This folder is empty.",
+    "locked": "Kept by Godmode",
+    "selectItem": "Select {{name}}",
+    "searchResults": "Search results",
+    "inAllFiles": "In all files",
+    "noOtherHits": "No other file or note mentions “{{query}}”.",
+    "line": "line {{n}}",
+    "filtered": "{{shown}} of {{items}}",
+    "counting": "counting…",
+    "actionsFor": "Actions for {{name}}",
+    "moveTo": "Move to…"
+  },
+  "dialogs": {
+    "delete": {
+      "titleOne": "Delete {{name}}?",
+      "titleMany": "Delete {{items}}?",
+      "description": "It goes to {{name}}'s bin: you can put it back there for 30 days.",
+      "stillNamesOne": "{{name}} still names it",
+      "stillNamesMany": "{{name}} still names {{n}} of these",
+      "namedIn": "<mono>{{file}}</mono> — in {{names}}",
+      "mayNeedOne": "It may still need it. Remove the mention too, or keep the file.",
+      "mayNeedMany": "It may still need them. Remove the mention too, or keep the file.",
+      "stays": "<mono>{{name}}</mono> stays: {{reason}}",
+      "moveToBin": "Move to bin"
+    },
+    "name": {
+      "errors": {
+        "empty": "Give it a name.",
+        "slash": "A name can't contain a slash — use Move to put it elsewhere.",
+        "dot": "Names can't start with a dot here.",
+        "tooLong": "That name is too long.",
+        "taken": "{{name}} is already there."
+      },
+      "titleRename": "Rename {{name}}",
+      "titleNote": "New note",
+      "titleFolder": "New folder",
+      "in": "In <mono>{{dir}}/</mono>",
+      "inRename": "In <mono>{{dir}}/</mono> — where the agent's memory names it, the new name is written in too.",
+      "theRepository": "the repository",
+      "pinned": "Named in {{names}} — change the name there too, or the agent looks for the old one.",
+      "defaultNote": "untitled.md",
+      "defaultFolder": "new folder"
+    },
+    "move": {
+      "fold": "Fold",
+      "unfold": "Unfold",
+      "titleOne": "Move {{name}}",
+      "titleMany": "Move {{items}}",
+      "description": "Pick a folder. Where the agent's memory names a moved file, the new place is written in.",
+      "to": "To {{dir}}/",
+      "notUpdated": "Not updated by the move",
+      "namedIn": "<mono>{{file}}</mono> is named in {{names}}",
+      "changeHint": "Change the path there too, or the agent looks for it in the old place.",
+      "moveAnyway": "Move anyway",
+      "moveHere": "Move here"
+    }
+  },
+  "page": {
+    "title": "Files",
+    "description": "Look through what your agents keep — their workspace, notes and memory — and clean it up. Deleted files wait 30 days in a bin.",
+    "notFound": "This agent doesn't exist anymore",
+    "allAgents": "All agents",
+    "tabs": {
+      "browse": "Browse",
+      "notes": "Notes",
+      "review": "Review",
+      "bin": "Bin"
+    },
+    "dreaming": "{{name}} is dreaming — moves and deletes wait until the dream has ended.",
+    "working": "{{name}} is working right now and may still use files here.",
+    "back": "Back to the list",
+    "discardTitle": "Discard unsaved changes?",
+    "discardDescription": "Your edits to {{path}} haven't been saved.",
+    "keepEditing": "Keep editing",
+    "discard": "Discard"
+  }
+}

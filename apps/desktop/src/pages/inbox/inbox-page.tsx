@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Archive, CircleCheck, Inbox, List, PartyPopper, Plus, RefreshCw, SquareKanban } from "lucide-react";
 import type { Agent, AgentQuestion, HumanTask, MissingLogin, MissingLoginStatus } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR, isHumanTaskWaiting } from "@godmode/shared";
@@ -25,31 +26,20 @@ import { DirectionHint } from "@/components/layout/direction-hint";
 
 type Entry = { kind: "login"; item: MissingLogin; at: number } | { kind: "question"; item: AgentQuestion; at: number };
 
-const EMPTY: Record<MissingLoginStatus, { icon: React.ReactNode; title: string; description: string }> = {
-  open: {
-    icon: <PartyPopper />,
-    title: "All clear — your agents have everything they need",
-    description: "When an agent needs a decision, your OK, a login it doesn't have or a 2FA code, it lands here instead of getting lost in a chat.",
-  },
-  resolved: {
-    icon: <CircleCheck />,
-    title: "Nothing resolved yet",
-    description: "Requests you fix — by adding a login or 2FA code, or marking them resolved — are kept here for reference.",
-  },
-  dismissed: {
-    icon: <Archive />,
-    title: "Nothing dismissed",
-    description: "Requests you dismiss are parked here. Reopen them any time.",
-  },
+const EMPTY: Record<MissingLoginStatus, { icon: React.ReactNode }> = {
+  open: { icon: <PartyPopper /> },
+  resolved: { icon: <CircleCheck /> },
+  dismissed: { icon: <Archive /> },
 };
 
 const VIEWS = [
-  { id: "list", label: "List", icon: List },
-  { id: "board", label: "Board", icon: SquareKanban },
+  { id: "list", labelKey: "views.list", icon: List },
+  { id: "board", labelKey: "views.board", icon: SquareKanban },
 ] as const;
 
 /** Everything that waits for the human in one place: the list to work through, and the same to-dos as a board to plan with. */
 export default function InboxPage() {
+  const { t } = useTranslation("inbox");
   const [params, setParams] = useSearchParams();
   const storedView = useUi((s) => s.inboxView);
   const setStoredView = useUi((s) => s.setInboxView);
@@ -102,10 +92,18 @@ export default function InboxPage() {
   const agentsWaiting = new Set(tasks.filter((t) => isHumanTaskWaiting(t) && t.agentId).map((t) => t.agentId)).size;
   const parked = tasks.filter((t) => t.status === "backlog").length;
   const boardDescription = waiting
-    ? `${waiting} to do${agentsWaiting ? ` · ${agentsWaiting} agent${agentsWaiting === 1 ? "" : "s"} on hold until you're done` : ""}${parked ? ` · ${parked} in the backlog` : ""}. Drag to plan, drop on Done and its agent picks up where it left off.`
+    ? t("board.waiting", {
+        facts: [
+          t("board.toDo", { count: waiting }),
+          agentsWaiting ? t("board.onHold", { count: agentsWaiting }) : null,
+          parked ? t("board.inBacklog", { count: parked }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      })
     : parked
-      ? `Nothing to do right now · ${parked} in the backlog for later.`
-      : "Your to-dos as a board: what agents hand you and what you add for yourself. Drop one on Done and its agent picks up where it left off.";
+      ? t("board.onlyBacklog", { count: parked })
+      : t("board.empty");
 
   return (
     <div className={view === "board" ? "flex h-full min-h-0 flex-col" : "relative"}>
@@ -126,21 +124,22 @@ export default function InboxPage() {
 }
 
 function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView; onView: (v: InboxView) => void; description?: string; onNewTask: () => void }) {
+  const { t } = useTranslation("inbox");
   const attention = useAttention();
   const openCount = attention.data?.length ?? 0;
   return (
     <PageHeader
       icon={<Inbox />}
-      title="Needs you"
+      title={t("header.title")}
       description={
         description ??
         (openCount > 0
-          ? `${openCount} thing${openCount === 1 ? "" : "s"} need${openCount === 1 ? "s" : ""} you — answer what your agents ask, do what they hand you, add the access they miss.`
-          : "What your agents need from you — questions, to-dos, approvals, missing logins, 2FA codes — plus updates from their work.")
+          ? t("header.descriptionCount", { count: openCount })
+          : t("header.description"))
       }
       actions={
         <>
-          <div role="group" aria-label="View" className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
+          <div role="group" aria-label={t("views.label")} className="flex items-center gap-1 rounded-lg border bg-paper-2 p-1">
             {VIEWS.map((v) => (
               <button
                 key={v.id}
@@ -152,12 +151,12 @@ function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView
                   view === v.id ? "border bg-card text-foreground shadow-card" : "border border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
-                <v.icon aria-hidden /> {v.label}
+                <v.icon aria-hidden /> {t(v.labelKey)}
               </button>
             ))}
           </div>
           <Button onClick={onNewTask}>
-            <Plus /> New to-do
+            <Plus /> {t("header.newTodo")}
           </Button>
         </>
       }
@@ -166,6 +165,7 @@ function InboxHeader({ view, onView, description, onNewTask }: { view: InboxView
 }
 
 function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
+  const { t } = useTranslation(["inbox", "common"]);
   const [tab, setTab] = useState<MissingLoginStatus>("open");
   const open = useMissingLogins("open");
   const resolved = useMissingLogins("resolved");
@@ -209,13 +209,13 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
           <section aria-labelledby="attention-title" className="min-w-0">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <h2 id="attention-title" className="eyebrow">
-                Needs your attention
+                {t("list.title")}
               </h2>
               <Tabs value={tab} onValueChange={(v) => setTab(v as MissingLoginStatus)}>
                 <TabsList>
                   {(["open", "resolved", "dismissed"] as const).map((s) => (
                     <TabsTrigger key={s} value={s} className="gap-1.5 px-3 capitalize">
-                      {s}
+                      {t(`tabs.${s}`)}
                       {count(s) !== undefined && count(s)! > 0 && (
                         <span
                           className={
@@ -247,11 +247,11 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
             ) : current.isError && !currentQuestions.data?.length ? (
               <EmptyState
                 icon={<Inbox />}
-                title={isVaultLocked(current.error) ? "Vault is locked" : "Couldn't load requests"}
+                title={isVaultLocked(current.error) ? t("list.vaultLocked") : t("list.loadError")}
                 description={errorMessage(current.error)}
                 action={
                   <Button variant="outline" onClick={() => current.refetch()}>
-                    <RefreshCw /> Try again
+                    <RefreshCw /> {t("common:actions.tryAgain")}
                   </Button>
                 }
               />
@@ -260,8 +260,8 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
                 key={tab}
                 icon={EMPTY[tab].icon}
                 art={tab === "open" ? <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={64} follow /> : undefined}
-                title={EMPTY[tab].title}
-                description={EMPTY[tab].description}
+                title={t(`empty.${tab}.title`)}
+                description={t(`empty.${tab}.description`)}
                 className={tab === "open" ? "border-success/30 bg-success/[0.03]" : undefined}
               />
             ) : (

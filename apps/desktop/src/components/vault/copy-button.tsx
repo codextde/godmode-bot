@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Check, Copy } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,7 @@ export function CopyButton({
   value,
   getValue,
   secret = false,
-  label = "Copy",
+  label: labelProp,
   toastLabel,
   className,
   size = "icon-sm",
@@ -25,6 +26,8 @@ export function CopyButton({
   size?: "icon-sm" | "icon-xs" | "icon";
   icon?: ReactNode;
 }) {
+  const { t } = useTranslation("common");
+  const label = labelProp ?? t("actions.copy");
   const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const onClick = async (e: React.MouseEvent) => {
@@ -33,7 +36,7 @@ export function CopyButton({
     try {
       const v = value ?? (await getValue?.());
       if (!v) return;
-      await (secret ? copySecret(v, toastLabel ?? `${label.replace(/^Copy /, "")} copied`) : copyText(v, toastLabel ?? "Copied"));
+      await (secret ? copySecret(v, toastLabel ?? t("actions.copied")) : copyText(v, toastLabel ?? t("actions.copied")));
       setDone(true);
       setTimeout(() => setDone(false), 1400);
     } finally {

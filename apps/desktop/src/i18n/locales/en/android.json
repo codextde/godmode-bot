@@ -1,1 +1,199 @@
-{}
+{
+  "connection": {
+    "usb": "USB",
+    "wifi": "Wi-Fi",
+    "emulator": "Emulator"
+  },
+  "state": {
+    "agentWorking": "Agent working",
+    "connected": "Connected",
+    "unauthorized": "Allow USB debugging",
+    "offline": "Offline",
+    "disconnected": "Not connected"
+  },
+  "list": {
+    "two": "{{first}} and {{second}}",
+    "more_one": "{{names}} and {{count}} more",
+    "more_other": "{{names}} and {{count}} more"
+  },
+  "deviceCard": {
+    "disconnectFailed": "Couldn't disconnect",
+    "open": "Open {{name}}",
+    "takeControl": "Take control",
+    "lastSeen": "Last seen {{time}}",
+    "more": "More for {{name}}",
+    "rename": "Rename and describe",
+    "disconnectWifi": "Disconnect Wi-Fi",
+    "forget": "Forget phone"
+  },
+  "usedBy": {
+    "assignFailed": "Couldn't change who uses the phone",
+    "title": "Used by",
+    "noOneYet": "No one yet",
+    "chat": "Chat",
+    "untitledChat": "Untitled chat",
+    "assignmentTitle": "{{kind}}: {{label}}",
+    "takeAway": "Take {{device}} away from {{label}}",
+    "assignAria": "Give {{name}} to an agent",
+    "assign": "Assign",
+    "searchAgents": "Search agents…",
+    "noAgents": "No agents found.",
+    "assigned": "Assigned",
+    "singleChatHint": "For a single chat, pick the phone with the <b>Phone</b> button in its message box."
+  },
+  "panel": {
+    "aria": "Android phone",
+    "title": "Phone",
+    "live": "Live",
+    "waiting": "Waiting",
+    "hide": "Hide the phone",
+    "show": "Show the phone",
+    "tabs": "Phones",
+    "takeControl": "Take control",
+    "stopControlling": "Stop controlling",
+    "openFull": "Open full size",
+    "controlHint": "Click to tap, drag to swipe, type to enter text. Right click goes back.",
+    "footerTitle": "Android phones",
+    "count_one": "{{count}} phone in this chat",
+    "count_other": "{{count}} phones in this chat"
+  },
+  "overview": {
+    "steps": {
+      "developer": {
+        "title": "Turn on developer options",
+        "body": "Settings → About phone → tap Build number seven times."
+      },
+      "debugging": {
+        "title": "Allow USB debugging",
+        "body": "Settings → System → Developer options → USB debugging."
+      },
+      "plugIn": {
+        "title": "Plug it in and tap Allow",
+        "body": "Tick “Always allow from this computer” so it stays allowed."
+      }
+    },
+    "lookFailed": "Couldn't look for phones",
+    "installFailed": "Couldn't install adb",
+    "countConnected": "{{connected}} of {{total}} connected",
+    "phones": "Phones",
+    "lookAgain": "Look for phones again",
+    "connectWifi": "Connect over Wi-Fi",
+    "adbTitle": "Godmode needs adb to talk to phones",
+    "adbCanInstall": "adb is Android's free debugging bridge from Google. Godmode installs its own copy (about 16 MB) — nothing else on your computer changes.",
+    "adbManual": "Install Android's platform-tools (adb) and make sure it's on your PATH, or set its path below.",
+    "installing": "Installing…",
+    "install": "Install adb",
+    "loadError": "Couldn't load your phones",
+    "waitingOk": "A phone is waiting for your OK",
+    "waitingConnect": "A phone is waiting to connect",
+    "emptyTitle": "Connect your first phone",
+    "emptyDescription": "Plug an Android phone into this computer with a USB cable. It shows up here on its own.",
+    "orWifi": "Or connect over Wi-Fi"
+  },
+  "chip": {
+    "tooltipNone": "Let this chat use your Android phones",
+    "tooltipInherited": "Can use {{names}} — assigned to {{agent}}",
+    "tooltipActive": "This chat can use {{names}}",
+    "ariaLabelList": "Android phones: {{names}}",
+    "title": "Android phones",
+    "button": "Phone",
+    "description": "Runs in this chat see the screen, tap, type, open apps and run shell commands.",
+    "empty": "No phones yet.",
+    "connect": "Connect a phone",
+    "findPlaceholder": "Find a phone…",
+    "noMatch": "No phone with that name.",
+    "assignedTo": "Assigned to {{agent}}",
+    "alwaysOn": "Always on",
+    "selected": "Selected",
+    "manage": "Manage phones"
+  },
+  "field": {
+    "empty": "No phones yet — connect one and this agent can use it.",
+    "canControl": "Can control",
+    "hint": "Every run of this agent can control these. A single chat can add more with the phone button in its message box."
+  },
+  "wifi": {
+    "connected": "Phone connected over Wi-Fi",
+    "connectFailed": "Couldn't connect",
+    "title": "Connect a phone over Wi-Fi",
+    "description": "On the phone: Settings → Developer options → Wireless debugging. The phone and this computer must be on the same network.",
+    "firstTime": "First time",
+    "pairedBefore": "Paired before",
+    "pairHint": "Tap “Pair device with pairing code” on the phone and enter what it shows.",
+    "address": "IP address & port",
+    "pairingCode": "Pairing code",
+    "addressHint": "The one at the top of the Wireless debugging screen (not the pairing port).",
+    "pairAndConnect": "Pair and connect",
+    "connect": "Connect"
+  },
+  "edit": {
+    "saveFailed": "Couldn't save the phone",
+    "title": "Edit phone",
+    "description": "Agents see the name and the description when they work with this phone.",
+    "whatFor": "What it's for",
+    "placeholder": "Test phone, signed in to the shop's TikTok account. Don't change system settings."
+  },
+  "forget": {
+    "toast": "Forgot {{name}}",
+    "failed": "Couldn't forget the phone",
+    "title": "Forget “{{name}}”?",
+    "body": "Godmode forgets the phone's name and description.",
+    "oneUser": "{{name}} loses it.",
+    "oneUserFallback": "The agent or chat using it loses it.",
+    "manyUsers": "The {{n}} agents and chats using it lose it.",
+    "rest": "When you plug it in again it shows up as a new phone. Nothing on the phone changes.",
+    "confirm": "Forget phone"
+  },
+  "device": {
+    "sendFailed": "The phone didn't take that",
+    "buttons": {
+      "power": "Power",
+      "volumeDown": "Volume down",
+      "volumeUp": "Volume up",
+      "mute": "Mute",
+      "wake": "Wake the screen",
+      "sleep": "Turn the screen off",
+      "notifications": "Notifications",
+      "quickSettings": "Quick settings"
+    },
+    "typePlaceholder": "Text for the focused field",
+    "typeAria": "Text to type on the phone",
+    "typeEnter": "Type and press Enter",
+    "asciiOnly": "adb types plain ASCII only. Use the phone's keyboard for ä, é or emoji.",
+    "commandFailed": "The command didn't run",
+    "commandAria": "Shell command",
+    "run": "Run",
+    "timedOut": "timed out",
+    "noOutput": "(no output)",
+    "about": {
+      "phone": "Phone",
+      "connection": "Connection",
+      "screen": "Screen",
+      "serial": "Serial"
+    },
+    "loadError": "Couldn't load the phone",
+    "unknown": "This phone isn't known anymore",
+    "unknownDescription": "It may have been forgotten. Plug it in again and it shows up as a new phone.",
+    "allPhones": "All phones",
+    "nav": {
+      "back": "Back",
+      "home": "Home",
+      "recents": "Recent apps"
+    },
+    "hint": "Click to tap · drag to swipe · hold to long-press · scroll to swipe · right click or <kbd>Esc</kbd> for back · type to enter text",
+    "controls": "Phone controls",
+    "sections": {
+      "buttons": "Buttons",
+      "type": "Type",
+      "command": "Run a command",
+      "about": "About"
+    }
+  },
+  "screen": {
+    "ariaInteractive": "Screen of {{name}}. Click to tap, drag to swipe, type to enter text.",
+    "aria": "Screen of {{name}}",
+    "unlock": "Unlock the phone and tap Allow",
+    "connectingLabel": "Connecting to the screen",
+    "connecting": "Connecting…"
+  }
+}

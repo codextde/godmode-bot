@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import type { Task } from "@godmode/shared";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
@@ -24,6 +25,7 @@ function topOfColumn(qc: QueryClient, task: Task): number {
 
 /** Take tasks off the board or bring them back. They move right away; the toast offers undo. */
 export function useArchiveTasks() {
+  const { t } = useTranslation(["tasks", "common"]);
   const qc = useQueryClient();
   const mutation = useMutation({
     mutationFn: async ({ tasks, archived, undoOf }: ArchiveVars): Promise<Task[]> => {
@@ -48,12 +50,19 @@ export function useArchiveTasks() {
       for (const t of updated) upsertTask(qc, t);
       if (undoOf) return;
       const one = tasks.length === 1 ? tasks[0]! : null;
-      toast.success(`${one ? `#${one.number}` : `${tasks.length} tasks`} ${archived ? "archived" : "back on the board"}`, {
+      const title = one
+        ? archived
+          ? t("archive.oneArchived", { number: one.number })
+          : t("archive.oneRestored", { number: one.number })
+        : archived
+          ? t("archive.manyArchived", { count: tasks.length })
+          : t("archive.manyRestored", { count: tasks.length });
+      toast.success(title, {
         description: one?.title,
-        action: { label: "Undo", onClick: () => mutation.mutate({ tasks: updated, archived: !archived, undoOf: tasks }) },
+        action: { label: t("common:actions.undo"), onClick: () => mutation.mutate({ tasks: updated, archived: !archived, undoOf: tasks }) },
       });
     },
-    onError: (e, { archived }) => toastApiError(e, archived ? "Could not archive" : "Could not restore", qc),
+    onError: (e, { archived }) => toastApiError(e, archived ? t("archive.archiveError") : t("archive.restoreError"), qc),
     onSettled: () => qc.invalidateQueries({ queryKey: qk.tasks }),
   });
   return {

@@ -1,1 +1,30 @@
-{}
+{
+  "away": {
+    "title": "Während du weg warst · {{duration}}",
+    "close": "Zusammenfassung schließen",
+    "whoWorked": "Wer gearbeitet hat",
+    "finished_one": "{{count}} Lauf beendet",
+    "finished_other": "{{count}} Läufe beendet",
+    "problems_one": "{{count}} Problem",
+    "problems_other": "{{count}} Probleme",
+    "delivered_one": "{{count}} Aufgabe geliefert",
+    "delivered_other": "{{count}} Aufgaben geliefert",
+    "agentRuns_one": "{{name}}: {{count}} Lauf",
+    "agentRuns_other": "{{name}}: {{count}} Läufe"
+  },
+  "offers": {
+    "startError": "Konnte nicht gestartet werden",
+    "declineError": "Konnte nicht abgelehnt werden",
+    "titleOwner": "{{name}} kann dir das abnehmen",
+    "title": "Arbeit, die dir dein Agent abnehmen kann",
+    "startsWith": "Beginnt mit:",
+    "offered": "Angeboten {{time}}",
+    "showAll": "Alles zeigen",
+    "decline": "Nein danke",
+    "accept": "Mach das"
+  },
+  "list": {
+    "continueError": "Konnte nicht fortgesetzt werden",
+    "continue": "Fortsetzen"
+  }
+}

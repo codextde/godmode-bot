@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Download, ExternalLink, Sparkles, Terminal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Mod, ModCatalogEntry } from "@godmode/shared";
 import { QueryError } from "@/components/integrations/query-error";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,7 @@ function installedFrom(mods: Mod[], entry: ModCatalogEntry): Mod | undefined {
 
 /** Whole Claude Code plugins Godmode recommends: one click installs them from GitHub. */
 export function FeaturedPlugins({ mods, actions, onOpen }: { mods: Mod[]; actions: ModActions; onOpen: (mod: Mod) => void }) {
+  const { t } = useTranslation("mods");
   const catalog = useModCatalog();
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [lastPreview, setLastPreview] = useState<ModCatalogEntry | null>(null);
@@ -54,13 +56,13 @@ export function FeaturedPlugins({ mods, actions, onOpen }: { mods: Mod[]; action
     <section aria-labelledby="plugins-featured-heading" className="space-y-4">
       <div>
         <h2 id="plugins-featured-heading" className="flex items-center gap-2 text-[17px] font-medium tracking-[-0.02em]">
-          <Sparkles className="size-4 text-muted-foreground" /> Featured
+          <Sparkles className="size-4 text-muted-foreground" /> {t("featured.title")}
         </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">Popular Claude Code plugins, installed from GitHub in one click and kept up to date.</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t("featured.description")}</p>
       </div>
 
       {catalog.isError ? (
-        <QueryError error={catalog.error} onRetry={() => catalog.refetch()} title="Couldn't load the featured plugins" />
+        <QueryError error={catalog.error} onRetry={() => catalog.refetch()} title={t("featured.loadError")} />
       ) : catalog.isLoading ? (
         <div className={GRID}>
           {[0, 1].map((i) => (
@@ -101,6 +103,7 @@ export function FeaturedPlugins({ mods, actions, onOpen }: { mods: Mod[]; action
 }
 
 function RepoLine({ entry }: { entry: ModCatalogEntry }) {
+  const { t } = useTranslation("mods");
   return (
     <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
       <GitHubMark className="size-3 shrink-0" />
@@ -108,7 +111,7 @@ function RepoLine({ entry }: { entry: ModCatalogEntry }) {
       <span aria-hidden className="opacity-50">
         ·
       </span>
-      <span className="shrink-0">by {entry.author}</span>
+      <span className="shrink-0">{t("featured.byAuthor", { author: entry.author })}</span>
     </p>
   );
 }
@@ -130,6 +133,7 @@ function FeaturedCard({
   onInstall: () => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
   return (
     <motion.article
       initial={{ opacity: 0, y: 8 }}
@@ -154,7 +158,7 @@ function FeaturedCard({
             </h3>
             {installed && (
               <Badge variant="outline" className="h-5 shrink-0 gap-1 border-brand/25 bg-brand-soft px-1.5 text-[10px] text-brand-strong">
-                <CircleCheck /> Installed
+                <CircleCheck /> {t("page.installed")}
               </Badge>
             )}
           </div>
@@ -175,7 +179,7 @@ function FeaturedCard({
 
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 px-4 pt-4 pb-4">
         <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          {entry.requires.length > 0 && <span className="eyebrow mr-0.5 text-[10.5px]">Needs</span>}
+          {entry.requires.length > 0 && <span className="eyebrow mr-0.5 text-[10.5px]">{t("featured.needs")}</span>}
           {entry.requires.map((r) => (
             <span key={r} className="inline-flex h-5 items-center rounded-[5px] border bg-paper-2 px-1.5 text-[11px] whitespace-nowrap text-foreground/80">
               {r}
@@ -183,12 +187,12 @@ function FeaturedCard({
           ))}
         </div>
         {installed ? (
-          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={() => onOpen(installed)} aria-label={`Open ${installed.title}`}>
-            Open <ArrowUpRight />
+          <Button size="sm" variant="secondary" className="relative shrink-0" onClick={() => onOpen(installed)} aria-label={t("featured.openAria", { title: installed.title })}>
+            {t("common:actions.open")} <ArrowUpRight />
           </Button>
         ) : (
-          <Button size="sm" className="relative shrink-0" onClick={onInstall} disabled={installing} aria-label={`Install ${entry.title}`}>
-            {installing ? <Spinner /> : <Download />} {installing ? "Installing…" : "Install"}
+          <Button size="sm" className="relative shrink-0" onClick={onInstall} disabled={installing} aria-label={t("featured.installAria", { title: entry.title })}>
+            {installing ? <Spinner /> : <Download />} {installing ? t("featured.installing") : t("featured.install")}
           </Button>
         )}
       </div>
@@ -213,6 +217,7 @@ function FeaturedDialog({
   onInstall: (entry: ModCatalogEntry) => void;
   onOpen: (mod: Mod) => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
   if (!entry) return null;
   const web = `https://github.com/${entry.repo}`;
   return (
@@ -229,7 +234,7 @@ function FeaturedDialog({
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-6 py-5">
           <section className="space-y-2">
-            <h3 className="eyebrow">What it does</h3>
+            <h3 className="eyebrow">{t("featured.whatItDoes")}</h3>
             <ul className="space-y-1.5 text-[13px] leading-relaxed">
               {entry.highlights.map((h) => (
                 <li key={h} className="flex gap-2.5">
@@ -242,7 +247,7 @@ function FeaturedDialog({
 
           {entry.usage && (
             <section className="space-y-2">
-              <h3 className="eyebrow">Try it in a chat</h3>
+              <h3 className="eyebrow">{t("featured.tryInChat")}</h3>
               <p className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 font-mono text-[12.5px] text-foreground/90">
                 <Terminal className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
                 {entry.usage}
@@ -252,7 +257,7 @@ function FeaturedDialog({
 
           {entry.requires.length > 0 && (
             <section className="space-y-2">
-              <h3 className="eyebrow">Needs on this computer</h3>
+              <h3 className="eyebrow">{t("featured.needsOnComputer")}</h3>
               <div className="flex flex-wrap gap-1.5">
                 {entry.requires.map((r) => (
                   <span key={r} className="inline-flex h-6 items-center rounded-md border bg-card px-2 text-xs text-foreground/85">
@@ -260,29 +265,28 @@ function FeaturedDialog({
                   </span>
                 ))}
               </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">The plugin tells the agent when something is missing; the agent can install it for you.</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{t("featured.missingHint")}</p>
             </section>
           )}
 
           <p className="rounded-lg border border-warning/30 bg-warning/[0.06] px-3.5 py-3 text-xs leading-relaxed text-foreground/85">
-            Godmode downloads it from GitHub and checks it with Claude Code before it runs. It works with your agents' access and starts programs of its own on
-            this computer{entry.license ? ` · ${entry.license} licence` : ""}.
+            {entry.license ? t("featured.warningLicense", { license: entry.license }) : t("featured.warning")}
           </p>
         </div>
 
         <DialogFooter className="items-center border-t bg-paper-2 px-6 py-4 sm:justify-between">
           <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
             <a href={web} target="_blank" rel="noreferrer">
-              <ExternalLink /> View on GitHub
+              <ExternalLink /> {t("featured.viewOnGitHub")}
             </a>
           </Button>
           {installed ? (
             <Button onClick={() => onOpen(installed)}>
-              Open <ArrowUpRight />
+              {t("common:actions.open")} <ArrowUpRight />
             </Button>
           ) : (
             <Button onClick={() => onInstall(entry)} disabled={installing}>
-              {installing ? <Spinner /> : <Download />} {installing ? "Installing…" : "Install plugin"}
+              {installing ? <Spinner /> : <Download />} {installing ? t("featured.installing") : t("featured.installPlugin")}
             </Button>
           )}
         </DialogFooter>

@@ -1,1 +1,25 @@
-{}
+{
+  "dayFormat": "EEEE, d. MMM",
+  "title": "Aktivität",
+  "description": "Jeder Lauf all deiner Agenten.",
+  "runningNow": "Läuft gerade",
+  "liveNow": "Gerade live",
+  "searchPlaceholder": "Prompts & Ergebnisse durchsuchen…",
+  "searchLabel": "Läufe durchsuchen",
+  "filterByAgent": "Nach Agent filtern",
+  "allAgents": "Alle Agenten",
+  "filterByTrigger": "Nach Auslöser filtern",
+  "anyTrigger": "Jeder Auslöser",
+  "filterByStatus": "Nach Status filtern",
+  "count_one": "{{count}} Lauf",
+  "count_other": "{{count}} Läufe",
+  "countWithSuccess_one": "{{count}} Lauf · {{rate}} % erfolgreich",
+  "countWithSuccess_other": "{{count}} Läufe · {{rate}} % erfolgreich",
+  "loadFailed": "Aktivität konnte nicht geladen werden",
+  "noMatch": "Keine Läufe passen zu diesen Filtern",
+  "emptyTitle": "Noch keine Aktivität",
+  "emptyDescription": "Wenn deine Agenten chatten, Automationen ausführen oder Arbeit delegieren, erscheint hier jeder Lauf – live.",
+  "clearFilters": "Filter zurücksetzen",
+  "limitHint": "Zeigt die neuesten {{count}} Läufe. Schränk die Filter ein, um weiter zurückzuschauen.",
+  "thinking": "Denkt nach…"
+}

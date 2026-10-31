@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import styles from "./ThinkingReasoning.module.css";
 
 /*
@@ -22,6 +23,7 @@ function sentencesOf(text: string): string[] {
 
 /** `summary` replaces the "for Ns" part of the folded header (e.g. "it through"). */
 export function ThinkingReasoning({ text, active, seconds, summary }: { text: string; active: boolean; seconds?: number | null; summary?: string }) {
+  const { t } = useTranslation("aicss");
   const [open, setOpen] = useState(false);
   const [fade, setFade] = useState({ top: false, bottom: true });
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -71,8 +73,13 @@ export function ThinkingReasoning({ text, active, seconds, summary }: { text: st
       {done ? (
         <button type="button" className={styles.trHeader + " " + styles.isClickable} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
           <span className={styles.trLabel}>
-            <span className={styles.trVerb}>Thought</span>
-            {summary ? ` ${summary}` : secs ? ` for ${secs}s` : " process"}
+            {summary ? (
+              <Trans t={t} i18nKey="thought.summary" values={{ summary }} components={{ verb: <span className={styles.trVerb} /> }} />
+            ) : secs ? (
+              <Trans t={t} i18nKey="thought.seconds" values={{ seconds: secs }} components={{ verb: <span className={styles.trVerb} /> }} />
+            ) : (
+              <Trans t={t} i18nKey="thought.process" components={{ verb: <span className={styles.trVerb} /> }} />
+            )}
           </span>
           <svg className={styles.trChevron} viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
             <path d="m4.5 15.75 7.5-7.5 7.5 7.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
@@ -80,7 +87,7 @@ export function ThinkingReasoning({ text, active, seconds, summary }: { text: st
         </button>
       ) : (
         <div className={styles.trHeader}>
-          <span className={styles.trLabel + " " + styles.trShimmer}>Reasoning…</span>
+          <span className={styles.trLabel + " " + styles.trShimmer}>{t("reasoning")}</span>
         </div>
       )}
 

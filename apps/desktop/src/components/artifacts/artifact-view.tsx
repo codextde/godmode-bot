@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
 import type { Artifact } from "@godmode/shared";
@@ -58,6 +59,7 @@ import { saveBlob } from "@/lib/desktop";
 import { useArtifact } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { dateLocale, intlLocale } from "@/i18n";
 import { useConversationLiveRun } from "@/stores/live";
 import { ArtifactFrame, standaloneDocument } from "./artifact-frame";
 
@@ -66,7 +68,7 @@ type Tab = "preview" | "code" | "data";
 export function ago(iso: string | null | undefined): string {
   if (!iso) return "";
   try {
-    return `${formatDistanceToNowStrict(new Date(iso))} ago`;
+    return formatDistanceToNowStrict(new Date(iso), { addSuffix: true, locale: dateLocale() });
   } catch {
     return "";
   }
@@ -74,21 +76,22 @@ export function ago(iso: string | null | undefined): string {
 
 /** Sends, refreshes, pins and deletes an artifact; the frame's saves go through here too. */
 export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "agentName"> | undefined) {
+  const { t } = useTranslation("artifacts");
   const qc = useQueryClient();
   const navigate = useNavigate();
   const id = artifact?.id ?? "";
-  const agent = artifact?.agentName ?? "The agent";
+  const agent = artifact?.agentName ?? t("theAgentStart");
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.artifacts });
   const message = useMutation({
     mutationFn: (input: string | { content: string; source: "human" | "app" }) =>
       typeof input === "string" ? api.artifacts.message(id, input) : api.artifacts.message(id, input.content, input.source),
-    onSuccess: (r) => toast.success(r.queued ? `${agent} gets it right after the current step` : `${agent} is on it`, { description: "It updates here by itself." }),
-    onError: (err) => toast.error("Couldn't send it", { description: errorMessage(err) }),
+    onSuccess: (r) => toast.success(r.queued ? t("toast.queued", { agent }) : t("toast.onIt", { agent }), { description: t("toast.updatesItself") }),
+    onError: (err) => toast.error(t("toast.sendError"), { description: errorMessage(err) }),
   });
   const refresh = useMutation({
     mutationFn: () => api.artifacts.refresh(id),
-    onSuccess: () => toast.success(`${agent} is getting fresh data`),
-    onError: (err) => toast.error("Couldn't refresh", { description: errorMessage(err) }),
+    onSuccess: () => toast.success(t("toast.refreshing", { agent })),
+    onError: (err) => toast.error(t("toast.refreshError"), { description: errorMessage(err) }),
   });
   const pin = useMutation({
     mutationFn: (pinned: boolean) => api.artifacts.update(id, { pinned }),
@@ -98,18 +101,18 @@ export function useArtifactActions(artifact: Pick<Artifact, "id" | "title" | "ag
     mutationFn: (version: number) => api.artifacts.restore(id, version),
     onSuccess: (a, version) => {
       void invalidate();
-      if (a.version === qc.getQueryData<Artifact>(qk.artifact(id))?.version) toast.info(`Version ${version} is the same as the current one`);
-      else toast.success(`Restored as version ${a.version}`);
+      if (a.version === qc.getQueryData<Artifact>(qk.artifact(id))?.version) toast.info(t("toast.sameVersion", { version }));
+      else toast.success(t("toast.restored", { version: a.version }));
     },
-    onError: (err) => toast.error("Couldn't restore it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("toast.restoreError"), { description: errorMessage(err) }),
   });
   const remove = useMutation({
     mutationFn: () => api.artifacts.delete(id),
     onSuccess: () => {
       void invalidate();
-      toast.success(`Deleted ${artifact?.title ?? "the artifact"}`);
+      toast.success(artifact?.title ? t("toast.deleted", { title: artifact.title }) : t("toast.deletedFallback"));
     },
-    onError: (err) => toast.error("Couldn't delete it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("toast.deleteError"), { description: errorMessage(err) }),
   });
   const saveData = async (data: unknown) => {
     await api.artifacts.saveData(id, { data });
@@ -139,6 +142,7 @@ export function ArtifactView({
   onExpand?: (v: boolean) => void;
   footer?: ReactNode;
 }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const { data: artifact, isLoading, error } = useArtifact(id);
   const [tab, setTab] = useState<Tab>("preview");
   const [viewing, setViewing] = useState<number | null>(null);
@@ -172,11 +176,11 @@ export function ArtifactView({
     return (
       <div className="grid h-full place-items-center p-8 text-center">
         <div className="space-y-2">
-          <p className="text-sm font-medium">This artifact is gone</p>
-          <p className="text-xs text-muted-foreground">It was deleted, or it lives on another computer.</p>
+          <p className="text-sm font-medium">{t("view.goneTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("view.goneDescription")}</p>
           {onClose && (
             <Button size="sm" variant="outline" onClick={onClose}>
-              Close
+              {t("common:actions.close")}
             </Button>
           )}
         </div>
@@ -184,7 +188,7 @@ export function ArtifactView({
     );
   }
 
-  const agent = artifact.agentName ?? "the agent";
+  const agent = artifact.agentName ?? t("theAgent");
   const download = () =>
     saveBlob(new Blob([standaloneDocument(html ?? artifact.html, artifact.data, resolved)], { type: "text/html" }), `${slug(artifact.title)}.html`);
 
@@ -208,12 +212,13 @@ export function ArtifactView({
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-brand opacity-60" />
                   <span className="relative inline-flex size-1.5 rounded-full bg-brand" />
                 </span>
-                {agent} is working on it
+                {t("view.working", { agent })}
               </span>
             ) : (
               <>
-                Updated {ago(artifact.updatedAt)}
-                {artifact.dataUpdatedAt && artifact.dataUpdatedAt !== artifact.updatedAt ? ` · data ${ago(artifact.dataUpdatedAt)}` : ""}
+                {artifact.dataUpdatedAt && artifact.dataUpdatedAt !== artifact.updatedAt
+                  ? t("view.updatedWithData", { time: ago(artifact.updatedAt), data: ago(artifact.dataUpdatedAt) })
+                  : t("view.updated", { time: ago(artifact.updatedAt) })}
               </>
             )}
           </p>
@@ -222,20 +227,20 @@ export function ArtifactView({
         <Segmented value={tab} onChange={setTab} />
 
         <IconAction
-          label={artifact.refreshPrompt ? "Refresh the data" : "Ask for fresh data"}
+          label={artifact.refreshPrompt ? t("view.refreshData") : t("view.askFreshData")}
           onClick={() => actions.refresh.mutate()}
           disabled={actions.refresh.isPending || busy}
         >
           <RefreshCw className={cn((actions.refresh.isPending || busy) && "animate-spin [animation-duration:1.6s]")} />
         </IconAction>
         {onExpand && (
-          <IconAction label={expanded ? "Narrower" : "Wider"} onClick={() => onExpand(!expanded)}>
+          <IconAction label={expanded ? t("view.narrower") : t("view.wider")} onClick={() => onExpand(!expanded)}>
             {expanded ? <Minimize2 /> : <Maximize2 />}
           </IconAction>
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label="More">
+            <Button variant="ghost" size="icon" className="size-8 text-muted-foreground" aria-label={t("more")}>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
@@ -243,40 +248,40 @@ export function ArtifactView({
             {variant === "panel" && (
               <DropdownMenuItem asChild>
                 <Link to={`/artifacts/${artifact.id}`}>
-                  <ArrowUpRight /> Open full screen
+                  <ArrowUpRight /> {t("view.openFullScreen")}
                 </Link>
               </DropdownMenuItem>
             )}
             {variant === "page" && artifact.conversationId && (
               <DropdownMenuItem asChild>
                 <Link to={`/chat/${artifact.conversationId}`}>
-                  <MessageSquareText /> Open its chat
+                  <MessageSquareText /> {t("openChat")}
                 </Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onSelect={() => actions.pin.mutate(!artifact.pinned)}>
-              {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? "Unpin" : "Pin to the top"}
+              {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? t("unpin") : t("pinToTop")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setEditingRefresh(true)}>
-              <RefreshCw /> How it refreshes…
+              <RefreshCw /> {t("view.howItRefreshesMenu")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => void download()}>
-              <Download /> Download as HTML
+              <Download /> {t("view.downloadHtml")}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
-              <Trash2 /> Delete
+              <Trash2 /> {t("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         {onClose && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="-mr-1 size-8 text-muted-foreground" onClick={onClose} aria-label="Close">
+              <Button variant="ghost" size="icon" className="-mr-1 size-8 text-muted-foreground" onClick={onClose} aria-label={t("common:actions.close")}>
                 {variant === "panel" ? <PanelRightClose /> : <X />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Close</TooltipContent>
+            <TooltipContent>{t("common:actions.close")}</TooltipContent>
           </Tooltip>
         )}
       </header>
@@ -286,14 +291,14 @@ export function ArtifactView({
           <Bar key="old" tone="muted">
             <History className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate">
-              Version {viewing}
+              {t("version", { version: viewing })}
               {old.data?.note ? ` · ${old.data.note}` : ""} · {ago(old.data?.createdAt)}
             </span>
             <Button size="xs" variant="ghost" onClick={() => setViewing(null)}>
-              Back to latest
+              {t("view.backToLatest")}
             </Button>
             <Button size="xs" onClick={() => actions.restore.mutate(viewing)} disabled={actions.restore.isPending}>
-              <RotateCcw /> Restore
+              <RotateCcw /> {t("view.restore")}
             </Button>
           </Bar>
         )}
@@ -302,15 +307,13 @@ export function ArtifactView({
             <MessageSquareText className="size-3.5 shrink-0 self-start mt-0.5" />
             <span className="max-h-24 min-w-0 flex-1 overflow-y-auto break-words whitespace-pre-wrap">
               {request.kind === "refresh" ? (
-                <>The app asks {agent} for fresh data.</>
+                <>{t("view.appAsksRefresh", { agent })}</>
               ) : (
-                <>
-                  The app wants to send {agent}: <span className="text-foreground">“{request.text}”</span>
-                </>
+                <Trans t={t} i18nKey="view.appWantsToSend" values={{ agent, text: request.text }} components={{ q: <span className="text-foreground" /> }} />
               )}
             </span>
             <Button size="xs" variant="ghost" className="self-start" onClick={() => setRequest(null)}>
-              Not now
+              {t("view.notNow")}
             </Button>
             <Button
               size="xs"
@@ -321,7 +324,7 @@ export function ArtifactView({
                 setRequest(null);
               }}
             >
-              {request.kind === "refresh" ? <RefreshCw /> : <Send />} {request.kind === "refresh" ? "Refresh" : "Send"}
+              {request.kind === "refresh" ? <RefreshCw /> : <Send />} {request.kind === "refresh" ? t("common:actions.refresh") : t("common:actions.send")}
             </Button>
           </Bar>
         )}
@@ -329,10 +332,10 @@ export function ArtifactView({
           <Bar key="error" tone="warning">
             <TriangleAlert className="size-3.5 shrink-0" />
             <span className="min-w-0 flex-1 truncate" title={failure}>
-              Something broke: {failure}
+              {t("view.somethingBroke", { failure })}
             </span>
             <Button size="xs" variant="ghost" onClick={() => setFailure(null)}>
-              Dismiss
+              {t("view.dismiss")}
             </Button>
             <Button
               size="xs"
@@ -345,7 +348,7 @@ export function ArtifactView({
                 setFailure(null);
               }}
             >
-              Ask {agent} to fix it
+              {t("view.askToFix", { agent })}
             </Button>
           </Bar>
         )}
@@ -369,8 +372,15 @@ export function ArtifactView({
               onError={setFailure}
             />
           ))}
-        {tab === "code" && <Source text={html ?? ""} label="HTML" />}
-        {tab === "data" && <Source text={dataText} label="Data" hint={artifact.dataUpdatedAt ? `Saved ${ago(artifact.dataUpdatedAt)}` : "No data saved yet"} />}
+        {tab === "code" && <Source text={html ?? ""} label="HTML" copyLabel={t("source.copyHtml")} />}
+        {tab === "data" && (
+          <Source
+            text={dataText}
+            label={t("tabs.data")}
+            copyLabel={t("source.copyData")}
+            hint={artifact.dataUpdatedAt ? t("source.saved", { time: ago(artifact.dataUpdatedAt) }) : t("source.noData")}
+          />
+        )}
       </div>
 
       {footer}
@@ -391,6 +401,7 @@ export function ArtifactView({
 
 /** What Refresh asks the agent to do, written by the agent: the human sees it and can change it. */
 function RefreshDialog({ artifact, open, onOpenChange }: { artifact: Artifact; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const qc = useQueryClient();
   const [text, setText] = useState(artifact.refreshPrompt);
   useEffect(() => {
@@ -402,30 +413,28 @@ function RefreshDialog({ artifact, open, onOpenChange }: { artifact: Artifact; o
       void qc.invalidateQueries({ queryKey: qk.artifacts });
       onOpenChange(false);
     },
-    onError: (err) => toast.error("Couldn't save it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("toast.saveError"), { description: errorMessage(err) }),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>How it refreshes</DialogTitle>
-          <DialogDescription>
-            What {artifact.agentName ?? "the agent"} does when you press Refresh: where the data comes from and what to update.
-          </DialogDescription>
+          <DialogTitle>{t("refreshDialog.title")}</DialogTitle>
+          <DialogDescription>{t("refreshDialog.description", { agent: artifact.agentName ?? t("theAgent") })}</DialogDescription>
         </DialogHeader>
         <Textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={5}
           maxLength={4000}
-          placeholder="e.g. Read the orders of the last 60 days from the Shopify admin and update revenue, orders and top products."
+          placeholder={t("refreshDialog.placeholder")}
         />
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("common:actions.cancel")}
           </Button>
           <Button onClick={() => save.mutate()} disabled={save.isPending || text === artifact.refreshPrompt}>
-            {save.isPending && <Spinner />} Save
+            {save.isPending && <Spinner />} {t("common:actions.save")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -444,18 +453,19 @@ export function DeleteArtifactDialog({
   onOpenChange: (v: boolean) => void;
   onDeleted?: () => void;
 }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const { remove } = useArtifactActions(artifact);
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete {artifact.title}?</AlertDialogTitle>
-          <AlertDialogDescription>Its code, every version and the data saved in it are gone for good. The chat stays.</AlertDialogDescription>
+          <AlertDialogTitle>{t("deleteDialog.title", { title: artifact.title })}</AlertDialogTitle>
+          <AlertDialogDescription>{t("deleteDialog.description")}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Keep it</AlertDialogCancel>
+          <AlertDialogCancel>{t("deleteDialog.keep")}</AlertDialogCancel>
           <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={() => remove.mutate(undefined, { onSuccess: onDeleted })}>
-            Delete
+            {t("common:actions.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -480,15 +490,16 @@ function IconAction({ label, onClick, disabled, children }: { label: string; onC
   );
 }
 
-const TABS: { id: Tab; label: string; icon: ReactNode }[] = [
-  { id: "preview", label: "Preview", icon: <Eye /> },
-  { id: "code", label: "Code", icon: <Code2 /> },
-  { id: "data", label: "Data", icon: <Table2 /> },
-];
+const TABS = [
+  { id: "preview", labelKey: "tabs.preview", icon: <Eye /> },
+  { id: "code", labelKey: "tabs.code", icon: <Code2 /> },
+  { id: "data", labelKey: "tabs.data", icon: <Table2 /> },
+] as const satisfies { id: Tab; labelKey: string; icon: ReactNode }[];
 
 function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void }) {
+  const { t: tr } = useTranslation("artifacts");
   return (
-    <div role="tablist" aria-label="View" className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @md:flex">
+    <div role="tablist" aria-label={tr("tabs.label")} className="hidden items-center gap-0.5 rounded-lg border bg-card p-0.5 @md:flex">
       {TABS.map((t) => (
         <Tooltip key={t.id}>
           <TooltipTrigger asChild>
@@ -496,7 +507,7 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
               type="button"
               role="tab"
               aria-selected={value === t.id}
-              aria-label={t.label}
+              aria-label={tr(t.labelKey)}
               onClick={() => onChange(t.id)}
               className={cn(
                 "grid size-7 place-items-center rounded-md text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:size-3.5",
@@ -506,7 +517,7 @@ function Segmented({ value, onChange }: { value: Tab; onChange: (t: Tab) => void
               {t.icon}
             </button>
           </TooltipTrigger>
-          <TooltipContent>{t.label}</TooltipContent>
+          <TooltipContent>{tr(t.labelKey)}</TooltipContent>
         </Tooltip>
       ))}
     </div>
@@ -524,6 +535,7 @@ function VersionPicker({
   versions: { version: number; note: string; createdAt: string }[];
   onPick: (v: number) => void;
 }) {
+  const { t } = useTranslation("artifacts");
   const shown = viewing ?? current;
   return (
     <DropdownMenu>
@@ -534,18 +546,18 @@ function VersionPicker({
             "shrink-0 rounded-[5px] border px-1.5 py-px font-mono text-[10.5px] tabular-nums transition hover:bg-accent",
             viewing != null ? "border-warning/40 bg-warning/10 text-warning" : "bg-card text-muted-foreground",
           )}
-          aria-label="Versions"
+          aria-label={t("versions.label")}
         >
           v{shown}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="max-h-80 w-72 overflow-y-auto">
-        <DropdownMenuLabel className="text-xs text-muted-foreground">Versions</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs text-muted-foreground">{t("versions.label")}</DropdownMenuLabel>
         {versions.map((v) => (
           <DropdownMenuItem key={v.version} onSelect={() => onPick(v.version)} className="items-start gap-2.5">
             <span className="mt-px w-7 shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">v{v.version}</span>
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px]">{v.note || (v.version === 1 ? "First version" : "Changed")}</span>
+              <span className="block truncate text-[13px]">{v.note || (v.version === 1 ? t("versions.first") : t("versions.changed"))}</span>
               <span className="block text-[11px] text-muted-foreground">{ago(v.createdAt)}</span>
             </span>
             {v.version === shown && <Check className="mt-0.5 size-3.5 text-brand-strong" />}
@@ -579,16 +591,18 @@ function Bar({ tone, children }: { tone: "muted" | "brand" | "warning"; children
   );
 }
 
-function Source({ text, label, hint }: { text: string; label: string; hint?: string }) {
+function Source({ text, label, copyLabel, hint }: { text: string; label: string; copyLabel: string; hint?: string }) {
+  const { t } = useTranslation("artifacts");
   const lines = useMemo(() => text.split("\n"), [text]);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-9 shrink-0 items-center gap-2 border-b bg-paper-2 px-3 text-[11.5px] text-muted-foreground">
         <span className="font-medium text-foreground">{label}</span>
         <span>
-          {lines.length.toLocaleString()} lines{hint ? ` · ${hint}` : ""}
+          {t("source.lines", { count: lines.length, formatted: lines.length.toLocaleString(intlLocale()) })}
+          {hint ? ` · ${hint}` : ""}
         </span>
-        <CopyButton text={text} label={`Copy ${label.toLowerCase()}`} className="ml-auto" />
+        <CopyButton text={text} label={copyLabel} className="ml-auto" />
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <pre className="min-w-max py-2 font-mono text-[12px] leading-[1.6]">

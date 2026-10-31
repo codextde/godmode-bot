@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { Smartphone } from "lucide-react";
 import type { AndroidDevice, AndroidInputEvent, AndroidKey } from "@godmode/shared";
 import { Orb } from "@/components/aicss/Orb";
@@ -59,6 +60,7 @@ export function PhoneScreen({
   /** Whether pictures are arriving (for a "Live" badge outside). */
   onLive?: (live: boolean) => void;
 }) {
+  const { t } = useTranslation("android");
   const qc = useQueryClient();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -219,11 +221,11 @@ export function PhoneScreen({
         .catch((e) => {
           if (Date.now() - lastErrorAt.current > 3000) {
             lastErrorAt.current = Date.now();
-            toastApiError(e, "The phone didn't take that", qc);
+            toastApiError(e, t("device.sendFailed"), qc);
           }
         });
     },
-    [device.id, qc],
+    [device.id, qc, t],
   );
 
   const textBuf = useRef("");
@@ -388,7 +390,7 @@ export function PhoneScreen({
           ref={viewRef}
           tabIndex={interactive ? 0 : -1}
           role={interactive ? "application" : undefined}
-          aria-label={interactive ? `Screen of ${device.name}. Click to tap, drag to swipe, type to enter text.` : `Screen of ${device.name}`}
+          aria-label={interactive ? t("screen.ariaInteractive", { name: device.name }) : t("screen.aria", { name: device.name })}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -410,14 +412,14 @@ export function PhoneScreen({
                     <span className="grid size-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/60">
                       <Smartphone className="size-4" />
                     </span>
-                    <span className="text-xs text-white/60">{device.state === "unauthorized" ? "Unlock the phone and tap Allow" : "Not connected"}</span>
+                    <span className="text-xs text-white/60">{device.state === "unauthorized" ? t("screen.unlock") : t("state.disconnected")}</span>
                   </>
                 ) : error ? (
                   <span className="text-xs text-white/70">{error}</span>
                 ) : (
                   <>
-                    <Orb variant="C3" size={24} label="Connecting to the screen" />
-                    <span className="text-shimmer text-xs font-medium text-white/80">Connecting…</span>
+                    <Orb variant="C3" size={24} label={t("screen.connectingLabel")} />
+                    <span className="text-shimmer text-xs font-medium text-white/80">{t("screen.connecting")}</span>
                   </>
                 )}
               </span>

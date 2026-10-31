@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { ComposioToolkit } from "@godmode/shared";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -21,6 +22,7 @@ export function useComposioConnections(enabled = true) {
 
 /** Composio: API key, connected accounts and the app gallery. */
 export function ComposioTab() {
+  const { t } = useTranslation("integrations");
   const status = useComposioStatus();
   const ready = !!status.data?.configured && status.data.valid !== false;
   const connections = useComposioConnections(ready);
@@ -47,7 +49,7 @@ export function ComposioTab() {
   }, [connections.data]);
   const connectedCount = useCallback((slug: string) => counts.get(slug) ?? 0, [counts]);
 
-  if (status.isError) return <QueryError error={status.error} onRetry={() => status.refetch()} title="Couldn't reach Composio settings" />;
+  if (status.isError) return <QueryError error={status.error} onRetry={() => status.refetch()} title={t("composio.statusError")} />;
 
   return (
     <div className="space-y-8">
@@ -59,7 +61,7 @@ export function ComposioTab() {
           {connections.isLoading ? (
             <Skeleton className="h-28 rounded-xl" />
           ) : connections.isError ? (
-            <QueryError error={connections.error} onRetry={() => connections.refetch()} title="Couldn't load connected accounts" />
+            <QueryError error={connections.error} onRetry={() => connections.refetch()} title={t("composio.connectionsError")} />
           ) : (
             (connections.data?.length ?? 0) > 0 && <ComposioConnections connections={connections.data!} toolkits={toolkits} />
           )}

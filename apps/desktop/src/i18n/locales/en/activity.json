@@ -1,1 +1,25 @@
-{}
+{
+  "dayFormat": "EEEE, MMM d",
+  "title": "Activity",
+  "description": "Every run across your agents.",
+  "runningNow": "Running now",
+  "liveNow": "Live now",
+  "searchPlaceholder": "Search prompts & results…",
+  "searchLabel": "Search runs",
+  "filterByAgent": "Filter by agent",
+  "allAgents": "All agents",
+  "filterByTrigger": "Filter by trigger",
+  "anyTrigger": "Any trigger",
+  "filterByStatus": "Filter by status",
+  "count_one": "{{count}} run",
+  "count_other": "{{count}} runs",
+  "countWithSuccess_one": "{{count}} run · {{rate}}% success",
+  "countWithSuccess_other": "{{count}} runs · {{rate}}% success",
+  "loadFailed": "Couldn't load activity",
+  "noMatch": "No runs match these filters",
+  "emptyTitle": "No activity yet",
+  "emptyDescription": "When your agents chat, run automations or delegate work, every run shows up here — live.",
+  "clearFilters": "Clear filters",
+  "limitHint": "Showing the latest {{count}} runs. Narrow the filters to look further back.",
+  "thinking": "Thinking…"
+}

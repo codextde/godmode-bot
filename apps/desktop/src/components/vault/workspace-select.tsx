@@ -1,4 +1,5 @@
 import { Globe2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useWorkspaces } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
@@ -19,6 +20,7 @@ export function WorkspaceSelect({
   id?: string;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation("vault");
   const { data: workspaces = [] } = useWorkspaces();
   const current = value ? workspaces.find((w) => w.id === value) : null;
   return (
@@ -31,23 +33,23 @@ export function WorkspaceSelect({
               <span className="w-4 text-center">{current.icon || "🗂️"}</span> {current.name}
             </>
           ) : value ? (
-            "Workspace"
+            t("scope.workspace")
           ) : (
             <>
-              <Globe2 className="size-4" /> Global
+              <Globe2 className="size-4" /> {t("scope.global")}
             </>
           )}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={GLOBAL_SCOPE}>
-          <Globe2 className="size-4" /> Global <span className="text-muted-foreground">— every workspace</span>
+          <Globe2 className="size-4" /> {t("scope.global")} <span className="text-muted-foreground">{t("scope.everyWorkspace")}</span>
         </SelectItem>
         {workspaces.length > 0 && (
           <>
             <SelectSeparator />
             <SelectGroup>
-              <SelectLabel>Workspaces</SelectLabel>
+              <SelectLabel>{t("scope.workspaces")}</SelectLabel>
               {workspaces.map((w) => (
                 <SelectItem key={w.id} value={w.id}>
                   <span className="w-4 text-center">{w.icon || "🗂️"}</span> {w.name}
@@ -63,15 +65,16 @@ export function WorkspaceSelect({
 
 /** Scope filter used in list toolbars: all / global / workspace. */
 export function ScopeFilterSelect({ value, onChange, className }: { value: string; onChange: (v: string) => void; className?: string }) {
+  const { t } = useTranslation("vault");
   const { data: workspaces = [] } = useWorkspaces();
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className={cn("w-44", className)} aria-label="Scope filter">
+      <SelectTrigger className={cn("w-44", className)} aria-label={t("scope.filter")}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value="all">All scopes</SelectItem>
-        <SelectItem value="global">Global only</SelectItem>
+        <SelectItem value="all">{t("scope.all")}</SelectItem>
+        <SelectItem value="global">{t("scope.globalOnly")}</SelectItem>
         {workspaces.length > 0 && <SelectSeparator />}
         {workspaces.map((w) => (
           <SelectItem key={w.id} value={w.id}>

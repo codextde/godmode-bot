@@ -7,6 +7,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { VoiceSettings } from "@godmode/shared";
+import { t } from "@/i18n";
 import { api, request } from "./api";
 
 /* ------------------------------------------------------------------ */
@@ -57,8 +58,8 @@ export function stripMarkdown(md: string): string {
   return (
     md
       // fenced code → short spoken hint
-      .replace(/```[\s\S]*?```/g, " (code omitted) ")
-      .replace(/~~~[\s\S]*?~~~/g, " (code omitted) ")
+      .replace(/```[\s\S]*?```/g, ` ${t("system:voice.codeOmitted")} `)
+      .replace(/~~~[\s\S]*?~~~/g, ` ${t("system:voice.codeOmitted")} `)
       // images → alt text, links → label
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
       .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -193,7 +194,7 @@ export class LevelMeter {
 
   constructor(source: MediaStream | HTMLAudioElement) {
     const Ctor = audioContextCtor();
-    if (!Ctor) throw new Error("Web Audio is not available");
+    if (!Ctor) throw new Error(t("system:voice.noWebAudio"));
     this.ctx = new Ctor();
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 512;
@@ -263,7 +264,7 @@ export async function startDictation(opts: DictationOptions): Promise<DictationH
   }
   if (!canRecord()) {
     if (Recognition) return startRecognition(Recognition, opts);
-    throw new Error("Voice input isn't supported here.");
+    throw new Error(t("system:voice.inputUnsupported"));
   }
   return startRecorder(opts);
 }
@@ -275,8 +276,8 @@ async function openMic(): Promise<MediaStream> {
     });
   } catch (e) {
     const name = (e as { name?: string })?.name;
-    if (name === "NotAllowedError" || name === "SecurityError") throw new Error("Microphone access was denied. Allow it in your system settings.");
-    if (name === "NotFoundError") throw new Error("No microphone found.");
+    if (name === "NotAllowedError" || name === "SecurityError") throw new Error(t("system:voice.micDenied"));
+    if (name === "NotFoundError") throw new Error(t("system:voice.noMic"));
     throw e instanceof Error ? e : new Error(String(e));
   }
 }
@@ -383,10 +384,10 @@ function startRecognition(Recognition: SpeechRecognitionCtor, opts: DictationOpt
       cleanupMeter();
       const msg =
         e.error === "not-allowed" || e.error === "service-not-allowed"
-          ? "Microphone or speech recognition access was denied."
+          ? t("system:voice.recognitionDenied")
           : e.error === "audio-capture"
-            ? "No microphone found."
-            : `Speech recognition failed (${e.error}).`;
+            ? t("system:voice.noMic")
+            : t("system:voice.recognitionFailed", { error: e.error });
       const err = new Error(msg);
       if (started) opts.onError(err);
       else reject(err);
@@ -628,7 +629,7 @@ function speakServer(text: string, opts: SpeakOptions): { done: Promise<void>; s
       .then(async (blob) => {
         if (stopped) return resolve();
         if (!(blob instanceof Blob) || blob.size === 0 || (blob.type && !blob.type.startsWith("audio/") && blob.type !== "application/octet-stream")) {
-          throw new Error("The voice service returned no audio.");
+          throw new Error(t("system:voice.noAudio"));
         }
         url = URL.createObjectURL(blob);
         audio = new Audio(url);
@@ -638,7 +639,7 @@ function speakServer(text: string, opts: SpeakOptions): { done: Promise<void>; s
         };
         audio.onerror = () => {
           cleanup();
-          reject(new Error("Could not play the reply audio."));
+          reject(new Error(t("system:voice.playFailed")));
         };
         if (opts.onLevel) {
           try {
@@ -687,7 +688,7 @@ export async function speak(text: string, settings: VoiceSettings | undefined, o
   };
 
   if (provider === "browser") {
-    if (!canSpeakInBrowser()) throw new Error("Speech synthesis isn't available here.");
+    if (!canSpeakInBrowser()) throw new Error(t("system:voice.synthesisUnavailable"));
     return run(speakBrowser(clean, settings, opts));
   }
   try {

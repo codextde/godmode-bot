@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { Bot, ExternalLink, Plug, Slash, Sparkles, Zap } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { Mod } from "@godmode/shared";
 import { CodeBlock } from "@/components/aicss/CodeBlock";
 import { Button } from "@/components/ui/button";
+import { intlLocale } from "@/i18n";
 import { cn } from "@/lib/utils";
 import { formatBytes, formatTokens, shortCommit, sortedPaths } from "./mod-parts";
 
@@ -11,6 +13,7 @@ const NAME_CHIP = "inline-flex h-6 max-w-full min-w-0 items-center rounded-md bo
 const FIRST = 24;
 
 function Group({ icon, title, hint, names, prefix = "" }: { icon: ReactNode; title: string; hint: string; names: string[]; prefix?: string }) {
+  const { t } = useTranslation("mods");
   const [all, setAll] = useState(false);
   if (!names.length) return null;
   const shown = all ? names : names.slice(0, FIRST);
@@ -39,7 +42,7 @@ function Group({ icon, title, hint, names, prefix = "" }: { icon: ReactNode; tit
               onClick={() => setAll((v) => !v)}
               className="h-6 rounded-md px-2 text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
             >
-              {all ? "Show fewer" : `Show all ${names.length}`}
+              {all ? t("contents.showFewer") : t("contents.showAll", { n: names.length })}
             </button>
           </li>
         )}
@@ -50,6 +53,7 @@ function Group({ icon, title, hint, names, prefix = "" }: { icon: ReactNode; tit
 
 /** The Contents tab of a plugin from a repository: what it brings, and its manifest and hooks to read. */
 export function PluginContents({ mod }: { mod: Mod }) {
+  const { t } = useTranslation("mods");
   const source = mod.source!;
   const c = mod.contents;
   const paths = sortedPaths(mod.files);
@@ -63,10 +67,10 @@ export function PluginContents({ mod }: { mod: Mod }) {
         <>
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border @2xl:grid-cols-4">
             {[
-              ["Version", source.version ?? "—"],
-              ["Commit", shortCommit(source.commit)],
-              ["Files", `${c.files.toLocaleString()} · ${formatBytes(c.bytes)}`],
-              ["Every session", c.alwaysOnTokens != null ? formatTokens(c.alwaysOnTokens) : "—"],
+              [t("contents.version"), source.version ?? "—"],
+              [t("contents.commit"), shortCommit(source.commit)],
+              [t("contents.files"), `${c.files.toLocaleString(intlLocale())} · ${formatBytes(c.bytes)}`],
+              [t("contents.everySession"), c.alwaysOnTokens != null ? formatTokens(c.alwaysOnTokens) : "—"],
             ].map(([label, value]) => (
               <div key={label} className="bg-card px-3.5 py-2.5">
                 <dt className="eyebrow text-[10.5px]">{label}</dt>
@@ -75,33 +79,33 @@ export function PluginContents({ mod }: { mod: Mod }) {
             ))}
           </dl>
 
-          <Group icon={<Sparkles />} title="Skills" hint="Loaded when a task needs them, or by name." names={c.skills} />
-          <Group icon={<Bot />} title="Subagents" hint="Specialists the agent hands work to." names={c.agents} />
-          <Group icon={<Slash />} title="Commands" hint="Started with /name in a chat." names={c.commands} prefix="/" />
-          <Group icon={<Zap />} title="Hooks" hint="Commands it runs on this computer when these happen." names={c.hooks} />
-          <Group icon={<Plug />} title="MCP servers" hint="Programs that give the agent tools of their own." names={c.mcpServers} />
+          <Group icon={<Sparkles />} title={t("contents.skills")} hint={t("contents.skillsHint")} names={c.skills} />
+          <Group icon={<Bot />} title={t("contents.subagents")} hint={t("contents.subagentsHint")} names={c.agents} />
+          <Group icon={<Slash />} title={t("contents.commands")} hint={t("contents.commandsHint")} names={c.commands} prefix="/" />
+          <Group icon={<Zap />} title={t("contents.hooks")} hint={t("contents.hooksHint")} names={c.hooks} />
+          <Group icon={<Plug />} title={t("contents.mcpServers")} hint={t("contents.mcpServersHint")} names={c.mcpServers} />
           {!c.skills.length && !c.agents.length && !c.commands.length && !c.hooks.length && !c.mcpServers.length && (
-            <p className="rounded-lg border border-dashed px-3.5 py-3 text-xs text-muted-foreground">Godmode found no skills, subagents, commands, hooks or MCP servers in it.</p>
+            <p className="rounded-lg border border-dashed px-3.5 py-3 text-xs text-muted-foreground">{t("contents.nothingFound")}</p>
           )}
         </>
       ) : (
-        <p className="rounded-lg border border-dashed px-3.5 py-3 text-xs text-muted-foreground">What it brings isn't known yet. Check for updates to read it again.</p>
+        <p className="rounded-lg border border-dashed px-3.5 py-3 text-xs text-muted-foreground">{t("contents.unknown")}</p>
       )}
 
       {path && (
         <section className="space-y-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-medium">Manifest and hooks</h3>
+            <h3 className="text-sm font-medium">{t("contents.manifestAndHooks")}</h3>
             {browse && (
               <Button variant="ghost" size="xs" asChild className="text-muted-foreground">
                 <a href={browse} target="_blank" rel="noreferrer">
-                  <ExternalLink /> Browse every file on GitHub
+                  <ExternalLink /> {t("contents.browseGitHub")}
                 </a>
               </Button>
             )}
           </div>
           {paths.length > 1 && (
-            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Files">
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={t("contents.files")}>
               {paths.map((p) => (
                 <button
                   key={p}

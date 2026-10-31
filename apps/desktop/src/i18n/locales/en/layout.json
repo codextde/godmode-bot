@@ -1,1 +1,417 @@
-{}
+{
+  "brand": {
+    "tagline": "AI coworker"
+  },
+  "draftStatus": {
+    "saved": "Draft saved",
+    "discard": "Discard"
+  },
+  "app": {
+    "licenseRequired": "Godmode needs an active licence",
+    "activate": "Activate",
+    "answer": "Answer",
+    "cannotReachCloud": "Cannot reach this computer through Godmode Cloud.",
+    "cannotReachCore": "Cannot reach the Godmode core.",
+    "cloudBlock": {
+      "cantOpen": "Can't open this computer",
+      "browserOffTitle": "Browser access is off",
+      "browserOffMessage": "Godmode on this computer doesn't accept browser access through the cloud right now. Turn it on there under Settings → Cloud.",
+      "notSetUpTitle": "Godmode isn't set up on this computer yet",
+      "notSetUpMessage": "Finish the setup in Godmode on the computer itself, then open it here again."
+    }
+  },
+  "nav": {
+    "chat": "Chat",
+    "inbox": "Needs you",
+    "tasks": "Agent tasks",
+    "agents": "Agents",
+    "automations": "Automations",
+    "activity": "Activity",
+    "calls": "Calls",
+    "plugins": "Plugins",
+    "passwords": "Passwords",
+    "cards": "Cards",
+    "browser": "Browser",
+    "computer": "Computer",
+    "vms": "Virtual machines",
+    "ssh": "SSH servers",
+    "settings": "Settings",
+    "archivedChats": "Archived chats",
+    "archivedTasks": "Archived tasks"
+  },
+  "scope": {
+    "all": "All workspaces",
+    "workspace": "Workspace",
+    "global": "Global"
+  },
+  "counts": {
+    "working_one": "{{count}} working",
+    "working_other": "{{count}} working",
+    "needsYou_one": "{{count}} needs you",
+    "needsYou_other": "{{count}} need you",
+    "waitingForYou_one": "{{count}} waiting for you",
+    "waitingForYou_other": "{{count}} waiting for you",
+    "agents_one": "{{count}} agent",
+    "agents_other": "{{count}} agents",
+    "openTasks_one": "{{count}} open task",
+    "openTasks_other": "{{count}} open tasks",
+    "projects_one": "{{count}} project",
+    "projects_other": "{{count}} projects"
+  },
+  "shell": {
+    "newChat": "New chat",
+    "searchTooltip": "Search & commands ({{shortcut}})",
+    "sections": {
+      "work": "Work",
+      "more": "More",
+      "machines": "Machines"
+    },
+    "closeNavigation": "Close navigation",
+    "collapseSidebar": "Collapse sidebar",
+    "expandSidebar": "Expand sidebar",
+    "openNavigation": "Open navigation",
+    "openNavigationAttention": "Open navigation — something needs you",
+    "home": "Godmode home",
+    "search": "Search and commands",
+    "waiting_one": "{{count}} waiting",
+    "waiting_other": "{{count}} waiting"
+  },
+  "cloud": {
+    "allComputers": "All computers",
+    "allComputersTooltip": "All computers in Godmode Cloud",
+    "versionNote": "This computer runs Godmode {{coreVersion}}; this cloud shows the dashboard of {{uiVersion}}. If something looks wrong, update Godmode or ask the cloud's administrator to update.",
+    "dismiss": "Dismiss"
+  },
+  "footer": {
+    "online": "Online",
+    "reconnecting": "Reconnecting…",
+    "connectedCloud": "Connected to {{device}} through Godmode Cloud",
+    "lostCloud": "Connection to {{device}} lost — retrying",
+    "connectedCore": "Connected to Godmode core",
+    "lostCore": "Connection to core lost — retrying",
+    "lockVault": "Lock vault",
+    "settingsWaitingLabel_one": "Settings ({{count}} waiting in Messaging)",
+    "settingsWaitingLabel_other": "Settings ({{count}} waiting in Messaging)",
+    "settingsWaiting_one": "Settings · {{count}} waiting in Messaging",
+    "settingsWaiting_other": "Settings · {{count}} waiting in Messaging",
+    "settingsShortcut": "Settings ({{shortcut}})"
+  },
+  "splash": {
+    "starting": "Starting Godmode…"
+  },
+  "cloudState": {
+    "offlineTitle": "This computer is offline",
+    "planTitle": "Your plan's limit is reached",
+    "offlineMessage": "{{device}} isn't connected to Godmode Cloud right now. It comes back here on its own once Godmode is running on it again.",
+    "checking": "Checking again every few seconds",
+    "openBilling": "Open billing"
+  },
+  "themeToggle": {
+    "switchTo": {
+      "light": "Switch to light mode",
+      "dark": "Switch to dark mode"
+    },
+    "followingSystem": "Following your system until you pick one"
+  },
+  "claudeSignedOut": {
+    "keyRefused": "Claude refused your Anthropic API key.",
+    "keyRefusedHint": "Your agents can't work until it works again.",
+    "signingIn": "Signing in to Claude…",
+    "finishInBrowser": "Finish it in your browser.",
+    "failed": "The sign-in didn't finish.",
+    "signedOut": "Claude is signed out.",
+    "signInAgainHint": "Your agents can't work until you sign in again.",
+    "ownerSignInHint": "Your agents can't work until the owner of this computer signs in again.",
+    "checkKey": "Check the key",
+    "signInAgain": "Sign in again",
+    "showSteps": "Show steps"
+  },
+  "claudeUpdate": {
+    "noUpgrade": "claude update finished without upgrading.",
+    "updated": "Updated — new chats use it right away.",
+    "failed": "Couldn't update Claude Code",
+    "installing": "Installing…",
+    "available": "<v>{{version}}</v> available",
+    "updating": "Updating",
+    "update": "Update",
+    "updateFromTo": "Update from {{from}} to {{to}}",
+    "skipVersionLabel": "Skip Claude Code {{version}}",
+    "skipVersion": "Skip this version",
+    "updateTo": "Update Claude Code to {{version}}",
+    "installingVersion": "Installing Claude Code {{version}}…"
+  },
+  "update": {
+    "installFailed": "Couldn't install the update",
+    "confirmTitle": "Restart to update?",
+    "confirmDescription_one": "{{count}} agent is still working. Restarting stops it — you can pick up where you left off once Godmode is back.",
+    "confirmDescription_other": "{{count}} agents are still working. Restarting stops them — you can pick up where you left off once Godmode is back.",
+    "restartNow": "Restart now",
+    "ready": "Update ready",
+    "restarting": "Restarting",
+    "restart": "Restart",
+    "installAndReopen": "Install v{{version}} and reopen Godmode",
+    "restartToUpdate": "Restart to update to v{{version}}"
+  },
+  "lidMode": {
+    "line": {
+      "closed": "The lid is closed and agents keep working.",
+      "open": "Close the lid: agents keep working.",
+      "idle": "No agent is working, so the Mac may sleep. It stays awake again as soon as one starts.",
+      "lowBattery": "Paused at {{percent}}% battery. Plug in the Mac to continue.",
+      "lowBatteryUnknown": "Paused at low battery. Plug in the Mac to continue.",
+      "error": "macOS refused the change.",
+      "off": "Closing the lid puts the Mac to sleep."
+    },
+    "passwordTitle": "Enter your Mac password",
+    "passwordDescription": "macOS asks once so Godmode can keep the Mac awake with the lid closed.",
+    "state": {
+      "on": "Lid-closed mode on",
+      "off": "Lid-closed mode off",
+      "paused": "Lid-closed mode paused",
+      "attention": "Lid-closed mode needs attention"
+    },
+    "offDescription": "Your Mac sleeps again when you close the lid.",
+    "onDescription": "Close the lid whenever you like. Your agents keep working.",
+    "cancelledTitle": "Nothing changed",
+    "cancelledDescription": "The Mac password wasn't entered.",
+    "switchError": "Could not switch lid-closed mode",
+    "letSleep": "Let the Mac sleep",
+    "turnOff": "Turn off lid-closed mode",
+    "turnOn": "Keep working with the lid closed",
+    "clickHint": "Click to keep agents working when you close the lid."
+  },
+  "directionHint": {
+    "agents": "Agents",
+    "you": "You",
+    "toYou": {
+      "title": "From your agents to you.",
+      "body": "Questions, approvals, missing logins and to-dos your agents hand you. Answer or mark one done and the agent carries on.",
+      "lead": "Work you hand to agents:"
+    },
+    "toAgents": {
+      "title": "From you to your agents.",
+      "body": "Tickets you write and assign. The agent picks one up, works on it and moves it to review when it is done.",
+      "lead": "What agents need from you:"
+    },
+    "hideLabel": "Hide this explanation",
+    "hide": "Hide"
+  },
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "description": "Press a key outside a text field. “G then T”: press G, then T.",
+    "then": "then",
+    "groups": {
+      "everywhere": "Everywhere",
+      "goTo": "Go to",
+      "chat": "In a chat",
+      "lists": "Lists"
+    },
+    "goTo": {
+      "todoBoard": "Your to-dos board"
+    },
+    "rows": {
+      "search": "Search chats, tickets, automations, settings — and what waits for you",
+      "newChat": "New chat",
+      "newPrivateChat": "New private chat (nothing is saved)",
+      "toggleSidebar": "Show or hide the sidebar",
+      "switchWorkspace": "Switch to a workspace (in A–Z order)",
+      "allWorkspaces": "All workspaces",
+      "settings": "Settings",
+      "theme": "Light or dark mode",
+      "thisList": "This list",
+      "send": "Send",
+      "newLine": "New line",
+      "commands": "Claude Code commands (/compact, /model, …)",
+      "editLast": "Edit your last message while it waits in the queue",
+      "quote": "Quote the selected text in your next message",
+      "stopDictation": "Stop dictation",
+      "newTicket": "New ticket (Tasks)",
+      "searchList": "Search (Agents, Logins, Workspaces)"
+    }
+  },
+  "palette": {
+    "description": "Find what waits for you, chats, tickets, automations, agents, settings and actions",
+    "placeholder": "Search chats, tickets, automations, settings… or type a command",
+    "empty": "No results.",
+    "groups": {
+      "waiting": "Waiting for you",
+      "switchWorkspace": "Switch workspace",
+      "tickets": "Tickets",
+      "actions": "Actions",
+      "navigate": "Navigate",
+      "chats": "Chats"
+    },
+    "current": "current",
+    "inWorkspace": "in {{name}}",
+    "off": "off",
+    "newPrivateChat": "New private chat",
+    "createAgent": "Create agent",
+    "addLogin": "Add login",
+    "import2fa": "Import 2FA QR code",
+    "importMemory": "Import memory from ChatGPT, Claude or Gemini",
+    "addCard": "Add card",
+    "usePalette": "Use the {{name}} palette",
+    "switchMode": {
+      "easy": "Switch to Easy mode",
+      "pro": "Switch to Professional mode"
+    },
+    "handOff": "Hand off running work to {{name}}",
+    "chatWith": "New chat with {{name}}",
+    "passkeys": "Passkeys",
+    "twoFactorCodes": "2FA codes",
+    "artifacts": "Artifacts",
+    "artifactsEasy": "Dashboards & apps",
+    "integrations": "Integrations",
+    "integrationsEasy": "Connected apps",
+    "messaging": "Messaging",
+    "messagingEasy": "Chat apps",
+    "workspaces": "Workspaces",
+    "instructions": "Instructions",
+    "license": "License",
+    "billing": "Billing and usage",
+    "mentioned": "mentioned in a message",
+    "settingsSections": {
+      "general": "General",
+      "ai": "AI & Claude",
+      "browser": "Browser",
+      "computer": "Computer",
+      "voice": "Voice",
+      "memory": "Memory",
+      "artifacts": "Artifacts",
+      "integrations": "Integrations",
+      "messaging": "Messaging",
+      "android": "Android phones",
+      "activity": "Activity",
+      "plugins": "Plugins",
+      "calls": "Phone calls",
+      "cards": "Cards",
+      "vms": "Virtual machines",
+      "ssh": "SSH servers",
+      "apiKeys": "API keys",
+      "security": "Security",
+      "files": "Files",
+      "backup": "Backup",
+      "phone": "Phone",
+      "devices": "Devices",
+      "system": "System",
+      "logs": "Logs",
+      "about": "About"
+    }
+  },
+  "recent": {
+    "title": "Recent",
+    "previous7": "Previous 7 days",
+    "previous30": "Previous 30 days",
+    "pinned": "Pinned",
+    "running_one": "{{count}} running",
+    "running_other": "{{count}} running",
+    "markAllRead": "Mark all read",
+    "failedHere": "Something went wrong here",
+    "newReply": "New reply",
+    "archiveLabel": "Archive “{{title}}”",
+    "deleteLabel": "Delete “{{title}}”",
+    "archive": "Archive",
+    "showMore": "Show {{count}} more<muted>of {{total}}</muted>",
+    "archivedOngoing_one": "{{count}} archived chat still has work ahead",
+    "archivedOngoing_other": "{{count}} archived chats still have work ahead",
+    "origin": {
+      "from": "From {{name}}",
+      "handedOver": "Handed over",
+      "automation": "Automation",
+      "heartbeat": "Heartbeat"
+    },
+    "chip": {
+      "workspace": "Workspace: {{name}}",
+      "project": "Project: {{name}}"
+    },
+    "sourcesLabel": "Who started the chats",
+    "sources": {
+      "mine": { "label": "Mine", "hint": "Chats you started" },
+      "automations": { "label": "Automations", "hint": "Started by an automation or the API" },
+      "agents": { "label": "Agents", "hint": "Started by an agent: handovers, board tasks, heartbeats" },
+      "all": { "label": "All", "hint": "Every chat" }
+    },
+    "waitingForYou": "Waiting for you",
+    "newReplies": "New replies",
+    "hintNeedsYou_one": "{{hint}} · {{count}} needs you",
+    "hintNeedsYou_other": "{{hint}} · {{count}} need you",
+    "hintUnread_one": "{{hint}} · {{count}} unread",
+    "hintUnread_other": "{{hint}} · {{count}} unread",
+    "tabsLabel": "Filter recent chats",
+    "tabs": {
+      "all": { "label": "All", "hint": "Every recent chat" },
+      "running": { "label": "Running", "hint": "Working, queued or waiting for you" },
+      "scheduled": { "label": "Scheduled", "hint": "Continue on their own later" },
+      "done": { "label": "Done", "hint": "Finished chats" }
+    },
+    "empty": {
+      "all": { "title": "No chats yet", "text": "Your archived chats are below." },
+      "running": { "title": "Nothing running", "text": "Chats that work or wait for you show up here." },
+      "scheduled": { "title": "Nothing scheduled", "text": "When an agent plans to check back later, the chat waits here." },
+      "done": { "title": "Nothing finished yet", "text": "Finished chats land here." }
+    },
+    "emptySource": {
+      "mine": { "title": "No chats from you yet", "text": "Chats you start show up here. Automations and agents have their own tabs." },
+      "automations": { "title": "No automation chats", "text": "When an automation runs, its chat lands here." },
+      "agents": { "title": "No agent chats", "text": "Handovers, board tasks and heartbeats agents start themselves land here." }
+    },
+    "emptyScope": {
+      "title": "No chats in {{name}} yet",
+      "archived": "Its archived chats are below.",
+      "new": "New chats you start here land in this list."
+    }
+  },
+  "deviceStatus": {
+    "thisMac": "This Mac",
+    "thisComputer": "This computer",
+    "inTime": "in {{time}}",
+    "inAMoment": "in a moment",
+    "atTime": "at {{time}}",
+    "yourPrimary": "Your primary",
+    "standsIn": "{{device}} stands in for {{name}}.",
+    "standsInHint": "Automations, the board and your phone run here; changes go back when it's back.",
+    "away": "{{name}} is away.",
+    "takesOver": "{{device}} takes over <time/> — everything keeps working.",
+    "awayHint": "Everything keeps working here; automations and messages wait until it's back.",
+    "devices": "Devices",
+    "summary": {
+      "standingIn": "Standing in for {{name}}",
+      "synced": "Synced with {{name}}",
+      "away": "{{name}} is away",
+      "groupMacs_one": "{{count}} Mac in your group",
+      "groupMacs_other": "{{count}} Macs in your group",
+      "groupComputers_one": "{{count}} computer in your group",
+      "groupComputers_other": "{{count}} computers in your group"
+    },
+    "needsAttention_one": "{{count}} needs attention",
+    "needsAttention_other": "{{count}} need attention",
+    "triggerLabel": "{{hint}}. Devices",
+    "isPrimary": "{{name}} is the primary.",
+    "group": "Device group",
+    "manage": "Manage devices",
+    "primary": "Primary",
+    "needsFullDisk": "Needs Full Disk Access",
+    "alsoRunner": "Also paired as a runner"
+  },
+  "workspaceSwitcher": {
+    "triggerLabel": "Workspace: {{label}}. Switch workspace",
+    "workspaceCount_one": "{{count}} workspace",
+    "workspaceCount_other": "{{count}} workspaces",
+    "allQuiet": "All quiet",
+    "waitingElsewhere_one": "{{count}} waiting for you in other workspaces",
+    "waitingElsewhere_other": "{{count}} waiting for you in other workspaces",
+    "switchShortcut": "Switch workspace ({{shortcut}})",
+    "find": "Find a workspace…",
+    "noMatch": "No workspace called “{{query}}”.",
+    "everything": "Everything in one place",
+    "globalMeta": "Shared with every workspace",
+    "heading": "Workspaces · {{count}}",
+    "newWorkspace": "New workspace",
+    "newProjectKeyword": "New project",
+    "newProject": "New project <muted>in {{name}}</muted>",
+    "manage": "Manage workspaces",
+    "hideProjects": "Hide {{name}}'s projects",
+    "showProjects": "Show {{name}}'s projects",
+    "empty": "Empty"
+  }
+}

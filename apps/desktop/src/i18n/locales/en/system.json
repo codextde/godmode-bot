@@ -1,1 +1,129 @@
-{}
+{
+  "mode": {
+    "label": {
+      "easy": "Easy",
+      "pro": "Professional"
+    },
+    "blurb": {
+      "easy": "Plain words and only what you need day to day. Everything else is one click away.",
+      "pro": "Every tool, setting and detail in view: models, runs, machines, logs."
+    },
+    "switchError": "Could not switch the mode",
+    "switched": {
+      "easy": "Easy mode",
+      "pro": "Professional mode"
+    },
+    "switchBackHint": "Switch back any time in Settings → General."
+  },
+  "easyPages": {
+    "automations": {
+      "description": "Let your agents start work by themselves: on a schedule, or when something happens in your apps."
+    },
+    "files": {
+      "description": "What your agents keep: their files, notes and memory. Look through it, tidy it up, and put back what you deleted."
+    },
+    "activity": {
+      "title": "History",
+      "description": "Everything your agents did."
+    },
+    "calls": {
+      "title": "Phone calls"
+    },
+    "plugins": {
+      "title": "Add-ons",
+      "description": "Extra skills for your agents. Add one, switch it off or remove it any time."
+    },
+    "cards": {
+      "title": "Payment cards"
+    },
+    "computer": {
+      "title": "Computer control"
+    },
+    "ssh": {
+      "title": "Servers"
+    }
+  },
+  "palettes": {
+    "paper": { "label": "Paper", "blurb": "Warm paper by day, anthracite by night" },
+    "graphite": { "label": "Graphite", "blurb": "Cool neutral greys with a blue accent" },
+    "nord": { "blurb": "Arctic blue-greys and frost" },
+    "solarized": { "blurb": "Ethan Schoonover's classic cream and teal" },
+    "rose": { "label": "Rosé", "blurb": "Soft blush with a raspberry accent" },
+    "forest": { "label": "Forest", "blurb": "Moss, fern and bark" },
+    "ocean": { "label": "Ocean", "blurb": "Sea glass and deep water" },
+    "dracula": { "blurb": "Purple night, and a pale day to match" }
+  },
+  "password": {
+    "strength": {
+      "tooWeak": "Too weak",
+      "weak": "Weak",
+      "fair": "Fair",
+      "strong": "Strong",
+      "excellent": "Excellent"
+    },
+    "duration": {
+      "instantly": "instantly",
+      "centuries": "centuries",
+      "century_one": "{{count}} century",
+      "century_other": "{{count}} centuries",
+      "year_one": "{{count}} year",
+      "year_other": "{{count}} years",
+      "month_one": "{{count}} month",
+      "month_other": "{{count}} months",
+      "day_one": "{{count}} day",
+      "day_other": "{{count}} days",
+      "hour_one": "{{count}} hour",
+      "hour_other": "{{count}} hours",
+      "minute_one": "{{count}} minute",
+      "minute_other": "{{count}} minutes",
+      "second_one": "{{count}} second",
+      "second_other": "{{count}} seconds"
+    },
+    "feedback": {
+      "variety": "Use more different characters.",
+      "common": "This is one of the most common passwords.",
+      "commonWord": "Avoid common words like “{{word}}”.",
+      "personal": "Don't include your name or the site name.",
+      "dates": "Years and dates are easy to guess.",
+      "patterns": "Avoid sequences, repeats and keyboard patterns.",
+      "length": "Use at least 12 characters — length matters most.",
+      "mix": "Mix in numbers, symbols or uppercase letters."
+    }
+  },
+  "places": {
+    "primary": "Primary"
+  },
+  "core": {
+    "didNotStart": "Godmode core did not start. Check the logs in ~/.godmode/logs."
+  },
+  "api": {
+    "fileGone": "The file doesn't exist anymore"
+  },
+  "qr": {
+    "notAnImage": "This file could not be read as an image.",
+    "noCanvas": "Canvas is not available.",
+    "migrationNoData": "Migration code has no data",
+    "migrationUnreadable": "Migration code could not be read",
+    "notTwoFactor": "Not a 2FA QR code"
+  },
+  "voice": {
+    "codeOmitted": "(code omitted)",
+    "noWebAudio": "Web Audio is not available",
+    "inputUnsupported": "Voice input isn't supported here.",
+    "micDenied": "Microphone access was denied. Allow it in your system settings.",
+    "noMic": "No microphone found.",
+    "recognitionDenied": "Microphone or speech recognition access was denied.",
+    "recognitionFailed": "Speech recognition failed ({{error}}).",
+    "noAudio": "The voice service returned no audio.",
+    "playFailed": "Could not play the reply audio.",
+    "synthesisUnavailable": "Speech synthesis isn't available here.",
+    "readAloudFailed": "Could not read this aloud."
+  },
+  "sharedChoice": {
+    "saveError": {
+      "theme": "Could not save the theme",
+      "palette": "Could not save the palette",
+      "language": "Could not save the language"
+    }
+  }
+}

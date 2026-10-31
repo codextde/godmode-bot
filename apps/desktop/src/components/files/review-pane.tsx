@@ -1,11 +1,14 @@
 import { useMemo, useState, type ComponentType } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNowStrict } from "date-fns";
+import { Trans, useTranslation } from "react-i18next";
 import { Boxes, CircleCheck, Clock3, Copy, FileWarning, Folder, FolderInput, FolderX, HardDrive, RefreshCw, Sparkles, Trash2, Unlink, Unplug, Wind } from "lucide-react";
 import type { Agent, FileReviewItem, FileReviewKind } from "@godmode/shared";
 import { formatBytes } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
+import { intlLocale } from "@/i18n";
+import { useLocale } from "@/i18n/language";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -15,17 +18,19 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { fileIcon, nameOf } from "./file-editor";
 import { plural } from "./use-files";
 
-const KINDS: Record<FileReviewKind, { title: string; hint: string; icon: ComponentType<{ className?: string }>; safe: boolean }> = {
-  build: { title: "Installed packages and build output", hint: "Installing or building again brings them back.", icon: Boxes, safe: true },
-  junk: { title: "Junk files", hint: "Logs, temporary files and Finder leftovers.", icon: Wind, safe: true },
-  empty: { title: "Empty files and folders", hint: "Nothing in them.", icon: FolderX, safe: true },
-  duplicate: { title: "Copies", hint: "The same content lies somewhere else too — the other copy stays.", icon: Copy, safe: true },
-  large: { title: "Large files", hint: "Check whether they are still needed.", icon: HardDrive, safe: false },
-  scratch: { title: "Large scratch in tmp/", hint: "Goes by itself a week after its last change — delete now to free the space today.", icon: Clock3, safe: false },
-  stale: { title: "Untouched for 30 days", hint: "Old reports, exports and experiments: keep what still matters.", icon: Clock3, safe: false },
-  loose: { title: "Unsorted", hint: "Loose files at the top: sort them into a folder.", icon: FolderInput, safe: false },
-  "unlinked-note": { title: "Notes nothing links to", hint: "Memory notes without a link from MEMORY.md are rarely read: link, merge or delete them.", icon: Unplug, safe: false },
-  "broken-link": { title: "Broken links in memory", hint: "The memory points at notes that don't exist: fix the link in the note.", icon: Unlink, safe: false },
+type KindKey = "build" | "junk" | "empty" | "duplicate" | "large" | "scratch" | "stale" | "loose" | "unlinkedNote" | "brokenLink";
+
+const KINDS: Record<FileReviewKind, { key: KindKey; icon: ComponentType<{ className?: string }>; safe: boolean }> = {
+  build: { key: "build", icon: Boxes, safe: true },
+  junk: { key: "junk", icon: Wind, safe: true },
+  empty: { key: "empty", icon: FolderX, safe: true },
+  duplicate: { key: "duplicate", icon: Copy, safe: true },
+  large: { key: "large", icon: HardDrive, safe: false },
+  scratch: { key: "scratch", icon: Clock3, safe: false },
+  stale: { key: "stale", icon: Clock3, safe: false },
+  loose: { key: "loose", icon: FolderInput, safe: false },
+  "unlinked-note": { key: "unlinkedNote", icon: Unplug, safe: false },
+  "broken-link": { key: "brokenLink", icon: Unlink, safe: false },
 };
 const ORDER = Object.keys(KINDS) as FileReviewKind[];
 
@@ -41,6 +46,8 @@ export function useFileReview(agentId: string) {
 }
 
 export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent; selected: string | null; actions: ReviewActions; frozen: boolean }) {
+  const { t } = useTranslation(["files", "common"]);
+  const { dateLocale } = useLocale();
   const qc = useQueryClient();
   const review = useFileReview(agent.id);
   const recheck = useMutation({
@@ -70,20 +77,20 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-3 border-b px-4 py-3">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium tracking-[-0.01em]">{review.data ? (items.length ? `${plural(items.length, "thing")} to look at` : "Nothing to tidy") : "Looking through the files…"}</h2>
+          <h2 className="text-sm font-medium tracking-[-0.01em]">{review.data ? (items.length ? t("review.toLookAt", { things: plural(items.length, "thing") }) : t("review.nothingToTidy")) : t("review.looking")}</h2>
           <p className="text-xs text-muted-foreground">
             {review.data
-              ? `${totalBytes ? `${formatBytes(totalBytes)} could go · ` : ""}checked ${formatDistanceToNowStrict(new Date(review.data.checkedAt), { addSuffix: true })}${review.data.partial ? " · very large, not everything was looked at" : ""}`
-              : "Sizes, copies, junk and notes nothing links to."}
+              ? `${totalBytes ? `${t("review.couldGo", { size: formatBytes(totalBytes) })} · ` : ""}${t("review.checked", { time: formatDistanceToNowStrict(new Date(review.data.checkedAt), { addSuffix: true, locale: dateLocale }) })}${review.data.partial ? ` · ${t("review.partial")}` : ""}`
+              : t("review.intro")}
           </p>
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label="Check again" disabled={review.isFetching || recheck.isPending} onClick={() => recheck.mutate()}>
+            <Button variant="ghost" size="icon-sm" className="ml-auto" aria-label={t("review.checkAgain")} disabled={review.isFetching || recheck.isPending} onClick={() => recheck.mutate()}>
               {review.isFetching || recheck.isPending ? <Spinner /> : <RefreshCw />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Check again</TooltipContent>
+          <TooltipContent>{t("review.checkAgain")}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -105,24 +112,25 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
             <div className="mb-3 grid size-11 place-items-center rounded-full bg-brand-soft text-brand-strong">
               <CircleCheck className="size-5" />
             </div>
-            <p className="text-sm font-medium">{agent.name}'s files look tidy</p>
-            <p className="mt-1 max-w-xs text-xs text-muted-foreground">No build output, junk, copies or forgotten notes. The nightly dream keeps sorting the workspace too.</p>
+            <p className="text-sm font-medium">{t("review.tidyTitle", { name: agent.name })}</p>
+            <p className="mt-1 max-w-xs text-xs text-muted-foreground">{t("review.tidyDescription")}</p>
           </div>
         ) : (
           <div className="divide-y">
             {groups.map((g) => {
               const meta = KINDS[g.kind];
               const Icon = meta.icon;
+              const title = t(`review.kinds.${meta.key}.title`);
               const paths = g.items.filter(deletable).map((i) => i.path);
               const on = paths.filter((p) => chosen.has(p)).length;
               const bytes = g.items.reduce((n, i) => n + i.bytes, 0);
               return (
-                <section key={g.kind} aria-label={meta.title} className="py-2">
+                <section key={g.kind} aria-label={title} className="py-2">
                   <div className="flex items-start gap-2.5 px-4 pt-1 pb-1.5">
                     {paths.length > 0 ? (
                       <Checkbox
                         className="mt-0.5"
-                        aria-label={`Select all ${meta.title.toLowerCase()}`}
+                        aria-label={t("review.selectAll", { group: title })}
                         checked={on === paths.length ? true : on ? "indeterminate" : false}
                         onCheckedChange={(v) => toggle(paths, v === true)}
                       />
@@ -132,9 +140,9 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
                     <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-medium">
-                        {meta.title} <span className="font-normal text-muted-foreground tabular-nums">· {g.items.length}{bytes ? ` · ${formatBytes(bytes)}` : ""}</span>
+                        {title} <span className="font-normal text-muted-foreground tabular-nums">· {g.items.length}{bytes ? ` · ${formatBytes(bytes)}` : ""}</span>
                       </p>
-                      <p className="text-xs text-muted-foreground">{meta.hint}</p>
+                      <p className="text-xs text-muted-foreground">{t(`review.kinds.${meta.key}.hint`)}</p>
                     </div>
                   </div>
                   <ul className="px-1.5">
@@ -163,14 +171,19 @@ export function ReviewPane({ agent, selected, actions, frozen }: { agent: Agent;
           <p className="min-w-0 flex-1 text-xs text-muted-foreground">
             {chosenItems.length ? (
               <>
-                <span className="font-medium text-foreground">{plural(chosenItems.length, "item")}</span> selected · {formatBytes(chosenBytes)} · everything goes to the bin first
+                <Trans
+                  t={t}
+                  i18nKey="review.selected"
+                  values={{ items: plural(chosenItems.length, "item"), size: formatBytes(chosenBytes) }}
+                  components={{ b: <span className="font-medium text-foreground" /> }}
+                />
               </>
             ) : (
-              "Tick what can go — it waits in the bin for 30 days."
+              t("review.tickHint")
             )}
           </p>
           <Button size="sm" variant="destructive" disabled={!chosenItems.length || frozen} onClick={() => actions.onDelete(chosenItems.map((i) => i.path))}>
-            <Trash2 /> Delete {chosenItems.length || ""}
+            <Trash2 /> {t("common:actions.delete")} {chosenItems.length || ""}
           </Button>
         </div>
       )}
@@ -193,10 +206,11 @@ function ReviewRow({
   actions: ReviewActions;
   frozen: boolean;
 }) {
+  const { t } = useTranslation("files");
   const isDir = item.type === "dir";
   return (
     <li className={cn("group/row flex items-start gap-2.5 rounded-md px-2.5 py-1.5 transition-colors hover:bg-accent/50", active && "bg-secondary")}>
-      <span className="mt-0.5 grid w-4 place-items-center">{onCheck ? <Checkbox aria-label={`Select ${item.path}`} checked={checked} onCheckedChange={(v) => onCheck(v === true)} /> : <FileWarning className="size-3.5 text-warning" />}</span>
+      <span className="mt-0.5 grid w-4 place-items-center">{onCheck ? <Checkbox aria-label={t("review.selectItem", { path: item.path })} checked={checked} onCheckedChange={(v) => onCheck(v === true)} /> : <FileWarning className="size-3.5 text-warning" />}</span>
       <button type="button" onClick={() => actions.onOpen(item)} className="min-w-0 flex-1 text-left">
         <span className="flex items-center gap-1.5">
           <span className="shrink-0">{isDir ? <Folder className="size-4 text-muted-foreground" /> : fileIcon(item.path)}</span>
@@ -206,24 +220,24 @@ function ReviewRow({
         </span>
         <span className="mt-0.5 block text-xs text-muted-foreground">
           {item.detail}
-          {item.namedBy && <span className="ml-1 rounded-[4px] bg-warning/12 px-1 py-px text-[10px] font-medium text-warning">named in {item.namedBy}</span>}
+          {item.namedBy && <span className="ml-1 rounded-[4px] bg-warning/12 px-1 py-px text-[10px] font-medium text-warning">{t("review.namedIn", { names: item.namedBy })}</span>}
         </span>
       </button>
       <span className="flex shrink-0 flex-col items-end gap-1">
         {item.bytes > 0 && (
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatBytes(item.bytes)}
-            {isDir && item.files > 1 && <span className="text-muted-foreground/70"> · {item.files.toLocaleString()}</span>}
+            {isDir && item.files > 1 && <span className="text-muted-foreground/70"> · {item.files.toLocaleString(intlLocale())}</span>}
           </span>
         )}
         {item.kind === "loose" && (
           <Button size="xs" variant="ghost" className="h-5 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100" disabled={frozen} onClick={() => actions.onMove([item.path])}>
-            <FolderInput /> Move
+            <FolderInput /> {t("review.move")}
           </Button>
         )}
         {item.kind === "broken-link" && item.related && (
           <Button size="xs" variant="ghost" className="h-5" onClick={() => actions.onOpen(item)}>
-            Open {nameOf(item.related)}
+            {t("review.open", { name: nameOf(item.related) })}
           </Button>
         )}
       </span>

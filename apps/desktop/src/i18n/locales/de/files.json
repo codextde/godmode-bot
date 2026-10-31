@@ -1,1 +1,303 @@
-{}
+{
+  "count": {
+    "item_one": "{{n}} Element",
+    "item_other": "{{n}} Elemente",
+    "file_one": "{{n}} Datei",
+    "file_other": "{{n}} Dateien",
+    "note_one": "{{n}} Notiz",
+    "note_other": "{{n}} Notizen",
+    "memoryNote_one": "{{n}} Gedächtnisnotiz",
+    "memoryNote_other": "{{n}} Gedächtnisnotizen",
+    "agent_one": "{{n}} Agent",
+    "agent_other": "{{n}} Agenten",
+    "thing_one": "{{n}} Sache",
+    "thing_other": "{{n}} Sachen"
+  },
+  "reveal": {
+    "finder": "Im Finder zeigen",
+    "folder": "Im Ordner zeigen",
+    "copyPath": "Pfad kopieren"
+  },
+  "toast": {
+    "pathCopied": "Pfad kopiert",
+    "revealFailedFinder": "Finder konnte nicht geöffnet werden",
+    "revealFailedOther": "Dateimanager konnte nicht geöffnet werden",
+    "putBackOne": "Wiederhergestellt",
+    "putBackMany": "{{n}} wiederhergestellt",
+    "putBackFailed": "Nicht alles konnte wiederhergestellt werden",
+    "putBackFailedDescription": "{{error}} – der Rest liegt im Papierkorb.",
+    "deletedOne": "{{name}} gelöscht",
+    "deletedMany": "{{n}} Elemente gelöscht",
+    "movedToBin": "{{size}} in den Papierkorb verschoben.",
+    "stayed": "{{items}} geblieben.",
+    "stays": "{{name}} bleibt",
+    "nothingDeleted": "Nichts wurde gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "renamedTo": "Umbenannt in {{name}}",
+    "moved": "{{name}} verschoben",
+    "movedMany": "{{n}} Elemente verschoben",
+    "pathUpdated": "Pfad aktualisiert in {{files}}.",
+    "moveFailed": "Verschieben fehlgeschlagen"
+  },
+  "detail": {
+    "more": "Mehr zu {{name}}",
+    "moveTo": "Verschieben nach…",
+    "imageFailed": "Dieses Bild kann hier nicht angezeigt werden (zu groß oder nicht lesbar).",
+    "namedIn": "Erwähnt in {{names}}",
+    "pickTitle": "Wähle eine Datei zum Lesen oder Bearbeiten",
+    "pickDescription": "Notizen öffnen mit Vorschau; Änderungen landen im Verlauf von {{name}} und lassen sich rückgängig machen."
+  },
+  "notes": {
+    "filter": "Notizen filtern",
+    "clear": "Leeren",
+    "sort": "Notizen sortieren",
+    "sortBy": "Sortieren nach",
+    "folder": "Ordner",
+    "modified": "Zuletzt geändert",
+    "size": "Größe",
+    "memory": "Gedächtnis",
+    "unlinked": "<b>{{notes}}</b> ohne Link aus MEMORY.md",
+    "showAll": "Alle zeigen",
+    "showOnly": "Nur diese zeigen",
+    "noMatch": "Keine Notiz passt.",
+    "empty": "Noch keine Notizen."
+  },
+  "overview": {
+    "total": "<b>{{size}}</b> bei {{agents}}",
+    "scratch": "davon {{size}} Entwürfe in tmp/, die von selbst verschwinden",
+    "counting": "Zähle, was jeder Agent aufbewahrt…",
+    "sortAgents": "Agenten sortieren",
+    "largest": "Größte zuerst",
+    "az": "A–Z",
+    "memoryTitle": "MEMORY.md: {{chars}} von {{limit}} Zeichen",
+    "scratchTitle": "Entwürfe in workspace/tmp – verschwinden eine Woche nach der letzten Änderung von selbst",
+    "inBin": "{{n}} im Papierkorb"
+  },
+  "bin": {
+    "restored": "{{name}} wiederhergestellt",
+    "restoreFailed": "Wiederherstellen fehlgeschlagen",
+    "purgedOne": "Endgültig gelöscht",
+    "purgedAll": "Papierkorb geleert",
+    "freed": "{{size}} freigegeben.",
+    "title": "Zuletzt gelöscht",
+    "keptWith": "{{items}} · {{size}} · bleiben {{days}} Tage, dann entfernt die tägliche Aufräumrunde sie.",
+    "kept": "Bleiben {{days}} Tage, dann entfernt die tägliche Aufräumrunde sie.",
+    "emptyBin": "Papierkorb leeren",
+    "emptyTitle": "Der Papierkorb ist leer",
+    "emptyDescription": "Was du hier löschst, wartet {{days}} Tage, damit du es wiederherstellen kannst.",
+    "emptyFolder": "leerer Ordner",
+    "deletedAgo": "gelöscht {{time}}",
+    "daysLeft_one": "noch {{count}} Tag",
+    "daysLeft_other": "noch {{count}} Tage",
+    "goesToday": "verschwindet heute",
+    "putBack": "Wiederherstellen",
+    "deleteForGoodAria": "{{name}} endgültig löschen",
+    "confirmEmptyTitle": "Papierkorb von {{name}} leeren?",
+    "confirmDeleteTitle": "{{name}} endgültig löschen?",
+    "confirmEmptyBody": "{{items}} ({{size}}) werden endgültig entfernt.",
+    "confirmDeleteBody": "Das lässt sich danach nicht wiederherstellen.",
+    "historyNote": "Dateien, die der Agent committet hatte, bleiben in seinem Versionsverlauf.",
+    "deleteForGood": "Endgültig löschen"
+  },
+  "review": {
+    "kinds": {
+      "build": {
+        "title": "Installierte Pakete und Build-Ausgaben",
+        "hint": "Neu installieren oder bauen bringt sie zurück."
+      },
+      "junk": {
+        "title": "Datenmüll",
+        "hint": "Logs, temporäre Dateien und Finder-Reste."
+      },
+      "empty": {
+        "title": "Leere Dateien und Ordner",
+        "hint": "Nichts drin."
+      },
+      "duplicate": {
+        "title": "Kopien",
+        "hint": "Derselbe Inhalt liegt auch woanders – die andere Kopie bleibt."
+      },
+      "large": {
+        "title": "Große Dateien",
+        "hint": "Prüf, ob sie noch gebraucht werden."
+      },
+      "scratch": {
+        "title": "Große Entwürfe in tmp/",
+        "hint": "Verschwinden eine Woche nach der letzten Änderung von selbst – jetzt löschen, um den Platz schon heute freizugeben."
+      },
+      "stale": {
+        "title": "Seit 30 Tagen unberührt",
+        "hint": "Alte Berichte, Exporte und Experimente: Behalte, was noch zählt."
+      },
+      "loose": {
+        "title": "Unsortiert",
+        "hint": "Lose Dateien ganz oben: Sortier sie in einen Ordner."
+      },
+      "unlinkedNote": {
+        "title": "Notizen ohne Verlinkung",
+        "hint": "Gedächtnisnotizen ohne Link aus MEMORY.md werden selten gelesen: verlinken, zusammenführen oder löschen."
+      },
+      "brokenLink": {
+        "title": "Defekte Links im Gedächtnis",
+        "hint": "Das Gedächtnis verweist auf Notizen, die es nicht gibt: Korrigier den Link in der Notiz."
+      }
+    },
+    "toLookAt": "{{things}} zum Ansehen",
+    "nothingToTidy": "Nichts aufzuräumen",
+    "looking": "Sehe die Dateien durch…",
+    "couldGo": "{{size}} könnten weg",
+    "checked": "geprüft {{time}}",
+    "partial": "sehr groß, nicht alles wurde angesehen",
+    "intro": "Größen, Kopien, Datenmüll und Notizen ohne Verlinkung.",
+    "checkAgain": "Erneut prüfen",
+    "tidyTitle": "Die Dateien von {{name}} sind aufgeräumt",
+    "tidyDescription": "Keine Build-Ausgaben, kein Datenmüll, keine Kopien oder vergessenen Notizen. Das nächtliche Träumen sortiert den Workspace außerdem weiter.",
+    "selectAll": "Alle in „{{group}}“ auswählen",
+    "selected": "<b>{{items}}</b> ausgewählt · {{size}} · alles kommt zuerst in den Papierkorb",
+    "tickHint": "Hake an, was weg kann – es wartet 30 Tage im Papierkorb.",
+    "selectItem": "{{path}} auswählen",
+    "namedIn": "erwähnt in {{names}}",
+    "move": "Verschieben",
+    "open": "{{name}} öffnen"
+  },
+  "editor": {
+    "readOnly": {
+      "claude": "Aus den Einstellungen des Agenten erzeugt – bearbeite die Anweisungen stattdessen in den Einstellungen.",
+      "state": "Von Godmode geschriebener Schnappschuss – Änderungen würden überschrieben.",
+      "runs": "Rohes Laufprotokoll – schreibgeschützt.",
+      "conversations": "Chatverlauf – schreibgeschützt.",
+      "tooLarge": "Diese Datei ist zu groß, um sie hier zu bearbeiten."
+    },
+    "dreaming": "{{name}} träumt – Bearbeiten ist pausiert, bis das Träumen endet.",
+    "saved": "{{name}} gespeichert",
+    "saveFailed": "{{name}} konnte nicht gespeichert werden",
+    "conflictToast": "{{name}} hat sich während deiner Bearbeitung geändert",
+    "conflictToastDescription": "Lade sie neu oder überschreib sie mit deiner Version.",
+    "empty": "Leere Datei.",
+    "contentsAria": "Inhalt von {{path}}",
+    "missingPlaceholder": "Diese Datei gibt es noch nicht – fang an zu tippen, um sie zu erstellen.",
+    "unsaved": "Ungespeicherte Änderungen",
+    "viewMode": "Ansicht",
+    "source": "Quelltext",
+    "sideBySide": "Nebeneinander",
+    "split": "Geteilt",
+    "preview": "Vorschau",
+    "revert": "Verwerfen",
+    "openSettings": "Einstellungen öffnen",
+    "conflict": "<b>{{name}} hat sich während deiner Bearbeitung geändert</b> – vielleicht hat {{agent}} sie neu geschrieben. Lade neu, um die neue Version zu sehen (deine Änderungen gehen verloren), oder überschreib sie mit deiner.",
+    "reload": "Neu laden",
+    "overwrite": "Überschreiben",
+    "tooLargeTitle": "Zu groß, um sie hier zu öffnen",
+    "notText": "Keine Textdatei",
+    "unreadableHint": "Verschieben, umbenennen oder löschen kannst du sie in der Liste.",
+    "openFailed": "Datei konnte nicht geöffnet werden: {{error}}",
+    "lines_one": "{{n}} Zeile",
+    "lines_other": "{{n}} Zeilen",
+    "words_one": "{{n}} Wort",
+    "words_other": "{{n}} Wörter",
+    "loaded": "geladen {{time}}"
+  },
+  "browse": {
+    "folderNotes": {
+      "tmp": "Entwürfe – verschwinden von selbst",
+      "uploads": "Deine Anhänge",
+      "conversations": "Chatverläufe",
+      "runs": "Laufprotokolle",
+      "state": "Einstellungs-Schnappschuss",
+      "memory": "Notizen, die der Agent liest",
+      "workspace": "Was der Agent erstellt"
+    },
+    "breadcrumbAria": "Ordner",
+    "sort": "Sortieren",
+    "sortBy": "Sortieren nach",
+    "size": "Größe",
+    "modified": "Zuletzt geändert",
+    "new": "Neu",
+    "note": "Notiz",
+    "folder": "Ordner",
+    "filterPlaceholder": "Filtern oder alle Dateien und Notizen durchsuchen",
+    "filterAria": "Filtern und suchen",
+    "clear": "Leeren",
+    "selected": "{{items}} ausgewählt",
+    "move": "Verschieben",
+    "clearSelection": "Auswahl aufheben",
+    "selectAll": "Alle auswählen",
+    "colChanged": "Geändert",
+    "noMatch": "Hier passt nichts.",
+    "emptyFolder": "Dieser Ordner ist leer.",
+    "locked": "Von Godmode verwaltet",
+    "selectItem": "{{name}} auswählen",
+    "searchResults": "Suchergebnisse",
+    "inAllFiles": "In allen Dateien",
+    "noOtherHits": "Keine andere Datei oder Notiz erwähnt „{{query}}“.",
+    "line": "Zeile {{n}}",
+    "filtered": "{{shown}} von {{items}}",
+    "counting": "zähle…",
+    "actionsFor": "Aktionen für {{name}}",
+    "moveTo": "Verschieben nach…"
+  },
+  "dialogs": {
+    "delete": {
+      "titleOne": "{{name}} löschen?",
+      "titleMany": "{{items}} löschen?",
+      "description": "Es landet im Papierkorb von {{name}}: Dort kannst du es 30 Tage lang wiederherstellen.",
+      "stillNamesOne": "{{name}} erwähnt es noch",
+      "stillNamesMany": "{{name}} erwähnt noch {{n}} davon",
+      "namedIn": "<mono>{{file}}</mono> – in {{names}}",
+      "mayNeedOne": "Vielleicht wird es noch gebraucht. Entferne auch die Erwähnung oder behalte die Datei.",
+      "mayNeedMany": "Vielleicht werden sie noch gebraucht. Entferne auch die Erwähnung oder behalte die Dateien.",
+      "stays": "<mono>{{name}}</mono> bleibt: {{reason}}",
+      "moveToBin": "In den Papierkorb"
+    },
+    "name": {
+      "errors": {
+        "empty": "Gib einen Namen ein.",
+        "slash": "Ein Name darf keinen Schrägstrich enthalten – nutze Verschieben, um es woanders abzulegen.",
+        "dot": "Namen dürfen hier nicht mit einem Punkt beginnen.",
+        "tooLong": "Dieser Name ist zu lang.",
+        "taken": "{{name}} gibt es hier schon."
+      },
+      "titleRename": "{{name}} umbenennen",
+      "titleNote": "Neue Notiz",
+      "titleFolder": "Neuer Ordner",
+      "in": "In <mono>{{dir}}/</mono>",
+      "inRename": "In <mono>{{dir}}/</mono> – wo das Gedächtnis des Agenten es erwähnt, wird der neue Name mit eingetragen.",
+      "theRepository": "dem Repository",
+      "pinned": "Erwähnt in {{names}} – ändere den Namen auch dort, sonst sucht der Agent nach dem alten.",
+      "defaultNote": "unbenannt.md",
+      "defaultFolder": "neuer Ordner"
+    },
+    "move": {
+      "fold": "Zuklappen",
+      "unfold": "Aufklappen",
+      "titleOne": "{{name}} verschieben",
+      "titleMany": "{{items}} verschieben",
+      "description": "Wähle einen Ordner. Wo das Gedächtnis des Agenten eine verschobene Datei erwähnt, wird der neue Ort eingetragen.",
+      "to": "Nach {{dir}}/",
+      "notUpdated": "Wird beim Verschieben nicht angepasst",
+      "namedIn": "<mono>{{file}}</mono> wird erwähnt in {{names}}",
+      "changeHint": "Ändere den Pfad auch dort, sonst sucht der Agent am alten Ort.",
+      "moveAnyway": "Trotzdem verschieben",
+      "moveHere": "Hierher verschieben"
+    }
+  },
+  "page": {
+    "title": "Dateien",
+    "description": "Sieh dir an, was deine Agenten aufbewahren – Workspace, Notizen und Gedächtnis – und räum auf. Gelöschte Dateien warten 30 Tage im Papierkorb.",
+    "notFound": "Diesen Agenten gibt es nicht mehr",
+    "allAgents": "Alle Agenten",
+    "tabs": {
+      "browse": "Durchsuchen",
+      "notes": "Notizen",
+      "review": "Prüfen",
+      "bin": "Papierkorb"
+    },
+    "dreaming": "{{name}} träumt – Verschieben und Löschen warten, bis das Träumen vorbei ist.",
+    "working": "{{name}} arbeitet gerade und nutzt hier eventuell noch Dateien.",
+    "back": "Zurück zur Liste",
+    "discardTitle": "Ungespeicherte Änderungen verwerfen?",
+    "discardDescription": "Deine Änderungen an {{path}} sind nicht gespeichert.",
+    "keepEditing": "Weiter bearbeiten",
+    "discard": "Verwerfen"
+  }
+}

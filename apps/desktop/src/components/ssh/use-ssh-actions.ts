@@ -4,12 +4,13 @@ import { toast } from "sonner";
 import type { SshAssignmentKind, SshServer, SshTestResult } from "@godmode/shared";
 import { copyText } from "@/components/chat/copy-button";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
 /** Why a test failed, for a toast: the host key mismatch gets a way out. */
 export function testFailure(res: SshTestResult): string | undefined {
-  if (res.hostKeyChanged) return "The server presented a different host key than the pinned one. If it was reinstalled, forget the host key (⋯ menu) and test again.";
+  if (res.hostKeyChanged) return t("ssh:toast.hostKeyChanged");
   return res.error ?? undefined;
 }
 
@@ -33,13 +34,13 @@ export function useSshActions() {
     onSuccess: (res, { server, silent }) => {
       if (silent) return;
       if (res.ok) {
-        toast.success(`Signed in to ${server.name}`, {
+        toast.success(t("ssh:toast.signedIn", { name: server.name }), {
           description: [res.latencyMs !== null ? `${res.latencyMs} ms` : null, res.os].filter(Boolean).join(" · ") || undefined,
         });
-      } else toast.error(`Couldn't sign in to ${server.name}`, { description: testFailure(res) });
+      } else toast.error(t("ssh:toast.signInFailed", { name: server.name }), { description: testFailure(res) });
     },
     onError: (e, { server, silent }) => {
-      if (!silent) toastApiError(e, `Couldn't test “${server.name}”`, qc);
+      if (!silent) toastApiError(e, t("ssh:toast.testFailed", { name: server.name }), qc);
     },
     onSettled: (_res, _e, { server }) => {
       setTesting((s) => {
@@ -55,9 +56,9 @@ export function useSshActions() {
     mutationFn: (server: SshServer) => api.ssh.update(server.id, { hostKey: null }),
     onSuccess: (next) => {
       put(next);
-      toast.success("Host key forgotten", { description: "The next connection pins the key the server presents." });
+      toast.success(t("ssh:toast.hostKeyForgotten"), { description: t("ssh:toast.hostKeyForgottenDescription") });
     },
-    onError: (e) => toastApiError(e, "Couldn't forget the host key", qc),
+    onError: (e) => toastApiError(e, t("ssh:toast.forgetHostKeyFailed"), qc),
   });
 
   const remove = useMutation({
@@ -65,9 +66,9 @@ export function useSshActions() {
     onSuccess: (_res, server) => {
       qc.setQueryData<SshServer[]>(qk.sshServers, (old) => old?.filter((s) => s.id !== server.id));
       void qc.invalidateQueries({ queryKey: qk.agents });
-      toast.success(`${server.name} deleted`, { description: "Its saved password and key were removed from the vault." });
+      toast.success(t("ssh:toast.deleted", { name: server.name }), { description: t("ssh:toast.deletedDescription") });
     },
-    onError: (e, server) => toastApiError(e, `Couldn't delete “${server.name}”`, qc),
+    onError: (e, server) => toastApiError(e, t("ssh:toast.deleteFailed", { name: server.name }), qc),
   });
 
   const assign = useMutation({
@@ -77,21 +78,21 @@ export function useSshActions() {
       put(next);
       void qc.invalidateQueries({ queryKey: kind === "agent" ? qk.agents : qk.conversation(id) });
       if (assigned)
-        toast.success(`${name} can use ${next.name}`, {
-          description: kind === "agent" ? "Every run of the agent can sign in to it." : "Runs in the chat can sign in to it.",
+        toast.success(t("ssh:toast.assigned", { name, server: next.name }), {
+          description: kind === "agent" ? t("ssh:toast.assignedAgent") : t("ssh:toast.assignedChat"),
         });
       else
-        toast.success(`${name} no longer uses ${next.name}`, {
-          description: kind === "agent" ? "Chats that picked the server themselves keep it." : "Runs in the chat can't sign in to it anymore, unless its agent has it.",
+        toast.success(t("ssh:toast.unassigned", { name, server: next.name }), {
+          description: kind === "agent" ? t("ssh:toast.unassignedAgent") : t("ssh:toast.unassignedChat"),
         });
     },
-    onError: (e) => toastApiError(e, "Couldn't change the assignment", qc),
+    onError: (e) => toastApiError(e, t("ssh:toast.assignFailed"), qc),
   });
 
   const copyPublicKey = async (server: SshServer) => {
     if (!server.key) return;
-    if (await copyText(server.key.publicKey)) toast.success("Public key copied", { description: "Add it to ~/.ssh/authorized_keys on the server." });
-    else toast.error("Couldn't copy the public key");
+    if (await copyText(server.key.publicKey)) toast.success(t("ssh:toast.publicKeyCopied"), { description: t("ssh:toast.publicKeyCopiedDescription") });
+    else toast.error(t("ssh:toast.copyPublicKeyFailed"));
   };
 
   return { test, testing, forgetHostKey, remove, assign, copyPublicKey, put };

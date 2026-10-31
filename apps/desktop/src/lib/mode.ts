@@ -1,15 +1,27 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Bootstrap, InterfaceMode, Settings } from "@godmode/shared";
+import { t } from "@/i18n";
 import { api, errorMessage } from "./api";
 import { useBootstrap } from "./hooks";
 import { qk } from "./queryKeys";
 
-export const MODE_LABEL: Record<InterfaceMode, string> = { easy: "Easy", pro: "Professional" };
+export const MODE_LABEL: Record<InterfaceMode, string> = {
+  get easy() {
+    return t("system:mode.label.easy");
+  },
+  get pro() {
+    return t("system:mode.label.pro");
+  },
+};
 
 export const MODE_BLURB: Record<InterfaceMode, string> = {
-  easy: "Plain words and only what you need day to day. Everything else is one click away.",
-  pro: "Every tool, setting and detail in view: models, runs, machines, logs.",
+  get easy() {
+    return t("system:mode.blurb.easy");
+  },
+  get pro() {
+    return t("system:mode.blurb.pro");
+  },
 };
 
 /** The dashboard's interface mode; Professional until the human picks Easy. */
@@ -20,14 +32,52 @@ export function useInterfaceMode(): InterfaceMode {
 
 /** Easy mode titles and descriptions for the top-level pages, by path (the sidebar uses the same names). */
 export const EASY_PAGES: Record<string, { title?: string; description?: string }> = {
-  "/automations": { description: "Let your agents start work by themselves: on a schedule, or when something happens in your apps." },
-  "/files": { description: "What your agents keep: their files, notes and memory. Look through it, tidy it up, and put back what you deleted." },
-  "/activity": { title: "History", description: "Everything your agents did." },
-  "/calls": { title: "Phone calls" },
-  "/plugins": { title: "Add-ons", description: "Extra skills for your agents. Add one, switch it off or remove it any time." },
-  "/vault/cards": { title: "Payment cards" },
-  "/computer": { title: "Computer control" },
-  "/ssh": { title: "Servers" },
+  "/automations": {
+    get description() {
+      return t("system:easyPages.automations.description");
+    },
+  },
+  "/files": {
+    get description() {
+      return t("system:easyPages.files.description");
+    },
+  },
+  "/activity": {
+    get title() {
+      return t("system:easyPages.activity.title");
+    },
+    get description() {
+      return t("system:easyPages.activity.description");
+    },
+  },
+  "/calls": {
+    get title() {
+      return t("system:easyPages.calls.title");
+    },
+  },
+  "/plugins": {
+    get title() {
+      return t("system:easyPages.plugins.title");
+    },
+    get description() {
+      return t("system:easyPages.plugins.description");
+    },
+  },
+  "/vault/cards": {
+    get title() {
+      return t("system:easyPages.cards.title");
+    },
+  },
+  "/computer": {
+    get title() {
+      return t("system:easyPages.computer.title");
+    },
+  },
+  "/ssh": {
+    get title() {
+      return t("system:easyPages.ssh.title");
+    },
+  },
 };
 
 export function useEasyMode(): boolean {
@@ -51,12 +101,12 @@ export function useSetInterfaceMode() {
     onError: (err, _mode, ctx) => {
       if (ctx?.boot) qc.setQueryData(qk.bootstrap, ctx.boot);
       if (ctx?.settings) qc.setQueryData(qk.settings, ctx.settings);
-      toast.error("Could not switch the mode", { description: errorMessage(err) });
+      toast.error(t("system:mode.switchError"), { description: errorMessage(err) });
     },
     onSuccess: (_next, mode) => {
-      toast.success(`${MODE_LABEL[mode]} mode`, {
+      toast.success(t(`system:mode.switched.${mode}`), {
         id: "interface-mode",
-        description: mode === "easy" ? "Switch back any time in Settings → General." : undefined,
+        description: mode === "easy" ? t("system:mode.switchBackHint") : undefined,
         duration: 2500,
       });
     },

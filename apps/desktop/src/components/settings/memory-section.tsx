@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router";
 import { ArrowDownToLine, BrainCircuit, CheckCircle2, Download, ExternalLink, FileText, GitCommitHorizontal, Loader2, MoonStar, Sparkles } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Trans, useTranslation } from "react-i18next";
 import type { DreamingSettings, Settings } from "@godmode/shared";
 import { MAX_MEMORY_CHARS, MIN_MEMORY_CHARS, memoryBudget } from "@godmode/shared";
 import { cronToHuman, validateCron } from "@/components/agents/cron";
@@ -11,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { api, errorMessage } from "@/lib/api";
+import { intlLocale } from "@/i18n";
 import { qk } from "@/lib/queryKeys";
 import { openExternal } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -21,14 +23,15 @@ import { ChoiceCards, CommitInput, NumberField, SectionHeading, SettingRow, Sett
 type Backend = Settings["memory"]["backend"];
 
 const DREAM_SCHEDULES = [
-  { cron: "0 3 * * *", label: "Every night at 3:00" },
-  { cron: "0 1 * * *", label: "Every night at 1:00" },
-  { cron: "0 3,15 * * *", label: "Twice a day (3:00 and 15:00)" },
-  { cron: "0 3 * * 0", label: "Every Sunday at 3:00" },
-];
+  { cron: "0 3 * * *", labelKey: "memory.dreaming.schedules.night3" },
+  { cron: "0 1 * * *", labelKey: "memory.dreaming.schedules.night1" },
+  { cron: "0 3,15 * * *", labelKey: "memory.dreaming.schedules.twice" },
+  { cron: "0 3 * * 0", labelKey: "memory.dreaming.schedules.sunday" },
+] as const;
 const CUSTOM = "__custom__";
 
 export function MemorySection({ settings }: { settings: Settings }) {
+  const { t } = useTranslation("settings");
   const { patch } = useSettingsPatch();
   const m = settings.memory;
   const [params, setParams] = useSearchParams();
@@ -47,12 +50,9 @@ export function MemorySection({ settings }: { settings: Settings }) {
 
   return (
     <div className="space-y-5">
-      <SectionHeading
-        title="Memory"
-        description="Agents remember your preferences, facts and learnings across conversations — stored in each agent's own git repository on this machine."
-      />
+      <SectionHeading title={t("memory.title")} description={t("memory.description")} />
 
-      <SettingsGroup title="Memory backend" icon={<BrainCircuit />} bodyClassName="py-4">
+      <SettingsGroup title={t("memory.backend.title")} icon={<BrainCircuit />} bodyClassName="py-4">
         <ChoiceCards<Backend>
           name="memory-backend"
           value={m.backend}
@@ -61,19 +61,13 @@ export function MemorySection({ settings }: { settings: Settings }) {
             {
               value: "files",
               icon: <FileText />,
-              title: "Markdown files",
+              title: t("memory.backend.files"),
               badge: (
                 <Badge variant="secondary" className="h-5 text-[10px]">
-                  Recommended
+                  {t("memory.backend.recommended")}
                 </Badge>
               ),
-              description: (
-                <>
-                  Each agent keeps <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">MEMORY.md</code> and a{" "}
-                  <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">memory/</code> folder. Plain text you can read and edit — nothing
-                  to install.
-                </>
-              ),
+              description: <Trans t={t} i18nKey="memory.backend.filesDescription" components={{ c: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]" /> }} />,
             },
             {
               value: "claude-mem",
@@ -81,8 +75,7 @@ export function MemorySection({ settings }: { settings: Settings }) {
               title: "claude-mem",
               description: (
                 <>
-                  Automatic, searchable long-term memory via the open-source claude-mem plugin. Captures context from every session; data stays
-                  inside the agent's repo.{" "}
+                  {t("memory.backend.claudeMemDescription")}{" "}
                   <button
                     type="button"
                     className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
@@ -91,7 +84,7 @@ export function MemorySection({ settings }: { settings: Settings }) {
                       void openExternal("https://github.com/thedotmack/claude-mem");
                     }}
                   >
-                    Learn more <ExternalLink className="size-3" />
+                    {t("memory.backend.learnMore")} <ExternalLink className="size-3" />
                   </button>
                 </>
               ),
@@ -101,42 +94,34 @@ export function MemorySection({ settings }: { settings: Settings }) {
         {m.backend === "claude-mem" && <ClaudeMemStatus />}
       </SettingsGroup>
 
-      <SettingsGroup title="Bring your memory" icon={<ArrowDownToLine />}>
-        <SettingRow
-          label="Import from another AI"
-          description="What ChatGPT, Claude or Gemini remember about you — your work, people, preferences and plans — goes into your main agent's memory, so it knows you from day one."
-        >
+      <SettingsGroup title={t("memory.import.title")} icon={<ArrowDownToLine />}>
+        <SettingRow label={t("memory.import.label")} description={t("memory.import.description")}>
           <Button variant="outline" size="sm" onClick={() => onImportOpen(true)}>
-            Import…
+            {t("memory.import.button")}
           </Button>
         </SettingRow>
       </SettingsGroup>
       <ImportMemoryDialog open={importOpen} onOpenChange={onImportOpen} />
 
-      <SettingsGroup title="Housekeeping" icon={<GitCommitHorizontal />}>
+      <SettingsGroup title={t("memory.housekeeping.title")} icon={<GitCommitHorizontal />}>
         <SettingRow
-          label="Load memory into every chat"
+          label={t("memory.housekeeping.inject")}
           htmlFor="inject-memory"
-          description={
-            <>
-              The agent starts each new chat already knowing its <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">MEMORY.md</code> — no
-              need to look things up first.
-            </>
-          }
+          description={<Trans t={t} i18nKey="memory.housekeeping.injectDescription" components={{ c: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]" /> }} />}
         >
           <Switch id="inject-memory" checked={m.injectMemory} onCheckedChange={(injectMemory) => patch({ memory: { injectMemory } })} />
         </SettingRow>
         <SettingRow
-          label="Auto-commit after every run"
+          label={t("memory.housekeeping.autoCommit")}
           htmlFor="auto-commit"
-          description="Snapshots the agent's memory, transcripts and files into git so you can see — and undo — what changed."
+          description={t("memory.housekeeping.autoCommitDescription")}
         >
           <Switch id="auto-commit" checked={m.autoCommit} onCheckedChange={(autoCommit) => patch({ memory: { autoCommit } })} />
         </SettingRow>
         <SettingRow
-          label="Reflect after each run"
+          label={t("memory.housekeeping.reflect")}
           htmlFor="reflect"
-          description="The agent spends a moment writing down what it learned (costs a few extra tokens, makes it noticeably smarter over time)."
+          description={t("memory.housekeeping.reflectDescription")}
         >
           <Switch id="reflect" checked={m.reflectAfterRun} onCheckedChange={(reflectAfterRun) => patch({ memory: { reflectAfterRun } })} />
         </SettingRow>
@@ -148,54 +133,47 @@ export function MemorySection({ settings }: { settings: Settings }) {
 }
 
 function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; onChange: (patch: Partial<DreamingSettings>) => void }) {
+  const { t } = useTranslation("settings");
   const off = !d.enabled;
   return (
-    <SettingsGroup
-      title="Dreaming"
-      icon={<MoonStar />}
-      description="While you're away, agents review their recent conversations and rewrite their memory: they pick up what they learned, merge duplicates, fix contradictions and update dates — like sleeping on it — keep it short enough to load into every chat, and sort their workspace. Every dream can be reviewed and undone in the agent's Memory tab."
-    >
-      <SettingRow
-        label="Dream while idle"
-        htmlFor="dream-enabled"
-        description="Agents consolidate their memory in the background, on the schedule below."
-      >
+    <SettingsGroup title={t("memory.dreaming.title")} icon={<MoonStar />} description={t("memory.dreaming.description")}>
+      <SettingRow label={t("memory.dreaming.enabled")} htmlFor="dream-enabled" description={t("memory.dreaming.enabledDescription")}>
         <Switch id="dream-enabled" checked={d.enabled} onCheckedChange={(enabled) => onChange({ enabled })} />
       </SettingRow>
       <SettingRow
-        label="Schedule"
+        label={t("memory.dreaming.schedule")}
         htmlFor="dream-schedule"
         disabled={off}
-        description="In this computer's local time. Dreams missed while it was off or asleep are caught up when it wakes."
+        description={t("memory.dreaming.scheduleDescription")}
       >
         <DreamSchedule cron={d.cron} disabled={off} onChange={(cron) => onChange({ cron })} />
       </SettingRow>
       <SettingRow
-        label="Model"
+        label={t("memory.dreaming.model")}
         htmlFor="dream-model"
         disabled={off}
-        description="What stays in memory, what moves into a note and what goes is a judgment every later chat lives with — Opus is the default. A smaller model dreams for less."
+        description={t("memory.dreaming.modelDescription")}
       >
-        <ModelSelect id="dream-model" allowNone noneLabel="Same as the agent" disabled={off} value={d.model} onChange={(model) => onChange({ model })} />
+        <ModelSelect id="dream-model" allowNone noneLabel={t("memory.dreaming.sameAsAgent")} disabled={off} value={d.model} onChange={(model) => onChange({ model })} />
       </SettingRow>
       <SettingRow
-        label="Memory size"
+        label={t("memory.dreaming.size")}
         htmlFor="dream-memory-size"
         disabled={off}
         description={
-          <>
-            Dreams keep <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">MEMORY.md</code> under this and move the details into notes
-            in <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">memory/</code>. Every chat starts with it, so shorter means cheaper,
-            quicker chats. A chat loads up to {memoryBudget(d.maxMemoryChars).limit.toLocaleString()} characters — an agent whose memory outgrows that dreams as
-            soon as it is idle, without waiting for the schedule.
-          </>
+          <Trans
+            t={t}
+            i18nKey="memory.dreaming.sizeDescription"
+            values={{ limit: memoryBudget(d.maxMemoryChars).limit.toLocaleString(intlLocale()) }}
+            components={{ c: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]" /> }}
+          />
         }
       >
         <NumberField
           id="dream-memory-size"
           min={MIN_MEMORY_CHARS}
           max={MAX_MEMORY_CHARS}
-          suffix="characters"
+          suffix={t("memory.dreaming.characters")}
           disabled={off}
           value={d.maxMemoryChars}
           onCommit={(v) => v !== null && onChange({ maxMemoryChars: v })}
@@ -203,38 +181,32 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         />
       </SettingRow>
       <SettingRow
-        label="Tidy the workspace"
+        label={t("memory.dreaming.tidy")}
         htmlFor="dream-tidy"
         disabled={off}
-        description={
-          <>
-            Dreams also sort <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/</code>: loose files into topic folders, leftovers
-            of finished work out. Recent files and anything an automation uses stay put; what goes waits a week in{" "}
-            <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]">workspace/tmp</code>, and undoing the dream puts it all back.
-          </>
-        }
+        description={<Trans t={t} i18nKey="memory.dreaming.tidyDescription" components={{ c: <code className="rounded-[4px] bg-secondary px-1 font-mono text-[11px]" /> }} />}
       >
         <Switch id="dream-tidy" disabled={off} checked={d.tidyWorkspace} onCheckedChange={(tidyWorkspace) => onChange({ tidyWorkspace })} />
       </SettingRow>
       <SettingRow
-        label="Offer to take work off your plate"
+        label={t("memory.dreaming.offers")}
         htmlFor="dream-offers"
         disabled={off}
-        description="Your main agent's dreams also spot work it could do for you — a chore you repeat, a deadline nobody is on, a task left half-done — and offer it on Home. Nothing starts until you click Do it."
+        description={t("memory.dreaming.offersDescription")}
       >
         <Switch id="dream-offers" disabled={off} checked={d.offers} onCheckedChange={(offers) => onChange({ offers })} />
       </SettingRow>
       <SettingRow
-        label="Minimum new exchanges"
+        label={t("memory.dreaming.minExchanges")}
         htmlFor="dream-min-exchanges"
         disabled={off}
-        description="A scheduled dream waits until the agent has had at least this many new exchanges since its last one."
+        description={t("memory.dreaming.minExchangesDescription")}
       >
         <NumberField
           id="dream-min-exchanges"
           min={0}
           max={1000}
-          suffix="exchanges"
+          suffix={t("memory.dreaming.exchanges")}
           disabled={off}
           value={d.minNewExchanges}
           onCommit={(v) => v !== null && onChange({ minNewExchanges: v })}
@@ -242,16 +214,16 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
         />
       </SettingRow>
       <SettingRow
-        label="Refresh dates after"
+        label={t("memory.dreaming.refresh")}
         htmlFor="dream-refresh-days"
         disabled={off}
-        description="Without enough new activity, still dream when the last dream is this old and the memory mentions dates — so plans that have passed become past events. 0 = never."
+        description={t("memory.dreaming.refreshDescription")}
       >
         <NumberField
           id="dream-refresh-days"
           min={0}
           max={365}
-          suffix={d.refreshDays === 0 ? "never" : d.refreshDays === 1 ? "day" : "days"}
+          suffix={d.refreshDays === 0 ? t("memory.dreaming.never") : t("memory.dreaming.days", { count: d.refreshDays })}
           disabled={off}
           value={d.refreshDays}
           onCommit={(v) => v !== null && onChange({ refreshDays: v })}
@@ -264,6 +236,7 @@ function DreamingGroup({ dreaming: d, onChange }: { dreaming: DreamingSettings; 
 
 /** Schedule presets + "Custom…" for any 5-field cron expression. */
 function DreamSchedule({ cron, disabled, onChange }: { cron: string; disabled: boolean; onChange: (cron: string) => void }) {
+  const { t } = useTranslation("settings");
   const normalized = cron.trim().replace(/\s+/g, " ");
   const preset = DREAM_SCHEDULES.find((s) => s.cron === normalized);
   const [customMode, setCustomMode] = useState(false);
@@ -288,17 +261,17 @@ function DreamSchedule({ cron, disabled, onChange }: { cron: string; disabled: b
         <SelectContent>
           {DREAM_SCHEDULES.map((s) => (
             <SelectItem key={s.cron} value={s.cron}>
-              {s.label}
+              {t(s.labelKey)}
             </SelectItem>
           ))}
           <SelectSeparator />
-          <SelectItem value={CUSTOM}>Custom…</SelectItem>
+          <SelectItem value={CUSTOM}>{t("memory.dreaming.custom")}</SelectItem>
         </SelectContent>
       </Select>
       {custom && (
         <>
           <CommitInput
-            aria-label="Custom dreaming schedule (cron expression)"
+            aria-label={t("memory.dreaming.customLabel")}
             autoFocus={customMode && !!preset}
             delay={null}
             disabled={disabled}
@@ -311,15 +284,15 @@ function DreamSchedule({ cron, disabled, onChange }: { cron: string; disabled: b
               const next = v.trim().replace(/\s+/g, " ");
               if (!next || next === normalized) return setProblem(null);
               const fields = next.split(" ").length;
-              const invalid = fields === 5 ? validateCron(next) : `Expected 5 fields (minute hour day month weekday), got ${fields}`;
+              const invalid = fields === 5 ? validateCron(next) : t("memory.dreaming.expectedFields", { count: fields });
               setProblem(invalid);
-              if (invalid) toast.error("That schedule isn't valid", { description: invalid });
+              if (invalid) toast.error(t("memory.dreaming.invalid"), { description: invalid });
               else onChange(next);
             }}
           />
           <p id="dream-schedule-hint" className={cn("text-[11px] leading-relaxed", problem ? "text-destructive" : "text-muted-foreground")}>
-            {problem ? `${problem} — still dreaming ${cronToHuman(cron).replace(/^./, (c) => c.toLowerCase())}.` : cronToHuman(cron)} ·{" "}
-            <span className="font-mono whitespace-nowrap">minute hour day month weekday</span>
+            {problem ? t("memory.dreaming.stillDreaming", { problem, schedule: cronToHuman(cron).replace(/^./, (c) => c.toLowerCase()) }) : cronToHuman(cron)} ·{" "}
+            <span className="font-mono whitespace-nowrap">{t("memory.dreaming.cronFields")}</span>
           </p>
         </>
       )}
@@ -329,14 +302,15 @@ function DreamSchedule({ cron, disabled, onChange }: { cron: string; disabled: b
 
 /** Install state of the optional claude-mem plugin (managed by Godmode, per-agent stores). */
 function ClaudeMemStatus() {
+  const { t } = useTranslation("settings");
   const qc = useQueryClient();
   const doctor = useQuery({ queryKey: qk.doctor, queryFn: () => api.doctor.get() });
   const dep = doctor.data?.dependencies.find((d) => d.id === "claude-mem");
   const install = useMutation({
     mutationFn: () => api.doctor.install("claude-mem"),
     onSuccess: (res) => {
-      if (res.ok) toast.success("claude-mem installed", { description: "Agents use it from their next run." });
-      else toast.error("claude-mem could not be installed", { description: res.output.split("\n").at(-1) });
+      if (res.ok) toast.success(t("memory.claudeMem.installed"), { description: t("memory.claudeMem.installedDescription") });
+      else toast.error(t("memory.claudeMem.installError"), { description: res.output.split("\n").at(-1) });
       void qc.invalidateQueries({ queryKey: qk.doctor });
     },
     onError: (err) => toast.error(errorMessage(err)),
@@ -346,16 +320,16 @@ function ClaudeMemStatus() {
     <div className="mt-4 flex items-center justify-between gap-4 rounded-lg border bg-paper-2 px-4 py-3 text-sm">
       {dep?.ok ? (
         <p className="flex items-center gap-2 text-muted-foreground">
-          <CheckCircle2 className="size-4 text-success" /> claude-mem {dep.version} is installed. Each agent keeps its own isolated store.
+          <CheckCircle2 className="size-4 text-success" /> {t("memory.claudeMem.ready", { version: dep.version })}
         </p>
       ) : (
         <>
           <p className="text-muted-foreground">
-            claude-mem isn't installed yet — until it is, agents keep using <code className="font-mono text-[11px]">MEMORY.md</code>.{" "}
-            {dep?.detail?.includes("Node.js") && "It needs Node.js 20+."}
+            <Trans t={t} i18nKey="memory.claudeMem.missing" components={{ c: <code className="font-mono text-[11px]" /> }} />{" "}
+            {dep?.detail?.includes("Node.js") && t("memory.claudeMem.needsNode")}
           </p>
           <Button size="sm" onClick={() => install.mutate()} disabled={install.isPending || dep?.installable === false}>
-            {install.isPending ? <Loader2 className="animate-spin" /> : <Download />} Install
+            {install.isPending ? <Loader2 className="animate-spin" /> : <Download />} {t("memory.claudeMem.install")}
           </Button>
         </>
       )}

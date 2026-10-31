@@ -1,1 +1,14 @@
-{}
+{
+  "loading": "Loading",
+  "more": "More",
+  "breadcrumb": "Breadcrumb",
+  "sidebar": {
+    "title": "Sidebar",
+    "description": "Displays the mobile sidebar.",
+    "toggle": "Toggle sidebar"
+  },
+  "commandDialog": {
+    "title": "Command palette",
+    "description": "Search for a command to run…"
+  }
+}

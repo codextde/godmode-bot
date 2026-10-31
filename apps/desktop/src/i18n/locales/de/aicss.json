@@ -1,1 +1,50 @@
-{}
+{
+  "thinking": "Denkt nach",
+  "reasoning": "Überlegt…",
+  "thought": {
+    "seconds": "<verb>Nachgedacht</verb> für {{seconds}} s",
+    "process": "<verb>Gedankengang</verb>",
+    "summary": "<verb>Nachgedacht</verb> {{summary}}"
+  },
+  "codeBlock": {
+    "copyCode": "Code kopieren"
+  },
+  "fileDiff": {
+    "unchanged_one": "{{count}} unveränderte Zeile",
+    "unchanged_other": "{{count}} unveränderte Zeilen",
+    "showMore_one": "{{count}} weitere Zeile anzeigen",
+    "showMore_other": "{{count}} weitere Zeilen anzeigen"
+  },
+  "reasoningEffort": {
+    "label": "Aufwand",
+    "ariaLabel": "Denkaufwand",
+    "low": "Niedrig",
+    "medium": "Mittel",
+    "high": "Hoch",
+    "extraHigh": "Sehr hoch"
+  },
+  "orb": {
+    "thinking": "Denkt nach…",
+    "processing": "Verarbeitet…",
+    "working": "Arbeitet…",
+    "searching": "Sucht…",
+    "finalizing": "Schließt ab…",
+    "generating": "Erzeugt…",
+    "solving": "Löst…",
+    "routing": "Leitet weiter…",
+    "loading": "Lädt…",
+    "listening": "Hört zu…",
+    "streaming": "Überträgt…",
+    "analyzing": "Analysiert…",
+    "compiling": "Kompiliert…",
+    "sequencing": "Ordnet…",
+    "uploading": "Lädt hoch…",
+    "syncing": "Synchronisiert…",
+    "idling": "Wartet…",
+    "shaping": "Formt…",
+    "expanding": "Erweitert…",
+    "unfolding": "Entfaltet…",
+    "transforming": "Verwandelt…",
+    "dispersing": "Verteilt…"
+  }
+}

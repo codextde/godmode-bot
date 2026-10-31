@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CircleAlert, CircleCheck, FileCode2, FileJson2, FileText, Pencil, Plus, Save, ShieldCheck, Trash2, TriangleAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { MAX_MOD_BYTES, MAX_MOD_FILE_BYTES, MAX_MOD_FILES, MOD_HOOKS_PATH, MOD_MANIFEST_PATH, modPathProblem, type Mod, type ModCheck } from "@godmode/shared";
 import { CopyButton } from "@/components/chat/copy-button";
@@ -10,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { api } from "@/lib/api";
 import { modKey } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -75,10 +77,10 @@ function tooLarge(files: Files): string | null {
   let total = 0;
   for (const [path, content] of Object.entries(files)) {
     const bytes = encoder.encode(content).length;
-    if (bytes > MAX_MOD_FILE_BYTES) return `${path} is larger than ${MAX_MOD_FILE_BYTES / 1000} kB.`;
+    if (bytes > MAX_MOD_FILE_BYTES) return t("mods:code.fileTooLarge", { path, kb: MAX_MOD_FILE_BYTES / 1000 });
     total += bytes;
   }
-  return total > MAX_MOD_BYTES ? `Together the files are larger than ${MAX_MOD_BYTES / 1000} kB.` : null;
+  return total > MAX_MOD_BYTES ? t("mods:code.filesTooLarge", { kb: MAX_MOD_BYTES / 1000 }) : null;
 }
 
 /** The Code tab: the mod's files on the left, an editor on the right, and what Claude Code's validator says below. */
@@ -100,6 +102,7 @@ export function ModCode({
   jump: { line: number } | null;
   onOpenFile: (path: string, line?: number | null) => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
   const qc = useQueryClient();
   const [result, setResult] = useState<{ check: ModCheck | null; revision: number } | null>(null);
   const paths = useMemo(() => sortedPaths(draft.files), [draft.files]);
@@ -108,7 +111,7 @@ export function ModCode({
   const check = useMutation({
     mutationFn: ({ files }: { files: Files; revision: number }) => api.mods.checkFiles({ files }),
     onSuccess: (res, { revision }) => setResult({ check: res.check, revision }),
-    onError: (e) => toastApiError(e, "Couldn't check the code", qc),
+    onError: (e) => toastApiError(e, t("code.checkFailed"), qc),
   });
 
   const save = useMutation({
@@ -117,17 +120,17 @@ export function ModCode({
       draft.adopt(next.files);
       actions.put(next);
       setResult(null);
-      if (!next.check) toast.success("Code saved", { description: "It wasn't checked — Claude Code isn't installed on this computer." });
-      else if (next.check.ok) toast.success("Code saved", { description: "The check passed. It applies from the next message." });
-      else toast.warning("Code saved, but the check failed", { description: "Runs don't load the plugin until it passes." });
+      if (!next.check) toast.success(t("code.saved"), { description: t("code.savedUnchecked") });
+      else if (next.check.ok) toast.success(t("code.saved"), { description: t("code.savedPassed") });
+      else toast.warning(t("code.savedFailed"), { description: t("code.savedFailedDescription") });
     },
-    onError: (e) => toastApiError(e, "Couldn't save the code", qc),
+    onError: (e) => toastApiError(e, t("code.saveFailed"), qc),
   });
 
   const busy = check.isPending || save.isPending;
   const guard = (): boolean => {
     const problem = tooLarge(draft.files);
-    if (problem) toast.error("Too large for a plugin", { description: problem });
+    if (problem) toast.error(t("code.tooLarge"), { description: problem });
     return !problem;
   };
   const runCheck = () => {
@@ -140,13 +143,13 @@ export function ModCode({
   const shown = result ? result.check : mod.check;
   const note = result
     ? result.revision !== draft.revision
-      ? "Checked before your last edit"
+      ? t("code.noteBeforeEdit")
       : draft.isDirty
-        ? "This draft, not saved yet"
-        : "The saved code"
+        ? t("code.noteDraft")
+        : t("code.noteSaved")
     : draft.isDirty
-      ? "The saved code — your changes aren't checked yet"
-      : "The saved code";
+      ? t("code.noteSavedUnchecked")
+      : t("code.noteSaved");
 
   return (
     <div
@@ -161,15 +164,15 @@ export function ModCode({
       {(mod.needsReview || draft.stale) && (
         <div className="shrink-0 space-y-2 border-b p-3">
           {mod.needsReview && (
-            <Callout tone="warning" title={`${author} wrote this code`}>
-              Read it through before anything else. Switching the plugin on is your approval: from then on it runs in every turn of the agents it is for.
+            <Callout tone="warning" title={t("code.authorWrote", { author })}>
+              {t("code.reviewHint")}
             </Callout>
           )}
           {draft.stale && (
-            <Callout title="The saved code changed while you were editing">
-              <p>Saving replaces it with what you have here.</p>
+            <Callout title={t("code.staleTitle")}>
+              <p>{t("code.staleHint")}</p>
               <Button type="button" size="xs" variant="outline" className="mt-2" onClick={() => draft.adopt(mod.files)}>
-                Load the saved code instead
+                {t("code.loadSaved")}
               </Button>
             </Callout>
           )}
@@ -181,22 +184,22 @@ export function ModCode({
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {path === null ? (
-            <p className="p-5 text-sm text-muted-foreground">This plugin has no files yet. Add one to start.</p>
+            <p className="p-5 text-sm text-muted-foreground">{t("code.noFiles")}</p>
           ) : (
             <>
               <div className="flex h-9 shrink-0 items-center gap-2 border-b pr-1.5 pl-3 text-xs">
                 <span className="min-w-0 truncate font-mono text-foreground/85" title={path}>
                   {path}
                 </span>
-                {draft.dirtyPaths.has(path) && <span className="size-1.5 shrink-0 rounded-full bg-foreground/60" role="img" aria-label="Unsaved changes" />}
+                {draft.dirtyPaths.has(path) && <span className="size-1.5 shrink-0 rounded-full bg-foreground/60" role="img" aria-label={t("sheet.unsaved")} />}
                 <span className="ml-auto shrink-0 text-muted-foreground tabular-nums">
-                  {languageLabel(path)} · {draft.files[path].split("\n").length} lines
+                  {languageLabel(path)} · {t("code.lines", { count: draft.files[path].split("\n").length })}
                 </span>
-                <CopyButton text={draft.files[path]} label="Copy this file" />
+                <CopyButton text={draft.files[path]} label={t("code.copyFile")} />
               </div>
               <CodeEditor
                 key={path}
-                label={`Code of ${path}`}
+                label={t("code.editorLabel", { path })}
                 language={languageOf(path)}
                 value={draft.files[path]}
                 onChange={(content) => draft.write(path, content)}
@@ -210,22 +213,22 @@ export function ModCode({
             <p className="mr-auto flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
               {draft.isDirty ? (
                 <>
-                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-foreground/60" /> Unsaved changes
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-foreground/60" /> {t("sheet.unsaved")}
                 </>
               ) : (
-                "No unsaved changes"
+                t("code.noUnsaved")
               )}
             </p>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button type="button" variant="outline" size="sm" disabled={busy} onClick={runCheck}>
-                  {check.isPending ? <Spinner /> : <ShieldCheck />} Check
+                  {check.isPending ? <Spinner /> : <ShieldCheck />} {t("code.check")}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Run Claude Code's validator over this draft, without saving</TooltipContent>
+              <TooltipContent>{t("code.checkHint")}</TooltipContent>
             </Tooltip>
             <Button type="button" size="sm" disabled={!draft.isDirty || busy} onClick={runSave} aria-keyshortcuts="Meta+S Control+S">
-              {save.isPending ? <Spinner /> : <Save />} Save
+              {save.isPending ? <Spinner /> : <Save />} {t("common:actions.save")}
               <kbd className="font-mono text-[10px] tracking-wide opacity-55">{modKey}S</kbd>
             </Button>
           </div>
@@ -254,25 +257,26 @@ function FileList({
   draft: ModDraft;
   onOpenFile: (path: string) => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
   const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const problem = (path: string, renamed?: string): string | null => {
-    if (!path) return "Enter a path, like hooks/helper.ts.";
+    if (!path) return t("code.enterPath");
     const refused = modPathProblem(path);
     if (refused) return refused;
-    if (path !== renamed && path in draft.files) return "A file with this path already exists.";
-    if (!renamed && paths.length >= MAX_MOD_FILES) return `A plugin holds at most ${MAX_MOD_FILES} files here.`;
+    if (path !== renamed && path in draft.files) return t("code.pathExists");
+    if (!renamed && paths.length >= MAX_MOD_FILES) return t("code.maxFiles", { max: MAX_MOD_FILES });
     return null;
   };
 
   return (
-    <aside aria-label="Files" className="flex max-h-44 shrink-0 flex-col border-b bg-paper-2/60 @2xl:max-h-none @2xl:w-60 @2xl:border-r @2xl:border-b-0">
+    <aside aria-label={t("contents.files")} className="flex max-h-44 shrink-0 flex-col border-b bg-paper-2/60 @2xl:max-h-none @2xl:w-60 @2xl:border-r @2xl:border-b-0">
       <div className="flex shrink-0 items-center justify-between py-1.5 pr-1.5 pl-3">
-        <h3 className="eyebrow text-[10.5px]">Files</h3>
+        <h3 className="eyebrow text-[10.5px]">{t("contents.files")}</h3>
         <Button type="button" variant="ghost" size="xs" className="text-muted-foreground hover:text-foreground" onClick={() => setAdding(true)}>
-          <Plus /> New file
+          <Plus /> {t("code.newFile")}
         </Button>
       </div>
       <ul className="min-h-0 flex-1 space-y-px overflow-y-auto px-1.5 pb-2">
@@ -283,7 +287,7 @@ function FileList({
             return (
               <li key={p}>
                 <PathInput
-                  label={`New path for ${p}`}
+                  label={t("code.newPathFor", { path: p })}
                   initial={p}
                   validate={(next) => problem(next, p)}
                   onCancel={() => setRenaming(null)}
@@ -319,7 +323,7 @@ function FileList({
               {draft.dirtyPaths.has(p) && (
                 <span
                   role="img"
-                  aria-label="Unsaved changes"
+                  aria-label={t("sheet.unsaved")}
                   className={cn(
                     "pointer-events-none absolute top-1/2 right-2.5 size-1.5 -translate-y-1/2 rounded-full bg-foreground/60",
                     !fixed && "group-focus-within/file:hidden group-hover/file:hidden",
@@ -328,10 +332,10 @@ function FileList({
               )}
               {!fixed && (
                 <span className="absolute inset-y-0 right-0.5 flex items-center opacity-0 transition-opacity group-focus-within/file:opacity-100 group-hover/file:opacity-100">
-                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground" aria-label={`Rename ${p}`} onClick={() => setRenaming(p)}>
+                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-foreground" aria-label={t("code.renameAria", { path: p })} onClick={() => setRenaming(p)}>
                     <Pencil />
                   </Button>
-                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" aria-label={`Delete ${p}`} onClick={() => setDeleting(p)}>
+                  <Button type="button" variant="ghost" size="icon-xs" className="text-muted-foreground hover:text-destructive" aria-label={t("code.deleteAria", { path: p })} onClick={() => setDeleting(p)}>
                     <Trash2 />
                   </Button>
                 </span>
@@ -342,7 +346,7 @@ function FileList({
         {adding && (
           <li>
             <PathInput
-              label="Path of the new file"
+              label={t("code.newFilePath")}
               initial=""
               validate={(next) => problem(next)}
               onCancel={() => setAdding(false)}
@@ -359,9 +363,9 @@ function FileList({
       <ConfirmDialog
         open={deleting !== null}
         onOpenChange={(o) => !o && setDeleting(null)}
-        title={`Delete “${deleting ?? ""}”?`}
-        description="The file leaves the plugin when you save."
-        confirmLabel="Delete file"
+        title={t("code.deleteTitle", { path: deleting ?? "" })}
+        description={t("code.deleteDescription")}
+        confirmLabel={t("code.deleteFile")}
         onConfirm={() => {
           if (deleting) draft.remove(deleting);
           setDeleting(null);
@@ -452,30 +456,31 @@ function CheckPanel({
   paths: string[];
   onOpenFile: (path: string, line?: number | null) => void;
 }) {
+  const { t } = useTranslation("mods");
   const problems = check ? check.errors.length : 0;
   return (
-    <section aria-label="Check result" aria-live="polite" className="max-h-48 shrink-0 overflow-y-auto border-t px-4 py-3">
+    <section aria-label={t("code.checkResult")} aria-live="polite" className="max-h-48 shrink-0 overflow-y-auto border-t px-4 py-3">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
         {busy ? (
           <>
             <Spinner className="size-3.5" />
-            <span className="text-muted-foreground">Checking with Claude Code…</span>
+            <span className="text-muted-foreground">{t("code.checking")}</span>
           </>
         ) : !check ? (
           <>
             <CircleAlert className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-            <span className="text-muted-foreground">Not checked yet. The check needs Claude Code on this computer.</span>
+            <span className="text-muted-foreground">{t("overview.notCheckedNeedsClaude")}</span>
           </>
         ) : check.ok ? (
           <>
             <CircleCheck className="size-3.5 shrink-0 text-success" aria-hidden />
-            <span className="font-medium">The check passed</span>
+            <span className="font-medium">{t("code.passed")}</span>
           </>
         ) : (
           <>
             <TriangleAlert className="size-3.5 shrink-0 text-destructive" aria-hidden />
             <span className="font-medium text-destructive">
-              {problems === 0 ? "The check failed" : problems === 1 ? "1 problem to fix" : `${problems} problems to fix`}
+              {problems === 0 ? t("code.failed") : t("code.problems", { count: problems })}
             </span>
           </>
         )}
@@ -485,8 +490,8 @@ function CheckPanel({
         <div className="mt-2 space-y-2">
           {check.ok && (
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="eyebrow mr-1 text-[10.5px]">Hooks into</span>
-              {check.hooks.length ? <HookChips hooks={check.hooks} max={12} /> : <span className="text-xs text-muted-foreground">Nothing yet</span>}
+              <span className="eyebrow mr-1 text-[10.5px]">{t("card.hooksInto")}</span>
+              {check.hooks.length ? <HookChips hooks={check.hooks} max={12} /> : <span className="text-xs text-muted-foreground">{t("card.nothingYet")}</span>}
             </div>
           )}
           <ModProblems problems={check.errors} tone="error" paths={paths} onOpenFile={onOpenFile} />

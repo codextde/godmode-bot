@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, CircleCheck, FileUp, KeyRound, Laptop, RectangleEllipsis, ShieldAlert, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { SshAuthMethod, SshGeneratedKey, SshHostKey, SshLocalKey, SshServer, SshServerInput, SshServerPatch, SshTestResult, SshTestStage } from "@godmode/shared";
 import {
@@ -42,13 +43,13 @@ type TestState = { sig: string; result: SshTestResult } | { sig: string; error: 
 
 const TOGGLE_ON = "data-[state=on]:bg-secondary data-[state=on]:text-foreground data-[state=on]:ring-1 data-[state=on]:ring-foreground/15 data-[state=on]:ring-inset";
 
-const STAGE_TITLE: Record<SshTestStage, string> = {
-  config: "Check the settings",
-  connect: "Couldn't reach the server",
-  "host-key": "The host key check failed",
-  auth: "Sign-in failed",
-  command: "Signed in, but the first command failed",
-};
+const STAGE_TITLE = {
+  config: "dialog.stage.config",
+  connect: "dialog.stage.connect",
+  "host-key": "dialog.stage.hostKey",
+  auth: "dialog.stage.auth",
+  command: "dialog.stage.command",
+} as const satisfies Record<SshTestStage, string>;
 
 function looksLikePublicKey(text: string): boolean {
   const t = text.trim();
@@ -72,7 +73,8 @@ function Field({ label, htmlFor, hint, error, children, className }: { label: Re
 }
 
 function Optional() {
-  return <span className="font-normal text-muted-foreground">(optional)</span>;
+  const { t } = useTranslation("common");
+  return <span className="font-normal text-muted-foreground">({t("words.optional")})</span>;
 }
 
 /** Add or edit an SSH server: address, sign-in (password or key), a connection test that pins the host key. */
@@ -88,6 +90,7 @@ export function ServerDialog({
   onOpenChange: (open: boolean) => void;
   actions: SshActions;
 }) {
+  const { t } = useTranslation(["ssh", "common"]);
   const qc = useQueryClient();
   const short = useShortPath();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -164,15 +167,15 @@ export function ServerDialog({
   };
 
   const errors: Partial<Record<"name" | "host" | "port" | "username" | "password" | "key", string>> = {};
-  if (!name.trim()) errors.name = "Give the server a name";
-  if (!host.trim()) errors.host = "Enter a host name or IP address";
-  else if (/\s|@/.test(host.trim())) errors.host = "Only the host — the user goes below";
+  if (!name.trim()) errors.name = t("dialog.errors.name");
+  if (!host.trim()) errors.host = t("dialog.errors.host");
+  else if (/\s|@/.test(host.trim())) errors.host = t("dialog.errors.hostOnly");
   if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) errors.port = "1–65535";
-  if (!username.trim()) errors.username = "Enter the user to sign in as";
-  if (auth === "password" && !password && !(editing && savedLoginPassword)) errors.password = "Enter the password";
+  if (!username.trim()) errors.username = t("dialog.errors.username");
+  if (auth === "password" && !password && !(editing && savedLoginPassword)) errors.password = t("dialog.errors.password");
   if (auth === "key" && !savedKey) {
-    if (publicKeyPasted) errors.key = "That's a public key — use the private key (the file without .pub)";
-    else if (!newKeyGiven) errors.key = "Paste, load or generate a private key";
+    if (publicKeyPasted) errors.key = t("dialog.errors.publicKey");
+    else if (!newKeyGiven) errors.key = t("dialog.errors.keyMissing");
   }
   const connectionErrors = { ...errors };
   delete connectionErrors.name;
@@ -223,18 +226,18 @@ export function ServerDialog({
       setFileName(null);
       setPassphrase("");
     },
-    onError: (e) => toastApiError(e, "Couldn't generate a key", qc),
+    onError: (e) => toastApiError(e, t("dialog.generateFailed"), qc),
   });
 
   const create = useMutation({
     mutationFn: (input: SshServerInput) => api.ssh.create(input),
     onSuccess: (created) => {
       actions.put(created);
-      toast.success("Server added", { description: "Pick it for a chat with the SSH button, or assign it to an agent." });
+      toast.success(t("dialog.added"), { description: t("dialog.addedDescription") });
       actions.test.mutate({ server: created, silent: true });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Couldn't add the server", qc),
+    onError: (e) => toastApiError(e, t("dialog.addFailed"), qc),
   });
 
   const patch: SshServerPatch = {};
@@ -256,11 +259,11 @@ export function ServerDialog({
     mutationFn: ({ id, patch: p }: { id: string; patch: SshServerPatch }) => api.ssh.update(id, p),
     onSuccess: (next) => {
       actions.put(next);
-      toast.success("Changes saved");
+      toast.success(t("dialog.saved"));
       if (reconnects) actions.test.mutate({ server: next, silent: true });
       onOpenChange(false);
     },
-    onError: (e) => toastApiError(e, "Couldn't save the changes", qc),
+    onError: (e) => toastApiError(e, t("dialog.saveFailed"), qc),
   });
 
   const saving = create.isPending || update.isPending;
@@ -293,7 +296,7 @@ export function ServerDialog({
     if (fileRef.current) fileRef.current.value = "";
     if (!file) return;
     if (file.size > MAX_KEY_FILE) {
-      toast.error("That file is too big for a private key");
+      toast.error(t("dialog.fileTooBig"));
       return;
     }
     const text = await file.text();
@@ -317,26 +320,26 @@ export function ServerDialog({
       <DialogContent className="gap-0 overflow-hidden rounded-2xl p-0 sm:max-w-xl">
         <form onSubmit={submit} noValidate className="min-w-0">
           <DialogHeader className="border-b bg-paper-2 px-6 pt-6 pb-5">
-            <DialogTitle>{server ? `Edit “${server.name}”` : "Add SSH server"}</DialogTitle>
-            <DialogDescription>Godmode signs in for your agents. The password or key is sealed in the vault — the AI never sees it.</DialogDescription>
+            <DialogTitle>{server ? t("dialog.titleEdit", { name: server.name }) : t("dialog.titleAdd")}</DialogTitle>
+            <DialogDescription>{t("dialog.description")}</DialogDescription>
           </DialogHeader>
 
           <div ref={bodyRef} className="max-h-[min(40rem,calc(100dvh-15rem))] space-y-5 overflow-y-auto px-6 py-5">
-            <Field label="Name" htmlFor="ssh-name" error={err("name")}>
+            <Field label={t("dialog.name")} htmlFor="ssh-name" error={err("name")}>
               <Input
                 id="ssh-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 maxLength={MAX_NAME}
                 autoFocus
-                placeholder="e.g. Production web"
+                placeholder={t("dialog.namePlaceholder")}
                 aria-invalid={!!err("name")}
                 aria-describedby={err("name") ? "ssh-name-error" : undefined}
               />
             </Field>
 
             <div className="grid grid-cols-[minmax(0,1fr)_6rem] gap-3">
-              <Field label="Host" htmlFor="ssh-host" error={err("host")} hint="Paste user@host:port to fill in all three.">
+              <Field label={t("dialog.host")} htmlFor="ssh-host" error={err("host")} hint={t("dialog.hostHint")}>
                 <Input
                   id="ssh-host"
                   value={host}
@@ -345,7 +348,7 @@ export function ServerDialog({
                     if (onHostInput(e.clipboardData.getData("text"))) e.preventDefault();
                   }}
                   onBlur={() => onHostInput(host)}
-                  placeholder="203.0.113.10 or web-1.example.com"
+                  placeholder={t("dialog.hostPlaceholder")}
                   autoComplete="off"
                   autoCapitalize="off"
                   autoCorrect="off"
@@ -355,7 +358,7 @@ export function ServerDialog({
                   aria-describedby={err("host") ? "ssh-host-error" : undefined}
                 />
               </Field>
-              <Field label="Port" htmlFor="ssh-port" error={err("port")}>
+              <Field label={t("dialog.port")} htmlFor="ssh-port" error={err("port")}>
                 <Input
                   id="ssh-port"
                   value={port}
@@ -370,7 +373,7 @@ export function ServerDialog({
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="Username" htmlFor="ssh-user" error={err("username")}>
+              <Field label={t("dialog.username")} htmlFor="ssh-user" error={err("username")}>
                 <Input
                   id="ssh-user"
                   value={username}
@@ -387,7 +390,7 @@ export function ServerDialog({
               </Field>
               <div className="space-y-1.5">
                 <span id="ssh-auth-label" className="block text-sm leading-none font-medium">
-                  Sign in with
+                  {t("dialog.signInWith")}
                 </span>
                 <ToggleGroup
                   type="single"
@@ -398,10 +401,10 @@ export function ServerDialog({
                   className="w-full"
                 >
                   <ToggleGroupItem value="password" className={cn("flex-1 gap-1.5", TOGGLE_ON)}>
-                    <RectangleEllipsis /> Password
+                    <RectangleEllipsis /> {t("dialog.password")}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="key" className={cn("flex-1 gap-1.5", TOGGLE_ON)}>
-                    <KeyRound /> SSH key
+                    <KeyRound /> {t("dialog.sshKey")}
                   </ToggleGroupItem>
                 </ToggleGroup>
               </div>
@@ -409,13 +412,13 @@ export function ServerDialog({
 
             <div className="space-y-4 rounded-xl border bg-paper-2/60 p-4">
               {auth === "password" ? (
-                <Field label="Password" htmlFor="ssh-password" error={err("password")}>
+                <Field label={t("dialog.password")} htmlFor="ssh-password" error={err("password")}>
                   <PasswordInput
                     id="ssh-password"
                     groupClassName="h-9 bg-card"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder={editing && savedLoginPassword ? "Saved — leave empty to keep" : "Password for this user"}
+                    placeholder={editing && savedLoginPassword ? t("dialog.savedKeepPlaceholder") : t("dialog.passwordPlaceholder")}
                     aria-invalid={!!err("password")}
                     aria-describedby={err("password") ? "ssh-password-error" : undefined}
                   />
@@ -424,7 +427,7 @@ export function ServerDialog({
                 <>
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="ssh-key">Private key</Label>
+                      <Label htmlFor="ssh-key">{t("dialog.privateKey")}</Label>
                       {replacingKey && (
                         <button
                           type="button"
@@ -434,7 +437,7 @@ export function ServerDialog({
                           }}
                           className="rounded-sm text-xs text-muted-foreground transition hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
                         >
-                          Keep the saved key
+                          {t("dialog.keepSavedKey")}
                         </button>
                       )}
                     </div>
@@ -446,28 +449,28 @@ export function ServerDialog({
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-sm font-medium">
-                            {keyTypeLabel(savedKey.type)} key <span className="font-normal text-muted-foreground">· saved in the vault</span>
+                            <Trans t={t} i18nKey="dialog.savedKey" values={{ type: keyTypeLabel(savedKey.type) }} components={{ muted: <span className="font-normal text-muted-foreground" /> }} />
                           </p>
                           <p className="truncate font-mono text-[11.5px] text-muted-foreground" title={savedKey.fingerprint}>
                             {savedKey.fingerprint}
                           </p>
                         </div>
-                        <CopyButton text={savedKey.publicKey} label="Copy public key" className="size-7" />
+                        <CopyButton text={savedKey.publicKey} label={t("dialog.copyPublicKey")} className="size-7" />
                         <Button id="ssh-key" type="button" variant="outline" size="sm" onClick={() => setReplacingKey(true)}>
-                          Replace key
+                          {t("dialog.replaceKey")}
                         </Button>
                       </div>
                     ) : keySource.kind !== "paste" ? (
                       <div className="flex h-10 items-center gap-2.5 rounded-md border bg-card pr-1 pl-3 shadow-xs">
                         <KeyRound className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                         <span className="min-w-0 flex-1 truncate text-[13px]">
-                          {keySource.kind === "local" ? <span className="font-mono">{short(keySource.key.path)}</span> : <span className="font-medium">New key</span>}
+                          {keySource.kind === "local" ? <span className="font-mono">{short(keySource.key.path)}</span> : <span className="font-medium">{t("dialog.newKey")}</span>}
                           <span className="text-muted-foreground">
                             {" "}
                             · {keyTypeLabel(keySource.key.type)} · <span className="font-mono">{shortFingerprint(keySource.key.fingerprint, 20)}</span>
                           </span>
                         </span>
-                        <Button id="ssh-key" type="button" variant="ghost" size="icon-xs" aria-label="Use another key" className="text-muted-foreground" onClick={clearKey}>
+                        <Button id="ssh-key" type="button" variant="ghost" size="icon-xs" aria-label={t("dialog.useAnotherKey")} className="text-muted-foreground" onClick={clearKey}>
                           <X />
                         </Button>
                       </div>
@@ -489,7 +492,7 @@ export function ServerDialog({
                             e.preventDefault();
                             void loadFile(file);
                           }}
-                          placeholder={"Paste a private key (OpenSSH, PEM or PuTTY)\n-----BEGIN OPENSSH PRIVATE KEY-----"}
+                          placeholder={`${t("dialog.keyPlaceholder")}\n-----BEGIN OPENSSH PRIVATE KEY-----`}
                           spellCheck={false}
                           autoComplete="off"
                           className="max-h-44 min-h-24 bg-card font-mono text-[11.5px] leading-relaxed placeholder:font-sans placeholder:text-[13px]"
@@ -499,17 +502,17 @@ export function ServerDialog({
                         <div className="flex flex-wrap items-center gap-1.5">
                           <input ref={fileRef} type="file" className="hidden" aria-hidden tabIndex={-1} onChange={(e) => void loadFile(e.target.files?.[0])} />
                           <Button type="button" variant="outline" size="xs" onClick={() => fileRef.current?.click()}>
-                            <FileUp /> Load file…
+                            <FileUp /> {t("dialog.loadFile")}
                           </Button>
                           {keys.length > 0 && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button type="button" variant="outline" size="xs">
-                                  <Laptop /> From this computer <ChevronDown className="opacity-60" />
+                                  <Laptop /> {t("dialog.fromThisComputer")} <ChevronDown className="opacity-60" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="start" className="w-80">
-                                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Private keys in ~/.ssh</DropdownMenuLabel>
+                                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t("dialog.localKeys")}</DropdownMenuLabel>
                                 {keys.map((k) => (
                                   <DropdownMenuItem
                                     key={k.path}
@@ -525,7 +528,7 @@ export function ServerDialog({
                                     <span className="min-w-0 flex-1">
                                       <span className="block truncate font-mono text-[12.5px]">{k.name}</span>
                                       <span className="block truncate text-[11px] text-muted-foreground">
-                                        {[keyTypeLabel(k.type), shortFingerprint(k.fingerprint, 20), k.encrypted ? "passphrase" : null, k.comment || null].filter(Boolean).join(" · ")}
+                                        {[keyTypeLabel(k.type), shortFingerprint(k.fingerprint, 20), k.encrypted ? t("dialog.passphraseTag") : null, k.comment || null].filter(Boolean).join(" · ")}
                                       </span>
                                     </span>
                                   </DropdownMenuItem>
@@ -534,7 +537,7 @@ export function ServerDialog({
                             </DropdownMenu>
                           )}
                           <Button type="button" variant="outline" size="xs" disabled={generate.isPending} onClick={() => generate.mutate()}>
-                            {generate.isPending ? <Spinner className="size-3" /> : <KeyRound />} Generate new key
+                            {generate.isPending ? <Spinner className="size-3" /> : <KeyRound />} {t("dialog.generateKey")}
                           </Button>
                           {fileName && <span className="max-w-40 truncate text-xs text-muted-foreground">{fileName}</span>}
                         </div>
@@ -551,16 +554,16 @@ export function ServerDialog({
 
                   {keySource.kind !== "generated" && (!savedKey || savedKey.encrypted) && (
                     <Field
-                      label={localEncrypted ? "Passphrase" : <>Passphrase <Optional /></>}
+                      label={localEncrypted ? t("dialog.passphrase") : <>{t("dialog.passphrase")} <Optional /></>}
                       htmlFor="ssh-passphrase"
-                      hint={localEncrypted ? "This key is protected — Godmode needs its passphrase to sign in." : "Only if the key is protected."}
+                      hint={localEncrypted ? t("dialog.passphraseHintLocal") : t("dialog.passphraseHint")}
                     >
                       <PasswordInput
                         id="ssh-passphrase"
                         groupClassName="h-9 bg-card"
                         value={passphrase}
                         onChange={(e) => setPassphrase(e.target.value)}
-                        placeholder={savedKey?.encrypted ? "Saved — leave empty to keep" : undefined}
+                        placeholder={savedKey?.encrypted ? t("dialog.savedKeepPlaceholder") : undefined}
                       />
                     </Field>
                   )}
@@ -568,11 +571,11 @@ export function ServerDialog({
                   <Field
                     label={
                       <>
-                        Password for sudo <Optional />
+                        {t("dialog.sudoPassword")} <Optional />
                       </>
                     }
                     htmlFor="ssh-sudo"
-                    hint="Godmode types it when an agent runs a command with sudo. An agent with a shell on this account could capture it — a narrow NOPASSWD sudo rule is safer."
+                    hint={t("dialog.sudoHint")}
                   >
                     <PasswordInput
                       id="ssh-sudo"
@@ -580,7 +583,7 @@ export function ServerDialog({
                       value={sudoPassword}
                       disabled={removeSudo}
                       onChange={(e) => setSudoPassword(e.target.value)}
-                      placeholder={removeSudo ? "Removed when you save" : editing && savedLoginPassword ? "Saved — leave empty to keep" : "Only if sudo asks for one"}
+                      placeholder={removeSudo ? t("dialog.sudoRemovedPlaceholder") : editing && savedLoginPassword ? t("dialog.savedKeepPlaceholder") : t("dialog.sudoPlaceholder")}
                       trailing={
                         editing &&
                         savedLoginPassword && (
@@ -592,7 +595,7 @@ export function ServerDialog({
                               setSudoPassword("");
                             }}
                           >
-                            {removeSudo ? "Undo" : "Remove"}
+                            {removeSudo ? t("common:actions.undo") : t("common:actions.remove")}
                           </InputGroupButton>
                         )
                       }
@@ -602,13 +605,13 @@ export function ServerDialog({
               )}
             </div>
 
-            <Field label="Description" htmlFor="ssh-description" hint="Agents read this to know what the server is for and how to work on it.">
+            <Field label={t("common:words.description")} htmlFor="ssh-description" hint={t("dialog.descriptionHint")}>
               <Textarea
                 id="ssh-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={2000}
-                placeholder="Production web server — Ubuntu, nginx and Postgres. Deploys go to /srv/app."
+                placeholder={t("dialog.descriptionPlaceholder")}
                 className="max-h-40 min-h-20"
               />
             </Field>
@@ -638,15 +641,15 @@ export function ServerDialog({
           <DialogFooter className="border-t bg-paper-2 px-6 py-4 sm:justify-between">
             <Button type="button" variant="outline" onClick={runTest} disabled={test.isPending}>
               {test.isPending ? <Spinner /> : <ShieldCheck />}
-              {test.isPending ? "Testing…" : "Test connection"}
+              {test.isPending ? t("status.testing") : t("dialog.testConnection")}
             </Button>
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-                Cancel
+                {t("common:actions.cancel")}
               </Button>
               <Button type="submit" disabled={saving || (editing && !changed)}>
                 {saving && <Spinner />}
-                {server ? "Save changes" : "Add server"}
+                {server ? t("dialog.saveChanges") : t("dialog.addServer")}
               </Button>
             </div>
           </DialogFooter>
@@ -657,20 +660,21 @@ export function ServerDialog({
 }
 
 function AuthorizeKeyCallout({ publicKey }: { publicKey: string }) {
+  const { t } = useTranslation("ssh");
   const command = `mkdir -p ~/.ssh && echo '${publicKey.trim()}' >> ~/.ssh/authorized_keys`;
   return (
     <div className="space-y-2.5 rounded-lg border bg-card p-3.5 text-xs shadow-xs" role="note">
       <div>
-        <p className="text-[13px] font-medium">Add the public key to the server before testing</p>
-        <p className="mt-0.5 text-muted-foreground">Sign in another way once (your hosting panel or console) and run this — then Godmode can use the key.</p>
+        <p className="text-[13px] font-medium">{t("authorize.title")}</p>
+        <p className="mt-0.5 text-muted-foreground">{t("authorize.description")}</p>
       </div>
-      <CodeLine text={command} label="Copy command" />
+      <CodeLine text={command} label={t("authorize.copyCommand")} />
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center gap-1 rounded-sm text-muted-foreground transition outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-          <ChevronDown className="size-3.5 -rotate-90 transition-transform group-open:rotate-0" /> Public key only
+          <ChevronDown className="size-3.5 -rotate-90 transition-transform group-open:rotate-0" /> {t("authorize.publicKeyOnly")}
         </summary>
         <div className="mt-2">
-          <CodeLine text={publicKey.trim()} label="Copy public key" />
+          <CodeLine text={publicKey.trim()} label={t("authorize.copyPublicKey")} />
         </div>
       </details>
     </div>
@@ -699,6 +703,7 @@ function TestResultPanel({
   trustNewKey: boolean;
   onTrustNewKey: (v: boolean) => void;
 }) {
+  const { t } = useTranslation("ssh");
   if ("error" in state) {
     return (
       <div aria-live="polite" className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/[0.05] px-3 py-2.5 text-xs" role="alert">
@@ -715,9 +720,9 @@ function TestResultPanel({
         <div className="flex items-start gap-2.5">
           <ShieldAlert className="mt-px size-3.5 shrink-0 text-warning" aria-hidden />
           <div className="min-w-0 space-y-1">
-            <p className="text-[13px] font-medium">The server's host key changed</p>
+            <p className="text-[13px] font-medium">{t("result.hostKeyChangedTitle")}</p>
             <p className="leading-relaxed text-muted-foreground">
-              That's expected after a reinstall. If nothing changed on the server, someone may be intercepting the connection — don't trust the new key.
+              {t("result.hostKeyChangedBody")}
             </p>
             <p className="font-mono text-[11px] break-all text-foreground/85">
               {keyTypeLabel(r.hostKey.type)} {r.hostKey.fingerprint}
@@ -726,7 +731,7 @@ function TestResultPanel({
         </div>
         <label htmlFor="ssh-trust-key" className="ml-6 flex cursor-pointer items-center gap-2 text-[13px]">
           <Checkbox id="ssh-trust-key" checked={trustNewKey} onCheckedChange={(v) => onTrustNewKey(v === true)} />
-          Trust the new host key
+          {t("result.trustNewKey")}
         </label>
       </div>
     );
@@ -737,7 +742,7 @@ function TestResultPanel({
       <div aria-live="polite" className="flex items-start gap-2.5 rounded-lg border border-destructive/25 bg-destructive/[0.05] px-3 py-2.5 text-xs" role="alert">
         <TriangleAlert className="mt-px size-3.5 shrink-0 text-destructive" aria-hidden />
         <div className="min-w-0 space-y-0.5">
-          <p className="font-medium text-destructive">{r.stage ? STAGE_TITLE[r.stage] : "Couldn't connect"}</p>
+          <p className="font-medium text-destructive">{r.stage ? t(STAGE_TITLE[r.stage]) : t("result.couldNotConnect")}</p>
           {r.error && <p className="leading-relaxed break-words text-destructive/85">{r.error}</p>}
         </div>
       </div>
@@ -750,7 +755,7 @@ function TestResultPanel({
       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
         <CircleCheck className="size-3.5 shrink-0 text-success" aria-hidden />
         <span className="font-medium">
-          Signed in as <span className="font-mono">{username}</span>
+          <Trans t={t} i18nKey="result.signedInAs" values={{ user: username }} components={{ mono: <span className="font-mono" /> }} />
         </span>
         <span className="text-muted-foreground">{[r.latencyMs !== null ? `${r.latencyMs} ms` : null, r.os].filter(Boolean).map((part) => `· ${part}`).join(" ")}</span>
       </p>
@@ -760,7 +765,7 @@ function TestResultPanel({
             <span className="font-mono text-[11px] break-all text-foreground/85">
               {keyTypeLabel(r.hostKey.type)} {r.hostKey.fingerprint}
             </span>
-            <span className="block">{same ? "Matches the pinned host key." : "Godmode trusts only this host key from now on."}</span>
+            <span className="block">{same ? t("result.matchesPinned") : t("result.trustsOnly")}</span>
           </span>
         </p>
       )}
@@ -769,21 +774,23 @@ function TestResultPanel({
 }
 
 export function DeleteServerDialog({ server, onClose, actions }: { server: SshServer | null; onClose: () => void; actions: SshActions }) {
+  const { t } = useTranslation(["ssh", "common"]);
   const users = server?.assignments.length ?? 0;
-  const secrets = server?.auth === "key" ? (server.hasPassword ? "key and sudo password" : "key") : "password";
+  const body = server?.auth === "key" ? (server.hasPassword ? t("deleteDialog.bodyKeyAndSudo") : t("deleteDialog.bodyKey")) : t("deleteDialog.bodyPassword");
   return (
     <AlertDialog open={!!server} onOpenChange={(o) => !o && onClose()}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete “{server?.name}”?</AlertDialogTitle>
+          <AlertDialogTitle>{t("deleteDialog.title", { name: server?.name })}</AlertDialogTitle>
           <AlertDialogDescription>
-            Godmode forgets the server and deletes its saved {secrets} from the vault.
-            {users === 1 && ` ${server?.assignments[0]?.name || "The agent or chat using it"} loses access to it.`}
-            {users > 1 && ` The ${users} agents and chats using it lose access to it.`} The server itself isn't touched.
+            {body}
+            {users === 1 &&
+              ` ${server?.assignments[0]?.name ? t("deleteDialog.oneUser", { name: server.assignments[0].name }) : t("deleteDialog.oneUserFallback")}`}
+            {users > 1 && ` ${t("deleteDialog.manyUsers", { n: users })}`} {t("deleteDialog.untouched")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
@@ -791,7 +798,7 @@ export function DeleteServerDialog({ server, onClose, actions }: { server: SshSe
               onClose();
             }}
           >
-            <Trash2 /> Delete server
+            <Trash2 /> {t("deleteDialog.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

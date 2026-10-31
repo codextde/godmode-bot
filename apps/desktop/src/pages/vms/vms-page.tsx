@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { Trans, useTranslation } from "react-i18next";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Box, Download, HardDrive, Plus, PowerOff, RefreshCw, ShieldAlert } from "lucide-react";
@@ -23,6 +24,7 @@ import { cn } from "@/lib/utils";
 
 /** macOS VMs agents work in: create, start/stop, open their screen, assign them. */
 export default function VmsPage() {
+  const { t } = useTranslation(["vms", "common"]);
   const [params, setParams] = useSearchParams();
   const { data: boot } = useBootstrap();
   const status = useVmStatus();
@@ -57,14 +59,14 @@ export default function VmsPage() {
     <div className="relative">
       <PageHeader
         icon={<Box />}
-        title="Virtual machines"
-        description="Isolated macOS machines on this Mac — agents work there instead of on your computer."
+        title={t("page.title")}
+        description={t("page.description")}
         actions={
           s?.supported ? (
             <>
               <RunningCount status={s} />
               <Button onClick={() => setCreateOpen(true)}>
-                <Plus /> New VM
+                <Plus /> {t("page.newVm")}
               </Button>
             </>
           ) : undefined
@@ -80,11 +82,11 @@ export default function VmsPage() {
         ) : status.isError || !s ? (
           <EmptyState
             icon={<Box />}
-            title="Couldn't check virtual machines"
+            title={t("page.checkFailed")}
             description={errorMessage(status.error)}
             action={
               <Button variant="outline" onClick={() => status.refetch()}>
-                <RefreshCw /> Try again
+                <RefreshCw /> {t("common:actions.tryAgain")}
               </Button>
             }
           />
@@ -96,13 +98,13 @@ export default function VmsPage() {
               <div className="flex items-start gap-3 rounded-lg border bg-paper-2 px-3 py-2.5 text-[13px]">
                 <PowerOff className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                 <p className="min-w-0 flex-1">
-                  <span className="font-medium">Agents don't use VMs right now.</span>{" "}
+                  <span className="font-medium">{t("page.turnedOffTitle")}</span>{" "}
                   <span className="text-xs text-muted-foreground">
-                    Virtual machines are turned off in{" "}
-                    <Link to="/settings/vms" className="font-medium text-foreground underline underline-offset-2">
-                      Settings → Virtual machines
-                    </Link>{" "}
-                    — every run works on this Mac. You can still manage VMs here.
+                    <Trans
+                      t={t}
+                      i18nKey="page.turnedOffBody"
+                      components={{ link: <Link to="/settings/vms" className="font-medium text-foreground underline underline-offset-2" /> }}
+                    />
                   </span>
                 </p>
               </div>
@@ -112,11 +114,11 @@ export default function VmsPage() {
             {list.isError ? (
               <EmptyState
                 icon={<Box />}
-                title="Couldn't load your VMs"
+                title={t("page.loadError")}
                 description={errorMessage(list.error)}
                 action={
                   <Button variant="outline" onClick={() => list.refetch()}>
-                    <RefreshCw /> Try again
+                    <RefreshCw /> {t("common:actions.tryAgain")}
                   </Button>
                 }
               />
@@ -129,11 +131,11 @@ export default function VmsPage() {
             ) : vms.length === 0 ? (
               <EmptyState
                 icon={<Box />}
-                title="Give an agent its own Mac"
-                description="It installs tools, runs builds and uses apps in an isolated macOS VM instead of your computer. Assign a VM to an agent, a chat or a workspace."
+                title={t("page.emptyTitle")}
+                description={t("page.emptyDescription")}
                 action={
                   <Button onClick={() => setCreateOpen(true)}>
-                    <Plus /> New VM
+                    <Plus /> {t("page.newVm")}
                   </Button>
                 }
               />
@@ -179,6 +181,7 @@ export default function VmsPage() {
 }
 
 function RunningCount({ status }: { status: VmStatus }) {
+  const { t } = useTranslation("vms");
   const full = status.running >= status.maxRunning;
   return (
     <Tooltip>
@@ -189,25 +192,31 @@ function RunningCount({ status }: { status: VmStatus }) {
         >
           <LiveDot live={status.running > 0} className={cn(status.running === 0 && "bg-muted-foreground/40")} />
           <span className="tabular-nums">
-            <span className={cn("font-medium text-foreground", full && "text-warning")}>{status.running}</span> of {status.maxRunning} running
+            <Trans
+              t={t}
+              i18nKey="page.running"
+              values={{ running: status.running, max: status.maxRunning }}
+              components={{ b: <span className={cn("font-medium text-foreground", full && "text-warning")} /> }}
+            />
           </span>
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-64">
-        Apple lets one Mac run at most {status.maxRunning} macOS VMs at the same time. Stop or suspend one to start another.
+        {t("page.runningTooltip", { max: status.maxRunning })}
       </TooltipContent>
     </Tooltip>
   );
 }
 
 function Unsupported({ reason }: { reason: string | null }) {
+  const { t } = useTranslation("vms");
   return (
     <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/[0.07] p-4 text-sm" role="alert">
       <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
       <div className="min-w-0 space-y-1">
-        <p className="font-medium">Virtual machines aren't available here</p>
+        <p className="font-medium">{t("page.unsupportedTitle")}</p>
         <p className="text-xs leading-relaxed text-muted-foreground">
-          {reason ?? "macOS VMs need a Mac with Apple silicon."} Agents keep working on this computer as usual.
+          {reason ?? t("page.unsupportedReason")} {t("page.unsupportedKeep")}
         </p>
       </div>
     </div>
@@ -215,16 +224,17 @@ function Unsupported({ reason }: { reason: string | null }) {
 }
 
 function SetupCard({ status }: { status: VmStatus }) {
+  const { t } = useTranslation("vms");
   const qc = useQueryClient();
   const short = useShortPath();
   const install = useMutation({
     mutationFn: api.vms.install,
     onSuccess: (res) => {
-      if (res.ok) toast.success("Ready for virtual machines", { description: "Create your first VM next." });
-      else toast.error("Setup didn't finish", { description: res.output || undefined });
+      if (res.ok) toast.success(t("page.setupReady"), { description: t("page.setupReadyDescription") });
+      else toast.error(t("page.setupFailed"), { description: res.output || undefined });
       void qc.invalidateQueries({ queryKey: qk.vms });
     },
-    onError: (e) => toastApiError(e, "Setup didn't finish", qc),
+    onError: (e) => toastApiError(e, t("page.setupFailed"), qc),
   });
   return (
     <section className={cn("rounded-xl border bg-card p-5 shadow-card", install.isPending && "glow-border")}>
@@ -233,19 +243,23 @@ function SetupCard({ status }: { status: VmStatus }) {
           <Download className="size-[18px]" />
         </div>
         <div className="min-w-0 flex-1 basis-72">
-          <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">One-time setup</h2>
+          <h2 className="text-[15px] leading-snug font-medium tracking-[-0.01em]">{t("page.setupTitle")}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Godmode runs macOS VMs with Apple's Virtualization framework (via{" "}
-            <a href="https://tart.run" target="_blank" rel="noreferrer" className="font-medium text-foreground underline underline-offset-2">
-              Tart
-            </a>
-            , free for personal use). VMs and their disks are stored on this Mac in <span className="font-mono text-[13px] break-all text-foreground">{short(status.storageDir)}</span>.
+            <Trans
+              t={t}
+              i18nKey="page.setupBody"
+              values={{ path: short(status.storageDir) }}
+              components={{
+                link: <a href="https://tart.run" target="_blank" rel="noreferrer" className="font-medium text-foreground underline underline-offset-2" />,
+                mono: <span className="font-mono text-[13px] break-all text-foreground" />,
+              }}
+            />
           </p>
-          <p className="mt-2 text-xs text-muted-foreground">Creating a VM sets this up too — you can skip straight to New VM.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("page.setupSkip")}</p>
         </div>
         <Button onClick={() => install.mutate()} disabled={install.isPending} className="self-center">
           {install.isPending ? <Spinner /> : <Download />}
-          {install.isPending ? "Setting up…" : "Set up"}
+          {install.isPending ? t("page.settingUp") : t("page.setUp")}
         </Button>
       </div>
     </section>
@@ -253,17 +267,18 @@ function SetupCard({ status }: { status: VmStatus }) {
 }
 
 function StorageNote({ status }: { status: VmStatus }) {
+  const { t } = useTranslation(["vms", "common"]);
   const short = useShortPath();
   return (
     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-xs text-muted-foreground">
       <HardDrive className="size-3.5" />
       <span>
-        Stored in <span className="font-mono">{short(status.storageDir)}</span>
+        <Trans t={t} i18nKey="page.storedIn" values={{ path: short(status.storageDir) }} components={{ mono: <span className="font-mono" /> }} />
       </span>
       {status.host.freeDiskGb !== null && (
         <>
           <span className="opacity-40">·</span>
-          <span className="tabular-nums">{status.host.freeDiskGb} GB free</span>
+          <span className="tabular-nums">{t("page.free", { n: status.host.freeDiskGb })}</span>
         </>
       )}
       {status.tart.version && (
@@ -274,7 +289,7 @@ function StorageNote({ status }: { status: VmStatus }) {
       )}
       <span className="opacity-40">·</span>
       <Link to="/settings/vms" className="font-medium text-foreground underline-offset-2 hover:underline">
-        Settings
+        {t("common:words.settings")}
       </Link>
     </p>
   );

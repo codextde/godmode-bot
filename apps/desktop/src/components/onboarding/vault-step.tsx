@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { motion, useAnimationControls } from "motion/react";
 import { CircleCheck, EyeOff, KeyRound, LockKeyhole, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { VaultStatus } from "@godmode/shared";
@@ -14,10 +15,10 @@ import { NewSecretFields, StepCard, StepFooter, StepHeader, secretValid } from "
 const MIN_PASSPHRASE = 8;
 
 const GUARANTEES = [
-  { icon: <KeyRound />, text: "Your passphrase derives the encryption key (scrypt). It is never stored or sent anywhere." },
-  { icon: <LockKeyhole />, text: "Every password, 2FA secret and API key is encrypted individually with AES-256-GCM." },
-  { icon: <EyeOff />, text: "Agents fill secrets straight into the browser — the AI model never sees them unless you allow it." },
-];
+  { icon: <KeyRound />, textKey: "vault.guarantees.key" },
+  { icon: <LockKeyhole />, textKey: "vault.guarantees.encryption" },
+  { icon: <EyeOff />, textKey: "vault.guarantees.fill" },
+] as const;
 
 export function VaultStep({
   vault,
@@ -30,18 +31,19 @@ export function VaultStep({
   onDone: (result: "created" | "unlocked" | "existing") => void;
   onBack: () => void;
 }) {
+  const { t } = useTranslation(["onboarding", "common"]);
   if (vault.initialized && vault.unlocked)
     return (
       <div>
-        <StepHeader eyebrow="Vault" title="Your vault is ready." description="It's unlocked and encrypted on this machine." />
+        <StepHeader eyebrow={t("vault.eyebrow")} title={t("vault.readyTitle")} description={t("vault.readyDescription")} />
         <StepCard>
           <div className="flex items-center gap-3 rounded-lg border border-brand/25 bg-brand-soft p-4 text-sm">
             <CircleCheck className="size-5 shrink-0 text-brand-strong" />
-            Logins, 2FA codes and API keys you add are encrypted with your passphrase.
+            {t("vault.readyBody")}
           </div>
           <StepFooter onBack={onBack}>
             <SubmitButton busy={false} type="button" onClick={() => onDone("existing")} className="w-auto px-6">
-              Continue
+              {t("common:actions.continue")}
             </SubmitButton>
           </StepFooter>
         </StepCard>
@@ -52,6 +54,7 @@ export function VaultStep({
 }
 
 function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: () => void; onBack: () => void }) {
+  const { t } = useTranslation("onboarding");
   const qc = useQueryClient();
   const [passphrase, setPassphrase] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -80,14 +83,14 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
   return (
     <form onSubmit={submit}>
       <StepHeader
-        eyebrow="Vault"
+        eyebrow={t("vault.eyebrow")}
         title={
           <>
-            Create your vault.
-            <span className="block text-foreground/35">Sealed on this machine.</span>
+            {t("vault.createTitle")}
+            <span className="block text-foreground/35">{t("vault.createSubtitle")}</span>
           </>
         }
-        description="The vault holds website logins, 2FA secrets and API keys so your agents can sign in without interrupting you."
+        description={t("vault.createDescription")}
       />
       <StepCard>
         <ul className="mb-6 divide-y overflow-hidden rounded-xl border bg-paper-2">
@@ -102,14 +105,14 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
               <span className="grid size-6 shrink-0 place-items-center rounded-md border border-brand/25 bg-brand-soft text-brand-strong [&_svg]:size-3.5">
                 {g.icon}
               </span>
-              <span className="pt-0.5 text-foreground/85">{g.text}</span>
+              <span className="pt-0.5 text-foreground/85">{t(g.textKey)}</span>
             </motion.li>
           ))}
         </ul>
 
         <NewSecretFields
           idPrefix="vault-passphrase"
-          label="Vault passphrase"
+          label={t("vault.passphrase")}
           value={passphrase}
           confirm={confirm}
           onChange={setPassphrase}
@@ -122,18 +125,17 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
         <div className="mt-5 flex items-start gap-3 rounded-lg border border-warning/25 bg-warning/[0.07] p-3.5 text-sm">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p>
-            <span className="font-medium">It can't be recovered.</span>{" "}
-            <span className="text-muted-foreground">Store it in your password manager — without it, the vault can only be reset.</span>
+            <span className="font-medium">{t("vault.noRecovery")}</span>{" "}
+            <span className="text-muted-foreground">{t("vault.noRecoveryHint")}</span>
           </p>
         </div>
 
         <label htmlFor="vault-remember" className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border p-3.5 transition-colors hover:bg-accent/40">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brand-strong" />
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium">Remember on this device</span>
+            <span className="block text-sm font-medium">{t("vault.remember")}</span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-              Recommended so automations run unattended. The vault key is kept in your operating system's keychain and the vault unlocks
-              automatically on this machine. Turn off to type the passphrase after every restart.
+              {t("vault.rememberHint")}
             </span>
           </span>
           <Switch id="vault-remember" checked={remember} onCheckedChange={setRemember} className="mt-0.5" />
@@ -145,7 +147,7 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
 
         <StepFooter onBack={onBack}>
           <SubmitButton busy={busy} disabled={!valid} className="w-auto px-6">
-            Create vault
+            {t("vault.create")}
           </SubmitButton>
         </StepFooter>
       </StepCard>
@@ -154,6 +156,7 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
 }
 
 function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => void }) {
+  const { t } = useTranslation("onboarding");
   const qc = useQueryClient();
   const controls = useAnimationControls();
   const [passphrase, setPassphrase] = useState("");
@@ -180,10 +183,10 @@ function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => vo
 
   return (
     <form onSubmit={submit}>
-      <StepHeader eyebrow="Vault" title="Unlock your vault." description="A vault already exists on this machine. Enter its passphrase to continue setting up." />
+      <StepHeader eyebrow={t("vault.eyebrow")} title={t("vault.unlockTitle")} description={t("vault.unlockDescription")} />
       <StepCard>
         <motion.div animate={controls} className="space-y-2">
-          <Label htmlFor="onboarding-unlock">Vault passphrase</Label>
+          <Label htmlFor="onboarding-unlock">{t("vault.passphrase")}</Label>
           <PasswordInput
             id="onboarding-unlock"
             autoFocus
@@ -201,7 +204,7 @@ function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => vo
         </div>
         <StepFooter onBack={onBack}>
           <SubmitButton busy={busy} disabled={!passphrase} className="w-auto px-6">
-            Unlock
+            {t("vault.unlock")}
           </SubmitButton>
         </StepFooter>
       </StepCard>

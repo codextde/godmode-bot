@@ -1,7 +1,9 @@
 import { Check, Globe, ShieldCheck, TriangleAlert } from "lucide-react";
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
+import { useTranslation } from "react-i18next";
 import type { Agent, MessagingAccess, MessagingProvider } from "@godmode/shared";
 import { AgentAvatar } from "@/components/common";
+import { t } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 /** Pick the agents a bot talks to; the first one is where new chats start. */
@@ -18,6 +20,7 @@ export function AgentChooser({
   onChange: (ids: string[], defaultId: string | null) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation(["messaging", "common"]);
   const toggle = (id: string) => {
     if (value.includes(id)) {
       const next = value.filter((x) => x !== id);
@@ -26,7 +29,7 @@ export function AgentChooser({
   };
 
   return (
-    <ul className="max-h-72 divide-y overflow-y-auto rounded-xl border bg-card shadow-card" role="group" aria-label="Agents">
+    <ul className="max-h-72 divide-y overflow-y-auto rounded-xl border bg-card shadow-card" role="group" aria-label={t("common:words.agents")}>
       {agents.map((a) => {
         const on = value.includes(a.id);
         const first = on && defaultId === a.id;
@@ -55,7 +58,7 @@ export function AgentChooser({
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <span className="truncate text-sm font-medium">{a.name}</span>
-                  {!a.enabled && <span className="rounded-[4px] border px-1 text-[10px] text-muted-foreground">Off</span>}
+                  {!a.enabled && <span className="rounded-[4px] border px-1 text-[10px] text-muted-foreground">{t("common:status.off")}</span>}
                 </span>
                 {a.description && <span className="block truncate text-xs text-muted-foreground">{a.description}</span>}
               </span>
@@ -73,7 +76,7 @@ export function AgentChooser({
                     : "text-muted-foreground opacity-0 group-hover/agent:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100",
                 )}
               >
-                {first ? "Starts here" : "Start here"}
+                {first ? t("agentChooser.startsHere") : t("agentChooser.startHere")}
               </button>
             )}
           </li>
@@ -84,9 +87,9 @@ export function AgentChooser({
 }
 
 function openAccessText(provider: MessagingProvider, team: string | null): string {
-  if (provider === "telegram") return "Anyone who finds the bot can use these agents — with the logins and tools they have.";
-  if (provider === "slack") return `Everyone in ${team ?? "the Slack workspace"} can talk to the bot without asking.`;
-  return "Everyone in your organization who can reach the bot can use it without asking.";
+  if (provider === "telegram") return t("messaging:access.openTelegram");
+  if (provider === "slack") return team ? t("messaging:access.openSlackTeam", { team }) : t("messaging:access.openSlack");
+  return t("messaging:access.openTeams");
 }
 
 /** Who may talk to a bot. */
@@ -103,21 +106,22 @@ export function AccessChooser({
   onChange: (value: MessagingAccess) => void;
   disabled?: boolean;
 }) {
+  const { t } = useTranslation("messaging");
   const options: { value: MessagingAccess; icon: typeof ShieldCheck; title: string; text: string; tag?: string }[] = [
     {
       value: "approved",
       icon: ShieldCheck,
-      title: "People you approve",
-      text: "Someone new writes → you get a request here and decide. Recommended.",
+      title: t("access.approvedTitle"),
+      text: t("access.approvedText"),
     },
-    { value: "anyone", icon: Globe, title: "Anyone", text: openAccessText(provider, team), tag: provider === "telegram" ? "Public" : undefined },
+    { value: "anyone", icon: Globe, title: t("access.anyoneTitle"), text: openAccessText(provider, team), tag: provider === "telegram" ? t("access.public") : undefined },
   ];
   return (
     <RadioGroupPrimitive.Root
       value={value}
       onValueChange={(v) => onChange(v as MessagingAccess)}
       disabled={disabled}
-      aria-label="Who can talk to the bot"
+      aria-label={t("access.ariaLabel")}
       className="grid gap-2 sm:grid-cols-2"
     >
       {options.map((o) => {

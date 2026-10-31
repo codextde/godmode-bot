@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
 /** Tag/chip input: Enter, comma, space or Tab commits; Backspace on empty removes the last chip. */
@@ -23,6 +24,7 @@ export function ChipInput({
   id?: string;
   "aria-label"?: string;
 }) {
+  const { t } = useTranslation("vault");
   const [draft, setDraft] = useState("");
 
   const commit = (raw: string) => {
@@ -64,7 +66,7 @@ export function ChipInput({
             <button
               type="button"
               className="grid size-4 place-items-center rounded-[3px] text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
-              aria-label={`Remove ${chip}`}
+              aria-label={t("chipInput.remove", { value: chip })}
               onClick={() => onChange(value.filter((v) => v !== chip))}
             >
               <X className="size-3" />

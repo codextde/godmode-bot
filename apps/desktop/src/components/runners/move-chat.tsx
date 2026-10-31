@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import type { Conversation } from "@godmode/shared";
 import { ArrowRight, Laptop, MonitorSmartphone } from "lucide-react";
 import {
@@ -14,20 +15,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { followupWhen } from "@/components/chat/followup";
+import { t as translate } from "@/i18n";
 import { placeName, type Place } from "@/lib/places";
 import { cn } from "@/lib/utils";
 import { useChatMoves } from "@/stores/chatMoves";
 import { startChatMove } from "./chat-move-progress";
-import { RunnerStateDot, RunnerTag, THIS_COMPUTER_INLINE } from "./runner-parts";
+import { RunnerStateDot, RunnerTag, thisComputerInline } from "./runner-parts";
 
 /** Why a runner's chat can't move right now (its run works or stands still there), or null. */
 export function moveBlocker(chat: { running: boolean; paused: boolean }): string | null {
-  if (chat.running) return "Stop the run or let it finish first";
-  if (chat.paused) return "Stop the paused run first";
+  if (chat.running) return translate("runners:move.blockRunning");
+  if (chat.paused) return translate("runners:move.blockPaused");
   return null;
 }
 
 function PlaceTag({ place, active }: { place: Place | null; active?: boolean }) {
+  const { t } = useTranslation("runners");
   const Icon = place?.here ? Laptop : MonitorSmartphone;
   return (
     <span
@@ -37,7 +40,7 @@ function PlaceTag({ place, active }: { place: Place | null; active?: boolean }) 
       )}
     >
       <Icon className={cn("size-3.5 shrink-0", !active && "text-muted-foreground")} aria-hidden />
-      <span className="truncate font-medium">{place?.name ?? "Another computer"}</span>
+      <span className="truncate font-medium">{place?.name ?? t("move.anotherComputer")}</span>
       {place?.twinOf && <RunnerTag className={cn(active && "border-brand/25 bg-transparent text-brand-strong")} />}
       {place && !active && <RunnerStateDot state={place.state} />}
     </span>
@@ -68,6 +71,7 @@ export function MoveChatDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t } = useTranslation(["runners", "common"]);
   const qc = useQueryClient();
   const [to, setTo] = useState<Place | null>(initial);
   useEffect(() => {
@@ -77,9 +81,9 @@ export function MoveChatDialog({
   const shown = useRef(from);
   if (open) shown.current = from;
   const origin = shown.current;
-  const name = origin ? placeName(origin) : "The other computer";
+  const name = origin ? placeName(origin) : t("move.theOtherComputer");
   const away = !!origin && origin.state !== "online";
-  const dest = to?.here ? THIS_COMPUTER_INLINE : to ? placeName(to) : "the other computer";
+  const dest = to?.here ? thisComputerInline() : to ? placeName(to) : t("move.theOtherComputerInline");
   const moving = useChatMoves((s) => !!s.moves[conversation.id]);
   const move = () => {
     if (!to) return;
@@ -91,11 +95,11 @@ export function MoveChatDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Move this chat to {dest}?</AlertDialogTitle>
+          <AlertDialogTitle>{t("move.dialogTitle", { dest })}</AlertDialogTitle>
           <AlertDialogDescription>
             {working
-              ? `${agentName} is working on it right now. The run stops on ${name}, and ${agentName} picks up on ${dest} with the whole conversation.`
-              : `${agentName} picks it up on ${dest} with the whole conversation.`}
+              ? t("move.dialogWorking", { agent: agentName, from: name, dest })
+              : t("move.dialogIdle", { agent: agentName, dest })}
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -106,21 +110,21 @@ export function MoveChatDialog({
         </div>
 
         {targets.length > 1 && (
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Move to">
-            {targets.map((t) => (
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={t("move.moveTo")}>
+            {targets.map((target) => (
               <button
-                key={t.runnerId ?? "primary"}
+                key={target.runnerId ?? "primary"}
                 type="button"
                 role="radio"
-                aria-checked={to === t}
-                onClick={() => setTo(t)}
+                aria-checked={to === target}
+                onClick={() => setTo(target)}
                 className={cn(
                   "flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs transition hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
-                  to === t ? "border-foreground/20 bg-accent font-medium" : "text-muted-foreground",
+                  to === target ? "border-foreground/20 bg-accent font-medium" : "text-muted-foreground",
                 )}
               >
-                {t.here ? <Laptop className="size-3" /> : <MonitorSmartphone className="size-3" />}
-                {placeName(t)}
+                {target.here ? <Laptop className="size-3" /> : <MonitorSmartphone className="size-3" />}
+                {placeName(target)}
               </button>
             ))}
           </div>
@@ -129,16 +133,16 @@ export function MoveChatDialog({
         <ul className="space-y-1.5 text-[13px] text-muted-foreground">
           <li>
             {away
-              ? `${name} can't be reached right now. It drops its copy once it's back — anything it still does in this chat until then is lost.`
-              : `Files the agent made outside its repository stay on ${name}.`}
+              ? t("move.away", { name })
+              : t("move.filesStay", { name })}
           </li>
-          {conversation.followup && <li>The follow-up {followupWhen(conversation.followup.dueAt)} comes along.</li>}
+          {conversation.followup && <li>{t("move.followup", { when: followupWhen(conversation.followup.dueAt) })}</li>}
         </ul>
 
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t("common:actions.cancel")}</AlertDialogCancel>
           <Button onClick={move} disabled={moving || !to}>
-            {moving ? <Spinner /> : to?.here ? <Laptop /> : <MonitorSmartphone />} {moving ? "Moving" : working ? "Move and continue" : "Move"}
+            {moving ? <Spinner /> : to?.here ? <Laptop /> : <MonitorSmartphone />} {moving ? t("move.moving") : working ? t("move.moveAndContinue") : t("move.move")}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

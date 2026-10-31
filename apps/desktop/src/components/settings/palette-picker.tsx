@@ -1,10 +1,12 @@
 import type { KeyboardEvent } from "react";
 import { Check } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PALETTES, type Palette } from "@godmode/shared";
 import { PALETTE_DEFS, type Mode } from "@/lib/palettes";
 import { cn } from "@/lib/utils";
 
 export function PalettePicker({ value, mode, onChange }: { value: Palette; mode: Mode; onChange: (p: Palette) => void }) {
+  const { t } = useTranslation("settings");
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
     if (!step) return;
@@ -14,7 +16,7 @@ export function PalettePicker({ value, mode, onChange }: { value: Palette; mode:
     e.currentTarget.querySelector<HTMLButtonElement>(`[data-palette="${next}"]`)?.focus();
   };
   return (
-    <div role="radiogroup" aria-label="Palette" onKeyDown={onKeyDown} className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+    <div role="radiogroup" aria-label={t("general.appearance.palette")} onKeyDown={onKeyDown} className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
       {PALETTES.map((id) => {
         const def = PALETTE_DEFS[id];
         const s = def[mode];

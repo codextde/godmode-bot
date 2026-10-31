@@ -2,8 +2,10 @@
 
 import styles from "./CodeBlock.module.css";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const { t } = useTranslation(["aicss", "common"]);
   const [copied, setCopied] = useState(false);
   const lines = code.split("\n");
   const copy = () => {
@@ -18,13 +20,13 @@ export function CodeBlock({ lang, code }: { lang: string; code: string }) {
           <svg className={styles.cbIcon} viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="m8 6-6 6 6 6M16 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
           <span className={styles.cbLang}>{lang}</span>
         </span>
-        <button className={styles.cbCopy} onClick={copy} aria-label={copied ? "Copied" : "Copy code"}>
+        <button className={styles.cbCopy} onClick={copy} aria-label={copied ? t("common:actions.copied") : t("codeBlock.copyCode")}>
           {copied ? (
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m4.5 12.75 6 6 9-13.5" /></svg>
           ) : (
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5" /><path d="M5 15a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2" /></svg>
           )}
-          <span>{copied ? "Copied" : "Copy"}</span>
+          <span>{copied ? t("common:actions.copied") : t("common:actions.copy")}</span>
         </button>
       </div>
       <div className={styles.cbBody}>

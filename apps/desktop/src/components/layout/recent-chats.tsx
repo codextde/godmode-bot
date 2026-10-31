@@ -4,6 +4,7 @@ import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
 import { Fragment, type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { AlarmClock, Archive, Bot, ChevronDown, CircleCheck, MessagesSquare, Pin, Trash2, Workflow, Zap } from "lucide-react";
 import {
   SidebarGroup,
@@ -25,6 +26,7 @@ import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { useLive } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
+import { dateLocale, intlLocale, t as translate } from "@/i18n";
 
 const PAGE = 25;
 
@@ -32,22 +34,23 @@ const PAGE = 25;
 function dayLabel(iso: string): string {
   const date = new Date(iso);
   const days = differenceInCalendarDays(new Date(), date);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  if (days < 7) return "Previous 7 days";
-  if (days < 30) return "Previous 30 days";
-  return date.toLocaleDateString(undefined, { month: "long", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
+  if (days <= 0) return translate("common:words.today");
+  if (days === 1) return translate("common:words.yesterday");
+  if (days < 7) return translate("layout:recent.previous7");
+  if (days < 30) return translate("layout:recent.previous30");
+  return date.toLocaleDateString(intlLocale(), { month: "long", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" });
 }
 
 const ROW_ACTION =
   "top-1/2! size-6 -translate-y-1/2 text-muted-foreground after:inset-x-0 hover:bg-background hover:text-foreground hover:shadow-card [&>svg]:size-3.5";
 
 export function RecentChats() {
+  const { t } = useTranslation(["layout", "common"]);
   const scope = useUi((s) => s.workspace);
   const scopeWorkspace = useScopeWorkspace();
   const scopeProject = useScopeProject();
   const projectIndex = useProjectIndex();
-  const scopeName = scope === "all" ? null : scope === "global" ? "Global" : (scopeProject?.name ?? scopeWorkspace?.name ?? null);
+  const scopeName = scope === "all" ? null : scope === "global" ? t("scope.global") : (scopeProject?.name ?? scopeWorkspace?.name ?? null);
   const { data: conversations = [] } = useScopedConversations();
   const { data: hasArchived = false } = useQuery({
     queryKey: [...qk.conversationsAll, "has-archived", scope],
@@ -100,26 +103,26 @@ export function RecentChats() {
   const more = matching.length - items.length;
   // Long lists read by day; the running and scheduled tabs are short and ordered by what comes next.
   const dated = recentTab === "all" || recentTab === "done";
-  const dayOf = (c: Conversation) => (c.pinned ? "Pinned" : dayLabel(c.lastMessageAt ?? c.createdAt));
+  const dayOf = (c: Conversation) => (c.pinned ? t("recent.pinned") : dayLabel(c.lastMessageAt ?? c.createdAt));
 
   if (unarchived.length === 0 && !hasArchived && !scopeName) return deleteDialog;
 
   return (
     <SidebarGroup className="group-data-[collapsible=icon]:hidden">
       <div className="flex items-center justify-between gap-2">
-        <NavSectionHeader label="Recent" open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} quiet />
+        <NavSectionHeader label={t("recent.title")} open={open} controls="recent-chats-panel" onToggle={() => toggleOpen("recent")} quiet />
         {!open && (counts.running > 0 || needsYou > 0) && (
           <span className="mr-2 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
             {needsYou > 0 && (
               <span className="flex items-center gap-1 text-warning">
                 <span className="size-1.5 rounded-full bg-current" aria-hidden />
-                {needsYou} needs you
+                {t("counts.needsYou", { count: needsYou })}
               </span>
             )}
             {counts.running > 0 && (
               <span className="flex items-center gap-1 text-brand-strong">
                 <span className="size-1.5 rounded-full bg-current" aria-hidden />
-                {counts.running} running
+                {t("recent.running", { count: counts.running })}
               </span>
             )}
           </span>
@@ -133,7 +136,7 @@ export function RecentChats() {
           }
           className="absolute top-3.5 right-3 text-[11px] text-muted-foreground transition hover:text-foreground"
         >
-          Mark all read
+          {t("recent.markAllRead")}
         </button>
       )}
       {open && (
@@ -170,23 +173,23 @@ export function RecentChats() {
                         <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1">
-                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || "New chat"}</span>
+                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || t("shell.newChat")}</span>
                             {c.unread && conversationId !== c.id && (
                               <span
                                 className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}
                                 role="img"
-                                aria-label={c.unread.failed ? "Something went wrong here" : "New reply"}
+                                aria-label={c.unread.failed ? t("recent.failedHere") : t("recent.newReply")}
                               />
                             )}
                             {c.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
                           </span>
                           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
                             {workspace && <WorkspaceChip workspace={workspace} />}
-                            {project && <WorkspaceChip workspace={project} kind="Project" />}
+                            {project && <WorkspaceChip workspace={project} kind="project" />}
                             <span className="block min-w-0 flex-1 truncate">
                               {chatStatus(c, { running, queued }) ?? (
                                 <>
-                                  {originLine(c, agents) ?? agent?.name ?? "Agent"} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false })}
+                                  {originLine(c, agents) ?? agent?.name ?? t("common:words.agent")} · {formatDistanceToNowStrict(new Date(c.lastMessageAt ?? c.createdAt), { addSuffix: false, locale: dateLocale() })}
                                 </>
                               )}
                             </span>
@@ -198,27 +201,27 @@ export function RecentChats() {
                       <TooltipTrigger asChild>
                         <SidebarMenuAction
                           showOnHover
-                          aria-label={`Archive “${c.title || "New chat"}”`}
+                          aria-label={t("recent.archiveLabel", { title: c.title || t("shell.newChat") })}
                           onClick={() => setArchived(c, true)}
                           className={cn(ROW_ACTION, "right-7.5")}
                         >
                           <Archive />
                         </SidebarMenuAction>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Archive</TooltipContent>
+                      <TooltipContent side="top">{t("recent.archive")}</TooltipContent>
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <SidebarMenuAction
                           showOnHover
-                          aria-label={`Delete “${c.title || "New chat"}”`}
+                          aria-label={t("recent.deleteLabel", { title: c.title || t("shell.newChat") })}
                           onClick={() => askDelete(c)}
                           className={cn(ROW_ACTION, "hover:text-destructive")}
                         >
                           <Trash2 />
                         </SidebarMenuAction>
                       </TooltipTrigger>
-                      <TooltipContent side="top">Delete</TooltipContent>
+                      <TooltipContent side="top">{t("common:actions.delete")}</TooltipContent>
                     </Tooltip>
                   </SidebarMenuItem>
                   </Fragment>
@@ -233,8 +236,7 @@ export function RecentChats() {
                   >
                     <ChevronDown />
                     <span>
-                      Show {Math.min(more, PAGE)} more
-                      <span className="ml-1 text-muted-foreground/60">of {more}</span>
+                      <Trans t={t} i18nKey="recent.showMore" values={{ count: Math.min(more, PAGE), total: more }} components={{ muted: <span className="ml-1 text-muted-foreground/60" /> }} />
                     </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -249,7 +251,7 @@ export function RecentChats() {
                   >
                     <Link to="/archived">
                       <Archive />
-                      <span>Archived chats</span>
+                      <span>{t("nav.archivedChats")}</span>
                       {archivedOngoing > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -259,7 +261,7 @@ export function RecentChats() {
                             </span>
                           </TooltipTrigger>
                           <TooltipContent side="top">
-                            {archivedOngoing === 1 ? "1 archived chat still has" : `${archivedOngoing} archived chats still have`} work ahead
+                            {t("recent.archivedOngoing", { count: archivedOngoing })}
                           </TooltipContent>
                         </Tooltip>
                       )}
@@ -280,19 +282,20 @@ export function RecentChats() {
 function originLine(c: Conversation, agents: Agent[]): string | null {
   if (c.origin === "delegation") {
     const from = c.delegatedFrom ? agents.find((a) => a.id === c.delegatedFrom!.agentId) : undefined;
-    return from ? `From ${from.name}` : "Handed over";
+    return from ? translate("layout:recent.origin.from", { name: from.name }) : translate("layout:recent.origin.handedOver");
   }
-  if (c.origin === "routine") return "Automation";
-  if (c.origin === "heartbeat") return "Heartbeat";
+  if (c.origin === "routine") return translate("layout:recent.origin.automation");
+  if (c.origin === "heartbeat") return translate("layout:recent.origin.heartbeat");
   return null;
 }
 
 /** Which workspace a chat belongs to, in the workspace's colour. Global chats go without. */
-function WorkspaceChip({ workspace, kind = "Workspace" }: { workspace: Pick<Workspace, "name" | "icon" | "color">; kind?: string }) {
+function WorkspaceChip({ workspace, kind = "workspace" }: { workspace: Pick<Workspace, "name" | "icon" | "color">; kind?: "workspace" | "project" }) {
+  const { t } = useTranslation("layout");
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(workspace.color);
   return (
     <span
-      title={`${kind}: ${workspace.name}`}
+      title={t(`recent.chip.${kind}`, { name: workspace.name })}
       className={cn(
         "inline-flex h-4 max-w-22 shrink-0 items-center gap-1 rounded-[5px] px-1 text-[10px] font-medium text-foreground/75 ring-1 ring-inset",
         hex ? "ring-foreground/10" : colorGradient(workspace.color),
@@ -342,12 +345,7 @@ function sourceStats(chats: Conversation[]): Record<RecentSource, SourceStat> {
   return stats;
 }
 
-const SOURCES: { value: RecentSource; label: string; hint: string }[] = [
-  { value: "mine", label: "Mine", hint: "Chats you started" },
-  { value: "automations", label: "Automations", hint: "Started by an automation or the API" },
-  { value: "agents", label: "Agents", hint: "Started by an agent: handovers, board tasks, heartbeats" },
-  { value: "all", label: "All", hint: "Every chat" },
-];
+const SOURCES = [{ value: "mine" }, { value: "automations" }, { value: "agents" }, { value: "all" }] as const satisfies readonly { value: RecentSource }[];
 
 function SourceTabs({
   value,
@@ -358,24 +356,26 @@ function SourceTabs({
   onChange: (source: RecentSource) => void;
   stats: Record<RecentSource, SourceStat>;
 }) {
+  const { t } = useTranslation("layout");
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
     if (!delta) return;
     e.preventDefault();
-    const next = (SOURCES.findIndex((t) => t.value === value) + delta + SOURCES.length) % SOURCES.length;
+    const next = (SOURCES.findIndex((s) => s.value === value) + delta + SOURCES.length) % SOURCES.length;
     onChange(SOURCES[next].value);
     refs.current[next]?.focus();
   };
 
   return (
-    <div role="tablist" aria-label="Who started the chats" onKeyDown={onKeyDown} className={cn(TAB_LIST, "mb-1")}>
-      {SOURCES.map((t, i) => {
-        const active = t.value === value;
-        const { unread, needsYou } = stats[t.value];
-        const signal = !active && t.value !== "all" && (needsYou > 0 ? "needs" : unread > 0 ? "unread" : null);
+    <div role="tablist" aria-label={t("recent.sourcesLabel")} onKeyDown={onKeyDown} className={cn(TAB_LIST, "mb-1")}>
+      {SOURCES.map((s, i) => {
+        const active = s.value === value;
+        const { unread, needsYou } = stats[s.value];
+        const signal = !active && s.value !== "all" && (needsYou > 0 ? "needs" : unread > 0 ? "unread" : null);
+        const hint = t(`recent.sources.${s.value}.hint`);
         return (
-          <Tooltip key={t.value}>
+          <Tooltip key={s.value}>
             <TooltipTrigger asChild>
               <button
                 ref={(el) => {
@@ -385,23 +385,22 @@ function SourceTabs({
                 role="tab"
                 aria-selected={active}
                 tabIndex={active ? 0 : -1}
-                onClick={() => onChange(t.value)}
+                onClick={() => onChange(s.value)}
                 className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
               >
                 {active && <motion.span layoutId="recent-source-pill" className={TAB_PILL} transition={TAB_SPRING} />}
-                <span className="relative truncate">{t.label}</span>
+                <span className="relative truncate">{t(`recent.sources.${s.value}.label`)}</span>
                 {signal && (
                   <span
                     className={cn("relative size-1.5 shrink-0 rounded-full", signal === "needs" ? "bg-warning" : "bg-brand-strong")}
                     role="img"
-                    aria-label={signal === "needs" ? "Waiting for you" : "New replies"}
+                    aria-label={signal === "needs" ? t("recent.waitingForYou") : t("recent.newReplies")}
                   />
                 )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {t.hint}
-              {needsYou > 0 ? ` · ${needsYou} need${needsYou === 1 ? "s" : ""} you` : unread > 0 ? ` · ${unread} unread` : ""}
+              {needsYou > 0 ? t("recent.hintNeedsYou", { hint, count: needsYou }) : unread > 0 ? t("recent.hintUnread", { hint, count: unread }) : hint}
             </TooltipContent>
           </Tooltip>
         );
@@ -423,12 +422,7 @@ function continuesAt(c: Conversation): string {
   return c.followup?.dueAt ?? c.paused?.resumeAt ?? "9999";
 }
 
-const TABS: { value: RecentTab; label: string; hint: string }[] = [
-  { value: "all", label: "All", hint: "Every recent chat" },
-  { value: "running", label: "Running", hint: "Working, queued or waiting for you" },
-  { value: "scheduled", label: "Scheduled", hint: "Continue on their own later" },
-  { value: "done", label: "Done", hint: "Finished chats" },
-];
+const TABS = [{ value: "all" }, { value: "running" }, { value: "scheduled" }, { value: "done" }] as const satisfies readonly { value: RecentTab }[];
 
 function RecentTabs({
   value,
@@ -443,12 +437,13 @@ function RecentTabs({
   needsYou: number;
   children?: ReactNode;
 }) {
+  const { t } = useTranslation("layout");
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const delta = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
     if (!delta) return;
     e.preventDefault();
-    const next = (TABS.findIndex((t) => t.value === value) + delta + TABS.length) % TABS.length;
+    const next = (TABS.findIndex((tab) => tab.value === value) + delta + TABS.length) % TABS.length;
     onChange(TABS[next].value);
     refs.current[next]?.focus();
   };
@@ -456,52 +451,50 @@ function RecentTabs({
   return (
     <div className="sticky top-0 z-10 -mx-2 bg-sidebar px-2 pt-1 pb-1.5">
       {children}
-      <div role="tablist" aria-label="Filter recent chats" onKeyDown={onKeyDown} className={TAB_LIST}>
-        {TABS.map((t, i) => {
-          const active = t.value === value;
-          const count = t.value === "running" || t.value === "scheduled" ? counts[t.value] : 0;
-          const urgent = t.value === "running" && needsYou > 0;
+      <div role="tablist" aria-label={t("recent.tabsLabel")} onKeyDown={onKeyDown} className={TAB_LIST}>
+        {TABS.map((tab, i) => {
+          const active = tab.value === value;
+          const count = tab.value === "running" || tab.value === "scheduled" ? counts[tab.value] : 0;
+          const urgent = tab.value === "running" && needsYou > 0;
+          const hint = t(`recent.tabs.${tab.value}.hint`);
           return (
-            <Tooltip key={t.value}>
+            <Tooltip key={tab.value}>
               <TooltipTrigger asChild>
                 <button
                   ref={(el) => {
                     refs.current[i] = el;
                   }}
-                  id={`recent-tab-${t.value}`}
+                  id={`recent-tab-${tab.value}`}
                   type="button"
                   role="tab"
                   aria-selected={active}
                   aria-controls="recent-chats-panel"
                   tabIndex={active ? 0 : -1}
-                  onClick={() => onChange(t.value)}
+                  onClick={() => onChange(tab.value)}
                   className={cn(TAB, active ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
                 >
                   {active && <motion.span layoutId="recent-tab-pill" className={TAB_PILL} transition={TAB_SPRING} />}
-                  <span className="relative truncate">{t.label}</span>
+                  <span className="relative truncate">{t(`recent.tabs.${tab.value}.label`)}</span>
                   {count > 0 && (
                     <span
                       className={cn(
                         "relative flex h-3.5 min-w-3.5 items-center justify-center gap-0.5 rounded-full px-1 text-[10px] leading-none tabular-nums",
                         urgent
                           ? "bg-warning/15 text-warning"
-                          : t.value === "running"
+                          : tab.value === "running"
                             ? "bg-brand-strong/12 text-brand-strong"
                             : active
                               ? "bg-foreground/8 text-foreground"
                               : "bg-foreground/6 text-muted-foreground",
                       )}
                     >
-                      {t.value === "running" && !urgent && <span className="size-1 animate-pulse rounded-full bg-current" aria-hidden />}
+                      {tab.value === "running" && !urgent && <span className="size-1 animate-pulse rounded-full bg-current" aria-hidden />}
                       {count}
                     </span>
                   )}
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
-                {t.hint}
-                {urgent && ` · ${needsYou} need${needsYou === 1 ? "s" : ""} you`}
-              </TooltipContent>
+              <TooltipContent side="bottom">{urgent ? t("recent.hintNeedsYou", { hint, count: needsYou }) : hint}</TooltipContent>
             </Tooltip>
           );
         })}
@@ -510,26 +503,18 @@ function RecentTabs({
   );
 }
 
-const EMPTY: Record<RecentTab, { icon: typeof Zap; title: string; text: string }> = {
-  all: { icon: MessagesSquare, title: "No chats yet", text: "Your archived chats are below." },
-  running: { icon: Zap, title: "Nothing running", text: "Chats that work or wait for you show up here." },
-  scheduled: { icon: AlarmClock, title: "Nothing scheduled", text: "When an agent plans to check back later, the chat waits here." },
-  done: { icon: CircleCheck, title: "Nothing finished yet", text: "Finished chats land here." },
-};
+const EMPTY: Record<RecentTab, typeof Zap> = { all: MessagesSquare, running: Zap, scheduled: AlarmClock, done: CircleCheck };
 
-const EMPTY_SOURCE: Record<Exclude<RecentSource, "all">, { icon: typeof Zap; title: string; text: string }> = {
-  mine: { icon: MessagesSquare, title: "No chats from you yet", text: "Chats you start show up here. Automations and agents have their own tabs." },
-  automations: { icon: Workflow, title: "No automation chats", text: "When an automation runs, its chat lands here." },
-  agents: { icon: Bot, title: "No agent chats", text: "Handovers, board tasks and heartbeats agents start themselves land here." },
-};
+const EMPTY_SOURCE: Record<Exclude<RecentSource, "all">, typeof Zap> = { mine: MessagesSquare, automations: Workflow, agents: Bot };
 
 function EmptyTab({ tab, source, scopeName, hasArchived }: { tab: RecentTab; source: RecentSource; scopeName: string | null; hasArchived: boolean }) {
+  const { t } = useTranslation("layout");
   const { icon: Icon, title, text } =
     tab === "all" && source !== "all"
-      ? EMPTY_SOURCE[source]
+      ? { icon: EMPTY_SOURCE[source], title: t(`recent.emptySource.${source}.title`), text: t(`recent.emptySource.${source}.text`) }
       : tab === "all" && scopeName
-        ? { ...EMPTY.all, title: `No chats in ${scopeName} yet`, text: hasArchived ? "Its archived chats are below." : "New chats you start here land in this list." }
-        : EMPTY[tab];
+        ? { icon: EMPTY.all, title: t("recent.emptyScope.title", { name: scopeName }), text: hasArchived ? t("recent.emptyScope.archived") : t("recent.emptyScope.new") }
+        : { icon: EMPTY[tab], title: t(`recent.empty.${tab}.title`), text: t(`recent.empty.${tab}.text`) };
   return (
     <li className="flex flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-5 text-center">
       <Icon className="mb-0.5 size-4 text-muted-foreground/70" aria-hidden />

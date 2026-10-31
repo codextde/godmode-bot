@@ -1,5 +1,6 @@
 import type { Agent, Conversation, Project } from "@godmode/shared";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
 import { withPending } from "./pending-queue";
@@ -196,9 +197,10 @@ export function useArchivedTasks(workspaceId?: ScopeFilter) {
 
 /** Resolve the workspace name for display. */
 export function useWorkspaceName(id: string | null | undefined): string {
+  const { t } = useTranslation("layout");
   const { data } = useWorkspaces();
-  if (!id) return "Global";
-  return data?.find((w) => w.id === id)?.name ?? "Workspace";
+  if (!id) return t("scope.global");
+  return data?.find((w) => w.id === id)?.name ?? t("scope.workspace");
 }
 
 /** Every pending follow-up, soonest first. */

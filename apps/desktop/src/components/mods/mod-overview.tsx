@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { ArrowUp, Braces, Check, CircleAlert, CircleCheck, FolderTree, GitCommitHorizontal, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
-import { modAbilities, modHookLabel, modState, modUpdateAvailable, type Mod, type ModAbility } from "@godmode/shared";
+import { Trans, useTranslation } from "react-i18next";
+import { modState, modUpdateAvailable, type Mod, type ModAbility } from "@godmode/shared";
 import { Callout } from "@/components/settings/settings-kit";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
+import { useLocale } from "@/i18n/language";
 import { useAllAgents } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { contentsAbilities, ModProblems, modAuthor, modOriginLabel, shortCommit, sortedPaths } from "./mod-parts";
+import { abilitiesOf, contentsAbilities, hookLabel, ModProblems, modAuthor, modOriginLabel, shortCommit, sortedPaths } from "./mod-parts";
 import { RunsForEditor } from "./runs-for";
 import type { ModActions } from "./use-mod-actions";
 
@@ -41,34 +43,44 @@ export function ModOverview({
   onOpenFile: (path: string, line?: number | null) => void;
   onDelete: () => void;
 }) {
+  const { t } = useTranslation(["mods", "common"]);
+  const { dateLocale } = useLocale();
   const { data: agents = [] } = useAllAgents();
   const state = modState(mod);
   const check = mod.check;
   const checking = actions.checking.has(mod.id);
   const source = mod.source;
   // From a repository: what it brings tells more than the validator's notes, which only cover function hooks.
-  const abilities = source ? [...contentsAbilities(mod.contents), ...(check ? modAbilities(check).filter((a) => a.id !== "programs") : [])] : check ? modAbilities(check) : [];
+  const abilities = source ? [...contentsAbilities(mod.contents), ...(check ? abilitiesOf(check).filter((a) => a.id !== "programs") : [])] : check ? abilitiesOf(check) : [];
   const everyday = abilities.filter((a) => a.level === "normal");
   const sensitive = abilities.filter((a) => a.level === "sensitive");
   const paths = sortedPaths(mod.files);
   const checkedAt = check ? new Date(check.checkedAt) : null;
+  const author = modAuthor(mod, agents);
+  const reviewTitle = source
+    ? author
+      ? t("overview.installedThis", { name: author.name })
+      : t("overview.agentInstalledThis")
+    : author
+      ? t("overview.draftedThis", { name: author.name })
+      : t("overview.agentDraftedThis");
 
   return (
     <div className="space-y-7 p-5">
       {state === "review" && (
-        <Callout tone="warning" title={`${modAuthor(mod, agents)?.name ?? "An agent"} ${source ? "installed" : "drafted"} this plugin`}>
-          <p>It stays off until you have {source ? "looked at what it brings" : "read its code"}. Switching it on is your approval.</p>
+        <Callout tone="warning" title={reviewTitle}>
+          <p>{source ? t("overview.staysOffContents") : t("overview.staysOffCode")}</p>
           <Button size="xs" variant="outline" className="mt-2" onClick={onOpenCode}>
-            {source ? <FolderTree /> : <Braces />} {source ? "See what it brings" : "Read the code"}
+            {source ? <FolderTree /> : <Braces />} {source ? t("overview.seeContents") : t("overview.readCode")}
           </Button>
         </Callout>
       )}
       {state === "broken" && (
-        <Callout tone="danger" title="Claude Code refuses this plugin as it is">
-          <p>{source ? "Runs don't load it. Update it, or check again after a Claude Code update." : "Runs don't load it until the problems below are fixed."}</p>
+        <Callout tone="danger" title={t("overview.refusedTitle")}>
+          <p>{source ? t("overview.refusedRepo") : t("overview.refusedCode")}</p>
           {!source && (
             <Button size="xs" variant="outline" className="mt-2" onClick={onOpenCode}>
-              <Braces /> Fix the code
+              <Braces /> {t("overview.fixCode")}
             </Button>
           )}
         </Callout>
@@ -78,16 +90,16 @@ export function ModOverview({
         <div className="space-y-7">
           <div className="space-y-2">
             <Label htmlFor={`mod-description-${mod.id}`} className="text-sm font-medium">
-              Description
+              {t("common:words.description")}
             </Label>
             <DescriptionField mod={mod} actions={actions} />
           </div>
 
           {source && <VersionPanel mod={mod} actions={actions} />}
 
-          <Block title="Runs for" description="The agents whose runs load this plugin while it is switched on.">
+          <Block title={t("runsFor.label")} description={t("overview.runsForDescription")}>
             <RunsForEditor mod={mod} actions={actions} />
-            {mod.scope === "agents" && mod.agentIds.length === 0 && <p className="text-xs text-warning/85">No agent yet — nobody runs this plugin until you pick one.</p>}
+            {mod.scope === "agents" && mod.agentIds.length === 0 && <p className="text-xs text-warning/85">{t("overview.noAgentYet")}</p>}
           </Block>
 
           <div className="space-y-2.5">
@@ -102,18 +114,18 @@ export function ModOverview({
               <p className="min-w-0 flex-1 basis-40 text-xs leading-relaxed text-muted-foreground">
                 {check && checkedAt ? (
                   <>
-                    Checked with Claude Code
+                    {t("overview.checkedWith")}
                     {check.claudeVersion && <span className="font-mono text-[11.5px] text-foreground/80"> {check.claudeVersion}</span>} ·{" "}
-                    <time dateTime={check.checkedAt} title={format(checkedAt, "PPp")}>
-                      {formatDistanceToNow(checkedAt, { addSuffix: true })}
+                    <time dateTime={check.checkedAt} title={format(checkedAt, "PPp", { locale: dateLocale })}>
+                      {formatDistanceToNow(checkedAt, { addSuffix: true, locale: dateLocale })}
                     </time>
                   </>
                 ) : (
-                  "Not checked yet. The check needs Claude Code on this computer."
+                  t("overview.notCheckedNeedsClaude")
                 )}
               </p>
               <Button size="xs" variant="outline" disabled={checking} onClick={() => actions.check.mutate({ mod })}>
-                {checking ? <Spinner className="size-3" /> : <RefreshCw />} {check ? "Check again" : "Check now"}
+                {checking ? <Spinner className="size-3" /> : <RefreshCw />} {check ? t("overview.checkAgain") : t("card.checkNow")}
               </Button>
             </div>
             {check && (check.errors.length > 0 || check.warnings.length > 0) && (
@@ -127,19 +139,19 @@ export function ModOverview({
 
         <div className="space-y-7">
           <Block
-            title="What it can do"
-            description={source ? "Told from what it brings: its skills, subagents, commands, hooks and servers." : check ? "Told from the events it hooks and what it calls on Claude Code." : undefined}
+            title={t("overview.whatItCanDo")}
+            description={source ? t("overview.toldFromContents") : check ? t("overview.toldFromHooks") : undefined}
           >
             {!check && !source ? (
-              <Quiet>Not checked yet. Until Claude Code has checked it, read the code to see what this plugin does.</Quiet>
+              <Quiet>{t("overview.notCheckedReadCode")}</Quiet>
             ) : abilities.length === 0 ? (
-              <Quiet>{source ? "Nothing Godmode could find." : "Nothing yet — it doesn't hook into Claude Code."}</Quiet>
+              <Quiet>{source ? t("overview.nothingFound") : t("overview.nothingHooked")}</Quiet>
             ) : (
               <>
                 {everyday.length > 0 && <AbilityList abilities={everyday} />}
                 {sensitive.length > 0 && (
                   <div className="space-y-2">
-                    <p className="eyebrow pt-1 text-[10.5px]">Reaches outside the conversation</p>
+                    <p className="eyebrow pt-1 text-[10.5px]">{t("overview.reachesOutside")}</p>
                     <AbilityList abilities={sensitive} sensitive />
                   </div>
                 )}
@@ -147,7 +159,7 @@ export function ModOverview({
             )}
           </Block>
 
-          <Block title="Hooks into">
+          <Block title={t("card.hooksInto")}>
             {source ? (
               mod.contents?.hooks.length ? (
                 <ul className="divide-y rounded-lg border bg-card">
@@ -159,17 +171,17 @@ export function ModOverview({
                   ))}
                 </ul>
               ) : (
-                <Quiet>No hooks.</Quiet>
+                <Quiet>{t("overview.noHooks")}</Quiet>
               )
             ) : !check ? (
-              <Quiet>Not known until Claude Code checks the plugin.</Quiet>
+              <Quiet>{t("overview.hooksUnknown")}</Quiet>
             ) : check.hooks.length === 0 ? (
-              <Quiet>No hooks yet.</Quiet>
+              <Quiet>{t("overview.noHooksYet")}</Quiet>
             ) : (
               <ul className="divide-y rounded-lg border bg-card">
                 {check.hooks.map((h, i) => (
                   <li key={i} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 px-3.5 py-2">
-                    <span className="text-[13px]">{modHookLabel(h)}</span>
+                    <span className="text-[13px]">{hookLabel(h)}</span>
                     <span className="flex min-w-0 items-baseline gap-1.5 font-mono text-[11px] text-muted-foreground">
                       <span className="text-foreground/75">{h.event}</span>
                       {h.matcher && <span className="truncate rounded-[4px] border bg-paper-2 px-1">{h.matcher}</span>}
@@ -184,10 +196,10 @@ export function ModOverview({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-5">
         <p className="text-xs text-muted-foreground">
-          {modOriginLabel(mod, agents)} · added {format(new Date(mod.createdAt), "PP")}
+          {t("overview.originAdded", { origin: modOriginLabel(mod, agents), date: format(new Date(mod.createdAt), "PP", { locale: dateLocale }) })}
         </p>
         <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={onDelete}>
-          <Trash2 /> {source ? "Uninstall" : "Delete plugin"}
+          <Trash2 /> {source ? t("overview.uninstall") : t("overview.deletePlugin")}
         </Button>
       </div>
     </div>
@@ -215,6 +227,7 @@ function AbilityList({ abilities, sensitive }: { abilities: ModAbility[]; sensit
 }
 
 function DescriptionField({ mod, actions }: { mod: Mod; actions: ModActions }) {
+  const { t } = useTranslation("mods");
   const [text, setText] = useState(mod.description);
   const focused = useRef(false);
   useEffect(() => {
@@ -236,7 +249,7 @@ function DescriptionField({ mod, actions }: { mod: Mod; actions: ModActions }) {
         if (next !== mod.description) actions.update.mutate({ mod, patch: { description: next } });
         setText(next);
       }}
-      placeholder="What this plugin does, in a sentence or two."
+      placeholder={t("overview.descriptionPlaceholder")}
       className="min-h-[4.5rem] text-[13px] leading-relaxed md:text-[13px]"
     />
   );
@@ -244,6 +257,8 @@ function DescriptionField({ mod, actions }: { mod: Mod; actions: ModActions }) {
 
 /** Where a plugin from a repository comes from, the version that runs, and whether a newer one waits. */
 function VersionPanel({ mod, actions }: { mod: Mod; actions: ModActions }) {
+  const { t } = useTranslation("mods");
+  const { dateLocale } = useLocale();
   const source = mod.source!;
   const upgrading = actions.upgrading.has(mod.id);
   const looking = actions.checkUpdates.isPending && actions.checkUpdates.variables?.some((m) => m.id === mod.id) !== false;
@@ -254,7 +269,18 @@ function VersionPanel({ mod, actions }: { mod: Mod; actions: ModActions }) {
   const compareUrl = update && source.web?.startsWith("https://github.com/") ? `${source.web}/compare/${source.commit}...${source.latestCommit}` : null;
 
   return (
-    <Block title="Version" description={`Follows ${source.ref ? `“${source.ref}”` : "the default branch"} of ${source.repo}${source.path ? `, folder ${source.path}` : ""}.`}>
+    <Block
+      title={t("contents.version")}
+      description={
+        source.ref
+          ? source.path
+            ? t("version.followsRefFolder", { ref: source.ref, repo: source.repo, path: source.path })
+            : t("version.followsRef", { ref: source.ref, repo: source.repo })
+          : source.path
+            ? t("version.followsDefaultFolder", { repo: source.repo, path: source.path })
+            : t("version.followsDefault", { repo: source.repo })
+      }
+    >
       <div className="divide-y overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
           <span className="font-mono text-[15px] font-medium tracking-[-0.01em] tabular-nums">{source.version ?? shortCommit(source.commit)}</span>
@@ -268,10 +294,12 @@ function VersionPanel({ mod, actions }: { mod: Mod; actions: ModActions }) {
           </a>
           {installedAt && (
             <span className="ml-auto text-xs text-muted-foreground">
-              installed{" "}
-              <time dateTime={source.installedAt} title={format(installedAt, "PPp")}>
-                {formatDistanceToNow(installedAt, { addSuffix: true })}
-              </time>
+              <Trans
+                t={t}
+                i18nKey="version.installedAgo"
+                values={{ ago: formatDistanceToNow(installedAt, { addSuffix: true, locale: dateLocale }) }}
+                components={{ time: <time dateTime={source.installedAt} title={format(installedAt, "PPp", { locale: dateLocale })} /> }}
+              />
             </span>
           )}
         </div>
@@ -286,38 +314,38 @@ function VersionPanel({ mod, actions }: { mod: Mod; actions: ModActions }) {
           <p className="min-w-0 flex-1 basis-44 text-xs leading-relaxed text-muted-foreground">
             {update ? (
               <>
-                <span className="font-medium text-foreground">Update ready</span>
+                <span className="font-medium text-foreground">{t("card.updateReady")}</span>
                 {source.latestVersion && source.latestVersion !== source.version && <span className="font-mono text-[11.5px] text-foreground/85"> {source.latestVersion}</span>}
                 {source.latestCommit && <span className="font-mono text-[11.5px]"> ({shortCommit(source.latestCommit)})</span>}
                 {compareUrl && (
                   <>
                     {" · "}
                     <a href={compareUrl} target="_blank" rel="noreferrer" className="rounded-sm underline decoration-foreground/25 underline-offset-[3px] outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50">
-                      what changed
+                      {t("version.whatChanged")}
                     </a>
                   </>
                 )}
               </>
             ) : source.checkError ? (
-              <span className="text-warning">Couldn't look for updates: {source.checkError}</span>
+              <span className="text-warning">{t("version.checkError", { error: source.checkError })}</span>
             ) : checkedAt ? (
-              <>
-                Up to date · looked{" "}
-                <time dateTime={source.checkedAt!} title={format(checkedAt, "PPp")}>
-                  {formatDistanceToNow(checkedAt, { addSuffix: true })}
-                </time>
-              </>
+              <Trans
+                t={t}
+                i18nKey="version.upToDateLooked"
+                values={{ ago: formatDistanceToNow(checkedAt, { addSuffix: true, locale: dateLocale }) }}
+                components={{ time: <time dateTime={source.checkedAt!} title={format(checkedAt, "PPp", { locale: dateLocale })} /> }}
+              />
             ) : (
-              "Not looked for updates yet."
+              t("version.notLookedYet")
             )}
           </p>
           {update ? (
             <Button size="xs" disabled={upgrading} onClick={() => actions.upgrade.mutate(mod)}>
-              {upgrading ? <Spinner className="size-3" /> : <ArrowUp />} {upgrading ? "Updating…" : "Update"}
+              {upgrading ? <Spinner className="size-3" /> : <ArrowUp />} {upgrading ? t("card.updating") : t("card.update")}
             </Button>
           ) : (
             <Button size="xs" variant="outline" disabled={looking || upgrading} onClick={() => actions.checkUpdates.mutate([mod])}>
-              {looking ? <Spinner className="size-3" /> : <RefreshCw />} Check for updates
+              {looking ? <Spinner className="size-3" /> : <RefreshCw />} {t("card.checkUpdates")}
             </Button>
           )}
         </div>

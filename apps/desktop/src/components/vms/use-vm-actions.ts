@@ -2,15 +2,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Vm, VmAssignmentKind, VmPatch } from "@godmode/shared";
 import { toastApiError } from "@/components/vault/vault-utils";
+import { t } from "@/i18n";
 import { api, type VmOpenTarget } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 
 /** Where runs go once an assignment is removed (a chat's VM wins over its agent's, which wins over the workspace's). */
-const UNASSIGNED: Record<VmAssignmentKind, string> = {
-  conversation: "The chat uses its agent's VM again, if it has one.",
-  agent: "The agent uses its workspace's VM again, if there is one — otherwise it works on this Mac.",
-  workspace: "Its agents work on this Mac again, unless they have a VM of their own.",
-};
+const UNASSIGNED = {
+  conversation: "vms:toast.unassigned.conversation",
+  agent: "vms:toast.unassigned.agent",
+  workspace: "vms:toast.unassigned.workspace",
+} as const satisfies Record<VmAssignmentKind, string>;
 
 /**
  * Lifecycle, open, edit, reset, duplicate, delete and assignment for macOS VMs — with toasts, and the answer patched
@@ -27,41 +28,45 @@ export function useVmActions() {
   const start = useMutation({
     mutationFn: (vm: Vm) => api.vms.start(vm.id),
     onSuccess: put,
-    onError: (e, vm) => toastApiError(e, `Couldn't start “${vm.name}”`, qc),
+    onError: (e, vm) => toastApiError(e, t("vms:toast.startFailed", { name: vm.name }), qc),
   });
 
   const stop = useMutation({
     mutationFn: (vm: Vm) => api.vms.stop(vm.id),
     onSuccess: put,
-    onError: (e, vm) => toastApiError(e, `Couldn't stop “${vm.name}”`, qc),
+    onError: (e, vm) => toastApiError(e, t("vms:toast.stopFailed", { name: vm.name }), qc),
   });
 
   const suspend = useMutation({
     mutationFn: (vm: Vm) => api.vms.suspend(vm.id),
     onSuccess: (next) => {
       put(next);
-      toast.success(`${next.name} is suspended`, { description: "Its memory is saved to disk — Resume continues right where it left off." });
+      toast.success(t("vms:toast.suspended", { name: next.name }), { description: t("vms:toast.suspendedDescription") });
     },
-    onError: (e, vm) => toastApiError(e, `Couldn't suspend “${vm.name}”`, qc),
+    onError: (e, vm) => toastApiError(e, t("vms:toast.suspendFailed", { name: vm.name }), qc),
   });
 
   const restart = useMutation({
     mutationFn: (vm: Vm) => api.vms.restart(vm.id),
     onSuccess: put,
-    onError: (e, vm) => toastApiError(e, `Couldn't restart “${vm.name}”`, qc),
+    onError: (e, vm) => toastApiError(e, t("vms:toast.restartFailed", { name: vm.name }), qc),
   });
 
   const open = useMutation({
     mutationFn: ({ vm, what }: { vm: Vm; what: VmOpenTarget }) => api.vms.open(vm.id, what),
     onMutate: ({ vm, what }) => {
       if (what !== "folder" && vm.state !== "running") {
-        toast(`Starting ${vm.name} first…`, {
-          description: what === "screen" ? "Its screen opens as soon as macOS is up." : "Terminal opens as soon as macOS is up.",
+        toast(t("vms:toast.startingFirst", { name: vm.name }), {
+          description: what === "screen" ? t("vms:toast.startingFirstScreen") : t("vms:toast.startingFirstTerminal"),
         });
       }
     },
     onError: (e, { vm, what }) =>
-      toastApiError(e, what === "screen" ? `Couldn't show the screen of “${vm.name}”` : what === "terminal" ? "Couldn't open Terminal" : "Couldn't open the shared folder", qc),
+      toastApiError(
+        e,
+        what === "screen" ? t("vms:toast.screenFailed", { name: vm.name }) : what === "terminal" ? t("vms:toast.terminalFailed") : t("vms:toast.folderFailed"),
+        qc,
+      ),
   });
 
   const update = useMutation({
@@ -69,27 +74,27 @@ export function useVmActions() {
     onSuccess: (next, { vm, patch }) => {
       put(next);
       const later = vm.state === "running" && (patch.cpu !== undefined || patch.memoryMb !== undefined || patch.display !== undefined);
-      toast.success("Changes saved", { description: later ? "CPU, memory and display apply the next time the VM starts." : undefined });
+      toast.success(t("vms:toast.saved"), { description: later ? t("vms:toast.savedLater") : undefined });
     },
-    onError: (e) => toastApiError(e, "Couldn't save the changes", qc),
+    onError: (e) => toastApiError(e, t("vms:toast.saveFailed"), qc),
   });
 
   const reset = useMutation({
     mutationFn: ({ vm, start }: { vm: Vm; start?: boolean }) => api.vms.reset(vm.id, { start }),
     onSuccess: (next) => {
       put(next);
-      toast.success(`${next.name} is fresh again`, { description: "A clean macOS from its image. The shared folder and assignments were kept." });
+      toast.success(t("vms:toast.reset", { name: next.name }), { description: t("vms:toast.resetDescription") });
     },
-    onError: (e, { vm }) => toastApiError(e, `Couldn't reset “${vm.name}”`, qc),
+    onError: (e, { vm }) => toastApiError(e, t("vms:toast.resetFailed", { name: vm.name }), qc),
   });
 
   const duplicate = useMutation({
     mutationFn: ({ vm, name }: { vm: Vm; name?: string }) => api.vms.duplicate(vm.id, name),
     onSuccess: (copy) => {
       put(copy);
-      toast.success(`${copy.name} created`, { description: "Same disk contents, its own shared folder. Assign it to an agent or workspace." });
+      toast.success(t("vms:toast.duplicated", { name: copy.name }), { description: t("vms:toast.duplicatedDescription") });
     },
-    onError: (e, { vm }) => toastApiError(e, `Couldn't duplicate “${vm.name}”`, qc),
+    onError: (e, { vm }) => toastApiError(e, t("vms:toast.duplicateFailed", { name: vm.name }), qc),
   });
 
   const remove = useMutation({
@@ -97,9 +102,9 @@ export function useVmActions() {
     onSuccess: (_res, { vm, keepFiles }) => {
       qc.setQueryData<Vm[]>(qk.vmList, (old) => old?.filter((v) => v.id !== vm.id));
       void qc.invalidateQueries({ queryKey: qk.vmStatus });
-      toast.success(`${vm.name} deleted`, { description: keepFiles ? `Its shared folder is still at ${vm.sharedDir}` : undefined });
+      toast.success(t("vms:toast.deleted", { name: vm.name }), { description: keepFiles ? t("vms:toast.deletedKeep", { path: vm.sharedDir }) : undefined });
     },
-    onError: (e, { vm }) => toastApiError(e, `Couldn't delete “${vm.name}”`, qc),
+    onError: (e, { vm }) => toastApiError(e, t("vms:toast.deleteFailed", { name: vm.name }), qc),
   });
 
   const assign = useMutation({
@@ -107,10 +112,10 @@ export function useVmActions() {
       api.vms.assign(vm.id, { kind, id, assigned }),
     onSuccess: (next, { kind, name, assigned }) => {
       put(next);
-      if (assigned) toast.success(`${name} now works in ${next.name}`, { description: next.state === "running" ? undefined : "The VM starts when a run needs it." });
-      else toast.success(`${name} no longer uses ${next.name}`, { description: UNASSIGNED[kind] });
+      if (assigned) toast.success(t("vms:toast.assigned", { name, vm: next.name }), { description: next.state === "running" ? undefined : t("vms:toast.assignedDescription") });
+      else toast.success(t("vms:toast.unassignedTitle", { name, vm: next.name }), { description: t(UNASSIGNED[kind]) });
     },
-    onError: (e) => toastApiError(e, "Couldn't change the assignment", qc),
+    onError: (e) => toastApiError(e, t("vms:toast.assignFailed"), qc),
   });
 
   return { start, stop, suspend, restart, open, update, reset, duplicate, remove, assign };

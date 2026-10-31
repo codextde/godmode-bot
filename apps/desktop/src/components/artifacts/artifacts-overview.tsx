@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { Link, useNavigate } from "react-router";
 import { useMutation } from "@tanstack/react-query";
 import { motion } from "motion/react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ArtifactSummary } from "@godmode/shared";
 import { ARTIFACT_STARTERS, MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
@@ -23,7 +24,17 @@ import { cn } from "@/lib/utils";
 import { useUi } from "@/stores/ui";
 
 /** Dashboards and small apps the agents built: a line to ask for a new one, then the gallery. */
+const STARTER_TEXT = {
+  sales: { title: "starters.sales.title", blurb: "starters.sales.blurb" },
+  kpi: { title: "starters.kpi.title", blurb: "starters.kpi.blurb" },
+  pipeline: { title: "starters.pipeline.title", blurb: "starters.pipeline.blurb" },
+  budget: { title: "starters.budget.title", blurb: "starters.budget.blurb" },
+  content: { title: "starters.content.title", blurb: "starters.content.blurb" },
+  calculator: { title: "starters.calculator.title", blurb: "starters.calculator.blurb" },
+} as const;
+
 export function ArtifactsOverview() {
+  const { t } = useTranslation(["artifacts", "common"]);
   const { data: artifacts, isLoading } = useArtifacts();
   const [query, setQuery] = useState("");
   const list = useMemo(() => {
@@ -46,19 +57,19 @@ export function ArtifactsOverview() {
       ) : empty ? (
         <EmptyState
           art={<Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={64} follow />}
-          title="Nothing built yet"
-          description="Describe a dashboard or a tool above, or pick a starting point. Agents also build artifacts when you ask for one in any chat."
+          title={t("overview.emptyTitle")}
+          description={t("overview.emptyDescription")}
         />
       ) : (
         <section className="space-y-3">
           <div className="flex items-center gap-3">
             <h3 className="text-sm font-medium">
-              Your artifacts <span className="ml-1 text-muted-foreground tabular-nums">{artifacts!.length}</span>
+              {t("overview.yourArtifacts")} <span className="ml-1 text-muted-foreground tabular-nums">{artifacts!.length}</span>
             </h3>
             {(artifacts?.length ?? 0) > 6 && (
               <div className="relative ml-auto w-56">
                 <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" className="h-8 pl-8 text-sm" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("common:actions.search")} className="h-8 pl-8 text-sm" />
               </div>
             )}
           </div>
@@ -69,7 +80,7 @@ export function ArtifactsOverview() {
               ))}
             </div>
           ) : (
-            <p className="py-10 text-center text-sm text-muted-foreground">Nothing matches “{query}”.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t("overview.noMatch", { query })}</p>
           )}
         </section>
       )}
@@ -78,6 +89,7 @@ export function ArtifactsOverview() {
 }
 
 function Composer({ prominent }: { prominent: boolean }) {
+  const { t } = useTranslation("artifacts");
   const navigate = useNavigate();
   const scope = useUi((s) => s.workspace);
   const { data: agents = [] } = useAgents();
@@ -90,7 +102,7 @@ function Composer({ prominent }: { prominent: boolean }) {
     mutationFn: () =>
       api.artifacts.start({ prompt: prompt.trim(), agentId: picked?.id, workspaceId: scope !== "all" && scope !== "global" ? scope : null }),
     onSuccess: ({ conversationId }) => navigate(`/chat/${conversationId}`),
-    onError: (err) => toast.error("Couldn't start it", { description: errorMessage(err) }),
+    onError: (err) => toast.error(t("overview.startError"), { description: errorMessage(err) }),
   });
   const submit = () => {
     if (prompt.trim() && !start.isPending) start.mutate();
@@ -110,30 +122,33 @@ function Composer({ prominent }: { prominent: boolean }) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={onKey}
-          placeholder="Describe a dashboard or app — e.g. “A sales dashboard with this month's Shopify revenue, orders and top products”"
+          placeholder={t("overview.composerPlaceholder")}
           className="min-h-[76px] resize-none border-0 bg-transparent p-1.5 text-[15px] shadow-none focus-visible:ring-0 dark:bg-transparent"
         />
       </div>
       <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2.5">
         <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
-          {ARTIFACT_STARTERS.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              title={s.blurb}
-              onClick={() => {
-                setPrompt(s.prompt);
-                box.current?.focus();
-              }}
-              className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
-            >
-              {s.title}
-            </button>
-          ))}
+          {ARTIFACT_STARTERS.map((s) => {
+            const text = STARTER_TEXT[s.id as keyof typeof STARTER_TEXT];
+            return (
+              <button
+                key={s.id}
+                type="button"
+                title={text ? t(text.blurb) : s.blurb}
+                onClick={() => {
+                  setPrompt(s.prompt);
+                  box.current?.focus();
+                }}
+                className="rounded-full border bg-background px-2.5 py-1 text-xs text-muted-foreground transition hover:border-foreground/20 hover:text-foreground"
+              >
+                {text ? t(text.title) : s.title}
+              </button>
+            );
+          })}
         </div>
         {usable.length > 1 && picked && <AgentPicker agents={usable} value={picked.id} onChange={setAgentId} />}
         <Button size="sm" onClick={submit} disabled={!prompt.trim() || start.isPending || !picked} className="gap-1.5">
-          {start.isPending ? <Spinner /> : <ArrowUp />} Build it
+          {start.isPending ? <Spinner /> : <ArrowUp />} {t("overview.buildIt")}
         </Button>
       </div>
     </section>
@@ -155,6 +170,7 @@ function useSeen<T extends Element>() {
 }
 
 function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: number }) {
+  const { t } = useTranslation(["artifacts", "common"]);
   const [box, seen] = useSeen<HTMLDivElement>();
   const { data: full } = useArtifact(seen ? artifact.id : null);
   const actions = useArtifactActions(artifact);
@@ -180,7 +196,7 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
           <div className="absolute inset-0 bg-gradient-to-t from-black/[0.04] to-transparent" />
           {busy && (
             <span className="absolute top-2.5 left-2.5 inline-flex items-center gap-1.5 rounded-full border bg-card/95 px-2 py-0.5 text-[11px] font-medium text-brand-strong shadow-sm backdrop-blur">
-              <Spinner className="size-3" /> Updating
+              <Spinner className="size-3" /> {t("tile.updating")}
             </span>
           )}
         </div>
@@ -190,10 +206,10 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
               {artifact.pinned && <Pin className="size-3 shrink-0 text-muted-foreground" />}
               <span className="truncate">{artifact.title}</span>
             </h3>
-            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{artifact.description || `Version ${artifact.version}`}</p>
+            <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">{artifact.description || t("version", { version: artifact.version })}</p>
             <div className="mt-2.5 flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
               {agent && <AgentAvatar agent={agent} size="sm" className="size-4" />}
-              <span className="truncate">{artifact.agentName ?? "Agent"}</span>
+              <span className="truncate">{artifact.agentName ?? t("common:words.agent")}</span>
               <span aria-hidden>·</span>
               <span className="shrink-0">{ago(artifact.updatedAt)}</span>
             </div>
@@ -203,24 +219,24 @@ function ArtifactTile({ artifact, index }: { artifact: ArtifactSummary; index: n
       <div className="absolute right-2 bottom-2.5 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label="More">
+            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={t("more")}>
               <MoreHorizontal />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onSelect={() => actions.pin.mutate(!artifact.pinned)}>
-              {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? "Unpin" : "Pin to the top"}
+              {artifact.pinned ? <PinOff /> : <Pin />} {artifact.pinned ? t("unpin") : t("pinToTop")}
             </DropdownMenuItem>
             {artifact.conversationId && (
               <DropdownMenuItem asChild>
                 <Link to={`/chat/${artifact.conversationId}`}>
-                  <AppWindow /> Open its chat
+                  <AppWindow /> {t("openChat")}
                 </Link>
               </DropdownMenuItem>
             )}
             <DropdownMenuSeparator />
             <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
-              <Trash2 /> Delete
+              <Trash2 /> {t("common:actions.delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ClaudeLoginStatus } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,7 @@ let autoCopied: string | null = null;
  * `onSignedIn` runs when a sign-in finishes while the component is on screen, wherever it was started.
  */
 export function useClaudeLogin({ onSignedIn }: { onSignedIn?: () => void } = {}) {
+  const { t } = useTranslation("onboarding");
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: qk.claudeLogin,
@@ -66,14 +68,14 @@ export function useClaudeLogin({ onSignedIn }: { onSignedIn?: () => void } = {})
     },
     onError: (e) => {
       setMine(false);
-      toast.error("Could not start the sign-in", { description: errorMessage(e) });
+      toast.error(t("claude.startFailed"), { description: errorMessage(e) });
     },
   });
   const cancel = useMutation({ mutationFn: api.doctor.cancelClaudeLogin, onSuccess: set });
   // What the code did arrives as an event (or the next poll); the reply is only "still waiting".
   const submit = useMutation({
     mutationFn: (code: string) => api.doctor.submitClaudeLoginCode(code),
-    onError: (e) => toast.error("Could not send the code", { description: errorMessage(e) }),
+    onError: (e) => toast.error(t("claude.codeFailed"), { description: errorMessage(e) }),
   });
 
   const state = data?.state ?? "idle";
@@ -81,13 +83,13 @@ export function useClaudeLogin({ onSignedIn }: { onSignedIn?: () => void } = {})
   useEffect(() => {
     if (prev.current === "waiting" && state !== "waiting") {
       if (state === "done") {
-        toast.success("Signed in to Claude", { id: "claude-signed-in", description: "Your agents can work again." });
+        toast.success(t("claude.signedIn"), { id: "claude-signed-in", description: t("claude.signedInDescription") });
         onSignedIn?.();
       }
       setMine(false);
     }
     prev.current = state;
-  }, [state, onSignedIn]);
+  }, [state, onSignedIn, t]);
 
   // The sign-in this component started copies its link as soon as it arrives.
   const url = state === "waiting" ? (data?.url ?? null) : null;
@@ -102,8 +104,8 @@ export function useClaudeLogin({ onSignedIn }: { onSignedIn?: () => void } = {})
     if (!url) return;
     const ok = await copySignInLink(url, true);
     setCopied({ url, ok });
-    if (ok) toast.success("Sign-in link copied", { id: "claude-link-copied" });
-    else toast.error("Could not copy the link", { description: "Open the sign-in page instead." });
+    if (ok) toast.success(t("claude.linkCopiedToast"), { id: "claude-link-copied" });
+    else toast.error(t("claude.copyFailed"), { description: t("claude.copyFailedHint") });
   };
   const link = { url, copied: copied?.url === url ? copied.ok : null, copy };
 
@@ -117,6 +119,7 @@ export type ClaudeLogin = ReturnType<typeof useClaudeLogin>;
  * opened (or on a phone): that page shows a code to paste back here.
  */
 export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; className?: string }) {
+  const { t } = useTranslation(["onboarding", "common"]);
   const id = useId();
   const [code, setCode] = useState("");
   const { url, copied, copy } = login.link;
@@ -132,20 +135,23 @@ export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; cl
     <div className={cn("rounded-lg border bg-paper-2 p-3 text-xs", className)} aria-live="polite">
       <div className="flex items-center gap-2 text-[13px] font-medium">
         <Spinner className="size-3.5" />
-        <span className="min-w-0 flex-1">{signsInFromAfar ? "Sign in on this device" : "Finish signing in in your browser"}</span>
+        <span className="min-w-0 flex-1">{signsInFromAfar ? t("claude.signInHere") : t("claude.finishInBrowser")}</span>
         <Button type="button" size="xs" variant="ghost" className="-my-1 -mr-1.5 text-muted-foreground" onClick={() => login.cancel.mutate()} disabled={login.cancel.isPending}>
-          Cancel
+          {t("common:actions.cancel")}
         </Button>
       </div>
       <p className="mt-1 leading-relaxed text-muted-foreground">
-        {signsInFromAfar ? "Open the sign-in page, sign in with your Claude account and click " : "Sign in with your Claude account and click "}
-        <span className="font-medium text-foreground">Authorize</span>.{signsInFromAfar ? " Then paste the code it shows below." : " This updates by itself."}
+        <Trans
+          t={t}
+          i18nKey={signsInFromAfar ? "claude.stepsAfar" : "claude.steps"}
+          components={{ b: <span className="font-medium text-foreground" /> }}
+        />
       </p>
 
       <div className="mt-2.5 rounded-md border bg-card p-2.5">
         {!url ? (
           <p className="flex items-center gap-2 text-muted-foreground">
-            <Spinner className="size-3" /> Getting the sign-in link…
+            <Spinner className="size-3" /> {t("claude.gettingLink")}
           </p>
         ) : (
           <>
@@ -153,23 +159,21 @@ export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; cl
               <p className="flex items-start gap-2 leading-relaxed">
                 <Check className="mt-px size-3.5 shrink-0 text-success" aria-hidden />
                 <span>
-                  <span className="font-medium">Sign-in link copied.</span>{" "}
-                  <span className="text-muted-foreground">
-                    {signsInFromAfar ? "Paste it into a browser on this device if the page did not open." : "No browser window opened? Paste it into your browser."}
-                  </span>
+                  <span className="font-medium">{t("claude.linkCopied")}</span>{" "}
+                  <span className="text-muted-foreground">{signsInFromAfar ? t("claude.pasteAfar") : t("claude.pasteHere")}</span>
                 </span>
               </p>
             ) : (
               <p className="leading-relaxed text-muted-foreground">
-                {signsInFromAfar ? "Open the page here, or copy the link into another browser." : "No browser window opened? Open the page, or copy the link into your browser."}
+                {signsInFromAfar ? t("claude.openAfar") : t("claude.openHere")}
               </p>
             )}
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Button type="button" size="xs" variant={signsInFromAfar ? "default" : "outline"} className="h-7 px-2.5" onClick={openPage}>
-                <ExternalLink /> Open sign-in page
+                <ExternalLink /> {t("claude.openPage")}
               </Button>
               <Button type="button" size="xs" variant="outline" className="h-7 px-2.5" onClick={() => void copy()}>
-                <Copy /> {copied ? "Copy again" : "Copy link"}
+                <Copy /> {copied ? t("claude.copyAgain") : t("claude.copyLink")}
               </Button>
             </div>
           </>
@@ -185,20 +189,20 @@ export function ClaudeSignInSteps({ login, className }: { login: ClaudeLogin; cl
           }}
         >
           <label htmlFor={id} className="block text-muted-foreground">
-            {signsInFromAfar ? "Code from the sign-in page" : "Got a code from the sign-in page? Paste it here."}
+            {signsInFromAfar ? t("claude.codeLabelAfar") : t("claude.codeLabel")}
           </label>
           <div className="flex gap-2">
             <Input
               id={id}
               value={code}
               onChange={(e) => setCode(e.target.value)}
-              placeholder="Paste the code"
+              placeholder={t("claude.codePlaceholder")}
               className="h-8 bg-card font-mono text-xs"
               autoComplete="off"
               spellCheck={false}
             />
             <Button type="submit" size="sm" variant="outline" disabled={!code.trim() || login.submit.isPending}>
-              {login.submit.isPending && <Spinner />} Continue
+              {login.submit.isPending && <Spinner />} {t("common:actions.continue")}
             </Button>
           </div>
         </form>

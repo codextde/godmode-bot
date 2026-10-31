@@ -1,1 +1,199 @@
-{}
+{
+  "connection": {
+    "usb": "USB",
+    "wifi": "WLAN",
+    "emulator": "Emulator"
+  },
+  "state": {
+    "agentWorking": "Agent arbeitet",
+    "connected": "Verbunden",
+    "unauthorized": "USB-Debugging erlauben",
+    "offline": "Offline",
+    "disconnected": "Nicht verbunden"
+  },
+  "list": {
+    "two": "{{first}} und {{second}}",
+    "more_one": "{{names}} und {{count}} weiteres",
+    "more_other": "{{names}} und {{count}} weitere"
+  },
+  "deviceCard": {
+    "disconnectFailed": "Trennen fehlgeschlagen",
+    "open": "{{name}} öffnen",
+    "takeControl": "Steuern",
+    "lastSeen": "Zuletzt gesehen {{time}}",
+    "more": "Mehr zu {{name}}",
+    "rename": "Umbenennen und beschreiben",
+    "disconnectWifi": "WLAN trennen",
+    "forget": "Handy vergessen"
+  },
+  "usedBy": {
+    "assignFailed": "Konnte nicht ändern, wer das Handy nutzt",
+    "title": "Genutzt von",
+    "noOneYet": "Noch niemandem",
+    "chat": "Chat",
+    "untitledChat": "Unbenannter Chat",
+    "assignmentTitle": "{{kind}}: {{label}}",
+    "takeAway": "{{device}} von {{label}} entfernen",
+    "assignAria": "{{name}} einem Agenten geben",
+    "assign": "Zuweisen",
+    "searchAgents": "Agenten suchen…",
+    "noAgents": "Keine Agenten gefunden.",
+    "assigned": "Zugewiesen",
+    "singleChatHint": "Für einen einzelnen Chat wählst du das Handy über den <b>Handy</b>-Button im Eingabefeld."
+  },
+  "panel": {
+    "aria": "Android-Handy",
+    "title": "Handy",
+    "live": "Live",
+    "waiting": "Wartet",
+    "hide": "Handy ausblenden",
+    "show": "Handy einblenden",
+    "tabs": "Handys",
+    "takeControl": "Steuern",
+    "stopControlling": "Steuerung beenden",
+    "openFull": "In voller Größe öffnen",
+    "controlHint": "Klicken zum Tippen, ziehen zum Wischen, tippen zum Schreiben. Rechtsklick geht zurück.",
+    "footerTitle": "Android-Handys",
+    "count_one": "{{count}} Handy in diesem Chat",
+    "count_other": "{{count}} Handys in diesem Chat"
+  },
+  "overview": {
+    "steps": {
+      "developer": {
+        "title": "Entwickleroptionen einschalten",
+        "body": "Einstellungen → Über das Telefon → siebenmal auf Build-Nummer tippen."
+      },
+      "debugging": {
+        "title": "USB-Debugging erlauben",
+        "body": "Einstellungen → System → Entwickleroptionen → USB-Debugging."
+      },
+      "plugIn": {
+        "title": "Anschließen und Zulassen tippen",
+        "body": "Hake „Von diesem Computer immer zulassen“ an, damit es erlaubt bleibt."
+      }
+    },
+    "lookFailed": "Suche nach Handys fehlgeschlagen",
+    "installFailed": "adb konnte nicht installiert werden",
+    "countConnected": "{{connected}} von {{total}} verbunden",
+    "phones": "Handys",
+    "lookAgain": "Erneut nach Handys suchen",
+    "connectWifi": "Über WLAN verbinden",
+    "adbTitle": "Godmode braucht adb, um mit Handys zu sprechen",
+    "adbCanInstall": "adb ist Androids kostenlose Debugging-Brücke von Google. Godmode installiert eine eigene Kopie (etwa 16 MB) – sonst ändert sich nichts auf deinem Computer.",
+    "adbManual": "Installiere Androids platform-tools (adb) und stell sicher, dass es in deinem PATH liegt, oder gib den Pfad unten an.",
+    "installing": "Installiere…",
+    "install": "adb installieren",
+    "loadError": "Deine Handys konnten nicht geladen werden",
+    "waitingOk": "Ein Handy wartet auf dein OK",
+    "waitingConnect": "Ein Handy wartet auf die Verbindung",
+    "emptyTitle": "Verbinde dein erstes Handy",
+    "emptyDescription": "Schließ ein Android-Handy per USB-Kabel an diesen Computer an. Es erscheint dann von selbst hier.",
+    "orWifi": "Oder über WLAN verbinden"
+  },
+  "chip": {
+    "tooltipNone": "Diesen Chat deine Android-Handys nutzen lassen",
+    "tooltipInherited": "Kann {{names}} nutzen – {{agent}} zugewiesen",
+    "tooltipActive": "Dieser Chat kann {{names}} nutzen",
+    "ariaLabelList": "Android-Handys: {{names}}",
+    "title": "Android-Handys",
+    "button": "Handy",
+    "description": "Läufe in diesem Chat sehen den Bildschirm, tippen, schreiben, öffnen Apps und führen Shell-Befehle aus.",
+    "empty": "Noch keine Handys.",
+    "connect": "Handy verbinden",
+    "findPlaceholder": "Handy suchen…",
+    "noMatch": "Kein Handy mit diesem Namen.",
+    "assignedTo": "{{agent}} zugewiesen",
+    "alwaysOn": "Immer aktiv",
+    "selected": "Ausgewählt",
+    "manage": "Handys verwalten"
+  },
+  "field": {
+    "empty": "Noch keine Handys – verbinde eins, dann kann dieser Agent es nutzen.",
+    "canControl": "Darf steuern",
+    "hint": "Jeder Lauf dieses Agenten kann diese steuern. Ein einzelner Chat kann über den Handy-Button im Eingabefeld weitere hinzufügen."
+  },
+  "wifi": {
+    "connected": "Handy über WLAN verbunden",
+    "connectFailed": "Verbindung fehlgeschlagen",
+    "title": "Handy über WLAN verbinden",
+    "description": "Auf dem Handy: Einstellungen → Entwickleroptionen → Kabelloses Debugging. Handy und Computer müssen im selben Netzwerk sein.",
+    "firstTime": "Erstes Mal",
+    "pairedBefore": "Schon gekoppelt",
+    "pairHint": "Tippe auf dem Handy auf „Gerät über Kopplungscode koppeln“ und gib ein, was angezeigt wird.",
+    "address": "IP-Adresse & Port",
+    "pairingCode": "Kopplungscode",
+    "addressHint": "Die oben im Bildschirm „Kabelloses Debugging“ (nicht der Kopplungsport).",
+    "pairAndConnect": "Koppeln und verbinden",
+    "connect": "Verbinden"
+  },
+  "edit": {
+    "saveFailed": "Handy konnte nicht gespeichert werden",
+    "title": "Handy bearbeiten",
+    "description": "Agenten sehen Name und Beschreibung, wenn sie mit diesem Handy arbeiten.",
+    "whatFor": "Wofür es da ist",
+    "placeholder": "Testhandy, angemeldet beim TikTok-Konto des Shops. Keine Systemeinstellungen ändern."
+  },
+  "forget": {
+    "toast": "{{name}} vergessen",
+    "failed": "Handy konnte nicht vergessen werden",
+    "title": "„{{name}}“ vergessen?",
+    "body": "Godmode vergisst Namen und Beschreibung des Handys.",
+    "oneUser": "{{name}} verliert es.",
+    "oneUserFallback": "Der Agent oder Chat, der es nutzt, verliert es.",
+    "manyUsers": "Die {{n}} Agenten und Chats, die es nutzen, verlieren es.",
+    "rest": "Schließt du es wieder an, erscheint es als neues Handy. Auf dem Handy selbst ändert sich nichts.",
+    "confirm": "Handy vergessen"
+  },
+  "device": {
+    "sendFailed": "Das Handy hat das nicht angenommen",
+    "buttons": {
+      "power": "Ein/Aus",
+      "volumeDown": "Leiser",
+      "volumeUp": "Lauter",
+      "mute": "Stumm",
+      "wake": "Bildschirm aufwecken",
+      "sleep": "Bildschirm ausschalten",
+      "notifications": "Mitteilungen",
+      "quickSettings": "Schnelleinstellungen"
+    },
+    "typePlaceholder": "Text für das aktive Feld",
+    "typeAria": "Text, der auf dem Handy eingegeben wird",
+    "typeEnter": "Eingeben und Enter drücken",
+    "asciiOnly": "adb tippt nur einfaches ASCII. Für ä, é oder Emojis nimm die Tastatur des Handys.",
+    "commandFailed": "Der Befehl wurde nicht ausgeführt",
+    "commandAria": "Shell-Befehl",
+    "run": "Ausführen",
+    "timedOut": "Zeitüberschreitung",
+    "noOutput": "(keine Ausgabe)",
+    "about": {
+      "phone": "Handy",
+      "connection": "Verbindung",
+      "screen": "Bildschirm",
+      "serial": "Seriennr."
+    },
+    "loadError": "Handy konnte nicht geladen werden",
+    "unknown": "Dieses Handy ist nicht mehr bekannt",
+    "unknownDescription": "Vielleicht wurde es vergessen. Schließ es wieder an, dann erscheint es als neues Handy.",
+    "allPhones": "Alle Handys",
+    "nav": {
+      "back": "Zurück",
+      "home": "Startbildschirm",
+      "recents": "Letzte Apps"
+    },
+    "hint": "Klicken zum Tippen · ziehen zum Wischen · halten für langes Drücken · scrollen zum Wischen · Rechtsklick oder <kbd>Esc</kbd> für zurück · tippen zum Schreiben",
+    "controls": "Handysteuerung",
+    "sections": {
+      "buttons": "Tasten",
+      "type": "Schreiben",
+      "command": "Befehl ausführen",
+      "about": "Info"
+    }
+  },
+  "screen": {
+    "ariaInteractive": "Bildschirm von {{name}}. Klicken zum Tippen, ziehen zum Wischen, tippen zum Schreiben.",
+    "aria": "Bildschirm von {{name}}",
+    "unlock": "Entsperr das Handy und tippe auf Zulassen",
+    "connectingLabel": "Verbinde mit dem Bildschirm",
+    "connecting": "Verbinde…"
+  }
+}

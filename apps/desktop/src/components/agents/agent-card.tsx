@@ -1,5 +1,6 @@
 import { Link, useNavigate } from "react-router";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import { Check, Copy, Cpu, Ellipsis, FolderInput, History, MessageSquare, Pause, Pencil, Play, Power, PowerOff, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { AgentAvatar, ScopeBadge } from "@/components/common";
@@ -21,6 +22,7 @@ import { useAllAgents, useWorkspaces } from "@/lib/hooks";
 import { GroupIcon } from "./agent-groups";
 import { planMove, useMoveAgent } from "./agent-dnd";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { AgentStatus, useAgentLiveRun, useAgentMood, useAgentPause, useDuplicateAgent, useStartAgentChat, useToggleAgent } from "./agent-actions";
 
 export function AgentCard({
@@ -37,6 +39,8 @@ export function AgentCard({
   onRunTask: (agent: Agent) => void;
   onDelete: (agent: Agent) => void;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
+  const { dateLocale, intlLocale } = useLocale();
   const modelLabel = useModelLabel();
   const live = useAgentLiveRun(agent.id);
   const running = !!live || agent.status === "running";
@@ -66,7 +70,7 @@ export function AgentCard({
               {agent.name}
             </Link>
             {agent.isDefault && (
-              <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">Built-in</span>
+              <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] font-medium text-muted-foreground">{t("agentCard.builtIn")}</span>
             )}
           </div>
           {agent.role && (
@@ -81,40 +85,40 @@ export function AgentCard({
       </div>
 
       <p className="mt-2.5 line-clamp-2 min-h-10 flex-1 text-[13px] leading-5 text-muted-foreground">
-        {agent.description || <span className="italic opacity-70">No description</span>}
+        {agent.description || <span className="italic opacity-70">{t("agentCard.noDescription")}</span>}
       </p>
 
       <div className="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground">
         <div className="flex min-w-0 flex-1 items-center gap-x-3 overflow-hidden whitespace-nowrap">
           {showScope && <ScopeBadge workspaceId={agent.workspaceId} className="min-w-0 truncate" />}
-          <span className="flex shrink-0 items-center gap-1" title={`${routineCount} automation${routineCount === 1 ? "" : "s"}`}>
+          <span className="flex shrink-0 items-center gap-1" title={t("agentCard.automations", { count: routineCount })}>
             <Workflow className="size-3.5" /> {routineCount}
           </span>
-          <span className="flex min-w-0 items-center gap-1" title={agent.lastRunAt ? `Last run ${new Date(agent.lastRunAt).toLocaleString()}` : "Never ran"}>
+          <span className="flex min-w-0 items-center gap-1" title={agent.lastRunAt ? t("agentCard.lastRun", { when: new Date(agent.lastRunAt).toLocaleString(intlLocale) }) : t("agentCard.neverRan")}>
             <History className="size-3.5 shrink-0" />
-            <span className="truncate">{agent.lastRunAt ? formatDistanceToNowStrict(new Date(agent.lastRunAt), { addSuffix: true }) : "Never"}</span>
+            <span className="truncate">{agent.lastRunAt ? formatDistanceToNowStrict(new Date(agent.lastRunAt), { addSuffix: true, locale: dateLocale }) : t("common:words.never")}</span>
           </span>
           {agent.model && (
-            <span className="flex min-w-0 items-center gap-1" title="Model">
+            <span className="flex min-w-0 items-center gap-1" title={t("agentCard.model")}>
               <Cpu className="size-3.5 shrink-0" /> <span className="truncate">{modelLabel(agent.model)}</span>
             </span>
           )}
         </div>
         <div className="relative z-10 flex shrink-0 gap-1.5">
           <Button size="xs" variant="secondary" className="h-7 px-2.5" onClick={() => chat.mutate(agent)} disabled={chatting}>
-            {chatting ? <Spinner /> : <MessageSquare />} Chat
+            {chatting ? <Spinner /> : <MessageSquare />} {t("agentCard.chat")}
           </Button>
           {paused ? (
             <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => resume.mutate(agent)} disabled={resume.isPending || !agent.enabled}>
-              {resume.isPending ? <Spinner /> : <StepForward />} Continue
+              {resume.isPending ? <Spinner /> : <StepForward />} {t("agentCard.continue")}
             </Button>
           ) : running ? (
             <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => pause.mutate(agent)} disabled={pause.isPending}>
-              {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} Pause
+              {pause.isPending ? <Spinner /> : <Pause className="fill-current" />} {t("agentCard.pause")}
             </Button>
           ) : (
             <Button size="xs" variant="outline" className="h-7 px-2.5" onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
-              <Play /> Run
+              <Play /> {t("agentCard.run")}
             </Button>
           )}
         </div>
@@ -138,6 +142,7 @@ export function AgentMenu({
   onDelete: (agent: Agent) => void;
   className?: string;
 }) {
+  const { t } = useTranslation(["agents", "common"]);
   const navigate = useNavigate();
   const live = useAgentLiveRun(agent.id);
   const running = !!live || agent.status === "running";
@@ -149,46 +154,46 @@ export function AgentMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className={cn("relative z-10 text-muted-foreground", className)} aria-label={`Actions for ${agent.name}`}>
+        <Button variant="ghost" size="icon-sm" className={cn("relative z-10 text-muted-foreground", className)} aria-label={t("agentCard.menu.actionsFor", { name: agent.name })}>
           <Ellipsis />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48">
         <DropdownMenuItem onClick={() => chat.mutate(agent)} disabled={chatting}>
-          <MessageSquare /> New chat
+          <MessageSquare /> {t("agentCard.menu.newChat")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onRunTask(agent)} disabled={!agent.enabled}>
-          <Play /> Run task…
+          <Play /> {t("agentCard.menu.runTask")}
         </DropdownMenuItem>
         {running && (
           <DropdownMenuItem onClick={() => pause.mutate(agent)}>
-            <Pause /> Pause
+            <Pause /> {t("agentCard.pause")}
           </DropdownMenuItem>
         )}
         {paused && (
           <DropdownMenuItem onClick={() => resume.mutate(agent)} disabled={!agent.enabled}>
-            <StepForward /> Continue
+            <StepForward /> {t("agentCard.continue")}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/routines`)}>
-          <Workflow /> Automations
+          <Workflow /> {t("agentCard.menu.automations")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => navigate(`/agents/${agent.id}/settings`)}>
-          <Pencil /> Edit
+          <Pencil /> {t("common:actions.edit")}
         </DropdownMenuItem>
         {!agent.isDefault && (
           <DropdownMenuItem onClick={() => duplicate.mutate(agent)} disabled={duplicate.isPending}>
-            <Copy /> Duplicate
+            <Copy /> {t("agentCard.menu.duplicate")}
           </DropdownMenuItem>
         )}
         {!agent.isDefault && <MoveToMenu agent={agent} />}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => toggle.mutate({ id: agent.id, enabled: !agent.enabled })}>
-          {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? "Switch off" : "Switch on"}
+          {agent.enabled ? <PowerOff /> : <Power />} {agent.enabled ? t("agentCard.menu.switchOff") : t("agentCard.menu.switchOn")}
         </DropdownMenuItem>
         {!agent.isDefault && (
           <DropdownMenuItem variant="destructive" onClick={() => onDelete(agent)}>
-            <Trash2 /> Delete
+            <Trash2 /> {t("common:actions.delete")}
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -198,6 +203,7 @@ export function AgentMenu({
 
 /** The menu's way to move an agent to another workspace, with its team (the same as dragging it there). */
 function MoveToMenu({ agent }: { agent: Agent }) {
+  const { t } = useTranslation("agents");
   const { data: workspaces = [] } = useWorkspaces();
   const { data: all = [] } = useAllAgents();
   const move = useMoveAgent();
@@ -208,7 +214,7 @@ function MoveToMenu({ agent }: { agent: Agent }) {
   return (
     <DropdownMenuSub>
       <DropdownMenuSubTrigger>
-        <FolderInput /> Move to
+        <FolderInput /> {t("agentCard.menu.moveTo")}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="max-h-80 w-52 overflow-y-auto">
         {[null, ...workspaces].map((w) => {
@@ -216,7 +222,7 @@ function MoveToMenu({ agent }: { agent: Agent }) {
           return (
             <DropdownMenuItem key={w?.id ?? "global"} disabled={here || move.isPending} onClick={() => to(w?.id ?? null)}>
               <GroupIcon workspace={w} isGlobal={!w} className="size-4.5 rounded-[4px] text-[10px] [&_svg]:size-3" />
-              <span className="truncate">{w?.name ?? "Global"}</span>
+              <span className="truncate">{w?.name ?? t("agentCard.menu.global")}</span>
               {here && <Check className="ml-auto" />}
             </DropdownMenuItem>
           );

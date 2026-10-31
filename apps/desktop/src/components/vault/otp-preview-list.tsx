@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Layers, TriangleAlert, X } from "lucide-react";
+import { Trans, useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { parseOtpUri, type MigrationPreview, type OtpPreview } from "@/lib/qr";
@@ -34,15 +35,16 @@ export function useParsedUris(uris: string[]) {
 
 /** Preview of everything that is about to be imported, with per-code removal. */
 export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (uri: string) => void }) {
+  const { t } = useTranslation("vault");
   const { parsed, accountCount, incomplete } = useParsedUris(uris);
   if (parsed.length === 0) return null;
 
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between">
-        <p className="eyebrow">Ready to import</p>
+        <p className="eyebrow">{t("otpPreview.ready")}</p>
         <Badge variant="secondary" className="tabular-nums">
-          {accountCount} {accountCount === 1 ? "account" : "accounts"}
+          {t("otpPreview.accounts", { count: accountCount })}
         </Badge>
       </div>
 
@@ -50,8 +52,7 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
         <div key={i} className="flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/[0.07] p-3 text-xs">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
           <p>
-            This Google Authenticator export has <strong>{b.size} QR codes</strong> — {b.missing} {b.missing === 1 ? "is" : "are"} still missing. Add the
-            remaining screenshots to import every account.
+            <Trans t={t} i18nKey="otpPreview.incomplete" values={{ size: b.size }} count={b.missing} components={{ strong: <strong /> }} />
           </p>
         </div>
       ))}
@@ -68,7 +69,7 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
                     {p.preview.account && <p className="truncate text-xs text-muted-foreground">{p.preview.account}</p>}
                   </div>
                   <OtpBadges type={p.preview.type} algorithm={p.preview.algorithm} digits={p.preview.digits} period={p.preview.period} invalid={!p.preview.validSecret} />
-                  <RemoveButton label={p.preview.issuer} onClick={() => onRemove(p.uri)} />
+                  <RemoveButton label={t("otpPreview.remove", { name: p.preview.issuer })} onClick={() => onRemove(p.uri)} />
                 </div>
               </motion.div>
             ) : (
@@ -76,16 +77,16 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
                 <div className="flex items-center gap-2 bg-paper-2 px-3 py-2">
                   <Layers className="size-4 text-muted-foreground" />
                   <p className="min-w-0 flex-1 truncate text-xs font-medium">
-                    Google Authenticator export
+                    {t("otpPreview.googleExport")}
                     {p.preview.batchSize > 1 && (
                       <span className="text-muted-foreground">
                         {" "}
-                        · QR {p.preview.batchIndex + 1} of {p.preview.batchSize}
+                        · {t("otpPreview.qrPart", { index: p.preview.batchIndex + 1, total: p.preview.batchSize })}
                       </span>
                     )}
                   </p>
                   <span className="text-xs text-muted-foreground tabular-nums">{p.preview.accounts.length}</span>
-                  <RemoveButton label="this export" onClick={() => onRemove(p.uri)} />
+                  <RemoveButton label={t("otpPreview.removeExport")} onClick={() => onRemove(p.uri)} />
                 </div>
                 {p.preview.accounts.map((a, i) => (
                   <div key={i} className="flex items-center gap-3 py-2 pr-3 pl-6">
@@ -107,16 +108,17 @@ export function OtpPreviewList({ uris, onRemove }: { uris: string[]; onRemove: (
 }
 
 function OtpBadges({ type, algorithm, digits, period, invalid }: { type: string; algorithm: string; digits: number; period?: number; invalid?: boolean }) {
+  const { t } = useTranslation("vault");
   return (
     <div className="flex shrink-0 flex-wrap justify-end gap-1">
       {invalid && (
         <Badge variant="destructive" className="h-5 text-[10px]">
-          Invalid secret
+          {t("otpPreview.invalidSecret")}
         </Badge>
       )}
       {type === "hotp" && (
-        <Badge variant="outline" className="h-5 border-warning/40 text-[10px] text-warning" title="Counter-based codes may not be supported">
-          Counter (HOTP)
+        <Badge variant="outline" className="h-5 border-warning/40 text-[10px] text-warning" title={t("otpPreview.hotpHint")}>
+          {t("otpPreview.hotp")}
         </Badge>
       )}
       {algorithm !== "SHA1" && (
@@ -126,7 +128,7 @@ function OtpBadges({ type, algorithm, digits, period, invalid }: { type: string;
       )}
       {digits !== 6 && (
         <Badge variant="outline" className="h-5 text-[10px] font-normal">
-          {digits} digits
+          {t("otpPreview.digits", { digits })}
         </Badge>
       )}
       {period && period !== 30 && (
@@ -140,7 +142,7 @@ function OtpBadges({ type, algorithm, digits, period, invalid }: { type: string;
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button size="icon-xs" variant="ghost" className="text-muted-foreground hover:text-foreground" aria-label={`Remove ${label}`} onClick={onClick}>
+    <Button size="icon-xs" variant="ghost" className="text-muted-foreground hover:text-foreground" aria-label={label} onClick={onClick}>
       <X />
     </Button>
   );

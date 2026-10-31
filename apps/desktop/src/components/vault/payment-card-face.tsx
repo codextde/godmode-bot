@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Snowflake } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { CARD_BRAND_LABELS, type CardBrand } from "@godmode/shared";
 import { cn } from "@/lib/utils";
 import { formatExpiry } from "./card-utils";
@@ -42,14 +43,15 @@ export function PaymentCardFace({
   expired?: boolean;
   className?: string;
 }) {
+  const { t } = useTranslation("vault");
   const expiry = expMonth && expYear ? formatExpiry(expMonth, expYear) : null;
   const brandLabel = CARD_BRAND_LABELS[brand];
   const description = [
     label,
-    last4 ? `${brandLabel} ending in ${last4}` : brandLabel,
-    expiry && `expires ${expiry}`,
-    frozen && "frozen",
-    expired && "expired",
+    last4 ? t("cardFace.endingIn", { brand: brandLabel, last4 }) : brandLabel,
+    expiry && t("cardFace.expiresOn", { date: expiry }),
+    frozen && t("cardFace.frozenLower"),
+    expired && t("cardFace.expiredLower"),
   ]
     .filter(Boolean)
     .join(", ");
@@ -93,10 +95,10 @@ export function PaymentCardFace({
         <div className="flex items-center justify-between gap-[2cqw]">
           <ChipGlyph />
           <div className="flex items-center gap-[1.5cqw]">
-            {expired && <FaceChip>Expired</FaceChip>}
+            {expired && <FaceChip>{t("cardFace.expired")}</FaceChip>}
             {frozen && (
               <FaceChip className="text-sky-100">
-                <Snowflake className="size-[1.1em]" /> Frozen
+                <Snowflake className="size-[1.1em]" /> {t("cardFace.frozen")}
               </FaceChip>
             )}
           </div>
@@ -108,11 +110,11 @@ export function PaymentCardFace({
 
         <div className="flex min-w-0 items-end justify-between gap-[3cqw]">
           <span className={cn("min-w-0 truncate text-[clamp(9px,3.6cqw,13px)] font-medium tracking-[0.08em] uppercase", holderName ? "text-white/75" : "text-white/35")}>
-            {holderName || "Name on card"}
+            {holderName || t("card.holder")}
           </span>
           <span className="shrink-0 text-right leading-none">
-            <span className="block text-[clamp(7px,2.5cqw,9px)] tracking-[0.14em] text-white/45 uppercase">Expires</span>
-            <span className={cn("mt-[1cqw] block font-mono text-[clamp(10px,3.9cqw,14px)] tabular-nums", expiry ? "text-white/85" : "text-white/35")}>{expiry ?? "MM/YY"}</span>
+            <span className="block text-[clamp(7px,2.5cqw,9px)] tracking-[0.14em] text-white/45 uppercase">{t("card.expires")}</span>
+            <span className={cn("mt-[1cqw] block font-mono text-[clamp(10px,3.9cqw,14px)] tabular-nums", expiry ? "text-white/85" : "text-white/35")}>{expiry ?? t("cardFace.expiryPlaceholder")}</span>
           </span>
         </div>
       </div>

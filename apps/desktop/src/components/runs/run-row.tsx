@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { formatDistanceToNowStrict } from "date-fns";
+import { useTranslation } from "react-i18next";
 import type { Agent, Run } from "@godmode/shared";
 import { useLive } from "@/stores/live";
 import { AgentAvatar } from "@/components/common";
 import { cn } from "@/lib/utils";
+import { useLocale } from "@/i18n/language";
 import { formatDuration, formatElapsed, RunStatusIcon, TriggerBadge } from "./run-status";
 
 /** Re-render every `interval` ms while `active`; returns Date.now(). */
@@ -45,9 +47,11 @@ export function RunRow({
   onSelect?: (run: Run) => void;
   className?: string;
 }) {
+  const { t } = useTranslation("runs");
+  const { dateLocale, intlLocale } = useLocale();
   const { live, status, running, elapsed } = useRunLiveState(run);
   const when = run.startedAt ?? run.createdAt;
-  const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || "(no prompt)";
+  const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || t("row.noPrompt");
 
   return (
     <button
@@ -66,7 +70,7 @@ export function RunRow({
       {showAgent && agent && <AgentAvatar agent={agent} size="sm" />}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
-          {showAgent && <span className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? "Unknown agent"}</span>}
+          {showAgent && <span className="truncate text-sm font-medium tracking-[-0.01em]">{agent?.name ?? t("row.unknownAgent")}</span>}
           <TriggerBadge trigger={run.trigger} />
         </div>
         <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
@@ -74,12 +78,12 @@ export function RunRow({
         </p>
       </div>
       <div className="hidden shrink-0 items-center gap-4 text-xs text-muted-foreground tabular-nums @xl:flex">
-        <span className="w-16 text-right" title="Duration">
+        <span className="w-16 text-right" title={t("row.duration")}>
           {elapsed != null ? <span className="font-mono text-brand-strong">{formatElapsed(elapsed)}</span> : formatDuration(run.durationMs)}
         </span>
       </div>
-      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString()}>
-        {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}
+      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString(intlLocale)}>
+        {formatDistanceToNowStrict(new Date(when), { addSuffix: true, locale: dateLocale })}
       </span>
     </button>
   );

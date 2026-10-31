@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
+import { Trans, useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, Check, Copy, ExternalLink, Info, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { MessagingAccess, MessagingConnection, MessagingCredentials, MessagingProvider, MessagingVerifyResult } from "@godmode/shared";
@@ -26,11 +27,11 @@ import { PLATFORMS, PlatformLogo } from "./platform";
 import { TeamsFinishSteps } from "./teams-setup";
 
 type Step = "setup" | "tokens" | "agents" | "done";
-const STEPS: { id: Step; label: string }[] = [
-  { id: "setup", label: "Create the bot" },
-  { id: "tokens", label: "Connect" },
-  { id: "agents", label: "Agents" },
-];
+const STEPS = [
+  { id: "setup", labelKey: "connect.steps.setup" },
+  { id: "tokens", labelKey: "connect.steps.tokens" },
+  { id: "agents", labelKey: "connect.steps.agents" },
+] as const satisfies { id: Step; labelKey: string }[];
 
 interface Fields {
   botToken: string;
@@ -63,6 +64,7 @@ export function ConnectDialog({
   onOpenChange: (open: boolean) => void;
   onOpenConnection: (id: string) => void;
 }) {
+  const { t } = useTranslation(["messaging", "common"]);
   const [shown, setShown] = useState<MessagingProvider | null>(provider);
   const [openedFor, setOpenedFor] = useState<MessagingProvider | null>(null);
   const [step, setStep] = useState<Step>("setup");
@@ -144,15 +146,15 @@ export function ConnectDialog({
         access,
         ...(p === "teams" ? { publicUrl: fields.publicUrl } : {}),
       };
-      const conn = await withGrant((grant) => api.messaging.create(input, grant), "Letting anyone use your agents needs your vault passphrase.");
+      const conn = await withGrant((grant) => api.messaging.create(input, grant), t("grantAnyone"));
       setCreated(conn);
       setStep("done");
       void qc.invalidateQueries({ queryKey: qk.messaging });
-      toast.success(`${conn.name} is connected`);
+      toast.success(t("connect.connectedToast", { name: conn.name }));
     } catch (err) {
       if (isGrantCancelled(err)) return;
       if (isVaultLocked(err)) toastApiError(err, "", qc);
-      else toast.error("Couldn't connect the bot", { description: errorMessage(err) });
+      else toast.error(t("connect.connectError"), { description: errorMessage(err) });
     } finally {
       setSaving(false);
     }
@@ -166,15 +168,15 @@ export function ConnectDialog({
         <DialogHeader className="flex-row items-center gap-3.5 space-y-0 border-b px-6 pt-6 pb-5 text-left">
           <PlatformLogo provider={p} size="lg" />
           <div className="min-w-0 flex-1">
-            <DialogTitle className="text-lg tracking-[-0.02em]">{step === "done" ? "You're connected" : `Connect ${meta.label}`}</DialogTitle>
+            <DialogTitle className="text-lg tracking-[-0.02em]">{step === "done" ? t("connect.doneTitle") : t("connect.title", { platform: meta.label })}</DialogTitle>
             <DialogDescription className="mt-0.5">
-              {step === "done" ? "Your agents now answer there." : "Talk to your agents right where you already chat."}
+              {step === "done" ? t("connect.doneDescription") : t("connect.description")}
             </DialogDescription>
           </div>
         </DialogHeader>
 
         {step !== "done" && (
-          <ol className="flex items-center gap-2 border-b bg-paper-2/50 px-6 py-2.5" aria-label="Steps">
+          <ol className="flex items-center gap-2 border-b bg-paper-2/50 px-6 py-2.5" aria-label={t("connect.stepsLabel")}>
             {STEPS.map((s, i) => (
               <li key={s.id} className="flex items-center gap-2 text-xs">
                 {i > 0 && <span className="h-px w-5 bg-border" />}
@@ -189,7 +191,7 @@ export function ConnectDialog({
                   {i < index ? <Check className="size-2.5" strokeWidth={3} /> : i + 1}
                 </span>
                 <span className={cn(i === index ? "font-medium text-foreground" : "text-muted-foreground")} aria-current={i === index ? "step" : undefined}>
-                  {s.label}
+                  {t(s.labelKey)}
                 </span>
               </li>
             ))}
@@ -214,14 +216,19 @@ export function ConnectDialog({
               {step === "agents" && (
                 <div className="space-y-5">
                   <div className="space-y-1.5">
-                    <Label htmlFor="bot-name">Name in Godmode</Label>
+                    <Label htmlFor="bot-name">{t("connect.nameInGodmode")}</Label>
                     <Input id="bot-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={verified?.bot.name} maxLength={100} />
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <p className="text-sm font-medium">Agents people can talk to</p>
+                      <p className="text-sm font-medium">{t("connect.agentsLabel")}</p>
                       <p className="text-xs text-muted-foreground">
-                        Chats start with the first one; people switch with <code className="font-mono">{p === "slack" ? `${SLACK_COMMAND} agent` : "/agent"}</code>.
+                        <Trans
+                          t={t}
+                          i18nKey="connect.agentsHint"
+                          values={{ command: p === "slack" ? `${SLACK_COMMAND} agent` : "/agent" }}
+                          components={{ code: <code className="font-mono" /> }}
+                        />
                       </p>
                     </div>
                     <AgentChooser
@@ -235,7 +242,7 @@ export function ConnectDialog({
                     />
                   </div>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">Who can talk to it</p>
+                    <p className="text-sm font-medium">{t("whoCanTalk")}</p>
                     <AccessChooser provider={p} team={verified?.bot.team ?? null} value={access} onChange={setAccess} />
                   </div>
                 </div>
@@ -249,37 +256,37 @@ export function ConnectDialog({
           {step === "done" && created ? (
             <>
               <Button variant="ghost" onClick={() => onOpenConnection(created.id)}>
-                Bot settings
+                {t("connect.botSettings")}
               </Button>
-              <Button onClick={() => onOpenChange(false)}>Done</Button>
+              <Button onClick={() => onOpenChange(false)}>{t("common:actions.done")}</Button>
             </>
           ) : (
             <>
               {index > 0 ? (
                 <Button variant="ghost" onClick={() => setStep(STEPS[index - 1]!.id)} disabled={saving}>
-                  <ArrowLeft /> Back
+                  <ArrowLeft /> {t("common:actions.back")}
                 </Button>
               ) : (
                 <span />
               )}
               {step === "setup" && (
                 <Button onClick={() => setStep("tokens")}>
-                  I have the {p === "teams" ? "details" : p === "slack" ? "tokens" : "token"} <ArrowRight />
+                  {p === "teams" ? t("connect.haveDetails") : p === "slack" ? t("connect.haveTokens") : t("connect.haveToken")} <ArrowRight />
                 </Button>
               )}
               {step === "tokens" &&
                 (verified ? (
                   <Button onClick={() => setStep("agents")} disabled={p === "teams" && !fields.publicUrl.trim()}>
-                    Continue <ArrowRight />
+                    {t("common:actions.continue")} <ArrowRight />
                   </Button>
                 ) : (
                   <Button onClick={() => void check()} disabled={!credentials || checking}>
-                    {checking ? <Spinner /> : null} Check
+                    {checking ? <Spinner /> : null} {t("connect.check")}
                   </Button>
                 ))}
               {step === "agents" && (
                 <Button onClick={() => void connect()} disabled={!agentIds.length || saving}>
-                  {saving ? <Spinner /> : null} Connect {meta.label}
+                  {saving ? <Spinner /> : null} {t("connect.title", { platform: meta.label })}
                 </Button>
               )}
             </>
@@ -302,11 +309,12 @@ function GuideStep({ n, children, action }: { n: number; children: ReactNode; ac
   );
 }
 
-function Mono({ children }: { children: ReactNode }) {
+function Mono({ children }: { children?: ReactNode }) {
   return <code className="rounded-[4px] border bg-paper-2 px-1 py-px font-mono text-[12px]">{children}</code>;
 }
 
 function SetupGuide({ provider }: { provider: MessagingProvider }) {
+  const { t } = useTranslation(["messaging", "common"]);
   const [copied, setCopied] = useState(false);
   if (provider === "telegram") {
     return (
@@ -315,17 +323,17 @@ function SetupGuide({ provider }: { provider: MessagingProvider }) {
           n={1}
           action={
             <Button size="sm" variant="outline" onClick={() => void openExternal("https://t.me/BotFather")}>
-              <ExternalLink /> Open @BotFather
+              <ExternalLink /> {t("connect.telegram.openBotFather")}
             </Button>
           }
         >
-          Open <strong className="font-medium">@BotFather</strong>, Telegram's bot for making bots.
+          <Trans t={t} i18nKey="connect.telegram.step1" components={{ b: <strong className="font-medium" /> }} />
         </GuideStep>
         <GuideStep n={2}>
-          Send <Mono>/newbot</Mono>, then pick a display name and a username that ends in <Mono>bot</Mono>.
+          <Trans t={t} i18nKey="connect.telegram.step2" components={{ code: <Mono /> }} />
         </GuideStep>
         <GuideStep n={3}>
-          BotFather answers with a token like <Mono>123456789:AAE…</Mono> — copy it for the next step.
+          <Trans t={t} i18nKey="connect.telegram.step3" components={{ code: <Mono /> }} />
         </GuideStep>
       </ol>
     );
@@ -338,7 +346,7 @@ function SetupGuide({ provider }: { provider: MessagingProvider }) {
           action={
             <div className="flex flex-wrap gap-2">
               <Button size="sm" onClick={() => void openExternal(slackCreateUrl())}>
-                <ExternalLink /> Create the Slack app
+                <ExternalLink /> {t("connect.slack.createApp")}
               </Button>
               <Button
                 size="sm"
@@ -350,22 +358,22 @@ function SetupGuide({ provider }: { provider: MessagingProvider }) {
                   }
                 }}
               >
-                {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy manifest"}
+                {copied ? <Check /> : <Copy />} {copied ? t("common:actions.copied") : t("connect.slack.copyManifest")}
               </Button>
             </div>
           }
         >
-          Create the app from Godmode's manifest — it brings the permissions, Socket Mode and the <Mono>{SLACK_COMMAND}</Mono> command. Pick your workspace and confirm.
+          <Trans t={t} i18nKey="connect.slack.step1" values={{ command: SLACK_COMMAND }} components={{ code: <Mono /> }} />
         </GuideStep>
         <GuideStep n={2}>
-          <strong className="font-medium">Install App</strong> → Install to your workspace, then copy the <strong className="font-medium">Bot User OAuth Token</strong> (<Mono>xoxb-…</Mono>).
+          <Trans t={t} i18nKey="connect.slack.step2" components={{ b: <strong className="font-medium" />, code: <Mono /> }} />
         </GuideStep>
         <GuideStep n={3}>
-          <strong className="font-medium">Basic Information → App-Level Tokens</strong> → Generate a token with the <Mono>connections:write</Mono> scope and copy it (<Mono>xapp-…</Mono>).
+          <Trans t={t} i18nKey="connect.slack.step3" components={{ b: <strong className="font-medium" />, code: <Mono /> }} />
         </GuideStep>
         <p className="flex items-start gap-2 rounded-lg border bg-paper-2 px-3 py-2.5 text-xs text-muted-foreground">
           <Info className="mt-px size-3.5 shrink-0" />
-          Socket Mode keeps the connection outgoing: Slack never needs to reach this computer.
+          {t("connect.slack.socketNote")}
         </p>
       </ol>
     );
@@ -376,23 +384,25 @@ function SetupGuide({ provider }: { provider: MessagingProvider }) {
         n={1}
         action={
           <Button size="sm" variant="outline" onClick={() => void openExternal("https://portal.azure.com/#create/Microsoft.AzureBot")}>
-            <ExternalLink /> Create an Azure Bot
+            <ExternalLink /> {t("connect.teams.createBot")}
           </Button>
         }
       >
-        In the Azure portal, create an <strong className="font-medium">Azure Bot</strong> with type <strong className="font-medium">Single Tenant</strong>. Note its Microsoft App ID and your tenant ID.
+        <Trans t={t} i18nKey="connect.teams.step1" components={{ b: <strong className="font-medium" /> }} />
       </GuideStep>
       <GuideStep n={2}>
-        <strong className="font-medium">Configuration → Manage Password</strong> → New client secret, and copy its <strong className="font-medium">Value</strong>.
+        <Trans t={t} i18nKey="connect.teams.step2" components={{ b: <strong className="font-medium" /> }} />
       </GuideStep>
       <GuideStep n={3}>
-        <strong className="font-medium">Channels</strong> → add <strong className="font-medium">Microsoft Teams</strong>.
+        <Trans t={t} i18nKey="connect.teams.step3" components={{ b: <strong className="font-medium" /> }} />
       </GuideStep>
       <GuideStep n={4}>
-        Teams delivers messages over https, so Godmode needs a public address — a tunnel like <Mono>cloudflared</Mono> or <Mono>ngrok</Mono> pointing at{" "}
         {/* Through Godmode Cloud this page's host is the cloud's, never the computer's. */}
-        {cloudContext ? "Godmode on that computer" : <Mono>{new URL(coreUrl("/")).host}</Mono>}, or a server. You'll get the messaging endpoint for Azure
-        after connecting.
+        {cloudContext ? (
+          <Trans t={t} i18nKey="connect.teams.step4Cloud" components={{ code: <Mono /> }} />
+        ) : (
+          <Trans t={t} i18nKey="connect.teams.step4" values={{ host: new URL(coreUrl("/")).host }} components={{ code: <Mono /> }} />
+        )}
       </GuideStep>
     </ol>
   );
@@ -421,6 +431,7 @@ export function CredentialFields({
   onSubmit: () => void;
   withPublicUrl?: boolean;
 }) {
+  const { t } = useTranslation("messaging");
   const submit = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -429,7 +440,7 @@ export function CredentialFields({
   };
   if (provider === "telegram") {
     return (
-      <Field id="tg-token" label="Bot token" hint="From @BotFather. Stored encrypted in your vault.">
+      <Field id="tg-token" label={t("fields.botToken")} hint={t("fields.botTokenHint")}>
         <PasswordInput id="tg-token" value={fields.botToken} onChange={(e) => set("botToken")(e.target.value)} onKeyDown={submit} placeholder="123456789:AAE…" autoFocus />
       </Field>
     );
@@ -437,10 +448,10 @@ export function CredentialFields({
   if (provider === "slack") {
     return (
       <div className="space-y-4">
-        <Field id="slack-bot" label="Bot User OAuth Token" hint="OAuth & Permissions → starts with xoxb-">
+        <Field id="slack-bot" label="Bot User OAuth Token" hint={t("fields.slackBotHint")}>
           <PasswordInput id="slack-bot" value={fields.botToken} onChange={(e) => set("botToken")(e.target.value)} onKeyDown={submit} placeholder="xoxb-…" autoFocus />
         </Field>
-        <Field id="slack-app" label="App-Level Token" hint="Basic Information → App-Level Tokens → starts with xapp-">
+        <Field id="slack-app" label="App-Level Token" hint={t("fields.slackAppHint")}>
           <PasswordInput id="slack-app" value={fields.appToken} onChange={(e) => set("appToken")(e.target.value)} onKeyDown={submit} placeholder="xapp-…" />
         </Field>
       </div>
@@ -456,11 +467,11 @@ export function CredentialFields({
           <Input id="teams-tenant" value={fields.tenantId} onChange={(e) => set("tenantId")(e.target.value)} onKeyDown={submit} placeholder="72f988bf-…" className="h-10 font-mono text-[13px]" />
         </Field>
       </div>
-      <Field id="teams-secret" label="Client secret" hint="The secret's Value (not its ID). Stored encrypted in your vault.">
+      <Field id="teams-secret" label={t("fields.clientSecret")} hint={t("fields.clientSecretHint")}>
         <PasswordInput id="teams-secret" value={fields.appPassword} onChange={(e) => set("appPassword")(e.target.value)} onKeyDown={submit} />
       </Field>
       {withPublicUrl && (
-        <Field id="teams-url" label="Public address of this Godmode" hint="https, reachable from the internet — a tunnel or your server.">
+        <Field id="teams-url" label={t("fields.publicUrl")} hint={t("fields.publicUrlHint")}>
           <Input id="teams-url" value={fields.publicUrl} onChange={(e) => set("publicUrl")(e.target.value)} placeholder="https://godmode.example.com" className="h-10" />
         </Field>
       )}
@@ -471,6 +482,7 @@ export function CredentialFields({
 export { EMPTY as EMPTY_FIELDS, credentialsOf, type Fields as CredentialFieldValues };
 
 function BotCard({ provider, result }: { provider: MessagingProvider; result: MessagingVerifyResult }) {
+  const { t } = useTranslation("messaging");
   const { bot } = result;
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
@@ -478,10 +490,10 @@ function BotCard({ provider, result }: { provider: MessagingProvider; result: Me
         <PlatformLogo provider={provider} />
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium">{bot.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{[bot.username && provider === "telegram" ? `@${bot.username}` : null, bot.team].filter(Boolean).join(" · ") || "Credentials work"}</p>
+          <p className="truncate text-xs text-muted-foreground">{[bot.username && provider === "telegram" ? `@${bot.username}` : null, bot.team].filter(Boolean).join(" · ") || t("connect.credentialsWork")}</p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-[5px] bg-brand-soft px-1.5 py-0.5 text-[11px] font-medium text-brand-strong">
-          <Check className="size-3" strokeWidth={3} /> Verified
+          <Check className="size-3" strokeWidth={3} /> {t("connect.verified")}
         </span>
       </div>
       {result.warnings.map((w) => (
@@ -494,6 +506,7 @@ function BotCard({ provider, result }: { provider: MessagingProvider; result: Me
 }
 
 function Done({ connection: c }: { connection: MessagingConnection }) {
+  const { t } = useTranslation("messaging");
   const handle = c.provider === "telegram" && c.bot.username ? `@${c.bot.username}` : c.name;
   return (
     <div className="space-y-5">
@@ -501,11 +514,11 @@ function Done({ connection: c }: { connection: MessagingConnection }) {
         <span className="grid size-12 place-items-center rounded-full bg-brand-soft text-brand-strong">
           <DrawCheck className="size-6" />
         </span>
-        <p className="mt-3 text-base font-medium tracking-[-0.01em]">{handle} is live</p>
+        <p className="mt-3 text-base font-medium tracking-[-0.01em]">{t("connect.live", { handle })}</p>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           {c.access === "approved"
-            ? "Send it a message. The first time, you approve yourself here — that's how strangers stay out."
-            : "Send it a message — your agents answer right there."}
+            ? t("connect.liveApproved")
+            : t("connect.liveAnyone")}
         </p>
       </div>
       {c.provider === "teams" ? (
@@ -514,14 +527,14 @@ function Done({ connection: c }: { connection: MessagingConnection }) {
         c.bot.url && (
           <div className="flex justify-center">
             <Button onClick={() => void openExternal(c.bot.url!)}>
-              <ExternalLink /> Open {c.provider === "telegram" ? handle : "Slack"}
+              <ExternalLink /> {t("connect.open", { target: c.provider === "telegram" ? handle : "Slack" })}
             </Button>
           </div>
         )
       )}
       {c.provider === "slack" && (
         <p className="text-center text-xs text-muted-foreground">
-          In channels, invite it with <Mono>/invite @{c.bot.username ?? "Godmode"}</Mono> and mention it.
+          <Trans t={t} i18nKey="connect.slackInvite" values={{ name: c.bot.username ?? "Godmode" }} components={{ code: <Mono /> }} />
         </p>
       )}
     </div>

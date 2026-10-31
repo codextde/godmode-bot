@@ -1,1 +1,1417 @@
-{}
+{
+  "modelOptions": {
+    "olderModels": "Ältere Modelle",
+    "specialTasks": "Spezialaufgaben"
+  },
+  "timezoneSelect": {
+    "search": "Zeitzone suchen…",
+    "empty": "Keine Zeitzone gefunden.",
+    "yours": "Deine Zeitzone",
+    "all": "Alle Zeitzonen"
+  },
+  "startWindowField": {
+    "label": "Zufällige Startzeit",
+    "description": "Startet jedes Mal zu einem anderen Zeitpunkt – wie ein Kollege, der nicht auf die Minute einstempelt.",
+    "within": "Start innerhalb von"
+  },
+  "multiSelect": {
+    "placeholder": "Auswählen…",
+    "empty": "Nichts gefunden.",
+    "search": "Suchen…",
+    "selected_one": "{{count}} ausgewählt",
+    "selected_other": "{{count}} ausgewählt",
+    "remove": "{{label}} entfernen"
+  },
+  "avatarPicker": {
+    "change": "Emoji {{emoji}} – ändern",
+    "choose": "Emoji auswählen",
+    "customPlaceholder": "Oder tippe ein beliebiges Emoji…",
+    "custom": "Eigenes Emoji",
+    "accentColor": "Akzentfarbe"
+  },
+  "characterStudio": {
+    "yourAgent": "Dein Agent",
+    "surprise": "Überrasch mich",
+    "parts": {
+      "body": "Körper",
+      "eyes": "Augen",
+      "mouth": "Mund",
+      "top": "Hut",
+      "face": "Gesicht",
+      "neck": "Hals"
+    },
+    "personality": "Persönlichkeit",
+    "neutral": "Neutral",
+    "neutralBlurb": "Keine besondere Stimme – schlicht und hilfsbereit",
+    "custom": "Eigene…",
+    "customBlurb": "Beschreib die Stimme in deinen eigenen Worten",
+    "customPlaceholder": "Herzlich und ein bisschen nerdig. Erklärt Dinge mit Essens-Metaphern, antwortet kurz und endet immer mit dem nächsten Schritt.",
+    "customLabel": "Eigene Persönlichkeit"
+  },
+  "roleTemplates": {
+    "title": "Oder stell eine Rolle ein",
+    "description": "Ein Agent pro Job oder ein All-in-one-Agent, der eine ganze Abteilung führt.",
+    "blank": "Leerer Agent",
+    "searchPlaceholder": "Rollen suchen…",
+    "searchLabel": "Rollen suchen",
+    "clearSearch": "Suche leeren",
+    "department": "Abteilung",
+    "all": "Alle",
+    "allInOne": "All-in-one",
+    "categoryShort": {
+      "leadership": "Führung",
+      "finance": "Finanzen",
+      "legal": "Recht",
+      "people": "Personal",
+      "marketing": "Marketing",
+      "sales": "Vertrieb",
+      "customer": "Kundenservice",
+      "ecommerce": "E-Commerce",
+      "product": "Produkt & Design",
+      "engineering": "Entwicklung & IT",
+      "data": "Daten",
+      "operations": "Betrieb"
+    },
+    "category": {
+      "leadership": "Führung & Strategie",
+      "finance": "Finanzen & Buchhaltung",
+      "legal": "Recht & Compliance",
+      "people": "Personal & HR",
+      "marketing": "Marketing",
+      "sales": "Vertrieb",
+      "customer": "Kundenservice",
+      "ecommerce": "E-Commerce",
+      "product": "Produkt & Design",
+      "engineering": "Entwicklung & IT",
+      "data": "Daten & Analyse",
+      "operations": "Betrieb & Einkauf"
+    },
+    "noMatch": "Keine Rolle passt zu „{{query}}“",
+    "noRoles": "Hier gibt es noch keine Rollen",
+    "emptyDescription": "Beschreib den Job in deinen eigenen Worten und Godmode richtet den Agenten für dich ein.",
+    "describeInstead": "Lieber beschreiben",
+    "leadsTeam": "Leitet ein Team",
+    "jobs_one": "{{count}} Job:",
+    "jobs_other": "{{count}} Jobs:"
+  },
+  "agentNew": {
+    "examples": {
+      "invoices": "Lade am 1. jedes Monats meine Rechnungen aus allen Lieferantenportalen herunter",
+      "github": "Prüf jeden Morgen meine GitHub-Benachrichtigungen und fass zusammen, was mich braucht",
+      "pricing": "Behalte wöchentlich die Preisseiten der Konkurrenz im Blick und melde Änderungen",
+      "inbox": "Sortier zweimal am Tag mein Postfach und entwirf Antworten auf alles Dringende"
+    },
+    "describeError": "Godmode ist nicht erreichbar",
+    "describe": {
+      "titleEasy": "Oder beschreib es",
+      "title": "Beschreib es",
+      "subtitle": "– Godmode richtet es für dich ein",
+      "placeholder": "Ein Agent, der sich am 3. jedes Monats bei meinem Strom- und Handyanbieter anmeldet, die neuesten Rechnungen als PDF herunterlädt und mir die Beträge nennt…",
+      "label": "Beschreib deinen Agenten",
+      "submit": "Mit Godmode erstellen"
+    },
+    "structures": {
+      "titleEasy": "Oder stell ein ganzes Team auf",
+      "title": "Oder gründe eine ganze Firma",
+      "descriptionEasy": "Mehrere Helfer auf einmal: Jeder hat seinen eigenen Job, und eine Leitung verteilt die Arbeit und prüft sie.",
+      "description": "Ein ganzes Organigramm auf einmal eingestellt: Jeder Agent hat seinen Job, jede Leitung verteilt die Arbeit und prüft sie."
+    },
+    "roles": {
+      "titleEasy": "Wähl einen Helfer als Start",
+      "descriptionEasy": "Fertige Helfer für Alltagsjobs. Wähl einen aus und pass alles an, wie du magst – oder starte leer.",
+      "blankEasy": "Leer starten"
+    },
+    "title": "Neuer Agent",
+    "descriptionEasy": "Starte mit einem fertigen Helfer oder beschreib in eigenen Worten, was du brauchst.",
+    "description": "Beschreib in einfachen Worten, was du brauchst, oder starte mit einer Vorlage.",
+    "drafts": {
+      "title": "Mach da weiter, wo du aufgehört hast",
+      "fromScratch": "Von Grund auf",
+      "fromTemplate": "Aus {{name}}",
+      "aTemplate": "einer Vorlage",
+      "unnamed": "Unbenannter Agent",
+      "continueLabel": "{{name}} fortsetzen",
+      "draftSource": "Entwurf · {{source}}",
+      "continue": "Weiter",
+      "discardLabel": "Entwurf {{name}} verwerfen",
+      "discard": "Entwurf verwerfen"
+    },
+    "templatesUnavailable": "Vorlagen sind gerade nicht verfügbar ({{error}}).",
+    "form": {
+      "ready": "{{name}} ist bereit",
+      "readyDescription": "Sag Hallo oder gib ihm eine erste Aufgabe.",
+      "routineError": "Die Automation konnte nicht erstellt werden",
+      "createError": "Agent konnte nicht erstellt werden",
+      "notFound": "Vorlage nicht gefunden",
+      "notFoundDescription": "Sie wurde vielleicht entfernt. Starte von Grund auf oder wähl eine andere.",
+      "backToTemplates": "Zurück zu den Vorlagen",
+      "titleFromTemplate": "Neuer Agent aus „{{name}}“",
+      "titleScratch": "Von Grund auf starten",
+      "description": "Feinschliff jetzt oder später – alles lässt sich in den Einstellungen des Agenten ändern.",
+      "submit": "Agent erstellen",
+      "alsoRoutine": "Auch die Automation <b>{{name}}</b> erstellen <muted>({{schedule}})</muted>"
+    }
+  },
+  "agentForm": {
+    "errors": {
+      "name": "Gib deinem Agenten einen Namen",
+      "subagentName": "Subagenten brauchen einen Namen",
+      "subagentUnique": "Subagenten-Namen müssen eindeutig sein",
+      "subagentPrompt": "Sag dem Subagenten, was er tun soll"
+    },
+    "nav": {
+      "identity": "Identität",
+      "team": "Team",
+      "personality": "Persönlichkeit",
+      "instructions": "Anweisungen",
+      "brain": "Modell",
+      "folder": "Ordner",
+      "permissions": "Berechtigungen",
+      "browser": "Browser",
+      "computer": "Computer",
+      "vm": "Virtuelle Maschine",
+      "ssh": "SSH-Server",
+      "android": "Android-Handys",
+      "tools": "Tools",
+      "subagents": "Subagenten",
+      "advanced": "Erweiterte Optionen"
+    },
+    "navEasy": {
+      "identity": "Über",
+      "instructions": "Was er tut"
+    },
+    "default": "Standard",
+    "switchedOff": "ausgeschaltet",
+    "team": {
+      "title": "Team",
+      "descriptionEasy": "Wem er unterstellt ist. Jeder Agent weiß, wer ihn leitet und wer was macht – so landet die Arbeit beim Richtigen.",
+      "description": "Sein Platz in deinem Team. Jeder Agent erfährt, wer ihn leitet und wer was macht – so landet die Arbeit beim Richtigen.",
+      "resetNote": "Zurückgesetzt auf {{lead}}: {{name}} arbeitet in einem anderen Workspace.",
+      "builtinLeads": "{{name}} leitet das Team und berichtet an dich. Jeder Agent ohne eigene Leitung berichtet an ihn.",
+      "reportsTo": "Berichtet an",
+      "builtIn": "– integriert",
+      "leadHint": "Seine Leitung im Organigramm. Das ändert nichts daran, was er darf.",
+      "leadHintNamed": "Seine Leitung im Organigramm – {{name}} erfährt, wer das ist. Das ändert nichts daran, was er darf.",
+      "leads": "Leitet",
+      "orgChart": "Organigramm"
+    },
+    "personality": {
+      "title": "Persönlichkeit",
+      "descriptionEasy": "Wie er mit dir spricht – in Begrüßungen, Updates und Berichten.",
+      "description": "Wie er mit dir spricht – Begrüßungen, Updates und Berichte. Landet in der CLAUDE.md des Agenten."
+    },
+    "instructions": {
+      "titleEasy": "Was soll er tun?",
+      "title": "Anweisungen",
+      "descriptionEasy": "Beschreib den Job in deinen eigenen Worten: was zu tun ist, wo Dinge abgelegt werden und wann er bei dir nachfragen soll.",
+      "description": "Daueraufträge: wie er arbeiten soll, was er immer oder nie tun soll. Landet in der CLAUDE.md des Agenten.",
+      "placeholder": "Du bist mein Finanzassistent.\n\n- Melde dich bei meinen Lieferantenportalen an und lade neue Rechnungen als PDF herunter.\n- Speichere sie unter workspace/invoices/YYYY-MM/.\n- Fass am Ende die Summen zusammen und sag mir, wenn dir etwas Ungewöhnliches auffällt.\n- Bezahl nie etwas, ohne mich vorher zu fragen.",
+      "tipEasy": "Tipp: Sei konkret bei Zielen, Speicherorten und wann er dich fragen soll. Er merkt sich, was er unterwegs lernt.",
+      "tip": "Tipp: Sei konkret bei Zielen, Speicherorten und wann er dich fragen soll. Der Agent hält seine Erkenntnisse in MEMORY.md fest.",
+      "chars_one": "{{formatted}} Zeichen",
+      "chars_other": "{{formatted}} Zeichen",
+      "inherited": "Bekommt dieser Agent zusätzlich bei jedem Lauf"
+    },
+    "brain": {
+      "title": "Modell & Workspace",
+      "description": "Welches Claude-Modell ihn antreibt, wie gründlich er nachdenkt und wo er zu Hause ist.",
+      "model": "Modell",
+      "defaultFromSettings": "Standard (aus den Einstellungen)",
+      "effort": "Denkaufwand",
+      "effortHint": "Mehr Aufwand denkt länger nach – besser für knifflige, mehrstufige Arbeit, aber langsamer und teurer.",
+      "noEffort": "{{model}} nutzt keine Aufwandsstufen.",
+      "thisModel": "Dieses Modell",
+      "noUltracode": "{{model}} unterstützt Ultracode nicht.",
+      "noUltracodeInstalled": "Das installierte Claude Code bietet kein Ultracode."
+    },
+    "folder": {
+      "title": "Arbeitsordner",
+      "description": "Optional. Seine Chats und Automationen laufen in diesem Ordner und können die Dateien dort lesen und bearbeiten. Das Gedächtnis bleibt im eigenen Repository des Agenten.",
+      "change": "Ändern",
+      "remove": "Ordner entfernen",
+      "none": "Kein Ordner – der Agent arbeitet in seinem eigenen Repository. Ein einzelner Chat kann trotzdem einen Ordner wählen.",
+      "choose": "Ordner wählen…",
+      "dialogTitle": "Standardordner",
+      "dialogDescription": "Neue Chats und Automationen dieses Agenten laufen in diesem Ordner. Jeder Chat kann trotzdem zu einem anderen wechseln."
+    },
+    "permissions": {
+      "title": "Berechtigungen",
+      "description": "Was dieser Agent in deinem Namen tun darf.",
+      "secrets": "Passwörter & 2FA-Codes",
+      "fill": "Im Browser ausfüllen",
+      "recommended": "Empfohlen",
+      "fillDescription": "Godmode tippt Geheimnisse direkt in die Seite. Die KI sieht sie nie.",
+      "reveal": "Für die KI sichtbar",
+      "revealDescription": "Das Modell kann Passwörter und Codes im Klartext lesen (nötig für reine API-Tools). Jeder Zugriff wird protokolliert.",
+      "revealWarning": "Geheimnisse können im Kontext des Modells landen. Nutz das nur für Agenten, denen du vertraust.",
+      "delegation": "Darf Arbeit an Teammitglieder abgeben",
+      "delegationDescription": "Teile einer Aufgabe an andere Agenten abgeben und deren Ergebnisse nutzen.",
+      "manage": "Darf Agenten & Automationen verwalten",
+      "manageDescription": "Agenten und Zeitpläne erstellen, ändern und löschen – wie der integrierte Godmode-Orchestrator."
+    },
+    "browser": {
+      "title": "Browser",
+      "description": "Ein echtes Chromium, mit dem der Agent Websites für dich bedient.",
+      "access": "Browserzugriff",
+      "accessDescription": "Webseiten aufrufen, klicken, tippen und lesen.",
+      "window": "Fenster",
+      "visible": "Sichtbar",
+      "headless": "Unsichtbar",
+      "profile": "Profil",
+      "defaultProfile": "Standardprofil (Workspace / global)",
+      "defaultTag": "Standard",
+      "cookies_one": "{{count}} Cookie",
+      "cookies_other": "{{count}} Cookies"
+    },
+    "computer": {
+      "title": "Computer",
+      "description": "In Chats teilst du ein Fenster oder den Bildschirm selbst. Hier kannst du diesem Agenten erlauben, den Computer eigenständig zu nutzen – für Automationen und delegierte Aufgaben.",
+      "unattended": "Computer ohne Freigabe nutzen",
+      "unattendedDescription": "Steuert echte Maus und Tastatur, wenn er eigenständig läuft. Schalte das nur für Agenten ein, denen du deinen Desktop anvertraust.",
+      "screen": "Bildschirm",
+      "entireDesktop": "Gesamter Desktop",
+      "entireDesktopCount_one": "Gesamter Desktop ({{count}} Display)",
+      "entireDesktopCount_other": "Gesamter Desktop ({{count}} Displays)",
+      "primary": "{{name}} (Hauptbildschirm)",
+      "disconnected": "Display {{id}} (nicht verbunden)"
+    },
+    "vm": {
+      "title": "Virtuelle Maschine",
+      "description": "Lass diesen Agenten in seiner eigenen macOS-VM arbeiten: Er installiert dort Tools, führt Builds aus und nutzt Apps statt auf diesem Mac. Ein einzelner Chat kann trotzdem eine andere VM wählen.",
+      "worksIn": "Arbeitet in",
+      "noneWithVm": "Keine – VM des Workspace nutzen ({{vm}})",
+      "none": "Keine – VM des Workspace nutzen",
+      "hintSelected": "Seine Läufe starten die VM, wenn sie sie brauchen.",
+      "hintWorkspace": "Läufe arbeiten in {{vm}}, der VM von {{workspace}}.",
+      "hintLocal": "Läufe arbeiten auf diesem Mac, außer sein Workspace oder ein Chat hat eine VM."
+    },
+    "ssh": {
+      "title": "SSH-Server",
+      "description": "Entfernte Rechner, an denen sich dieser Agent anmelden und die er steuern kann. Godmode tippt Passwort oder Schlüssel – die KI sieht sie nie.",
+      "empty": "Noch keine SSH-Server – füg einen hinzu, dann kann dieser Agent darauf arbeiten.",
+      "add": "Server hinzufügen",
+      "canSignIn": "Darf sich anmelden bei",
+      "manage": "Server verwalten",
+      "hint": "Jeder Lauf dieses Agenten kann sich hier anmelden. Ein einzelner Chat kann über den SSH-Button im Eingabefeld weitere hinzufügen."
+    },
+    "android": {
+      "title": "Android-Handys",
+      "description": "Handys, die dieser Agent in jedem Lauf sehen und steuern kann. Es sind echte Handys mit echten Konten – gib ihm nur die, die er für seinen Job braucht."
+    },
+    "tools": {
+      "title": "Tools & Integrationen",
+      "description": "APIs, MCP-Server und verbundene Apps, die dieser Agent nutzen kann.",
+      "inherit": "Gemeinsame Integrationen übernehmen",
+      "inheritDescription": "Auch die globalen und Workspace-Tools, MCP-Server und Composio-Apps nutzen.",
+      "apiTools": "API-Tools",
+      "manage": "Tools verwalten",
+      "emptyInherit": "Noch keine API-Tools. Füg eins hinzu, damit er Bilder erzeugen, sprechen, suchen oder deine eigenen APIs aufrufen kann.",
+      "emptyOwn": "Keine eigenen API-Tools. Füg eins hinzu, damit er Bilder erzeugen, sprechen, suchen oder deine eigenen APIs aufrufen kann.",
+      "addOwn": "Tool nur für diesen Agenten hinzufügen",
+      "mcpLabel": "Verbundene Server",
+      "mcpPlaceholder": "MCP-Server verbinden…",
+      "mcpNone": "Noch keine MCP-Server – füg sie unter Integrationen hinzu",
+      "mcpEmpty": "Keine MCP-Server eingerichtet."
+    },
+    "subagents": {
+      "title": "Subagenten",
+      "description": "Spezialisten, die dieser Agent innerhalb eines Laufs für gezielte Teilaufgaben starten kann.",
+      "add": "Subagent hinzufügen",
+      "empty": "Keine Subagenten. Füg einen für wiederkehrende Spezialarbeit hinzu, z. B. einen „researcher“, der nur sucht und zusammenfasst.",
+      "sameModel": "Wie der Agent",
+      "whenToUse": "Wann einsetzen",
+      "whenPlaceholder": "Für Webrecherche und Quellensuche",
+      "prompt": "Prompt",
+      "promptPlaceholder": "Du bist ein gründlicher Rechercheur. Finde Primärquellen, nenne URLs und fass in Stichpunkten zusammen.",
+      "remove": "Subagent {{name}} entfernen"
+    },
+    "identity": {
+      "titleEasy": "Über",
+      "title": "Identität",
+      "descriptionEasy": "Sein Name, sein Aussehen und in einer Zeile, was er tut.",
+      "description": "Wie dieser Agent aussieht und wie er überall in Godmode auftritt.",
+      "namePlaceholder": "z. B. Rechnungsjäger",
+      "jobTitle": "Jobtitel",
+      "role": "Rolle",
+      "rolePlaceholderDefault": "z. B. Stabschef",
+      "rolePlaceholder": "z. B. Buchhalter",
+      "roleHint": "Sein Jobtitel – steht unter seinem Namen und wird seinen Teammitgliedern mitgeteilt.",
+      "shortDescription": "Kurzbeschreibung",
+      "descriptionPlaceholder": "Lädt jeden Monat meine Rechnungen herunter und legt sie ab",
+      "color": "Farbe",
+      "emoji": "Emoji in Chat-Apps",
+      "emojiHint": "Unterschreibt damit seine Nachrichten, wo nur Text passt – Slack, Telegram, Teams."
+    },
+    "advanced": {
+      "error": "Hier drin muss noch etwas korrigiert werden, bevor du speichern kannst.",
+      "summary": "Modell, Ordner, Berechtigungen, Browser, Computer, Server, Tools und Subagenten. Die Standardwerte passen gut."
+    },
+    "preview": {
+      "title": "Vorschau",
+      "unnamed": "Unbenannter Agent",
+      "noDescription": "Noch keine Beschreibung",
+      "yourAgent": "Dein Agent",
+      "defaultModel": "Standardmodell",
+      "browser": "Browser",
+      "computer": "Computer",
+      "servers_one": "{{count}} Server",
+      "servers_other": "{{count}} Server",
+      "phones_one": "{{count}} Handy",
+      "phones_other": "{{count}} Handys",
+      "fillOnly": "Geheimnisse nur ausfüllen",
+      "reveals": "Sieht Geheimnisse",
+      "sections": "Formularabschnitte"
+    },
+    "footer": {
+      "unsaved": "Du hast ungespeicherte Änderungen",
+      "allSaved": "Alle Änderungen gespeichert",
+      "changeLater": "Du kannst später alles ändern.",
+      "discard": "Verwerfen"
+    },
+    "workspace": {
+      "label": "Workspace",
+      "global": "Global – sieht nur globale Logins & Tools"
+    },
+    "project": {
+      "label": "Projekt",
+      "none": "Kein Projekt – der ganze Workspace",
+      "hint": "Seine Chats arbeiten an diesem Projekt, außer ein Chat wählt ein anderes."
+    },
+    "delegate": {
+      "namesMore_one": "{{names}} und {{count}} weiterer",
+      "namesMore_other": "{{names}} und {{count}} weitere",
+      "label": "Darf Arbeit abgeben an <muted>(leer = jedes erreichbare Teammitglied)</muted>",
+      "placeholder": "Jedes erreichbare Teammitglied",
+      "noneInReach": "Noch keine anderen Agenten erreichbar.",
+      "reaches_one": "Erreicht {{count}} Agenten: {{names}}.",
+      "reaches_other": "Erreicht {{count}} Agenten: {{names}}.",
+      "handsTo": "Gibt Arbeit ab an: {{names}}.",
+      "nobodyInReach": "Niemand auf dieser Liste ist erreichbar, also kann er keine Arbeit abgeben.",
+      "outOfReach": "{{name}} arbeitet in einem anderen Workspace und ist daher nicht erreichbar."
+    }
+  },
+  "settingsTab": {
+    "saved": "Einstellungen gespeichert",
+    "savedDescription": "CLAUDE.md wurde neu erstellt.",
+    "saveError": "Einstellungen konnten nicht gespeichert werden",
+    "saveChanges": "Änderungen speichern",
+    "dangerZone": "Gefahrenzone",
+    "dangerZoneDescription": "Beim Löschen werden der Agent, seine Automationen, Unterhaltungen und das Gedächtnis-Repository entfernt.",
+    "deleteAgent": "{{name}} löschen"
+  },
+  "routinesTab": {
+    "quickStarts": {
+      "morning": "Jeden Morgen",
+      "morningName": "Morgen-Check-in",
+      "monday": "Jeden Montag",
+      "mondayName": "Wochenrückblick",
+      "appEvent": "Bei einem App-Ereignis",
+      "condition": "Wenn sich etwas ändert"
+    },
+    "introEasy": "Mit Automationen arbeitet {{name}} selbstständig: nach Zeitplan, wenn in einer deiner Apps etwas passiert oder wenn eine Bedingung zutrifft.",
+    "introPro": "Mit Automationen arbeitet {{name}} nach Zeitplan, wenn in deinen Apps etwas passiert, wenn eine Bedingung erfüllt ist oder wenn ein Webhook aufgerufen wird.",
+    "newAutomation": "Neue Automation",
+    "loadError": "Automationen konnten nicht geladen werden",
+    "emptyTitle": "Noch keine Automationen",
+    "emptyDescription": "Lass {{name}} selbstständig arbeiten – auch wenn du nicht da bist."
+  },
+  "routineItem": {
+    "toast": {
+      "updateError": "Automation konnte nicht aktualisiert werden",
+      "checking": "„{{name}}“ wird geprüft…",
+      "testEventSent": "Testereignis an „{{name}}“ gesendet",
+      "started": "„{{name}}“ gestartet",
+      "watch": "Ansehen",
+      "checkError": "Prüfung konnte nicht gestartet werden",
+      "startError": "Automation konnte nicht gestartet werden",
+      "deleted": "„{{name}}“ gelöscht",
+      "deleteError": "Automation konnte nicht gelöscht werden"
+    },
+    "webhookCopied": "Webhook-URL kopiert",
+    "openAgent": "{{name}} öffnen",
+    "paused": "Pausiert",
+    "fillOnly": "Secrets nur ausfüllen",
+    "fillOnlyHint": "Von einem Agenten eingerichtet: Seine Läufe füllen Logins in Seiten ein, können sie aber nicht lesen. Bearbeite die Automation, um das zu ändern.",
+    "waiting_one": "{{count}} wartet",
+    "waiting_other": "{{count}} warten",
+    "eventsWait_one": "1 Ereignis wartet, bis der aktuelle Lauf fertig ist",
+    "eventsWait_other": "{{count}} Ereignisse warten, bis der aktuelle Lauf fertig ist",
+    "onlyWhen": "Nur wenn {{filter}}",
+    "triggerError": "Der Auslöser funktioniert nicht.",
+    "triggerPending": "Auslöser wird eingerichtet…",
+    "lastRun": "Letzter Lauf",
+    "pauseNamed": "{{name}} pausieren",
+    "enableNamed": "{{name}} aktivieren",
+    "moreActions": "Weitere Aktionen für {{name}}",
+    "recentEvents": "Letzte Ereignisse",
+    "openConversation": "Unterhaltung öffnen",
+    "sendTestEvent": "Testereignis senden…",
+    "copyWebhook": "Webhook-URL kopieren",
+    "unlockToCopy": "Entsperre den Tresor, um die URL zu kopieren",
+    "rotateWebhook": "Webhook-URL erneuern",
+    "deleteDialog": {
+      "title": "„{{name}}“ löschen?",
+      "app": "Godmode hört nicht mehr auf „{{trigger}}“ in {{app}}.",
+      "webhook": "Die Webhook-URL funktioniert dann nicht mehr.",
+      "schedule": "Sie läuft dann nicht mehr.",
+      "history": "Bisherige Läufe und Unterhaltungen bleiben in deinem Verlauf.",
+      "confirm": "Automation löschen"
+    },
+    "lastEvent": "Letztes Ereignis",
+    "lastEventTooltip": "{{date}} · letzte Ereignisse anzeigen",
+    "noneYet": "Noch keins",
+    "randomPick": "Zufällig im Startfenster gewählt",
+    "nextCheckAt": "Nächste Prüfung: {{date}}",
+    "lastCheckAgo": "Letzte Prüfung {{time}}",
+    "nextCheck": "Nächste Prüfung",
+    "nextRun": "Nächster Lauf"
+  },
+  "cron": {
+    "kinds": {
+      "hourly": "Jede Stunde",
+      "several": "Mehrmals am Tag",
+      "daily": "Jeden Tag",
+      "weekdays": "Werktags",
+      "weekly": "Jede Woche",
+      "monthly": "Jeden Monat",
+      "custom": "Eigener (Cron)"
+    },
+    "problems": {
+      "pickDay": "Wähle mindestens einen Tag",
+      "endAfterStart": "Die Endzeit muss nach der Startzeit liegen",
+      "tooManyRuns": "{{times}} Läufe brauchen mindestens {{minutes}} zwischen Start und Ende",
+      "onlyOneRun": "Nur ein Lauf passt – mach den Zeitraum länger als {{hours}} h"
+    }
+  },
+  "cronBuilder": {
+    "examples": {
+      "every15Min": "alle 15 Min.",
+      "every2Hours": "alle 2 Stunden",
+      "twiceWeekdays": "9:00 & 17:00 werktags",
+      "firstAndFifteenth": "1. & 15."
+    },
+    "timeline": {
+      "random_one": "Ein Lauf zu einem zufälligen Zeitpunkt im Block – jeden Tag ein neuer.",
+      "random_other": "Ein Lauf zu einem zufälligen Zeitpunkt in jedem der {{count}} Blöcke – jeden Tag ein neuer.",
+      "interval_one": "{{count}} Lauf am Tag: {{times}}",
+      "interval_other": "{{count}} Läufe am Tag: {{times}}",
+      "intervalMore_one": "{{count}} Lauf am Tag: {{times}} und {{more}} weitere",
+      "intervalMore_other": "{{count}} Läufe am Tag: {{times}} und {{more}} weitere"
+    },
+    "repeat": "Wiederholen",
+    "customSchedule": "Eigener Zeitplan",
+    "atMinute": "Zur Minute",
+    "timing": "Zeitpunkt",
+    "randomTimes": "Zufällige Zeiten",
+    "fixedInterval": "Fester Abstand",
+    "onDay": "Am Tag",
+    "at": "Um",
+    "runsPerDay": "Läufe pro Tag",
+    "times_one": "{{count}}-mal",
+    "times_other": "{{count}}-mal",
+    "every": "Abstand",
+    "hours_one": "{{count}} Stunde",
+    "hours_other": "{{count}} Stunden",
+    "between": "Zwischen",
+    "from": "Von",
+    "and": "und",
+    "until": "Bis",
+    "on": "An",
+    "dayOfWeek": "Wochentag",
+    "cronExpression": "Cron-Ausdruck",
+    "cronFields": "(Minute Stunde Tag Monat Wochentag)"
+  },
+  "routineDialog": {
+    "namePlaceholder": {
+      "schedule": "Wöchentlicher Zahlenbericht",
+      "app": "Rechnungsmails nach Drive",
+      "condition": "Preise der Konkurrenz im Blick",
+      "webhook": "Abgebrochene Bestellungen retten"
+    },
+    "filterPlaceholder": {
+      "app": "der Absender ein Kunde ist oder der Betreff eine Rechnung erwähnt",
+      "webhook": "die Bestellsumme über 100 € liegt"
+    },
+    "problems": {
+      "agent": "Wähle einen Agenten",
+      "name": "Gib deiner Automation einen Namen",
+      "condition": "Beschreibe, worauf geachtet werden soll",
+      "promptEvent": "Sag dem Agenten, was er mit jedem Ereignis tun soll",
+      "prompt": "Sag dem Agenten, was er jedes Mal tun soll"
+    },
+    "revealGrant": "Bestätige, damit diese Automation Secrets lesen darf",
+    "toast": {
+      "updated": "Automation aktualisiert",
+      "scheduled": "Automation geplant",
+      "created": "Automation erstellt",
+      "updateError": "Automation konnte nicht aktualisiert werden",
+      "createError": "Automation konnte nicht erstellt werden"
+    },
+    "checkModel": "Modell für Prüfungen",
+    "agentModel": "Modell des Agenten",
+    "checkModelHint": "Ein kleineres, schnelleres Modell hält häufige Prüfungen günstig; die eigentliche Arbeit macht das Modell des Agenten.",
+    "advancedSummary": {
+      "scheduleWindow": "zufälliger Start, Cron-Ausdruck",
+      "schedule": "Cron-Ausdruck",
+      "condition": "Modell für Prüfungen, Cron-Ausdruck"
+    },
+    "title": {
+      "linkReady": "Dein Link ist bereit",
+      "webhookReady": "Dein Webhook ist bereit",
+      "edit": "Automation bearbeiten",
+      "new": "Neue Automation"
+    },
+    "description": {
+      "linkReady": "Schick eine Anfrage an diesen Link, und „{{name}}“ legt los.",
+      "webhookReady": "Sende einen POST an diese URL, und „{{name}}“ legt los.",
+      "default": "Sobald es passiert, legt der Agent los – auch wenn du nicht da bist."
+    },
+    "agentPlaceholder": "Wähle, wer die Arbeit macht",
+    "whenToRun": "Wann soll sie laufen?",
+    "conditionLabel": "Wenn…",
+    "conditionPlaceholder": "ein Mitbewerber den Preis seines Pro-Tarifs ändert (acme.com/pricing)",
+    "conditionHint": "In normaler Sprache. Der Agent prüft das nach dem Zeitplan unten und legt los, sobald es zutrifft.",
+    "checkFrequency": "Wie oft prüfen",
+    "webhookIntroEasy": "Godmode gibt dieser Automation einen geheimen Link. Sobald ein anderes Tool ihn aufruft, etwa ein Shop-Checkout, ein Formular oder Zapier, legt der Agent mit den gesendeten Daten los.",
+    "webhookIntroPro": "Godmode gibt dieser Automation eine geheime URL. Sobald ein Dienst sie aufruft – ein Shop-Checkout, ein Formular, ein CI-Job, Zapier –, läuft der Agent mit dem Request-Body.",
+    "webhookAfter": {
+      "linkSave": "Den Link bekommst du direkt nach dem Speichern.",
+      "linkCreate": "Den Link bekommst du direkt nach dem Erstellen.",
+      "urlSave": "Die URL bekommst du direkt nach dem Speichern.",
+      "urlCreate": "Die URL bekommst du direkt nach dem Erstellen."
+    },
+    "filterLabel": "Nur wenn…",
+    "filterHint": "In normaler Sprache. Ereignisse, die nicht passen, werden übersprungen; leer lassen, um auf jedes Ereignis zu reagieren.",
+    "advanced": "Erweitert",
+    "rawCron": {
+      "check": "Prüfzeitplan als Cron-Ausdruck",
+      "schedule": "Zeitplan als Cron-Ausdruck"
+    },
+    "promptLabel": "Was soll sie tun?",
+    "reuse": {
+      "title": "Eine Unterhaltung behalten",
+      "event": "Jedes Ereignis setzt denselben Verlauf fort. Aus: Jedes Ereignis bekommt eine eigene, danach benannte Unterhaltung.",
+      "schedule": "Jeder Lauf setzt denselben Verlauf fort und erinnert sich so an frühere Läufe."
+    },
+    "enabled": {
+      "title": "Aktiv",
+      "event": "Pausierte Automationen behalten ihre Einstellungen und ignorieren neue Ereignisse.",
+      "schedule": "Pausierte Automationen behalten ihre Einstellungen, laufen aber nicht."
+    },
+    "reveal": {
+      "title": "Secrets für die KI sichtbar machen",
+      "description": "Ein Agent hat diese Automation eingerichtet, daher füllen ihre Läufe Logins in Seiten ein, können Passwörter und 2FA-Codes aber nicht lesen. Schalte das nur ein, wenn du dem Prompt oben vertraust: Dann lesen ihre Läufe sie wie die des Agenten selbst."
+    },
+    "notify": {
+      "label": "Sag mir Bescheid",
+      "failures": "Wenn ein Lauf fehlschlägt",
+      "always": "Nach jedem Lauf",
+      "neverHint": "Keine Mitteilungen. Eine fehlschlagende Automation erscheint trotzdem unter „Braucht dich“.",
+      "alwaysHint": "Eine Mitteilung nach jedem Lauf, mit dem, was er getan hat.",
+      "failuresHint": "Ein Fehler wird einmal gemeldet, bis wieder ein Lauf klappt."
+    },
+    "toSave": "zum Speichern",
+    "saveChanges": "Änderungen speichern",
+    "create": "Automation erstellen",
+    "runOn": {
+      "primary": "primär",
+      "thisComputer": "dieser Computer",
+      "label": "Ausführen auf",
+      "any": "Beliebiges Gerät",
+      "another": "Anderer Computer",
+      "anyHint": "Läuft dort, wo deine Zeitpläne laufen: auf dem primären Computer oder einem anderen, solange er einspringt.",
+      "pickedHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist.",
+      "pickedOfflineHint": "Nur {{name}} führt sie aus, auch wenn ein anderer Computer einspringt. Was er verpasst, während er weg ist, läuft, sobald er zurück ist (gerade offline).",
+      "unlistedHint": "An einen Computer gebunden, der nicht aufgeführt ist: einer, der die Gruppe verlassen hat (dann führt der primäre sie aus), oder einer, den dieser Computer nicht sieht, solange der primäre weg ist."
+    },
+    "timezone": "Zeitzone"
+  },
+  "heartbeatTab": {
+    "interval": {
+      "daily": "einmal am Tag",
+      "hourly": "jede Stunde",
+      "hours_one": "jede Stunde",
+      "hours_other": "alle {{count}} Stunden",
+      "minutes_one": "jede Minute",
+      "minutes_other": "alle {{count}} Minuten",
+      "dailyShort": "Täglich"
+    },
+    "toast": {
+      "saveError": "Heartbeat konnte nicht gespeichert werden",
+      "beatFailed": "Der Schlag konnte nicht starten",
+      "onIt": "{{name}} kümmert sich darum",
+      "allQuiet": "Alles ruhig",
+      "skipped": "Schlag übersprungen",
+      "wakeError": "{{name}} konnte nicht geweckt werden"
+    },
+    "watch": "Ansehen",
+    "wakeNow": "Jetzt wecken",
+    "titleEasy": "Check-ins",
+    "title": "Heartbeat",
+    "introEasy": "Weckt {{name}} regelmäßig, um Aufgaben voranzubringen und die Checkliste abzuarbeiten, und hält jeden Check-in fest.",
+    "introPro": "Weckt {{name}} im eigenen Rhythmus, um Aufgaben voranzubringen und die Checkliste abzuarbeiten – und hinterlässt eine Spur.",
+    "loadError": "Heartbeat konnte nicht geladen werden: {{error}}",
+    "switchOnFirst": "Schalte {{name}} zuerst ein",
+    "switchOff": "Heartbeat von {{name}} ausschalten",
+    "switchOn": "Heartbeat von {{name}} einschalten",
+    "status": {
+      "beats": "Schlägt {{interval}}",
+      "weekdays": "werktags",
+      "agentOff": "wartet, solange {{name}} ausgeschaltet ist",
+      "noHour": "keine Stunde zum Wecken",
+      "dueNow": "jetzt fällig",
+      "nextAt": "nächster um {{time}}",
+      "next": "nächster {{when}}"
+    },
+    "board": {
+      "working": "In Arbeit",
+      "waiting": "Wartet",
+      "waitingOnYou": "Wartet auf dich",
+      "blocked": "Blockiert"
+    },
+    "rhythm": {
+      "title": "Rhythmus",
+      "description": "Wie oft er schlägt und wann.",
+      "every": "Intervall",
+      "intervalAria": "Zeit zwischen den Schlägen",
+      "when": "Wann",
+      "whenHours": "Nur in diesen Stunden, in deiner Ortszeit.",
+      "whenAny": "Tag und Nacht.",
+      "from": "Von",
+      "to": "bis",
+      "toAria": "Bis",
+      "whenAria": "Wann er schlagen darf",
+      "anyTime": "Jederzeit",
+      "workingHours": "Arbeitszeit",
+      "weekdaysOnly": "Nur werktags",
+      "weekdaysDescription": "Montag bis Freitag.",
+      "checklist": "Bei jedem Schlag außerdem…",
+      "checklistDescription": "Feste Aufgaben, die er in seinem Heartbeat-Chat erledigt. Leer lassen, dann kümmert er sich nur um seine Aufgaben – ruhige Schläge starten keinen Lauf."
+    },
+    "checklistPlaceholder": "Prüfe Stripe auf unbezahlte Bestellungen und hake bei den Leads von gestern nach.",
+    "outcome": {
+      "woke": "Geweckt",
+      "quiet": "Ruhig",
+      "skipped": "Übersprungen",
+      "failed": "Fehlgeschlagen"
+    },
+    "why": {
+      "stalled": "Steckt fest",
+      "unstarted": "Noch nicht begonnen",
+      "retry": "Fehlgeschlagen – neuer Versuch",
+      "default": "Dafür geweckt"
+    },
+    "time": {
+      "yesterday": "Gestern, {{time}}",
+      "thisYearFormat": "EEE, d. MMM, p",
+      "otherYearFormat": "d. MMM yyyy, p"
+    },
+    "recent": {
+      "title": "Letzte Schläge",
+      "emptyOff": "Noch keine Schläge. Schalte den Heartbeat ein, dann kommt der erste nach einem Intervall.",
+      "emptyNext": "Noch keine Schläge – der erste kommt {{when}}.",
+      "empty": "Noch keine Schläge.",
+      "showFewer": "Weniger anzeigen",
+      "showOlder_one": "{{count}} älteren anzeigen",
+      "showOlder_other": "{{count}} ältere anzeigen"
+    },
+    "changesSinceBeat_one": "{{count}} Änderung seit dem letzten Schlag",
+    "changesSinceBeat_other": "{{count}} Änderungen seit dem letzten Schlag",
+    "changesSinceWork_one": "{{count}} Änderung, seit er zuletzt daran gearbeitet hat",
+    "changesSinceWork_other": "{{count}} Änderungen, seit er zuletzt daran gearbeitet hat",
+    "beatCount_one": "{{count}} Schlag",
+    "beatCount_other": "{{count}} Schläge",
+    "runState": {
+      "queued": "Wartet auf Start",
+      "running": "Arbeitet daran…",
+      "paused": "Pausiert",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Gestoppt"
+    },
+    "checklist": "Checkliste",
+    "openChat": "Chat öffnen",
+    "showAll": "Alles anzeigen",
+    "watchdog": {
+      "kind": {
+        "stalled": "Steckt fest",
+        "looping": "Dreht sich im Kreis"
+      },
+      "action": {
+        "retry": "Neu versucht",
+        "escalated": "An dich eskaliert"
+      },
+      "title": "Watchdog",
+      "descriptionOn": "Stoppt Läufe, die feststecken oder sich im Kreis drehen. Einrichten unter <link>Einstellungen → KI</link>.",
+      "descriptionOff": "Aus – Läufe werden nicht überwacht. Einschalten unter <link>Einstellungen → KI</link>.",
+      "emptyOn": "Keine Eingriffe – jeder Lauf ist vorangekommen.",
+      "empty": "Keine Eingriffe.",
+      "ticket": "Aufgabe"
+    }
+  },
+  "agentDetail": {
+    "tabs": {
+      "overview": "Übersicht",
+      "chats": "Chats",
+      "routines": "Automationen",
+      "heartbeat": "Heartbeat",
+      "memory": "Gedächtnis",
+      "history": "Verlauf",
+      "settings": "Einstellungen"
+    },
+    "easyTabs": {
+      "heartbeat": "Check-ins",
+      "history": "Versionsverlauf"
+    },
+    "notFound": "Agent nicht gefunden",
+    "loadError": "Dieser Agent konnte nicht geladen werden",
+    "notFoundDescription": "Vielleicht wurde er gelöscht.",
+    "allAgents": "Alle Agenten",
+    "builtIn": "Integriert",
+    "addRole": "Rolle hinzufügen",
+    "reportsToYou": "Berichtet an dich",
+    "reportsTo": "Berichtet an <avatar/> {{name}}",
+    "leads_one": "Leitet {{count}}",
+    "leads_other": "Leitet {{count}}",
+    "defaultModel": "Standardmodell",
+    "effort": "Aufwand {{effort}}",
+    "browser": "Browser",
+    "switchOffLabel": "{{name}} ausschalten",
+    "switchOnLabel": "{{name}} einschalten",
+    "switchOffHint": "Ausschalten: Es antwortet nicht mehr, Automationen und Übergaben warten",
+    "switchOn": "Einschalten",
+    "answerQuestions_one": "{{count}} Frage beantworten",
+    "answerQuestions_other": "{{count}} Fragen beantworten",
+    "answer": "Antworten",
+    "pause": "Pausieren",
+    "pauseHint": "Aktuelle Arbeit pausieren – es macht später dort weiter",
+    "runTask": "Aufgabe ausführen",
+    "chat": "Chat",
+    "moreActions": "Weitere Aktionen",
+    "duplicate": "Duplizieren",
+    "deleteAgent": "Agent löschen",
+    "sections": "Bereiche des Agenten",
+    "more": "Mehr"
+  },
+  "chatsTab": {
+    "origin": {
+      "chat": "Chat",
+      "routine": "Automation",
+      "delegation": "Übergeben",
+      "api": "Chat",
+      "dream": "Träume",
+      "slack": "Slack",
+      "telegram": "Telegram",
+      "teams": "Microsoft Teams",
+      "task": "Aufgabe",
+      "heartbeat": "Heartbeat"
+    },
+    "searchPlaceholder": "Chats von {{name}} durchsuchen…",
+    "searchLabel": "Unterhaltungen durchsuchen",
+    "archived": "Archiviert",
+    "newChat": "Neuer Chat",
+    "loadError": "Unterhaltungen konnten nicht geladen werden",
+    "noMatch": "Keine passenden Unterhaltungen",
+    "noArchived": "Keine archivierten Unterhaltungen",
+    "emptyTitle": "Noch keine Chats mit {{name}}",
+    "nothingFound": "Nichts gefunden für „{{query}}“.",
+    "emptyDescription": "Starte einen – der Kontext bleibt über alle Nachrichten erhalten.",
+    "working": "Arbeitet…",
+    "pinned": "Angeheftet",
+    "unarchiveChat": "Chat wiederherstellen",
+    "archiveChat": "Chat archivieren",
+    "unarchive": "Wiederherstellen",
+    "archive": "Archivieren",
+    "deleteLabel": "„{{title}}“ löschen"
+  },
+  "dreamsPanel": {
+    "toast": {
+      "started": "{{name}} träumt…",
+      "startedDescription": "{{reviewed}}.",
+      "startError": "Traum konnte nicht gestartet werden",
+      "stopping": "Traum wird gestoppt…",
+      "stoppingDescription": "Alles, was bisher geändert wurde, wird zurückgesetzt.",
+      "stopError": "Traum konnte nicht gestoppt werden"
+    },
+    "title": "Träumen",
+    "loadError": "Träume konnten nicht geladen werden: {{error}}",
+    "stoppingLabel": "Traum von {{name}} wird gestoppt",
+    "stopLabel": "Traum von {{name}} stoppen",
+    "stopping": "Stoppt…",
+    "dreamNow": "Jetzt träumen",
+    "waitingToDream": "Wartet aufs Träumen…",
+    "dreaming": "Träumt…",
+    "startsSoon": "Startet, sobald {{name}} mit der aktuellen Arbeit fertig ist.",
+    "last": {
+      "default": "Letzter Traum <time>{{ago}}</time>",
+      "failed": "Letzter Traum <time>{{ago}}</time> fehlgeschlagen",
+      "cancelled": "Letzter Traum <time>{{ago}}</time> abgebrochen",
+      "paused": "Letzter Traum <time>{{ago}}</time> pausiert",
+      "pausedSize": " – der nächste geplante Traum übernimmt",
+      "pausedIdle": " – geht weiter, sobald {{name}} frei ist",
+      "undone": " (rückgängig gemacht)"
+    },
+    "neverDreamt": "Hat noch nicht geträumt",
+    "off": "Träumen ist aus – schalte es unter <link>Einstellungen → Gedächtnis</link> ein",
+    "nextDream": "Nächster Traum {{when}}",
+    "newExchanges_one": "{{count}} neuer Austausch",
+    "newExchanges_other": "{{count}} neue Austausche",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tagen",
+    "scheduleHint": "Nach Plan träumt {{name}}, sobald seit dem letzten Traum {{exchanges}} zusammengekommen sind.",
+    "scheduleHintRefresh": "Nach Plan träumt {{name}}, sobald seit dem letzten Traum {{exchanges}} zusammengekommen sind – oder nach {{days}}, um Daten im Gedächtnis zu aktualisieren.",
+    "noUpcoming": "Kein Traum geplant – prüfe den Zeitplan unter <link>Einstellungen → Gedächtnis</link>",
+    "switchedOff": "{{name}} ist ausgeschaltet – schalte es ein, damit es träumen kann.",
+    "pending": "<b>{{exchanges}}</b> in {{chats}} warten",
+    "pendingBelow": "<b>{{exchanges}}</b> in {{chats}} warten – der nächste geplante Traum braucht {{threshold}}",
+    "nothingNew": "Nichts Neues seit dem letzten Traum.",
+    "nothingYet": "Noch nichts zum Träumen – chatte zuerst mit dem Agenten.",
+    "meter": {
+      "shortening": "Dieser Traum kürzt es gerade.",
+      "nextShortens": "Der nächste Traum kürzt es – oder träume jetzt.",
+      "dreamToShorten": "Träume jetzt, um es zu kürzen.",
+      "size": "<b>{{chars}}</b><muted> von {{target}} Zeichen</muted>",
+      "cut": "Chats laden nur die ersten {{limit}} – das Ende fehlt. {{next}}",
+      "over": "{{over}} über dem Limit. {{next}}",
+      "within": "Innerhalb des Größenlimits."
+    },
+    "showFewer": "Weniger anzeigen",
+    "journal": {
+      "empty": "Jeder Traum landet hier: was {{name}} durchgegangen ist, was sich im Gedächtnis geändert hat und warum – mit zeilengenauem Diff und der Möglichkeit, es rückgängig zu machen.",
+      "title": "Traumjournal",
+      "showOlder_one": "{{count}} älteren Traum anzeigen",
+      "showOlder_other": "{{count}} ältere Träume anzeigen"
+    },
+    "entry": {
+      "memoryTitle": "MEMORY.md: {{before}} → {{after}} Zeichen",
+      "to": "auf",
+      "consolidating": "Gedächtnis wird konsolidiert…",
+      "attemptedPartly": "Versucht – soweit möglich zurückgesetzt",
+      "attemptedAll": "Versucht – zurückgesetzt, nichts wurde behalten",
+      "showFewerChanges": "Weniger Änderungen anzeigen",
+      "showMoreChanges_one": "{{count}} weitere Änderung anzeigen",
+      "showMoreChanges_other": "{{count}} weitere Änderungen anzeigen",
+      "goodShape": "Das Gedächtnis war schon in gutem Zustand – nichts umzuschreiben.",
+      "hideChanges": "Änderungen ausblenden",
+      "changes_one": "{{count}} Änderung",
+      "changes_other": "{{count}} Änderungen",
+      "attemptedChanges_one": "{{count}} versuchte Änderung",
+      "attemptedChanges_other": "{{count}} versuchte Änderungen",
+      "review": "Änderungen ansehen",
+      "undoLabel": "Traum ({{when}}) rückgängig machen",
+      "undo": "Rückgängig",
+      "undoBlocked": "Verfügbar, sobald der aktuelle Traum beendet ist",
+      "editedSince": "Inzwischen bearbeitet – nicht rückgängig zu machen",
+      "editedSinceFiles": "Die Gedächtnisdateien oder das Einsortierte haben sich nach dem Traum geändert, daher lässt er sich nicht automatisch rückgängig machen. Bearbeite stattdessen die Dateien unten.",
+      "editedSinceWorkspace": "Das Einsortierte wurde inzwischen verschoben oder entfernt (verworfene Dateien warten eine Woche), daher lässt er sich nicht automatisch rückgängig machen."
+    },
+    "moves": {
+      "stuck": "Konnte nicht zurückgelegt werden",
+      "workspace": "Workspace",
+      "label": {
+        "move": "einsortiert",
+        "rewrite": "umgeschrieben",
+        "discard": "verworfen"
+      },
+      "count": {
+        "move_one": "{{count}} einsortiert",
+        "move_other": "{{count}} einsortiert",
+        "rewrite_one": "{{count}} umgeschrieben",
+        "rewrite_other": "{{count}} umgeschrieben",
+        "discard_one": "{{count}} verworfen",
+        "discard_other": "{{count}} verworfen"
+      },
+      "outOfWay": "{{size}} aus dem Weg geräumt",
+      "sizeNow": "jetzt {{size}}",
+      "removedAfterWeek": "wird nach einer Woche entfernt",
+      "showMore_one": "{{count}} weitere anzeigen",
+      "showMore_other": "{{count}} weitere anzeigen"
+    }
+  },
+  "dreamParts": {
+    "fileListTwo": "{{first}} und {{second}}",
+    "memoryFiles_one": "{{count}} Gedächtnisdatei",
+    "memoryFiles_other": "{{count}} Gedächtnisdateien",
+    "workspaceEntries_one": "{{count}} Workspace-Eintrag",
+    "workspaceEntries_other": "{{count}} Workspace-Einträge",
+    "exchanges_one": "{{count}} Austausch",
+    "exchanges_other": "{{count}} Austausche",
+    "chats_one": "{{count}} Chat",
+    "chats_other": "{{count}} Chats",
+    "reviewed": {
+      "nothingActive": "Nichts Neues zu lesen – räumt auf und aktualisiert Daten",
+      "nothingEnded": "Wollte aufräumen und Daten aktualisieren",
+      "nothingDone": "Keine neuen Unterhaltungen – aufgeräumt und Daten aktualisiert",
+      "active": "Liest {{exchanges}} in {{chats}}",
+      "ended": "Wollte {{exchanges}} in {{chats}} durchgehen",
+      "done": "{{exchanges}} in {{chats}} durchgegangen"
+    },
+    "when": {
+      "today": "Heute, {{time}}",
+      "yesterday": "Gestern, {{time}}",
+      "thisYearFormat": "EEE, d. MMM, p",
+      "otherYearFormat": "d. MMM yyyy, p"
+    },
+    "upcoming": {
+      "dueNow": "jetzt fällig",
+      "tonight": "heute Nacht um {{time}}",
+      "today": "heute um {{time}}",
+      "tomorrow": "morgen um {{time}}",
+      "onDay": "{{day}} um {{time}}",
+      "thisYearFormat": "EEE, d. MMM",
+      "otherYearFormat": "d. MMM yyyy"
+    },
+    "status": {
+      "queued": "Wartet",
+      "running": "Läuft",
+      "succeeded": "Konsolidiert",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert",
+      "reverted": "Rückgängig"
+    },
+    "reason": {
+      "schedule": "Geplant",
+      "manual": "Manuell",
+      "size": "Gedächtnis voll"
+    },
+    "kind": {
+      "added": "Neu",
+      "updated": "Aktualisiert",
+      "merged": "Zusammengeführt",
+      "corrected": "Korrigiert",
+      "removed": "Entfernt",
+      "dated": "Datiert"
+    },
+    "kindCount": {
+      "added_one": "{{count}} neu",
+      "added_other": "{{count}} neu",
+      "updated_one": "{{count}} aktualisiert",
+      "updated_other": "{{count}} aktualisiert",
+      "merged_one": "{{count}} zusammengeführt",
+      "merged_other": "{{count}} zusammengeführt",
+      "corrected_one": "{{count}} korrigiert",
+      "corrected_other": "{{count}} korrigiert",
+      "removed_one": "{{count}} entfernt",
+      "removed_other": "{{count}} entfernt",
+      "dated_one": "{{count}} datiert",
+      "dated_other": "{{count}} datiert"
+    },
+    "undone": {
+      "title": "Traum rückgängig gemacht",
+      "error": "Der Traum konnte nicht rückgängig gemacht werden",
+      "files_one": "{{files}} ist wieder so wie vorher.",
+      "files_other": "{{files}} sind wieder so wie vorher.",
+      "entries_one": "{{entries}} ist wieder an seinem alten Platz.",
+      "entries_other": "{{entries}} sind wieder an ihrem alten Platz.",
+      "both": "{{files}} und {{entries}} sind wieder so wie vorher."
+    },
+    "undoDialog": {
+      "title": "Diesen Traum rückgängig machen?",
+      "putMemory": "Das Gedächtnis auf den Stand vor diesem Traum zurücksetzen?",
+      "putFiles_one": "<b>{{files}}</b> auf den Stand vor diesem Traum zurücksetzen?",
+      "putFiles_other": "<b>{{files}}</b> auf den Stand vor diesem Traum zurücksetzen?",
+      "putFilesAndMove_one": "<b>{{files}}</b> auf den Stand vor diesem Traum zurücksetzen und <b>{{entries}}</b> zurückverschieben?",
+      "putFilesAndMove_other": "<b>{{files}}</b> auf den Stand vor diesem Traum zurücksetzen und <b>{{entries}}</b> zurückverschieben?",
+      "forgotten": "Was {{name}} darin verarbeitet hat, ist dann vergessen – der Traum bleibt im Journal und wird als rückgängig markiert.",
+      "moveOnly_one": "<b>{{entries}}</b> dorthin zurückverschieben, wo er vor diesem Traum war? Der Traum bleibt im Journal und wird als rückgängig markiert.",
+      "moveOnly_other": "<b>{{entries}}</b> dorthin zurückverschieben, wo sie vor diesem Traum waren? Der Traum bleibt im Journal und wird als rückgängig markiert.",
+      "keep": "Änderungen behalten",
+      "confirm": "Traum rückgängig machen"
+    }
+  },
+  "dreamReview": {
+    "eyebrow": "Traum · {{when}}",
+    "title": "Was {{name}} geändert hat",
+    "show": "Anzeigen",
+    "changes": "Änderungen",
+    "result": "Ergebnis",
+    "attempted": "Was versucht wurde",
+    "notes": "Notizen des Agenten",
+    "rolledBackPartly": "Soweit möglich zurückgesetzt",
+    "rolledBackAll": "Zurückgesetzt – nichts wurde behalten",
+    "noNotes": "{{name}} hat die Änderungen nicht beschrieben – der Diff zeigt genau, was geschrieben wurde.",
+    "loadError": "Die Änderungen konnten nicht geladen werden: {{error}}",
+    "nothingLeft": "Von diesem Traum ist nichts mehr in den Gedächtnisdateien übrig.",
+    "noFileChanges": "Dieser Traum hat keine Gedächtnisdateien geändert.",
+    "footer": {
+      "reverted": "Dieser Traum wurde rückgängig gemacht – die Dateien sind wieder auf dem Stand davor.",
+      "blocked": "Rückgängig machen geht, sobald der aktuelle Traum von {{name}} beendet ist.",
+      "canRevert": "Rückgängig machen setzt diese Dateien genau auf den Stand vor dem Traum zurück.",
+      "cannotRevert": "Das Gedächtnis hat sich nach diesem Traum geändert, daher lässt er sich nicht automatisch rückgängig machen – bearbeite die Dateien stattdessen im Tab „Gedächtnis“."
+    },
+    "undo": "Traum rückgängig machen",
+    "file": {
+      "createdEmpty": "Leere Datei erstellt.",
+      "deletedEmpty": "Leere Datei gelöscht.",
+      "onlyNewlineAdded": "Nur der Zeilenumbruch am Dateiende wurde hinzugefügt.",
+      "onlyNewlineRemoved": "Nur der Zeilenumbruch am Dateiende wurde entfernt.",
+      "noLineChanges": "Keine Zeilenänderungen.",
+      "newFile": "Neue Datei",
+      "deleted": "Gelöscht",
+      "dreamDeleted": "Der Traum hat diese Datei gelöscht.",
+      "emptyFile": "Leere Datei."
+    },
+    "diff": {
+      "showUnchanged_one": "{{count}} unveränderte Zeile anzeigen",
+      "showUnchanged_other": "{{count}} unveränderte Zeilen anzeigen",
+      "notShown_one": "{{count}} weitere Zeile nicht angezeigt",
+      "notShown_other": "{{count}} weitere Zeilen nicht angezeigt",
+      "showEverything": "Alles anzeigen",
+      "newlineAdded": "Zeilenumbruch am Dateiende hinzugefügt",
+      "newlineRemoved": "Kein Zeilenumbruch mehr am Dateiende",
+      "srAdded": "Hinzugefügt: ",
+      "srRemoved": "Entfernt: "
+    }
+  },
+  "historyTab": {
+    "dayFormat": "EEEE, d. MMMM yyyy",
+    "unknownDate": "Unbekanntes Datum",
+    "loadError": "Verlauf konnte nicht geladen werden",
+    "emptyTitle": "Noch kein Verlauf",
+    "emptyDescription": "Jeder Lauf, jede Gedächtnisänderung und jede neue Einstellung wird im Git-Repository von {{name}} gespeichert und erscheint hier.",
+    "intro": "Das Gedächtnis von {{name}} liegt in einem Git-Repository – jede Änderung ist versioniert.",
+    "noMessage": "(keine Nachricht)",
+    "copyHash": "Commit-Hash kopieren"
+  },
+  "memoryTab": {
+    "files": "Dateien",
+    "repository": "Agenten-Repository",
+    "tidyUpHint": "Größen, Aufräumvorschläge, Verschieben und Löschen",
+    "saveFirst": "Speichere oder verwirf zuerst deine Änderungen",
+    "unsavedChanges": "{{path}} hat ungespeicherte Änderungen.",
+    "unsavedChangesFile": "Die Datei hat ungespeicherte Änderungen.",
+    "tidyUp": "Aufräumen",
+    "filesLabel": "Agenten-Dateien",
+    "selectFile": "Wähle eine Datei aus, um sie anzusehen.",
+    "discardTitle": "Ungespeicherte Änderungen verwerfen?",
+    "discardDescription": "Deine Änderungen an {{path}} wurden nicht gespeichert.",
+    "keepEditing": "Weiter bearbeiten",
+    "discard": "Verwerfen",
+    "empty": "Leer"
+  },
+  "memoryEditorParts": {
+    "jumpToSection": "Zu einem Abschnitt springen",
+    "sections": "Abschnitte",
+    "budgetCut": "Chats laden nur die ersten {{limit}} Zeichen – das Ende fehlt.",
+    "budgetOver": "{{over}} über dem Ziel – der nächste Traum kürzt es.",
+    "budgetOk": "Wird vollständig in jeden Chat geladen.",
+    "sizeLabel": "Größe von MEMORY.md",
+    "sizeValue": "{{chars}} von {{target}} Zeichen",
+    "chars": "{{chars}} / {{target}} Zeichen",
+    "brokenLinks_one": "{{count}} defekter Link",
+    "brokenLinks_other": "{{count}} defekte Links",
+    "missingNotes": "Diese Notizen gibt es nicht:"
+  },
+  "overviewTab": {
+    "jobsLast200": "Jobs (letzte 200)",
+    "jobsDone": "Erledigte Jobs",
+    "runsLast200": "Läufe (letzte 200)",
+    "totalRuns": "Läufe gesamt",
+    "successRate": "Erfolgsquote",
+    "failed_one": "{{count}} fehlgeschlagen",
+    "failed_other": "{{count}} fehlgeschlagen",
+    "averageTime": "Durchschnittliche Zeit",
+    "avgDuration": "Ø Dauer",
+    "recentWork": "Zuletzt erledigt",
+    "recentRuns": "Letzte Läufe",
+    "allActivity": "Alle Aktivitäten",
+    "workLoadError": "Die letzten Arbeiten konnten nicht geladen werden: {{error}}",
+    "runsLoadError": "Läufe konnten nicht geladen werden: {{error}}",
+    "emptyEasy": "Noch nichts da. Starte einen Chat oder gib eine Aufgabe – alles, was erledigt wird, erscheint hier.",
+    "emptyPro": "Noch keine Läufe. Starte einen Chat oder gib eine Aufgabe – jeder Lauf erscheint hier.",
+    "instructions": "Anweisungen",
+    "editInstructions": "Anweisungen bearbeiten",
+    "noInstructions": "Noch keine Anweisungen – es arbeitet nur mit deinen Nachrichten."
+  },
+  "plate": {
+    "title": "Was ansteht",
+    "aChat": "Ein Chat",
+    "switchedOff": "{{name}} ist ausgeschaltet.",
+    "switchOn": "Einschalten",
+    "nothing": "Bei {{name}} steht gerade nichts an.",
+    "runTask": "Aufgabe ausführen",
+    "addAutomation": "Automation hinzufügen",
+    "now": "Jetzt",
+    "boardTickets": "Aufgaben im Board",
+    "moreOnBoard_one": "{{count}} weitere im Board",
+    "moreOnBoard_other": "{{count}} weitere im Board",
+    "ticketsError": "Die Aufgaben im Board konnten nicht geladen werden.",
+    "followups": "Follow-ups",
+    "nextAutomation_one": "Nächste Automation",
+    "nextAutomation_other": "Nächste Automationen",
+    "checks": "prüft {{schedule}}",
+    "andMore_one": "und {{count}} weitere",
+    "andMore_other": "und {{count}} weitere",
+    "working": "Arbeitet…",
+    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "watch": "Ansehen",
+    "stopLabel": "Stoppen: {{title}}",
+    "waitingForAnswer": "Wartet auf deine Antwort",
+    "usageLimit": "Nutzungslimit",
+    "waitingForLimit": "Wartet auf Claudes {{limit}}",
+    "waitingForLimitResume": "Wartet auf Claudes {{limit}} · geht {{when}} weiter",
+    "paused": "Pausiert",
+    "openChat": "Chat öffnen"
+  },
+  "agentActions": {
+    "presence": {
+      "off": "Ausgeschaltet",
+      "working": "Arbeitet…",
+      "workingMany": "Arbeitet in {{n}} Chats",
+      "needsLogin": "Braucht ein Login",
+      "needsYouMany": "Braucht dich · {{n}} Fragen",
+      "needsAnswer": "Wartet auf deine Antwort",
+      "failed": "Letzter Lauf fehlgeschlagen",
+      "paused": "Pausiert",
+      "pausedMany": "Pausiert · {{n}} Chats",
+      "queued": "In der Warteschlange",
+      "queuedMany": "Warteschlange · {{n}}",
+      "idle": "Bereit"
+    },
+    "startChat": {
+      "error": "Chat konnte nicht gestartet werden",
+      "offTitle": "{{name}} ist ausgeschaltet",
+      "offDescription": "Er antwortet erst, wenn du ihn einschaltest.",
+      "switchOnAndChat": "Einschalten und chatten"
+    },
+    "toggle": {
+      "on": "{{name}} ist eingeschaltet",
+      "off": "{{name}} ist ausgeschaltet",
+      "offDescription": "Seine Automationen laufen erst wieder, wenn du ihn einschaltest.",
+      "error": "Agent konnte nicht aktualisiert werden"
+    },
+    "duplicate": {
+      "grant": "Bestätige, um {{name}} zu kopieren. Dieser Agent darf Geheimnisse lesen.",
+      "ready": "{{name}} ist bereit",
+      "readyDescription": "Gleiches Setup wie {{source}}, mit frischem Gedächtnis. Gib ihm einen eigenen Namen und eine Rolle.",
+      "error": "{{name}} konnte nicht dupliziert werden"
+    },
+    "pause": {
+      "pausing": "{{name}} pausiert",
+      "many": "{{n}} Chats halten nach ihrem aktuellen Schritt an.",
+      "one": "Er hält nach dem aktuellen Schritt an.",
+      "error": "Pausieren fehlgeschlagen"
+    },
+    "resume": {
+      "continues": "{{name}} macht weiter",
+      "many": "{{n}} Chats machen dort weiter, wo sie aufgehört haben.",
+      "one": "Er macht dort weiter, wo er aufgehört hat.",
+      "error": "Fortsetzen fehlgeschlagen"
+    },
+    "runTask": {
+      "onIt": "{{name}} legt los",
+      "error": "Aufgabe konnte nicht gestartet werden",
+      "title": "Aufgabe starten",
+      "titleWith": "Aufgabe mit {{name}} starten",
+      "description": "Die Arbeit läuft in einem neuen Chat – du kannst live zusehen.",
+      "label": "Aufgabe",
+      "placeholderExample": "z. B. {{description}}",
+      "placeholder": "Beschreib, was er tun soll…",
+      "hint": "Lass es leer, dann arbeitet {{name}} nach seinen Anweisungen.",
+      "hintGeneric": "Lass es leer, dann arbeitet der Agent nach seinen Anweisungen.",
+      "toRun": "zum Starten",
+      "submit": "Aufgabe starten"
+    },
+    "delete": {
+      "deleted": "{{name}} gelöscht",
+      "error": "Agent konnte nicht gelöscht werden",
+      "title": "{{name}} löschen?",
+      "description": "Damit werden der Agent, seine Automationen und Chats entfernt. Sein Gedächtnis-Repository wird ebenfalls gelöscht. Das lässt sich nicht rückgängig machen.",
+      "confirm": "Agent löschen"
+    },
+    "status": {
+      "openFailedRun": "Fehlgeschlagenen Lauf öffnen",
+      "watch": "{{name}} bei der Arbeit zusehen: {{activity}}"
+    }
+  },
+  "agentCard": {
+    "builtIn": "Integriert",
+    "noDescription": "Keine Beschreibung",
+    "automations_one": "{{count}} Automation",
+    "automations_other": "{{count}} Automationen",
+    "lastRun": "Letzter Lauf: {{when}}",
+    "neverRan": "Noch nie gelaufen",
+    "model": "Modell",
+    "chat": "Chat",
+    "continue": "Fortsetzen",
+    "pause": "Pausieren",
+    "run": "Starten",
+    "menu": {
+      "actionsFor": "Aktionen für {{name}}",
+      "newChat": "Neuer Chat",
+      "runTask": "Aufgabe starten…",
+      "automations": "Automationen",
+      "duplicate": "Duplizieren",
+      "switchOff": "Ausschalten",
+      "switchOn": "Einschalten",
+      "moveTo": "Verschieben nach",
+      "global": "Global"
+    }
+  },
+  "agentList": {
+    "builtIn": "Integriert",
+    "noRole": "Noch keine Rolle",
+    "reportsToYou": "Berichtet an dich",
+    "automations_one": "{{count}} Automation",
+    "automations_other": "{{count}} Automationen",
+    "neverRan": "Noch nie gelaufen",
+    "chatWith": "Mit {{name}} chatten",
+    "newChat": "Neuer Chat"
+  },
+  "agentGroups": {
+    "global": "Global",
+    "workspace": "Workspace",
+    "dropHere": "Hier ablegen",
+    "open": "{{label}} öffnen",
+    "showOnly": "Nur {{label}} anzeigen",
+    "workingTitle_one": "{{count}} arbeitet",
+    "workingTitle_other": "{{count}} arbeiten",
+    "workingWord_one": "arbeitet",
+    "workingWord_other": "arbeiten",
+    "needsYouTitle_one": "{{count}} braucht dich",
+    "needsYouTitle_other": "{{count}} brauchen dich",
+    "needsYouWord_one": "braucht dich",
+    "needsYouWord_other": "brauchen dich"
+  },
+  "agentDnd": {
+    "theWorkspace": "Workspace",
+    "global": "Global",
+    "reportTo": "An {{lead}} berichten",
+    "reportToIn": "An {{lead}} in {{workspace}} berichten",
+    "nowReportsTo": "{{agent}} berichtet jetzt an {{lead}}",
+    "nowReportsToIn": "{{agent}} berichtet jetzt an {{lead}} in {{workspace}}",
+    "moveTo": "Nach {{workspace}} verschieben",
+    "moved": "{{agent}} nach {{workspace}} verschoben",
+    "loop": "{{lead}} berichtet an {{agent}}",
+    "movedBack": "Zurückverschoben",
+    "moveBackError": "Zurückverschieben fehlgeschlagen",
+    "teamMoved": "Sein Team ({{n}}) ist mitgezogen.",
+    "moveError": "Agent konnte nicht verschoben werden",
+    "cantMove": "{{name}} kann nicht dorthin verschoben werden",
+    "withReports_one": "mit {{count}} Teammitglied",
+    "withReports_other": "mit {{count}} Teammitgliedern",
+    "dropHint": "Auf einem Agenten oder Workspace ablegen",
+    "moveToWorkspace": "In Workspace verschieben",
+    "moveToShort": "Verschieben nach",
+    "here": "hier"
+  },
+  "orgChart": {
+    "teamOf": "Team von {{name}}",
+    "reportsToPanel": "Berichten an {{name}}",
+    "otherAgents": "Weitere Agenten",
+    "hireFirst": "Stell deinen ersten Agenten ein",
+    "hireFirstHint": "Er berichtet an {{name}}, bis du ihm eine andere Leitung gibst.",
+    "builtIn": "Integriert",
+    "noRole": "Noch keine Rolle",
+    "noRoleLower": "noch keine Rolle",
+    "hub": {
+      "whereWorkspaces_one": "{{count}} Workspace",
+      "whereWorkspaces_other": "{{count}} Workspaces",
+      "whereGlobalAnd_one": "Global und {{count}} Workspace",
+      "whereGlobalAnd_other": "Global und {{count}} Workspaces",
+      "ariaLabel": "{{name}}, {{role}}, {{status}}, berichtet an dich",
+      "leads_one": "Leitet <n>{{count}}</n> Agenten direkt. Alle ohne eigene Leitung berichten hierher.",
+      "leads_other": "Leitet <n>{{count}}</n> Agenten direkt. Alle ohne eigene Leitung berichten hierher.",
+      "leadsAcross_one": "Leitet <n>{{count}}</n> Agenten direkt, verteilt auf {{where}}. Alle ohne eigene Leitung berichten hierher.",
+      "leadsAcross_other": "Leitet <n>{{count}}</n> Agenten direkt, verteilt auf {{where}}. Alle ohne eigene Leitung berichten hierher."
+    },
+    "row": {
+      "ariaLabel": "{{name}}, {{role}}, {{status}}, berichtet an {{lead}}",
+      "leadsTitle": "Leitet {{n}}",
+      "leadBadge": "Leitung · {{n}}",
+      "reportsTo": "Berichtet an",
+      "reportHere": "Hierher berichten",
+      "notHere": "Nicht hier",
+      "idle": "Bereit"
+    }
+  },
+  "agentsPage": {
+    "descriptionAll": "Dein Team in allen Workspaces: wer was macht, wer wen leitet und woran jeder gerade arbeitet.",
+    "descriptionGlobal": "Dein globales Team: wer was macht, wer wen leitet und woran jeder gerade arbeitet.",
+    "descriptionIn": "Dein Team in {{name}}: wer was macht, wer wen leitet und woran jeder gerade arbeitet.",
+    "descriptionThis": "Dein Team in diesem Workspace: wer was macht, wer wen leitet und woran jeder gerade arbeitet.",
+    "filters": {
+      "running": "Aktiv",
+      "needs": "Braucht dich",
+      "scheduled": "Automatisiert"
+    },
+    "askGodmode": "Godmode fragen",
+    "newAgent": "Neuer Agent",
+    "searchPlaceholder": "Agenten suchen…",
+    "searchLabel": "Agenten suchen",
+    "filterLabel": "Agenten filtern",
+    "view": {
+      "label": "Ansicht",
+      "grid": "Raster",
+      "list": "Liste",
+      "chart": "Organigramm"
+    },
+    "loadError": "Agenten konnten nicht geladen werden",
+    "empty": {
+      "title": "Erstell deinen ersten Agenten",
+      "description": "Agenten sind Kollegen mit eigenen Anweisungen, eigenem Gedächtnis und Zeitplan – z. B. einer, der jeden Monat deine Rechnungen herunterlädt.",
+      "askGodmode": "Godmode einen erstellen lassen"
+    },
+    "noMatchQuery": "Keine Agenten passen zu „{{query}}“.",
+    "clear": "Leeren",
+    "noMatch": {
+      "title": "Keine passenden Agenten",
+      "nothingFound": "Nichts gefunden für „{{query}}“.",
+      "emptyView": "Keine Agenten in dieser Ansicht.",
+      "clearFilters": "Filter zurücksetzen"
+    },
+    "dragHintChart": "Zieh einen Agenten auf einen anderen, um zu ändern, an wen er berichtet, oder auf einen Workspace, um ihn mit seinem Team zu verschieben. <link>Team oder ganzes Unternehmen hinzufügen</link>",
+    "dragHint": "Zieh einen Agenten auf einen Workspace, um ihn mit seinem Team dorthin zu verschieben. <link>Team oder ganzes Unternehmen hinzufügen</link>",
+    "startCompany": {
+      "title": "Gründe ein Unternehmen",
+      "description": "Ein ganzes Organigramm auf einmal – jeder Agent hat seine Aufgabe, und jede Leitung verteilt die Arbeit, prüft sie und sagt dir, wo du gebraucht wirst."
+    },
+    "crew": "Deine Crew"
+  },
+  "teamTemplates": {
+    "kindLabel": "Art der Struktur",
+    "companies": "Unternehmen",
+    "teams": "Teams",
+    "company": "Unternehmen",
+    "team": "Team",
+    "agentCount_one": "{{count}} Agent",
+    "agentCount_other": "{{count}} Agenten",
+    "leadWith": "{{lead}} mit {{names}}",
+    "ready": {
+      "title": "{{name}} ist bereit",
+      "leads_one": "{{lead}} leitet {{count}} Agenten.",
+      "leads_other": "{{lead}} leitet {{count}} Agenten.",
+      "leadsIn_one": "{{lead}} leitet {{count}} Agenten in {{workspace}}.",
+      "leadsIn_other": "{{lead}} leitet {{count}} Agenten in {{workspace}}.",
+      "automations_one": "{{count}} Automation eingerichtet.",
+      "automations_other": "{{count}} Automationen eingerichtet."
+    },
+    "installError": "{{name}} konnte nicht eingerichtet werden",
+    "keptOf_one": "{{kept}} von {{count}} Agent",
+    "keptOf_other": "{{kept}} von {{count}} Agenten",
+    "everyone": "Alle",
+    "leadsOnly": "Nur Leitungen",
+    "clear": "Leeren",
+    "orgChart": "Organigramm",
+    "where": "Wo sie arbeiten",
+    "newWorkspace": "Neuer Workspace",
+    "globalEvery": "Global (alle Workspaces)",
+    "newWorkspaceName": "Name des neuen Workspace",
+    "workspaceNamePlaceholder": "Name des Workspace",
+    "schedules_one": "Auch ihren Zeitplan einrichten ({{count}})",
+    "schedules_other": "Auch ihre {{count}} Zeitpläne einrichten",
+    "scheduleList": "{{names}} – ändern oder pausieren kannst du sie unter Automationen.",
+    "scheduleListMore": "{{names}} und {{n}} weitere – ändern oder pausieren kannst du sie unter Automationen.",
+    "footerHint": "Leitungen können Arbeit an ihr Team abgeben. Jeden Agenten kannst du anpassen.",
+    "hire_one": "{{count}} Agenten einstellen",
+    "hire_other": "{{count}} Agenten einstellen",
+    "seat": {
+      "hire": "{{name}} einstellen",
+      "teamReportsTo": "(sein Team berichtet an {{name}})",
+      "reportsToGodmode": "Berichtet an Godmode",
+      "addTeam": "Team hinzufügen ({{n}})",
+      "leaveOutTeam": "Team weglassen ({{n}})",
+      "withSchedule": "Mit Zeitplan"
+    }
+  }
+}
