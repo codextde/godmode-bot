@@ -8,6 +8,12 @@ import { cn } from "@/lib/utils";
 const LOOK_MAX = 4;
 const LOOK_REACH = 240;
 
+/** At least ~56 px: pixel sizes, or Tailwind size-14 and up (size-16 = 64 px). */
+function isLarge(size: number | string | undefined, className: string | undefined): boolean {
+  if (typeof size === "number") return size >= 56;
+  return /(?:^|\s)size-(?:1[4-9]|[2-9]\d)(?:\s|$)/.test(cn(size, className));
+}
+
 /**
  * An agent's creature. The SVG comes from the shared renderer (inputs are enum-normalized, so the markup is safe to
  * inject); blinking, breathing and moods are CSS (`@godmode/shared/character.css`).
@@ -93,6 +99,9 @@ export function Character({
     };
   }, [follow]);
 
+  // Idle blinking and breathing only on big characters: on small avatars it is barely visible, yet every one of them
+  // repaints the window each frame. Moods that mean something (working, attention, ...) still move at any size.
+  const resting = still || ((mood === "idle" || mood === "sleeping") && !isLarge(size, className));
   const style: CSSProperties & Record<`--${string}`, string> = { "--gm-phase": `${characterPhase(phaseSeed)}s` };
   if (typeof size === "number") {
     style.width = size;
@@ -103,7 +112,7 @@ export function Character({
     <span
       ref={ref}
       style={style}
-      className={cn("inline-block shrink-0", typeof size === "string" && size, still && "gm-still", className)}
+      className={cn("inline-block shrink-0", typeof size === "string" && size, resting && "gm-still", className)}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

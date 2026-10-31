@@ -579,7 +579,7 @@ function FooterBar() {
       <Tooltip>
         <TooltipTrigger asChild>
           <div className="flex h-8 flex-1 items-center gap-2 px-2 text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">
-            <LiveDot live={connected} className={cn(!connected && "bg-warning")} />
+            <LiveDot live={false} className={connected ? "bg-brand" : "animate-pulse bg-warning"} />
             {connected ? "Online" : "Reconnecting…"}
           </div>
         </TooltipTrigger>
