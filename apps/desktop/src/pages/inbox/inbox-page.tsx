@@ -189,7 +189,7 @@ function InboxList({ agentById }: { agentById: Map<string, Agent> }) {
       ].sort((a, b) => b.at - a.at),
     [current.data, currentQuestions.data],
   );
-  // The rest of what waits (tickets, paused chats, budgets, failures, people): questions and logins have their cards below.
+  // The rest of what waits (tickets, paused chats, failures, people): questions and logins have their cards below.
   const attention = useAttention();
   const { workspaceOf } = useScopedAttention();
   const { data: workspaces = [] } = useWorkspaces();

@@ -6,13 +6,12 @@ import { addDays, endOfMonth, endOfQuarter, format, parseISO } from "date-fns";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { formatUsd, MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, type Goal, type GoalStatus } from "@godmode/shared";
+import { MAX_GOAL_TITLE_LENGTH, MAX_GOAL_WHY_LENGTH, type Goal, type GoalStatus } from "@godmode/shared";
 import { Group, SegmentRow, type Option } from "@/components/form";
 import { Icon } from "@/components/icon";
 import { Button, ErrorState, LoadingState, Row, T, tap } from "@/components/ui";
 import { api, ApiError, errorText, UPDATE_DESKTOP_MESSAGE } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { radius, space, useColors } from "@/lib/theme";
 
 interface Draft {
@@ -55,7 +54,6 @@ export default function GoalSheet() {
   const seed = useMemo(() => (id ? cachedGoal(id) : undefined), [id]);
   const list = useQuery({ queryKey: qk.goals(null), queryFn: () => api.goals.list(null), enabled: !!id, placeholderData: seed ? [seed] : undefined });
   const goal = id ? list.data?.find((g) => g.id === id) : undefined;
-  const spendTracking = useSpendTracking();
   const [draft, setDraft] = useState<Draft | null>(() => (id ? (seed ? draftOf(seed) : null) : draftOf()));
   // Opened before the goal was on the phone: fill the form once it is.
   if (!draft && goal) setDraft(draftOf(goal));
@@ -186,9 +184,9 @@ export default function GoalSheet() {
       <Group
         footer={
           goal
-            ? [goal.tickets.total ? `${goal.tickets.done} of ${goal.tickets.total} tickets done` : "No ticket serves it yet.", spendTracking && goal.costUsd > 0 ? `${formatUsd(goal.costUsd)} spent` : null]
-                .filter(Boolean)
-                .join(" · ")
+            ? goal.tickets.total
+              ? `${goal.tickets.done} of ${goal.tickets.total} tickets done`
+              : "No ticket serves it yet."
             : undefined
         }
       >

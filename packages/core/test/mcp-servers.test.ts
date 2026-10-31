@@ -55,7 +55,6 @@ function agentModel(p: Partial<Agent> & { id: string }): Agent {
       secretAccess: "fill",
       credentialIds: null,
       totpIds: null,
-      maxBudgetUsd: null,
     },
     browser: { profileId: null, enabled: false, headless: null },
     computer: { enabled: false, target: null },

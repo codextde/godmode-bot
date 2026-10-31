@@ -2,7 +2,7 @@ import { Link } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { formatDistanceToNowStrict } from "date-fns";
-import { AlertTriangle, Coins, KanbanSquare, KeyRound, ListTodo, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
+import { AlertTriangle, KanbanSquare, KeyRound, ListTodo, MessageCircleQuestion, OctagonAlert, Pause, Play, UserPlus, Workflow, type LucideIcon } from "lucide-react";
 import type { Agent, AttentionItem, Workspace } from "@godmode/shared";
 import { api, errorMessage } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -19,7 +19,6 @@ export const ATTENTION_ICON: Record<AttentionItem["kind"], LucideIcon> = {
   review: KanbanSquare,
   blocked: OctagonAlert,
   paused: Pause,
-  held: Coins,
   failed: AlertTriangle,
   automation: Workflow,
   access: UserPlus,
@@ -29,7 +28,6 @@ const TONE: Partial<Record<AttentionItem["kind"], string>> = {
   question: "text-warning",
   todo: "text-warning",
   login: "text-warning",
-  held: "text-warning",
   blocked: "text-rose-600 dark:text-rose-400",
   failed: "text-destructive",
   automation: "text-destructive",

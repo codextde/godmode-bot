@@ -16,10 +16,6 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   PaymentCardSecrets,
   AttentionItem,
   AwaySummary,
-  BudgetOverview,
-  BudgetReleaseInput,
-  SpendPeriod,
-  SpendReport,
   Agent,
   AgentFileEntry,
   AgentFileInfo,
@@ -550,21 +546,10 @@ export const api = {
     },
   },
 
-  spend: {
-    /** What the team (or one agent) cost, booked when it was spent: four period totals and the chosen period per agent and kind of work. */
-    report: (period: SpendPeriod, agentId?: string | null) => get<SpendReport>("/api/spend", { period, agentId: agentId ?? undefined }),
-  },
-
   /** Everything that waits for the human ("Needs you"), from live state. */
   attention: () => get<AttentionItem[]>("/api/attention"),
   /** What the team did since the human was last here. */
   away: (since: string, until: string) => get<AwaySummary>("/api/away", { since, until }),
-
-  budgets: {
-    get: () => get<BudgetOverview>("/api/budgets"),
-    /** Let held work run although its budget is used up. */
-    release: (input: BudgetReleaseInput) => post<{ continued: number }>("/api/budgets/release", input),
-  },
 
   agents: {
     list: (q: { workspaceId?: ScopeFilter } = {}) => get<Agent[]>("/api/agents", q),

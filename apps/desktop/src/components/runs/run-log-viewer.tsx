@@ -14,7 +14,6 @@ import {
   Settings2,
 } from "lucide-react";
 import { api, errorMessage } from "@/lib/api";
-import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { saveBlob } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
@@ -26,7 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { formatCost, formatDuration, formatTokens } from "./run-status";
+import { formatDuration, formatTokens } from "./run-status";
 
 type Json = Record<string, unknown>;
 
@@ -42,7 +41,6 @@ export type LogEntry =
       subtype: string;
       isError: boolean;
       durationMs: number | null;
-      costUsd: number | null;
       numTurns: number | null;
       tokensIn: number | null;
       tokensOut: number | null;
@@ -133,7 +131,6 @@ export function parseRunLog(text: string): LogEntry[] {
         subtype: str(ev.subtype) || str(ev.stop_reason) || "done",
         isError: !!ev.is_error,
         durationMs: num(ev.duration_ms),
-        costUsd: num(ev.total_cost_usd),
         numTurns: num(ev.num_turns),
         tokensIn: num(usage.input_tokens),
         tokensOut: num(usage.output_tokens),
@@ -173,7 +170,6 @@ const PAGE = 300;
 export function RunLogViewer({ runId, live = false }: { runId: string; live?: boolean }) {
   const [showStream, setShowStream] = useState(false);
   const [limit, setLimit] = useState(PAGE);
-  const spendTracking = useSpendTracking();
   const log = useQuery({
     queryKey: [...qk.run(runId), "log"],
     queryFn: () => fetchLog(runId),
@@ -236,7 +232,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
       </div>
       <ol className="relative space-y-1 border-l pl-4">
         {visible.slice(0, limit).map((e, i) => (
-          <LogRow key={i} entry={e} toolNames={toolNames} spendTracking={spendTracking} />
+          <LogRow key={i} entry={e} toolNames={toolNames} />
         ))}
       </ol>
       {visible.length > limit && (
@@ -248,7 +244,7 @@ export function RunLogViewer({ runId, live = false }: { runId: string; live?: bo
   );
 }
 
-function LogRow({ entry, toolNames, spendTracking }: { entry: LogEntry; toolNames: Map<string, { name: string; input: unknown }>; spendTracking: boolean }) {
+function LogRow({ entry, toolNames }: { entry: LogEntry; toolNames: Map<string, { name: string; input: unknown }> }) {
   switch (entry.kind) {
     case "init":
       return (
@@ -316,7 +312,6 @@ function LogRow({ entry, toolNames, spendTracking }: { entry: LogEntry; toolName
         >
           <span className="text-muted-foreground tabular-nums">
             {formatDuration(entry.durationMs)}
-            {spendTracking && ` · ${formatCost(entry.costUsd)}`}
             {entry.numTurns != null && ` · ${entry.numTurns} turns`}
             {entry.tokensIn != null && ` · ${formatTokens(entry.tokensIn)} in / ${formatTokens(entry.tokensOut)} out`}
           </span>

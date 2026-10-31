@@ -172,7 +172,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const mood = waiting
     ? { mood: "attention" as const, label: approval ? "Needs your OK" : "Needs your answer" }
     : paused
-      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : paused.reason === "budget" ? "Held — budget used up" : "Paused" }
+      ? { mood: "idle" as const, label: paused.reason === "limit" ? "Waiting for the limit to reset" : "Paused" }
       : liveMood;
   const { pause } = usePauseActions(conversationId);
   const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
@@ -618,7 +618,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
                     className="overflow-hidden"
                   >
-                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} agentId={agent?.id} queued={queue.length} />
+                    <PauseBar conversationId={conversationId} pause={paused} agentName={agent?.name ?? "The agent"} queued={queue.length} />
                   </motion.div>
                 )}
                 {runnerAway && runner && (
@@ -755,7 +755,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     />
                   </>
                 }
-                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" || paused.reason === "budget" ? "Queue message" : "Send and continue") : undefined}
+                sendHint={waiting ? "Send answer" : paused ? (paused.reason === "limit" ? "Queue message" : "Send and continue") : undefined}
                 placeholder={
                   runnerAway && chatPlace
                     ? chatPlace.state === "connecting"
@@ -772,9 +772,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
                     : paused?.reason === "user"
                       ? `Message ${agent.name} to continue with new instructions…`
                       : paused
-                        ? paused.reason === "budget"
-                          ? `Message ${agent.name} — it goes along when the run continues`
-                          : `Message ${agent.name} — it goes along when the limit resets`
+                        ? `Message ${agent.name} — it goes along when the limit resets`
                         : `Message ${agent.name} — or type / for commands`
                 }
                 status={

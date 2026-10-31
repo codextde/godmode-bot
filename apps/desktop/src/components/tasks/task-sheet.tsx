@@ -50,7 +50,7 @@ import { AttachmentTray, readAttachments, totalBytes, type PendingAttachment } f
 import { api } from "@/lib/api";
 import { modKey, openExternal } from "@/lib/desktop";
 import { clearDraft, draftKeys, saveDraft, useDraft } from "@/lib/drafts";
-import { useGoals, useQuestions, useSpendTracking, useTasks } from "@/lib/hooks";
+import { useGoals, useQuestions, useTasks } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { QuestionCard, viewOfQuestion } from "@/components/chat/question-card";
 import { Switch } from "@/components/ui/switch";
@@ -60,7 +60,7 @@ import { AgentSelect, DueDateField, LabelsInput, PrioritySelect, StatusSelect, a
 import { TaskTimeline } from "./task-timeline";
 import { TaskDialog } from "./task-dialog";
 import { PullRequestChip, useTaskActivity } from "./task-card";
-import { APPROVE_KEY, BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatCost, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
+import { APPROVE_KEY, BLOCKED_META, StatusIcon, TYPE_META, TypeIcon, formatWork, isWorking, pauseLabel, repoLabel, taskRepoLabel, workspaceRepos } from "./task-meta";
 import { followupWhen, useFollowupActions } from "@/components/chat/followup";
 import { useNow } from "@/components/vault/use-now";
 import { HumanTaskBar } from "@/components/human-tasks/human-task-chat";
@@ -231,7 +231,6 @@ function TaskDetail({
   onReassign: (task: Task, agentId: string | null) => void;
 }) {
   const qc = useQueryClient();
-  const spendTracking = useSpendTracking();
   const { data: board = [] } = useTasks("all");
   const labelsInUse = [...new Set(board.flatMap((t) => t.labels))].sort((a, b) => a.localeCompare(b));
   const workspace = task.workspaceId ? (workspaces.get(task.workspaceId) ?? null) : null;
@@ -471,7 +470,7 @@ function TaskDetail({
             Filed by {task.createdBy === "user" ? "you" : (agents.find((a) => `agent:${a.id}` === task.createdBy)?.name ?? "an agent")} on{" "}
             {format(new Date(task.createdAt), "d MMM yyyy, HH:mm")}
             {task.runCount > 0 &&
-              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"}${spendTracking ? ` · ${formatCost(task.costUsd)}` : ""}${
+              ` · ${agent?.name ?? "The agent"} worked ${formatWork(task.workMs)} in ${task.runCount} run${task.runCount === 1 ? "" : "s"}${
                 isWorking(task) ? " so far" : ""
               }`}
             {task.completedAt && ` · closed ${formatDistanceToNowStrict(new Date(task.completedAt), { addSuffix: true })}`}
@@ -692,7 +691,6 @@ function WorkPanel({
   onStartWithoutWaiting: () => void;
 }) {
   const qc = useQueryClient();
-  const spendTracking = useSpendTracking();
   const activity = useTaskActivity(task);
   const working = isWorking(task);
   const { resume } = usePauseActions(task.conversationId ?? "");
@@ -859,11 +857,7 @@ function WorkPanel({
     const advice =
       kind === "failed" && /timed out/i.test(reason)
         ? "It hit the run's time limit. Try again, or split the task into smaller ones."
-        : kind === "failed" && /cost budget/i.test(reason)
-          ? spendTracking
-            ? `It reached its cost budget. Raise ${who}'s budget, then try again.`
-            : "It reached its cost budget. Turn on Budgets and spend in Settings → AI & Claude to change it, or try again."
-          : null;
+        : null;
     const restart = (label: string, icon = <RotateCcw />) =>
       task.agentId ? (
         <Button size="sm" onClick={() => onMove(task, "todo")}>

@@ -3,13 +3,13 @@ import type { Task } from "./tasks";
 import type { HumanTask } from "./humanTasks";
 
 /** What waits for the human. Computed by the core from live state (never from notifications), so it can't go stale. */
-export type AttentionKind = "question" | "todo" | "login" | "review" | "blocked" | "paused" | "held" | "failed" | "automation" | "access";
+export type AttentionKind = "question" | "todo" | "login" | "review" | "blocked" | "paused" | "failed" | "automation" | "access";
 
 export interface AttentionItem {
   /** "<kind>:<id of the thing>", stable while it waits. */
   id: string;
   kind: AttentionKind;
-  /** The agent it is about; null for a person on a bot or the team's budget. */
+  /** The agent it is about; null for a person on a bot. */
   agentId: ID | null;
   /** One sentence. */
   title: string;
@@ -31,10 +31,10 @@ export interface AttentionItem {
 
 export type AttentionCounts = Record<AttentionKind, number> & { total: number };
 
-export const ATTENTION_KINDS: readonly AttentionKind[] = ["question", "todo", "login", "review", "blocked", "paused", "held", "failed", "automation", "access"];
+export const ATTENTION_KINDS: readonly AttentionKind[] = ["question", "todo", "login", "review", "blocked", "paused", "failed", "automation", "access"];
 
 export const ATTENTION_GROUPS: readonly { id: string; label: string; kinds: readonly AttentionKind[] }[] = [
-  { id: "waiting", label: "Waiting for you", kinds: ["question", "todo", "login", "paused", "held"] },
+  { id: "waiting", label: "Waiting for you", kinds: ["question", "todo", "login", "paused"] },
   { id: "review", label: "Ready for review", kinds: ["review"] },
   { id: "blocked", label: "Blocked", kinds: ["blocked"] },
   { id: "problems", label: "Went wrong", kinds: ["failed", "automation"] },
@@ -42,7 +42,7 @@ export const ATTENTION_GROUPS: readonly { id: string; label: string; kinds: read
 ];
 
 export function emptyAttentionCounts(): AttentionCounts {
-  return { question: 0, todo: 0, login: 0, review: 0, blocked: 0, paused: 0, held: 0, failed: 0, automation: 0, access: 0, total: 0 };
+  return { question: 0, todo: 0, login: 0, review: 0, blocked: 0, paused: 0, failed: 0, automation: 0, access: 0, total: 0 };
 }
 
 export function countAttention(items: readonly Pick<AttentionItem, "kind">[]): AttentionCounts {
@@ -69,10 +69,8 @@ export interface AwaySummary {
   failed: number;
   /** Tickets an agent delivered for review since. */
   delivered: number;
-  /** What the work since cost (booked when it was spent). */
-  costUsd: number;
   /** Who worked, most runs first. */
-  agents: { agentId: ID; name: string; runs: number; costUsd: number }[];
+  agents: { agentId: ID; name: string; runs: number }[];
   /** At most six things worth a look, newest first within: delivered tickets, problems, replies, failed automations. */
   highlights: AwayHighlight[];
 }

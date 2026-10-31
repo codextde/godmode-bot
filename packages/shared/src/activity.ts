@@ -124,7 +124,6 @@ export const GATEWAY_ACTIVITY: Record<string, (input: Input, names: ActivityName
   android_devices_list: () => "Looking at the Android phones",
   android_assign: () => "Assigning a phone",
   vm_power: (i) => (str(i.action) === "stop" ? "Stopping a VM" : str(i.action) === "suspend" ? "Suspending a VM" : "Starting a VM"),
-  spend_overview: () => "Checking what the team costs",
 };
 
 function browserActivity(tool: string, input: Input): string {
@@ -350,7 +349,6 @@ export const GATEWAY_DONE: Record<string, string> = {
   android_devices_list: "Looked at the Android phones",
   android_assign: "Assigned a phone",
   vm_power: "Switched a VM on or off",
-  spend_overview: "Checked what the team costs",
   runner_health: "Checked a runner",
   runner_exec: "Ran a command on a runner",
   runner_fix: "Fixed a runner",

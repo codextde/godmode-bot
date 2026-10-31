@@ -74,13 +74,10 @@ export function registerSystemRoutes(app: Hono) {
     checkSettingsPatch(patch, () => requireGrant(c));
     const cloud = patch.cloud as Record<string, unknown> | undefined;
     const previous = getSettings();
-    const { monthlyBudgetUsd: before = null, spendTracking: tracking } = previous.runner;
     const next = updateSettings(patch as never);
     auditSettings("user", previous, next, Object.keys(patch), requestVia(c));
     applyRuntimeSettings(next);
     if (cloud) audit("user", "cloud.settings", null, cloud);
-    if ((next.runner.monthlyBudgetUsd ?? null) !== before) audit("user", "budget.set", null, { scope: "team", from: before, to: next.runner.monthlyBudgetUsd ?? null });
-    if (next.runner.spendTracking !== tracking) audit("user", "spend.tracking", null, { from: tracking, to: next.runner.spendTracking });
     return c.json(next);
   });
 

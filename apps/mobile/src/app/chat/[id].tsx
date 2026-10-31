@@ -15,7 +15,6 @@ import {
   type MessageBlock,
   type QueuedMessage,
   type RetryMode,
-  budgetPauseTitle,
   retryHelps,
   retryModeOf,
   runEndOf,
@@ -372,7 +371,6 @@ export default function Chat() {
         ) : paused ? (
           <PausedStrip
             limit={paused.reason === "limit" ? (paused.limit ?? "usage limit") : null}
-            held={paused.reason === "budget" && paused.budget ? budgetPauseTitle(paused.budget, agent?.name ?? "The agent", paused.pausedAt) : null}
             auto={paused.auto}
             onContinue={resume}
           />
@@ -643,21 +641,17 @@ function AskingStrip({ agentName, approval }: { agentName: string; approval: boo
 }
 
 /** Above the composer while the chat's run stands still. */
-function PausedStrip({ limit, held, auto, onContinue }: { limit: string | null; held: string | null; auto: boolean; onContinue: () => void }) {
+function PausedStrip({ limit, auto, onContinue }: { limit: string | null; auto: boolean; onContinue: () => void }) {
   const c = useColors();
   return (
     <View style={[styles.paused, { backgroundColor: c.surface, borderColor: c.border }]}>
-      <Icon name={limit || held ? "clock" : "pause"} size={15} color={limit || held ? c.warning : c.textMuted} />
+      <Icon name={limit ? "clock" : "pause"} size={15} color={limit ? c.warning : c.textMuted} />
       <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={2}>
-        {held
-          ? `${held} — raise the budget on your computer, or let it run.`
-          : limit
-            ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}`
-            : "Paused — continues where it stopped"}
+        {limit ? `Claude's ${limit} is reached${auto ? " — continues by itself after the reset" : ""}` : "Paused — continues where it stopped"}
       </T>
-      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel={held ? "Let it run" : "Continue"}>
+      <Pressable onPress={onContinue} hitSlop={10} accessibilityRole="button" accessibilityLabel="Continue">
         <T variant="footnote" color={c.primary} style={{ fontWeight: "600" }}>
-          {held ? "Let it run" : limit ? "Try now" : "Continue"}
+          {limit ? "Try now" : "Continue"}
         </T>
       </Pressable>
     </View>

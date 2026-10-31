@@ -175,13 +175,11 @@ export interface UsageSummary {
   from: ISODate;
   to: ISODate;
   runs: number;
-  /** As reported by Claude Code. With a Claude subscription this is an equivalent, not a charge. */
-  costUsd: number;
   durationMs: number;
   turns: number;
   tokens: { input: number; output: number; cacheRead: number; cacheWrite: number };
-  byDay: { day: string; runs: number; costUsd: number }[];
-  byModel: { model: string; runs: number; costUsd: number }[];
+  byDay: { day: string; runs: number }[];
+  byModel: { model: string; runs: number }[];
 }
 
 /* ------------------------------------------------------------------ */
