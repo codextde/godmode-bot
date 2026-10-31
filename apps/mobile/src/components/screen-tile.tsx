@@ -1,17 +1,20 @@
 import { Image } from "expo-image";
 import { router, useIsFocused } from "expo-router";
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { AndroidDevice } from "@godmode/shared";
 import { Glass } from "./glass";
 import { Icon, type IconName } from "./icon";
 import { LiveDot, T, tap } from "./ui";
 import type { Frame } from "@/lib/live";
 import { hostOf } from "@/lib/format";
+import { t } from "@/lib/i18n";
 import { isLive, screenHref, useAndroidFrame, useStreamFrame, useVmFrame, type LiveScreen } from "@/lib/screens";
 import { radius, space, useColors } from "@/lib/theme";
 
 const LABEL_MUTED = "rgba(255, 255, 255, 0.72)";
 const KIND_ICON: Record<LiveScreen["kind"], IconName> = { browser: "globe", vm: "vm", share: "display", android: "phone" };
+const VM_STATES = ["running", "stopped", "suspended", "starting", "stopping", "creating", "error"] as const;
 
 export function frameUri(frame: Frame | undefined): string | undefined {
   return frame && frame.data ? `data:${frame.mime};base64,${frame.data}` : undefined;
@@ -20,6 +23,7 @@ export function frameUri(frame: Frame | undefined): string | undefined {
 /** A live picture of a browser, VM or shared screen with its name on a glass label. */
 export function ScreenTile({ screen, style, compact }: { screen: LiveScreen; style?: StyleProp<ViewStyle>; compact?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const focused = useIsFocused();
   const live = isLive(screen);
   const stream = useStreamFrame(screen, focused && live);
@@ -32,13 +36,13 @@ export function ScreenTile({ screen, style, compact }: { screen: LiveScreen; sty
   const subtitle =
     screen.kind === "browser"
       ? live
-        ? hostOf(frame?.url) || "Idle"
-        : "Not running"
+        ? hostOf(frame?.url) || t("screenTile.idle")
+        : t("screenTile.notRunning")
       : screen.kind === "vm"
         ? vmState(screen.vm.state)
         : screen.kind === "android"
           ? phoneState(screen.device)
-          : "Shared in a chat";
+          : t("screenTile.sharedInChat");
 
   return (
     <Pressable
@@ -75,16 +79,13 @@ export function ScreenTile({ screen, style, compact }: { screen: LiveScreen; sty
 }
 
 export function phoneState(device: AndroidDevice): string {
-  if (device.state !== "connected") return device.state === "unauthorized" ? "Waiting for its OK" : "Not connected";
-  return device.busy ? "An agent is on it" : device.awake === false ? "Screen off" : "Connected";
+  if (device.state !== "connected") return device.state === "unauthorized" ? t("components:screenTile.phone.waitingForOk") : t("components:screenTile.phone.notConnected");
+  return device.busy ? t("components:screenTile.phone.agentOnIt") : device.awake === false ? t("components:screenTile.phone.screenOff") : t("components:screenTile.phone.connected");
 }
 
 export function vmState(state: string): string {
-  return (
-    { running: "Running", stopped: "Stopped", suspended: "Paused", starting: "Starting…", stopping: "Stopping…", creating: "Setting up…", error: "Needs attention" }[
-      state
-    ] ?? state
-  );
+  const known = VM_STATES.find((s) => s === state);
+  return known ? t(`components:screenTile.vm.${known}`) : state;
 }
 
 const styles = StyleSheet.create({

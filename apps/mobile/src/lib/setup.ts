@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert } from "react-native";
 import type { Agent, Effort, Project, Settings, Workspace } from "@godmode/shared";
 import { api, errorText, type AgentPatch, type ProjectPatch, type SettingsPatch, type WorkspacePatch } from "./api";
+import { t } from "./i18n";
 import { qk, queryClient } from "./query";
 
 export function useSettings() {
@@ -28,7 +29,7 @@ function merge<T>(base: T, patch: unknown): T {
 type Options = { quiet?: boolean };
 
 function failed(err: unknown, opts?: Options): false {
-  if (!opts?.quiet) Alert.alert("Couldn't save", errorText(err));
+  if (!opts?.quiet) Alert.alert(t("common:errors.couldNotSave"), errorText(err));
   return false;
 }
 

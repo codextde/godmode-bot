@@ -7,12 +7,13 @@ export const MAX_RUNS_PER_WINDOW = 24;
 /** Shortest share of the window one of several runs gets. */
 export const MIN_MINUTES_PER_RUN = 10;
 
-/** "15 min", "1 h", "1 h 30 min" */
-export function formatMinutes(minutes: number): string {
+/** "15 min", "1 h", "1 h 30 min" ("1 Std. 30 Min." in German). */
+export function formatMinutes(minutes: number, lang: "en" | "de" = "en"): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  if (!h) return `${m} min`;
-  return m ? `${h} h ${m} min` : `${h} h`;
+  const [hu, mu] = lang === "de" ? ["Std.", "Min."] : ["h", "min"];
+  if (!h) return `${m} ${mu}`;
+  return m ? `${h} ${hu} ${m} ${mu}` : `${h} ${hu}`;
 }
 
 function utcOffset(date: Date, timeZone: string): string {
@@ -47,6 +48,9 @@ export function startWindowLimit(next: (after: Date) => Date | null, timeZone: s
   return limit;
 }
 
-export function startWindowTooLong(limit: number): string {
-  return `Runs are only ${formatMinutes(limit)} apart — the random start window can be at most ${formatMinutes(limit)}`;
+export function startWindowTooLong(limit: number, lang: "en" | "de" = "en"): string {
+  const d = formatMinutes(limit, lang);
+  return lang === "de"
+    ? `Die Läufe liegen nur ${d} auseinander — das zufällige Startfenster darf höchstens ${d} lang sein`
+    : `Runs are only ${d} apart — the random start window can be at most ${d}`;
 }

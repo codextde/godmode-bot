@@ -2,12 +2,14 @@ import { formatDistanceToNowStrict } from "date-fns";
 import { router } from "expo-router";
 import { memo, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { cronToHuman, scheduleToHuman, type Agent, type Routine, type RoutineTriggerType } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
 import { api, errorText } from "@/lib/api";
 import { whenText } from "@/lib/format";
+import { currentLanguage, dateLocale, t } from "@/lib/i18n";
 import { useLive } from "@/lib/live";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
@@ -28,34 +30,35 @@ export function phoneTimezone(): string | null {
 
 /** What starts an automation, in the desktop's words (trigger-meta.ts). */
 export const TRIGGER_TITLES: Record<RoutineTriggerType, string> = {
-  schedule: "On a schedule",
-  app: "When something happens in an app",
-  condition: "When a condition is met",
-  webhook: "When a webhook is called",
+  get schedule() { return t("components:routineRow.triggers.schedule"); },
+  get app() { return t("components:routineRow.triggers.app"); },
+  get condition() { return t("components:routineRow.triggers.condition"); },
+  get webhook() { return t("components:routineRow.triggers.webhook"); },
 };
 
 /** Schedule: run now · condition: check now · app/webhook: run with a test event. */
 export function runLabel(type: RoutineTriggerType): string {
-  return type === "condition" ? "Check now" : type === "schedule" ? "Run now" : "Send test event";
+  return type === "condition" ? t("components:routineRow.checkNow") : type === "schedule" ? t("components:routineRow.runNow") : t("components:routineRow.sendTestEvent");
 }
 
 /** What starts an automation, in one line: its schedule and next run (`withNext`), the app event, the condition or the webhook. */
 export function triggerText(r: Routine, withNext = true): string {
   const next = withNext && r.enabled && r.nextRunAt ? whenText(r.nextRunAt) : null;
-  const t = r.trigger;
-  switch (t.type) {
+  const trigger = r.trigger;
+  switch (trigger.type) {
     case "schedule": {
       const zone = r.timezone && r.timezone !== phoneTimezone() ? ` (${r.timezone.replace(/_/g, " ")})` : "";
-      return `${scheduleToHuman(r.cron, t.startWindowMinutes, t.runsPerWindow)}${zone}${next ? ` · next run ${next}` : ""}`;
+      const schedule = `${scheduleToHuman(r.cron, trigger.startWindowMinutes, trigger.runsPerWindow, currentLanguage())}${zone}`;
+      return next ? t("components:routineRow.withNextRun", { schedule, when: next }) : schedule;
     }
     case "app":
-      return `${t.triggerName} · ${appName(t.toolkit)}`;
+      return `${trigger.triggerName} · ${appName(trigger.toolkit)}`;
     case "condition": {
-      const often = cronToHuman(r.cron);
-      return `When ${t.condition} · checked ${often.charAt(0).toLowerCase()}${often.slice(1)}`;
+      const often = cronToHuman(r.cron, currentLanguage());
+      return t("components:routineRow.conditionChecked", { condition: trigger.condition, often: `${often.charAt(0).toLowerCase()}${often.slice(1)}` });
     }
     case "webhook":
-      return "When its webhook is called";
+      return t("components:routineRow.webhookCalled");
   }
 }
 
@@ -73,7 +76,7 @@ export function setRoutineEnabled(routine: Routine, enabled: boolean) {
     .setEnabled(routine.id, enabled)
     .catch((err) => {
       patchRoutine(routine.id, { enabled: !enabled });
-      Alert.alert("Couldn't change the automation", errorText(err));
+      Alert.alert(t("components:routineRow.toggleFailed"), errorText(err));
     })
     .finally(refreshRoutines);
 }
@@ -85,16 +88,18 @@ export function runRoutine(routine: Routine): Promise<void> {
       useLive.getState().runStarted(run);
       tap();
     })
-    .catch((err) => Alert.alert("Couldn't run it", errorText(err)))
+    .catch((err) => Alert.alert(t("components:routineRow.runFailed"), errorText(err)))
     .finally(refreshRoutines);
 }
 
 /** One automation in a list: whose it is, what starts it, a switch and Run now. Tapping it opens the automation. */
 export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: { routine: Routine; agent?: Agent; working?: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const [starting, setStarting] = useState(false);
   const failed = routine.lastStatus === "failed";
-  const last = routine.lastRunAt ? `last run ${failed ? "failed " : ""}${formatDistanceToNowStrict(new Date(routine.lastRunAt), { addSuffix: true })}` : null;
+  const ago = routine.lastRunAt ? formatDistanceToNowStrict(new Date(routine.lastRunAt), { addSuffix: true, locale: dateLocale() }) : null;
+  const last = ago ? (failed ? t("routineRow.lastRunFailed", { ago }) : t("routineRow.lastRun", { ago })) : null;
   const broken = routine.enabled && routine.triggerStatus?.state === "error";
   const canRun = routine.enabled && !working && !starting;
 
@@ -115,7 +120,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
           {agent ? `${agent.name} · ` : ""}
           {working ? (
             <T variant="footnote" color={c.brandStrong} style={{ fontWeight: "600" }}>
-              Running now
+              {t("routineRow.runningNow")}
             </T>
           ) : (
             triggerText(routine)
@@ -131,13 +136,13 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         </T>
         {broken ? (
           <T variant="footnote" color={c.danger} numberOfLines={2}>
-            {routine.triggerStatus.message ?? "The trigger isn't working."}
+            {routine.triggerStatus.message ?? t("routineRow.triggerBroken")}
           </T>
         ) : null}
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Run ${routine.name} now`}
+        accessibilityLabel={t("routineRow.runNamedNow", { name: routine.name })}
         accessibilityState={{ disabled: !canRun, busy: starting }}
         hitSlop={6}
         // Not `disabled`: a press on it must not fall through to the row and open the automation.
@@ -151,7 +156,7 @@ export const RoutineRow = memo(function RoutineRow({ routine, agent, working }: 
         {starting ? <ActivityIndicator size="small" color={c.textMuted} /> : <Icon name="play" size={12} color={c.text} />}
       </Pressable>
       <Switch
-        accessibilityLabel={`${routine.enabled ? "Turn off" : "Turn on"} ${routine.name}`}
+        accessibilityLabel={routine.enabled ? t("routineRow.turnOff", { name: routine.name }) : t("routineRow.turnOn", { name: routine.name })}
         value={routine.enabled}
         onValueChange={(enabled) => setRoutineEnabled(routine, enabled)}
         trackColor={{ true: c.brand, false: c.sunken }}

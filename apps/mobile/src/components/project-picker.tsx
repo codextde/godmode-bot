@@ -1,4 +1,5 @@
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { Project } from "@godmode/shared";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
@@ -10,7 +11,7 @@ export function ProjectPicker({
   value,
   onChange,
   inset = 0,
-  label = "Project",
+  label,
   hint,
   allowNone = true,
   bleed = 0,
@@ -26,11 +27,12 @@ export function ProjectPicker({
   /** Inside a padded container: the chips scroll to the screen edge instead of being cut off at the padding. */
   bleed?: number;
 }) {
+  const { t } = useTranslation("components");
   if (!projects.length) return null;
   return (
     <View style={{ gap: space.sm, marginHorizontal: -bleed }}>
       <T variant="eyebrow" muted style={{ paddingHorizontal: inset + bleed }}>
-        {label}
+        {label ?? t("projectPicker.label")}
       </T>
       <ScrollView
         horizontal
@@ -38,7 +40,7 @@ export function ProjectPicker({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: space.sm, paddingHorizontal: inset + bleed }}
       >
-        {allowNone && <Chip active={!value} label="No project" onPress={() => onChange(null)} />}
+        {allowNone && <Chip active={!value} label={t("projectPicker.noProject")} onPress={() => onChange(null)} />}
         {projects.map((p) => (
           <Chip key={p.id} active={value === p.id} label={p.name} icon={p.icon} folder onPress={() => onChange(p.id)} />
         ))}

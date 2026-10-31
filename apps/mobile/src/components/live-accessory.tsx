@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router } from "expo-router";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { CharacterAvatar } from "./character";
 import { Icon } from "./icon";
 import { LiveDot, T, tap } from "./ui";
@@ -17,8 +18,9 @@ import { space, useColors } from "@/lib/theme";
 export function LiveAccessory() {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const offline = useLive((s) => s.status === "offline");
-  const computer = useLinkComputer().name ?? "your computer";
+  const computer = useLinkComputer().name ?? t("liveAccessory.yourComputer");
   const { data: agents } = useQuery({ queryKey: qk.agents, queryFn: api.agents.list });
   const list = useWorkspaceRuns();
   const first = list[0];
@@ -30,7 +32,7 @@ export function LiveAccessory() {
       <Pressable style={styles.row} onPress={() => reconnectNow()}>
         <Icon name="wifi" size={15} color={c.warning} />
         <T variant="footnote" numberOfLines={1} style={{ flex: 1, fontWeight: "600" }}>
-          {inline ? "Offline" : `Reconnecting to ${computer}…`}
+          {inline ? t("liveAccessory.offline") : t("liveAccessory.reconnecting", { computer })}
         </T>
         {!inline && <Icon name="refresh" size={15} color={c.textMuted} />}
       </Pressable>
@@ -38,7 +40,7 @@ export function LiveAccessory() {
   }
   if (!first) return null;
 
-  const label = first.run.status === "queued" ? "Waiting to start" : activityText(first.activity);
+  const label = first.run.status === "queued" ? t("liveAccessory.waitingToStart") : activityText(first.activity);
   return (
     <Pressable
       style={styles.row}
@@ -50,13 +52,13 @@ export function LiveAccessory() {
       {inline || !agent ? <LiveDot /> : <CharacterAvatar agent={agent} size={26} mood={first.run.status === "queued" ? "idle" : "working"} />}
       {inline ? (
         <T variant="footnote" numberOfLines={1} style={{ fontWeight: "600" }}>
-          {list.length > 1 ? `${list.length} working` : (agent?.name ?? "Working")}
+          {list.length > 1 ? t("liveAccessory.workingCount", { count: list.length }) : (agent?.name ?? t("liveAccessory.working"))}
         </T>
       ) : (
         <>
           <View style={{ flex: 1, minWidth: 0 }}>
             <T variant="footnote" numberOfLines={1} style={{ fontWeight: "600" }}>
-              {agent?.name ?? "Working"}
+              {agent?.name ?? t("liveAccessory.working")}
               {list.length > 1 ? <T variant="footnote" muted>{`  +${list.length - 1}`}</T> : null}
             </T>
             <T variant="caption" muted numberOfLines={1}>
@@ -65,7 +67,7 @@ export function LiveAccessory() {
           </View>
           <Pressable
             hitSlop={10}
-            accessibilityLabel="Stop"
+            accessibilityLabel={t("common:actions.stop")}
             onPress={() => {
               tap();
               void api.runs.cancel(first.run.id);

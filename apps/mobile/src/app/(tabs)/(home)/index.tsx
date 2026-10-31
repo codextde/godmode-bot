@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { router, Stack } from "expo-router";
 import { memo, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import type { AgentQuestion } from "@godmode/shared";
 import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { AwaySummaryCard } from "@/components/away-summary";
@@ -17,6 +18,7 @@ import { openTask } from "@/components/task-row";
 import { Card, LiveDot, Row, SkeletonRows, T, tap } from "@/components/ui";
 import { WorkspaceChip } from "@/components/workspace-chip";
 import { api, errorText } from "@/lib/api";
+import { dateLocale } from "@/lib/i18n";
 import { trackAway } from "@/lib/away";
 import { greeting, needsYou, pickAgent, SUGGESTIONS, type Need } from "@/lib/desktop-parity";
 import { chatListQuery, useAgents, useOpenHumanTasks } from "@/lib/hooks";
@@ -35,8 +37,9 @@ const NEED_ICON: Record<Need["kind"], IconName> = { question: "warning", todo: "
 
 export default function Home() {
   const c = useColors();
+  const { t } = useTranslation(["tabs", "common"]);
   const link = useLinkComputer();
-  const computer = link.name ?? "Your computer";
+  const computer = link.name ?? t("home.yourComputer");
   const status = useLive((s) => s.status);
   const offlineReason = useLive((s) => s.offlineReason);
   const { data: allAgents } = useAgents();
@@ -63,13 +66,13 @@ export default function Home() {
       <Stack.Screen options={{ title: "", headerLargeTitleEnabled: false }} />
       <HeaderActions
         actions={[
-          { icon: "compose", label: "New chat", onPress: () => router.push("/compose") },
-          { icon: "tasks", label: "New task", onPress: () => router.push("/new-task") },
-          { icon: "settings", label: "Settings", onPress: () => router.push("/settings") },
+          { icon: "compose", label: t("home.newChat"), onPress: () => router.push("/compose") },
+          { icon: "tasks", label: t("home.newTask"), onPress: () => router.push("/new-task") },
+          { icon: "settings", label: t("common:words.settings"), onPress: () => router.push("/settings") },
         ]}
         menu={[
-          { icon: "inbox", title: "Inbox", onPress: () => router.push("/inbox") },
-          { icon: "call", title: "Calls", onPress: () => router.push("/calls") },
+          { icon: "inbox", title: t("home.inbox"), onPress: () => router.push("/inbox") },
+          { icon: "call", title: t("home.calls"), onPress: () => router.push("/calls") },
         ]}
       />
 
@@ -78,11 +81,11 @@ export default function Home() {
         <T variant="footnote" muted numberOfLines={1}>
           {status === "online"
             ? link.away
-              ? `Connected through ${computer} — ${link.away} is away`
-              : `${computer} · connected`
+              ? t("home.status.connectedThrough", { computer, away: link.away })
+              : t("home.status.connected", { computer })
             : status === "connecting"
-              ? `Connecting to ${computer}…`
-              : `${computer} is out of reach`}
+              ? t("home.status.connecting", { computer })
+              : t("home.status.outOfReach", { computer })}
         </T>
       </Pressable>
 
@@ -90,15 +93,16 @@ export default function Home() {
         <View style={[styles.pill, { backgroundColor: c.surface, borderColor: c.border }]}>
           <LiveDot size={6} />
           <T variant="caption" muted>
-            {format(now, "EEEE, MMMM d")}
-            {enabled.length > 0 ? ` · ${enabled.length === 1 ? "1 agent ready" : `${enabled.length} agents ready`}` : ""}
+            {format(now, t("home.datePattern"), { locale: dateLocale() })}
+            {enabled.length > 0 ? ` · ${t("home.agentsReady", { count: enabled.length })}` : ""}
           </T>
         </View>
         <T variant="largeTitle" style={styles.greeting}>
           {greeting(now)}
           {userName ? `, ${userName}` : ""}.
           <T variant="largeTitle" color={c.textFaint} style={styles.greeting}>
-            {"\n"}What should we get done?
+            {"\n"}
+            {t("home.prompt")}
           </T>
         </T>
       </View>
@@ -109,7 +113,7 @@ export default function Home() {
         <Glass interactive style={styles.ask} fallback={c.surface}>
           <Icon name="sparkles" size={18} color={c.textMuted} />
           <T variant="body" muted numberOfLines={1} style={{ flex: 1 }}>
-            {agent ? `Ask ${agent.name} anything, or hand over a task…` : "Ask anything, or hand over a task…"}
+            {agent ? t("home.askAgent", { name: agent.name }) : t("home.ask")}
           </T>
           <View style={[styles.askSend, { backgroundColor: c.primary }]}>
             <Icon name="send" size={14} color={c.onPrimary} weight="bold" />
@@ -138,10 +142,10 @@ export default function Home() {
           <Icon name="wifi" size={18} color={c.warning} />
           <View style={{ flex: 1 }}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
-              Can't reach {computer}
+              {t("home.offline.title", { computer })}
             </T>
             <T variant="footnote" muted>
-              {offlineReason ?? "Make sure it's awake and connected to Tailscale or Godmode Cloud."} Tap to retry.
+              {t("home.offline.body", { reason: offlineReason ?? t("home.offline.hint") })}
             </T>
           </View>
         </Card>
@@ -159,6 +163,7 @@ export default function Home() {
 /** What waits for the human, first thing on Home: the newest few, the rest in the Inbox. */
 function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
   const c = useColors();
+  const { t } = useTranslation("tabs");
   const { byId: agents } = useAgents();
   const { id: workspaceId, projectId } = useWorkspace();
   const humanTasks = useOpenHumanTasks();
@@ -172,7 +177,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
       humanTasks: humanTasks.data ?? [],
       missing: missing.data ?? [],
       tasks: tasks.data ?? [],
-      nameOf: (id) => (id ? (agents.get(id)?.name ?? "An agent") : "An agent"),
+      nameOf: (id) => (id ? (agents.get(id)?.name ?? t("home.needs.anAgent")) : t("home.needs.anAgent")),
     });
     // The picked workspace's (and the global ones); in a project, what its tickets and agents wait for.
     const scoped = all.filter((n) => {
@@ -181,7 +186,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
       return n.task ? n.task.projectId === projectId : !n.agentId || agents.get(n.agentId)?.projectId === projectId;
     });
     return { items: scoped, elsewhere: all.length - scoped.length };
-  }, [questions.data, humanTasks.data, missing.data, tasks.data, agents, workspaceId, projectId]);
+  }, [questions.data, humanTasks.data, missing.data, tasks.data, agents, workspaceId, projectId, t]);
 
   const total = items.length + (vaultLocked ? 1 : 0);
   if (!total && !elsewhere) return null;
@@ -194,7 +199,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
       >
         <View style={[styles.dot, { backgroundColor: c.warning }]} />
         <T variant="footnote" muted style={{ flex: 1 }}>
-          Nothing waits for you here. {elsewhere} {elsewhere === 1 ? "thing waits" : "things wait"} in other workspaces
+          {t("home.needs.elsewhere", { count: elsewhere })}
         </T>
         <Icon name="chevron" size={11} color={c.textFaint} />
       </Pressable>
@@ -205,14 +210,14 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
   return (
     <View style={styles.section}>
       <Head
-        title="Needs you"
+        title={t("home.needs.title")}
         count={total}
         tone="warning"
-        action={more ? (elsewhere > 0 ? `+${elsewhere} in other workspaces · Inbox` : `All ${items.length} in the Inbox`) : undefined}
+        action={more ? (elsewhere > 0 ? t("home.needs.moreElsewhere", { count: elsewhere }) : t("home.needs.allInInbox", { count: items.length })) : undefined}
         onAction={() => router.push("/inbox")}
       />
       <Card>
-        {vaultLocked && <NeedsRow icon="lock" title="The vault is locked" body="Agents can't sign in until you unlock it on your computer." />}
+        {vaultLocked && <NeedsRow icon="lock" title={t("home.needs.vaultLocked")} body={t("home.needs.vaultLockedBody")} />}
         {shown.map((n) =>
           n.question ? (
             <QuestionRow key={n.id} need={n} question={n.question} />
@@ -233,6 +238,7 @@ function NeedsYou({ vaultLocked }: { vaultLocked: boolean }) {
 
 /** Agents that work right now. On its own so their activity labels don't render the whole of Home again. */
 const WorkingNow = memo(function WorkingNow() {
+  const { t } = useTranslation("tabs");
   const { byId: agents } = useAgents();
   const { id: workspaceId } = useWorkspace();
   const recent = useQuery(chatListQuery(workspaceId));
@@ -242,7 +248,7 @@ const WorkingNow = memo(function WorkingNow() {
   if (!working.length) return null;
   return (
     <Animated.View layout={LinearTransition} style={styles.section}>
-      <Head title="Working now" count={working.length} live note={queued > 0 ? `· ${queued} queued` : undefined} />
+      <Head title={t("home.workingNow")} count={working.length} live note={queued > 0 ? `· ${t("home.queued", { count: queued })}` : undefined} />
       <View style={{ gap: space.md }}>
         {working.map((w) => (
           <Animated.View key={w.run.id} entering={FadeIn}>
@@ -256,11 +262,12 @@ const WorkingNow = memo(function WorkingNow() {
 
 /** What the agents' browsers, computers and phones show right now. */
 function LiveScreens() {
+  const { t } = useTranslation(["tabs", "common"]);
   const live = useLiveScreens().screens.filter(isLive);
   if (!live.length) return null;
   return (
     <View style={styles.section}>
-      <Head title="Live screens" count={live.length} action="All" onAction={() => router.push("/screens")} />
+      <Head title={t("home.liveScreens")} count={live.length} action={t("common:words.all")} onAction={() => router.push("/screens")} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md, paddingRight: space.lg }} style={{ marginRight: -space.lg }}>
         {live.map((s) => (
           <ScreenTile key={s.key} screen={s} style={{ width: 260 }} />
@@ -272,6 +279,7 @@ function LiveScreens() {
 
 /** The latest chats, pinned first. */
 function RecentChats({ projects }: { projects: ReturnType<typeof useProjectIndex> }) {
+  const { t } = useTranslation("tabs");
   const { byId: agents } = useAgents();
   const { id: workspaceId, projectId } = useWorkspace();
   const recent = useQuery(chatListQuery(workspaceId));
@@ -287,7 +295,7 @@ function RecentChats({ projects }: { projects: ReturnType<typeof useProjectIndex
   if (!recent.isLoading && !recent.isError && !chats.length) return null;
   return (
     <View style={styles.section}>
-      <Head title="Pick up where you left off" action="Your agents" onAction={() => router.push("/agents")} />
+      <Head title={t("home.recent.title")} action={t("home.recent.yourAgents")} onAction={() => router.push("/agents")} />
       <Card style={{ paddingVertical: 4 }}>
         {chats.length ? (
           chats.map((conv) => {
@@ -306,7 +314,7 @@ function RecentChats({ projects }: { projects: ReturnType<typeof useProjectIndex
           <SkeletonRows count={3} />
         ) : (
           <T variant="subhead" muted style={{ padding: space.lg }}>
-            Couldn't load your chats. {errorText(recent.error)}
+            {t("home.recent.loadError", { error: errorText(recent.error) })}
           </T>
         )}
       </Card>
@@ -365,6 +373,7 @@ function Head({
 /** A question an agent waits on: an approval is answered right here, anything else in its chat. */
 function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestion }) {
   const c = useColors();
+  const { t } = useTranslation("tabs");
   const [sending, setSending] = useState<"approve" | "decline" | null>(null);
   const approval = q.kind === "approval";
   const decide = (decision: "approve" | "decline") => {
@@ -378,7 +387,7 @@ function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestio
       <NeedsRow
         icon="warning"
         title={need.title}
-        body={[need.detail, q.taskNumber != null ? `Task #${q.taskNumber}` : null, approval ? q.body : "Open the chat to answer"].filter(Boolean).join(" · ")}
+        body={[need.detail, q.taskNumber != null ? t("home.question.taskNumber", { number: q.taskNumber }) : null, approval ? q.body : t("home.question.openChat")].filter(Boolean).join(" · ")}
         onPress={() => router.push(`/chat/${q.conversationId}`)}
       />
       {approval ? (
@@ -387,7 +396,7 @@ function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestio
             <Pressable
               key={decision}
               accessibilityRole="button"
-              accessibilityLabel={decision === "approve" ? "Approve" : "Decline"}
+              accessibilityLabel={decision === "approve" ? t("home.question.approve") : t("home.question.decline")}
               accessibilityState={{ busy: sending === decision, disabled: !!sending }}
               disabled={!!sending}
               onPress={() => decide(decision)}
@@ -398,7 +407,7 @@ function QuestionRow({ need, question: q }: { need: Need; question: AgentQuestio
             >
               {sending === decision ? <ActivityIndicator size="small" color={decision === "approve" ? c.onPrimary : c.text} /> : null}
               <T variant="footnote" color={decision === "approve" ? c.onPrimary : c.text} style={{ fontWeight: "600" }}>
-                {decision === "approve" ? "Approve" : "Decline"}
+                {decision === "approve" ? t("home.question.approve") : t("home.question.decline")}
               </T>
             </Pressable>
           ))}

@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, View } from "react-native";
-import { EFFORT_LABELS, ULTRACODE_HINT, type ClaudeModel, type ConversationWithMessages, type Effort } from "@godmode/shared";
+import { useTranslation } from "react-i18next";
+import { effortLabel, ULTRACODE_HINT, ULTRACODE_HINT_DE, type ClaudeModel, type ConversationWithMessages, type Effort } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Card, Hairline, T, tap } from "@/components/ui";
 import { api, errorText, type ModelChoicePatch } from "@/lib/api";
@@ -11,18 +12,12 @@ import { NO_CHOICE, useEffectiveModel, useNewChatChoice, type ModelChoice } from
 import { useAgents } from "@/lib/hooks";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
-
-const EFFORT_HINTS: Record<Effort, string> = {
-  low: "Quick answers with little deliberation.",
-  medium: "Balanced speed and depth.",
-  high: "Thinks problems through before acting.",
-  xhigh: "Extra deliberation for hard, multi-step work.",
-  max: "Thinks as long as it needs. Slowest, most tokens.",
-};
+import { currentLanguage } from "@/lib/i18n";
 
 /** The model and effort of a chat (or of the next new chat): applies right away, like the picker on the computer. */
 export default function ModelSheet() {
   const c = useColors();
+  const { t } = useTranslation("settings");
   const { conversationId, agentId } = useLocalSearchParams<{ conversationId?: string; agentId?: string }>();
   const { byId } = useAgents();
   const conversation = useQuery({
@@ -58,7 +53,7 @@ export default function ModelSheet() {
     queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, ...patch } : old));
     api.conversations.update(conversationId, patch).catch((err) => {
       if (prev) queryClient.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, model: prev.model, effort: prev.effort, ultracode: prev.ultracode } : old));
-      Alert.alert("Couldn't switch the model", errorText(err));
+      Alert.alert(t("model.switchFailed"), errorText(err));
     });
   };
 
@@ -69,9 +64,9 @@ export default function ModelSheet() {
   return (
     <ScrollView contentContainerStyle={styles.content} style={{ backgroundColor: c.background }}>
       <View style={{ gap: 4 }}>
-        <T variant="title">Model</T>
+        <T variant="title">{t("ai.defaultModel.model")}</T>
         <T variant="subhead" muted>
-          {conversationId ? "Applies from the next message in this chat." : "For the chat you are about to start."}
+          {conversationId ? t("model.appliesNext") : t("model.forNewChat")}
         </T>
       </View>
 
@@ -95,7 +90,7 @@ export default function ModelSheet() {
               style={({ pressed }) => [styles.older, pressed && { backgroundColor: c.sunken }]}
             >
               <T variant="subhead" muted style={{ flex: 1 }}>
-                Older models
+                {t("model.older")}
               </T>
               <T variant="footnote" color={c.textFaint}>
                 {older.length}
@@ -116,7 +111,7 @@ export default function ModelSheet() {
           <>
             <Hairline inset={space.lg} />
             <T variant="footnote" muted style={{ paddingHorizontal: space.lg, paddingTop: space.md }}>
-              Special tasks
+              {t("model.special")}
             </T>
             {special.map((m) => (
               <Option key={m.id} model={m} selected={m.id === current.id} isDefault={m.id === base.id} onPress={() => pickModel(m)} />
@@ -125,7 +120,7 @@ export default function ModelSheet() {
         ) : null}
         {catalog.isLoading && models.length === 0 ? (
           <T variant="footnote" muted style={{ padding: space.lg }}>
-            Asking Claude Code for its models…
+            {t("model.loading")}
           </T>
         ) : null}
       </Card>
@@ -135,7 +130,7 @@ export default function ModelSheet() {
           <EffortMeter levels={current.efforts} value={effort} onChange={pickEffort} />
         ) : (
           <T variant="footnote" muted>
-            Effort isn't adjustable for {current.label}.
+            {t("model.noEffort", { model: current.label })}
           </T>
         )}
       </Card>
@@ -150,24 +145,24 @@ export default function ModelSheet() {
             <Switch value={ultracode} onValueChange={pickUltracode} accessibilityLabel="Ultracode" />
           </View>
           <T variant="footnote" muted style={{ marginTop: space.sm }}>
-            {ULTRACODE_HINT}
+            {currentLanguage() === "de" ? ULTRACODE_HINT_DE : ULTRACODE_HINT}
           </T>
         </Card>
       ) : anyUltracode ? (
         <T variant="footnote" muted style={{ paddingHorizontal: 4 }}>
-          Ultracode isn't available for {current.label}.
+          {t("model.noUltracode", { model: current.label })}
         </T>
       ) : null}
 
       <View style={styles.footer}>
         <View style={[styles.dot, { backgroundColor: catalog.data?.source === "claude" ? c.brand : c.warning }]} />
         <T variant="caption" muted style={{ flex: 1 }} numberOfLines={1}>
-          {catalog.data?.source === "claude" ? `Claude Code ${catalog.data.claudeVersion ?? ""}`.trim() : "Built-in list"}
+          {catalog.data?.source === "claude" ? `Claude Code ${catalog.data.claudeVersion ?? ""}`.trim() : t("model.builtIn")}
         </T>
         {overridden ? (
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => change(NO_CHOICE)}>
             <T variant="footnote" style={{ fontWeight: "600" }}>
-              Use {agent ? `${agent.name}'s` : "the agent's"} default
+              {agent ? t("model.useAgentDefault", { name: agent.name }) : t("model.useDefault")}
             </T>
           </Pressable>
         ) : null}
@@ -178,6 +173,7 @@ export default function ModelSheet() {
 
 function Option({ model, selected, isDefault, compact, onPress }: { model: ClaudeModel; selected: boolean; isDefault: boolean; compact?: boolean; onPress: () => void }) {
   const c = useColors();
+  const { t } = useTranslation("settings");
   return (
     <Pressable
       accessibilityRole="button"
@@ -193,7 +189,7 @@ function Option({ model, selected, isDefault, compact, onPress }: { model: Claud
           {isDefault ? (
             <View style={[styles.tag, { borderColor: c.borderStrong }]}>
               <T variant="caption" muted style={{ fontSize: 10.5 }}>
-                Default
+                {t("agent.thinking.default")}
               </T>
             </View>
           ) : null}
@@ -211,21 +207,22 @@ function Option({ model, selected, isDefault, compact, onPress }: { model: Claud
 
 function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; value: Effort; onChange: (e: Effort) => void }) {
   const c = useColors();
+  const { t } = useTranslation("settings");
   const active = levels.indexOf(value);
   return (
     <View>
       <View style={styles.effortHead}>
         <T variant="headline" style={{ fontSize: 15 }}>
-          Effort
+          {t("ai.defaultModel.effort")}
         </T>
-        <T variant="subhead">{EFFORT_LABELS[value]}</T>
+        <T variant="subhead">{effortLabel(value, currentLanguage())}</T>
       </View>
-      <View style={styles.bars} accessibilityRole="adjustable" accessibilityLabel="Effort" accessibilityValue={{ text: EFFORT_LABELS[value] }}>
+      <View style={styles.bars} accessibilityRole="adjustable" accessibilityLabel={t("ai.defaultModel.effort")} accessibilityValue={{ text: effortLabel(value, currentLanguage()) }}>
         {levels.map((level, i) => (
           <Pressable
             key={level}
             accessibilityRole="button"
-            accessibilityLabel={EFFORT_LABELS[level]}
+            accessibilityLabel={effortLabel(level, currentLanguage())}
             accessibilityState={{ selected: i === active }}
             onPress={() => level !== value && onChange(level)}
             style={styles.barHit}
@@ -236,14 +233,14 @@ function EffortMeter({ levels, value, onChange }: { levels: readonly Effort[]; v
       </View>
       <View style={styles.effortHead}>
         <T variant="caption" color={c.textFaint}>
-          Faster
+          {t("model.faster")}
         </T>
         <T variant="caption" color={c.textFaint}>
-          Deeper
+          {t("model.deeper")}
         </T>
       </View>
       <T variant="footnote" muted style={{ marginTop: space.sm }}>
-        {EFFORT_HINTS[value]}
+        {t(`model.effortHint.${value}`)}
       </T>
     </View>
   );

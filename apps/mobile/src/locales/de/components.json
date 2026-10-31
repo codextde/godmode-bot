@@ -1,0 +1,924 @@
+{
+  "callParts": {
+    "status": {
+      "calling": "Klingelt",
+      "in_progress": "Im Gespräch",
+      "processing": "Wird abgeschlossen",
+      "done": "Fertig",
+      "no_answer": "Keine Antwort",
+      "voicemail": "Auf Mailbox gesprochen",
+      "failed": "Fehlgeschlagen"
+    },
+    "unknownCaller": "Unbekannter Anrufer",
+    "unknownNumber": "Unbekannte Nummer"
+  },
+  "workspaceChip": {
+    "allWorkspaces": "Alle Workspaces",
+    "projectLabel": "Projekt: {{project}} in {{workspace}}. Wechseln",
+    "workspaceLabel": "Workspace: {{workspace}}. Wechseln"
+  },
+  "remoteImage": {
+    "picture": "Bild",
+    "couldNotLoad": "{{name}} konnte nicht geladen werden"
+  },
+  "contextRing": {
+    "label": "Chat-Gedächtnis",
+    "labelFull": "Chat-Gedächtnis zu {{pct}} % voll",
+    "hint": "Zeigt, wie voll dieser Chat ist, und lässt dich ihn komprimieren"
+  },
+  "modelButton": {
+    "label": "Modell: {{summary}}",
+    "hint": "Modell und Aufwand wählen",
+    "effort": "Aufwand: {{level}}"
+  },
+  "appLock": {
+    "prompt": "Godmode entsperren",
+    "locked": "Godmode ist gesperrt",
+    "unlock": "Entsperren"
+  },
+  "liveStrip": {
+    "watch": "Ansehen"
+  },
+  "liveAccessory": {
+    "yourComputer": "deinem Computer",
+    "offline": "Offline",
+    "reconnecting": "Verbinde neu mit {{computer}}…",
+    "waitingToStart": "Wartet auf Start",
+    "workingCount_one": "{{count}} arbeitet",
+    "workingCount_other": "{{count}} arbeiten",
+    "working": "Arbeitet"
+  },
+  "humanTaskRow": {
+    "status": {
+      "backlog": "Backlog",
+      "open": "Offen",
+      "doing": "In Arbeit",
+      "takenBack": "Zurückgezogen"
+    },
+    "wasDone": {
+      "task": "Erledigt",
+      "decision": "Beantwortet",
+      "approval": "Freigegeben"
+    },
+    "wasDeclined": {
+      "task": "Nicht machbar",
+      "decision": "Verworfen",
+      "approval": "Abgelehnt"
+    },
+    "kind": {
+      "task": "To-do",
+      "decision": "Entscheidung",
+      "approval": "Freigabe"
+    },
+    "anAgent": "Ein Agent",
+    "you": "Du",
+    "ticket": "Aufgabe #{{number}}",
+    "urgent": "Dringend"
+  },
+  "projectPicker": {
+    "label": "Projekt",
+    "noProject": "Kein Projekt"
+  },
+  "notificationRow": {
+    "unread": "Ungelesen: {{title}}"
+  },
+  "screenTile": {
+    "idle": "Untätig",
+    "notRunning": "Läuft nicht",
+    "sharedInChat": "In einem Chat geteilt",
+    "phone": {
+      "waitingForOk": "Wartet auf dein OK",
+      "notConnected": "Nicht verbunden",
+      "agentOnIt": "Ein Agent ist dran",
+      "screenOff": "Bildschirm aus",
+      "connected": "Verbunden"
+    },
+    "vm": {
+      "running": "Läuft",
+      "stopped": "Gestoppt",
+      "suspended": "Pausiert",
+      "starting": "Startet…",
+      "stopping": "Stoppt…",
+      "creating": "Wird eingerichtet…",
+      "error": "Braucht Aufmerksamkeit"
+    }
+  },
+  "dreamParts": {
+    "twoFiles": "{{first}} und {{second}}",
+    "memoryFiles_one": "{{count, number}} Gedächtnisdatei",
+    "memoryFiles_other": "{{count, number}} Gedächtnisdateien",
+    "workspaceEntries_one": "{{count, number}} Workspace-Eintrag",
+    "workspaceEntries_other": "{{count, number}} Workspace-Einträge",
+    "exchanges_one": "{{count, number}} Gesprächsrunde",
+    "exchanges_other": "{{count, number}} Gesprächsrunden",
+    "chats_one": "{{count, number}} Chat",
+    "chats_other": "{{count, number}} Chats",
+    "reviewed": {
+      "nothingNewActive": "Nichts Neues zu lesen – räumt auf und aktualisiert Datumsangaben",
+      "nothingNewEnded": "Wollte aufräumen und Datumsangaben aktualisieren",
+      "nothingNew": "Keine neuen Unterhaltungen – aufgeräumt und Datumsangaben aktualisiert",
+      "active": "Sieht {{exchanges}} in {{chats}} durch",
+      "ended": "Wollte {{exchanges}} in {{chats}} durchsehen",
+      "done": "{{exchanges}} in {{chats}} durchgesehen"
+    },
+    "todayAt": "Heute, {{time}}",
+    "yesterdayAt": "Gestern, {{time}}",
+    "dateTimeFormat": "EEE, d. MMM, HH:mm",
+    "dateTimeYearFormat": "d. MMM yyyy, HH:mm",
+    "dateFormat": "EEE, d. MMM",
+    "dateYearFormat": "d. MMM yyyy",
+    "upcoming": {
+      "dueNow": "jetzt fällig",
+      "tonight": "heute Nacht um {{time}}",
+      "today": "heute um {{time}}",
+      "tomorrow": "morgen um {{time}}",
+      "onDay": "{{day}} um {{time}}",
+      "onDate": "{{date}} um {{time}}"
+    },
+    "status": {
+      "queued": "Wartet",
+      "running": "Läuft",
+      "succeeded": "Konsolidiert",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen",
+      "paused": "Pausiert",
+      "reverted": "Rückgängig gemacht"
+    },
+    "reason": {
+      "schedule": "Geplant",
+      "manual": "Manuell",
+      "size": "Gedächtnis voll"
+    },
+    "change": {
+      "added": "Hinzugefügt",
+      "updated": "Aktualisiert",
+      "merged": "Zusammengeführt",
+      "corrected": "Korrigiert",
+      "removed": "Entfernt",
+      "dated": "Datiert"
+    },
+    "changeCount": {
+      "added": "{{n}} hinzugefügt",
+      "updated": "{{n}} aktualisiert",
+      "merged": "{{n}} zusammengeführt",
+      "corrected": "{{n}} korrigiert",
+      "removed": "{{n}} entfernt",
+      "dated": "{{n}} datiert"
+    }
+  },
+  "dreamsCard": {
+    "title": "Träumen",
+    "startFailed": "Traum konnte nicht starten",
+    "offHint": "Träumen ist aus – schalte es unter Einstellungen → Gedächtnis ein",
+    "loadFailed": "Träume konnten nicht geladen werden: {{error}}",
+    "dreamNow": "Jetzt träumen",
+    "journal": "Traumtagebuch",
+    "showFewer": "Weniger anzeigen",
+    "showOlder_one": "{{count, number}} älteren Traum anzeigen",
+    "showOlder_other": "{{count, number}} ältere Träume anzeigen",
+    "journalEmpty": "Hier landet jeder Traum: was {{name}} durchgesehen hat, was sich im Gedächtnis geändert hat und warum – mit Zeile-für-Zeile-Diff.",
+    "waitingToDream": "Wartet aufs Träumen…",
+    "dreaming": "Träumt…",
+    "startsSoon": "Startet, sobald {{name}} mit der aktuellen Arbeit fertig ist.",
+    "last": {
+      "failed": "Letzter Traum {{ago}} fehlgeschlagen",
+      "cancelled": "Letzter Traum {{ago}} abgebrochen",
+      "pausedSize": "Letzter Traum {{ago}} pausiert – der nächste geplante Traum übernimmt",
+      "pausedIdle": "Letzter Traum {{ago}} pausiert – geht weiter, sobald {{name}} frei ist",
+      "reverted": "Letzter Traum {{ago}} (rückgängig gemacht)",
+      "default": "Letzter Traum {{ago}}"
+    },
+    "neverDreamt": "Hat noch nicht geträumt",
+    "nextDream": "Nächster Traum {{when}}",
+    "noUpcoming": "Kein Traum geplant – prüfe den Zeitplan unter Einstellungen → Gedächtnis",
+    "agentOff": "{{name}} ist ausgeschaltet – schalte den Agenten ein, damit er träumen kann.",
+    "newExchanges_one": "{{count, number}} neue Gesprächsrunde",
+    "newExchanges_other": "{{count, number}} neue Gesprächsrunden",
+    "pending": "<b>{{exchanges}}</b> in {{chats}} warten",
+    "pendingBelowThreshold": "<b>{{exchanges}}</b> in {{chats}} warten – der nächste geplante Traum braucht {{threshold}}",
+    "nothingNew": "Nichts Neues seit dem letzten Traum.",
+    "nothingYet": "Noch nichts zum Träumen – chatte zuerst mit dem Agenten.",
+    "attemptedPartly": "Versucht – wo möglich zurückgerollt",
+    "attemptedNothingKept": "Versucht – zurückgerollt, nichts wurde behalten",
+    "alreadyGood": "Das Gedächtnis war schon in gutem Zustand – nichts umzuschreiben.",
+    "dreamOf": "Traum: {{when}}",
+    "consolidating": "Konsolidiere Gedächtnis…"
+  },
+  "headerActions": {
+    "more": "Mehr"
+  },
+  "taskRow": {
+    "status": {
+      "backlog": "Backlog",
+      "todo": "Zu erledigen",
+      "in_progress": "In Arbeit",
+      "in_review": "In Prüfung",
+      "blocked": "Blockiert",
+      "done": "Erledigt",
+      "cancelled": "Abgebrochen"
+    },
+    "type": {
+      "general": {
+        "label": "Aufgabe",
+        "hint": "Erledigt sie und berichtet zurück"
+      },
+      "coding": {
+        "label": "Coding",
+        "hint": "Eigener Branch, öffnet einen Pull Request"
+      },
+      "research": {
+        "label": "Recherche",
+        "hint": "Recherchiert, schreibt einen Bericht"
+      }
+    },
+    "blocked": {
+      "needs_input": "Braucht dich:",
+      "failed": "Fehlgeschlagen:",
+      "stopped": "Gestoppt:",
+      "interrupted": "Unterbrochen:",
+      "publish": "Veröffentlichen fehlgeschlagen:",
+      "setup": "Einrichtung:"
+    },
+    "needsOk": "Braucht dein OK",
+    "needsAnswer": "Braucht deine Antwort",
+    "paused": "Pausiert",
+    "waiting": "Wartet",
+    "waitingContinues": "Wartet – weiter ab {{when}}",
+    "waitingForParts_one": "Wartet auf {{count}} Teil",
+    "waitingForParts_other": "Wartet auf {{count}} Teile",
+    "waitingForPartsBlocked_one": "Wartet auf {{count}} Teil · {{blocked}} blockiert",
+    "waitingForPartsBlocked_other": "Wartet auf {{count}} Teile · {{blocked}} blockiert",
+    "restartedMidRun": "Godmode wurde mitten im Lauf neu gestartet.",
+    "overdue": "Überfällig",
+    "due": "Fällig {{date}}",
+    "partOf": "Teil von #{{number}}",
+    "waitsFor": "Wartet auf {{tickets}}",
+    "partsDone": "{{done}}/{{total}} Teile",
+    "unassigned": "Nicht zugewiesen",
+    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "working": "Arbeitet…"
+  },
+  "runRow": {
+    "status": {
+      "queued": "Wartet",
+      "running": "Läuft",
+      "paused": "Pausiert",
+      "succeeded": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen"
+    },
+    "trigger": {
+      "chat": "Chat",
+      "routine": "Automation",
+      "check": "Bedingungsprüfung",
+      "dream": "Traum",
+      "delegation": "Übergabe",
+      "manual": "Manuell",
+      "task": "Aufgabe",
+      "followup": "Wiedervorlage",
+      "heartbeat": "Heartbeat",
+      "call": "Anruf"
+    },
+    "needsOk": "Braucht dein OK",
+    "needsAnswer": "Braucht deine Antwort",
+    "noPrompt": "Kein Prompt",
+    "waitingToStart": "Wartet auf Start"
+  },
+  "attachments": {
+    "remove": "{{name}} entfernen"
+  },
+  "goalsStrip": {
+    "label": "Ziele",
+    "newGoal": "Neues Ziel",
+    "addGoal": "Ziel hinzufügen",
+    "addHint": "Ziele sagen, wofür die Arbeit gut ist – Aufgaben, die einem Ziel dienen, sagen ihrem Agenten warum, und du siehst, wie weit es ist.",
+    "goal": "Ziel",
+    "hideFinished": "Abgeschlossene ausblenden",
+    "finished_one": "{{count}} abgeschlossen",
+    "finished_other": "{{count}} abgeschlossen",
+    "progress": "{{done}} von {{total}} erledigt",
+    "noTickets": "Noch keine Aufgaben",
+    "achieved": "Erreicht",
+    "dropped": "Verworfen"
+  },
+  "awaySummary": {
+    "runsFinished_one": "{{count}} Lauf abgeschlossen",
+    "runsFinished_other": "{{count}} Läufe abgeschlossen",
+    "problems_one": "{{count}} Problem",
+    "problems_other": "{{count}} Probleme",
+    "ticketsDelivered_one": "{{count}} Aufgabe geliefert",
+    "ticketsDelivered_other": "{{count}} Aufgaben geliefert",
+    "title": "Während du weg warst · {{duration}}",
+    "close": "Zusammenfassung schließen",
+    "openActivity": "Öffnet die Aktivität",
+    "whoWorked": "Wer gearbeitet hat"
+  },
+  "cronBuilder": {
+    "kinds": {
+      "hourly": "Jede Stunde",
+      "daily": "Jeden Tag",
+      "weekdays": "Werktags",
+      "weekly": "Jede Woche",
+      "monthly": "Jeden Monat",
+      "custom": "Eigener (Cron)"
+    },
+    "examples": {
+      "every15Minutes": "alle 15 Min.",
+      "every2Hours": "alle 2 Stunden",
+      "twiceOnWeekdays": "werktags 9:00 & 17:00",
+      "firstAndFifteenth": "am 1. & 15."
+    },
+    "repeat": "Wiederholen",
+    "atMinute": "Zur Minute",
+    "onDay": "Am Tag",
+    "hour": "Stunde",
+    "minute": "Minute",
+    "on": "Am",
+    "at": "Um",
+    "cronHint": "Cron-Ausdruck (Minute Stunde Tag Monat Wochentag)",
+    "cronLabel": "Cron-Ausdruck",
+    "randomStart": "Zufällige Startzeit",
+    "randomStartHint": "Startet jedes Mal zu einem anderen Zeitpunkt – wie ein Kollege, der nicht auf die Minute genau einstempelt.",
+    "startWithin": "Start innerhalb von"
+  },
+  "routineRow": {
+    "triggers": {
+      "schedule": "Nach Zeitplan",
+      "app": "Wenn in einer App etwas passiert",
+      "condition": "Wenn eine Bedingung erfüllt ist",
+      "webhook": "Wenn ein Webhook aufgerufen wird"
+    },
+    "checkNow": "Jetzt prüfen",
+    "runNow": "Jetzt ausführen",
+    "sendTestEvent": "Testereignis senden",
+    "withNextRun": "{{schedule}} · nächster Lauf {{when}}",
+    "conditionChecked": "Wenn {{condition}} · geprüft: {{often}}",
+    "webhookCalled": "Wenn sein Webhook aufgerufen wird",
+    "toggleFailed": "Automation konnte nicht geändert werden",
+    "runFailed": "Konnte nicht ausgeführt werden",
+    "lastRun": "letzter Lauf {{ago}}",
+    "lastRunFailed": "letzter Lauf {{ago}} fehlgeschlagen",
+    "runningNow": "Läuft gerade",
+    "triggerBroken": "Der Auslöser funktioniert nicht.",
+    "runNamedNow": "{{name}} jetzt ausführen",
+    "turnOff": "{{name}} ausschalten",
+    "turnOn": "{{name}} einschalten"
+  },
+  "followupRow": {
+    "anyMoment": "jeden Moment",
+    "updateGodmode": "Aktualisiere Godmode auf deinem Computer, um Wiedervorlagen vom Handy aus zu ändern.",
+    "moves": {
+      "inHours_one": "In {{count}} Stunde",
+      "inHours_other": "In {{count}} Stunden",
+      "thisEvening": "Heute Abend",
+      "tomorrowMorning": "Morgen früh",
+      "nextMonday": "Nächsten Montag",
+      "inAWeek": "In einer Woche"
+    },
+    "title": "Wiedervorlagen",
+    "hint": "Chats, die deine Agenten von selbst wieder aufnehmen",
+    "aChat": "Ein Chat",
+    "continueFailed": "Konnte nicht fortgesetzt werden",
+    "moveFailed": "Wiedervorlage konnte nicht verschoben werden",
+    "cancelFailed": "Wiedervorlage konnte nicht abgebrochen werden",
+    "continueNow": "Jetzt fortsetzen",
+    "cancel": "Wiedervorlage abbrechen",
+    "rowLabel": "{{title}}, geht {{when}} weiter",
+    "workingNow": "Arbeitet gerade in diesem Chat",
+    "continueTitleNow": "„{{title}}“ jetzt fortsetzen",
+    "changeWhen": "Ändern, wann „{{title}}“ weitergeht"
+  },
+  "character": {
+    "presence": {
+      "off": "Ausgeschaltet",
+      "working": "Arbeitet…",
+      "workingInChats_one": "Arbeitet in {{count}} Chat",
+      "workingInChats_other": "Arbeitet in {{count}} Chats",
+      "needsLogin": "Braucht ein Login",
+      "needsYouQuestions_one": "Braucht dich · {{count}} Frage",
+      "needsYouQuestions_other": "Braucht dich · {{count}} Fragen",
+      "needsAnswer": "Braucht deine Antwort",
+      "failed": "Letzter Lauf fehlgeschlagen",
+      "pausedChats_one": "Pausiert · {{count}} Chat",
+      "pausedChats_other": "Pausiert · {{count}} Chats",
+      "paused": "Pausiert",
+      "queuedCount_one": "Wartet · {{count}}",
+      "queuedCount_other": "Wartet · {{count}}",
+      "queued": "Wartet",
+      "idle": "Bereit"
+    }
+  },
+  "agentHistory": {
+    "dismissFailed": "Konnte nicht ausgeblendet werden",
+    "lastRunFailed": "Letzter Lauf fehlgeschlagen",
+    "whyFailed": "Deshalb zeigt {{name}} „Letzter Lauf fehlgeschlagen“.",
+    "dismiss": "Ausblenden",
+    "openRun": "Lauf öffnen",
+    "recentRuns": "Letzte Läufe",
+    "loadFailed": "Läufe konnten nicht geladen werden: {{error}}",
+    "empty": "Noch keine Läufe. Starte einen Chat oder gib dem Agenten eine Aufgabe – jeder Lauf erscheint hier.",
+    "noPrompt": "(kein Prompt)",
+    "rowLabel": "{{status}}: {{snippet}}",
+    "waitingToStart": "Wartet auf Start"
+  },
+  "rows": {
+    "origin": {
+      "routine": "Automation",
+      "delegation": "Übergeben",
+      "heartbeat": "Heartbeat"
+    },
+    "queued": "In der Warteschlange – wartet auf einen freien Platz",
+    "needsOk": "Braucht dein OK",
+    "needsAnswer": "Braucht deine Antwort",
+    "paused": "Pausiert",
+    "continues": "Geht {{when}} weiter",
+    "waitingForLimit": "Wartet auf das Limit",
+    "from": "Von {{name}}",
+    "newChat": "Neuer Chat",
+    "somethingWentWrong": "Hier ist etwas schiefgelaufen",
+    "newReply": "Neue Antwort",
+    "working": "Arbeitet",
+    "noMessages": "Noch keine Nachrichten",
+    "workingOnTask": "Arbeitet an einer Aufgabe",
+    "waitingToStart": "Wartet auf Start",
+    "builtIn": "Eingebaut"
+  },
+  "markdown": {
+    "done": "Erledigt",
+    "notDone": "Nicht erledigt"
+  },
+  "setup": {
+    "changePicture": "Bild ändern",
+    "descriptionPlaceholder": "Kurze Beschreibung hinzufügen",
+    "removeTitle": "{{name}} entfernen?",
+    "removeRepoMessage": "Agenten arbeiten nicht mehr damit und der Klon landet im Papierkorb.",
+    "removeFolderMessage": "Agenten arbeiten nicht mehr mit diesem Ordner. Der Ordner selbst bleibt erhalten.",
+    "sourcesTitle": "Repositorys und Ordner",
+    "defaultBranch": "Standard-Branch",
+    "status": {
+      "ready": "Bereit",
+      "cloning": "Wird geklont",
+      "syncing": "Wird aktualisiert",
+      "missing": "Nicht geklont",
+      "error": "Fehlgeschlagen"
+    },
+    "update": "{{name}} aktualisieren",
+    "updateFailed": "Konnte nicht aktualisiert werden",
+    "remove": "{{name}} entfernen",
+    "repoUrl": "Repository-URL",
+    "branch": "Branch",
+    "branchPlaceholder": "Branch (optional)",
+    "addRepo": "Git-Repository hinzufügen"
+  },
+  "queueTray": {
+    "alreadyHas": "{{name}} hat diese Nachricht schon",
+    "wordingKept": "Deine neue Formulierung steht im Nachrichtenfeld – schick sie als Nachtrag.",
+    "editFailed": "Nachricht konnte nicht geändert werden",
+    "removeFailed": "Nachricht konnte nicht entfernt werden",
+    "sendFailed": "Warteschlange konnte nicht gesendet werden",
+    "hint": {
+      "stopping": "Stoppt den aktuellen Schritt…",
+      "sending": "Wird gesendet…",
+      "withAnswer_one": "Geht mit deiner Antwort mit",
+      "withAnswer_other": "Gehen mit deiner Antwort mit",
+      "whenLimitResets_one": "Geht mit, sobald das Limit zurückgesetzt ist",
+      "whenLimitResets_other": "Gehen mit, sobald das Limit zurückgesetzt ist",
+      "whenYouContinue_one": "Geht mit, sobald du fortsetzt",
+      "whenYouContinue_other": "Gehen mit, sobald du fortsetzt",
+      "notSent": "Noch nicht gesendet",
+      "runsWhenDone": "Läuft, sobald {{name}} fertig ist",
+      "nextStep_one": "{{name}} nimmt das beim nächsten Schritt auf",
+      "nextStep_other": "{{name}} nimmt sie beim nächsten Schritt auf"
+    },
+    "label": "Wartende Nachrichten",
+    "queued": "Warteschlange",
+    "sendNowLabel": "Jetzt senden: stoppt, was {{name}} gerade tut, und startet mit der Warteschlange",
+    "sendNow": "Jetzt senden",
+    "message": "Wartende Nachricht",
+    "editHint": "Nachricht bearbeiten",
+    "files_one": "{{count}} Datei",
+    "files_other": "{{count}} Dateien",
+    "remove": "Aus der Warteschlange entfernen"
+  },
+  "questionCard": {
+    "alreadySettled": "Schon erledigt",
+    "answerFailed": "Antwort konnte nicht gesendet werden",
+    "theAgent": "Der Agent",
+    "approvalWithdrawn": "Freigabe zurückgezogen",
+    "questionWithdrawn": "Frage zurückgezogen",
+    "stoppedBeforeAnswer": "Der Lauf wurde gestoppt, bevor das beantwortet wurde.",
+    "needsOk": "Braucht dein OK",
+    "approval": "Freigabe",
+    "question": "Frage",
+    "why": "Warum",
+    "affects": "Betrifft",
+    "optionRecommended": "{{label}}, empfohlen",
+    "recommended": "Empfohlen",
+    "notePlaceholder": "Notiz für {{name}} (optional)",
+    "noteLabel": "Notiz für {{name}}",
+    "approve": "Freigeben",
+    "decline": "Ablehnen",
+    "addNote": "Notiz hinzufügen",
+    "finishingStep": "{{name}} beendet noch den aktuellen Schritt…",
+    "replyCountsAsAnswer": "Oder antworte unten: Deine Nachricht zählt als Antwort.",
+    "typeOwnAnswer": "Oder schreib unten deine eigene Antwort.",
+    "replyToAnswer": "Antworte unten.",
+    "settled": {
+      "approved": "Du hast freigegeben",
+      "approvedPhone": "Du hast vom Handy aus freigegeben",
+      "declined": "Du hast abgelehnt",
+      "declinedPhone": "Du hast vom Handy aus abgelehnt",
+      "chose": "Du hast „{{option}}“ gewählt",
+      "chosePhone": "Du hast vom Handy aus „{{option}}“ gewählt",
+      "answered": "Du hast geantwortet",
+      "answeredPhone": "Du hast vom Handy aus geantwortet"
+    }
+  },
+  "taskTimeline": {
+    "goneAgent": "Ein Agent, den es nicht mehr gibt",
+    "loadFailed": "Aktivität konnte nicht geladen werden.",
+    "retryLabel": "Aktivität erneut laden",
+    "loading": "Aktivität wird geladen",
+    "youFiled": "Du hast das angelegt",
+    "filedBy": "{{name}} hat das angelegt",
+    "showEarlierLabel_one": "{{count}} früheres Ereignis anzeigen",
+    "showEarlierLabel_other": "{{count}} frühere Ereignisse anzeigen",
+    "showEarlier_one": "Frühere Aktivität anzeigen ({{count}})",
+    "showEarlier_other": "Frühere Aktivität anzeigen ({{count}})",
+    "resultAbove": "das Ergebnis oben",
+    "showResult": "Dieses Ergebnis anzeigen",
+    "hideResult": "Dieses Ergebnis ausblenden",
+    "files": "Dateien: {{files}}",
+    "event": {
+      "approved": {
+        "you": "{{a}} hast es freigegeben",
+        "other": "{{a}} hat es freigegeben"
+      },
+      "markedDone": {
+        "you": "{{a}} hast es als erledigt markiert",
+        "other": "{{a}} hat es als erledigt markiert"
+      },
+      "cancelled": {
+        "you": "{{a}} hast es abgebrochen",
+        "other": "{{a}} hat es abgebrochen"
+      },
+      "reopened": {
+        "you": "{{a}} hast es wieder geöffnet",
+        "other": "{{a}} hat es wieder geöffnet"
+      },
+      "movedBlocked": {
+        "you": "{{a}} hast es auf „Blockiert“ gesetzt",
+        "other": "{{a}} hat es auf „Blockiert“ gesetzt"
+      },
+      "restarted": {
+        "you": "{{a}} hast es neu gestartet",
+        "other": "{{a}} hat es neu gestartet"
+      },
+      "stopped": {
+        "you": "{{a}} hast es gestoppt",
+        "other": "{{a}} hat es gestoppt"
+      },
+      "moved": {
+        "you": "{{a}} hast es von „{{from}}“ nach „{{to}}“ verschoben",
+        "other": "{{a}} hat es von „{{from}}“ nach „{{to}}“ verschoben"
+      },
+      "assignedTo": {
+        "you": "{{a}} hast es {{name}} zugewiesen",
+        "other": "{{a}} hat es {{name}} zugewiesen"
+      },
+      "tookOff": {
+        "you": "{{a}} hast {{name}} davon abgezogen",
+        "other": "{{a}} hat {{name}} davon abgezogen"
+      },
+      "handed": {
+        "you": "{{a}} hast es von {{from}} an {{to}} übergeben",
+        "other": "{{a}} hat es von {{from}} an {{to}} übergeben"
+      },
+      "archived": {
+        "you": "{{a}} hast es archiviert",
+        "other": "{{a}} hat es archiviert"
+      },
+      "restored": {
+        "you": "{{a}} hast es zurück aufs Board gelegt",
+        "other": "{{a}} hat es zurück aufs Board gelegt"
+      },
+      "retryMore": {
+        "you": "{{a}} hast es noch einmal versucht",
+        "other": "{{a}} hat es von selbst noch einmal versucht"
+      },
+      "retry": {
+        "you": "{{a}} hast es nach dem fehlgeschlagenen Lauf erneut versucht",
+        "other": "{{a}} hat es nach dem fehlgeschlagenen Lauf von selbst erneut versucht"
+      },
+      "started": {
+        "you": "{{a}} hast mit der Arbeit begonnen",
+        "other": "{{a}} hat mit der Arbeit begonnen"
+      },
+      "continuedPlanned": {
+        "you": "{{a}} hast wie geplant weitergemacht",
+        "other": "{{a}} hat wie geplant weitergemacht"
+      },
+      "heartbeat": {
+        "you": "{{a}} hast es beim Heartbeat aufgegriffen",
+        "other": "{{a}} hat es beim Heartbeat aufgegriffen"
+      },
+      "startedOver": {
+        "you": "{{a}} hast von vorn begonnen",
+        "other": "{{a}} hat von vorn begonnen"
+      },
+      "pickedUp": {
+        "you": "{{a}} hast es wieder aufgegriffen",
+        "other": "{{a}} hat es wieder aufgegriffen"
+      },
+      "waitingFor": {
+        "you": "{{a}} wartest auf {{list}}",
+        "other": "{{a}} wartet auf {{list}}"
+      },
+      "waitingContinues": {
+        "you": "{{a}} wartest – geht {{when}} weiter",
+        "other": "{{a}} wartet – geht {{when}} weiter"
+      },
+      "delivered": {
+        "you": "{{a}} hast geliefert",
+        "other": "{{a}} hat geliefert"
+      },
+      "deliveredPr": {
+        "you": "{{a}} hast geliefert – Pull Request #{{number}}",
+        "other": "{{a}} hat geliefert – Pull Request #{{number}}"
+      },
+      "needsInput": {
+        "you": "{{a}} brauchst etwas",
+        "other": "{{a}} braucht etwas von dir"
+      },
+      "requestedChanges": {
+        "you": "{{a}} hast Änderungen angefordert",
+        "other": "{{a}} hat Änderungen angefordert"
+      },
+      "answered": {
+        "you": "{{a}} hast geantwortet",
+        "other": "{{a}} hat geantwortet"
+      },
+      "reopenedMessage": {
+        "you": "{{a}} hast es mit einer Nachricht wieder geöffnet",
+        "other": "{{a}} hat es mit einer Nachricht wieder geöffnet"
+      },
+      "wrote": {
+        "you": "{{a}} hast geschrieben",
+        "other": "{{a}} hat geschrieben"
+      },
+      "noted": {
+        "you": "{{a}} hast notiert",
+        "other": "{{a}} hat notiert"
+      },
+      "mergedPr": {
+        "you": "{{a}} hast Pull Request #{{number}} gemergt",
+        "other": "{{a}} hat Pull Request #{{number}} gemergt"
+      },
+      "askedTask": {
+        "you": "{{a}} hast dir ein To-do gegeben",
+        "other": "{{a}} hat dir ein To-do gegeben"
+      },
+      "askedOk": {
+        "you": "{{a}} hast um Freigabe gebeten",
+        "other": "{{a}} bittet dich um Freigabe"
+      },
+      "asked": {
+        "you": "{{a}} hast gefragt",
+        "other": "{{a}} hat dich gefragt"
+      },
+      "taskDeclined": {
+        "you": "{{a}} konntest das To-do nicht erledigen",
+        "other": "{{a}} konnte das To-do nicht erledigen"
+      },
+      "taskDone": {
+        "you": "{{a}} hast das To-do erledigt",
+        "other": "{{a}} hat das To-do erledigt"
+      },
+      "approvedPlain": {
+        "you": "{{a}} hast freigegeben",
+        "other": "{{a}} hat freigegeben"
+      },
+      "declined": {
+        "you": "{{a}} hast abgelehnt",
+        "other": "{{a}} hat abgelehnt"
+      },
+      "pickedUpSubtasks": {
+        "you_one": "{{a}} hast es wieder aufgegriffen – {{list}} ist fertig",
+        "you_other": "{{a}} hast es wieder aufgegriffen – {{list}} sind fertig",
+        "other_one": "{{a}} hat es wieder aufgegriffen – {{list}} ist fertig",
+        "other_other": "{{a}} hat es wieder aufgegriffen – {{list}} sind fertig"
+      },
+      "actor": {
+        "you": "Du",
+        "agent": "Ein Agent"
+      },
+      "fallback": {
+        "anAgent": "einem Agenten",
+        "theAgent": "den Agenten",
+        "anotherAgent": "einen anderen Agenten"
+      },
+      "later": "später",
+      "stoppedEarly": "Gestoppt, bevor es fertig war",
+      "prOpened": "Pull Request #{{number}} geöffnet",
+      "branchPushed": "Branch gepusht – der Pull Request muss noch geöffnet werden",
+      "prMergedAuto": "Pull Request #{{number}} automatisch gemergt",
+      "prMerged": "Pull Request #{{number}} gemergt",
+      "prClosed": "Pull Request #{{number}} ohne Merge geschlossen",
+      "blockedFailed": "Der Lauf ist fehlgeschlagen",
+      "blockedInterrupted": "Durch einen Neustart unterbrochen",
+      "blockedPublish": "Die Arbeit konnte nicht veröffentlicht werden",
+      "blockedSetup": "Einrichtung fehlgeschlagen"
+    }
+  },
+  "heartbeatCard": {
+    "title": "Heartbeat",
+    "offHint": "Weckt {{name}} im eigenen Rhythmus, um Aufgaben voranzubringen und die Checkliste abzuarbeiten.",
+    "beatFailed": "Der Schlag konnte nicht starten",
+    "wakeFailed": "{{name}} konnte nicht geweckt werden",
+    "loadFailed": "Heartbeat konnte nicht geladen werden: {{error}}",
+    "description": "Weckt {{name}} im eigenen Rhythmus, um Aufgaben voranzubringen und die Checkliste abzuarbeiten – und hinterlässt eine Spur.",
+    "wakeNow": "Jetzt wecken",
+    "switchOnFirst": "Schalte {{name}} zuerst ein",
+    "recentBeats": "Letzte Schläge",
+    "noBeatsFirst": "Noch keine Schläge – der erste kommt {{when}}.",
+    "noBeats": "Noch keine Schläge.",
+    "showFewer": "Weniger anzeigen",
+    "showOlder_one": "{{count}} älteren anzeigen",
+    "showOlder_other": "{{count}} ältere anzeigen",
+    "beats": "Schlägt {{interval}}",
+    "weekdays": "werktags",
+    "waitsWhileOff": "wartet, solange {{name}} ausgeschaltet ist",
+    "noHourToWake": "keine Stunde zum Aufwachen",
+    "interval": {
+      "daily": "einmal am Tag",
+      "hourly": "jede Stunde",
+      "hours_one": "jede Stunde",
+      "hours_other": "alle {{count}} Stunden",
+      "minutes_one": "jede Minute",
+      "minutes_other": "alle {{count}} Minuten"
+    },
+    "nextAt": "nächster um {{time}}",
+    "next": "nächster {{when}}",
+    "outcome": {
+      "woke": "Aufgewacht",
+      "quiet": "Ruhig",
+      "skipped": "Übersprungen",
+      "failed": "Fehlgeschlagen"
+    },
+    "runState": {
+      "queued": "Wartet auf Start",
+      "running": "Arbeitet es ab…",
+      "paused": "Pausiert",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Gestoppt"
+    },
+    "checklist": "Checkliste",
+    "changesSince_one": "{{count}} Änderung seit dem vorigen Schlag",
+    "changesSince_other": "{{count}} Änderungen seit dem vorigen Schlag",
+    "beatCount_one": "{{count}} Schlag",
+    "beatCount_other": "{{count}} Schläge"
+  },
+  "ui": {
+    "unassigned": "Nicht zugewiesen",
+    "loading": "Wird geladen"
+  },
+  "form": {
+    "less": "{{title}} verringern",
+    "more": "{{title}} erhöhen",
+    "saving": "Speichert",
+    "notSaved": "Nicht gespeichert",
+    "savesAsYouType": "Speichert beim Tippen",
+    "useEmoji": "{{emoji}} verwenden"
+  },
+  "composer": {
+    "message": "Nachricht",
+    "addMessage": "Nachricht hinzufügen",
+    "slashCommands": "Slash-Befehle",
+    "attach": "Anhängen",
+    "photoLibrary": "Fotomediathek",
+    "takePhoto": "Foto aufnehmen",
+    "chooseFiles": "Dateien auswählen",
+    "attachMessage": "Fotos oder Dateien zur Nachricht hinzufügen.",
+    "photos": "Fotos",
+    "camera": "Kamera",
+    "files": "Dateien",
+    "thisAgent": "Dieser Agent",
+    "loadingCommands": "Claude-Code-Befehle werden geladen…",
+    "commandsFailed": "Befehle konnten nicht geladen werden – {{error}}",
+    "noMatch": "Kein passender Befehl – wird als Nachricht gesendet."
+  },
+  "runLog": {
+    "loading": "Protokoll wird geladen",
+    "loadFailed": "Protokoll konnte nicht geladen werden: {{error}}",
+    "empty": "Noch keine Protokollzeilen.",
+    "events_one": "{{count}} Ereignis",
+    "events_other": "{{count}} Ereignisse",
+    "live": "Live",
+    "streamingDeltas": "Streaming-Deltas ({{count}})",
+    "copyRaw": "Rohprotokoll kopieren",
+    "shareRaw": "Rohprotokoll teilen",
+    "steps": "Schritte",
+    "raw": "Roh",
+    "showMore": "{{count}} weitere von {{total}} anzeigen",
+    "sessionStarted": "Sitzung gestartet",
+    "tools_one": "{{count}} Tool",
+    "tools_other": "{{count}} Tools",
+    "subagentSaid": "Subagent sagte",
+    "assistant": "Assistent",
+    "thinking": "Denkt nach",
+    "redacted": "geschwärzt",
+    "thinkingRedacted": "Das Nachdenken ist geschwärzt.",
+    "subagent": "Subagent",
+    "toolResult": "Tool-Ergebnis",
+    "failedTool": "Fehlgeschlagen: {{title}}",
+    "resultTool": "Ergebnis · {{title}}",
+    "images_one": "{{count}} Bild",
+    "images_other": "{{count}} Bilder",
+    "imageResult": "(Bildergebnis)",
+    "emptyResult": "(leer)",
+    "finishedWithError": "Mit Fehler beendet ({{subtype}})",
+    "finished": "Beendet",
+    "turns_one": "{{count}} Runde",
+    "turns_other": "{{count}} Runden",
+    "tokens": "{{in}} rein / {{out}} raus",
+    "rateLimit": "Rate-Limit: {{status}}",
+    "hideRawJson": "Roh-JSON ausblenden",
+    "rawJson": "Roh-JSON",
+    "moreCharacters_one": "({{count}} weiteres Zeichen)",
+    "moreCharacters_other": "({{count}} weitere Zeichen)"
+  },
+  "message": {
+    "source": {
+      "automation": "Automation",
+      "delegation": "Von einem anderen Agenten",
+      "task": "Aufgabe vom Board",
+      "offer": "Angebot, das du angenommen hast"
+    },
+    "copyReply": "Antwort kopieren",
+    "followup": {
+      "now": "Jetzt fortgesetzt, vor der Wiedervorlage",
+      "late": "Verspätet fortgesetzt, wie geplant",
+      "onTime": "Von selbst fortgesetzt, wie geplant"
+    },
+    "retry": {
+      "restart": {
+        "continue": "Nach dem Neustart von Godmode fortgesetzt",
+        "again": "Nach dem Neustart von Godmode erneut gesendet"
+      },
+      "offline": {
+        "continue": "Fortgesetzt, sobald Claude wieder erreichbar war",
+        "again": "Erneut gesendet, sobald Claude erreichbar war"
+      },
+      "error": {
+        "continue": "Nach einem Fehler fortgesetzt",
+        "again": "Nach einem Fehler erneut gesendet"
+      },
+      "background": {
+        "continue": "Fortgesetzt, nachdem die Hintergrundarbeit gestoppt wurde",
+        "again": "Erneut gesendet, nachdem die Hintergrundarbeit gestoppt wurde"
+      },
+      "pickedUpAgain": "Wieder aufgenommen",
+      "continuedWhereStopped": "Dort fortgesetzt, wo es aufgehört hat",
+      "triedAgain": "Erneut versucht",
+      "secretsMasked": "Gespeicherte Geheimnisse bleiben maskiert"
+    },
+    "moved": "Von {{from}} nach {{to}} verschoben",
+    "continuedThere": "Dort fortgesetzt",
+    "callEnded": "Anruf mit {{name}} beendet",
+    "callEndedStatus": "Anruf mit {{name}} beendet · {{status}}",
+    "pickedUpMidTask": "Mitten in der Arbeit aufgenommen",
+    "pickedUpMidTaskSent": "Mitten in der Arbeit aufgenommen · gesendet {{time}}",
+    "humanTaskDone": "Du hast H-{{number}} erledigt: {{title}}",
+    "humanTaskNotDone": "Du konntest H-{{number}} nicht erledigen: {{title}}",
+    "limitReached": "{{limit}} erreicht",
+    "usageLimit": "Nutzungslimit",
+    "paused": "Pausiert",
+    "continued": "fortgesetzt",
+    "justNow": "gerade eben",
+    "markerDateFormat": "d. MMM, HH:mm",
+    "helper": {
+      "helper": "Helfer",
+      "background": "Helfer im Hintergrund",
+      "working": "Arbeitet…",
+      "failed": "Fehlgeschlagen",
+      "stopped": "Gestoppt",
+      "done": "Fertig",
+      "report": "Bericht",
+      "result": "Ergebnis"
+    },
+    "steps_one": "{{count}} Schritt",
+    "steps_other": "{{count}} Schritte",
+    "earlierSteps_one": "und {{count}} früherer Schritt",
+    "earlierSteps_other": "und {{count}} frühere Schritte",
+    "helpersInBackground_one": "{{count}} Helfer arbeitet im Hintergrund",
+    "helpersInBackground_other": "{{count}} Helfer arbeiten im Hintergrund",
+    "thoughtItThrough": "Durchdacht",
+    "screenshot": "Screenshot",
+    "moreLines_one": "{{count}} weitere Zeile",
+    "moreLines_other": "{{count}} weitere Zeilen",
+    "thinkingStep": "Denkt nach",
+    "thinking": "Denkt nach…",
+    "compressedAuto": "Automatisch komprimiert",
+    "compressed": "Chat komprimiert"
+  }
+}

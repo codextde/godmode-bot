@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { parsePairingLink } from "@godmode/shared";
 import { Icon } from "@/components/icon";
 import { Logo } from "@/components/logo";
@@ -13,6 +14,7 @@ import { isGatewayUrl, useSession } from "@/lib/session";
 import { radius, space, useColors } from "@/lib/theme";
 
 export default function Pair() {
+  const { t } = useTranslation(["onboarding", "common"]);
   const { d } = useLocalSearchParams<{ d?: string }>();
   const payload = useMemo(() => (d ? parsePairingLink(d) : null), [d]);
   const current = useSession((s) => s.connection);
@@ -45,11 +47,11 @@ export default function Pair() {
     return (
       <View style={[styles.root, { backgroundColor: c.background }]}>
         <Icon name="warning" size={28} color={c.warning} />
-        <T variant="title">Not a Godmode code</T>
+        <T variant="title">{t("pair.invalid.title")}</T>
         <T variant="subhead" muted style={{ textAlign: "center" }}>
-          Open Settings → Phone on your computer and scan the code shown there.
+          {t("pair.invalid.body")}
         </T>
-        <Button title="Scan again" icon="scan" onPress={() => router.replace("/scan")} style={{ alignSelf: "stretch" }} />
+        <Button title={t("pair.invalid.scanAgain")} icon="scan" onPress={() => router.replace("/scan")} style={{ alignSelf: "stretch" }} />
       </View>
     );
   }
@@ -58,7 +60,7 @@ export default function Pair() {
   const switching = current && current.instance.id !== payload.id;
   const routes = [
     { label: "Tailscale", url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("http:")) },
-    { label: "Server", url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("https:")) },
+    { label: t("pair.server"), url: payload.urls.find((u) => !isGatewayUrl(u) && u.startsWith("https:")) },
     { label: "Godmode Cloud", url: payload.urls.find(isGatewayUrl) },
   ].filter((route) => route.url);
 
@@ -67,10 +69,10 @@ export default function Pair() {
       <Logo size={56} />
       <View style={{ alignItems: "center", gap: 6 }}>
         <T variant="title" style={{ textAlign: "center" }}>
-          Connect to {payload.name}?
+          {t("pair.title", { name: payload.name })}
         </T>
         <T variant="subhead" muted style={{ textAlign: "center" }}>
-          This phone gets its own key and can control Godmode on this computer.
+          {t("pair.body")}
         </T>
       </View>
 
@@ -90,7 +92,7 @@ export default function Pair() {
           <View style={styles.detailRow}>
             <Icon name="warning" size={16} color={c.warning} />
             <T variant="footnote" style={{ flex: 1 }}>
-              Replaces the connection to {current.instance.name}.
+              {t("pair.replaces", { name: current.instance.name })}
             </T>
           </View>
         )}
@@ -99,18 +101,18 @@ export default function Pair() {
       {error || expired ? (
         <View style={[styles.error, { backgroundColor: c.dangerSoft }]}>
           <T variant="footnote" color={c.danger}>
-            {expired && !error ? "This code has expired. Show a new one on your computer." : error}
+            {expired && !error ? t("pair.expired") : error}
           </T>
         </View>
       ) : null}
 
       <View style={{ alignSelf: "stretch", gap: space.sm, marginTop: "auto" }}>
         {expired ? (
-          <Button title="Scan a new code" icon="scan" size="lg" onPress={() => router.replace("/scan")} />
+          <Button title={t("pair.scanNew")} icon="scan" size="lg" onPress={() => router.replace("/scan")} />
         ) : (
-          <Button title={busy ? "Connecting…" : "Connect"} icon="link" size="lg" loading={busy} onPress={() => void connect()} />
+          <Button title={busy ? t("pair.connecting") : t("pair.connect")} icon="link" size="lg" loading={busy} onPress={() => void connect()} />
         )}
-        <Button title="Cancel" variant="secondary" onPress={close} />
+        <Button title={t("common:actions.cancel")} variant="secondary" onPress={close} />
       </View>
     </View>
   );

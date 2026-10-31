@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import type { ReactNode } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import { isCallActive, type CallPurpose, type PhoneCall } from "@godmode/shared";
 import { CallStatusBadge, callListQuery, callName, callQuery, formatCallTime } from "@/components/call-parts";
 import { CharacterAvatar } from "@/components/character";
@@ -10,17 +11,19 @@ import { Icon } from "@/components/icon";
 import { Badge, Button, EmptyState, ErrorState, LiveDot, LoadingState, Row, T } from "@/components/ui";
 import { ApiError, errorText } from "@/lib/api";
 import { useAgents, useNow } from "@/lib/hooks";
+import { dateLocale } from "@/lib/i18n";
 import { queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 
-const GOAL_LABEL: Record<CallPurpose, string> = {
-  task: "Goal",
-  question: "Question for you",
-  inform: "News for you",
-  inbound: "What the caller wanted",
-};
+const GOAL_LABEL = {
+  task: "detail.goal.task",
+  question: "detail.goal.question",
+  inform: "detail.goal.inform",
+  inbound: "detail.goal.inbound",
+} as const satisfies Record<CallPurpose, string>;
 
 export default function CallScreen() {
+  const { t } = useTranslation("calls");
   const { id } = useLocalSearchParams<{ id: string }>();
   const call = useQuery({
     ...callQuery(id),
@@ -30,13 +33,13 @@ export default function CallScreen() {
   if (!call.data) {
     return (
       <View style={{ flex: 1, justifyContent: "center" }}>
-        <Stack.Title>Call</Stack.Title>
+        <Stack.Title>{t("detail.title")}</Stack.Title>
         {call.error instanceof ApiError && call.error.code === "device_forbidden" ? (
-          <EmptyState icon="call" title="Calls aren't available yet" body="Update Godmode on your computer to see calls here." />
+          <EmptyState icon="call" title={t("unavailableTitle")} body={t("unavailableBody")} />
         ) : call.isError ? (
-          <ErrorState title="Couldn't open this call" error={errorText(call.error)} onRetry={() => void call.refetch()} />
+          <ErrorState title={t("detail.openFailed")} error={errorText(call.error)} onRetry={() => void call.refetch()} />
         ) : (
-          <LoadingState label="Loading the call…" />
+          <LoadingState label={t("detail.loading")} />
         )}
       </View>
     );
@@ -46,6 +49,7 @@ export default function CallScreen() {
 
 function CallDetail({ call: c }: { call: PhoneCall }) {
   const colors = useColors();
+  const { t } = useTranslation(["calls", "common"]);
   const { byId } = useAgents();
   const agent = c.agentId ? byId.get(c.agentId) : undefined;
   const agentName = agent?.name ?? c.agentName;
@@ -65,18 +69,20 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
           {callName(c)}
         </T>
         <T variant="footnote" muted style={{ textAlign: "center" }}>
-          {[c.contactName && c.number ? c.number : null, inbound ? "Incoming" : "Outgoing", format(new Date(c.createdAt), "EEE, MMM d · HH:mm")].filter(Boolean).join(" · ")}
+          {[c.contactName && c.number ? c.number : null, inbound ? t("detail.incoming") : t("detail.outgoing"), format(new Date(c.createdAt), t("detail.dateFormat"), { locale: dateLocale() })]
+            .filter(Boolean)
+            .join(" · ")}
         </T>
         <Row style={{ gap: 6, marginTop: 4 }}>
           <CallStatusBadge status={c.status} />
-          {c.fromOwner ? <Badge label="Owner call" /> : null}
+          {c.fromOwner ? <Badge label={t("detail.ownerCall")} /> : null}
         </Row>
       </View>
 
       <View style={[styles.facts, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Fact label="Duration">{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : <FactText>{formatCallTime(c.durationSecs)}</FactText>}</Fact>
+        <Fact label={t("detail.duration")}>{active && c.durationSecs == null ? <LiveTimer since={c.createdAt} /> : <FactText>{formatCallTime(c.durationSecs)}</FactText>}</Fact>
         <View style={{ width: StyleSheet.hairlineWidth, backgroundColor: colors.border }} />
-        <Fact label="Agent">
+        <Fact label={t("common:words.agent")}>
           <Row style={{ gap: 6 }}>
             {agent ? <CharacterAvatar agent={agent} size={18} /> : null}
             <FactText>{agentName ?? "–"}</FactText>
@@ -84,7 +90,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
         </Fact>
       </View>
 
-      {c.conversationId ? <Button title="Open chat" icon="chats" variant="secondary" onPress={() => router.push({ pathname: "/chat/[id]", params: { id: c.conversationId! } })} /> : null}
+      {c.conversationId ? <Button title={t("detail.openChat")} icon="chats" variant="secondary" onPress={() => router.push({ pathname: "/chat/[id]", params: { id: c.conversationId! } })} /> : null}
 
       {c.error ? (
         <View style={[styles.callout, { backgroundColor: colors.dangerSoft }]}>
@@ -96,7 +102,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
       ) : null}
 
       {c.goal ? (
-        <Section label={GOAL_LABEL[c.purpose]}>
+        <Section label={t(GOAL_LABEL[c.purpose])}>
           <T variant="body" selectable>
             {c.goal}
           </T>
@@ -108,7 +114,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
           <Row style={{ gap: 6 }}>
             <Icon name={c.successful === true ? "check" : missed ? "close" : "bolt"} size={12} color={missed ? colors.warning : colors.brandStrong} weight="bold" />
             <T variant="eyebrow" color={missed ? colors.warning : colors.brandStrong}>
-              {missed ? "Outcome · goal not reached" : "Outcome"}
+              {missed ? t("detail.outcomeMissed") : t("detail.outcome")}
             </T>
           </Row>
           <T variant="body" selectable>
@@ -118,7 +124,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
       ) : null}
 
       {c.purpose === "question" && c.answer ? (
-        <Section label="Your answer">
+        <Section label={t("detail.yourAnswer")}>
           <T variant="body" selectable>
             {c.answer}
           </T>
@@ -126,7 +132,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
       ) : null}
 
       {c.summary ? (
-        <Section label="Summary">
+        <Section label={t("detail.summary")}>
           <T variant="body" selectable style={{ opacity: 0.88 }}>
             {c.summary}
           </T>
@@ -137,7 +143,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
         <View style={[styles.waiting, { borderColor: colors.border }]}>
           <LiveDot size={8} />
           <T variant="footnote" muted style={{ flex: 1 }}>
-            {c.status === "processing" ? "The call ended. Godmode is writing the summary." : "The transcript and summary show up here when the call ends."}
+            {c.status === "processing" ? t("detail.processing") : t("detail.waiting")}
           </T>
         </View>
       ) : null}
@@ -146,7 +152,7 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
         <View style={styles.hint}>
           <Icon name="display" size={13} color={colors.textMuted} />
           <T variant="footnote" muted style={{ flex: 1 }}>
-            The recording plays in Godmode on your computer.
+            {t("detail.recording")}
           </T>
         </View>
       ) : null}
@@ -158,13 +164,14 @@ function CallDetail({ call: c }: { call: PhoneCall }) {
 
 function Transcript({ call: c }: { call: PhoneCall }) {
   const colors = useColors();
-  const other = c.contactName || (c.direction === "inbound" ? "Caller" : "Them");
+  const { t } = useTranslation("calls");
+  const other = c.contactName || (c.direction === "inbound" ? t("detail.caller") : t("detail.them"));
   return (
-    <Section label="Transcript">
+    <Section label={t("detail.transcript")}>
       <View style={{ gap: 6, marginTop: 4 }}>
-        {c.transcript.map((t, i) => {
-          const mine = t.speaker === "agent";
-          const first = i === 0 || c.transcript[i - 1]!.speaker !== t.speaker;
+        {c.transcript.map((turn, i) => {
+          const mine = turn.speaker === "agent";
+          const first = i === 0 || c.transcript[i - 1]!.speaker !== turn.speaker;
           return (
             <View key={i} style={{ alignItems: mine ? "flex-end" : "flex-start", paddingTop: first && i > 0 ? 10 : 0 }}>
               {first ? (
@@ -182,11 +189,11 @@ function Transcript({ call: c }: { call: PhoneCall }) {
                   ]}
                 >
                   <T variant="callout" selectable>
-                    {t.text}
+                    {turn.text}
                   </T>
                 </View>
                 <T variant="caption" color={colors.textFaint} style={{ fontVariant: ["tabular-nums"], paddingBottom: 4 }}>
-                  {formatCallTime(t.at)}
+                  {formatCallTime(turn.at)}
                 </T>
               </View>
             </View>

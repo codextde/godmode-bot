@@ -1,6 +1,7 @@
 import * as LocalAuthentication from "expo-local-authentication";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import Animated, { FadeOut } from "react-native-reanimated";
 import { Logo } from "./logo";
 import { Button, T } from "./ui";
@@ -16,11 +17,12 @@ export function AppLock() {
   const [covered, setCovered] = useState(false);
   const leftAt = useRef<number | null>(null);
   const c = useColors();
+  const { t } = useTranslation("components");
 
   const unlock = useCallback(async () => {
-    const result = await LocalAuthentication.authenticateAsync({ promptMessage: "Unlock Godmode", disableDeviceFallback: false });
+    const result = await LocalAuthentication.authenticateAsync({ promptMessage: t("appLock.prompt"), disableDeviceFallback: false });
     if (result.success) setLocked(false);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!enabled) {
@@ -50,8 +52,8 @@ export function AppLock() {
       <Logo size={64} />
       {locked && (
         <View style={{ alignItems: "center", gap: space.lg }}>
-          <T variant="headline">Godmode is locked</T>
-          <Button title="Unlock" icon="faceid" onPress={() => void unlock()} />
+          <T variant="headline">{t("appLock.locked")}</T>
+          <Button title={t("appLock.unlock")} icon="faceid" onPress={() => void unlock()} />
         </View>
       )}
     </Animated.View>

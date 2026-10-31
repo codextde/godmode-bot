@@ -1,0 +1,189 @@
+{
+  "compose": {
+    "title": "Neuer Chat",
+    "startFailed": "Chat konnte nicht starten",
+    "loadingAgents": "Agenten werden geladen",
+    "placeholderAgent": "Frag {{name}} etwas oder gib eine Aufgabe ab…",
+    "placeholder": "Frag etwas oder gib eine Aufgabe ab…",
+    "projectHint": "Arbeitet mit Kontext, Ordnern und Repositorys des Projekts.",
+    "try": "Probier mal"
+  },
+  "newTask": {
+    "title": "Neue Aufgabe",
+    "tooLongTitle": "Die Details sind zu lang",
+    "tooLongMessage": "Kürze den Text oder hänge weniger Dateien an.",
+    "createFailed": "Aufgabe konnte nicht erstellt werden",
+    "titlePlaceholder": "Was ist zu tun?",
+    "detailsPlaceholder": "Details, Links, wann es fertig ist (optional)",
+    "addMoreFilesA11y_one": "Weitere Dateien hinzufügen, {{count}} hinzugefügt",
+    "addMoreFilesA11y_other": "Weitere Dateien hinzufügen, {{count}} hinzugefügt",
+    "addFiles": "Fotos oder Dateien hinzufügen",
+    "addMore": "Weitere hinzufügen",
+    "fileCount_one": "{{count}} Datei",
+    "fileCount_other": "{{count}} Dateien",
+    "kind": "Art",
+    "codingNeedsWorkspace": ". Wähl einen Workspace mit einem Repository auf deinem Computer.",
+    "projectHint": "Der Agent arbeitet mit Kontext, Ordnern und Repositorys des Projekts.",
+    "workspaceHint": "Nutzt das Setup des Workspace.",
+    "unassigned": "Niemand",
+    "agentStarts": "{{name}} legt los, sobald du sie erstellst.",
+    "waitsInBacklog": "Wartet im Backlog, bis du einen Agenten zuweist.",
+    "startWith": "Mit {{name}} starten",
+    "addToBacklog": "Ins Backlog"
+  },
+  "live": {
+    "browser": "Browser",
+    "sharedScreen": "Geteilter Bildschirm",
+    "screen": "Bildschirm",
+    "virtualMachine": "Virtuelle Maschine",
+    "androidPhone": "Android-Handy",
+    "notRunning": "Läuft nicht",
+    "inputFailed": "Bildschirm nicht erreichbar",
+    "vmFailed": "VM konnte nicht geändert werden",
+    "browserFailed": "Browser konnte nicht starten",
+    "controlHintMac": "Steuerung aktiv: tippen zum Klicken, halten für Rechtsklick",
+    "controlHint": "Steuerung aktiv: tippen zum Klicken",
+    "vmIs": "{{name}} ist {{state}}",
+    "startVm": "VM starten",
+    "stopVm": "VM stoppen",
+    "stopVmTitle": "Diese VM stoppen?",
+    "stopVmMessage": "macOS fährt herunter; Agenten, die darin arbeiten, werden unterbrochen.",
+    "phoneNotConnected": "{{name}} ist nicht verbunden",
+    "phoneConnectHint": "Schließ es an oder verbinde es per WLAN in Godmode auf deinem Computer.",
+    "browserNotRunning": "{{name}} läuft nicht",
+    "browserStartsChat": "Startet, sobald der Agent das Web braucht.",
+    "browserStartsHint": "Agenten starten ihn, wenn sie das Web brauchen. Starte ihn jetzt, um hier zuzusehen.",
+    "startBrowser": "Browser starten",
+    "waitingBrowser": "Warte auf den Browser. Er erscheint hier, sobald ein Agent ihn nutzt.",
+    "waitingPicture": "Warte auf das Bild…",
+    "typePlaceholder": "In den Bildschirm tippen",
+    "enter": "Enter",
+    "inControl": "Du steuerst",
+    "takeControl": "Steuern",
+    "type": "Tippen",
+    "scrollUp": "Nach oben scrollen",
+    "scrollDown": "Nach unten scrollen",
+    "tapHintMac": "Tippen zum Klicken, halten für Rechtsklick",
+    "tapHint": "Tipp ins Bild, um dort zu klicken",
+    "keys": {
+      "escape": "Escape",
+      "tab": "Tab",
+      "delete": "Löschen",
+      "left": "Pfeil links",
+      "up": "Pfeil hoch",
+      "down": "Pfeil runter",
+      "right": "Pfeil rechts",
+      "spotlight": "Spotlight",
+      "switchApps": "App wechseln",
+      "closeWindow": "Fenster schließen",
+      "quitApp": "App beenden",
+      "enter": "Enter"
+    }
+  },
+  "activity": {
+    "title": "Aktivität",
+    "loadFailed": "Aktivität konnte nicht geladen werden",
+    "noMatch": "Keine Läufe passen zu diesen Filtern",
+    "clearFilters": "Filter zurücksetzen",
+    "emptyTitle": "Noch keine Aktivität",
+    "emptyBody": "Wenn deine Agenten chatten, Automationen ausführen oder Arbeit delegieren, erscheint hier jeder Lauf — live.",
+    "workingNow": "Arbeiten gerade",
+    "doneToday": "Heute erledigt",
+    "failedToday": "Heute fehlgeschlagen",
+    "filters": {
+      "all": "Alle",
+      "running": "Läuft",
+      "paused": "Pausiert",
+      "succeeded": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "cancelled": "Abgebrochen",
+      "queued": "In Warteschlange"
+    }
+  },
+  "thread": {
+    "fallbackTitle": "Chat",
+    "theAgent": "Der Agent",
+    "loading": "Chat wird geladen",
+    "openFailed": "Chat konnte nicht geöffnet werden",
+    "notSent": "Nachricht nicht gesendet",
+    "stopFailed": "Stoppen fehlgeschlagen",
+    "continueFailed": "Fortsetzen fehlgeschlagen",
+    "retryFailed": "Konnte nicht wieder aufgenommen werden",
+    "changeFailed": "Chat konnte nicht geändert werden",
+    "pauseFailed": "Pausieren fehlgeschlagen",
+    "deleteTitle": "Diesen Chat löschen?",
+    "deleteMessage": "Er wird auch auf deinem Computer entfernt.",
+    "deleteFailed": "Chat konnte nicht gelöscht werden",
+    "rename": "Chat umbenennen",
+    "renameLabel": "Chat-Titel",
+    "watchScreen": "Bildschirm des Agenten ansehen",
+    "usageLimit": "Nutzungslimit",
+    "menu": {
+      "pause": "Pausieren",
+      "pin": "Anheften",
+      "unpin": "Lösen",
+      "archive": "Archivieren",
+      "unarchive": "Wiederherstellen"
+    },
+    "send": {
+      "answer": "Antwort senden",
+      "andContinue": "Senden und fortsetzen",
+      "queue": "Einreihen"
+    },
+    "placeholder": {
+      "message": "Nachricht",
+      "answer": "{{name}} antworten",
+      "howToGoOn": "Sag {{name}}, wie es weitergeht",
+      "afterReset": "Nachricht an {{name}} — geht nach dem Reset mit",
+      "whenContinues": "Nachricht an {{name}} — geht beim Fortsetzen mit",
+      "queue": "Nachricht für {{name}} einreihen",
+      "default": "Nachricht an {{name}} oder / für Befehle"
+    },
+    "earlier": {
+      "title": "Frühere Nachrichten",
+      "load": "Frühere Nachrichten laden",
+      "loading": "Frühere Nachrichten werden geladen",
+      "failed": "Frühere Nachrichten nicht geladen. Tippen zum Wiederholen"
+    },
+    "followup": {
+      "continues": "Geht {{when}} weiter",
+      "a11y": "{{name}} macht {{when}} weiter. Ändern",
+      "change": "Ändern",
+      "continueNow": "Jetzt fortsetzen",
+      "continueNowFailed": "Konnte nicht fortgesetzt werden",
+      "inAnHour": "In einer Stunde",
+      "tomorrow": "Morgen um 09:00",
+      "cancel": "Follow-up abbrechen",
+      "cancelFailed": "Follow-up konnte nicht abgebrochen werden",
+      "moveFailed": "Follow-up konnte nicht verschoben werden",
+      "updateDesktop": "Aktualisiere Godmode auf deinem Computer, um Follow-ups vom Handy aus zu ändern."
+    },
+    "forYou": {
+      "answer": "Wartet auf deine Antwort: ",
+      "you": "Wartet auf dich: ",
+      "more_one": " und {{count}} weiteres",
+      "more_other": " und {{count}} weitere"
+    },
+    "asking": {
+      "approval": "{{name}} braucht dein OK — antworte unten",
+      "question": "{{name}} wartet auf deine Antwort — antworte unten"
+    },
+    "paused": {
+      "limit": "{{limit}} von Claude erreicht",
+      "limitAuto": "{{limit}} von Claude erreicht — geht nach dem Reset von selbst weiter",
+      "user": "Pausiert — macht dort weiter, wo es aufgehört hat",
+      "tryNow": "Jetzt versuchen"
+    },
+    "longChat": {
+      "title": "Dieser Chat wird lang",
+      "titlePct": "Dieser Chat wird lang · {{pct}} %",
+      "compress": "Komprimieren",
+      "compressA11y": "Chat komprimieren",
+      "hide": "Ausblenden"
+    },
+    "ended": {
+      "stopped": "Gestoppt, bevor es fertig war",
+      "failed": "Hat nicht geklappt"
+    }
+  }
+}

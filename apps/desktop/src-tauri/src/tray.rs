@@ -17,12 +17,24 @@ pub fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
-    let open = MenuItem::with_id(app, "open", "Open Godmode", true, None::<&str>)?;
-    let new_chat = MenuItem::with_id(app, "new-chat", "New chat", true, None::<&str>)?;
+fn build_menu<R: Runtime>(app: &AppHandle<R>, open: &str, new_chat: &str, quit: &str) -> tauri::Result<Menu<R>> {
+    let open = MenuItem::with_id(app, "open", open, true, None::<&str>)?;
+    let new_chat = MenuItem::with_id(app, "new-chat", new_chat, true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Godmode", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &new_chat, &separator, &quit])?;
+    let quit = MenuItem::with_id(app, "quit", quit, true, None::<&str>)?;
+    Menu::with_items(app, &[&open, &new_chat, &separator, &quit])
+}
+
+/// The app sends the tray labels in its language once it knows it.
+#[tauri::command]
+pub fn set_tray_labels<R: Runtime>(app: AppHandle<R>, open: String, new_chat: String, quit: String) -> Result<(), String> {
+    let tray = app.tray_by_id("main").ok_or("no tray")?;
+    let menu = build_menu(&app, &open, &new_chat, &quit).map_err(|e| e.to_string())?;
+    tray.set_menu(Some(menu)).map_err(|e| e.to_string())
+}
+
+pub fn create<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    let menu = build_menu(app, "Open Godmode", "New chat", "Quit Godmode")?;
 
     // macOS: monochrome template image that adapts to the menu bar; elsewhere the full-colour app icon.
     #[cfg(target_os = "macos")]

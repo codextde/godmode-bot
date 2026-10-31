@@ -1,4 +1,5 @@
 import { router } from "expo-router";
+import { useTranslation } from "react-i18next";
 import { Pressable, StyleSheet } from "react-native";
 import { Icon } from "./icon";
 import { T, tap } from "./ui";
@@ -8,13 +9,14 @@ import { radius, useColors } from "@/lib/theme";
 /** The workspace (and project) everything on the phone is scoped to; tap to switch. Hidden until the computer has workspaces. */
 export function WorkspaceChip() {
   const c = useColors();
+  const { t } = useTranslation("components");
   const { workspace, project, workspaces } = useWorkspace();
   if (!workspaces.length) return null;
-  const name = workspace?.name ?? "All workspaces";
+  const name = workspace?.name ?? t("workspaceChip.allWorkspaces");
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${project ? `Project: ${project.name} in ${name}` : `Workspace: ${name}`}. Switch`}
+      accessibilityLabel={project ? t("workspaceChip.projectLabel", { project: project.name, workspace: name }) : t("workspaceChip.workspaceLabel", { workspace: name })}
       hitSlop={6}
       onPress={() => {
         tap();

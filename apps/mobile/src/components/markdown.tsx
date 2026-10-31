@@ -4,6 +4,7 @@ import { UITextView as Text } from "@bsky.app/react-native-uitextview";
 import { Linking, ScrollView, StyleSheet, View } from "react-native";
 import { TASK_ATTACHMENT_PATH } from "@godmode/shared";
 import { RemoteImage } from "./remote-image";
+import { t as translate } from "@/lib/i18n";
 import { alpha, fonts, radius, space, type, useColors, type Colors } from "@/lib/theme";
 
 /** Agent answers: Markdown rendered with native text (paragraphs, lists, code, quotes, tables, links, task pictures); every block is selectable by range on iOS. */
@@ -65,7 +66,7 @@ function block(t: Token, key: number, c: Colors, color: string): ReactNode {
             <View key={i} style={styles.listItem}>
               {item.task ? (
                 <View
-                  accessibilityLabel={item.checked ? "Done" : "Not done"}
+                  accessibilityLabel={item.checked ? translate("components:markdown.done") : translate("components:markdown.notDone")}
                   style={[styles.check, item.checked ? { backgroundColor: c.text, borderColor: c.text } : { borderColor: alpha(c.textMuted, 0.6) }]}
                 >
                   {item.checked ? <View style={[styles.tick, { borderColor: c.background }]} /> : null}

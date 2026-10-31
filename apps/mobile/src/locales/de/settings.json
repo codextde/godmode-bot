@@ -1,0 +1,494 @@
+{
+  "overview": {
+    "status": {
+      "connected": "Verbunden",
+      "connecting": "Verbinde…",
+      "outOfReach": "Nicht erreichbar",
+      "away": "Abwesend"
+    },
+    "pick": {
+      "thatComputer": "Dieser Computer",
+      "title": "{{name}} antwortet gerade nicht",
+      "body": "Dieses Handy wechselt dorthin, sobald er wieder da ist."
+    },
+    "lock": {
+      "turnOn": "Face ID für Godmode einschalten",
+      "turnOff": "Face ID für Godmode ausschalten"
+    },
+    "disconnect": {
+      "title": "Von {{name}} trennen?",
+      "body": "Dieses Handy vergisst seinen Schlüssel. Scanne einen neuen Code, um dich wieder zu verbinden.",
+      "confirm": "Trennen",
+      "button": "Dieses Handy trennen"
+    },
+    "computers": {
+      "title": "Dieses Handy nutzt",
+      "footer": "Ist der gewählte Computer nicht erreichbar, nutzt dieses Handy einen anderen aus der Gruppe und wechselt zurück, sobald er wieder antwortet.",
+      "automatic": "Automatisch",
+      "thePrimary": "Den Hauptcomputer, {{name}}",
+      "whoAnswers": "Den Computer, der antwortet",
+      "primary": "Hauptcomputer",
+      "secondary": "Zweitcomputer"
+    },
+    "preferences": {
+      "title": "Einstellungen",
+      "footer": "Änderungen gelten sofort auf deinem Computer. Laufende Chats übernehmen sie mit der nächsten Nachricht.",
+      "yourName": "Dein Name",
+      "addName": "Namen hinzufügen"
+    },
+    "theme": {
+      "title": "Erscheinungsbild",
+      "detail": "System folgt der Einstellung dieses Handys.",
+      "light": "Hell",
+      "dark": "Dunkel"
+    },
+    "language": {
+      "title": "Sprache",
+      "detail": "System folgt der Sprache dieses Handys. Gilt auch auf deinem Computer."
+    },
+    "mode": {
+      "title": "Oberfläche",
+      "detail": "{{blurb}} Gilt auch auf deinem Computer.",
+      "easy": "Einfach",
+      "pro": "Profi",
+      "easyBlurb": "Klare Worte und nur, was du im Alltag brauchst. Alles andere ist einen Klick entfernt.",
+      "proBlurb": "Jedes Tool, jede Einstellung, jedes Detail im Blick: Modelle, Läufe, Maschinen, Logs."
+    },
+    "links": {
+      "ai": "KI & Claude",
+      "instructions": "Anweisungen",
+      "instructionsDetail": "Regeln für jeden Agenten, Workspace und jedes Projekt",
+      "browser": "Browser",
+      "browserDetail": "Profile, Hintergrund, Live-Ansicht",
+      "computer": "Computer",
+      "computerDetail": "Computersteuerung und virtuelle Maschinen",
+      "memory": "Gedächtnis",
+      "memoryDetail": "Lernen, Träumen, Pflege"
+    },
+    "team": {
+      "title": "Dein Team",
+      "workspaces": "Workspaces",
+      "projects_one": "{{count}} Projekt",
+      "projects_other": "{{count}} Projekte",
+      "noneYet": "Noch keine"
+    },
+    "privacy": {
+      "title": "Daten & Datenschutz",
+      "footer": "Logins, 2FA-Codes, Backups und der Rest der Sicherheit bleiben auf deinem Computer.",
+      "faceId": "Face ID verlangen",
+      "faceIdDetail": "Verbirgt Godmode im App-Umschalter und fragt nach 30 Sekunden Abwesenheit.",
+      "security": "Sicherheit",
+      "onComputer": "Auf deinem Computer"
+    },
+    "app": {
+      "title": "App",
+      "footer": "Entferne dieses Handy jederzeit auf deinem Computer unter Einstellungen → Handy.",
+      "thisPhone": "Dieses Handy",
+      "version": "Godmode für {{platform}} {{version}}"
+    }
+  },
+  "ai": {
+    "defaultModel": {
+      "title": "Standardmodell",
+      "footer": "Agenten ohne eigenes Modell nutzen dieses. Ändere es pro Agent oder pro Chat im Eingabefeld.",
+      "model": "Modell",
+      "effort": "Aufwand",
+      "effortDetail": "Wie lange Claude nachdenkt, bevor es handelt.",
+      "fallback": "Ausweichmodell",
+      "fallbackDetail": "Wird genutzt, wenn das Standardmodell überlastet ist."
+    },
+    "work": {
+      "title": "Arbeit",
+      "footer": "Läufe über dem Limit warten in der Schlange. Ein Lauf, der länger als das Zeitlimit dauert, wird gestoppt.",
+      "parallel": "Parallele Läufe",
+      "timeout": "Zeitlimit pro Lauf",
+      "continueLimit": "Nach Nutzungslimits weitermachen",
+      "continueLimitDetail": "Ein Lauf, der Claudes Limit erreicht hat, macht von selbst weiter, sobald es zurückgesetzt ist.",
+      "resume": "Unterbrochene Arbeit fortsetzen",
+      "resumeDetail": "Arbeit, die durch einen Neustart, eine verlorene Internetverbindung oder das Ende eines Zugs unterbrochen wurde, geht von selbst weiter, sobald Godmode und die Verbindung wieder da sind."
+    },
+    "compact": {
+      "title": "Lange Chats",
+      "footer": "Ein Chat, der so viel vom Gedächtnis des Modells füllt, wird von selbst zusammengefasst und geht von der Zusammenfassung aus weiter. Früher hält jeden Schritt schneller und günstiger, später behält mehr Details. Komprimiere jeden Chat von Hand mit dem Ring neben dem Modell.",
+      "auto": "Von selbst komprimieren",
+      "at": "Bei {{percent}} %",
+      "atDefault": "Bei {{percent}} % (Standard)",
+      "nearlyFull": "Wenn fast voll",
+      "never": "Nie von selbst"
+    },
+    "watchdog": {
+      "title": "Wächter",
+      "footer": "Stoppt Läufe, die hängen oder sich im Kreis drehen, damit sie keine Zeit und Tokens verbrennen.",
+      "stalled": "Hängt nach",
+      "repeated": "Gleicher Schritt wiederholt"
+    }
+  },
+  "capabilities": {
+    "title": "Browser & Computer",
+    "liveView": "Live-Ansicht",
+    "browser": {
+      "title": "Browser",
+      "footer": "Agenten surfen in eigenen Profilen, Godmode füllt deine gespeicherten Logins aus.",
+      "enabled": "Browser für Agenten",
+      "headless": "Im Hintergrund ausführen",
+      "headlessDetail": "Auf deinem Computer öffnet sich kein Browserfenster.",
+      "stealth": "Wie ein Mensch wirken",
+      "stealthDetail": "Verbirgt Automatisierungssignale, damit Seiten Agenten nicht blockieren.",
+      "mute": "Ton stummschalten",
+      "liveViewDetail": "Sieh dem Browser zu, während ein Agent arbeitet.",
+      "keepAlive": "Inaktiven Browser schließen nach"
+    },
+    "computer": {
+      "title": "Computersteuerung",
+      "footer": "Agenten sehen und steuern nur einen Bildschirm, ein Fenster oder einen Tab, den du in einem Chat mit ihnen teilst.",
+      "foreground": "Fenster nach vorne holen",
+      "foregroundDetail": "Kurz, wenn eine Aktion im Hintergrund nicht ankommt.",
+      "cursor": "Cursor des Agenten zeigen",
+      "liveViewSpeed": "Tempo der Live-Ansicht"
+    },
+    "vm": {
+      "title": "Virtuelle Maschinen",
+      "footer": "Agenten mit einer VM arbeiten darin statt auf diesem Computer.",
+      "onQuit": "Wenn Godmode beendet wird",
+      "suspend": "Pausieren",
+      "suspendDetail": "Machen dort weiter, wo sie aufgehört haben.",
+      "stop": "Herunterfahren",
+      "keep": "Weiterlaufen lassen",
+      "idleStop": "Inaktive VMs stoppen nach"
+    }
+  },
+  "instructions": {
+    "intro": "Regeln, die deine Agenten bei jedem Lauf befolgen. Leg sie einmal für alle fest und verfeinere sie dann pro Workspace, Projekt oder Agent.",
+    "layers": {
+      "everyone": "Alle",
+      "workspace": "Workspace",
+      "project": "Projekt",
+      "agent": "Agent",
+      "chat": "Chat"
+    },
+    "precedence": "Alle fließen in jeden Lauf ein. Widersprechen sich zwei, gewinnt die spezifischere.",
+    "everyAgent": "Jeder Agent",
+    "everyAgentLabel": "Anweisungen für jeden Agenten",
+    "example": "1. Committe nur als ich, füge nie einen KI-Co-Autor hinzu.\n2. Halte Code-Kommentare minimal.\n3. Merge main in deinen Branch, bevor du einen Pull Request öffnest.\n4. Hänge bei UI-Änderungen Screenshots an.",
+    "loadError": "Die Anweisungen konnten nicht geladen werden.",
+    "lines_one": "{{count}} Zeile",
+    "lines_other": "{{count}} Zeilen",
+    "workspaces": {
+      "title": "Workspaces und Projekte",
+      "footer": "Agenten-Kontext: Jeder Agent, der im Workspace oder Projekt arbeitet, bekommt ihn.",
+      "noContext": "Noch kein Agenten-Kontext",
+      "noProjectContext": "Noch kein Projektkontext",
+      "createDetail": "Gib einem Kunden oder Produkt eigene Agenten und eigenen Kontext."
+    },
+    "agents": {
+      "footer": "Die eigene Rolle und die festen Aufträge jedes Agenten.",
+      "none": "Arbeitet nur mit deinen Nachrichten"
+    },
+    "tip": "Nur ein Chat? Schreib es in den Chat. Es gilt nur dort und hat Vorrang vor allem oben."
+  },
+  "memory": {
+    "schedule": {
+      "night3": "Jede Nacht um 3:00 Uhr",
+      "night1": "Jede Nacht um 1:00 Uhr",
+      "twiceDaily": "Zweimal täglich",
+      "sundays": "Sonntags um 3:00 Uhr",
+      "custom": "Eigener ({{cron}})"
+    },
+    "sameAsAgent": "Wie der Agent",
+    "memory": {
+      "footer": "Jeder Agent speichert, was er lernt, in einem eigenen Repository auf deinem Computer.",
+      "inject": "Jeden Chat mit Gedächtnis starten",
+      "injectDetail": "Lädt das Gedächtnis des Agenten in jeden neuen Chat.",
+      "reflect": "Nach jedem Lauf lernen",
+      "reflectDetail": "Agenten notieren am Ende eines Laufs, was sie gelernt haben.",
+      "autoCommit": "Änderungen mit git speichern"
+    },
+    "dreaming": {
+      "title": "Träumen",
+      "footer": "In Ruhephasen sehen Agenten die letzten Chats durch und räumen Gedächtnis und Workspace auf: Duplikate zusammenführen, Widersprüche klären, Vergangenes datieren, Dateien sortieren — und das Gedächtnis kurz genug halten, um es in jeden Chat zu laden.",
+      "when": "Wann",
+      "tidy": "Workspace aufräumen",
+      "tidyDetail": "Sortiert Dateien in Ordner und entfernt Überreste.",
+      "offers": "Anbieten, dir Arbeit abzunehmen",
+      "offersDetail": "Dein Hauptagent bietet auf der Startseite Arbeit an, die ihm aufgefallen ist.",
+      "size": "Gedächtnisgröße",
+      "chars_one": "{{formatted}} Zeichen",
+      "chars_other": "{{formatted}} Zeichen",
+      "minExchanges": "Nötige neue Wortwechsel",
+      "refresh": "Datiertes Gedächtnis auffrischen",
+      "daily": "Täglich",
+      "days_one": "{{count}} Tag",
+      "days_other": "{{count}} Tage"
+    },
+    "upkeep": {
+      "title": "Pflege",
+      "footer": "Godmode kümmert sich um sich selbst: Reparaturen, Updates seiner Tools und Aufräumen alter Dateien.",
+      "autoFix": "Probleme selbst beheben",
+      "autoUpdate": "Tools aktualisieren",
+      "autoCleanup": "Alte Dateien aufräumen"
+    },
+    "desktop": {
+      "title": "Auf deinem Computer",
+      "notifications": "Desktop-Mitteilungen"
+    }
+  },
+  "agents": {
+    "global": "Global",
+    "new": "Neuer Agent",
+    "heartbeat": "Heartbeat"
+  },
+  "agent": {
+    "notFound": {
+      "title": "Agent nicht gefunden",
+      "body": "Er wurde vielleicht auf deinem Computer gelöscht."
+    },
+    "role": "Rolle",
+    "rolePlaceholder": "Rolle hinzufügen, z. B. Buchhalter",
+    "builtIn": "Eingebaut",
+    "active": "Aktiv",
+    "activeOn": "Übernimmt Chats, Aufgaben und Automationen.",
+    "activeOff": "Tut nichts, bis du ihn einschaltest.",
+    "instructionsLabel": "Anweisungen für {{name}}",
+    "instructionsPlaceholder": "Was er tut, wie, und wann er dich fragt.\nZum Beispiel: Prüfe jeden Morgen meinen Posteingang und entwirf Antworten an Kunden.",
+    "about": "Über",
+    "descriptionLabel": "Beschreibung von {{name}}",
+    "descriptionPlaceholder": "Ein, zwei Zeilen, die deine anderen Agenten sehen, wenn sie Arbeit übergeben.",
+    "descriptionHint": "Sehen die Kollegen",
+    "memoryFooter": "Was der Agent gelernt hat und in jeden Chat lädt. Er aktualisiert das selbst; deine Änderungen lenken, was er sich merkt.",
+    "personality": {
+      "title": "Persönlichkeit",
+      "tone": "Ton",
+      "none": "Kein bestimmter Ton",
+      "custom": "Eigener"
+    },
+    "thinking": {
+      "title": "Denken",
+      "footer": "Standard folgt KI & Claude in den Einstellungen.",
+      "default": "Standard",
+      "special": "{{model}} (Spezialaufgaben)"
+    },
+    "project": "Projekt",
+    "hours": {
+      "any": "Jederzeit",
+      "work": "Arbeitszeit, 9 bis 18 Uhr",
+      "day": "Tagsüber, 8 bis 22 Uhr",
+      "night": "Nachts, 22 bis 7 Uhr",
+      "custom": "{{from}} bis {{to}} Uhr"
+    },
+    "heartbeat": {
+      "footer": "Wacht von selbst auf, um seine Aufgaben voranzubringen und seine Checkliste abzuarbeiten.",
+      "every": "Alle",
+      "weekdays": "Nur werktags",
+      "checklist": "Checkliste",
+      "checklistLabel": "Heartbeat-Checkliste",
+      "checklistPlaceholder": "Feste Pflichten für jeden Heartbeat.\nZum Beispiel: Prüfe Stripe auf unbezahlte Bestellungen."
+    }
+  },
+  "workspaces": {
+    "new": "Neuer Workspace",
+    "create": "Workspace erstellen",
+    "footer": "Ein Workspace gibt einem Kunden oder Produkt eigene Agenten, Kontext, Repositories und Projekte.",
+    "agents_one": "{{count}} Agent",
+    "agents_other": "{{count}} Agenten",
+    "repositories_one": "{{count}} Repository",
+    "repositories_other": "{{count}} Repositories",
+    "empty": "Leer",
+    "none": {
+      "title": "Noch keine Workspaces",
+      "body": "Gib einem Kunden oder Produkt eigene Agenten, Kontext und Repositories."
+    }
+  },
+  "workspace": {
+    "title": "Workspace",
+    "notFound": "Workspace nicht gefunden",
+    "deleteDialog": {
+      "title": "{{name}} löschen?",
+      "body": "Seine Repositories und sein Kontext werden mitgelöscht. Das lässt sich nicht rückgängig machen."
+    },
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "notEmpty": "In {{name}} sind noch Projekte, Agenten, Aufgaben, Logins oder anderes. Verschiebe oder lösche sie zuerst oder lösche den Workspace auf deinem Computer.",
+    "context": "Agenten-Kontext",
+    "contextLabel": "Agenten-Kontext für {{name}}",
+    "contextPlaceholder": "Wer der Kunde ist, was das Produkt macht, Links, Ton, Regeln.\nJeder Agent in diesem Workspace bekommt es bei jedem Lauf.",
+    "projects": "Projekte",
+    "projectsFooter": "Projekte ergänzen den Workspace um eigenen Kontext und eigene Repositories.",
+    "newProject": "Neues Projekt",
+    "sourcesFooter": "Jeder Agent im Workspace arbeitet damit. Aufgaben bekommen einen eigenen Branch eines Repositorys. Ordner deines Computers fügst du dort hinzu.",
+    "behavior": "Verhalten",
+    "autoMerge": "Pull Requests sofort mergen",
+    "autoMergeDetail": "Eine Aufgabe ist erledigt, wenn ihr Agent liefert, ohne deine Prüfung.",
+    "browserProfile": "Browserprofil",
+    "deleteFooter": "Hier lässt sich nur ein leerer Workspace löschen: keine Projekte, Agenten, Aufgaben oder Logins. Seine Chats wandern in alle Workspaces.",
+    "delete": "Workspace löschen"
+  },
+  "project": {
+    "notFound": "Projekt nicht gefunden",
+    "deleteBody": "Sein Kontext und seine Repositories werden mitgelöscht. Chats, Aufgaben und Agenten bleiben im Workspace.",
+    "workspaceDetail": "Workspace: sein Kontext kommt zuerst",
+    "context": "Projektkontext",
+    "contextLabel": "Kontext für {{name}}",
+    "contextPlaceholder": "Ziele, Umfang, Konventionen und Links für dieses Projekt.\nWird bei jedem Lauf zum Kontext des Workspace hinzugefügt.",
+    "agents": "Agenten im Projekt",
+    "agentsFooter": "Agenten arbeiten standardmäßig an diesem Projekt. Chats und Aufgaben können ein anderes wählen.",
+    "sourcesFooter": "Zusätzlich zu denen des Workspace. Ordner deines Computers fügst du dort hinzu.",
+    "workspaceProfile": "Das des Workspace",
+    "delete": "Projekt löschen"
+  },
+  "new": {
+    "workspace": {
+      "title": "Neuer Workspace",
+      "name": "Kunde, Firma oder Produkt",
+      "context": "Agenten-Kontext",
+      "placeholder": "Für wen, was er macht, Links, Ton und Regeln. Jeder Agent im Workspace bekommt es.",
+      "create": "Workspace erstellen"
+    },
+    "project": {
+      "title": "Neues Projekt",
+      "name": "Projektname",
+      "context": "Projektkontext",
+      "placeholder": "Ziele, Umfang und Konventionen. Wird zum Kontext des Workspace hinzugefügt.",
+      "create": "Projekt erstellen"
+    },
+    "agent": {
+      "title": "Neuer Agent",
+      "name": "Name, z. B. Posteingangs-Hüter",
+      "context": "Anweisungen",
+      "placeholder": "Was er tut, wie, und wann er dich fragt.",
+      "create": "Agent erstellen"
+    },
+    "createFailed": "Erstellen fehlgeschlagen",
+    "from": "Aus „{{name}}“",
+    "fromScratch": "Ganz neu",
+    "changeRole": "Rolle ändern",
+    "inWorkspace": "In {{icon}} {{name}}",
+    "pickPicture": "Bild wählen",
+    "rolePlaceholder": "Rolle, z. B. Buchhalter (optional)",
+    "contextPlaceholder": "{{label}} (optional). {{hint}}",
+    "worksIn": "Arbeitet in",
+    "everyWorkspace": "Jedem Workspace",
+    "getsContext": "Er bekommt Kontext, Repositories und Logins von {{name}}.",
+    "anyWorkspace": "Er kann in jedem Workspace arbeiten, in dem du ihn startest.",
+    "routineHint": "Seine Automation „{{name}}“ ({{schedule}}) kannst du auf deinem Computer hinzufügen.",
+    "setupHint": "Logins, Tools und Ordner für neue Agenten legst du auf deinem Computer fest.",
+    "categories": {
+      "leadership": "Führung",
+      "finance": "Finanzen",
+      "legal": "Recht",
+      "people": "Personal",
+      "marketing": "Marketing",
+      "sales": "Vertrieb",
+      "customer": "Kundenservice",
+      "ecommerce": "E-Commerce",
+      "product": "Produkt & Design",
+      "engineering": "Technik & IT",
+      "data": "Daten",
+      "operations": "Betrieb"
+    },
+    "categoryTitles": {
+      "leadership": "Führung & Strategie",
+      "finance": "Finanzen & Buchhaltung",
+      "legal": "Recht & Compliance",
+      "people": "Personal & HR",
+      "marketing": "Marketing",
+      "sales": "Vertrieb",
+      "customer": "Kundenservice",
+      "ecommerce": "E-Commerce",
+      "product": "Produkt & Design",
+      "engineering": "Technik & IT",
+      "data": "Daten & Analyse",
+      "operations": "Betrieb & Einkauf"
+    },
+    "picker": {
+      "scratch": "Ganz neu anfangen",
+      "hire": "Oder eine Rolle einstellen",
+      "intro": "Ein Agent pro Job oder ein Allrounder, der eine ganze Abteilung führt.",
+      "search": "Rollen suchen",
+      "searchPlaceholder": "Rollen suchen…",
+      "clearSearch": "Suche löschen",
+      "allInOne": "Allrounder",
+      "loadError": "Rollen sind gerade nicht verfügbar ({{error}}). Fang stattdessen ganz neu an.",
+      "noMatch": "Keine Rolle passt zu „{{query}}“. Fang ganz neu an und beschreibe den Job in den Anweisungen.",
+      "none": "Hier gibt es noch keine Rollen.",
+      "leads": "Leitet ein Team",
+      "allInOneJobs_one": "Allrounder · {{count}} Job",
+      "allInOneJobs_other": "Allrounder · {{count}} Jobs"
+    }
+  },
+  "model": {
+    "switchFailed": "Modell konnte nicht gewechselt werden",
+    "appliesNext": "Gilt ab der nächsten Nachricht in diesem Chat.",
+    "forNewChat": "Für den Chat, den du gleich startest.",
+    "older": "Ältere Modelle",
+    "special": "Spezialaufgaben",
+    "loading": "Frage Claude Code nach seinen Modellen…",
+    "noEffort": "Der Aufwand lässt sich für {{model}} nicht einstellen.",
+    "noUltracode": "Ultracode ist für {{model}} nicht verfügbar.",
+    "builtIn": "Eingebaute Liste",
+    "useAgentDefault": "Standard von {{name}} nutzen",
+    "useDefault": "Standard des Agenten nutzen",
+    "faster": "Schneller",
+    "deeper": "Gründlicher",
+    "effortHint": {
+      "low": "Schnelle Antworten mit wenig Überlegung.",
+      "medium": "Ausgewogen zwischen Tempo und Tiefe.",
+      "high": "Denkt Probleme durch, bevor es handelt.",
+      "xhigh": "Extra Überlegung für schwierige, mehrstufige Arbeit.",
+      "max": "Denkt so lange wie nötig. Am langsamsten, die meisten Tokens."
+    }
+  },
+  "goal": {
+    "saveFailed": "Ziel konnte nicht gespeichert werden",
+    "deleteFailed": "Ziel konnte nicht gelöscht werden",
+    "loading": "Lade das Ziel…",
+    "loadFailed": "Ziel konnte nicht geladen werden",
+    "gone": {
+      "title": "Dieses Ziel gibt es nicht mehr",
+      "body": "Es wurde auf deinem Computer gelöscht."
+    },
+    "deleteDialog": {
+      "title": "„{{title}}“ löschen?",
+      "ticketsStay_one": "Seine Aufgabe bleibt, dient dann aber keinem Ziel. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+      "ticketsStay_other": "Seine {{count}} Aufgaben bleiben, dienen dann aber keinem Ziel. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+      "noTickets": "Noch dient ihm keine Aufgabe. Um es festzuhalten, markiere es lieber als erreicht oder verwirf es.",
+      "keep": "Behalten"
+    },
+    "edit": "Ziel bearbeiten",
+    "new": "Neues Ziel",
+    "add": "Hinzufügen",
+    "intro": "Wofür die Arbeit ist. Aufgaben, die ihm dienen, sagen ihrem Agenten, warum.",
+    "title": "Ziel",
+    "titlePlaceholder": "Die neuen Preise starten",
+    "why": "Warum es wichtig ist",
+    "whyPlaceholder": "Warum es wichtig ist oder woran man erkennt, dass es erreicht ist",
+    "note": "Die Agenten bekommen das mit jeder Aufgabe, die ihm dient.",
+    "progress_one": "{{done}} von {{count}} Aufgabe erledigt",
+    "progress_other": "{{done}} von {{count}} Aufgaben erledigt",
+    "noTickets": "Noch dient ihm keine Aufgabe.",
+    "status": {
+      "title": "Status",
+      "active": "Aktiv",
+      "achieved": "Erreicht",
+      "dropped": "Verworfen"
+    },
+    "delete": "Ziel löschen",
+    "quick": {
+      "week": "In einer Woche",
+      "month": "Monatsende",
+      "quarter": "Quartalsende"
+    },
+    "datePattern": "d. MMM yyyy",
+    "targetDate": "Zieldatum",
+    "changeDate": "Zieldatum {{date}}. Ändern",
+    "pickTargetDate": "Zieldatum wählen",
+    "pickDate": "Datum wählen",
+    "removeDate": "Zieldatum entfernen"
+  },
+  "pickWorkspace": {
+    "intro": "Chats und Aufgaben, die du auf diesem Handy startest, landen im gewählten Workspace oder Projekt.",
+    "all": "Alle Workspaces",
+    "allBody": "Alles, aus jedem Workspace",
+    "manage": "Workspaces verwalten",
+    "hideProjects": "Projekte von {{name}} ausblenden",
+    "showProjects": "Projekte von {{name}} einblenden"
+  }
+}

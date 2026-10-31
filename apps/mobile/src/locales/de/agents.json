@@ -1,0 +1,63 @@
+{
+  "detail": {
+    "loading": "Agent wird geladen…",
+    "loadFailed": "Agent konnte nicht geladen werden",
+    "notFound": "Agent nicht gefunden",
+    "maybeDeleted": "Er wurde vielleicht gelöscht.",
+    "switchOnFailed": "Konnte nicht eingeschaltet werden",
+    "defaultModel": "Standardmodell",
+    "reportsToYou": "Berichtet an dich",
+    "reportsTo": "Berichtet an {{name}}",
+    "leads_one": "Leitet {{count}}",
+    "leads_other": "Leitet {{count}}",
+    "global": "Global",
+    "effort": "Aufwand: {{effort}}",
+    "setUp": "{{name}} einrichten",
+    "builtIn": "Eingebaut",
+    "runTask": "Aufgabe starten",
+    "chat": "Chat",
+    "automations": "Automationen",
+    "newAutomation": "Neue Automation",
+    "noAutomations": "Noch keine Automationen. Lass {{name}} selbstständig loslegen — auch wenn du nicht da bist.",
+    "recentChats": "Letzte Chats",
+    "noChats": "Noch keine Chats mit {{name}}."
+  },
+  "plate": {
+    "title": "Auf dem Tisch",
+    "aChat": "Ein Chat",
+    "empty": "{{name}} hat gerade nichts auf dem Tisch.",
+    "switchedOff": "{{name}} ist ausgeschaltet.",
+    "switchOn": "Einschalten",
+    "now": "Jetzt",
+    "working": "Arbeitet…",
+    "queued": "In Warteschlange — wartet auf einen freien Platz",
+    "waitingAnswer": "Wartet auf deine Antwort",
+    "waitingLimit": "Wartet auf {{limit}} von Claude",
+    "waitingLimitResumes": "Wartet auf {{limit}} von Claude · geht {{when}} weiter",
+    "usageLimit": "Nutzungslimit",
+    "paused": "Pausiert",
+    "tickets": "Aufgaben auf dem Board",
+    "moreOnBoard_one": "{{count}} weitere auf dem Board",
+    "moreOnBoard_other": "{{count}} weitere auf dem Board",
+    "followups": "Follow-ups",
+    "followup": "Follow-up",
+    "nextAutomations_one": "Nächste Automation",
+    "nextAutomations_other": "Nächste Automationen",
+    "andMore_one": "und {{count}} weitere",
+    "andMore_other": "und {{count}} weitere"
+  },
+  "memoryCard": {
+    "title": "Gedächtnis",
+    "empty": "Noch nichts gemerkt",
+    "size": "{{chars}} von {{target}} Zeichen",
+    "sizeUpdated": "{{chars}} von {{target}} Zeichen · aktualisiert {{ago}}",
+    "dreaming": "Träumt — räumt sein Gedächtnis auf",
+    "remembers": "Was er sich merkt"
+  },
+  "routine": {
+    "changeFailed": "Automation konnte nicht geändert werden",
+    "runFailed": "Konnte nicht gestartet werden",
+    "lastRunFailed": " · letzter Lauf fehlgeschlagen",
+    "runNow": "{{name}} jetzt ausführen"
+  }
+}

@@ -4,8 +4,8 @@ import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
-  heartbeatIntervalText,
   normalizeHeartbeat,
   type Agent,
   type AgentHeartbeat,
@@ -13,13 +13,14 @@ import {
   type HeartbeatBeat,
   type HeartbeatOutcome,
 } from "@godmode/shared";
-import { plural, upcomingWhen } from "./dream-parts";
+import { upcomingWhen } from "./dream-parts";
 import { Group, LinkRow } from "./form";
 import { Icon } from "./icon";
 import { openChat } from "./rows";
 import { Button, Card, Hairline, SectionTitle, SkeletonRows, T, tap } from "./ui";
 import { api, ApiError, errorText } from "@/lib/api";
 import { useNow } from "@/lib/hooks";
+import { dateLocale, t } from "@/lib/i18n";
 import { qk, queryClient } from "@/lib/query";
 import { alpha, radius, space, useColors, type Colors } from "@/lib/theme";
 
@@ -35,14 +36,15 @@ const openSettings = (agent: Agent) => router.push({ pathname: "/settings/agent/
  * Off, it is one quiet row into the agent's settings, where the heartbeat is set up.
  */
 export function HeartbeatCard({ agent }: { agent: Agent }) {
+  const { t } = useTranslation(["components", "common"]);
   const hb = normalizeHeartbeat(agent.heartbeat);
   if (!hb.enabled) {
     return (
-      <Group title="Heartbeat">
+      <Group title={t("heartbeatCard.title")}>
         <LinkRow
           icon="pulse"
-          title="Off"
-          detail={`Wakes ${agent.name} on its own rhythm to move its tickets forward and run its checklist.`}
+          title={t("common:status.off")}
+          detail={t("heartbeatCard.offHint", { name: agent.name })}
           onPress={() => openSettings(agent)}
         />
       </Group>
@@ -53,6 +55,7 @@ export function HeartbeatCard({ agent }: { agent: Agent }) {
 
 function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
   const c = useColors();
+  const { t } = useTranslation(["components", "common"]);
   const now = useNow(30_000);
   const [showAll, setShowAll] = useState(false);
   const q = useQuery({
@@ -77,16 +80,16 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
       queryClient.setQueryData<AgentHeartbeatState>(qk.heartbeat(agent.id), (old) => (old ? { ...old, beats: [b, ...old.beats.filter((x) => x.id !== b.id)] } : old));
       void queryClient.invalidateQueries({ queryKey: qk.heartbeat(agent.id) });
       void queryClient.invalidateQueries({ queryKey: qk.runs });
-      if (b.outcome === "failed") Alert.alert("The beat couldn't start", b.summary);
+      if (b.outcome === "failed") Alert.alert(t("heartbeatCard.beatFailed"), b.summary);
       else void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
-    onError: (err) => Alert.alert(`Couldn't wake ${agent.name}`, errorText(err)),
+    onError: (err) => Alert.alert(t("heartbeatCard.wakeFailed", { name: agent.name }), errorText(err)),
   });
 
   if (q.isError && refused(q.error)) {
     return (
-      <Group title="Heartbeat">
-        <LinkRow icon="pulse" title="On" detail={statusLine(agent, hb, undefined, now)} onPress={() => openSettings(agent)} />
+      <Group title={t("heartbeatCard.title")}>
+        <LinkRow icon="pulse" title={t("common:status.on")} detail={statusLine(agent, hb, undefined, now)} onPress={() => openSettings(agent)} />
       </Group>
     );
   }
@@ -98,7 +101,7 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
 
   return (
     <View>
-      <SectionTitle title="Heartbeat" />
+      <SectionTitle title={t("heartbeatCard.title")} />
       <Card style={{ overflow: "hidden" }}>
         <View style={styles.head}>
           <View style={styles.headRow}>
@@ -108,7 +111,7 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               {q.isError ? (
                 <T variant="footnote" color={c.danger}>
-                  {`Couldn't load the heartbeat: ${errorText(q.error)}`}
+                  {t("heartbeatCard.loadFailed", { error: errorText(q.error) })}
                 </T>
               ) : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -119,28 +122,28 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
                 </View>
               )}
               <T variant="footnote" muted>
-                Wakes {agent.name} on its own rhythm to move its tickets forward and run its checklist — and leaves a trail.
+                {t("heartbeatCard.description", { name: agent.name })}
               </T>
             </View>
           </View>
-          {q.isError ? <Button title="Try again" icon="refresh" variant="outline" onPress={() => void q.refetch()} /> : null}
-          <Button title="Wake now" icon="bolt" variant="secondary" disabled={!agent.enabled} loading={beat.isPending} onPress={() => beat.mutate()} />
+          {q.isError ? <Button title={t("common:actions.tryAgain")} icon="refresh" variant="outline" onPress={() => void q.refetch()} /> : null}
+          <Button title={t("heartbeatCard.wakeNow")} icon="bolt" variant="secondary" disabled={!agent.enabled} loading={beat.isPending} onPress={() => beat.mutate()} />
           {!agent.enabled ? (
             <T variant="caption" muted style={{ textAlign: "center" }}>
-              Switch {agent.name} on first
+              {t("heartbeatCard.switchOnFirst", { name: agent.name })}
             </T>
           ) : null}
         </View>
 
         <Hairline />
         <T variant="eyebrow" muted style={styles.eyebrow}>
-          Recent beats
+          {t("heartbeatCard.recentBeats")}
         </T>
         {q.isLoading ? (
           <SkeletonRows count={2} avatar={0} />
         ) : !items.length ? (
           <T variant="footnote" muted style={{ paddingHorizontal: space.lg, paddingBottom: space.lg, paddingTop: space.xs }}>
-            {q.data?.nextAt && agent.enabled ? `No beats yet — the first one comes ${upcomingWhen(q.data.nextAt)}.` : "No beats yet."}
+            {q.data?.nextAt && agent.enabled ? t("heartbeatCard.noBeatsFirst", { when: upcomingWhen(q.data.nextAt) }) : t("heartbeatCard.noBeats")}
           </T>
         ) : (
           <View style={{ paddingBottom: older > 0 ? 0 : space.xs }}>
@@ -161,7 +164,7 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
               >
                 <Icon name={showAll ? "up" : "down"} size={11} color={c.textMuted} weight="semibold" />
                 <T variant="footnote" muted style={{ fontWeight: "500" }}>
-                  {showAll ? "Show fewer" : `Show ${older} older`}
+                  {showAll ? t("heartbeatCard.showFewer") : t("heartbeatCard.showOlder", { count: older })}
                 </T>
               </Pressable>
             ) : null}
@@ -174,19 +177,27 @@ function HeartbeatOn({ agent, hb }: { agent: Agent; hb: AgentHeartbeat }) {
 
 /** "Beats every hour · 08:00–18:00 · weekdays · next at 10:30". */
 function statusLine(agent: Agent, hb: AgentHeartbeat, state: AgentHeartbeatState | undefined, now: number): string {
-  const parts = [`Beats ${heartbeatIntervalText(hb.intervalMinutes)}`];
+  const parts = [t("components:heartbeatCard.beats", { interval: intervalText(hb.intervalMinutes) })];
   if (hb.hours) parts.push(`${hourLabel(hb.hours.from)}–${hourLabel(hb.hours.to)}`);
-  if (hb.weekdays) parts.push("weekdays");
-  if (!agent.enabled) parts.push(`waits while ${agent.name} is switched off`);
+  if (hb.weekdays) parts.push(t("components:heartbeatCard.weekdays"));
+  if (!agent.enabled) parts.push(t("components:heartbeatCard.waitsWhileOff", { name: agent.name }));
   else if (state?.nextAt) parts.push(nextLabel(state.nextAt, now));
-  else if (state) parts.push("no hour to wake in");
+  else if (state) parts.push(t("components:heartbeatCard.noHourToWake"));
   return parts.join(" · ");
+}
+
+/** "every hour", "every 4 hours", "once a day" (shared heartbeatIntervalText) in the app language. */
+function intervalText(minutes: number): string {
+  if (minutes >= 1440) return t("components:heartbeatCard.interval.daily");
+  if (minutes === 60) return t("components:heartbeatCard.interval.hourly");
+  if (minutes > 60) return t("components:heartbeatCard.interval.hours", { count: Math.round(minutes / 60) });
+  return t("components:heartbeatCard.interval.minutes", { count: minutes });
 }
 
 function nextLabel(iso: string, now: number): string {
   const d = new Date(iso);
-  if (d.getTime() <= now) return "due now";
-  return isToday(d) ? `next at ${format(d, "HH:mm")}` : `next ${upcomingWhen(iso, now)}`;
+  if (d.getTime() <= now) return t("components:dreamParts.upcoming.dueNow");
+  return isToday(d) ? t("components:heartbeatCard.nextAt", { time: format(d, "HH:mm") }) : t("components:heartbeatCard.next", { when: upcomingWhen(iso, now) });
 }
 
 function hourLabel(hour: number): string {
@@ -197,24 +208,18 @@ function hourLabel(hour: number): string {
 function beatTime(iso: string): string {
   const d = new Date(iso);
   if (isToday(d)) return format(d, "HH:mm");
-  if (isYesterday(d)) return `Yesterday, ${format(d, "HH:mm")}`;
-  return format(d, isThisYear(d) ? "EEE, MMM d, HH:mm" : "MMM d, yyyy, HH:mm");
+  if (isYesterday(d)) return t("components:dreamParts.yesterdayAt", { time: format(d, "HH:mm") });
+  return format(d, isThisYear(d) ? t("components:dreamParts.dateTimeFormat") : t("components:dreamParts.dateTimeYearFormat"), { locale: dateLocale() });
 }
 
-const OUTCOME: Record<HeartbeatOutcome, { label: string; dot: (c: Colors) => string }> = {
-  woke: { label: "Woke", dot: (c) => c.brand },
-  quiet: { label: "Quiet", dot: (c) => alpha(c.textMuted, 0.4) },
-  skipped: { label: "Skipped", dot: (c) => c.warning },
-  failed: { label: "Failed", dot: (c) => c.danger },
+const OUTCOME: Record<HeartbeatOutcome, { dot: (c: Colors) => string }> = {
+  woke: { dot: (c) => c.brand },
+  quiet: { dot: (c) => alpha(c.textMuted, 0.4) },
+  skipped: { dot: (c) => c.warning },
+  failed: { dot: (c) => c.danger },
 };
 
-const RUN_STATE: Record<string, string> = {
-  queued: "Waiting to start",
-  running: "Working through it…",
-  paused: "Paused",
-  failed: "Failed",
-  cancelled: "Stopped",
-};
+const RUN_STATES = ["queued", "running", "paused", "failed", "cancelled"] as const;
 
 type BeatItem = { kind: "beat"; beat: HeartbeatBeat } | { kind: "quiet"; beats: HeartbeatBeat[] };
 
@@ -240,10 +245,13 @@ function plainText(md: string): string {
 
 function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
   const c = useColors();
-  const meta = OUTCOME[b.outcome] ?? OUTCOME.quiet;
-  const runState = b.runStatus && b.runStatus !== "succeeded" ? RUN_STATE[b.runStatus] : undefined;
+  const { t } = useTranslation("components");
+  const outcome = OUTCOME[b.outcome] ? b.outcome : "quiet";
+  const meta = OUTCOME[outcome];
+  const runStatus = RUN_STATES.find((s) => s === b.runStatus);
+  const runState = runStatus ? t(`heartbeatCard.runState.${runStatus}`) : undefined;
   const checklist = b.runId
-    ? ["Checklist", runState].filter(Boolean).join(" · ")
+    ? [t("heartbeatCard.checklist"), runState].filter(Boolean).join(" · ")
     : null;
   const chat = b.conversationId;
   return (
@@ -260,8 +268,8 @@ function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
             {beatTime(b.createdAt)}
           </T>
           <T variant="footnote" muted style={{ flex: 1 }} numberOfLines={1}>
-            {meta.label}
-            {b.reason === "now" ? " · Wake now" : ""}
+            {t(`heartbeatCard.outcome.${outcome}`)}
+            {b.reason === "now" ? ` · ${t("heartbeatCard.wakeNow")}` : ""}
           </T>
         </View>
         {b.summary ? (
@@ -271,7 +279,7 @@ function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
         ) : null}
         {b.changes > 0 ? (
           <T variant="caption" muted>
-            {plural(b.changes, "change")} since the beat before
+            {t("heartbeatCard.changesSince", { count: b.changes })}
           </T>
         ) : null}
         {checklist ? (
@@ -297,6 +305,7 @@ function BeatRow({ beat: b }: { beat: HeartbeatBeat }) {
 
 function QuietRow({ beats }: { beats: HeartbeatBeat[] }) {
   const c = useColors();
+  const { t } = useTranslation("components");
   const newest = new Date(beats[0]!.createdAt);
   const oldest = beats[beats.length - 1]!.createdAt;
   const sameDay = newest.toDateString() === new Date(oldest).toDateString();
@@ -305,9 +314,9 @@ function QuietRow({ beats }: { beats: HeartbeatBeat[] }) {
       <View style={[styles.beatDot, { backgroundColor: OUTCOME.quiet.dot(c) }]} />
       <T variant="footnote" muted style={{ flex: 1 }}>
         <T variant="footnote" style={{ fontWeight: "500" }}>
-          Quiet
+          {t("heartbeatCard.outcome.quiet")}
         </T>
-        {` · ${beats.length} beats · ${beatTime(oldest)}–${sameDay ? format(newest, "HH:mm") : beatTime(beats[0]!.createdAt)}`}
+        {` · ${t("heartbeatCard.beatCount", { count: beats.length })} · ${beatTime(oldest)}–${sameDay ? format(newest, "HH:mm") : beatTime(beats[0]!.createdAt)}`}
       </T>
     </View>
   );

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { router, Stack, useLocalSearchParams } from "expo-router";
 import { useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { useTranslation } from "react-i18next";
 import {
   AGENT_TEMPLATE_CATEGORIES,
   AGENT_TEMPLATE_CATEGORY_LABELS,
@@ -21,42 +22,22 @@ import { api, errorText } from "@/lib/api";
 import { qk, queryClient } from "@/lib/query";
 import { radius, space, useColors } from "@/lib/theme";
 import { useWorkspace } from "@/lib/workspace";
+import { currentLanguage } from "@/lib/i18n";
 
 type Kind = "workspace" | "project" | "agent";
 
-const COPY: Record<Kind, { title: string; name: string; context: string; placeholder: string; icon: string }> = {
-  workspace: {
-    title: "New workspace",
-    name: "Client, company or product",
-    context: "Agent context",
-    placeholder: "Who it's for, what it does, links, tone and rules. Every agent in the workspace gets it.",
-    icon: "🚀",
-  },
-  project: {
-    title: "New project",
-    name: "Project name",
-    context: "Project context",
-    placeholder: "Goals, scope and conventions. Added to the workspace's context.",
-    icon: "📁",
-  },
-  agent: {
-    title: "New agent",
-    name: "Name, like Inbox Keeper",
-    context: "Instructions",
-    placeholder: "What it does, how, and when it asks you.",
-    icon: "",
-  },
-};
+const ICON: Record<Kind, string> = { workspace: "🚀", project: "📁", agent: "" };
 
 const GLOBAL = "";
 
 export default function New() {
   const c = useColors();
+  const { t } = useTranslation(["settings", "common"]);
   const params = useLocalSearchParams<{ kind?: string; workspaceId?: string }>();
   const kind: Kind = params.kind === "project" || params.kind === "agent" ? params.kind : "workspace";
-  const copy = COPY[kind];
+  const copy = { title: t(`new.${kind}.title`), name: t(`new.${kind}.name`), context: t(`new.${kind}.context`), placeholder: t(`new.${kind}.placeholder`) };
   const { workspaces } = useWorkspace();
-  const [icon, setIcon] = useState(copy.icon);
+  const [icon, setIcon] = useState(ICON[kind]);
   const [picking, setPicking] = useState(false);
   const [name, setName] = useState("");
   const [role, setRole] = useState("");
@@ -68,11 +49,11 @@ export default function New() {
   const [template, setTemplate] = useState<AgentTemplate | null>(null);
   const parent = workspaces.find((w) => w.id === workspaceId);
 
-  const start = (t: AgentTemplate | null) => {
-    setTemplate(t);
-    setName(t?.name ?? "");
-    setRole(t?.role ?? "");
-    setInstructions(t?.instructions ?? "");
+  const start = (picked: AgentTemplate | null) => {
+    setTemplate(picked);
+    setName(picked?.name ?? "");
+    setRole(picked?.role ?? "");
+    setInstructions(picked?.instructions ?? "");
     setPicked(true);
   };
 
@@ -98,7 +79,7 @@ export default function New() {
         router.replace({ pathname: "/settings/agent/[id]", params: { id: a.id } });
       }
     } catch (err) {
-      Alert.alert("Couldn't create it", errorText(err));
+      Alert.alert(t("new.createFailed"), errorText(err));
     } finally {
       setSaving(false);
     }
@@ -121,11 +102,11 @@ export default function New() {
         <View style={styles.from}>
           {template ? <Character character={template.character} color={template.color} size={36} seed={template.id} /> : null}
           <T variant="subhead" muted style={{ flex: 1 }} numberOfLines={1}>
-            {template ? `From “${template.name}”` : "Starting from scratch"}
+            {template ? t("new.from", { name: template.name }) : t("new.fromScratch")}
           </T>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => setPicked(false)}>
             <T variant="subhead" style={{ fontWeight: "600" }}>
-              Change role
+              {t("new.changeRole")}
             </T>
           </Pressable>
         </View>
@@ -133,7 +114,7 @@ export default function New() {
 
       {kind === "project" && parent ? (
         <T variant="subhead" muted>
-          In {parent.icon || "🗂️"} {parent.name}
+          {t("new.inWorkspace", { icon: parent.icon || "🗂️", name: parent.name })}
         </T>
       ) : null}
 
@@ -142,7 +123,7 @@ export default function New() {
           {kind !== "agent" ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Pick a picture"
+              accessibilityLabel={t("new.pickPicture")}
               onPress={() => {
                 tap();
                 setPicking((v) => !v);
@@ -153,7 +134,7 @@ export default function New() {
             </Pressable>
           ) : null}
           <TextInput
-            accessibilityLabel="Name"
+            accessibilityLabel={t("common:words.name")}
             value={name}
             onChangeText={setName}
             placeholder={copy.name}
@@ -168,10 +149,10 @@ export default function New() {
           <>
             <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.border }} />
             <TextInput
-              accessibilityLabel="Role"
+              accessibilityLabel={t("agent.role")}
               value={role}
               onChangeText={setRole}
-              placeholder="Role, like Bookkeeper (optional)"
+              placeholder={t("new.rolePlaceholder")}
               placeholderTextColor={c.textFaint}
               maxLength={MAX_AGENT_ROLE_LENGTH}
               style={[styles.line, { color: c.text }]}
@@ -183,7 +164,7 @@ export default function New() {
           accessibilityLabel={copy.context}
           value={instructions}
           onChangeText={setInstructions}
-          placeholder={`${copy.context} (optional). ${copy.placeholder}`}
+          placeholder={t("new.contextPlaceholder", { label: copy.context, hint: copy.placeholder })}
           placeholderTextColor={c.textFaint}
           maxLength={kind === "agent" ? 50_000 : MAX_INSTRUCTIONS_LENGTH}
           multiline
@@ -204,35 +185,35 @@ export default function New() {
       {kind === "agent" ? (
         <View style={{ gap: space.sm }}>
           <T variant="eyebrow" muted>
-            Works in
+            {t("new.worksIn")}
           </T>
           <View style={styles.chips}>
-            <Chip active={!workspaceId} label="Every workspace" onPress={() => setWorkspaceId(GLOBAL)} />
+            <Chip active={!workspaceId} label={t("new.everyWorkspace")} onPress={() => setWorkspaceId(GLOBAL)} />
             {workspaces.map((w) => (
               <Chip key={w.id} active={w.id === workspaceId} label={`${w.icon || "🗂️"} ${w.name}`} onPress={() => setWorkspaceId(w.id)} />
             ))}
           </View>
           <T variant="footnote" muted>
-            {parent ? `It gets ${parent.name}'s context, repositories and logins.` : "It can work in any workspace you start it in."}
+            {parent ? t("new.getsContext", { name: parent.name }) : t("new.anyWorkspace")}
           </T>
         </View>
       ) : null}
 
-      <Button title={`Create ${kind}`} icon="plus" size="lg" loading={saving} disabled={!name.trim() || (kind === "project" && !parent)} onPress={() => void create()} />
+      <Button title={t(`new.${kind}.create`)} icon="plus" size="lg" loading={saving} disabled={!name.trim() || (kind === "project" && !parent)} onPress={() => void create()} />
       {kind === "agent" ? (
         <View style={{ gap: space.sm }}>
           {template?.routine ? (
             <View style={styles.hint}>
               <Icon name="clock" size={13} color={c.textMuted} />
               <T variant="footnote" muted style={{ flex: 1 }}>
-                Its automation “{template.routine.name}” ({cronToHuman(template.routine.cron)}) can be added on your computer.
+                {t("new.routineHint", { name: template.routine.name, schedule: cronToHuman(template.routine.cron, currentLanguage()) })}
               </T>
             </View>
           ) : null}
           <View style={styles.hint}>
             <Icon name="lock" size={13} color={c.textMuted} />
             <T variant="footnote" muted style={{ flex: 1 }}>
-              Logins, tools and folders for new agents are set on your computer.
+              {t("new.setupHint")}
             </T>
           </View>
         </View>
@@ -244,21 +225,6 @@ export default function New() {
 type Filter = AgentTemplateCategory | "all" | "all-in-one";
 
 type PickerItem = { kind: "group"; key: string; title: string; count: number } | { kind: "template"; key: string; template: AgentTemplate; divided: boolean };
-
-const SHORT_LABELS: Record<AgentTemplateCategory, string> = {
-  leadership: "Leadership",
-  finance: "Finance",
-  legal: "Legal",
-  people: "People",
-  marketing: "Marketing",
-  sales: "Sales",
-  customer: "Customer service",
-  ecommerce: "E-commerce",
-  product: "Product & design",
-  engineering: "Engineering & IT",
-  data: "Data",
-  operations: "Operations",
-};
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -277,44 +243,45 @@ const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-
 /** Every role a company has, by department, searchable: one agent per job, or one all-in-one agent per department. */
 function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) => void }) {
   const c = useColors();
+  const { t } = useTranslation(["settings", "common"]);
   const templates = useQuery({ queryKey: ["agent-templates"], queryFn: api.agents.templates, staleTime: 60 * 60_000 });
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => (templates.data ?? []).filter((t) => terms.every((re) => re.test(searchText(t)))), [templates.data, terms]);
-  const shown = found.filter((t) => inFilter(t, filter));
-  const chips = (["all", "all-in-one", ...AGENT_TEMPLATE_CATEGORIES] as Filter[]).filter((f) => f === "all" || f === filter || found.some((t) => inFilter(t, f)));
+  const found = useMemo(() => (templates.data ?? []).filter((x) => terms.every((re) => re.test(searchText(x)))), [templates.data, terms]);
+  const shown = found.filter((x) => inFilter(x, filter));
+  const chips = (["all", "all-in-one", ...AGENT_TEMPLATE_CATEGORIES] as Filter[]).filter((f) => f === "all" || f === filter || found.some((x) => inFilter(x, f)));
 
   const items = useMemo(() => {
-    const rows = (list: AgentTemplate[]): PickerItem[] => list.map((t, i) => ({ kind: "template", key: t.id, template: t, divided: i > 0 }));
+    const rows = (list: AgentTemplate[]): PickerItem[] => list.map((x, i) => ({ kind: "template", key: x.id, template: x, divided: i > 0 }));
     if (filter !== "all" || terms.length) return rows(shown);
     return AGENT_TEMPLATE_CATEGORIES.flatMap((category): PickerItem[] => {
-      const group = shown.filter((t) => t.category === category);
-      return group.length ? [{ kind: "group", key: `g-${category}`, title: AGENT_TEMPLATE_CATEGORY_LABELS[category], count: group.length }, ...rows(group)] : [];
+      const group = shown.filter((x) => x.category === category);
+      return group.length ? [{ kind: "group", key: `g-${category}`, title: t(`new.categoryTitles.${category}`), count: group.length }, ...rows(group)] : [];
     });
-  }, [shown, filter, terms.length]);
+  }, [shown, filter, terms.length, t]);
 
   const header = (
     <View style={styles.pickerHeader}>
-      <Button title="Start from scratch" icon="plus" variant="secondary" onPress={() => onPick(null)} />
-      <T variant="headline">Or hire one role</T>
+      <Button title={t("new.picker.scratch")} icon="plus" variant="secondary" onPress={() => onPick(null)} />
+      <T variant="headline">{t("new.picker.hire")}</T>
       <T variant="subhead" muted style={{ marginTop: -space.sm }}>
-        One agent per job, or one all-in-one agent that runs a whole department.
+        {t("new.picker.intro")}
       </T>
       <View style={[styles.search, { backgroundColor: c.sunken }]}>
         <Icon name="search" size={15} color={c.textMuted} />
         <TextInput
-          accessibilityLabel="Search roles"
+          accessibilityLabel={t("new.picker.search")}
           value={query}
           onChangeText={setQuery}
-          placeholder="Search roles…"
+          placeholder={t("new.picker.searchPlaceholder")}
           placeholderTextColor={c.textFaint}
           autoCorrect={false}
           returnKeyType="search"
           style={[styles.searchInput, { color: c.text }]}
         />
         {query ? (
-          <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={8} onPress={() => setQuery("")}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t("new.picker.clearSearch")} hitSlop={8} onPress={() => setQuery("")}>
             <Icon name="close" size={13} color={c.textMuted} />
           </Pressable>
         ) : null}
@@ -324,7 +291,7 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
           <Chip
             key={f}
             active={filter === f}
-            label={`${f === "all" ? "All" : f === "all-in-one" ? "All-in-one" : SHORT_LABELS[f]} ${found.filter((t) => inFilter(t, f)).length}`}
+            label={`${f === "all" ? t("common:words.all") : f === "all-in-one" ? t("new.picker.allInOne") : t(`new.categories.${f}`)} ${found.filter((x) => inFilter(x, f)).length}`}
             onPress={() => setFilter(f)}
           />
         ))}
@@ -334,7 +301,7 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
 
   return (
     <>
-      <Stack.Screen options={{ title: "New agent" }} />
+      <Stack.Screen options={{ title: t("new.agent.title") }} />
       <CloseButton />
       <FlashList
         data={items}
@@ -364,11 +331,11 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
             <SkeletonRows count={6} avatar={44} />
           ) : templates.isError ? (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              Roles aren't available right now ({errorText(templates.error)}). Start from scratch instead.
+              {t("new.picker.loadError", { error: errorText(templates.error) })}
             </T>
           ) : (
             <T variant="subhead" muted style={{ padding: space.lg }}>
-              {query.trim() ? `No role matches “${query.trim()}”. Start from scratch and describe the job in the instructions.` : "No roles here yet."}
+              {query.trim() ? t("new.picker.noMatch", { query: query.trim() }) : t("new.picker.none")}
             </T>
           )
         }
@@ -377,35 +344,36 @@ function TemplatePicker({ onPick }: { onPick: (template: AgentTemplate | null) =
   );
 }
 
-function TemplateRow({ template: t, onPress }: { template: AgentTemplate; onPress: () => void }) {
+function TemplateRow({ template: tpl, onPress }: { template: AgentTemplate; onPress: () => void }) {
   const c = useColors();
-  const allInOne = !!t.covers?.length;
+  const { t } = useTranslation("settings");
+  const allInOne = !!tpl.covers?.length;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${t.name}, ${t.role}`}
+      accessibilityLabel={`${tpl.name}, ${tpl.role}`}
       onPress={() => {
         tap();
         onPress();
       }}
       style={({ pressed }) => [styles.template, pressed && { backgroundColor: c.sunken }]}
     >
-      <Character character={t.character} color={t.color} size={44} seed={t.id} />
+      <Character character={tpl.character} color={tpl.color} size={44} seed={tpl.id} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <T variant="headline" numberOfLines={1} style={{ fontSize: 16 }}>
-          {t.name}
+          {tpl.name}
         </T>
         <T variant="footnote" muted numberOfLines={1}>
-          {t.role}
+          {tpl.role}
         </T>
-        {t.leads || allInOne ? (
+        {tpl.leads || allInOne ? (
           <View style={{ flexDirection: "row", gap: 6 }}>
-            {t.leads ? <Badge label="Leads a team" /> : null}
-            {allInOne ? <Badge label={`All-in-one · ${t.covers!.length} jobs`} tone="brand" /> : null}
+            {tpl.leads ? <Badge label={t("new.picker.leads")} /> : null}
+            {allInOne ? <Badge label={t("new.picker.allInOneJobs", { count: tpl.covers!.length })} tone="brand" /> : null}
           </View>
         ) : null}
         <T variant="footnote" muted numberOfLines={2}>
-          {t.description}
+          {tpl.description}
         </T>
       </View>
     </Pressable>
