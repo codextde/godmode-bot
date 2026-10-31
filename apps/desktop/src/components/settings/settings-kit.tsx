@@ -311,6 +311,7 @@ export function SettingsGroup({
 }) {
   return (
     <motion.section
+      data-slot="settings-group"
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn("rounded-xl border bg-card shadow-card", tone === "danger" && "border-destructive/25", className)}
@@ -359,6 +360,7 @@ export function SettingRow({
 }) {
   return (
     <div
+      data-slot="setting-row"
       className={cn(
         "flex gap-x-6 gap-y-2.5 py-4",
         stacked ? "flex-col" : "flex-wrap items-center justify-between @xl:flex-nowrap",
