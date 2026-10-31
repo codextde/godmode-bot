@@ -259,7 +259,7 @@ export function RecentChats() {
                   {headingNode}
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
-                      <SidebarMenuItem>
+                      <SidebarMenuItem className="rounded-md data-[state=open]:bg-sidebar-accent">
                         <SidebarMenuButton
                           asChild
                           isActive={conversationId === c.id}
@@ -419,12 +419,13 @@ export function RecentChats() {
 function useMarkUnread() {
   const { t } = useTranslation("layout");
   const qc = useQueryClient();
-  return (c: Conversation, unread: boolean, leave?: () => void) => {
+  return async (c: Conversation, unread: boolean, leave?: () => void) => {
     leave?.();
+    await qc.cancelQueries({ queryKey: qk.conversationLists });
     qc.setQueriesData<Conversation[]>({ queryKey: qk.conversationLists }, (list) =>
       list?.map((x) => (x.id === c.id ? { ...x, unread: unread ? (x.unread ?? { runId: "", failed: false }) : null } : x)),
     );
-    void (unread ? api.conversations.unread([c.id]) : api.conversations.read([c.id]))
+    void (unread ? api.conversations.unread([c.id]).then((r) => r.unread || toast(t("recent.menu.nothingNew"))) : api.conversations.read([c.id]))
       .catch((err) => toast.error(t("recent.menu.failed"), { description: errorMessage(err) }))
       .finally(() => qc.invalidateQueries({ queryKey: qk.conversationsAll }));
   };
