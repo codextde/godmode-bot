@@ -71,6 +71,17 @@ export async function releaseFor(version: string | null): Promise<Release> {
   return res?.ok ? res.json() : releaseFromPages(tag);
 }
 
+/** Windows, Linux and Docker builds are paused: their downloads stay on the last release that has them. */
+export const LAST_FULL_RELEASE = 'v0.2.38';
+
+/** The latest release's asset, or the last full release's while that platform is paused. */
+export async function findAsset(test: (a: Asset) => boolean): Promise<{ release: Release; asset?: Asset }> {
+  const release = await latestRelease();
+  const asset = release.assets.find(test);
+  if (asset) return { release, asset };
+  return { release, asset: (await releaseFor(LAST_FULL_RELEASE)).assets.find(test) };
+}
+
 /** The repo is public: GitHub's own download link needs no API call, so launch traffic can't use up the token. */
 export async function assetRedirect(asset: Asset): Promise<Response> {
   return new Response(null, { status: 302, headers: { location: asset.browser_download_url, 'cache-control': 'no-store' } });
