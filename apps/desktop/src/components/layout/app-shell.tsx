@@ -41,7 +41,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
-  SidebarRail,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -116,6 +115,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const setCommandOpen = useUi((s) => s.setCommandOpen);
   const { toggle: toggleTheme } = useTheme();
   const collapsed = useUi((s) => s.sidebarCollapsed);
+  const sidebarWidth = useUi((s) => s.sidebarWidth);
+  const [resizing, setResizing] = useState(false);
   const setCollapsed = useUi((s) => s.setSidebarCollapsed);
   const runningCount = useRunningCount();
   const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
@@ -234,9 +235,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     <SidebarProvider
       open={compact ? peek : !collapsed}
       onOpenChange={(open) => (compact ? setPeek(open) : setCollapsed(!open))}
-      className="h-svh min-h-0 overflow-hidden"
+      className={cn(
+        "h-svh min-h-0 overflow-hidden",
+        resizing && "cursor-col-resize select-none [&_[data-slot=sidebar-container]]:transition-none [&_[data-slot=sidebar-gap]]:transition-none",
+      )}
       // The macOS traffic lights reach 72px in; widen the icon rail so they never sit on top of a page.
-      style={isTauri && isMac ? ({ "--sidebar-width-icon": "5rem" } as CSSProperties) : undefined}
+      style={
+        {
+          ...(isTauri && isMac ? { "--sidebar-width-icon": "5rem" } : {}),
+          ...(sidebarWidth ? { "--sidebar-width": `${sidebarWidth}px` } : {}),
+        } as CSSProperties
+      }
     >
       <Sidebar collapsible="icon" variant="sidebar">
         <SidebarHeader
@@ -288,7 +297,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>
-        <SidebarRail />
+        <ResizeRail onResizing={setResizing} />
       </Sidebar>
 
       <SidebarInset className="group/inset relative h-svh min-h-0 min-w-0 overflow-hidden bg-background">
@@ -305,6 +314,69 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CommandPalette />
       <ShortcutsDialog />
     </SidebarProvider>
+  );
+}
+
+const SIDEBAR_MIN = 208;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 256;
+
+function ResizeRail({ onResizing }: { onResizing: (resizing: boolean) => void }) {
+  const { state, isMobile, toggleSidebar } = useSidebar();
+  const setWidth = useUi((s) => s.setSidebarWidth);
+  if (isMobile) return null;
+  const expanded = state === "expanded";
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const container = e.currentTarget.closest<HTMLElement>("[data-slot=sidebar-container]");
+    const startWidth = container?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
+    let dragged = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (!dragged && Math.abs(dx) < 4) return;
+      if (!dragged) {
+        dragged = true;
+        onResizing(true);
+      }
+      if (!expanded) {
+        if (dx > 24) {
+          toggleSidebar();
+          cleanup();
+        }
+        return;
+      }
+      const next = startWidth + dx;
+      if (next < SIDEBAR_MIN - 64) {
+        toggleSidebar();
+        cleanup();
+        return;
+      }
+      setWidth(Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next))));
+    };
+    const up = () => {
+      if (!dragged) toggleSidebar();
+      cleanup();
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      onResizing(false);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <button
+      type="button"
+      data-sidebar="rail"
+      tabIndex={-1}
+      aria-label={expanded ? "Resize sidebar" : "Expand sidebar"}
+      title={expanded ? "Drag to resize · click to collapse" : "Click to expand"}
+      onPointerDown={onPointerDown}
+      className="absolute inset-y-0 -right-2 z-20 hidden w-4 cursor-col-resize after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] after:-translate-x-1/2 after:transition-colors hover:after:bg-sidebar-border sm:flex"
+    />
   );
 }
 
