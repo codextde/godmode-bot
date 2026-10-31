@@ -27,6 +27,7 @@ import { removeCheckoutUnless, repoCacheDir, whileCloneIdle } from "../tasks/git
 import { imageDownloadInProgress, removeImage, vmStatus } from "../vm/service";
 import { vmRoot, vmSupport } from "../vm/tart";
 import { now, parseJson } from "../util";
+import { rebuildSearchIndex } from "./search";
 import { resolveGit } from "./doctor";
 import { reposDir, runGit } from "./workspaceSources";
 
@@ -696,6 +697,7 @@ function database(scan: Scan): Category {
           // Once: a full VACUUM blocks for seconds on a large database, so it switches to giving pages back in steps.
           db.run("PRAGMA auto_vacuum = INCREMENTAL");
           db.run("VACUUM");
+          rebuildSearchIndex();
         }
         // In WAL mode the freed pages are written to the WAL; only the checkpoint after it shrinks the file. It waits for
         // every reader, so not while the integrity check reads on its own connection.

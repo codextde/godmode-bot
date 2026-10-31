@@ -1,6 +1,7 @@
 /** Central React Query keys. Prefix-based invalidation: invalidating `qk.agents` also hits `qk.agent(id)`. */
 export const qk = {
   bootstrap: ["bootstrap"] as unknown[],
+  search: (q: string) => ["search", q],
   /** "Needs you" — under `bootstrap`, so whatever refreshes the counts refreshes the list. */
   attention: ["bootstrap", "attention"] as unknown[],
   away: (since: string, until: string) => ["away", since, until],

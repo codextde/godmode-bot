@@ -1,4 +1,4 @@
-import { Fragment, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
@@ -33,11 +33,27 @@ export interface ThreadProps {
   delegatedFrom?: Conversation["delegatedFrom"];
   /** Under the last message while nothing is in flight (what to do about a turn that ended early). */
   after?: ReactNode;
+  focusId?: string | null;
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after }: ThreadProps) {
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId }: ThreadProps) {
   const { t } = useTranslation("chat");
-  const { scrollRef, contentRef, atBottom, scrollToBottom } = useStickToBottom();
+  const { scrollRef, contentRef, atBottom, scrollToBottom, unstick } = useStickToBottom();
+  const [flash, setFlash] = useState<string | null>(null);
+  const focusPresent = !!focusId && messages.some((m) => m.id === focusId);
+  useEffect(() => {
+    if (!focusId || !focusPresent) return;
+    const el = scrollRef.current?.querySelector(`[data-message-id="${CSS.escape(focusId)}"]`);
+    if (!el) return;
+    unstick();
+    const frame = requestAnimationFrame(() => el.scrollIntoView({ block: "center" }));
+    setFlash(focusId);
+    const timer = setTimeout(() => setFlash(null), 2400);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [focusId, focusPresent, scrollRef, unstick]);
   // Messages present on first render don't animate in
   const initialIds = useRef<Set<string> | null>(null);
   if (initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
@@ -65,6 +81,8 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
                   </div>
                 )}
                 <motion.div
+                  data-message-id={m.id}
+                  className={`rounded-xl transition-shadow duration-700 ${flash === m.id ? "ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : "ring-0"}`}
                   initial={animate ? { opacity: 0, y: 8 } : false}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}

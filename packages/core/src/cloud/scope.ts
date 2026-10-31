@@ -190,6 +190,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/routines/:id/webhook/rotate", A],
   ["GET", "/api/automation-events", A],
 
+  ["GET", "/api/search", A],
   ["GET|POST", "/api/conversations", A],
   ["GET|PATCH|DELETE", "/api/conversations/:id", A],
   ["POST", "/api/conversations/read", A],
