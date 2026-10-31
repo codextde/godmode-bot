@@ -113,8 +113,22 @@
     "switchTo": {
       "light": "Switch to light mode",
       "dark": "Switch to dark mode"
-    },
-    "followingSystem": "Following your system until you pick one"
+    }
+  },
+  "usage": {
+    "title": "Claude usage left",
+    "fiveHour": "5-hour window",
+    "week": "This week",
+    "left": "{{percent}} % left",
+    "label": "Claude usage: {{fiveHour}} % of the 5-hour limit and {{week}} % of the weekly limit left",
+    "notStarted": "Starts with your next message",
+    "resetsSoon": "Resets any moment",
+    "resetsIn": "Resets at {{time}} (in {{duration}})",
+    "resetsOn": "Resets {{when}}",
+    "hours": "{{h}} h {{m}} min",
+    "minutes": "{{m}} min",
+    "stale": "Couldn't refresh just now — showing the last reading",
+    "hint": "Outer ring: 5 hours · inner ring: week. Click to refresh."
   },
   "claudeSignedOut": {
     "keyRefused": "Claude refused your Anthropic API key.",
