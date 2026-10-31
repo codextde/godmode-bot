@@ -11,6 +11,7 @@ import { z } from "zod";
 import { getAgent } from "../agents/service";
 import { logger } from "../log";
 import { audit } from "../services/audit";
+import { getSettings } from "../services/settings";
 import type { RunContext } from "../types";
 import { HttpError } from "../util";
 import { runSshServerIds } from "./assignments";
@@ -402,6 +403,7 @@ const audited = new Set<string>();
 export async function callSshTool(ctx: RunContext, name: string, args: unknown): Promise<SshToolResult> {
   const run = sshRun(ctx.runId);
   if (!run) return text("This run has no SSH servers.", true);
+  if (!getSettings().ssh.enabled) return text("SSH servers were turned off by the human.", true);
   const servers = serversOf(ctx);
   if (name === LIST_TOOL.name) return servers.length ? text(describeServers(servers)) : text("No SSH servers are available to this task anymore.", true);
   const tool = TOOLS.find((t) => t.name === name);

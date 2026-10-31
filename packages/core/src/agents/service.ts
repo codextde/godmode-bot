@@ -117,8 +117,6 @@ const BASE_PERMISSIONS: AgentPermissions = {
   secretAccess: "fill",
   credentialIds: null,
   totpIds: null,
-  maxBudgetUsd: null,
-  monthlyBudgetUsd: null,
 };
 
 const DEFAULT_BROWSER: AgentBrowserConfig = { profileId: null, enabled: true, headless: null };
@@ -207,8 +205,7 @@ function toModel(r: AgentRow): Agent {
     heartbeat: normalizeHeartbeat(parseJson<Partial<AgentHeartbeat>>(r.heartbeat, {})),
     // Derived from the slug so the data dir can move (backup restore, GODMODE_HOME change).
     repoPath: repoPathFor(r.slug),
-    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason NOT IN ('question', 'budget')", r.id)?.n ?? 0,
-    heldRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'budget'", r.id)?.n ?? 0,
+    pausedRuns: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason != 'question'", r.id)?.n ?? 0,
     openQuestions: get<{ n: number }>("SELECT COUNT(*) AS n FROM paused_runs WHERE agent_id = ? AND reason = 'question'", r.id)?.n ?? 0,
     lastRunAt: r.last_run_at,
     createdAt: r.created_at,
@@ -278,8 +275,6 @@ function existingMcpServerIds(ids: string[]): string[] {
 }
 
 function normalizePermissions(p: AgentPermissions): AgentPermissions {
-  const positive = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
-  const budget = positive(p.maxBudgetUsd);
   return {
     canManageAgents: p.canManageAgents === true,
     allowDelegation: p.allowDelegation !== false,
@@ -287,8 +282,6 @@ function normalizePermissions(p: AgentPermissions): AgentPermissions {
     secretAccess: p.secretAccess === "reveal" ? "reveal" : "fill",
     credentialIds: Array.isArray(p.credentialIds) ? stringList(p.credentialIds) : null,
     totpIds: Array.isArray(p.totpIds) ? stringList(p.totpIds) : null,
-    maxBudgetUsd: budget,
-    monthlyBudgetUsd: positive(p.monthlyBudgetUsd),
   };
 }
 
@@ -381,8 +374,6 @@ function lockHumanOnlyPermissions(p: AgentPermissions, current: AgentPermissions
     canManageAgents: current?.canManageAgents ?? false,
     credentialIds: current ? current.credentialIds : null,
     totpIds: current ? current.totpIds : null,
-    // The monthly budget is the human's alone.
-    monthlyBudgetUsd: current?.monthlyBudgetUsd ?? null,
   };
 }
 
@@ -398,9 +389,6 @@ function uniqueSlug(base: string): string {
 }
 
 function auditPermissions(actor: string, before: AgentPermissions | null, after: AgentPermissions, agentId: string) {
-  if ((before?.monthlyBudgetUsd ?? null) !== (after.monthlyBudgetUsd ?? null)) {
-    audit(actor, "budget.set", agentId, { scope: "agent", from: before?.monthlyBudgetUsd ?? null, to: after.monthlyBudgetUsd ?? null });
-  }
   const changed =
     (before?.secretAccess ?? "fill") !== after.secretAccess || (before?.canManageAgents ?? false) !== after.canManageAgents;
   if (!changed) return;
@@ -420,7 +408,7 @@ function claudeMdContext(agent: Agent) {
     ? get<{ name: string; description: string }>("SELECT name, description FROM workspaces WHERE id = ?", agent.workspaceId)
     : null;
   const settings = getSettings();
-  return { userName: settings.general.userName ?? "", workspace, spendTracking: settings.runner.spendTracking };
+  return { userName: settings.general.userName ?? "", workspace };
 }
 
 /**
@@ -805,32 +793,24 @@ export function removeFromDelegateLists(agentIds: string[]): void {
 let ensuring: Promise<Agent> | null = null;
 let settingsHookRegistered = false;
 let lastUserName: string | null = null;
-let lastSpendTracking: boolean | null = null;
 
 /** Meta key: the built-in agent's files were rewritten after it became the mascot (migration 20). */
 const MASCOT_FILES_KEY = "agents.mascot_files";
 
-/**
- * Regenerate every agent's CLAUDE.md when the user's display name changes (it is part of each CLAUDE.md), and those of
- * agents with a per-run cap when spend tracking is switched (the cap is mentioned only with it on).
- */
+/** Regenerate every agent's CLAUDE.md when the user's display name changes (it is part of each CLAUDE.md). */
 function registerSettingsHook() {
   if (settingsHookRegistered) return;
   settingsHookRegistered = true;
   lastUserName = getSettings().general.userName ?? "";
-  lastSpendTracking = getSettings().runner.spendTracking;
   onSettingsApplied((s) => {
     const name = s.general.userName ?? "";
-    const renamed = name !== lastUserName;
-    if (!renamed && s.runner.spendTracking === lastSpendTracking) return;
+    if (name === lastUserName) return;
     lastUserName = name;
-    lastSpendTracking = s.runner.spendTracking;
     void (async () => {
       for (const agent of listAgents()) {
-        if (!renamed && agent.permissions.maxBudgetUsd == null) continue;
         // Missing repositories are created lazily (ensureAgentRepo) with the current name anyway.
         if (!existsSync(join(agent.repoPath, ".git"))) continue;
-        await refreshAgentFiles(agent.id, renamed ? "Update user name" : "Update spend tracking").catch((err) =>
+        await refreshAgentFiles(agent.id, "Update user name").catch((err) =>
           log.warn(`failed to refresh CLAUDE.md of agent ${agent.slug}`, err),
         );
       }
@@ -856,6 +836,12 @@ async function ensureDefaultAgentOnce(): Promise<Agent> {
   for (const other of listAgents()) {
     if (other.id === agent.id) continue;
     await ensureAgentRepo(other).catch((err) => log.error(`failed to repair the repository of agent ${other.slug}`, err));
+  }
+  // CLAUDE.md files written while runs had a cost cap still mention it.
+  for (const a of listAgents()) {
+    const file = join(a.repoPath, "CLAUDE.md");
+    if (!existsSync(file) || !readFileSync(file, "utf8").includes("Each run is capped at $")) continue;
+    await refreshAgentFiles(a.id, "Remove the run cost cap").catch((err) => log.warn(`failed to refresh CLAUDE.md of agent ${a.slug}`, err));
   }
   return agent;
 }

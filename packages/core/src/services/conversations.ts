@@ -89,10 +89,8 @@ interface ConversationRow extends PauseQuestionCols {
   followup_created_at?: string | null;
   paused_run_id?: string | null;
   paused_reason?: PauseReason | null;
-  paused_budget_scope?: "agent" | "team" | null;
   unread_run_id?: string | null;
   unread_status?: string | null;
-  paused_budget_usd?: number | null;
   paused_limit?: string | null;
   paused_resume_at?: string | null;
   paused_auto?: number | null;
@@ -193,8 +191,6 @@ function toConversation(r: ConversationRow): Conversation {
               limit_name: r.paused_limit ?? null,
               resume_at: r.paused_resume_at ?? null,
               auto: r.paused_auto ?? 0,
-              budget_scope: r.paused_budget_scope ?? null,
-              budget_usd: r.paused_budget_usd ?? null,
             },
             r,
           )
@@ -223,7 +219,6 @@ const PREVIEW_SQL = `(SELECT m.content FROM messages m WHERE m.conversation_id =
 const FOLLOWUP_SQL = "f.note AS followup_note, f.due_at AS followup_due_at, f.created_at AS followup_created_at";
 const PAUSE_SQL =
   "p.run_id AS paused_run_id, p.reason AS paused_reason, p.limit_name AS paused_limit, p.resume_at AS paused_resume_at, p.auto AS paused_auto, p.created_at AS paused_at, " +
-  "p.budget_scope AS paused_budget_scope, p.budget_usd AS paused_budget_usd, " +
   PAUSE_QUESTION_SQL;
 // A handed-over chat links back to the run (and through it the chat and agent) that asked. Derived, not stored: when
 // the asking agent or its chat is deleted the link goes null by itself.
@@ -738,8 +733,8 @@ export function chatGoal(conversationId: string, configDir?: string | null): str
 }
 
 /**
- * Wipe a private chat: its messages, uploads, run logs and Claude Code session go, and its runs keep only what they
- * cost (budgets count it). Other chats are left alone.
+ * Wipe a private chat: its messages, uploads, run logs and Claude Code session go, and its runs keep only their
+ * numbers. Other chats are left alone.
  */
 export async function discardPrivateChat(id: string): Promise<boolean> {
   const row = conversationRow(id);
@@ -987,8 +982,6 @@ export async function sendMessage(
     files?: Attachment[];
     /** Who wrote it when it wasn't the human: an automation, an agent handing work over, the task board. */
     source?: MessageSource;
-    /** The human started it by hand (Run now): a used-up monthly budget doesn't hold it. */
-    byHuman?: boolean;
   },
 ): Promise<SendMessageResult> {
   const { conv, agent } = messageTarget(conversationId, input.trigger);
@@ -1018,7 +1011,6 @@ export async function sendMessage(
       voice: input.voice ?? false,
       userMessageId: message.id,
       runId: input.runId,
-      byHuman: input.byHuman,
     });
   } catch (err) {
     sql("DELETE FROM messages WHERE id = ?", message.id);
@@ -1184,7 +1176,6 @@ export function appendTranscript(conversationId: string, finishedRun: Run, userM
   const meta = [
     finishedRun.status,
     finishedRun.numTurns != null ? `${finishedRun.numTurns} turns` : null,
-    finishedRun.costUsd != null && getSettings().runner.spendTracking ? `$${finishedRun.costUsd.toFixed(4)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

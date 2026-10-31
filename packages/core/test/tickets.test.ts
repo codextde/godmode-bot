@@ -71,7 +71,7 @@ function managerCtx() {
 describe("ticket fields", () => {
   test("priority, due date and labels are stored, cleaned and checked", async () => {
     const t = createTask({ title: "Fix login", priority: "urgent", dueDate: "2026-12-24", labels: ["#bug", "Bug", "  billing   team ", ""] });
-    expect(t).toMatchObject({ priority: "urgent", dueDate: "2026-12-24", labels: ["bug", "billing team"], createdBy: "user", costUsd: 0, runCount: 0 });
+    expect(t).toMatchObject({ priority: "urgent", dueDate: "2026-12-24", labels: ["bug", "billing team"], createdBy: "user", runCount: 0 });
     expect(updateTask(t.id, { priority: "low", dueDate: null, labels: [] })).toMatchObject({ priority: "low", dueDate: null, labels: [] });
     expect((await catchHttp(() => createTask({ title: "x", priority: "asap" as never }))).message).toBe('Unknown priority "asap"');
     expect((await catchHttp(() => createTask({ title: "x", dueDate: "2026-02-30" }))).message).toContain("isn't a date");
@@ -111,8 +111,6 @@ describe("timeline", () => {
     expect(taskEventText(listTaskEvents(t.id).at(-1)!, { you: "You", youObject: "you" })).toBe("You approved it");
     const t2 = getTask(t.id);
     expect(t2.runCount).toBe(2);
-    const spent = get<{ c: number }>("SELECT SUM(cost_usd) AS c FROM runs WHERE conversation_id = ?", t2.conversationId!)!.c;
-    expect(t2.costUsd).toBeCloseTo(spent, 6);
     expect(t2.workMs).toBeGreaterThan(0);
 
     const res = await fetch(`${env.baseUrl}/api/tasks/${t.id}/events?limit=2`, { headers: { Authorization: `Bearer ${getAccessToken()}` } });
@@ -247,7 +245,8 @@ describe("what a ticket cost", () => {
     }
     expect(before < (get<{ applied_at: string }>("SELECT applied_at FROM _migrations WHERE id = 30")?.applied_at ?? "")).toBe(true);
     recomputeTicketTotals();
-    expect(getTask(t.id)).toMatchObject({ costUsd: 1, workMs: 3000, runCount: 3 });
+    expect(getTask(t.id)).toMatchObject({ workMs: 3000, runCount: 3 });
+    expect(get<{ cost_usd: number }>("SELECT cost_usd FROM tasks WHERE id = ?", t.id)!.cost_usd).toBe(1);
   });
 });
 

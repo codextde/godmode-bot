@@ -84,7 +84,7 @@ export interface TaskEventData {
   /** body: what the agent said when it ended its turn. Waits for a follow-up (dueAt, note) or for sub-tickets. */
   waiting: { dueAt?: ISODate; note?: string; subtasks?: number[] };
   /** body: the full result. */
-  delivered: { costUsd: number | null; durationMs: number | null; pullRequest: number | null };
+  delivered: { durationMs: number | null; pullRequest: number | null };
   /** body: the reason. */
   blocked: { kind: TaskBlockedKind };
   /** body: the message; on: the ticket's status when it was sent. */
@@ -219,8 +219,7 @@ export interface Task {
   blockedKind: TaskBlockedKind | null;
   /** The time the agent set to continue on its own: the ticket waits for it (In progress, nothing running). */
   followup: ConversationFollowup | null;
-  /** What every run that ended on this ticket cost, how long the agent worked, and how many runs there were. */
-  costUsd: number;
+  /** How long the agent worked on this ticket, and how many runs there were. */
   workMs: number;
   runCount: number;
   /** When the latest run started (null while it is queued). */
@@ -464,8 +463,6 @@ export interface Goal {
   targetDate: string | null;
   /** Tickets serving it (archived ones left out), and how many are done. */
   tickets: { total: number; done: number; open: number };
-  /** What the work on its tickets cost so far. */
-  costUsd: number;
   createdAt: ISODate;
   updatedAt: ISODate;
 }

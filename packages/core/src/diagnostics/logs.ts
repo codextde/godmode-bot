@@ -302,10 +302,9 @@ function runsSection(lists: LogEntry[][]): string[] {
   const status = (s: string) => runs.filter((e) => e.data!.status === s).length;
   const ms = runs.map((e) => num(e.data!.ms)).filter((v): v is number => v !== null);
   const queued = runs.map((e) => num(e.data!.queuedMs)).filter((v): v is number => v !== null);
-  const cost = runs.reduce((sum, e) => sum + (num(e.data!.costUsd) ?? 0), 0);
   const slowest = runs.reduce<LogEntry | null>((a, e) => ((num(e.data!.ms) ?? 0) > (num(a?.data?.ms) ?? -1) ? e : a), null);
   const out = [
-    `- ${runs.length} runs: ${status("succeeded")} succeeded, ${status("failed")} failed, ${status("cancelled")} cancelled · total cost $${cost.toFixed(2)}`,
+    `- ${runs.length} runs: ${status("succeeded")} succeeded, ${status("failed")} failed, ${status("cancelled")} cancelled`,
     `- Duration: median ${duration(median(ms))}, slowest ${duration(num(slowest?.data?.ms) ?? NaN)}${slowest ? ` (${str(slowest.data!.runId) ?? "?"}, ${str(slowest.data!.trigger) ?? "?"})` : ""} · queue wait: median ${duration(median(queued))}, longest ${duration(queued.length ? max(queued) : NaN)}`,
   ];
   const failures = new Map<string, { count: number; text: string }>();
@@ -317,25 +316,22 @@ function runsSection(lists: LogEntry[][]): string[] {
     if (f) f.count++;
     else failures.set(key, { count: 1, text: error });
   }
-  // Who spent it, and how much the model read per turn (a chat that grew large makes every turn expensive).
-  const agents = new Map<string, { runs: number; cost: number; context: number[] }>();
+  // Who ran, and how much the model read per turn (a chat that grew large makes every turn expensive).
+  const agents = new Map<string, { runs: number; context: number[] }>();
   for (const e of runs) {
     const name = str(e.data!.agent) ?? "?";
-    const a = agents.get(name) ?? { runs: 0, cost: 0, context: [] };
+    const a = agents.get(name) ?? { runs: 0, context: [] };
     a.runs++;
-    a.cost += num(e.data!.costUsd) ?? 0;
     const context = num(e.data!.contextTokens);
     if (context !== null) a.context.push(context);
     agents.set(name, a);
   }
-  const spenders = [...agents.entries()].filter(([, a]) => a.cost > 0).sort((a, b) => b[1].cost - a[1].cost).slice(0, 6);
-  if (spenders.length) {
-    out.push(
-      `- Cost by agent: ${spenders
-        .map(([name, a]) => `${cell(name)} $${a.cost.toFixed(2)} in ${a.runs} run${a.runs === 1 ? "" : "s"}${a.context.length ? `, ~${Math.round(median(a.context) / 1000)}k tokens read per turn` : ""}`)
-        .join(" · ")}`,
-    );
-  }
+  const busiest = [...agents.entries()].sort((a, b) => b[1].runs - a[1].runs).slice(0, 6);
+  out.push(
+    `- Runs by agent: ${busiest
+      .map(([name, a]) => `${cell(name)} ${a.runs} run${a.runs === 1 ? "" : "s"}${a.context.length ? `, ~${Math.round(median(a.context) / 1000)}k tokens read per turn` : ""}`)
+      .join(" · ")}`,
+  );
   const walls = runs.filter((e) => (num(e.data!.wallMs) ?? 0) > (num(e.data!.ms) ?? 0) * 2 + 60_000);
   if (walls.length) out.push(`- ${walls.length} run${walls.length === 1 ? "" : "s"} took much longer by the clock than Claude worked (the computer slept, or a background task was waited for): ${walls.slice(-5).map((e) => `${str(e.data!.runId) ?? "?"} ${duration(num(e.data!.wallMs) ?? NaN)} vs ${duration(num(e.data!.ms) ?? NaN)}`).join(", ")}`);
   if (failures.size) {

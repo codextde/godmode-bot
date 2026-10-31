@@ -4,12 +4,12 @@ import { format } from "date-fns";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import type { Agent, Conversation, Message, MessageBlock, RetryCause, RetryMode } from "@godmode/shared";
-import { ArrowRightLeft, ArrowUpRight, Coins, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Cpu, HandHelping, Info, KanbanSquare, Loader2, Pause, Play, RotateCcw, Square, Timer, Volume2, Workflow } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/common";
 import { Orb, type OrbVariant } from "@/components/aicss/Orb";
-import { formatCost, formatDuration, formatElapsed, formatTokens, useModelLabel } from "@/components/runs/run-status";
+import { formatDuration, formatElapsed, formatTokens, useModelLabel } from "@/components/runs/run-status";
 import { useSpeaker } from "@/hooks/use-voice";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -19,7 +19,7 @@ import { MessageBlocks } from "./message-blocks";
 import { CopyButton } from "./copy-button";
 import { UserBubble } from "./user-bubble";
 import { AttachmentList } from "./attachments";
-import { useAllAgents, useBootstrap, useSpendTracking, useTasks } from "@/lib/hooks";
+import { useAllAgents, useBootstrap, useTasks } from "@/lib/hooks";
 import { describeTool } from "./tool-meta";
 import { FollowupMarker, followupBlock } from "./followup";
 import { HumanTaskMarker, humanTaskBlock } from "@/components/human-tasks/human-task-chat";
@@ -287,7 +287,6 @@ export function AssistantMessage({ message, agent }: { message: Message; agent?:
 
 function RunMeta({ runId }: { runId: string }) {
   const modelLabel = useModelLabel();
-  const spendTracking = useSpendTracking();
   const { data: run } = useQuery({
     queryKey: qk.run(runId),
     queryFn: () => api.runs.get(runId),
@@ -301,11 +300,6 @@ function RunMeta({ runId }: { runId: string }) {
       {run.durationMs != null && (
         <span className="inline-flex items-center gap-1">
           <Timer className="size-3" /> {formatDuration(run.durationMs)}
-        </span>
-      )}
-      {spendTracking && run.costUsd != null && (
-        <span className="inline-flex items-center gap-1">
-          <Coins className="size-3" /> {formatCost(run.costUsd)}
         </span>
       )}
       {run.model && (

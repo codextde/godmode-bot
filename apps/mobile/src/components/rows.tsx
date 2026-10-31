@@ -35,7 +35,7 @@ export function chatStatus(c: Pick<Conversation, "paused" | "followup">, live: {
   }
   if (p) {
     const text =
-      p.reason === "user" ? "Paused" : p.reason === "budget" ? "Held — budget used up" : p.auto && p.resumeAt ? `Continues ${whenText(p.resumeAt)}` : "Waiting for the limit";
+      p.reason === "user" ? "Paused" : p.auto && p.resumeAt ? `Continues ${whenText(p.resumeAt)}` : "Waiting for the limit";
     return { text, icon: p.reason === "user" ? "pause" : "clock", tone: p.reason === "user" ? "muted" : "warning" };
   }
   if (c.followup) return { text: `Continues ${whenText(c.followup.dueAt)}`, icon: "clock", tone: "brand" };

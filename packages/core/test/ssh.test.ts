@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { updateSettings } from "../src/services/settings";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -24,6 +25,7 @@ let agent: Agent;
 
 beforeAll(async () => {
   env = await setupEnv("godmode-ssh-");
+  updateSettings({ ssh: { enabled: true } });
   await vault.setup(PASSPHRASE, false);
   sshd = await startSshServer({ password: "hunter2-login" });
   agent = await makeAgent({ name: "Operator" });

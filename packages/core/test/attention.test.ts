@@ -133,7 +133,7 @@ describe("the list", () => {
     expect(boot.counts.attention.total).toBe(listAttention().length);
   });
 
-  test("a chat paused by the human waits for them; one held run per budget is one row", async () => {
+  test("a chat paused by the human waits for them", async () => {
     const conv = newId("cnv");
     insert("conversations", { id: conv, agent_id: agent.id, title: "Paused chat", origin: "chat", created_at: now(), updated_at: now() });
     const runId = newId("run");

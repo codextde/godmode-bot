@@ -84,10 +84,6 @@ export const qk = {
   heartbeats: ["heartbeats"] as unknown[],
   agentHeartbeat: (agentId: string) => ["heartbeats", "agent", agentId],
   runs: ["runs"] as unknown[],
-  /** Spend and budgets (refreshed when runs end or stand still, and when settings or agents change). */
-  spend: ["spend"] as unknown[],
-  spendReport: (period: string, agentId: string | null) => ["spend", "report", period, agentId ?? "all"] as const,
-  budgets: ["spend", "budgets"] as unknown[],
   /** Runs handed over by a run (under `runs`, so run events refresh them). */
   runChildren: (runId: string) => ["runs", "children", runId] as const,
   runList: (agentId: string, status: string) => ["runs", "list", agentId, status],

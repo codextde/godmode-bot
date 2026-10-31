@@ -13,8 +13,8 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_updater::{Update, UpdaterExt};
+use tauri::{AppHandle, Emitter, Manager, State, Url};
+use tauri_plugin_updater::{Update, Updater as Checker, UpdaterExt};
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 use crate::{
@@ -36,6 +36,8 @@ const STATE_EVENT: &str = "update-state";
 /// The relaunched app gets the original arguments: after an update it must show its window even when the first
 /// launch was a hidden `--autostart`.
 const RELAUNCH_MARKER: &str = "show-after-update";
+const CANARY_MARKER: &str = "update-channel-canary";
+const CANARY_FEED: &str = "https://github.com/codextde/godmode-bot/releases/download/canary/latest.json";
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
@@ -140,21 +142,23 @@ async fn find_and_download(
     updater: &Updater,
     core: &Arc<CoreManager>,
 ) -> Result<Option<(Update, Vec<u8>)>, String> {
-    let (core, handle, shared) = (core.clone(), app.clone(), app.state::<Arc<Updater>>().inner().clone());
-    let checker = app
-        .updater_builder()
-        .configure_client(|client| client.connect_timeout(CONNECT_TIMEOUT).read_timeout(READ_TIMEOUT))
-        // Windows only: the installer replaces godmode-core.exe, so the core has to be gone before it starts.
-        .on_before_exit(move || {
-            shared.exiting.store(true, Ordering::SeqCst);
-            mark_relaunch(&handle);
-            let _ = handle.save_window_state(StateFlags::all() & !StateFlags::VISIBLE);
-            core.shutdown();
-            handle.cleanup_before_exit();
-        })
-        .build()
-        .map_err(|err| err.to_string())?;
-    let Some(update) = checker.check().await.map_err(|err| err.to_string())? else { return Ok(None) };
+    let canary = if canary_enabled(app) {
+        let feed = Url::parse(CANARY_FEED).map_err(|err| err.to_string())?;
+        match checker(app, core, Some(vec![feed]))?.check().await {
+            Ok(update) => update,
+            Err(err) => {
+                core.log(&format!("canary update check failed, falling back to stable: {err}"));
+                None
+            }
+        }
+    } else {
+        None
+    };
+    let found = match canary {
+        Some(update) => Some(update),
+        None => checker(app, core, None)?.check().await.map_err(|err| err.to_string())?,
+    };
+    let Some(update) = found else { return Ok(None) };
 
     let version = update.version.clone();
     app.state::<Arc<CoreManager>>().log(&format!("update {version} available, downloading"));
@@ -175,6 +179,33 @@ async fn find_and_download(
         .await
         .map_err(|err| err.to_string())?;
     Ok(Some((update, bytes)))
+}
+
+fn checker(app: &AppHandle, core: &Arc<CoreManager>, endpoints: Option<Vec<Url>>) -> Result<Checker, String> {
+    let (core, handle, shared) = (core.clone(), app.clone(), app.state::<Arc<Updater>>().inner().clone());
+    let mut builder = app
+        .updater_builder()
+        .configure_client(|client| client.connect_timeout(CONNECT_TIMEOUT).read_timeout(READ_TIMEOUT))
+        // Windows only: the installer replaces godmode-core.exe, so the core has to be gone before it starts.
+        .on_before_exit(move || {
+            shared.exiting.store(true, Ordering::SeqCst);
+            mark_relaunch(&handle);
+            let _ = handle.save_window_state(StateFlags::all() & !StateFlags::VISIBLE);
+            core.shutdown();
+            handle.cleanup_before_exit();
+        });
+    if let Some(endpoints) = endpoints {
+        builder = builder.endpoints(endpoints).map_err(|err| err.to_string())?;
+    }
+    builder.build().map_err(|err| err.to_string())
+}
+
+fn canary_marker(app: &AppHandle) -> Option<PathBuf> {
+    paths::data_dir(app).map(|dir| dir.join(CANARY_MARKER))
+}
+
+fn canary_enabled(app: &AppHandle) -> bool {
+    canary_marker(app).is_some_and(|marker| marker.exists())
 }
 
 fn relaunch_marker(app: &AppHandle) -> Option<PathBuf> {
@@ -203,6 +234,26 @@ pub fn update_state(updater: State<'_, Arc<Updater>>) -> UpdateState {
 #[tauri::command]
 pub async fn check_for_updates(app: AppHandle) {
     check_and_download(&app).await;
+}
+
+#[tauri::command]
+pub fn canary_updates(app: AppHandle) -> bool {
+    canary_enabled(&app)
+}
+
+#[tauri::command]
+pub async fn set_canary_updates(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let marker = canary_marker(&app).ok_or("No data directory")?;
+    if enabled {
+        if let Some(dir) = marker.parent() {
+            fs::create_dir_all(dir).map_err(|err| err.to_string())?;
+        }
+        fs::write(&marker, b"").map_err(|err| err.to_string())?;
+        check_and_download(&app).await;
+    } else if marker.exists() {
+        fs::remove_file(&marker).map_err(|err| err.to_string())?;
+    }
+    Ok(())
 }
 
 /// On Windows the installer takes over and restarts the app itself.

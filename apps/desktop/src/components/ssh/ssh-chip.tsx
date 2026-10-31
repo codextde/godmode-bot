@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useSshServers } from "@/lib/hooks";
+import { useSshServers, useBootstrap } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { SshStatusDot, sshAddress } from "./ssh-parts";
 
@@ -33,10 +33,11 @@ export function SshChip({
   onChange: (sshServerIds: string[]) => void | Promise<unknown>;
   busy?: boolean;
 }) {
+  const on = !!useBootstrap().data?.settings.ssh.enabled;
   const { data: servers = [], isLoading } = useSshServers();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  if (!agent) return null;
+  if (!agent || !on) return null;
 
   const fromAgent = new Set(agent.sshServerIds ?? []);
   const own = servers.filter((s) => value.includes(s.id) && !fromAgent.has(s.id));

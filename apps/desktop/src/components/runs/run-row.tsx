@@ -3,9 +3,8 @@ import { formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Run } from "@godmode/shared";
 import { useLive } from "@/stores/live";
 import { AgentAvatar } from "@/components/common";
-import { useSpendTracking } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
-import { formatCost, formatDuration, formatElapsed, RunStatusIcon, TriggerBadge } from "./run-status";
+import { formatDuration, formatElapsed, RunStatusIcon, TriggerBadge } from "./run-status";
 
 /** Re-render every `interval` ms while `active`; returns Date.now(). */
 export function useNow(active: boolean, interval = 1000): number {
@@ -47,7 +46,6 @@ export function RunRow({
   className?: string;
 }) {
   const { live, status, running, elapsed } = useRunLiveState(run);
-  const spendTracking = useSpendTracking();
   const when = run.startedAt ?? run.createdAt;
   const snippet = (run.prompt || "").replace(/\s+/g, " ").trim() || "(no prompt)";
 
@@ -79,11 +77,6 @@ export function RunRow({
         <span className="w-16 text-right" title="Duration">
           {elapsed != null ? <span className="font-mono text-brand-strong">{formatElapsed(elapsed)}</span> : formatDuration(run.durationMs)}
         </span>
-        {spendTracking && (
-          <span className="w-14 text-right" title="Cost">
-            {formatCost(run.costUsd)}
-          </span>
-        )}
       </div>
       <span className="w-20 shrink-0 text-right text-xs text-muted-foreground tabular-nums" title={new Date(when).toLocaleString()}>
         {formatDistanceToNowStrict(new Date(when), { addSuffix: true })}

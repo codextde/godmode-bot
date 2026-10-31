@@ -34,8 +34,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  group: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') && 'release-canary' || format('release-{0}', github.event.inputs.tag || github.ref_name) }}
+  cancel-in-progress: ${{ contains(github.event.inputs.tag || github.ref_name, '-canary.') }}
 
 env:
   TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -49,6 +49,7 @@ jobs:
     outputs:
       release_id: ${{ steps.release.outputs.id }}
       version: ${{ steps.version.outputs.version }}
+      canary: ${{ steps.version.outputs.canary }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -63,6 +64,7 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-canary.* ]]; then echo "canary=true" >> "$GITHUB_OUTPUT"; else echo "canary=false" >> "$GITHUB_OUTPUT"; fi
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -347,9 +349,48 @@ jobs:
           gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?name=latest.json" \
             -H "Content-Type: application/json" --input latest.rewritten.json --jq .browser_download_url
 
+  canary-feed:
+    name: Publish the canary
+    needs: [create-release, updater-manifest]
+    if: needs.create-release.outputs.canary == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the prerelease and point the canary feed at it
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+        run: |
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$TAG" -F draft=false -F prerelease=true --jq .html_url
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID/assets?per_page=100" --jq '.[] | select(.name == "latest.json") | .id')
+          gh api -H "Accept: application/octet-stream" "repos/$GITHUB_REPOSITORY/releases/assets/$id" > latest.json
+          feed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[] | select(.tag_name == "canary") | .id' | head -n1)
+          if [ -z "$feed" ]; then
+            feed=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name=canary -f target_commitish="$GITHUB_SHA" \
+              -f name="Canary channel" -f body="Update feed of the canary channel. The builds are the v*-canary.* prereleases." \
+              -F prerelease=true --jq .id)
+          fi
+          old=$(gh api "repos/$GITHUB_REPOSITORY/releases/$feed/assets?per_page=100" --jq '.[] | select(.name == "latest.json") | .id')
+          if [ -n "$old" ]; then gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$old"; fi
+          gh api -X POST "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$feed/assets?name=latest.json" \
+            -H "Content-Type: application/json" --input latest.json --jq .browser_download_url
+
+      - name: Keep the three newest canaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select(.tag_name | test("^v[0-9.]+-canary\\.[0-9]+$")) | "\(.id) \(.tag_name)"' |
+            sort -k2 -V -r | tail -n +4 |
+            while read -r id tag; do
+              [ "$tag" = "$TAG" ] && continue
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" || true
+            done
+
   server:
     name: Server binaries (${{ matrix.os }})
     needs: create-release
+    if: needs.create-release.outputs.canary != 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -454,6 +495,7 @@ jobs:
   docker:
     name: Docker image
     needs: create-release
+    if: needs.create-release.outputs.canary != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
