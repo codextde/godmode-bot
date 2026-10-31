@@ -33,6 +33,7 @@ import {
   MessageSquarePlus,
   MonitorUp,
   Moon,
+  Palette,
   Phone,
   Plug,
   Plus,
@@ -67,6 +68,8 @@ import { ATTENTION_ICON } from "@/components/attention/attention-list";
 import { useUi } from "@/stores/ui";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
+import { PALETTES } from "@godmode/shared";
+import { PALETTE_DEFS } from "@/lib/palettes";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { cloudContext } from "@/lib/core";
@@ -124,7 +127,7 @@ export function CommandPalette() {
   const setOpen = useUi((s) => s.setCommandOpen);
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { resolved, toggle: toggleTheme } = useTheme();
+  const { resolved, palette, setPalette, toggle: toggleTheme } = useTheme();
   const mode = useInterfaceMode();
   const { setMode } = useSetInterfaceMode();
   // In Easy mode pages go by their plain names; both names always find them.
@@ -316,6 +319,18 @@ export function CommandPalette() {
           >
             {resolved === "dark" ? <Sun /> : <Moon />} Switch to {resolved === "dark" ? "light" : "dark"} mode <CommandShortcut>{THEME_SHORTCUT}</CommandShortcut>
           </CommandItem>
+          {PALETTES.filter((p) => p !== palette).map((p) => (
+            <CommandItem
+              key={`palette-${p}`}
+              value={`palette theme colors appearance ${PALETTE_DEFS[p].label}`}
+              onSelect={() => {
+                setPalette(p);
+                setOpen(false);
+              }}
+            >
+              <Palette /> Use the {PALETTE_DEFS[p].label} palette
+            </CommandItem>
+          ))}
           <CommandItem
             value={`switch to ${MODE_LABEL[mode === "easy" ? "pro" : "easy"]} mode interface simple advanced beginner expert`}
             onSelect={() => {

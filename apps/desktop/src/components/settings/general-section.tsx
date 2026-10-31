@@ -7,10 +7,12 @@ import { Switch } from "@/components/ui/switch";
 import { useTheme } from "@/components/theme-provider";
 import { THEME_SHORTCUT } from "@/components/layout/theme-toggle";
 import { isTauri } from "@/lib/core";
+import { PALETTE_DEFS } from "@/lib/palettes";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
 import { ModePicker } from "./mode-picker";
+import { PalettePicker } from "./palette-picker";
 import { PowerGroup } from "./power-group";
 import { CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useSettingsPatch } from "./settings-kit";
 
@@ -18,7 +20,7 @@ type Theme = Settings["general"]["theme"];
 
 export function GeneralSection({ settings }: { settings: Settings }) {
   const { patch } = useSettingsPatch();
-  const { theme, setTheme } = useTheme();
+  const { theme, resolved, palette, setTheme, setPalette } = useTheme();
   const g = settings.general;
   const { setMode } = useSetInterfaceMode();
 
@@ -78,9 +80,9 @@ export function GeneralSection({ settings }: { settings: Settings }) {
       </SettingsGroup>
 
       <SettingsGroup title="Appearance" icon={<Palette />}>
-        <SettingRow label="Theme" description={`Warm paper by day, anthracite by night. System follows your OS. Switch any time with ${THEME_SHORTCUT}.`}>
+        <SettingRow label="Mode" description={`Every palette has a light and a dark side. System follows your OS. Switch any time with ${THEME_SHORTCUT}.`}>
           <Segmented<Theme>
-            aria-label="Theme"
+            aria-label="Mode"
             value={theme}
             onChange={setTheme}
             options={[
@@ -89,6 +91,9 @@ export function GeneralSection({ settings }: { settings: Settings }) {
               { value: "system", label: "System", icon: <Laptop /> },
             ]}
           />
+        </SettingRow>
+        <SettingRow label="Palette" description={PALETTE_DEFS[palette].blurb} stacked>
+          <PalettePicker value={palette} mode={resolved} onChange={setPalette} />
         </SettingRow>
       </SettingsGroup>
 

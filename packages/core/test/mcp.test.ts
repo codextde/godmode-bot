@@ -1533,6 +1533,7 @@ describe("settings tools", () => {
     expect(agentSettingKeys().sort()).toEqual(
       [
         "general.theme",
+        "general.palette",
         "general.mode",
         "general.minimizeToTray",
         "runner.model",

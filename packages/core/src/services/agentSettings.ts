@@ -16,7 +16,7 @@ type Sections = Record<string, unknown>;
  * for good, or brakes and caps agents. A new setting is closed until it is added here.
  */
 const AGENT_SETTINGS: Record<string, readonly string[]> = {
-  general: ["theme", "mode", "minimizeToTray"],
+  general: ["theme", "palette", "mode", "minimizeToTray"],
   runner: ["model", "fallbackModel", "effort", "ultracode", "maxConcurrentRuns", "runTimeoutMinutes", "autoContinueOnLimit", "resumeAfterRestart", "stallMinutes", "loopRepeats", "autoCompactPercent"],
   browser: ["headless", "keepAliveMinutes", "stealth", "muteAudio"],
   computer: ["agentCursor", "liveViewFps", "screenshotMaxSize"],
