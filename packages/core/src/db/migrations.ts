@@ -1804,4 +1804,24 @@ CREATE INDEX IF NOT EXISTS idx_offers_dream ON offers(dream_id);
     name: "remove_costs",
     sql: REMOVE_COSTS_SQL,
   },
+  {
+    id: 110,
+    name: "claude_accounts",
+    sql: /* sql */ `
+-- Claude subscriptions signed in from Godmode (their tokens live in the vault); the system login is not a row.
+CREATE TABLE IF NOT EXISTS claude_accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT,
+  name TEXT,
+  organization TEXT,
+  plan TEXT,
+  limited_until TEXT,
+  needs_sign_in INTEGER NOT NULL DEFAULT 0,
+  last_used_at TEXT,
+  created_at TEXT NOT NULL
+);
+-- JSON {ids, defaultId}: the Claude accounts a workspace's runs use; NULL = Godmode's.
+ALTER TABLE workspaces ADD COLUMN claude_accounts TEXT;
+`,
+  },
 ];

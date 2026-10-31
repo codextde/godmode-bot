@@ -72,6 +72,7 @@ import { isUnlocked, redact, redactionEpoch } from "../vault/vault";
 import { hasCardsForAgent } from "../vault/cards";
 import { commitAgentRepo, ensureAgentRepo, getAgent, listAgents, peersFor, setAgentFailedRun, setAgentStatus, teamOf, touchAgentRun } from "../agents/service";
 import { noteClaudeSignedOut, noteClaudeWorks } from "../services/claudeLogin";
+import { accountForRun, applyAccountEnv, noteAccountLimit, noteClaudeAccountSignedOut, type RunAccount } from "../services/claudeAccounts";
 import { isDirectory, workingDirectoryProblem } from "../services/folders";
 import { prepareSources, type RunSource } from "../services/workspaceSources";
 import { projectOfChat } from "../services/projects";
@@ -182,6 +183,8 @@ export function __setPersistForTests(intervalMs: number, backoff: number) {
   persistBackoff = backoff;
 }
 const KILL_GRACE_MS = 5000;
+/** A run whose account hit its limit continues on the next one after this short breath. */
+const ACCOUNT_SWITCH_DELAY_MS = 2_000;
 /** A pause lets the step in progress finish for this long before it cuts it off. */
 const PAUSE_GRACE_MS = 8000;
 /** Continuations a Stop hook (`/goal`) forces in a row without a tool call before Godmode ends the run. */
@@ -373,6 +376,8 @@ interface Job {
     killed?: boolean;
     /** What the run asked the human (`question` pauses): stored once the run stands still for it. */
     question?: PendingQuestion;
+    /** The limit was reached on one Claude account and the run goes on right away on another. */
+    switchAccount?: boolean;
   } & Partial<LimitPause>;
   pauseTimer?: ReturnType<typeof setTimeout> | null;
   /**
@@ -404,6 +409,10 @@ interface Job {
   goalClear?: { reason: string; atCheck: number };
   /** Where its Claude Code keeps sessions (GLM runs have a config folder of their own); null = the default. */
   claudeConfigDir?: string | null;
+  /** The Claude account it runs with; null = Claude Code's own login (no other accounts, GLM, a runner). */
+  claudeAccount?: RunAccount | null;
+  /** The workspace whose Claude accounts it may use. */
+  accountWorkspaceId?: string | null;
   /** Resolves ids in tool input for the activity label (memoized per run). */
   names?: ActivityNames;
   /** What this stretch of the run sends to Claude. */
@@ -2361,6 +2370,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";
   if (zai) applyZaiEnv(env, model, zai);
+  else {
+    job.accountWorkspaceId = chatWorkspaceId(job.conversationId) ?? workspaceId;
+    job.claudeAccount = glm ? null : await accountForRun(job.accountWorkspaceId).catch((err) => {
+      log.warn("could not pick a Claude account; using Claude Code's own login", err);
+      return null;
+    });
+    applyAccountEnv(env, job.claudeAccount);
+  }
   job.claudeConfigDir = env.CLAUDE_CONFIG_DIR ?? null;
   // Scripts that drive the browser themselves (Playwright, puppeteer) get the run's own endpoint: its profile, its chat's tabs.
   const cdpUrl = !vm && mcp.mcpServers[BROWSER_MCP_NAME] ? chatLeaseUrl(job.runId) : null;
@@ -2472,13 +2489,15 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     if (job.stalled) return { status: "failed", error: job.stalled };
     if (job.timedOut) return { status: "failed", error: `Timed out after ${timeoutMinutes} minutes` };
     if (answer && !limited) {
-      if (!glm) noteClaudeWorks();
+      if (!glm && !job.claudeAccount?.token) noteClaudeWorks();
       return { status: "succeeded", error: null };
     }
     // Claude's usage limit ended the run: it stands still until the limit has reset.
     const limit = limitOf(job, attempt);
     if (limit) {
-      job.pause = { reason: "limit", applied: true, ...limit };
+      const next = job.claudeAccount ? noteAccountLimit(job.claudeAccount.id, limit.resumeAt, job.accountWorkspaceId ?? null) : null;
+      if (next) job.acc.addNotice("info", `Claude account ${job.claudeAccount!.label} reached its ${limit.limit}. Switching to ${next.label}.`);
+      job.pause = { reason: "limit", applied: true, ...limit, ...(next ? { switchAccount: true } : {}) };
       // As with a pause by hand: what it delegated would report back to a process that is gone.
       for (const child of delegatedBy(job.runId)) await cancelRun(child, "Stopped (the run that delegated this waits for Claude's usage limit)").catch(() => {});
       return { status: "paused", error: null };
@@ -2486,7 +2505,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     const unsaid = limitUnsaid(job, attempt);
     if (unsaid) return { status: "failed", error: `Claude's ${unsaid.limit} is reached` };
     const error = describeFailure(job, attempt);
-    if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt)) {
+    if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt) && job.claudeAccount?.token) noteClaudeAccountSignedOut(job.claudeAccount.id);
+    else if (error === CLAUDE_SIGNED_OUT && claudeSaidSignedOut(job, attempt)) {
       void noteClaudeSignedOut({ apiKey: !!env.ANTHROPIC_API_KEY, since: job.spawnedAt }).catch((err) => log.warn("could not mark Claude Code signed out", err));
     }
     return { status: "failed", error };
@@ -2648,7 +2668,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   const answered = acc.answered;
   const before = job.resumed;
   // Tries by the timer that hit the limit again before Claude answered.
-  const retries = pause.reason === "limit" && !answered && before ? before.retries + (before.byTimer ? 1 : 0) : 0;
+  const retries = pause.reason === "limit" && !pause.switchAccount && !answered && before ? before.retries + (before.byTimer ? 1 : 0) : 0;
   // What the human chose for this run stays; otherwise the setting decides.
   const choice = before?.choice ?? null;
   const wanted = choice ?? getSettings().runner.autoContinueOnLimit;
@@ -2669,8 +2689,8 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
     also_answers: JSON.stringify(job.alsoAnswers),
     reason: pause.reason,
     limit_name: pause.limit ?? null,
-    resume_at: pause.resumeAt ?? null,
-    auto: pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted ? 1 : 0,
+    resume_at: pause.switchAccount ? new Date(Date.now() + ACCOUNT_SWITCH_DELAY_MS).toISOString() : (pause.resumeAt ?? null),
+    auto: pause.switchAccount || (pause.reason === "limit" && !!pause.resumeAt && retries < MAX_RETRIES && wanted) ? 1 : 0,
     choice: choice === null ? null : choice ? 1 : 0,
     delivered: delivered ? 1 : 0,
     redo: unsent === null ? null : redact(unsent),
@@ -2717,7 +2737,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
       if (asked) {
         saveQuestion(asked, { runId: job.runId, agentId: job.agentId, conversationId: job.conversationId, messageId: job.messageId, cutOff: !!pause.killed });
       }
-      savePause(row);
+      savePause(row, { quiet: !!pause.switchAccount });
     });
   } catch (err) {
     // A run that can't be kept must not look paused forever, and nothing may freeze its chat.
@@ -2741,7 +2761,7 @@ async function suspend(job: Job, agent: Agent | null, startedMs: number): Promis
   bus.changed("runs");
   if (asked) safely("announce the question", () => announceQuestion(asked.block.id));
   log.info("run paused", { runId: job.runId, reason: pause.reason, ...(row.resume_at ? { resumeAt: row.resume_at, auto: !!row.auto } : {}) });
-  if (pause.reason === "limit" && retries >= MAX_RETRIES && wanted) {
+  if (pause.reason === "limit" && !pause.switchAccount && retries >= MAX_RETRIES && wanted) {
     safely("stop continuing", () => stopContinuing(row, `Claude still reports its ${row.limit_name ?? "usage limit"} after ${MAX_RETRIES} tries. Continue the chat when the limit has reset.`));
   }
   // The slot is free: other chats go on.

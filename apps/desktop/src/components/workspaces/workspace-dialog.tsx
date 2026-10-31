@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceSourceInput } from "@godmode/shared";
+import { AGENT_COLORS, MAX_INSTRUCTIONS_LENGTH, type Workspace, type WorkspaceClaudeAccounts, type WorkspaceSourceInput } from "@godmode/shared";
 import { DraftStatus } from "@/components/common";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,6 +21,7 @@ import { qk } from "@/lib/queryKeys";
 import { useUi } from "@/stores/ui";
 import { WorkspaceSourcesField, toSourceInput } from "./workspace-sources";
 import { ColorRadios, ICONS, IconPicker } from "./icon-picker";
+import { WorkspaceAccountsField } from "./workspace-accounts-field";
 
 const MAX_NAME = 60;
 const NEW_DRAFT = "workspace:new";
@@ -35,6 +36,7 @@ interface WorkspaceForm {
   browserProfileId: string | null;
   sources: WorkspaceSourceInput[];
   autoMerge: boolean;
+  claudeAccounts: WorkspaceClaudeAccounts | null;
 }
 
 function randomLook() {
@@ -52,6 +54,7 @@ function formFrom(workspace: Workspace | null | undefined, look: { icon: string;
     browserProfileId: workspace?.browserProfileId ?? null,
     sources: workspace?.sources.map(toSourceInput) ?? [],
     autoMerge: workspace?.autoMerge ?? false,
+    claudeAccounts: workspace?.claudeAccounts ?? null,
   };
 }
 
@@ -82,7 +85,7 @@ export function WorkspaceDialog({
   const closing = useRef(live);
   if (open) closing.current = live;
   const form = open ? live : closing.current;
-  const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge } = form;
+  const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge, claudeAccounts } = form;
   const set =
     <K extends keyof WorkspaceForm>(key: K) =>
     (value: WorkspaceForm[K]) =>
@@ -122,6 +125,7 @@ export function WorkspaceDialog({
         instructions: instructions.trim(),
         sources,
         autoMerge,
+        ...(JSON.stringify(claudeAccounts) !== JSON.stringify(workspace?.claudeAccounts ?? null) ? { claudeAccounts } : {}),
         // Only when the VM control is shown: otherwise leave the assignment as it is.
         ...(vmChoices.available ? { vmId } : {}),
         ...(browserProfileId !== (workspace?.browserProfileId ?? null) ? { browserProfileId } : {}),
@@ -242,6 +246,7 @@ export function WorkspaceDialog({
               </div>
               <Switch id="ws-auto-merge" className="mt-0.5" checked={autoMerge} onCheckedChange={set("autoMerge")} />
             </div>
+            <WorkspaceAccountsField value={claudeAccounts} onChange={set("claudeAccounts")} />
             <WorkspaceProfileField id="ws-browser" workspaceId={workspace?.id ?? null} value={browserProfileId} onChange={set("browserProfileId")} />
             {vmChoices.available && (
               <VmSelectField
