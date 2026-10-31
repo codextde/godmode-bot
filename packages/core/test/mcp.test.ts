@@ -88,6 +88,7 @@ function delegatedRunId(r: { content: { text: string }[] }): string {
 
 beforeAll(async () => {
   env = await setupEnv("godmode-mcp-");
+  updateSettings({ vm: { enabled: true } });
   worker = await makeAgent({ name: "Worker", description: "Does browser work", browser: { enabled: true }, permissions: { allowDelegation: false } });
   manager = await makeAgent({ name: "Boss", permissions: { canManageAgents: true, allowDelegation: true } });
   revealer = await makeAgent({ name: "Revealer", permissions: { secretAccess: "reveal", allowDelegation: false } });

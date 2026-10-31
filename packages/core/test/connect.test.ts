@@ -63,6 +63,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<{ s
 
 beforeAll(async () => {
   env = await setupEnv("godmode-connect-");
+  updateSettings({ vm: { enabled: true } });
   godmode = await ensureDefaultAgent();
   const full = createConnector({ name: "Claude Code", client: "claude-code", access: "manage" });
   manage = full.token;

@@ -53,9 +53,9 @@ function heldRun(agentId: string): string {
   return runId;
 }
 
-describe("migration 108 removes costs", () => {
+describe("migration 109 removes costs", () => {
   test("embeds the SQL", () => {
-    expect(MIGRATIONS.find((m) => m.name === "remove_costs")).toMatchObject({ id: 108, sql: REMOVE_COSTS_SQL });
+    expect(MIGRATIONS.find((m) => m.name === "remove_costs")).toMatchObject({ id: 109, sql: REMOVE_COSTS_SQL });
   });
 
   test("strips the spend settings and the agents' budgets", () => {

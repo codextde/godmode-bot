@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
@@ -207,24 +207,24 @@ export function App() {
           <Route path="/my-tasks" element={<MyTasksRedirect />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
-          <Route path="/plugins" element={<PluginsPage />} />
+          <Route path="/plugins" element={<FeaturePage on={b.settings.plugins.enabled} section="plugins" keep="plugin"><PluginsPage /></FeaturePage>} />
           <Route path="/mods" element={<LegacyModsRedirect />} />
-          <Route path="/activity" element={<ActivityPage />} />
+          <Route path="/activity" element={<FeaturePage on={b.settings.activity.enabled} section="activity" keep="run"><ActivityPage /></FeaturePage>} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />
           <Route path="/vault/logins" element={<LoginsPage />} />
           <Route path="/vault/2fa" element={<TotpPage />} />
-          <Route path="/vault/cards" element={<CardsPage />} />
+          <Route path="/vault/cards" element={<FeaturePage on={b.settings.cards.enabled} section="cards"><CardsPage /></FeaturePage>} />
           <Route path="/vault/passkeys" element={<PasskeysPage />} />
           <Route path="/integrations" element={<ToSettings section="integrations" />} />
           <Route path="/messaging" element={<ToSettings section="messaging" />} />
           <Route path="/browser" element={<BrowserPage />} />
           <Route path="/computer" element={<ComputerPage />} />
-          <Route path="/vms" element={<VmsPage />} />
-          <Route path="/ssh" element={<SshPage />} />
+          <Route path="/vms" element={<FeaturePage on={b.settings.vm.enabled} section="vms"><VmsPage /></FeaturePage>} />
+          <Route path="/ssh" element={<FeaturePage on={b.settings.ssh.enabled} section="ssh"><SshPage /></FeaturePage>} />
           <Route path="/android" element={<ToSettings section="android" />} />
           <Route path="/android/:id" element={b.settings.android.enabled ? <AndroidDevicePage /> : <ToSettings section="android" />} />
-          <Route path="/calls" element={<CallsPage />} />
+          <Route path="/calls" element={<FeaturePage on={b.settings.phone.enabled} section="calls" keep="call"><CallsPage /></FeaturePage>} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           <Route path="/settings/:section" element={<SettingsPage />} />
@@ -269,6 +269,16 @@ function NotFoundRedirect() {
 
 /** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
 /** My tasks became the Inbox's board: old links (notifications, tickets) open the same task there. */
+/**
+ * A page of a feature the human can turn off: while it's off, its address opens the feature's switch in Settings. A
+ * link to one record (a run, a call) still opens it.
+ */
+function FeaturePage({ on, section, keep, children }: { on: boolean; section: string; keep?: string; children: ReactNode }) {
+  const { search } = useLocation();
+  if (on || (keep && new URLSearchParams(search).has(keep))) return children;
+  return <Navigate to={`/settings/${section}`} replace />;
+}
+
 /** A page that moved into Settings: its old address, with its query (?tab=, ?connection=), opens the section. */
 function ToSettings({ section }: { section: string }) {
   const { search } = useLocation();

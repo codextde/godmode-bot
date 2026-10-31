@@ -86,7 +86,7 @@ export function FailedRunBanner({ agent }: { agent: Agent }) {
   );
 }
 
-/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when, how long and what it cost. */
+/** The desktop's "Recent runs": the agent's latest runs, how each went, what started it, when and how long. */
 export function AgentHistory({ agent }: { agent: Agent }) {
   const runs = useQuery({ queryKey: qk.agentRuns(agent.id), queryFn: () => api.runs.list({ agentId: agent.id, limit: SHOWN_RUNS }) });
   return (

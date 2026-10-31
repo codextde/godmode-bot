@@ -32,7 +32,7 @@ function open(link: string) {
 }
 
 /**
- * First thing on Home after the human was away for a while: what the team did meanwhile — who worked, what it cost,
+ * First thing on Home after the human was away for a while: what the team did meanwhile — who worked,
  * and the few things worth a look. Closed with ×; it doesn't come back until the next time they were away.
  */
 export function AwaySummaryCard() {

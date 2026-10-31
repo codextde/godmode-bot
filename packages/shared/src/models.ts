@@ -1556,6 +1556,26 @@ export interface MessagingSettings {
   enabled: boolean;
 }
 
+/** The Activity page: every run of every agent. Off only hides it; runs are still recorded. */
+export interface ActivitySettings {
+  enabled: boolean;
+}
+
+/** Claude Code plugins from the Plugins page: runs load them only while this is on. */
+export interface PluginSettings {
+  enabled: boolean;
+}
+
+/** Saved payment cards: agents may pay with them only while this is on. */
+export interface CardSettings {
+  enabled: boolean;
+}
+
+/** SSH servers agents sign in to: their tools only reach runs while this is on. */
+export interface SshSettings {
+  enabled: boolean;
+}
+
 export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
@@ -1626,12 +1646,17 @@ export interface Settings {
   vm: VmSettings;
   android: AndroidSettings;
   /**
-   * Optional features, off for new installs (Settings → Features). An install that already used one before the switch
-   * existed starts with it on (migration 105).
+   * Optional features, off for new installs (Settings → Features), Activity aside. An install that already used one
+   * before the switch existed starts with it on (migrations 105 and 108). Virtual machines (`vm`) and phone calls
+   * (`phone`) have their switch in their own section.
    */
   artifacts: ArtifactSettings;
   integrations: IntegrationSettings;
   messaging: MessagingSettings;
+  activity: ActivitySettings;
+  plugins: PluginSettings;
+  cards: CardSettings;
+  ssh: SshSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;

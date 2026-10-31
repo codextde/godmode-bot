@@ -350,8 +350,10 @@ export function AgentForm({
   const vmChoices = useVmChoices();
   const androidOn = !!boot?.settings.android.enabled;
   const integrationsOn = !!boot?.settings.integrations.enabled;
+  const sshOn = !!boot?.settings.ssh.enabled;
   const sections = SECTIONS.filter(
-    (s) => (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn) && (s.id !== "tools" || integrationsOn),
+    (s) =>
+      (s.id !== "vm" || vmChoices.available) && (s.id !== "android" || androidOn) && (s.id !== "tools" || integrationsOn) && (s.id !== "ssh" || sshOn),
   );
 
   const { hash } = useLocation();
@@ -686,9 +688,11 @@ export function AgentForm({
         </FormSection>
       )}
 
-      <FormSection id="ssh" title="SSH servers" description="Remote machines this agent can sign in to and control. Godmode types the password or key — the AI never sees it.">
-        <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
-      </FormSection>
+      {sshOn && (
+        <FormSection id="ssh" title="SSH servers" description="Remote machines this agent can sign in to and control. Godmode types the password or key — the AI never sees it.">
+          <SshField value={values.sshServerIds} onChange={(v) => set("sshServerIds", v)} />
+        </FormSection>
+      )}
 
       {androidOn && (
         <FormSection
