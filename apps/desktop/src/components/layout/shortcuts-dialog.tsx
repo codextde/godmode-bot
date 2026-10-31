@@ -11,7 +11,6 @@ export const GO_TO = [
   { key: "c", to: "/", label: "nav.chat" },
   { key: "t", to: "/tasks", label: "nav.tasks" },
   { key: "m", to: "/inbox?view=board", label: "shortcuts.goTo.todoBoard" },
-  { key: "p", to: "/projects", label: "nav.projects" },
   { key: "a", to: "/agents", label: "nav.agents" },
   { key: "u", to: "/automations", label: "nav.automations" },
   { key: "i", to: "/inbox", label: "nav.inbox" },
