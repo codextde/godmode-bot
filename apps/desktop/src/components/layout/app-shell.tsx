@@ -273,13 +273,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="-mx-1 flex gap-1.5 group-data-[collapsible=icon]:mx-0 group-data-[collapsible=icon]:flex-col">
             <Button
               asChild
-              variant="ghost"
-              className="h-8 flex-1 justify-start gap-2.5 rounded-md border border-sidebar-border bg-sidebar-accent/50 px-2 text-[13px] font-normal text-sidebar-foreground shadow-none hover:bg-sidebar-accent hover:text-foreground has-[>svg]:px-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
+              className="h-9 flex-1 justify-start gap-2 group-data-[collapsible=icon]:size-8 group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0"
             >
               <Link to="/">
-                <MessageSquarePlus className="size-4 text-muted-foreground" />
+                <MessageSquarePlus className="size-4" />
                 <span className="group-data-[collapsible=icon]:hidden">{t("shell.newChat")}</span>
-                <kbd className="ml-auto font-mono text-[10px] tracking-wide text-muted-foreground group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
+                <kbd className="ml-auto font-mono text-[10px] tracking-wide opacity-55 group-data-[collapsible=icon]:hidden">{modKey}N</kbd>
               </Link>
             </Button>
             <SearchButton className="hidden group-data-[collapsible=icon]:inline-flex" />
