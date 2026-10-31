@@ -64,12 +64,6 @@ export function formatWork(ms: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-/** "$0.84", "<$0.01". */
-export function formatCost(usd: number): string {
-  if (usd > 0 && usd < 0.01) return "<$0.01";
-  return `$${usd.toFixed(2)}`;
-}
-
 export const PRIORITY_LABEL: Record<TaskPriority, string> = { urgent: "Urgent", high: "High", medium: "Medium", low: "Low", none: "No priority" };
 
 export const BLOCKED_TITLE: Record<TaskBlockedKind, (agent: string) => string> = {

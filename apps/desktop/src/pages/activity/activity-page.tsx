@@ -4,12 +4,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { format, isToday, isYesterday } from "date-fns";
 import { Activity, RefreshCw, Search } from "lucide-react";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
-import { useAllAgents, useRuns, useSpendTracking } from "@/lib/hooks";
+import { useAllAgents, useRuns } from "@/lib/hooks";
 import { errorMessage } from "@/lib/api";
 import { useLive, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
-import { SpendStrip } from "@/components/runs/spend-strip";
 import { Orb } from "@/components/aicss/Orb";
 import { LiveDot, WorkingTicks } from "@/components/aicss/Motion";
 import { Button } from "@/components/ui/button";
@@ -18,7 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RunRow, useNow } from "@/components/runs/run-row";
 import { RunDetailSheet } from "@/components/runs/run-detail-sheet";
-import { formatCost, formatElapsed } from "@/components/runs/run-status";
+import { formatElapsed } from "@/components/runs/run-status";
 
 const STATUSES: { id: "all" | RunStatus; label: string }[] = [
   { id: "all", label: "All" },
@@ -98,14 +97,10 @@ export default function ActivityPage() {
     return out;
   }, [runs]);
 
-  const spendTracking = useSpendTracking();
-  const summary = useMemo(() => {
+  const successRate = useMemo(() => {
     const finished = runs.filter((r) => r.status === "succeeded" || r.status === "failed");
     const ok = finished.filter((r) => r.status === "succeeded").length;
-    return {
-      cost: runs.reduce((s, r) => s + (r.costUsd ?? 0), 0),
-      rate: finished.length ? Math.round((ok / finished.length) * 100) : null,
-    };
+    return finished.length ? Math.round((ok / finished.length) * 100) : null;
   }, [runs]);
 
   const selectedRun = runs.find((r) => r.id === selectedId) ?? null;
@@ -117,7 +112,7 @@ export default function ActivityPage() {
       <PageHeader
         icon={<Activity />}
         title="Activity"
-        description={spendTracking ? "Every run across your agents — and what it cost." : "Every run across your agents."}
+        description="Every run across your agents."
         actions={
           <Button variant="outline" size="icon" onClick={() => runsQ.refetch()} aria-label="Refresh" disabled={runsQ.isFetching}>
             <RefreshCw className={cn(runsQ.isFetching && "animate-spin")} />
@@ -125,15 +120,6 @@ export default function ActivityPage() {
         }
       />
       <PageBody className="space-y-6">
-        {spendTracking && (
-          <SpendStrip
-            period={(["today", "week", "month", "all"] as const).find((p) => p === params.get("period")) ?? "week"}
-            onPeriod={(p) => setParam("period", p === "week" ? null : p)}
-            agentId={agentFilter === "all" ? null : agentFilter}
-            agentById={agentById}
-            onAgent={(id) => setParam("agent", id)}
-          />
-        )}
         <AnimatePresence>
           {liveList.length > 0 && statusFilter !== "succeeded" && statusFilter !== "failed" && statusFilter !== "cancelled" && statusFilter !== "paused" && (
             <motion.section
@@ -209,8 +195,7 @@ export default function ActivityPage() {
           {runs.length > 0 && (
             <span className="ml-auto self-center text-xs text-muted-foreground tabular-nums">
               {runs.length} run{runs.length === 1 ? "" : "s"}
-              {spendTracking && ` · ${formatCost(summary.cost)}`}
-              {summary.rate != null && ` · ${summary.rate}% success`}
+              {successRate != null && ` · ${successRate}% success`}
             </span>
           )}
         </div>

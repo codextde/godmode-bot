@@ -357,18 +357,15 @@ describe("untrusted backup contents", () => {
     expect(warnings.some((w) => w.includes("1 plugin(s) with an unsafe name"))).toBe(true);
   });
 
-  test("a backup from before spend tracking keeps it on only where it had budgets", async () => {
-    const withRunner = (runner: Record<string, unknown>) =>
-      tamper((dump) => {
-        const settings = (dump.tables.settings ??= []).filter((row) => row.key !== "runner");
-        dump.tables.settings = [...settings, { key: "runner", value: JSON.stringify(runner) }];
-      });
-    await importBackup(withRunner({ monthlyBudgetUsd: 20 }), BACKUP_PASSPHRASE);
-    expect(getSettings().runner).toMatchObject({ monthlyBudgetUsd: 20, spendTracking: true });
-    await importBackup(withRunner({ effort: "high" }), BACKUP_PASSPHRASE);
-    expect(getSettings().runner.spendTracking).toBe(false);
-    await importBackup(withRunner({ monthlyBudgetUsd: 20, spendTracking: false }), BACKUP_PASSPHRASE);
-    expect(getSettings().runner.spendTracking).toBe(false);
+  test("a backup with spend tracking and budgets comes back without them", async () => {
+    const old = tamper((dump) => {
+      const settings = (dump.tables.settings ??= []).filter((row) => row.key !== "runner");
+      dump.tables.settings = [...settings, { key: "runner", value: JSON.stringify({ effort: "high", spendTracking: true, monthlyBudgetUsd: 20, defaultMaxBudgetUsd: 2 }) }];
+    });
+    await importBackup(old, BACKUP_PASSPHRASE);
+    const runner = getSettings().runner as unknown as Record<string, unknown>;
+    expect(runner.effort).toBe("high");
+    for (const key of ["spendTracking", "monthlyBudgetUsd", "defaultMaxBudgetUsd"]) expect(key in runner).toBe(false);
   });
 
   test("turns off unattended computer use, clears shared screens and the Cua Driver command", async () => {

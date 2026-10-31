@@ -3,7 +3,7 @@ import { formatDistanceStrict } from "date-fns";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
-import { formatUsd, type AwayHighlight } from "@godmode/shared";
+import type { AwayHighlight } from "@godmode/shared";
 import { CharacterAvatar } from "./character";
 import { Icon, type IconName } from "./icon";
 import { openChat } from "./rows";
@@ -13,7 +13,6 @@ import { api } from "@/lib/api";
 import { useAwayStore } from "@/lib/away";
 import { useAgents } from "@/lib/hooks";
 import { qk } from "@/lib/query";
-import { useSpendTracking } from "@/lib/setup";
 import { space, useColors, type Colors } from "@/lib/theme";
 
 const ICON: Record<AwayHighlight["kind"], IconName> = { delivered: "tasks", failed: "warning", replied: "chats", automation: "workflow" };
@@ -33,7 +32,7 @@ function open(link: string) {
 }
 
 /**
- * First thing on Home after the human was away for a while: what the team did meanwhile — who worked, what it cost,
+ * First thing on Home after the human was away for a while: what the team did meanwhile — who worked,
  * and the few things worth a look. Closed with ×; it doesn't come back until the next time they were away.
  */
 export function AwaySummaryCard() {
@@ -41,7 +40,6 @@ export function AwaySummaryCard() {
   const away = useAwayStore((s) => s.away);
   const dismiss = useAwayStore((s) => s.dismiss);
   const { byId: agents } = useAgents();
-  const spendTracking = useSpendTracking();
   const { data } = useQuery({
     queryKey: qk.away(away?.since ?? ""),
     queryFn: () => api.away(away!.since, away!.until),
@@ -53,7 +51,6 @@ export function AwaySummaryCard() {
     plural(data.finished, "run") + " finished",
     data.failed ? plural(data.failed, "problem") : null,
     data.delivered ? `${plural(data.delivered, "ticket")} delivered` : null,
-    spendTracking && data.costUsd > 0 ? `${formatUsd(data.costUsd)} spent` : null,
   ].filter(Boolean);
   const now = new Date();
 

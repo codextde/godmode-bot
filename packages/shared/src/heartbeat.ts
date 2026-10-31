@@ -100,9 +100,9 @@ export function heartbeatIntervalLabel(minutes: number): string {
 }
 
 /**
- * - `quiet`: nothing to move forward and no checklist — no run, no cost.
+ * - `quiet`: nothing to move forward and no checklist — no run.
  * - `woke`: it woke the agent on tickets and/or ran its checklist.
- * - `skipped`: the last beat's run was still working, the agent was off, a budget or the licence held it.
+ * - `skipped`: the last beat's run was still working, the agent was off, or the licence held it.
  * - `failed`: the beat couldn't start what it wanted to.
  */
 export type HeartbeatOutcome = "quiet" | "woke" | "skipped" | "failed";
@@ -137,7 +137,6 @@ export interface HeartbeatBeat {
   conversationId: ID | null;
   runStatus: string | null;
   result: string | null;
-  costUsd: number | null;
   createdAt: ISODate;
 }
 

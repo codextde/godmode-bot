@@ -686,7 +686,7 @@ export function deleteRoutine(id: string): void {
  * Run an automation now: a schedule runs its prompt, a condition is checked, app and webhook automations get a
  * test event. Throws 409 when it is already running.
  */
-/** `byHuman`: the human clicked Run now (a scheduled automation then runs although a monthly budget is used up). */
+/** `byHuman`: the human clicked Run now (a test event then isn't held for a stand-in). */
 /** `here`: another computer of the group sent it here as the one it is pinned to (routes/link.ts): no further hop. */
 export async function runRoutineNow(id: string, opts: { byHuman?: boolean; here?: boolean } = {}): Promise<Run> {
   const routine = getRoutine(id);
@@ -703,6 +703,6 @@ export async function runRoutineNow(id: string, opts: { byHuman?: boolean; here?
       return started;
     }
     default:
-      return triggerRoutine(id, { byHuman: opts.byHuman });
+      return triggerRoutine(id);
   }
 }

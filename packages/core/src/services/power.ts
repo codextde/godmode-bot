@@ -361,7 +361,7 @@ function stopPolling() {
   pollTimer = null;
 }
 
-/** A pause the Mac should stay awake for: a question, or a usage limit that resets soon. Paused by hand or held by a budget: no. */
+/** A pause the Mac should stay awake for: a question, or a usage limit that resets soon. Paused by hand: no. */
 function waitsShortly(runId: string): boolean {
   const pause = get<{ reason: string; resume_at: string | null }>("SELECT reason, resume_at FROM paused_runs WHERE run_id = ?", runId);
   if (pause?.reason === "question") return true;

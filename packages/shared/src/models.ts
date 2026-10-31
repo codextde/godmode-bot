@@ -141,10 +141,6 @@ export interface AgentPermissions {
   credentialIds: ID[] | null;
   /** TOTP ids the agent may use. `null` = every TOTP in its scope. */
   totpIds: ID[] | null;
-  /** Hard cost cap per run in USD (passed to claude --max-budget-usd). null = unlimited */
-  maxBudgetUsd: number | null;
-  /** What the agent may cost per calendar month in USD; used up = its unattended work waits. null = no budget. Human-only. */
-  monthlyBudgetUsd?: number | null;
 }
 
 export interface AgentBrowserConfig {
@@ -212,8 +208,6 @@ export interface Agent {
   pausedRuns?: number;
   /** Runs of the agent that wait for the human's answer (see AgentQuestion). They are not part of `pausedRuns`. */
   openQuestions?: number;
-  /** Runs of the agent held because a monthly budget is used up. They are not part of `pausedRuns`. */
-  heldRuns?: number;
   lastRunAt: ISODate | null;
   createdAt: ISODate;
   updatedAt: ISODate;
@@ -448,10 +442,9 @@ export type ConversationFollowup = Pick<Followup, "note" | "dueAt" | "createdAt"
 
 /**
  * `user`: the human paused the run · `limit`: Claude's usage limit was reached mid-run · `question`: the run asked the
- * human something and waits for the answer (see AgentQuestion) · `budget`: unattended work held because a monthly budget
- * is used up (see PauseBudget).
+ * human something and waits for the answer (see AgentQuestion).
  */
-export type PauseReason = "user" | "limit" | "question" | "budget";
+export type PauseReason = "user" | "limit" | "question";
 
 /** How a turn that ended early is picked up: `continue` where it stopped, or `again` from its prompt. */
 export type RetryMode = "continue" | "again";
@@ -461,13 +454,6 @@ export type RetryMode = "continue" | "again";
  * or background work the end of the turn stopped.
  */
 export type RetryCause = "restart" | "offline" | "error" | "background";
-
-/** Whose monthly budget holds a run: the agent's own, or the whole team's. */
-export interface PauseBudget {
-  scope: "agent" | "team";
-  /** The monthly budget in USD when the run was held. */
-  limitUsd: number;
-}
 
 /** A run that stands still. Continuing it picks the work up where it stopped, in the same run and Claude session. */
 export interface RunPause {
@@ -482,9 +468,6 @@ export interface RunPause {
   auto: boolean;
   /** Question pauses: what the human is asked. Answering it is the only way to continue the run. */
   question?: Pick<AgentQuestion, "id" | "kind" | "title"> | null;
-  /** Budget pauses: which budget holds it. It continues by itself on the 1st of next month (`resumeAt`) or once the
-   *  budget has room again, or now when the human lets it run. */
-  budget?: PauseBudget | null;
 }
 
 /** `question`: the agent asks something, with suggested answers · `approval`: it asks for an OK before one specific step. */
@@ -635,7 +618,7 @@ export type MessageBlock =
   /** A message the human sent while the agent was working, at the point where the agent picked it up. */
   | { type: "user_message"; id: ID; text: string; attachments: Attachment[]; sentAt: ISODate }
   /** Where the run stood still (see RunPause). `resumedAt` is set once it continued from there. */
-  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate; budget?: PauseBudget | null }
+  | { type: "pause"; reason: PauseReason; at: ISODate; limit?: string | null; resumeAt?: ISODate | null; resumedAt?: ISODate }
   /**
    * What the agent asked the human at this point of the turn (see AgentQuestion; `id` is the question's). A snapshot
    * that needs no lookup: it is `open` from the moment the agent asks — the run stands still for it a moment later,
@@ -767,6 +750,7 @@ export interface Run {
   prompt: string;
   result: string | null;
   error: string | null;
+  /** What Claude Code reported, kept for device-group mirroring only: never shown (Godmode runs on a Claude subscription). */
   costUsd: number | null;
   durationMs: number | null;
   numTurns: number | null;
@@ -1405,14 +1389,6 @@ export interface RunnerSettings {
    * 0 = never by itself (only /compress), null = Claude Code's own threshold (close to full).
    */
   autoCompactPercent: number | null;
-  /**
-   * Shows what runs cost in USD and enables budgets. Off (Claude subscription, where Claude Code's costs are API prices
-   * nobody pays): nothing about cost is shown and no budget applies. Costs are recorded either way.
-   */
-  spendTracking: boolean;
-  defaultMaxBudgetUsd: number | null;
-  /** What the whole team may cost per calendar month in USD; used up = unattended work waits. null = no budget. */
-  monthlyBudgetUsd: number | null;
   extraArgs: string[];
   /** Global instructions: included in every run of every agent. */
   appendSystemPrompt: string;
@@ -1583,6 +1559,26 @@ export interface MessagingSettings {
   enabled: boolean;
 }
 
+/** The Activity page: every run of every agent. Off only hides it; runs are still recorded. */
+export interface ActivitySettings {
+  enabled: boolean;
+}
+
+/** Claude Code plugins from the Plugins page: runs load them only while this is on. */
+export interface PluginSettings {
+  enabled: boolean;
+}
+
+/** Saved payment cards: agents may pay with them only while this is on. */
+export interface CardSettings {
+  enabled: boolean;
+}
+
+/** SSH servers agents sign in to: their tools only reach runs while this is on. */
+export interface SshSettings {
+  enabled: boolean;
+}
+
 export interface AndroidSettings {
   /** Godmode looks for Android phones connected over adb, and agents may control the phones assigned to them. */
   enabled: boolean;
@@ -1653,12 +1649,17 @@ export interface Settings {
   vm: VmSettings;
   android: AndroidSettings;
   /**
-   * Optional features, off for new installs (Settings → Features). An install that already used one before the switch
-   * existed starts with it on (migration 105).
+   * Optional features, off for new installs (Settings → Features), Activity aside. An install that already used one
+   * before the switch existed starts with it on (migrations 105 and 108). Virtual machines (`vm`) and phone calls
+   * (`phone`) have their switch in their own section.
    */
   artifacts: ArtifactSettings;
   integrations: IntegrationSettings;
   messaging: MessagingSettings;
+  activity: ActivitySettings;
+  plugins: PluginSettings;
+  cards: CardSettings;
+  ssh: SshSettings;
   voice: VoiceSettings;
   security: SecuritySettings;
   server: ServerSettings;

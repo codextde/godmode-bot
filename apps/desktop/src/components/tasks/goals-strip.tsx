@@ -3,7 +3,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckCircle2, EllipsisVertical, Pencil, Plus, Target, Trash2, Undo2, XCircle } from "lucide-react";
 import type { Goal, GoalInput } from "@godmode/shared";
-import { formatUsd } from "@godmode/shared";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -21,13 +20,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { api, errorMessage } from "@/lib/api";
-import { useSpendTracking } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { dueLabel } from "./task-meta";
 
 /**
- * The goals the work serves, above the board: how far each is (tickets done of all, what it cost), a click filters the
+ * The goals the work serves, above the board: how far each is (tickets done of all), a click filters the
  * board to its tickets. Achieved and dropped goals fold away behind a count.
  */
 export function GoalsStrip({ goals, selected, onSelect, workspaceId }: { goals: Goal[]; selected: string | null; onSelect: (id: string | null) => void; workspaceId: string | null }) {
@@ -65,7 +63,6 @@ export function GoalsStrip({ goals, selected, onSelect, workspaceId }: { goals: 
 
 function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selected: boolean; onSelect: () => void; onEdit: () => void }) {
   const qc = useQueryClient();
-  const spendTracking = useSpendTracking();
   const save = useMutation({
     mutationFn: (patch: Partial<GoalInput>) => api.goals.update(g.id, patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.goals }),
@@ -101,7 +98,6 @@ function GoalCard({ goal: g, selected, onSelect, onEdit }: { goal: Goal; selecte
         </span>
         <span className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
           <span>{g.tickets.total ? `${g.tickets.done} of ${g.tickets.total} done` : "No tickets yet"}</span>
-          {spendTracking && g.costUsd > 0 && <span>· {formatUsd(g.costUsd)}</span>}
           {g.targetDate && <span className="ml-auto">{dueLabel(g.targetDate)}</span>}
         </span>
         {g.why && (

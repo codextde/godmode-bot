@@ -32,7 +32,7 @@ const S: Rule = "secrets";
 const refused = (message: string): Rule => ({ refused: message });
 
 /** Settings groups a cloud user may change. Machine, access and security settings stay on the computer; a new group is refused until it is added here. */
-const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer", "vm", "artifacts", "integrations", "messaging", "voice", "memory", "diagnostics", "onboardingComplete"]);
+const CLOUD_SETTINGS_GROUPS = new Set(["general", "runner", "browser", "computer", "vm", "artifacts", "integrations", "messaging", "activity", "plugins", "ssh", "voice", "memory", "diagnostics", "onboardingComplete"]);
 
 /** The voice provider's address is where the vault's OpenAI key is sent: pointing it elsewhere needs allowSecrets. */
 const settingsGroups: Rule = (body) => {
@@ -439,10 +439,6 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/license", "owner"],
   ["POST", "/api/license/refresh", "owner"],
   ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
-  // What the team spent and its monthly budgets; letting held work run is like continuing a paused chat.
-  ["GET", "/api/spend", A],
-  ["GET", "/api/budgets", A],
-  ["POST", "/api/budgets/release", A],
 ];
 
 /** Writes a viewer may make: resolving a chat's files and looking at an agent's before a delete change nothing. */

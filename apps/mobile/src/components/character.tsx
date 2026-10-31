@@ -82,7 +82,7 @@ export function agentMood(agent: Pick<Agent, "enabled" | "status">, running?: bo
   return agent.enabled ? "idle" : "sleeping";
 }
 
-type PresenceAgent = Pick<Agent, "id" | "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId"> & { heldRuns?: number };
+type PresenceAgent = Pick<Agent, "id" | "enabled" | "status" | "pausedRuns" | "openQuestions" | "failedRunId">;
 
 /** What the agent is doing right now, from the shared rules the desktop uses, a missing login included. */
 export function useAgentPresence(agent: PresenceAgent, live: { running?: number; queued?: number } = {}): AgentPresence {

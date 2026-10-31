@@ -729,9 +729,7 @@ ${quoted}${opts.messages.map((m) => `\n\n<message-from-human>\n${m}\n</message-f
   const why =
     opts.reason === "limit"
       ? `This turn stood still since ${since} because Claude's usage limit was reached. The limit has reset and the turn continues now`
-      : opts.reason === "budget"
-        ? `This turn was held since ${since} because a monthly budget was used up. It continues now`
-        : `${human} paused this turn on ${since} and continues it now`;
+      : `${human} paused this turn on ${since} and continues it now`;
   const said = opts.messages.length
     ? ` ${human} wrote ${many ? "the messages" : "the message"} below while it was paused: ${many ? "they change or add" : "it changes or adds"} to what you are doing.`
     : "";
@@ -791,8 +789,6 @@ export function retryWhy(end: RunEnd | null, error: string, userName: string): s
       return `the watchdog stopped it (${line(error, 300)})`;
     case "turns":
       return "it reached the maximum number of turns";
-    case "budget":
-      return "it reached its cost limit";
     default:
       // The error may carry text the model or a page wrote: it is quoted as data, never as instructions (no tags at all).
       return `it failed with this error: “${line(error.split("\n")[0] ?? "", 300).replace(/[<>]/g, (c) => (c === "<" ? "‹" : "›"))}”`;
