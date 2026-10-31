@@ -25,6 +25,10 @@ const workspaceSchema = z.object({
   vmId: z.string().trim().max(100).nullable().optional(),
   browserProfileId: z.string().trim().max(100).nullable().optional(),
   autoMerge: z.boolean().optional(),
+  claudeAccounts: z
+    .object({ ids: z.array(z.string().trim().min(1).max(100)).max(50), defaultId: z.string().trim().min(1).max(100) })
+    .nullable()
+    .optional(),
   sources: z.array(sourceSchema).max(MAX_SOURCES, `A workspace can have up to ${MAX_SOURCES} folders and repositories.`).optional(),
 });
 

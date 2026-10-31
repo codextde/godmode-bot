@@ -31,6 +31,8 @@ export interface Workspace {
   icon: string; // emoji or lucide icon name
   /** Agent context: standing instructions for every agent in this workspace, on every run. */
   instructions: string;
+  /** Claude accounts the workspace's runs use; null = Godmode's (Settings → Claude accounts). */
+  claudeAccounts: WorkspaceClaudeAccounts | null;
   /** macOS VM the workspace's agents work in (unless their chat or the agent has its own). null = none. */
   vmId: ID | null;
   /** The workspace's default browser profile (unless an agent pins its own). null = the global default. */
@@ -664,6 +666,7 @@ export interface ToolTask {
   lastTool?: string;
   /** A subagent's final report, from Claude Code's notification that it ended. */
   summary?: string;
+  model?: string;
 }
 
 export interface ToolTaskAgent {
@@ -1391,6 +1394,10 @@ export interface RunnerSettings {
   runTimeoutMinutes: number;
   /** A run that hit Claude's usage limit continues by itself once the limit has reset. */
   autoContinueOnLimit: boolean;
+  /** With more than one Claude account: move to another one when the one in use runs low or hits a limit. */
+  accountAutoSwitch: boolean;
+  /** Usage (percent of the session or weekly limit, whichever is higher) at which runs move to another account. */
+  accountSwitchPercent: number;
   /** Work that a quit, update or crash of Godmode cut off continues by itself after the next start; so does background work the end of a turn stopped. */
   resumeAfterRestart: boolean;
   /** The watchdog stops runs that stall or go in circles (see heartbeat.ts). */
@@ -1805,6 +1812,53 @@ export interface ClaudeUsage {
   week: ClaudeUsageWindow | null;
   plan: string | null;
   checkedAt: ISODate;
+}
+
+/** The Claude Code login on this computer: always there, never removed (its id in lists and workspace settings). */
+export const SYSTEM_CLAUDE_ACCOUNT = "system";
+
+/**
+ * A Claude subscription Godmode can run agents with. The system one is Claude Code's own login on this computer; the
+ * others were signed in from Godmode and their tokens are kept in the vault, so `claude auth login` in a terminal never
+ * logs them out.
+ */
+export interface ClaudeAccount {
+  id: ID;
+  system: boolean;
+  email: string | null;
+  name: string | null;
+  organization: string | null;
+  /** "max", "pro", "team", … as Claude reports it. */
+  plan: string | null;
+  isDefault: boolean;
+  usage: ClaudeUsage | null;
+  /** A usage limit stopped a run on this account: other accounts go first until then. */
+  limitedUntil: ISODate | null;
+  /** Its sign-in ran out or was revoked: sign in again. */
+  needsSignIn: boolean;
+  lastUsedAt: ISODate | null;
+  addedAt: ISODate | null;
+}
+
+export interface ClaudeAccountLogin {
+  state: "idle" | "waiting" | "done" | "failed";
+  url: string | null;
+  message: string | null;
+  /** The account being signed in again; null = adding a new one. */
+  accountId: ID | null;
+}
+
+export interface ClaudeAccountsState {
+  accounts: ClaudeAccount[];
+  login: ClaudeAccountLogin;
+  /** The vault is locked: the accounts signed in from Godmode can't be used until it is unlocked. */
+  locked: boolean;
+}
+
+/** A workspace's own choice of Claude accounts: runs there use only these, starting with the default. */
+export interface WorkspaceClaudeAccounts {
+  ids: ID[];
+  defaultId: ID;
 }
 
 export interface ClaudeUpdateResult {

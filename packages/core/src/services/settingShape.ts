@@ -7,6 +7,7 @@ const SETTING_LIMITS: Record<string, [min: number, max: number]> = {
   "runner.stallMinutes": [3, 240],
   "runner.loopRepeats": [3, 50],
   "runner.autoCompactPercent": [0, 95],
+  "runner.accountSwitchPercent": [50, 100],
   "browser.keepAliveMinutes": [0, 1440],
   "computer.liveViewFps": [1, 10],
   "computer.screenshotMaxSize": [640, 1568],

@@ -252,6 +252,26 @@ function builtinActivity(name: string, input: Input): string {
 }
 
 /** What a running tool call is doing, the way a person says it ("Opening github.com…"). Always ends with "…". */
+export function readableModelId(id: string): string {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)(?:-\d{8})?$/.exec(id);
+  return m ? `${m[1]!.charAt(0).toUpperCase()}${m[1]!.slice(1)} ${m[2]}.${m[3]}` : id;
+}
+
+export function reportPreview(markdown: string): string {
+  for (const raw of markdown.split("\n")) {
+    const line = raw
+      .replace(/^\s*(?:#{1,6}\s+|[-*+>]\s+|\d+[.)]\s+)/, "")
+      .replace(/\*\*|__|[*`]/g, "")
+      .trim();
+    if (line) return line;
+  }
+  return "";
+}
+
+export function shortenPaths(text: string): string {
+  return text.replace(/(^|[\s(“"'`])((?:~|\.{1,2})?(?:\/[^\s/]+){2,}\/?)/g, (_, lead: string, path: string) => lead + (path.split("/").filter(Boolean).pop() ?? path));
+}
+
 export function toolActivity(name: string, input: unknown, names: ActivityNames = {}): string {
   const raw: Input = input && typeof input === "object" && !Array.isArray(input) ? (input as Input) : {};
   const i: Input = names.redact ? Object.fromEntries(Object.entries(raw).map(([k, v]) => [k, typeof v === "string" ? names.redact!(v) : v])) : raw;

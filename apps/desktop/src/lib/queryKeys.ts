@@ -16,6 +16,7 @@ export const qk = {
   claudeUpdate: ["doctor", "claude-update"] as unknown[],
   claudeLogin: ["doctor", "claude-login"] as unknown[],
   claudeUsage: ["doctor", "claude-usage"] as unknown[],
+  claudeAccounts: ["claude-accounts"] as unknown[],
   permissions: ["doctor", "permissions"] as unknown[],
   toolUpdates: ["doctor", "updates"] as unknown[],
   maintenance: ["doctor", "maintenance"] as unknown[],
