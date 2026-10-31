@@ -44,6 +44,7 @@ import { qk, queryClient } from "@/lib/query";
 import { subscribeConversation, viewConversation } from "@/lib/realtime";
 import { screenHref, useChatScreens, type LiveScreen } from "@/lib/screens";
 import { radius, space, type, useColors } from "@/lib/theme";
+import { useTypewriter } from "@/lib/typewriter";
 
 type Item =
   | { key: string; role: "intro" }
@@ -293,7 +294,7 @@ export default function Chat() {
     Alert.prompt("Rename chat", undefined, (text) => text.trim() && void change({ title: text.trim() }), "plain-text", conversation.data?.title ?? "");
   };
 
-  const title = conversation.data?.title || "Chat";
+  const title = useTypewriter(conversation.data?.title || "Chat");
   const primary = screens[0];
   const data = conversation.data;
   const menu: HeaderMenuItem[] = data

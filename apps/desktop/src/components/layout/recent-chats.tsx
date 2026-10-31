@@ -18,6 +18,7 @@ import { NavSectionHeader } from "@/components/layout/nav-section-header";
 import { AgentAvatar, colorGradient } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
+import { AnimatedTitle } from "@/components/chat/animated-title";
 import { api } from "@/lib/api";
 import { chatProject, useAllAgents, useScopeProject, useScopeWorkspace, useScopedConversations, useWorkspaces } from "@/lib/hooks";
 import { useProjectIndex } from "@/components/projects/project-utils";
@@ -170,7 +171,9 @@ export function RecentChats() {
                         <AgentAvatar agent={agent ?? { id: c.agentId, color: "violet" }} size="sm" still className="-mt-0.5 size-5" />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1">
-                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>{c.title || "New chat"}</span>
+                            <span className={cn("truncate text-[13px]", c.unread && conversationId !== c.id && "font-semibold text-foreground")}>
+                              <AnimatedTitle text={c.title || "New chat"} />
+                            </span>
                             {c.unread && conversationId !== c.id && (
                               <span
                                 className={cn("size-1.5 shrink-0 rounded-full", c.unread.failed ? "bg-destructive" : "bg-brand-strong")}

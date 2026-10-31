@@ -29,6 +29,7 @@ import { useAllAgents } from "@/lib/hooks";
 import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { AnimatedTitle } from "@/components/chat/animated-title";
 
 const ORIGIN_META = {
   routine: { label: "Automation", icon: Workflow },
@@ -305,7 +306,7 @@ function EditableTitle({
         title="Rename"
         className="min-w-0 truncate rounded-md px-1.5 py-1 text-left text-sm font-medium transition hover:bg-accent/50"
       >
-        {value || "New chat"}
+        <AnimatedTitle text={value || "New chat"} />
       </button>
     );
   }
