@@ -1767,6 +1767,19 @@ export interface ClaudeUpdateStatus {
   checkedAt: ISODate;
 }
 
+export interface ClaudeUsageWindow {
+  percent: number;
+  resetsAt: ISODate | null;
+}
+
+export interface ClaudeUsage {
+  state: "ok" | "signed_out" | "unavailable";
+  fiveHour: ClaudeUsageWindow | null;
+  week: ClaudeUsageWindow | null;
+  plan: string | null;
+  checkedAt: ISODate;
+}
+
 export interface ClaudeUpdateResult {
   ok: boolean;
   previous: string | null;
