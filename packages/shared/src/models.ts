@@ -1338,8 +1338,13 @@ export const INTERFACE_MODES: readonly InterfaceMode[] = ["easy", "pro"];
 export type Theme = "light" | "dark" | "system";
 export const THEMES: readonly Theme[] = ["light", "dark", "system"];
 
+/** The colours the app is painted in; each has a light and a dark side, picked by the theme. */
+export type Palette = "paper" | "graphite" | "nord" | "solarized" | "rose" | "forest" | "ocean" | "dracula";
+export const PALETTES: readonly Palette[] = ["paper", "graphite", "nord", "solarized", "rose", "forest", "ocean", "dracula"];
+
 export interface GeneralSettings {
   theme: Theme;
+  palette: Palette;
   /** How much of Godmode the dashboard shows at once; every feature stays in both. */
   mode: InterfaceMode;
   accent: string;
