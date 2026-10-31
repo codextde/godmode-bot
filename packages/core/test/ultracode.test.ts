@@ -352,7 +352,7 @@ describe("Ultracode in runs", () => {
     expect((await send(conversationId, "Hi again")).inv.settings!.ultracode).toBe(true);
 
     const off = await send(conversationId, "/effort ultracode off");
-    expect(off.conv.messages.at(-1)!.content).toBe("Ultracode off. Effort stays high.");
+    expect(off.conv.messages.at(-1)!.content).toBe("Ultracode off. Effort stays medium.");
     expect(off.conv.ultracode).toBe(false);
     expect((await send(conversationId, "Hi again")).inv.settings).not.toHaveProperty("ultracode");
 
@@ -485,7 +485,7 @@ describe("Ultracode in routes and tools", () => {
     try {
       const saved = (await (await api("PUT", "/api/settings", { runner: { ultracode: true } })).json()) as Settings;
       expect(saved.runner.ultracode).toBe(true);
-      expect(buildLogReport()).toContain("effort high, Ultracode on, up to");
+      expect(buildLogReport()).toContain("effort medium, Ultracode on, up to");
     } finally {
       updateSettings({ runner: { ultracode: false } });
     }
