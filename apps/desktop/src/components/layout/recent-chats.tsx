@@ -272,7 +272,7 @@ export function RecentChats() {
                               </kbd>
                             ) : (
                               running &&
-                              !c.paused && <LiveDot className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
+                              !c.paused && <LiveDot live={false} className="ml-0.5 shrink-0 bg-brand-strong group-focus-within/menu-item:hidden group-hover/menu-item:hidden" />
                             )}
                           </span>
                           <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -425,7 +425,7 @@ function GroupHeading({
         aria-expanded={!folded}
         className="group/heading flex h-5 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[10.5px] font-medium text-muted-foreground/80 outline-none transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       >
-        {live && <LiveDot className="size-1.5 bg-brand-strong" />}
+        {live && <LiveDot live={false} className="size-1.5 bg-brand-strong" />}
         {label}
         {folded && <span className="font-normal text-muted-foreground/60 tabular-nums">{count}</span>}
         <ChevronDown

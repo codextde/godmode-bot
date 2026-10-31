@@ -166,14 +166,13 @@ export default function PluginsPage() {
           ) : (
             <div className="grid grid-cols-1 gap-4 @4xl:grid-cols-2">
               <AnimatePresence initial={false}>
-                {mods.map((mod, i) => (
+                {mods.map((mod) => (
                   <motion.div
                     key={mod.id}
                     layout="position"
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.97 }}
-                    transition={{ delay: Math.min(i, 8) * 0.03 }}
                     className="flex min-w-0"
                   >
                     <ModCard mod={mod} actions={actions} onOpen={(tab) => open(mod.id, tab)} onDelete={() => setDeleteId(mod.id)} />

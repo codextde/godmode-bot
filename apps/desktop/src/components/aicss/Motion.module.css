@@ -39,20 +39,9 @@
     0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 55%, transparent); }
     80%, 100% { box-shadow: 0 0 0 6px transparent; }
   }
-
-  /* Draw-in check */
-  .check path {
-    stroke-dasharray: 24;
-    stroke-dashoffset: 24;
-    animation: draw 420ms cubic-bezier(0.65, 0, 0.35, 1) 60ms forwards;
-  }
-  @keyframes draw {
-    to { stroke-dashoffset: 0; }
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ticks > span, .dotLive { animation: none; }
   .ticks > span { transform: scaleY(0.6); }
-  .check path { animation: none; stroke-dashoffset: 0; }
 }

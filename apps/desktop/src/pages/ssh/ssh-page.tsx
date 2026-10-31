@@ -100,14 +100,13 @@ export default function SshPage() {
         ) : (
           <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-2">
             <AnimatePresence initial={false}>
-              {servers.map((server, i) => (
+              {servers.map((server) => (
                 <motion.div
                   key={server.id}
                   layout="position"
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97 }}
-                  transition={{ delay: Math.min(i, 8) * 0.03 }}
                   className="min-w-0"
                 >
                   <ServerCard server={server} actions={actions} onEdit={() => openEdit(server.id)} onDelete={() => setDeleteId(server.id)} />

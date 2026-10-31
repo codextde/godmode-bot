@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import { motion } from "motion/react";
 import type { Agent, Followup } from "@godmode/shared";
 import { AlarmClock, CalendarClock, Play, X } from "lucide-react";
 import { AgentAvatar } from "@/components/common";
@@ -27,17 +26,13 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
         <span className="text-xs text-muted-foreground">Chats your agents will pick up again on their own</span>
       </div>
       <ul className="overflow-hidden rounded-xl border bg-card shadow-card">
-        {followups.map((f, i) => {
+        {followups.map((f) => {
           const agent = agentById.get(f.agentId);
           const working = busy.has(f.conversationId);
           const cancelling = actions.cancel.isPending && actions.cancel.variables === f.conversationId;
           return (
-            <motion.li
+            <li
               key={f.conversationId}
-              layout
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i, 8) * 0.03 }}
               className="flex items-center gap-3 border-b px-3 py-2.5 last:border-b-0"
             >
               {agent ? <AgentAvatar agent={agent} size="sm" /> : <span className="size-6" />}
@@ -93,7 +88,7 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
                   <TooltipContent>Cancel</TooltipContent>
                 </Tooltip>
               </div>
-            </motion.li>
+            </li>
           );
         })}
       </ul>

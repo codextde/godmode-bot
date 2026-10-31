@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-const SPREAD_MS = 520;
+const SPREAD_MS = 300;
 const STEP_MS = 22;
 
 export function AnimatedTitle({ text }: { text: string }) {

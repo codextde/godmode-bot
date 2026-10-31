@@ -1,6 +1,5 @@
-import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { CircleAlert, Info, ShieldAlert, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import type { Settings } from "@godmode/shared";
@@ -310,10 +309,8 @@ export function SettingsGroup({
   bodyClassName?: string;
 }) {
   return (
-    <motion.section
+    <section
       data-slot="settings-group"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
       className={cn("rounded-xl border bg-card shadow-card", tone === "danger" && "border-destructive/25", className)}
     >
       <header className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
@@ -336,7 +333,7 @@ export function SettingsGroup({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </header>
       <div className={cn("divide-y px-5", bodyClassName)}>{children}</div>
-    </motion.section>
+    </section>
   );
 }
 
@@ -395,7 +392,6 @@ export function Segmented<T extends string>({
   "aria-label"?: string;
   disabled?: boolean;
 }) {
-  const layoutId = useId();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     const idx = options.findIndex((o) => o.value === value);
@@ -432,11 +428,7 @@ export function Segmented<T extends string>({
             )}
           >
             {active && (
-              <motion.span
-                layoutId={layoutId}
-                className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent"
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
-              />
+              <span className="absolute inset-0 rounded-md bg-card shadow-card ring-1 ring-border dark:bg-accent" />
             )}
             <span className="relative flex items-center gap-1.5 capitalize [&_svg]:size-3.5">
               {o.icon}

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { ArrowLeft, Bot, Brain, ChevronDown, Copy, Cpu, Ellipsis, FolderOpen, GitCommitHorizontal, Globe, HeartPulse, LayoutGrid, MessageCircleQuestion, MessageSquare, MessagesSquare, Pause, Play, Settings2, StepForward, Trash2, Workflow } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { leadOf, reportsOf } from "@godmode/shared";
@@ -104,7 +103,7 @@ export default function AgentDetailPage() {
       <AgentHeader agent={agent} />
       <TabNav agentId={agent.id} active={tab} />
       <PageBody className="pt-6">
-        <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+        <div key={tab}>
           {tab === "" && <OverviewTab agent={agent} />}
           {tab === "chats" && <ChatsTab agent={agent} />}
           {tab === "routines" && <RoutinesTab agent={agent} />}
@@ -112,7 +111,7 @@ export default function AgentDetailPage() {
           {tab === "memory" && <MemoryTab agent={agent} />}
           {tab === "history" && <HistoryTab agent={agent} />}
           {tab === "settings" && <SettingsTab agent={agent} />}
-        </motion.div>
+        </div>
       </PageBody>
     </div>
   );
@@ -299,11 +298,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
               )}
             >
               {isActive && (
-                <motion.span
-                  layoutId="agent-tab"
-                  className="absolute inset-0 rounded-md border bg-card shadow-card"
-                  transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
-                />
+                <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
               )}
               <Icon className="relative size-4" />
               <span className="relative">{t.label}</span>
@@ -320,11 +315,7 @@ function TabNav({ agentId, active }: { agentId: string; active: TabId }) {
               )}
             >
               {activeMore && (
-                <motion.span
-                  layoutId="agent-tab"
-                  className="absolute inset-0 rounded-md border bg-card shadow-card"
-                  transition={{ type: "spring", bounce: 0.18, duration: 0.4 }}
-                />
+                <span className="absolute inset-0 rounded-md border bg-card shadow-card" />
               )}
               {activeMore ? <activeMore.icon className="relative size-4" /> : <Ellipsis className="relative size-4" />}
               <span className="relative">{activeMore ? EASY_LABELS[activeMore.id] : "More"}</span>

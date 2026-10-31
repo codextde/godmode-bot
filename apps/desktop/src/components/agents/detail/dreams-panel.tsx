@@ -371,7 +371,7 @@ function MemoryMeter({
         className="relative h-1.5 min-w-32 flex-1 basis-40 rounded-full bg-secondary"
       >
         <div
-          className={cn("h-full rounded-full transition-[width] duration-500", cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70")}
+          className={cn("h-full rounded-full transition-[width] duration-250", cut ? "bg-destructive" : over ? "bg-warning" : "bg-dream/70")}
           style={{ width: `${Math.min(100, (chars / limit) * 100)}%` }}
         />
         <span aria-hidden className="absolute -top-1 -bottom-1 w-px bg-foreground/35" style={{ left: `${(target / limit) * 100}%` }} />
@@ -763,14 +763,14 @@ function WorkspaceMoves({ moves, stuck }: { moves: DreamWorkspaceChange[]; stuck
 }
 
 const STARS = [
-  { top: 22, left: 54, size: 1.5, delay: 2.4 },
-  { top: 16, left: 61, size: 2, delay: 0 },
-  { top: 46, left: 67, size: 1.5, delay: 1.2 },
-  { top: 26, left: 74, size: 2.5, delay: 2.1 },
-  { top: 68, left: 79, size: 1.5, delay: 0.6 },
-  { top: 12, left: 86, size: 2, delay: 1.7 },
-  { top: 44, left: 91, size: 1.5, delay: 2.8 },
-  { top: 74, left: 96, size: 2, delay: 3.3 },
+  { top: 22, left: 54, size: 1.5 },
+  { top: 16, left: 61, size: 2 },
+  { top: 46, left: 67, size: 1.5 },
+  { top: 26, left: 74, size: 2.5 },
+  { top: 68, left: 79, size: 1.5 },
+  { top: 12, left: 86, size: 2 },
+  { top: 44, left: 91, size: 1.5 },
+  { top: 74, left: 96, size: 2 },
 ];
 
 /** A few quiet stars over a moonlit wash; they twinkle while the agent dreams. */
@@ -779,7 +779,7 @@ function NightSky({ active }: { active: boolean }) {
     <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
       <div
         className={cn(
-          "absolute inset-0 bg-[radial-gradient(80%_140%_at_100%_0%,var(--dream-soft),transparent_70%)] transition-opacity duration-700",
+          "absolute inset-0 bg-[radial-gradient(80%_140%_at_100%_0%,var(--dream-soft),transparent_70%)] transition-opacity duration-250",
           active ? "opacity-100" : "opacity-70",
         )}
       />
@@ -787,10 +787,10 @@ function NightSky({ active }: { active: boolean }) {
         <span
           key={i}
           className={cn(
-            "absolute rounded-full bg-dream transition-opacity duration-700",
-            active ? "opacity-70 motion-safe:animate-twinkle" : "opacity-20",
+            "absolute rounded-full bg-dream transition-opacity duration-250",
+            active ? "opacity-70" : "opacity-20",
           )}
-          style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size, animationDelay: `${s.delay}s` }}
+          style={{ top: `${s.top}%`, left: `${s.left}%`, width: s.size, height: s.size }}
         />
       ))}
     </div>
@@ -798,23 +798,18 @@ function NightSky({ active }: { active: boolean }) {
 }
 
 function MoonTile({ active }: { active: boolean }) {
-  const reduce = useReducedMotion();
   return (
     <div
       aria-hidden
       className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-dream transition-colors duration-500 [&_svg]:size-[18px]",
+        "grid size-9 shrink-0 place-items-center rounded-lg border bg-paper-2 text-dream transition-colors duration-250 [&_svg]:size-[18px]",
         active && "border-dream/30 bg-dream-soft motion-safe:animate-dream-halo",
       )}
     >
       {active ? (
-        <motion.span
-          className="grid place-items-center"
-          animate={reduce ? undefined : { rotate: [-10, 6, -10], y: [0, -1.5, 0] }}
-          transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
-        >
+        <span className="grid place-items-center">
           <Moon className="fill-dream/20" />
-        </motion.span>
+        </span>
       ) : (
         <MoonStar />
       )}

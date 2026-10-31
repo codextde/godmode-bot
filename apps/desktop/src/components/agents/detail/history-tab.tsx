@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
 import { GitCommitHorizontal, History } from "lucide-react";
 import type { Agent, GitCommit } from "@godmode/shared";
@@ -60,7 +59,6 @@ export function HistoryTab({ agent }: { agent: Agent }) {
     );
   }
 
-  let index = 0;
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
@@ -74,13 +72,9 @@ export function HistoryTab({ agent }: { agent: Agent }) {
             {g.commits.map((c) => {
               const [title, ...rest] = c.message.trim().split("\n");
               const body = rest.join("\n").trim();
-              const i = index++;
               return (
-                <motion.li
+                <li
                   key={c.oid}
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: Math.min(i, 20) * 0.02 }}
                   className="group relative rounded-lg px-3 py-2.5 transition hover:bg-accent/50"
                 >
                   <span className="absolute top-3.5 -left-[31px] grid size-4 place-items-center rounded-full border bg-card text-muted-foreground">
@@ -99,7 +93,7 @@ export function HistoryTab({ agent }: { agent: Agent }) {
                     <code className="rounded-[4px] border bg-secondary px-1 font-mono">{c.oid.slice(0, 7)}</code>
                     <CopyButton text={c.oid} label="Copy commit hash" className="opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100" />
                   </div>
-                </motion.li>
+                </li>
               );
             })}
           </ol>

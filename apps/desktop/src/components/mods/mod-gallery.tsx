@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Plus, Puzzle } from "lucide-react";
 import { MOD_CATEGORIES, MOD_CATEGORY_LABELS, type Mod, type ModCategory, type ModOption, type ModTemplate } from "@godmode/shared";
 import { CodeBlock } from "@/components/aicss/CodeBlock";
@@ -71,7 +70,7 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
                   active ? "border-transparent text-primary-foreground" : "bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
-                {active && <motion.span layoutId="mod-cat" className="absolute -inset-px rounded-md bg-primary" transition={{ type: "spring", stiffness: 400, damping: 32 }} />}
+                {active && <span className="absolute -inset-px rounded-md bg-primary" />}
                 <span className="relative">{c ? MOD_CATEGORY_LABELS[c] : "All"}</span>
               </button>
             );
@@ -91,11 +90,10 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
         <p className="rounded-xl border border-dashed bg-card/50 px-4 py-6 text-center text-sm text-muted-foreground">The gallery is empty on this version of Godmode.</p>
       ) : (
         <div className={GRID}>
-          {visible.map((t, i) => (
+          {visible.map((t) => (
             <TemplateCard
               key={t.id}
               template={t}
-              index={i}
               installed={installed.get(t.id)}
               adding={addingId === t.id}
               onPreview={() => setPreviewId(t.id)}
@@ -124,7 +122,6 @@ export function ModGallery({ mods, actions, onOpen, onAdded }: { mods: Mod[]; ac
 
 function TemplateCard({
   template: t,
-  index,
   installed,
   adding,
   onPreview,
@@ -132,7 +129,6 @@ function TemplateCard({
   onOpen,
 }: {
   template: ModTemplate;
-  index: number;
   installed: Mod | undefined;
   adding: boolean;
   onPreview: () => void;
@@ -140,11 +136,8 @@ function TemplateCard({
   onOpen: (mod: Mod) => void;
 }) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index, 12) * 0.03 }}
-      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float"
+    <article
+      className="relative flex flex-col rounded-xl border bg-card p-4 shadow-card transition-colors hover:border-foreground/15"
     >
       <div className="flex items-start gap-3">
         <ModIconTile icon={t.icon} size="sm" />
@@ -196,7 +189,7 @@ function TemplateCard({
           </Button>
         )}
       </div>
-    </motion.article>
+    </article>
   );
 }
 

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
-import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { ChevronRight, Globe, Plus, ShieldCheck } from "lucide-react";
 import type { Agent, MessagingConnection, MessagingProvider } from "@godmode/shared";
@@ -58,10 +57,10 @@ export function MessagingOverview() {
             <section className="space-y-3">
               <h3 className="eyebrow">Your bots</h3>
               <ul className="space-y-2">
-                {list.map((c, i) => (
-                  <motion.li key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.03 } }}>
+                {list.map((c) => (
+                  <li key={c.id}>
                     <ConnectionCard connection={c} agents={agents.data ?? []} onOpen={() => setParam("connection", c.id)} />
-                  </motion.li>
+                  </li>
                 ))}
               </ul>
             </section>

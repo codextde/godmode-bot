@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import { CircleCheck, CircleX, MessagesSquare, Phone, PhoneIncoming, PhoneOutgoing, Plus, RefreshCw, Settings2, Target, TriangleAlert } from "lucide-react";
 import type { Agent, CallPurpose, PhoneCall } from "@godmode/shared";
@@ -153,10 +152,10 @@ export default function CallsPage() {
 function CallList({ calls, selectedId, agents, onSelect }: { calls: PhoneCall[]; selectedId: string | null; agents: Map<string, Agent>; onSelect: (id: string) => void }) {
   return (
     <ul aria-label="Calls" className="divide-y overflow-hidden rounded-xl border bg-card shadow-card @4xl:sticky @4xl:top-6">
-      {calls.map((c, i) => (
-        <motion.li key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 10) * 0.025 } }}>
+      {calls.map((c) => (
+        <li key={c.id}>
           <CallRow call={c} agent={c.agentId ? agents.get(c.agentId) : undefined} selected={c.id === selectedId} onSelect={() => onSelect(c.id)} />
-        </motion.li>
+        </li>
       ))}
     </ul>
   );
@@ -210,7 +209,7 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
   const DirectionIcon = inbound ? PhoneIncoming : PhoneOutgoing;
   const agentName = agent?.name ?? c.agentName;
   return (
-    <motion.article initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-card">
+    <article className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-card">
       <header className="flex flex-wrap items-start justify-between gap-4 px-5 pt-5 pb-4">
         <div className="flex min-w-0 items-start gap-3.5">
           <span className={cn("grid size-10 shrink-0 place-items-center rounded-lg border bg-paper-2 [&_svg]:size-[18px]", inbound ? "text-sky-600 dark:text-sky-400" : "text-brand-strong")}>
@@ -305,7 +304,7 @@ function CallDetail({ call: c, agent }: { call: PhoneCall; agent?: Agent }) {
 
         {c.transcript.length > 0 && <Transcript call={c} />}
       </div>
-    </motion.article>
+    </article>
   );
 }
 

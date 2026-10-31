@@ -177,39 +177,17 @@
   --shadow-card: var(--gm-shadow-card);
   --shadow-float: var(--gm-shadow-float);
 
-  --animate-shimmer: shimmer 2.2s linear infinite;
-  --animate-spin-slow: spin 6s linear infinite;
-  --animate-float: float 6s ease-in-out infinite;
-  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   --animate-live-dot: live-dot 2s ease-out infinite;
-  --animate-twinkle: twinkle 3.6s ease-in-out infinite;
   --animate-dream-halo: dream-halo 3.2s ease-in-out infinite;
   --animate-dream-dot: dream-dot 2s ease-out infinite;
   --animate-march: march 0.6s linear infinite;
   --animate-ekg: ekg 2.8s cubic-bezier(0.45, 0, 0.3, 1) infinite;
   --animate-indeterminate: indeterminate 1.4s ease-in-out infinite;
-  --animate-title-in: title-in 0.55s cubic-bezier(0.22, 0.8, 0.24, 1) both;
+  --animate-title-in: title-in 0.25s cubic-bezier(0.22, 0.8, 0.24, 1) both;
 
-  @keyframes shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-  }
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-4px); }
-  }
-  @keyframes pulse-ring {
-    0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 45%, transparent); }
-    70% { box-shadow: 0 0 0 8px transparent; }
-    100% { box-shadow: 0 0 0 0 transparent; }
-  }
   @keyframes live-dot {
     0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 55%, transparent); }
     80%, 100% { box-shadow: 0 0 0 6px transparent; }
-  }
-  @keyframes twinkle {
-    0%, 100% { opacity: 0.2; transform: scale(0.7); }
-    50% { opacity: 1; transform: scale(1); }
   }
   @keyframes dream-halo {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--dream) 0%, transparent), 0 0 12px -4px color-mix(in oklab, var(--dream) 30%, transparent); }

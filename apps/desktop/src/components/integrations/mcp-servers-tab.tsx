@@ -212,12 +212,12 @@ function ServerList({
   return (
     <ul className="space-y-2">
       <AnimatePresence initial={false}>
-        {servers.map((s, i) => (
+        {servers.map((s) => (
           <motion.li
             key={s.id}
             layout
             initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+            animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, height: 0 }}
           >
             <ServerRow server={s} onToggle={(v) => onToggle(s, v)} onTest={() => onTest(s)} onEdit={onEdit && (() => onEdit(s))} onDelete={() => onDelete(s)} />

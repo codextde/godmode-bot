@@ -1,6 +1,5 @@
 import { useEffect, useRef, type Ref } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import type { SlashCommand } from "@godmode/shared";
 import { parseSlashCommand } from "@godmode/shared";
 import { Loader2, SquareSlash } from "lucide-react";
@@ -76,12 +75,8 @@ export function SlashMenu({
   }, [active, items]);
 
   return (
-    <motion.div
+    <div
       ref={ref}
-      initial={{ opacity: 0, y: below ? -4 : 4, scale: 0.99 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: below ? -4 : 4, scale: 0.99 }}
-      transition={{ duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }}
       className={cn(
         "absolute inset-x-0 z-30 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-float",
         below ? "top-full mt-2 origin-top" : "bottom-full mb-2 origin-bottom",
@@ -141,19 +136,14 @@ export function SlashMenu({
           <Kbd>esc</Kbd> close
         </span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 /** Slim strip above the textarea once a known command is typed: what it does and which arguments it takes. */
 export function SlashHint({ command }: { command: SlashCommand }) {
   return (
-    <motion.div
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height: "auto", opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
-      className="overflow-hidden"
-    >
+    <div className="overflow-hidden">
       <div className="flex min-w-0 items-center gap-2 px-4 pt-3 text-[12px] text-muted-foreground">
         <SquareSlash className="size-3.5 shrink-0" />
         <span className="shrink-0 font-mono font-medium text-foreground">/{command.name}</span>
@@ -162,7 +152,7 @@ export function SlashHint({ command }: { command: SlashCommand }) {
           {command.description}
         </span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 

@@ -153,7 +153,7 @@ export default function PasskeysPage() {
             }
           />
         ) : (
-          <div className="@container animate-in overflow-hidden rounded-xl border bg-card shadow-card fade-in-0">
+          <div className="@container overflow-hidden rounded-xl border bg-card shadow-card">
             <div className={cn(GRID, "eyebrow hidden border-b bg-paper-2 px-4 py-2 @3xl:grid")}>
               <span className="pl-12">Site</span>
               <span>Account</span>

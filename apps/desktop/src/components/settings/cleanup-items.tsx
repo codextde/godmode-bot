@@ -139,8 +139,8 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
           </div>
         </div>
       )}
-      {items.map((item, i) => (
-        <motion.div key={item.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}>
+      {items.map((item) => (
+        <div key={item.id}>
           <ItemRow
             item={item}
             checked={selected.has(item.id)}
@@ -149,7 +149,7 @@ export function CleanupItems({ report, refreshing }: { report: CleanupReport; re
             onExpand={() => setOpen(open === item.id ? null : item.id)}
             busy={run.isPending && selected.has(item.id)}
           />
-        </motion.div>
+        </div>
       ))}
       {clean.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3.5 text-xs text-muted-foreground">

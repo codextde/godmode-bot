@@ -117,9 +117,9 @@ export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quot
             <motion.button
               ref={pillRef}
               type="button"
-              initial={{ opacity: 0, y: at.below ? -4 : 4, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.96 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.14, ease: [0.2, 0.8, 0.2, 1] }}
               style={{ left: at.x, top: at.y }}
               // Keep the selection: it is read on click.

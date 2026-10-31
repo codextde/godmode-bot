@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { motion } from "motion/react";
 import { Bot, LayoutGrid, List, Network, Plus, Search, Sparkles } from "lucide-react";
 import type { Agent } from "@godmode/shared";
 import { MASCOT_CHARACTER, MASCOT_COLOR } from "@godmode/shared";
@@ -180,9 +179,7 @@ export default function AgentsPage() {
                   filter === f.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {filter === f.id && (
-                  <motion.span layoutId="agents-filter" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
-                )}
+                {filter === f.id && <span className="absolute inset-0 rounded-md border bg-card shadow-card" />}
                 <span className="relative flex items-center gap-1.5">
                   {f.label}
                   {counts[f.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{counts[f.id]}</span>}
@@ -369,16 +366,16 @@ function CardGrid({
   onDelete: (agent: Agent) => void;
 }) {
   return (
-    <motion.div layout className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3 @[96rem]:grid-cols-4">
-      {agents.map((agent, i) => (
-        <motion.div key={agent.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.035, duration: 0.25 }}>
+    <div className="grid grid-cols-1 gap-4 @2xl:grid-cols-2 @5xl:grid-cols-3 @[96rem]:grid-cols-4">
+      {agents.map((agent) => (
+        <div key={agent.id}>
           <DraggableAgent agent={agent}>
             <AgentCard agent={agent} routineCount={routineCounts.get(agent.id) ?? 0} showScope={!grouped} onRunTask={onRunTask} onDelete={onDelete} />
           </DraggableAgent>
-        </motion.div>
+        </div>
       ))}
       {!grouped && (
-        <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+        <div>
           <Link
             to="/agents/new"
             className="flex h-full min-h-48 flex-col items-center justify-center gap-2 rounded-xl border border-dashed text-sm text-muted-foreground transition hover:border-foreground/25 hover:bg-card hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -388,9 +385,9 @@ function CardGrid({
             </span>
             New agent
           </Link>
-        </motion.div>
+        </div>
       )}
-    </motion.div>
+    </div>
   );
 }
 
@@ -406,7 +403,7 @@ function Crew({ agents }: { agents: Agent[] }) {
               to={`/agents/${a.id}`}
               aria-label={a.name}
               className={cn(
-                "rounded-full transition-transform duration-200 hover:z-10 hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
+                "rounded-full hover:z-10 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
                 i > 0 && "-ml-1.5",
               )}
             >

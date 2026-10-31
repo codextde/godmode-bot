@@ -345,7 +345,6 @@ export function Composer({
 
   const listening = dictation.state === "listening" || dictation.state === "starting";
   const transcribing = dictation.state === "transcribing";
-  const working = !!running || !!busy;
 
   return (
     <div
@@ -353,27 +352,24 @@ export function Composer({
       className={cn(
         "@container/composer relative rounded-2xl border bg-card shadow-float transition-[border-color,box-shadow] duration-200",
         focused && "border-foreground/20 ring-4 ring-foreground/[0.035] dark:border-foreground/25 dark:ring-foreground/[0.05]",
-        working && !disabled && "glow-border",
         disabled && "shadow-card",
         className,
       )}
     >
-      <AnimatePresence>
-        {menuOpen && (
-          <SlashMenu
-            id={menuId}
-            items={menuItems}
-            active={menuIndex}
-            grouped={!menuQuery}
-            loading={commands.isLoading}
-            error={commands.error}
-            below={menuRoom.below}
-            maxHeight={menuRoom.maxHeight}
-            onHover={setMenuActive}
-            onPick={pickCommand}
-          />
-        )}
-      </AnimatePresence>
+      {menuOpen && (
+        <SlashMenu
+          id={menuId}
+          items={menuItems}
+          active={menuIndex}
+          grouped={!menuQuery}
+          loading={commands.isLoading}
+          error={commands.error}
+          below={menuRoom.below}
+          maxHeight={menuRoom.maxHeight}
+          onHover={setMenuActive}
+          onPick={pickCommand}
+        />
+      )}
 
       <AnimatePresence initial={false}>
         {attachments.length > 0 && (
@@ -401,7 +397,7 @@ export function Composer({
         )}
       </AnimatePresence>
 
-      <AnimatePresence initial={false}>{hint && <SlashHint key="slash-hint" command={hint} />}</AnimatePresence>
+      {hint && <SlashHint command={hint} />}
 
       <label htmlFor={draftKey ? `composer-${draftKey}` : "composer"} className="sr-only">
         Message
@@ -465,27 +461,23 @@ export function Composer({
           <AnimatePresence>
             {((running && !disabled) || transcribing) && (
               <motion.span
-                initial={{ opacity: 0, x: 6 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 6 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.15, ease: "easeOut" }}
                 className="hidden min-w-0 items-center gap-2 pr-1.5 text-xs text-muted-foreground @xl/composer:flex"
               >
                 <WorkingTicks count={9} className="text-brand-strong" />
                 <span className="truncate">{transcribing ? "Transcribing…" : "Working — new messages are queued"}</span>
               </motion.span>
             )}
-            {!running && !transcribing && focused && text.length > 0 && (
-              <motion.span
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex"
-              >
-                <Kbd>⇧</Kbd>
-                <Kbd>↵</Kbd> new line
-              </motion.span>
-            )}
           </AnimatePresence>
+          {!running && !transcribing && focused && text.length > 0 && (
+            <span className="hidden shrink-0 items-center gap-1 pr-1 text-[11px] whitespace-nowrap text-muted-foreground @2xl/composer:flex">
+              <Kbd>⇧</Kbd>
+              <Kbd>↵</Kbd> new line
+            </span>
+          )}
 
           {status}
           {easy ? (options || trailing) && <OptionsButton>{options}{trailing}</OptionsButton> : trailing}

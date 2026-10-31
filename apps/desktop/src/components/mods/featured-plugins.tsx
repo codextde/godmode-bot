@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { motion } from "motion/react";
 import { ArrowUpRight, CircleCheck, Download, ExternalLink, Sparkles, Terminal } from "lucide-react";
 import type { Mod, ModCatalogEntry } from "@godmode/shared";
 import { QueryError } from "@/components/integrations/query-error";
@@ -69,11 +68,10 @@ export function FeaturedPlugins({ mods, actions, onOpen }: { mods: Mod[]; action
         </div>
       ) : (
         <div className={GRID}>
-          {entries.map((entry, i) => (
+          {entries.map((entry) => (
             <FeaturedCard
               key={entry.id}
               entry={entry}
-              index={i}
               installed={installed.get(entry.id)}
               installing={installing.has(entry.id)}
               onPreview={() => setPreviewId(entry.id)}
@@ -115,7 +113,6 @@ function RepoLine({ entry }: { entry: ModCatalogEntry }) {
 
 function FeaturedCard({
   entry,
-  index,
   installed,
   installing,
   onPreview,
@@ -123,7 +120,6 @@ function FeaturedCard({
   onOpen,
 }: {
   entry: ModCatalogEntry;
-  index: number;
   installed: Mod | undefined;
   installing: boolean;
   onPreview: () => void;
@@ -131,11 +127,8 @@ function FeaturedCard({
   onOpen: (mod: Mod) => void;
 }) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: Math.min(index, 8) * 0.04 }}
-      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-[border-color,box-shadow] hover:border-foreground/15 hover:shadow-float"
+    <article
+      className="relative flex flex-col overflow-hidden rounded-xl border bg-card shadow-card transition-colors hover:border-foreground/15"
     >
       <div className="flex items-start gap-3.5 p-4 pb-3">
         <ModIconTile icon={entry.icon} raised />
@@ -192,7 +185,7 @@ function FeaturedCard({
           </Button>
         )}
       </div>
-    </motion.article>
+    </article>
   );
 }
 

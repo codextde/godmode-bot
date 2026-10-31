@@ -150,12 +150,12 @@ export function ApiToolsTab() {
       ) : (
         <ul className="space-y-2">
           <AnimatePresence initial={false}>
-            {list.map((t, i) => (
+            {list.map((t) => (
               <motion.li
                 key={t.id}
                 layout
                 initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0, transition: { delay: Math.min(i, 12) * 0.03 } }}
+                animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, height: 0 }}
               >
                 <ToolRow

@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { CircleAlert, CircleCheck, CircleX, KeyRound, RefreshCw, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import type { FixResult, PermissionId, PermissionReport, PermissionStatus } from "@godmode/shared";
@@ -76,8 +75,8 @@ export function PermissionsChecklist({ className }: { className?: string }) {
           {isFetching ? <Spinner className="size-3" /> : <RefreshCw />} Re-check
         </Button>
       </div>
-      {data.permissions.map((permission, i) => (
-        <motion.div key={permission.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+      {data.permissions.map((permission) => (
+        <div key={permission.id}>
           <PermissionRow
             permission={permission}
             onFixed={(result) => {
@@ -87,7 +86,7 @@ export function PermissionsChecklist({ className }: { className?: string }) {
               if (permission.id === "tool-binaries") void qc.invalidateQueries({ queryKey: qk.doctor });
             }}
           />
-        </motion.div>
+        </div>
       ))}
     </div>
   );

@@ -31,7 +31,7 @@ export function LicenseGate({ state }: { state: LicenseState }) {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.25, ease: [0.2, 0.8, 0.2, 1] }}
           className="flex flex-col items-center text-center"
         >
           <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} mood="idle" follow title="Godmode" />
@@ -47,7 +47,7 @@ export function LicenseGate({ state }: { state: LicenseState }) {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.08, ease: [0.2, 0.8, 0.2, 1] }}
+          transition={{ duration: 0.25, delay: 0.08, ease: [0.2, 0.8, 0.2, 1] }}
           className="mt-8 rounded-2xl border bg-card p-6 shadow-float sm:p-7"
         >
           <ActivatePanel source="gate" />

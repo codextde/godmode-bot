@@ -148,15 +148,15 @@ export function ApiKeysTab({ onOpenComposio, onOpenTools }: { onOpenComposio: ()
         </div>
       ) : (
         <ul className="space-y-2">
-          {KNOWN_KEYS.map((meta, i) => (
-            <motion.li key={meta.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
+          {KNOWN_KEYS.map((meta) => (
+            <li key={meta.key}>
               <KeyRow meta={meta} state={byKey.get(meta.key)} onOpenComposio={onOpenComposio} />
-            </motion.li>
+            </li>
           ))}
-          {unknown.map((s, i) => (
-            <motion.li key={s.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i + KNOWN_KEYS.length, 12) * 0.03 }}>
+          {unknown.map((s) => (
+            <li key={s.key}>
               <KeyRow meta={{ key: s.key, label: s.key, description: "Custom secret", icon: KeyRound }} state={s} onOpenComposio={onOpenComposio} />
-            </motion.li>
+            </li>
           ))}
         </ul>
       )}

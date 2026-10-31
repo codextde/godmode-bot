@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router";
-import { motion } from "motion/react";
 import { formatDistanceToNowStrict } from "date-fns";
 import { CircleAlert, Clock, Plus, Search, Workflow, Zap } from "lucide-react";
 import type { Routine, RoutineTriggerType } from "@godmode/shared";
@@ -195,7 +194,7 @@ export default function AutomationsPage() {
                       filter === f.id ? "text-foreground" : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {filter === f.id && <motion.span layoutId="automations-filter" className="absolute inset-0 rounded-md border bg-card shadow-card" transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />}
+                    {filter === f.id && <span className="absolute inset-0 rounded-md border bg-card shadow-card" />}
                     <span className="relative flex items-center gap-1.5">
                       {f.label}
                       {counts[f.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{counts[f.id]}</span>}
@@ -280,10 +279,10 @@ export default function AutomationsPage() {
           />
         ) : (
           <div className="space-y-3">
-            {visible.map((r, i) => (
-              <motion.div key={r.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.03 }}>
+            {visible.map((r) => (
+              <div key={r.id}>
                 <RoutineItem routine={r} agent={agentById.get(r.agentId)} onEdit={(routine) => setDialog({ key: `${routine.id}-${Date.now()}`, open: true, routine })} />
-              </motion.div>
+              </div>
             ))}
           </div>
         )}

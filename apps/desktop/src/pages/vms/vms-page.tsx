@@ -140,14 +140,13 @@ export default function VmsPage() {
             ) : (
               <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-2">
                 <AnimatePresence initial={false}>
-                  {vms.map((vm, i) => (
+                  {vms.map((vm) => (
                     <motion.div
                       key={vm.id}
                       layout="position"
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.97 }}
-                      transition={{ delay: Math.min(i, 8) * 0.03 }}
                       className="min-w-0"
                     >
                       <VmCard

@@ -175,7 +175,7 @@ export function BrowserPanel({
               </span>
             </div>
           ) : (
-            <div className={cn("rounded-xl", activity && "glow-border")}>
+            <div className="rounded-xl">
               <button
                 type="button"
                 onClick={() => onFocus("watch")}
@@ -353,7 +353,7 @@ export function BrowserToggle({ working, onClick }: { working: boolean; onClick:
       <TooltipTrigger asChild>
         <Button variant="ghost" size="icon-sm" aria-label="Show browser" onClick={onClick} className="relative text-muted-foreground">
           <PanelRightOpen />
-          {working && <LiveDot className="absolute top-1.5 right-1.5" />}
+          {working && <LiveDot live={false} className="absolute top-1.5 right-1.5 bg-brand" />}
         </Button>
       </TooltipTrigger>
       <TooltipContent>Show browser</TooltipContent>

@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
 import { ArrowUpRight, Brain, Clock3, NotebookText, Trash2 } from "lucide-react";
 import type { Agent, AgentFilesOverview } from "@godmode/shared";
 import { formatBytes, memoryBudget } from "@godmode/shared";
@@ -63,10 +62,10 @@ export function FilesOverview({ agents }: { agents: Agent[] }) {
       </div>
       {overview.isError && <p className="text-sm text-destructive">{errorMessage(overview.error)}</p>}
       <ul className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @5xl:grid-cols-3">
-        {rows.map(({ agent, row }, i) => (
-          <motion.li key={agent.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 12) * 0.02 }}>
+        {rows.map(({ agent, row }) => (
+          <li key={agent.id}>
             <AgentCard agent={agent} row={row} largest={largest} memoryLimit={budget.target} />
-          </motion.li>
+          </li>
         ))}
       </ul>
     </div>
