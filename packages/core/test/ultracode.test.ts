@@ -246,6 +246,8 @@ describe("Ultracode in runs", () => {
     const inv = invocations(env).at(-1)!;
     expect(inv.args).toContain("--settings");
     expect(inv.settings!.hooks).toBeDefined();
+    expect(inv.settings!.attribution).toEqual({ commit: "", pr: "" });
+    expect(inv.settings!.includeCoAuthoredBy).toBe(false);
     expect(inv.settings).not.toHaveProperty("ultracode");
   });
 

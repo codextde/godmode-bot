@@ -152,7 +152,7 @@ export interface Invocation {
   prompt: string;
   cwd: string;
   /** Content of the run's `--settings` file (the hooks, `ultracode` when on, the mods' options); null without one. */
-  settings: { hooks?: unknown; ultracode?: boolean; pluginConfigs?: Record<string, { options: Record<string, unknown> }> } | null;
+  settings: { hooks?: unknown; ultracode?: boolean; attribution?: { commit: string; pr: string }; includeCoAuthoredBy?: boolean; pluginConfigs?: Record<string, { options: Record<string, unknown> }> } | null;
   /** The --plugin-dir folders as the run found them (a run's mods are gone once it has ended). */
   plugins: { dir: string; files: string[]; module: string | null }[];
   /** The MCP servers its plugins brought into the run's `--mcp-config`. */
