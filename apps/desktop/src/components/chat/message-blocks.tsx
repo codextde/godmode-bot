@@ -534,7 +534,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
       {!expanded && images.length > 0 && (
         <span className="mt-1 flex gap-1">
           {images.slice(-3).map((img, i) => (
-            <img key={i} src={imageSrc(img)} alt="" className="h-10 w-16 rounded-md border object-cover object-top" />
+            <Thumbnail key={i} image={img} />
           ))}
         </span>
       )}
@@ -679,6 +679,25 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
         <img src={src} alt={alt} loading="lazy" className="max-h-56 w-auto max-w-full object-contain object-top" />
       </button>
       <Lightbox src={src} alt={alt} open={zoom} onOpenChange={setZoom} />
+    </>
+  );
+}
+
+function Thumbnail({ image }: { image: string }) {
+  const { t } = useTranslation("chat");
+  const [zoom, setZoom] = useState(false);
+  const src = imageSrc(image);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setZoom(true)}
+        aria-label={t("blocks.enlargeScreenshot")}
+        className="overflow-hidden rounded-md border transition hover:shadow-float focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        <img src={src} alt="" className="h-10 w-16 object-cover object-top" />
+      </button>
+      <Lightbox src={src} alt="" open={zoom} onOpenChange={setZoom} />
     </>
   );
 }
