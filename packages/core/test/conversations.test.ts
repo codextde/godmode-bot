@@ -12,6 +12,7 @@ import {
   discardPrivateChat,
   discardPrivateChats,
   getConversation,
+  messageImage,
   getConversationSummary,
   listConversations,
   listMessagePage,
@@ -374,6 +375,28 @@ describe("message windows", () => {
     expect(long!.resultTruncated).toBe(true);
     expect(text).toEqual({ type: "text", text: "Done" } as never);
     expect(getConversation(conv.id).messages[0]!.blocks[0]).toMatchObject({ image: PNG });
+  });
+
+  test("lite=images leaves pictures out but keeps tool output whole, and the picture is served from a stored or in-flight message", () => {
+    const conv = createConversation({ agentId: agent.id });
+    const blocks: MessageBlock[] = [
+      { type: "tool_use", id: "toolu_shot", name: "mcp__browser__browser_screenshot", input: {}, result: "ok", image: PNG },
+      { type: "tool_use", id: "toolu_long", name: "Bash", input: {}, result: "x".repeat(10_000) },
+    ];
+    const msg = addMessage({ conversationId: conv.id, role: "assistant", content: "", blocks });
+    const [shot, long] = getConversation(conv.id, { lite: "images" }).messages[0]!.blocks as Extract<MessageBlock, { type: "tool_use" }>[];
+    expect(shot!.image).toBeUndefined();
+    expect(shot!.imageUrl).toBe(`/api/conversations/${conv.id}/messages/${msg.id}/images/toolu_shot`);
+    expect(long!.result).toHaveLength(10_000);
+    expect(long!.resultTruncated).toBeUndefined();
+    expect(Buffer.from(messageImage(conv.id, msg.id, "toolu_shot").data).toString("base64")).toBe(PNG);
+    expect(() => messageImage(conv.id, msg.id, "toolu_long")).toThrow();
+
+    const inFlight = addMessage({ conversationId: conv.id, role: "assistant", content: "", blocks: [{ type: "tool_use", id: "toolu_live", name: "x", input: {} }] });
+    sql("INSERT INTO message_images (message_id, block_id, image) VALUES (?, ?, ?)", inFlight.id, "toolu_live", PNG);
+    expect(getConversation(conv.id).messages[1]!.blocks[0]).toMatchObject({ image: PNG });
+    expect(getConversation(conv.id, { lite: "images" }).messages[1]!.blocks[0]).toMatchObject({ imageUrl: expect.stringContaining("toolu_live") });
+    expect(Buffer.from(messageImage(conv.id, inFlight.id, "toolu_live").data).toString("base64")).toBe(PNG);
   });
 });
 

@@ -391,18 +391,23 @@ export function chatFillOnly(conversationId: string): boolean {
 
 /**
  * Which messages a client wants: all of them (default), or the latest `limit`. `lite`: screenshots as their own requests
- * and long tool output cut, for phones and other slow links (a long chat is megabytes of base64 pictures).
+ * and long tool output cut, for phones and other slow links (a long chat is megabytes of base64 pictures). `"images"`:
+ * only the screenshots as their own requests, tool output in full (the desktop app).
  */
 export interface MessageWindow {
   limit?: number;
-  lite?: boolean;
+  lite?: boolean | "images";
 }
 
-/** From a request's `?limit=` and `?lite=1`. */
+/** From a request's `?limit=` and `?lite=1` (or `?lite=images`). */
 export function messageWindow(query: (name: string) => string | undefined): MessageWindow {
   const limit = Number(query("limit"));
   const lite = query("lite");
-  return { limit: Number.isFinite(limit) && limit > 0 ? limit : undefined, lite: lite === "1" || lite === "true" };
+  return { limit: Number.isFinite(limit) && limit > 0 ? limit : undefined, lite: lite === "images" ? "images" : lite === "1" || lite === "true" };
+}
+
+export function windowMessages(messages: Message[], lite: MessageWindow["lite"]): Message[] {
+  return lite ? messages.map((m) => liteMessage(m, lite === true)) : messages;
 }
 
 export function getConversation(id: string, window: MessageWindow = {}): ConversationWithMessages {
@@ -412,7 +417,7 @@ export function getConversation(id: string, window: MessageWindow = {}): Convers
   const messages = page?.messages ?? listMessages(id);
   return {
     ...conversation,
-    messages: window.lite ? messages.map(liteMessage) : messages,
+    messages: windowMessages(messages, window.lite),
     activeRunId,
     queue: listQueue(id),
     ...(page ? { hasMore: page.hasMore } : {}),
@@ -426,7 +431,7 @@ export function windowConversation(conversation: ConversationWithMessages, windo
   const messages = conversation.messages.slice(-limit);
   return {
     ...conversation,
-    messages: window.lite ? messages.map(liteMessage) : messages,
+    messages: windowMessages(messages, window.lite),
     ...(window.limit ? { hasMore: conversation.messages.length > messages.length } : {}),
   };
 }
@@ -462,10 +467,14 @@ export function listMessagePage(conversationId: string, opts: { limit: number; b
 
 /** The picture a tool returned in a message, decoded, with its type. */
 export function messageImage(conversationId: string, messageId: string, toolUseId: string): { data: Uint8Array; mime: string } {
-  const row = get<{ blocks: string }>("SELECT blocks FROM messages WHERE id = ? AND conversation_id = ?", messageId, conversationId);
-  const block = parseJson<MessageBlock[]>(row?.blocks ?? "[]", []).find((b) => b.type === "tool_use" && b.id === toolUseId);
-  if (!block || block.type !== "tool_use") throw notFound("Picture");
-  // While its run works the picture is kept apart from the message.
+  const block = get<{ image: string | null }>(
+    `SELECT json_extract(b.value, '$.image') AS image FROM messages m, json_each(m.blocks) b
+     WHERE m.id = ? AND m.conversation_id = ? AND json_extract(b.value, '$.type') = 'tool_use' AND json_extract(b.value, '$.id') = ?`,
+    messageId,
+    conversationId,
+    toolUseId,
+  );
+  if (!block) throw notFound("Picture");
   const image = block.image ?? get<{ image: string }>("SELECT image FROM message_images WHERE message_id = ? AND block_id = ?", messageId, toolUseId)?.image;
   if (!image) throw notFound("Picture");
   const data = Buffer.from(image, "base64");
@@ -853,9 +862,16 @@ export function wholeBlocks(messageId: string, blocks: MessageBlock[]): MessageB
 
 /** Messages as they are read: with the screenshots their runs keep apart while they work. */
 function whole(messages: Message[]): Message[] {
-  const apart = new Set(all<{ message_id: string }>("SELECT DISTINCT message_id FROM message_images").map((r) => r.message_id));
-  if (!apart.size) return messages;
-  return messages.map((m) => (apart.has(m.id) ? { ...m, blocks: wholeBlocks(m.id, m.blocks) } : m));
+  if (!messages.length) return messages;
+  const images = new Map<string, ImageRow[]>();
+  const ids = messages.map((m) => m.id);
+  for (const row of all<ImageRow>(`SELECT * FROM message_images WHERE message_id IN (SELECT value FROM json_each(?))`, JSON.stringify(ids))) {
+    const list = images.get(row.message_id);
+    if (list) list.push(row);
+    else images.set(row.message_id, [row]);
+  }
+  if (!images.size) return messages;
+  return messages.map((m) => (images.has(m.id) ? { ...m, blocks: withImages(m.blocks, images.get(m.id)!) } : m));
 }
 
 export function listMessages(conversationId: string): Message[] {

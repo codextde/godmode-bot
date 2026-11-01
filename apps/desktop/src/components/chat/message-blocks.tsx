@@ -32,6 +32,7 @@ import { useSmoothText } from "./use-smooth-text";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
+import { useCoreFileUrl } from "./core-file";
 import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
 import { ArtifactCard } from "@/components/artifacts/artifact-panel";
@@ -441,6 +442,16 @@ function imageSrc(image: string): string {
   return `data:${mime};base64,${image}`;
 }
 
+type Picture = Pick<ToolUseBlock, "image" | "imageUrl">;
+
+const hasPicture = (b: Picture) => !!(b.image || b.imageUrl);
+
+function usePictureSrc(picture: Picture): string | null {
+  const data = useMemo(() => (picture.image ? imageSrc(picture.image) : null), [picture.image]);
+  const remote = useCoreFileUrl(data ? undefined : picture.imageUrl, true);
+  return data ?? remote.src;
+}
+
 function StreamingMarkdown({ text, className }: { text: string; className?: string }) {
   const reduce = useReduceAnimations();
   const smooth = useSmoothText(text);
@@ -608,7 +619,7 @@ function CompactToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolC
   const metas = tools.map((s) => describe(s.block.name, s.block.input, ctx));
   const runningIdx = streaming ? tools.findIndex((s) => stepRunning(s.block, true)) : -1;
   const failed = tools.filter((s) => s.block.isError).length;
-  const images = tools.filter((s) => s.block.image).map((s) => s.block.image!);
+  const images = tools.filter((s) => hasPicture(s.block)).map((s) => s.block);
   const expanded = manual ?? (streaming && !easy);
   const single = tools.length === 1;
 
@@ -651,7 +662,7 @@ function CompactToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolC
       {!expanded && images.length > 0 && (
         <span className="mt-1 flex gap-1">
           {images.slice(-3).map((img, i) => (
-            <Thumbnail key={i} image={img} />
+            <Thumbnail key={i} picture={img} />
           ))}
         </span>
       )}
@@ -769,7 +780,7 @@ function ToolStep({
 
   const body = (
     <>
-      {block.image && <Screenshot image={block.image} alt={meta.title} />}
+      {hasPicture(block) && <Screenshot picture={block} alt={meta.title} />}
       <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>
     </>
   );
@@ -793,10 +804,11 @@ function ToolStep({
   );
 }
 
-function Screenshot({ image, alt }: { image: string; alt: string }) {
+function Screenshot({ picture, alt }: { picture: Picture; alt: string }) {
   const { t } = useTranslation(["chat", "common"]);
   const [zoom, setZoom] = useState(false);
-  const src = imageSrc(image);
+  const src = usePictureSrc(picture);
+  if (!src) return <div className="mt-1 mb-1.5 h-32 w-56 max-w-full animate-pulse rounded-lg border bg-muted/30" />;
   return (
     <>
       <button
@@ -812,10 +824,11 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
   );
 }
 
-function Thumbnail({ image }: { image: string }) {
+function Thumbnail({ picture }: { picture: Picture }) {
   const { t } = useTranslation("chat");
   const [zoom, setZoom] = useState(false);
-  const src = imageSrc(image);
+  const src = usePictureSrc(picture);
+  if (!src) return <div className="h-10 w-16 animate-pulse rounded-md border bg-muted/30" />;
   return (
     <>
       <button

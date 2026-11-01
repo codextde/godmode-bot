@@ -25,6 +25,8 @@ export interface WsData {
   conversations?: Set<string>;
   /** The client applies `run.delta` patches (it said `deltas.patch`); the others get the whole block list. */
   patches?: boolean;
+  /** Stored messages come without their screenshots, each its own request (it said `messages.images`). */
+  imageUrls?: boolean;
   /** The chat this client shows right now in a visible, focused window (`conversation.view`). */
   viewing?: string | null;
   /** Android phones this client watches, and how (H.264 or still pictures). */
@@ -524,12 +526,15 @@ function sendDelta(event: RunDelta) {
 function sendMessage(event: Extract<ServerEvent, { type: "message.created" | "message.updated" }>) {
   let full: string | null = null;
   let lite: string | null = null;
+  let images: string | null = null;
   for (const ws of audience()) {
     const device = ws.data.auth === "device";
     if (device && !ws.data.conversations?.has(event.message.conversationId)) continue;
     const payload = device
       ? (lite ??= JSON.stringify({ ...event, message: liteMessage(event.message) }))
-      : (full ??= timedSync(`send ${event.type}`, () => JSON.stringify(event)));
+      : ws.data.imageUrls && !ws.data.link
+        ? (images ??= JSON.stringify({ ...event, message: liteMessage(event.message, false) }))
+        : (full ??= timedSync(`send ${event.type}`, () => JSON.stringify(event)));
     try {
       ws.send(payload);
     } catch {
@@ -670,6 +675,9 @@ export const websocketHandler = {
       }
       case "deltas.patch":
         ws.data.patches = true;
+        break;
+      case "messages.images":
+        ws.data.imageUrls = true;
         break;
       case "run.resync":
         if (typeof msg.runId !== "string" || msg.runId.length > 100) break;

@@ -171,6 +171,7 @@ async function connect(queryClient: QueryClient) {
     useLive.getState().setConnected(true);
     // Streaming replies as what changed instead of the whole block list every time.
     ws.send(JSON.stringify({ type: "deltas.patch" } satisfies ClientEvent));
+    ws.send(JSON.stringify({ type: "messages.images" } satisfies ClientEvent));
     while (pendingSends.length) ws.send(JSON.stringify(pendingSends.shift()));
     // A new socket doesn't know which chat this window shows.
     if (viewing) ws.send(JSON.stringify({ type: "conversation.view", conversationId: viewing } satisfies ClientEvent));
@@ -237,6 +238,22 @@ function refreshSoon(qc: QueryClient, queryKey: readonly unknown[], filters: Omi
 const LISTS_ONLY = { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[1] !== "detail" };
 const conversationLists = { queryKey: qk.conversationsAll, ...LISTS_ONLY };
 
+/** The open chat once per burst: a turn that ends says so in three events, and each refetch is the whole chat. */
+const refreshChat = (qc: QueryClient, id: string) => refreshSoon(qc, qk.conversation(id));
+
+/**
+ * A change pushed into the cached chat. A fetch that started before it would bring the old state back: it is cancelled
+ * first (after the cancel, so its rollback can't undo the change) and the chat fetched again after the burst.
+ */
+function patchChat(qc: QueryClient, id: string, apply: () => void) {
+  const queryKey = qk.conversation(id);
+  if (!qc.isFetching({ queryKey })) return apply();
+  void qc.cancelQueries({ queryKey }).then(() => {
+    apply();
+    refreshChat(qc, id);
+  });
+}
+
 /** A stored message into the cached chat right away; the optimistic copy of a message the human just sent goes. */
 function upsertMessage(qc: QueryClient, message: Message) {
   qc.setQueryData<ConversationWithMessages>(qk.conversation(message.conversationId), (old) => {
@@ -266,7 +283,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
     case "run.started":
       live.runStarted(event.run);
       qc.invalidateQueries({ queryKey: qk.runs });
-      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      refreshChat(qc, event.run.conversationId);
       qc.invalidateQueries(conversationLists);
       refreshSoon(qc, qk.bootstrap);
       break;
@@ -278,7 +295,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "run.paused":
       live.runPaused(event.run);
-      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      refreshChat(qc, event.run.conversationId);
       qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
@@ -288,7 +305,7 @@ function handle(qc: QueryClient, event: ServerEvent) {
       qc.setQueryData<ConversationWithMessages>(qk.conversation(event.run.conversationId), (old) =>
         old && old.activeRunId === event.run.id ? { ...old, activeRunId: null } : old,
       );
-      qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
+      refreshChat(qc, event.run.conversationId);
       qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
       qc.invalidateQueries({ queryKey: qk.agents });
@@ -301,22 +318,20 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "message.created":
     case "message.updated":
-      upsertMessage(qc, event.message);
-      // A fetch that started before this message must not take it away again.
-      qc.invalidateQueries({ queryKey: qk.conversation(event.message.conversationId) });
+      patchChat(qc, event.message.conversationId, () => upsertMessage(qc, event.message));
       break;
     case "queue.updated": {
       const key = qk.conversation(event.conversationId);
-      qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, queue: withPending(event.conversationId, event.queue) } : old));
-      // A fetch that started before this change must not bring the old queue back.
-      qc.invalidateQueries({ queryKey: key });
+      patchChat(qc, event.conversationId, () =>
+        qc.setQueryData<ConversationWithMessages>(key, (old) => (old ? { ...old, queue: withPending(event.conversationId, event.queue) } : old)),
+      );
       break;
     }
     case "conversation.updated":
       refreshSoon(qc, qk.conversationsAll, LISTS_ONLY);
       // Unread and failed chats are on "Needs you".
       refreshSoon(qc, qk.bootstrap);
-      qc.invalidateQueries({ queryKey: qk.conversation(event.conversation.id) });
+      refreshChat(qc, event.conversation.id);
       // Follow-ups show the chat's title.
       qc.invalidateQueries({ queryKey: qk.followups });
       break;

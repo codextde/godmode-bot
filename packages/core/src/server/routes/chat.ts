@@ -12,6 +12,7 @@ import {
   chatAttachmentImage,
   messageImage,
   messageWindow,
+  windowMessages,
   markConversationsRead,
   markConversationsUnread,
   sendMessage,
@@ -19,7 +20,6 @@ import {
   updateConversation,
 } from "../../services/conversations";
 import { editQueued, removeQueued, sendQueuedNow, submitMessage } from "../../services/messageQueue";
-import { liteMessage } from "../../services/liteMessage";
 import { answerByMessage } from "../../services/questions";
 import { answererOf } from "./questions";
 import { replySettles } from "../../services/humanTasks";
@@ -130,7 +130,7 @@ export function registerChatRoutes(app: Hono): void {
     getConversationSummary(id);
     const { limit, lite } = messageWindow((name) => c.req.query(name));
     const page = listMessagePage(id, { limit: limit ?? 50, before: c.req.query("before") || undefined });
-    return c.json(lite ? { ...page, messages: page.messages.map(liteMessage) } : page);
+    return c.json(lite ? { ...page, messages: windowMessages(page.messages, lite) } : page);
   });
 
   // A picture a tool returned (a screenshot), for light answers that leave it out of the message.
