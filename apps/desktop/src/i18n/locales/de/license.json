@@ -123,5 +123,15 @@
     "confirmTitle": "Diesen Lizenzschlüssel aktivieren?",
     "confirmText": "Ein Link möchte den Lizenzschlüssel mit der Endung {{next}} zu Godmode hinzufügen. Mach nur weiter, wenn du ihn gerade gekauft oder von jemandem bekommen hast, dem du vertraust.",
     "cancel": "Abbrechen"
+  },
+  "reminders": {
+    "title": "Möchtest du eine kurze Erinnerung, bevor deine kostenlosen Tage enden?",
+    "body": "Dazu 3 kurze Tipps, mit denen du mehr schaffst. (optional)",
+    "placeholder": "du@beispiel.de",
+    "save": "Erinnere mich",
+    "skip": "Überspringen",
+    "invalid": "Das sieht nicht nach einer E-Mail-Adresse aus.",
+    "goTo": "Erinnerungen gehen an {{email}}",
+    "remove": "Entfernen"
   }
 }

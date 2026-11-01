@@ -2,11 +2,14 @@ import { env } from 'cloudflare:workers';
 import { SITE } from '@/config/site';
 import { db } from './db';
 import { minLivemode } from './entitlement';
+import { composeFree, dueFreeKinds, leadKey, type FreeLead } from './free-emails';
 import { compose, dueKinds, type Composed, type EmailKind, type LifecycleOrder } from './lifecycle';
 import { composeRecovery, RECOVERY_WINDOW, recoveryDue, type RecoveryRow } from './recovery';
-import { unsubscribeUrl } from './signed';
+import { unsubscribeToken, unsubscribeUrl } from './signed';
 
 const DAY = 86_400_000;
+
+const base = () => SITE.url.replace(/\/$/, '');
 
 /** Off unless LIFECYCLE_EMAILS=on: until then due emails are only logged, nothing is recorded or sent. */
 const enabled = () => env.LIFECYCLE_EMAILS === 'on' && Boolean(env.EMAIL);
@@ -76,13 +79,59 @@ export async function sendWelcome(sessionId: string) {
   if (o) await deliver(o, Date.now());
 }
 
-/** Hourly cron: welcome backfill, day-3 getting started, and the reminder three days before a trial ends. */
+/** Hourly cron: welcome backfill, day-3 getting started, the reminder three days before a trial ends, and the free-days emails. */
 export async function runLifecycle(now = Date.now()) {
   const rows = await db()
     .prepare(`${SELECT} AND o.created_at >= ? ORDER BY o.created_at`)
     .bind(minLivemode(), now - 30 * DAY)
     .all<Candidate>();
   for (const o of rows.results ?? []) await deliver(o, now);
+  await runFreeLifecycle(now);
+}
+
+type FreeCandidate = FreeLead & { last_email_at: number | null };
+
+// Leads from the app on (or just past) their free days who haven't unsubscribed or bought since.
+const FREE_SELECT = `SELECT l.id, l.email, l.free_ends_at, l.locale, l.unsubscribed_at,
+    (SELECT MAX(sent_at) FROM emails e WHERE e.session_id = 'lead:' || l.id) AS last_email_at
+  FROM leads l
+  WHERE l.source = 'app' AND l.free_ends_at IS NOT NULL AND l.unsubscribed_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM unsubscribes u WHERE u.email = l.email)
+    AND NOT EXISTS (SELECT 1 FROM orders o WHERE lower(o.email) = l.email AND o.status IN ('paid', 'past_due') AND o.livemode >= ?)`;
+
+async function deliverFree(l: FreeCandidate, now: number) {
+  if (l.last_email_at && now - l.last_email_at < DAY) return;
+  const key = leadKey(l.id);
+  const sent = await db().prepare(`SELECT kind FROM emails WHERE session_id = ?`).bind(key).all<{ kind: string }>();
+  const done = new Set((sent.results ?? []).map((r) => r.kind));
+  const kind = dueFreeKinds(l, now).find((k) => !done.has(k));
+  if (!kind) return;
+  if (!enabled()) {
+    console.log('lifecycle email due (sending is off)', kind, key);
+    return;
+  }
+  const unsubscribe = `${base()}/api/unsubscribe?e=${await unsubscribeToken(l.id)}`;
+  await sendOnce({
+    sessionId: key,
+    kind,
+    to: l.email,
+    mail: composeFree(kind, l, base(), unsubscribe, now),
+    headers: { 'List-Unsubscribe': `<${unsubscribe}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+  });
+}
+
+/** Right after the app sent an address: the welcome, unless the free days are almost over (then the reminder). */
+export async function sendFreeWelcome(leadId: number) {
+  const l = await db().prepare(`${FREE_SELECT} AND l.id = ?`).bind(minLivemode(), leadId).first<FreeCandidate>();
+  if (l) await deliverFree(l, Date.now());
+}
+
+async function runFreeLifecycle(now: number) {
+  const rows = await db()
+    .prepare(`${FREE_SELECT} AND l.free_ends_at > ? ORDER BY l.free_ends_at`)
+    .bind(minLivemode(), now - 3 * DAY)
+    .all<FreeCandidate>();
+  for (const l of rows.results ?? []) await deliverFree(l, now);
 }
 
 type RecoveryCandidate = RecoveryRow & { mailed: number; bought: number; unsubscribed: number };

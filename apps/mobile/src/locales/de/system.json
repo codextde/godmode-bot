@@ -28,10 +28,10 @@
     "evening": "Guten Abend"
   },
   "suggestions": {
-    "emails": "Fasse meine ungelesenen E-Mails zusammen",
-    "invoices": "Erstelle einen Agenten, der jeden Monat meine Rechnungen herunterlädt",
-    "github": "Melde dich bei GitHub an und prüfe meine Mitteilungen",
-    "research": "Recherchiere die Konkurrenz und schreib einen Bericht",
+    "replies": "Entwirf Antworten auf die Kunden-E-Mails von heute",
+    "invoices": "Lade die Rechnungen dieses Monats aus meinen Lieferantenportalen herunter",
+    "adReport": "Mach einen Wochenbericht über meine Werbeausgaben",
+    "leadList": "Finde 20 lokale Firmen mit E-Mail-Adresse und trag sie in eine Tabelle ein",
     "hideTitle": "Vorschläge ausblenden?",
     "hideBody": "Du kannst sie jederzeit unter Einstellungen → App wieder einblenden.",
     "hide": "Ausblenden"

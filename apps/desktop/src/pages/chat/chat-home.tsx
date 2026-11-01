@@ -5,7 +5,7 @@ import { format, formatDistanceToNowStrict } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, ComputerTarget, Conversation, ConversationWithMessages, StartChatInput } from "@godmode/shared";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
-import { ArrowRight, BedDouble, Bell, CalendarClock, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Telescope, Mail, X } from "lucide-react";
+import { ArrowRight, BedDouble, CalendarClock, ChartColumn, EyeOff, FileText, Ghost, Pin, Receipt, Scale, Sheet, Mail, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,10 +50,10 @@ import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { useLocale } from "@/i18n/language";
 
 const SUGGESTIONS = [
-  { icon: Mail, text: "home.suggestions.emails" },
-  { icon: Receipt, text: "home.suggestions.invoicesAgent" },
-  { icon: Bell, text: "home.suggestions.github" },
-  { icon: Telescope, text: "home.suggestions.competitors" },
+  { icon: Mail, text: "home.suggestions.replies" },
+  { icon: Receipt, text: "home.suggestions.invoices" },
+  { icon: ChartColumn, text: "home.suggestions.adReport" },
+  { icon: Sheet, text: "home.suggestions.leadList" },
 ] as const;
 
 /** Easy mode: everyday office errands. `prompt` leaves the open end for the human to finish. */

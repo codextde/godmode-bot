@@ -123,5 +123,15 @@
     "confirmTitle": "Activate this licence key?",
     "confirmText": "A link wants to add the licence key ending in {{next}} to Godmode. Only continue if you just bought it or got it from someone you trust.",
     "cancel": "Cancel"
+  },
+  "reminders": {
+    "title": "Want a heads-up before your free days end?",
+    "body": "Plus 3 short tips to get more done. (optional)",
+    "placeholder": "you@example.com",
+    "save": "Remind me",
+    "skip": "Skip",
+    "invalid": "That doesn't look like an email address.",
+    "goTo": "Reminders go to {{email}}",
+    "remove": "Remove"
   }
 }

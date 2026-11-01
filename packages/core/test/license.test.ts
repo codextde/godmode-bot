@@ -561,3 +561,92 @@ describe("godmode://license links", () => {
     expect(licenseKeyFromDeepLink("not a url")).toBeNull();
   });
 });
+
+describe("reminders before the free trial ends", () => {
+  let posts: { url: string; body: Record<string, unknown> }[] = [];
+  let site: (url: string) => Response = () => Response.json({ ok: true, unsubscribe: "u7.123.sig" });
+
+  beforeEach(() => {
+    posts = [];
+    site = () => Response.json({ ok: true, unsubscribe: "u7.123.sig" });
+    __setLicenseFetchForTests(async (url, init) => {
+      calls.push(url);
+      if (init.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        return site(url);
+      }
+      return answer();
+    });
+  });
+
+  afterAll(() => {
+    __setLicenseFetchForTests(async (url) => {
+      calls.push(url);
+      return answer();
+    });
+  });
+
+  test("nothing is sent until the human types an address; then only it, the end date, version and language", async () => {
+    initLicense();
+    expect(licenseState().reminderEmail).toBeNull();
+    expect(posts).toEqual([]);
+
+    const res = await api("PUT", "/api/license/reminders", { email: "  Sam@Example.com ", locale: "de" });
+    expect(res.status).toBe(200);
+    const s = (await res.json()) as LicenseState;
+    expect(s.reminderEmail).toBe("sam@example.com");
+    expect(posts).toHaveLength(1);
+    expect(posts[0].url).toBe("https://usegodmode.com/api/lead");
+    expect(posts[0].body).toEqual({
+      email: "sam@example.com",
+      source: "app",
+      free_ends_at: licenseState().graceEndsAt,
+      app_version: expect.any(String),
+      locale: "de",
+    });
+    expect(getMeta("license.reminder_token")).toBe("u7.123.sig");
+  });
+
+  test("removing it unsubscribes on the site with the token, then forgets the address", async () => {
+    initLicense();
+    await api("PUT", "/api/license/reminders", { email: "sam@example.com", locale: "en" });
+    posts = [];
+    const res = await api("DELETE", "/api/license/reminders");
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as LicenseState).reminderEmail).toBeNull();
+    expect(posts.map((p) => p.url)).toEqual(["https://usegodmode.com/api/unsubscribe?e=u7.123.sig"]);
+    expect(getMeta("license.reminder_token")).toBeNull();
+  });
+
+  test("an offline site keeps the address so it can be removed later", async () => {
+    initLicense();
+    await api("PUT", "/api/license/reminders", { email: "sam@example.com", locale: "en" });
+    site = offline;
+    const res = await api("DELETE", "/api/license/reminders");
+    expect(res.status).toBe(502);
+    expect(licenseState().reminderEmail).toBe("sam@example.com");
+  });
+
+  test("refused outside the free trial, for a bad address, and when the site can't save it", async () => {
+    initLicense();
+    expect((await api("PUT", "/api/license/reminders", { email: "not-an-email", locale: "en" })).status).toBe(400);
+    site = () => Response.json({ error: "unavailable" }, { status: 503 });
+    expect((await api("PUT", "/api/license/reminders", { email: "sam@example.com", locale: "en" })).status).toBe(502);
+    expect(licenseState().reminderEmail).toBeNull();
+
+    __setLicenseEnforcedForTests(false);
+    site = () => Response.json({ ok: true });
+    expect((await api("PUT", "/api/license/reminders", { email: "sam@example.com", locale: "en" })).status).toBe(409);
+    expect(posts.filter((p) => p.url.endsWith("/api/lead"))).toHaveLength(1);
+  });
+
+  test("a key that the server confirms stops the reminders", async () => {
+    initLicense();
+    await api("PUT", "/api/license/reminders", { email: "sam@example.com", locale: "en" });
+    answer = trial();
+    await putKey(KEY);
+    await Bun.sleep(10);
+    expect(posts.at(-1)?.url).toBe("https://usegodmode.com/api/unsubscribe?e=u7.123.sig");
+    expect(licenseState().reminderEmail).toBeNull();
+  });
+});
