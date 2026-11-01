@@ -920,6 +920,19 @@ function canAsk(_agent: Agent, ctx: RunContext): boolean {
   }
 }
 
+/**
+ * The run may look at and take back tasks for the human: that asks nothing, so also in delegated runs (an agent drops
+ * its own, a lead its team's). Not in condition checks (they only observe).
+ */
+function canWithdraw(_agent: Agent, ctx: RunContext): boolean {
+  try {
+    const r = getRun(ctx.runId);
+    return r.trigger !== "check" && r.trigger !== "dream";
+  } catch {
+    return false;
+  }
+}
+
 /** The run is a dream (background memory consolidation): it gets `memory_dream_report` and nothing else. */
 function isDreamRun(ctx: RunContext): boolean {
   try {
@@ -1785,7 +1798,7 @@ const TOOLS: ToolDef[] = [
     description:
       "Tasks you gave the human (human_task_create) and whether they are still open, parked in their backlog (status backlog: they will get to it later, it still counts as open), being worked on, done or declined, with their note. Also lists a decision (kind: decision) Godmode found open in one of your final answers and put on their list.",
     schema: z.object({ status: z.enum(["active", "closed", "all"]).optional().describe("active (default) = open, in their backlog or being worked on") }),
-    when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
+    when: canWithdraw,
     run: ({ status }, { agent }) => {
       const tasks = listHumanTasks({ status: status ?? "active", agentId: isManager(agent) ? undefined : agent.id }).filter((t) => !t.questionId);
       if (!tasks.length) return status === "active" || !status ? "No open tasks for the human." : "None.";
@@ -1814,7 +1827,7 @@ const TOOLS: ToolDef[] = [
       id: z.string().min(1).max(100).describe('The task\'s id or its ref, e.g. "H-12"'),
       reason: z.string().max(500).optional().describe("Why it isn't needed anymore; required for a task of your team, the human sees it on the task"),
     }),
-    when: (agent, ctx) => canAsk(agent, ctx) && followupsAllowed(ctx.conversationId),
+    when: canWithdraw,
     run: ({ id, reason }, { agent }) => {
       const t = withdrawHumanTask(findHumanTask(id).id, reason ?? "", { agentId: agent.id });
       return `${humanTaskRef(t)} is off the list.`;
