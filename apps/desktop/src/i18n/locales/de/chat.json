@@ -1021,10 +1021,10 @@
   },
   "home": {
     "suggestions": {
-      "emails": "Fass meine ungelesenen E-Mails zusammen",
-      "invoicesAgent": "Erstelle einen Agenten, der jeden Monat meine Rechnungen herunterlädt",
-      "github": "Melde dich bei GitHub an und prüf meine Benachrichtigungen",
-      "competitors": "Recherchiere die Konkurrenz und schreib einen Bericht"
+      "replies": "Entwirf Antworten auf die Kunden-E-Mails von heute",
+      "invoices": "Lade die Rechnungen dieses Monats aus meinen Lieferantenportalen herunter",
+      "adReport": "Mach einen Wochenbericht über meine Werbeausgaben",
+      "leadList": "Finde 20 lokale Firmen mit E-Mail-Adresse und trag sie in eine Tabelle ein"
     },
     "easySuggestions": {
       "inbox": "Sortiere meinen Posteingang und entwirf Antworten",

@@ -15,9 +15,9 @@ export function greeting(date = new Date()): string {
 
 export const SUGGESTIONS: { icon: IconName; text: string }[] = [
   {
-    icon: "text",
+    icon: "reply",
     get text() {
-      return t("system:suggestions.emails");
+      return t("system:suggestions.replies");
     },
   },
   {
@@ -27,15 +27,15 @@ export const SUGGESTIONS: { icon: IconName; text: string }[] = [
     },
   },
   {
-    icon: "bell",
+    icon: "gauge",
     get text() {
-      return t("system:suggestions.github");
+      return t("system:suggestions.adReport");
     },
   },
   {
-    icon: "search",
+    icon: "table",
     get text() {
-      return t("system:suggestions.research");
+      return t("system:suggestions.leadList");
     },
   },
 ];

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import type { LicensePlan, LicenseState, LicenseStatus } from "@godmode/shared";
 import { ActivatePanel, LicenseKeyForm } from "@/components/license/activate";
+import { ReminderEmailForm, ReminderEmailSet } from "@/components/license/reminder-email";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -124,6 +125,9 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
             </InfoRow>
           )}
           <div className="py-5">{local ? <ActivatePanel source="settings" /> : <Callout>{t("license.activate.remote")}</Callout>}</div>
+          {freeWeek && s.enforced && local && (
+            <div className="py-4">{s.reminderEmail ? <ReminderEmailSet email={s.reminderEmail} /> : <ReminderEmailForm />}</div>
+          )}
         </SettingsGroup>
         {!s.enforced && <NotEnforced />}
       </>

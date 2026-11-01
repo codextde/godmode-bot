@@ -95,11 +95,20 @@ export interface LicenseState {
   enforced: boolean;
   /** New runs are refused right now. */
   blocked: boolean;
+  /** Where reminders before the end of the free trial go: an address the human typed in, sent only to usegodmode.com. */
+  reminderEmail: string | null;
 }
 
 /** PUT /api/license */
 export interface LicenseKeyInput {
   key: string;
+}
+
+/** PUT /api/license/reminders */
+export interface LicenseReminderInput {
+  email: string;
+  /** The language of the emails. */
+  locale: "en" | "de";
 }
 
 /** Error code of a refused run start (HTTP 402). */

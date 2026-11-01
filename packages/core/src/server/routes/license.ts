@@ -1,5 +1,5 @@
 import type { Hono } from "hono";
-import { licenseState, licenseUsage, refreshLicense, removeLicenseKey, setLicenseKey } from "../../license/license";
+import { licenseState, licenseUsage, refreshLicense, removeLicenseKey, removeReminderEmail, setLicenseKey, setReminderEmail } from "../../license/license";
 import { body, z } from "../validate";
 
 export function registerLicenseRoutes(app: Hono) {
@@ -15,4 +15,11 @@ export function registerLicenseRoutes(app: Hono) {
   app.delete("/api/license", (c) => c.json(removeLicenseKey()));
 
   app.post("/api/license/refresh", async (c) => c.json(await refreshLicense()));
+
+  app.put("/api/license/reminders", async (c) => {
+    const { email, locale } = await body(c, z.object({ email: z.string().max(320), locale: z.enum(["en", "de"]).default("en") }));
+    return c.json(await setReminderEmail(email, locale));
+  });
+
+  app.delete("/api/license/reminders", async (c) => c.json(await removeReminderEmail()));
 }

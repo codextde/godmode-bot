@@ -45,13 +45,20 @@ function price(o: LifecycleOrder) {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
+/** A paragraph, or a link drawn as a button in the HTML part. */
+export type Block = string | { button: string; url: string };
+
 /** Plain text is the source; the HTML part is the same words with links, no images or tracking. */
-function render(subject: string, paragraphs: string[]): Composed {
-  const text = paragraphs.join('\n\n');
-  const linkify = (p: string) => esc(p).replace(/https:\/\/[^\s<]+/g, (u) => `<a href="${u}" style="color:#0a7f5a">${u}</a>`);
-  const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#fff;color:#111;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"><div style="max-width:560px">${paragraphs
-    .map((p) => `<p style="margin:0 0 16px;white-space:pre-line">${linkify(p)}</p>`)
-    .join('')}</div></body></html>`;
+export function render(subject: string, blocks: Block[], footer?: string): Composed {
+  const text = [...blocks.map((b) => (typeof b === 'string' ? b : `${b.button}:\n${b.url}`)), ...(footer ? [`--\n${footer}`] : [])].join('\n\n');
+  const linkify = (p: string, color = '#0a7f5a') => esc(p).replace(/https:\/\/[^\s<]+/g, (u) => `<a href="${u}" style="color:${color}">${u}</a>`);
+  const html = `<!doctype html><html><body style="margin:0;padding:24px;background:#fff;color:#111;font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"><div style="max-width:560px">${blocks
+    .map((b) =>
+      typeof b === 'string'
+        ? `<p style="margin:0 0 16px;white-space:pre-line">${linkify(b)}</p>`
+        : `<p style="margin:4px 0 20px"><a href="${esc(b.url)}" style="display:inline-block;padding:11px 20px;border-radius:8px;background:#0a7f5a;color:#fff;font-weight:600;text-decoration:none">${esc(b.button)}</a></p>`,
+    )
+    .join('')}${footer ? `<p style="margin:28px 0 0;color:#777;font-size:12.5px;line-height:1.5">${linkify(footer, '#777')}</p>` : ''}</div></body></html>`;
   return { subject, text, html };
 }
 

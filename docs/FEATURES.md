@@ -206,7 +206,8 @@ Godmode is open source under the [MIT License](../LICENSE). Two ways to run it:
   ([Build from source](#build-from-source)). Every feature, no licence key, no limits.
 - **Godmode Pro, the official builds.** A signed and notarized macOS app, Windows and Linux builds, automatic updates,
   the install script and Docker image, and support from the people who build it. The official builds run free for 14
-  days without a key or card, then need a Pro licence. Prices are on
+  days without a key or card, then need a Pro licence. During those days you can leave your email (optional) for a
+  heads-up before they end; nothing else is sent. Prices are on
   [usegodmode.com](https://usegodmode.com/#pricing). Pro pays for Godmode's development.
 
 ### Desktop app

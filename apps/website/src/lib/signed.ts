@@ -65,3 +65,13 @@ export async function setKeyCookie(cookies: AstroCookies, key: string, secure: b
 }
 
 export const keyFromCookie = (cookies: AstroCookies) => verify(cookies.get(KEY_COOKIE)?.value);
+
+// Unsubscribe links in emails carry a signed lead id, never the address itself.
+const UNSUBSCRIBE_TTL = 3 * 365 * 86_400;
+
+export const unsubscribeToken = (leadId: number) => sign(`u${leadId}`, UNSUBSCRIBE_TTL);
+
+export async function leadFromUnsubscribeToken(token: string | null | undefined): Promise<number | null> {
+  const payload = await verify(token ?? undefined);
+  return payload && /^u\d+$/.test(payload) ? Number(payload.slice(1)) : null;
+}

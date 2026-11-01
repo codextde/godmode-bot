@@ -457,6 +457,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/license/refresh", "owner"],
   ["GET", "/api/license/usage", "owner"],
   ["PUT|DELETE", "/api/license", refused(COMPUTER_ONLY)],
+  ["PUT|DELETE", "/api/license/reminders", refused(COMPUTER_ONLY)],
 ];
 
 /** Writes a viewer may make: resolving a chat's files and looking at an agent's before a delete change nothing. */

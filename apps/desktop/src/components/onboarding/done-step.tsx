@@ -7,6 +7,7 @@ import { ArrowDownToLine, ArrowRight, Bot, ChevronDown, CircleCheck, CircleDashe
 import { MASCOT_CHARACTER, MASCOT_COLOR, type ChromeImportResult, type LicenseState, type LocalChromeProfile } from "@godmode/shared";
 import { Character } from "@/components/character";
 import { ActivatePanel } from "@/components/license/activate";
+import { ReminderEmailForm, ReminderEmailSet } from "@/components/license/reminder-email";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocale } from "@/i18n/language";
@@ -53,6 +54,9 @@ export function DoneStep({
   const freeUntil = license?.enforced && license.status === "grace" && license.graceEndsAt ? new Date(license.graceEndsAt) : null;
   const needsKey = !!license && !licensed && !freeUntil;
   const [activateOpen, setActivateOpen] = useState(false);
+  const [remindersSkipped, setRemindersSkipped] = useState(false);
+  const [remindersGiven, setRemindersGiven] = useState(false);
+  const reminderEmail = license?.reminderEmail ?? null;
   const blocked = !!license?.blocked;
   const first = userName.trim().split(/\s+/)[0];
 
@@ -139,6 +143,16 @@ export function DoneStep({
               <div className="mt-4 rounded-xl border p-5">
                 {blocked && license?.message && <p className="mb-4 text-sm text-muted-foreground">{license.message}</p>}
                 <ActivatePanel source="onboarding" onActivated={() => setActivateOpen(false)} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence initial={false}>
+          {freeUntil && !remindersSkipped && (!reminderEmail || remindersGiven) && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <div className="mt-4 rounded-xl border p-4">
+                {reminderEmail ? <ReminderEmailSet email={reminderEmail} /> : <ReminderEmailForm onSkip={() => setRemindersSkipped(true)} onSaved={() => setRemindersGiven(true)} />}
               </div>
             </motion.div>
           )}

@@ -110,6 +110,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   FollowupPatch,
   Goal,
   GoalInput,
+  LicenseReminderInput,
   LicenseState,
   LicenseUsage,
   GitCommit,
@@ -879,6 +880,9 @@ export const api = {
     refresh: () => post<LicenseState>("/api/license/refresh"),
     /** What Godmode did so far (for the end of the free trial). */
     usage: () => get<LicenseUsage>("/api/license/usage"),
+    /** Reminders before the free trial ends: the core sends the address to usegodmode.com. */
+    setReminders: (input: LicenseReminderInput) => put<LicenseState>("/api/license/reminders", input),
+    removeReminders: () => del<LicenseState>("/api/license/reminders"),
   },
 
   /** What the agents on this computer used over the last `days` days (from its run history). */

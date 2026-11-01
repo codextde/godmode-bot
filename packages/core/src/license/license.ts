@@ -47,6 +47,9 @@ const META = {
   graceEndsAt: "license.grace_ends_at",
   /** When this install first ran a version with licences. */
   firstStart: "license.first_start",
+  /** The address the human gave for reminders before the free trial ends, and the site's token to take it back. */
+  reminderEmail: "license.reminder_email",
+  reminderToken: "license.reminder_token",
 };
 
 /** The licence server's last answer for the stored key. */
@@ -239,6 +242,7 @@ export function licenseState(): LicenseState {
     message,
     enforced,
     blocked,
+    reminderEmail: getMeta(META.reminderEmail),
   };
 }
 
@@ -372,6 +376,7 @@ export async function setLicenseKey(input: string): Promise<LicenseState> {
   }
   if (answer.kind === "verdict") storeVerdict(answer.verdict);
   else if (changed && !getMeta(META.unverifiedSince)) setMeta(META.unverifiedSince, iso(clock()));
+  if (answer.kind === "verdict" && answer.verdict.valid && getMeta(META.reminderEmail)) void removeReminderEmail().catch((err) => log.info("reminders not stopped yet", { reason: String(err) }));
   audit("user", "license.set", key.slice(-5), { status: licenseState().status });
   log.info("licence key added", { key: key.slice(-5), verified: answer.kind === "verdict" });
   return publish();
@@ -385,6 +390,56 @@ export function removeLicenseKey(): LicenseState {
     audit("user", "license.remove", key.slice(-5));
     log.info("licence key removed", { key: key.slice(-5) });
   }
+  return publish();
+}
+
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/;
+const NOT_AN_EMAIL = "That doesn't look like an email address.";
+
+async function askSite(path: string, body?: unknown): Promise<Response> {
+  try {
+    return await fetchImpl(`${licenseBaseUrl()}${path}`, {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json", "user-agent": `GodmodeBot/${VERSION}` },
+      body: JSON.stringify(body ?? {}),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch {
+    throw new HttpError(502, "Couldn't reach usegodmode.com. Check your internet connection and try again.");
+  }
+}
+
+/**
+ * PUT /api/license/reminders: an address the human typed in for a heads-up before the free trial ends (and a few tips).
+ * Only during the free trial of a build that checks licences; nothing goes to the site without it.
+ */
+export async function setReminderEmail(input: string, locale: "en" | "de"): Promise<LicenseState> {
+  const email = input.trim().toLowerCase();
+  if (!EMAIL.test(email)) throw new HttpError(400, NOT_AN_EMAIL);
+  const state = licenseState();
+  if (!state.enforced || state.status !== "grace" || !state.graceEndsAt) throw new HttpError(409, "Reminders are only for the free trial.");
+  const res = await askSite("/api/lead", { email, source: "app", free_ends_at: state.graceEndsAt, app_version: VERSION, locale });
+  if (res.status === 400) throw new HttpError(400, NOT_AN_EMAIL);
+  if (!res.ok) throw new HttpError(502, "Couldn't save your email right now. Try again in a moment.");
+  const answer = (await res.json().catch(() => null)) as { unsubscribe?: unknown } | null;
+  setMeta(META.reminderEmail, email);
+  if (typeof answer?.unsubscribe === "string") setMeta(META.reminderToken, answer.unsubscribe);
+  else deleteMeta(META.reminderToken);
+  log.info("free trial reminders on");
+  return publish();
+}
+
+/** DELETE /api/license/reminders: unsubscribes on the site, then forgets the address. */
+export async function removeReminderEmail(): Promise<LicenseState> {
+  const token = getMeta(META.reminderToken);
+  if (token) {
+    const res = await askSite(`/api/unsubscribe?e=${encodeURIComponent(token)}`);
+    // 400: a token the site no longer knows; nothing left to unsubscribe there.
+    if (!res.ok && res.status !== 400) throw new HttpError(502, "Couldn't reach usegodmode.com to stop the reminders. Try again in a moment.");
+  }
+  deleteMeta(META.reminderEmail);
+  deleteMeta(META.reminderToken);
+  log.info("free trial reminders off");
   return publish();
 }
 

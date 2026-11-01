@@ -111,7 +111,12 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
        WHERE livemode = ? AND status = 'expired' AND email IS NOT NULL ORDER BY created_at DESC LIMIT 10`,
       liveFlag,
     ),
-    one(`SELECT COUNT(*) AS c, SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS recent FROM leads`, sinceMs),
+    one(
+      `SELECT COUNT(*) AS c, SUM(CASE WHEN ts >= ? THEN 1 ELSE 0 END) AS recent, SUM(CASE WHEN source = 'app' THEN 1 ELSE 0 END) AS app,
+              (SELECT COUNT(*) FROM emails WHERE kind = 'free_ending') AS ending, (SELECT COUNT(*) FROM emails WHERE kind = 'free_ended') AS ended
+       FROM leads`,
+      sinceMs,
+    ),
     all(
       `SELECT label, COUNT(*) AS c FROM events WHERE day >= ? AND type IN ('click', 'checkout_start') AND label IS NOT NULL
        GROUP BY label ORDER BY c DESC LIMIT 12`,
@@ -232,6 +237,7 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           <p class="text-[13px] text-muted">Paid orders</p>
           <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{paidCount}</p>
           <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded · {n(leads.c)} leads ({n(leads.recent)} new)</p>
+          <p class="mt-0.5 text-[12.5px] text-dim">{n(leads.app)} from the app · {n(leads.ending)} free_ending · {n(leads.ended)} free_ended sent</p>
         </div>
         <div class="card p-6">
           <p class="text-[13px] text-muted">In trial</p>
