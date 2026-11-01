@@ -220,9 +220,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const shownLinger = linger && !lingerDone && !live ? linger : null;
 
   // Hide the stored copy of the in-flight assistant message while it streams.
+  const liveMessageId = live?.messageId;
+  const liveRunId = live?.runId;
   const visibleMessages = useMemo(
-    () => (live ? messages.filter((m) => m.id !== live.messageId && !(m.role === "assistant" && m.runId === live.runId)) : messages),
-    [messages, live],
+    () => (liveRunId !== undefined ? messages.filter((m) => m.id !== liveMessageId && !(m.role === "assistant" && m.runId === liveRunId)) : messages),
+    [messages, liveMessageId, liveRunId],
   );
 
   const subagentSide = useMemo(() => {

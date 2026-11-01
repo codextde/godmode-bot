@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { format, isToday, isYesterday } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, Conversation, Message } from "@godmode/shared";
@@ -18,6 +18,52 @@ function dayLabel(iso: string): string {
   if (isYesterday(d)) return t("common:words.yesterday");
   return format(d, d.getFullYear() === new Date().getFullYear() ? t("chat:thread.dayFormat") : t("chat:thread.dayFormatYear"), { locale: dateLocale() });
 }
+
+const ThreadRow = memo(function ThreadRow({
+  message: m,
+  day,
+  animate,
+  flashing,
+  agent,
+  delegatedFrom,
+}: {
+  message: Message;
+  day: string | null;
+  animate: boolean;
+  flashing: boolean;
+  agent?: Agent;
+  delegatedFrom?: Conversation["delegatedFrom"];
+}) {
+  return (
+    <Fragment>
+      {day && (
+        <div className="eyebrow flex items-center gap-3 text-[10.5px]" role="separator">
+          <span className="h-px flex-1 bg-border" />
+          {day}
+          <span className="h-px flex-1 bg-border" />
+        </div>
+      )}
+      <motion.div
+        data-message-id={m.id}
+        data-turn-anchor={m.role === "user" && !m.source ? "" : undefined}
+        className={`rounded-xl transition-shadow duration-700 ${flashing ? "ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : "ring-0"}`}
+        initial={animate ? { opacity: 0, y: 8 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: EASE_OUT }}
+      >
+        {m.role === "user" && m.source ? (
+          <StartedMessage message={m} delegatedFrom={delegatedFrom} />
+        ) : m.role === "user" ? (
+          <UserMessage message={m} pending={m.id.startsWith("pending-")} />
+        ) : m.role === "assistant" ? (
+          <AssistantMessage message={m} agent={agent} />
+        ) : (
+          <SystemMessage message={m} />
+        )}
+      </motion.div>
+    </Fragment>
+  );
+});
 
 export interface ThreadProps {
   messages: Message[];
@@ -68,48 +114,32 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
   }, [sentCount, messages, pinTurn]);
 
   const isEmpty = messages.length === 0 && !inflight;
-  let lastDay = "";
+  const days = useMemo(() => {
+    let lastDay = "";
+    return messages.map((m) => {
+      const day = dayLabel(m.createdAt);
+      const show = day && day !== lastDay ? day : null;
+      lastDay = day || lastDay;
+      return show;
+    });
+  }, [messages]);
 
   return (
     <div className="relative min-h-0 flex-1">
       <div ref={scrollRef} className="h-full overflow-y-auto overscroll-contain [overflow-anchor:none]" tabIndex={-1} aria-label={t("thread.messages")}>
         <div ref={contentRef} className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 pt-6 pb-10 @xl:px-6">
           {isEmpty && empty}
-          {messages.map((m) => {
-            const day = dayLabel(m.createdAt);
-            const showDay = day && day !== lastDay;
-            lastDay = day || lastDay;
-            const animate = !reduce && !initialIds.current!.has(m.id);
-            return (
-              <Fragment key={m.id}>
-                {showDay && (
-                  <div className="eyebrow flex items-center gap-3 text-[10.5px]" role="separator">
-                    <span className="h-px flex-1 bg-border" />
-                    {day}
-                    <span className="h-px flex-1 bg-border" />
-                  </div>
-                )}
-                <motion.div
-                  data-message-id={m.id}
-                  data-turn-anchor={m.role === "user" && !m.source ? "" : undefined}
-                  className={`rounded-xl transition-shadow duration-700 ${flash === m.id ? "ring-2 ring-primary/40 ring-offset-4 ring-offset-background" : "ring-0"}`}
-                  initial={animate ? { opacity: 0, y: 8 } : false}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, ease: EASE_OUT }}
-                >
-                  {m.role === "user" && m.source ? (
-                    <StartedMessage message={m} delegatedFrom={delegatedFrom} />
-                  ) : m.role === "user" ? (
-                    <UserMessage message={m} pending={m.id.startsWith("pending-")} />
-                  ) : m.role === "assistant" ? (
-                    <AssistantMessage message={m} agent={agent} />
-                  ) : (
-                    <SystemMessage message={m} />
-                  )}
-                </motion.div>
-              </Fragment>
-            );
-          })}
+          {messages.map((m, i) => (
+            <ThreadRow
+              key={m.id}
+              message={m}
+              day={days[i] ?? null}
+              animate={!reduce && !initialIds.current!.has(m.id)}
+              flashing={flash === m.id}
+              agent={agent}
+              delegatedFrom={delegatedFrom}
+            />
+          ))}
           {!inflight && after}
           {inflight && (
             <LiveAssistantMessage
