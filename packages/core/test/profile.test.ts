@@ -52,3 +52,29 @@ describe("team profile", () => {
     expect(text.match(/<\/team-notes>/g)).toHaveLength(1);
   });
 });
+
+describe("team memory", () => {
+  test("a lead reads its reports' memory and sees their latest results; others don't", async () => {
+    const { readTeamMemory, teamActivityDigest, teamBelow } = await import("../src/memory/team");
+    const { insert } = await import("../src/db");
+    const { createConversation } = await import("../src/services/conversations");
+    const { newId } = await import("../src/util");
+    const main = getAgent(getDefaultAgentId()!);
+    const lead = await makeAgent({ name: "Case Lead" });
+    const clerk = await makeAgent({ name: "Case Clerk", reportsTo: lead.id });
+    writeFileSync(join(clerk.repoPath, "MEMORY.md"), "# Memory\n- November rent paid 2026-11-01\n");
+    expect(teamBelow(lead).map((a) => a.id)).toEqual([clerk.id]);
+    expect(teamBelow(main).map((a) => a.id)).toEqual(expect.arrayContaining([lead.id, clerk.id]));
+    expect(readTeamMemory(lead, clerk.id)).toContain("November rent paid");
+    expect(readTeamMemory(main, clerk.slug)).toContain("(read-only)");
+    expect(readTeamMemory(clerk, lead.id)).toContain("Only the memory of agents on your team");
+    expect(readTeamMemory(lead, clerk.id, "../CLAUDE.md")).toContain("not a memory file");
+    const c = createConversation({ agentId: clerk.id, title: "Monatsbericht" });
+    const ts = new Date().toISOString();
+    insert("runs", { id: newId("run"), agent_id: clerk.id, conversation_id: c.id, routine_id: null, parent_run_id: null, trigger: "chat", status: "succeeded", prompt: "paid?", result: "Die Novembermiete ist bezahlt.", error: null, created_at: ts, started_at: ts, finished_at: ts });
+    const digest = teamActivityDigest(lead, null);
+    expect(digest.runs).toBe(1);
+    expect(digest.text).toContain("Case Clerk · chat · Monatsbericht\n> Die Novembermiete ist bezahlt.");
+    expect(teamActivityDigest(clerk, null).runs).toBe(0);
+  });
+});

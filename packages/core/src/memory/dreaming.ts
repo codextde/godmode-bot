@@ -79,6 +79,7 @@ import { offerContext, offersOn, settleOffers } from "./offers";
 import { memoryEditsDigest, pruneMemoryEdits } from "./edits";
 import { notify } from "../services/notifications";
 import { PROFILE_FILE, PROFILE_MAX, isProfileKeeper, othersAboutHuman } from "./profile";
+import { teamActivityDigest } from "./team";
 
 
 const log = logger("dreaming");
@@ -453,6 +454,7 @@ export interface DreamPromptInput {
   editsPath?: string | null;
   editRuns?: number;
   profile?: { exists: boolean; teamPath: string | null } | null;
+  team?: { agents: string[]; activityPath: string | null } | null;
   exchanges: number;
   conversations: number;
   since: string | null;
@@ -560,6 +562,12 @@ export function buildDreamPrompt(input: DreamPromptInput): string {
           `   - It is too long now. Shorten it by moving, not by forgetting: the state of each project, histories, step-by-step procedures, ids and lists go into memory/<topic>.md (reuse the notes that exist), and MEMORY.md keeps one line with the gist and the link. Cut what is finished down to the fact that still matters. What stays in MEMORY.md itself: who ${human} is and how they want you to work, standing rules and limits, what is open right now, and the index of your notes.`,
         ]
       : []),
+    "   - Each agent keeps the memory of its own work. Don't keep the live status of work another agent owns (a case, a ticket, an automation, a running process): keep one line on who owns it and where to look, and remove status copies — they drift.",
+    ...(input.team
+      ? [
+          `   - Your team (${input.team.agents.join(", ")}) keeps its own memory: read it with \`team_memory_read\` when you need it or are unsure.${input.team.activityPath ? ` What they did since your last dream is in \`${input.team.activityPath}\`: it is newer than what your own conversations say about their work — correct or remove what it contradicts.` : ""}`,
+        ]
+      : []),
     ...(input.profile
       ? [
           `   - Keep \`${PROFILE_FILE}\`: what every agent of the team should know about ${human}, loaded into all their tasks — who ${human} is, languages, time zone and where they live and work, how they want agents to work and answer, hard limits and rules for everyone. Under ${fmtChars(PROFILE_MAX)} characters; no secrets, no project, account or one-off details. ${input.profile.exists ? "Bring it up to date from the activity" : "It doesn't exist yet: create it from your memory and the activity"}${input.profile.teamPath ? `, and take over what your teammates noted about ${human} in \`${input.profile.teamPath}\` where it is lasting and well-founded` : ""}. MEMORY.md doesn't repeat it: one line pointing to the note is enough.`,
@@ -606,6 +614,10 @@ const DREAMS_TMP = "workspace/tmp/dreams";
 
 function digestRelPath(dreamId: string, part = 1): string {
   return `${DREAMS_TMP}/${dreamId}${part > 1 ? `-${part}` : ""}.md`;
+}
+
+function teamActivityRelPath(dreamId: string): string {
+  return `${DREAMS_TMP}/${dreamId}-team-activity.md`;
 }
 
 function teamRelPath(dreamId: string): string {
@@ -670,6 +682,9 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
     const team = keeper ? othersAboutHuman(agentId, listAgents({ workspaceId: "all" }), settings.general.userName.trim() || "the human") : "";
     const teamPath = team ? teamRelPath(dreamId) : null;
     if (teamPath) write(teamPath, team);
+    const crew = teamActivityDigest(agent, lastDream);
+    const activityPath = crew.runs ? teamActivityRelPath(dreamId) : null;
+    if (activityPath) write(activityPath, crew.text);
     const tidying = settings.memory.dreaming.tidyWorkspace;
     const inventory = tidying ? await workspaceInventory(agent) : null;
     const inventoryPath = inventory?.entries ? inventoryRelPath(dreamId) : null;
@@ -711,6 +726,7 @@ export async function startDream(agentId: string, reason: DreamReason = "manual"
       editsPath,
       editRuns: edits.runs,
       profile: keeper ? { exists: currentMemoryFile(agent.repoPath, PROFILE_FILE) !== null, teamPath } : null,
+      team: crew.agents.length ? { agents: crew.agents, activityPath } : null,
       exchanges: activity.exchanges,
       conversations: activity.conversations,
       since,

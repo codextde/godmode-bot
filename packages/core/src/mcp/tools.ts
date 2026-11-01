@@ -170,6 +170,7 @@ import { createMod, findMod, installMod, listMods, updateMod } from "../mods/ser
 import { noteConnectorCall } from "../connect/connectors";
 import { selfRepairCheck } from "../diagnostics/selfRepair";
 import { recallRead, recallSearch } from "../memory/recall";
+import { readTeamMemory, teamBelow } from "../memory/team";
 
 const log = logger("mcp");
 
@@ -1038,7 +1039,7 @@ function artifactRefusal(agent: Agent, id: string): string | null {
   return null;
 }
 
-const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy", "offer_help", "recall", "recall_read"]);
+const DREAM_TOOLS: ReadonlySet<string> = new Set(["memory_dream_report", "workspace_tidy", "offer_help", "recall", "recall_read", "team_memory_read"]);
 
 /**
  * What an app outside Godmode may call, and the access its key needs. Nothing that needs a run, a chat or a browser,
@@ -3096,6 +3097,18 @@ Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emoji
       around: z.number().int().min(0).max(5).optional(),
     }),
     run: ({ messageId, around }, { agent }) => recallRead(agent.id, messageId, around ?? 1) ?? "No such message in your conversations.",
+  }),
+
+  defineTool({
+    name: "team_memory_read",
+    description:
+      "Read the memory of an agent on your team (who reports to you, directly or through others): its MEMORY.md, or a note under its memory/ (`path`, e.g. \"memory/cases.md\"). Read-only. Each agent owns what it works on: look things up here (or ask the agent) instead of keeping copies of its status in your own memory.",
+    schema: z.object({
+      agentId: z.string().min(1).max(64).describe("The agent's id or slug"),
+      path: z.string().max(300).optional().describe("MEMORY.md (default) or memory/<note>.md"),
+    }),
+    when: (agent) => teamBelow(agent).length > 0,
+    run: ({ agentId, path }, { agent }) => readTeamMemory(agent, agentId, path),
   }),
 
   defineTool({
