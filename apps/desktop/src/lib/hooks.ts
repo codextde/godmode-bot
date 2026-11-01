@@ -287,6 +287,10 @@ export function useSshServers() {
   return useQuery({ queryKey: qk.sshServers, queryFn: api.ssh.list });
 }
 
+export function useSshGodmode() {
+  return useQuery({ queryKey: qk.sshGodmode, queryFn: api.ssh.godmode });
+}
+
 /** Android phones adb sees (kept current by `entity.changed` "android"; polled a little so battery stays fresh). */
 export function useAndroidDevices() {
   return useQuery({ queryKey: qk.androidDevices, queryFn: api.android.list, refetchInterval: 30_000 });
@@ -312,6 +316,11 @@ export function useModCatalog() {
 /** Runners: other computers that work for this one. Kept live by `runner.updated` events in realtime.ts. */
 export function useRunners() {
   return useQuery({ queryKey: qk.runners, queryFn: api.runners.list });
+}
+
+export function useSshRunner(serverId: string | null | undefined) {
+  const { data: runners = [] } = useRunners();
+  return serverId ? runners.find((r) => r.kind === "ssh" && r.sshServerId === serverId) : undefined;
 }
 
 /** This computer's device group; `role` null when it isn't part of one. Kept live by `devices.updated` events. */

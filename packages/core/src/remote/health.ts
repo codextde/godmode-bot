@@ -112,7 +112,7 @@ const INSTALL: Fix = { kind: "install", label: "Install" };
 const LEAN_CLAUDE_AUTH: Fix = {
   kind: "manual",
   label: "Sign in to Claude",
-  hint: "Your logins stay on your computer, so Claude Code on the server signs in by itself: connect with `ssh` and run `claude` once (or `claude setup-token` for a login that lasts a year).",
+  hint: "Godmode sends your Claude login once it is connected. If none arrives, sign in to Claude Code in Godmode on your computer, or connect with `ssh` and run `claude` once here.",
 };
 
 /** How each check is fixed. `git` is not here: its hint is the doctor's, which depends on the platform. */

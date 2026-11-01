@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { Check, Copy, SquareTerminal, TriangleAlert, WifiOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { RemoteRunner, RunnerState } from "@godmode/shared";
 import { LiveDot } from "@/components/aicss/Motion";
 import { copyText } from "@/components/chat/copy-button";
@@ -13,6 +14,22 @@ import { t } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 import { isMac } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
+import { qk } from "@/lib/queryKeys";
+import { toastApiError } from "@/components/vault/vault-utils";
+
+export function useRemoveRunner({ onRemoved, failed }: { onRemoved: () => void; failed: string }) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.runners.remove(id),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.runners });
+      void qc.invalidateQueries({ queryKey: qk.conversationsAll });
+      onRemoved();
+    },
+    onError: (e) => toastApiError(e, failed, qc),
+  });
+}
 
 /** What the computer the human sits at is called in "run on" choices — and inside a sentence. */
 export const thisComputer = () => (isMac ? t("runners:thisMac") : t("runners:thisComputer"));

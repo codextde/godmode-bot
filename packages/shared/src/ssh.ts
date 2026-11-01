@@ -150,3 +150,12 @@ export interface SshAssignInput {
 export function sshCommand(server: Pick<SshServer, "host" | "port" | "username">): string {
   return `ssh ${server.port !== 22 ? `-p ${server.port} ` : ""}${server.username}@${server.host}`;
 }
+
+/**
+ * Godmode being set up on an SSH server (GET /api/ssh/godmode, by server id). Once it runs there it is a runner of kind
+ * "ssh" (GET /api/runners): its state, version and updates are the runner's.
+ */
+export interface SshGodmodeStatus {
+  state: "installing" | "failed";
+  error: string | null;
+}

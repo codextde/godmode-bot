@@ -26,7 +26,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RUNNER_STATE_LABEL, RunnerStateDot } from "@/components/runners/runner-parts";
+import { RUNNER_STATE_LABEL, RunnerStateDot, useRemoveRunner } from "@/components/runners/runner-parts";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FolderPickerDialog, folderName, useShortPath } from "@/components/chat/folder-picker";
 import { copyText } from "@/components/chat/copy-button";
@@ -35,7 +35,7 @@ import { dateLocale, t as translate } from "@/i18n";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/core";
 import { isMac, openExternal } from "@/lib/desktop";
-import { useBootstrap, useRunners, useSshServers, useWorkspaces } from "@/lib/hooks";
+import { useBootstrap, useSshRunner, useSshServers, useWorkspaces } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
@@ -250,16 +250,10 @@ function SourceRow({
   const path = live?.path || (source.kind !== "git" ? source.path : "");
   const web = source.kind === "git" ? webUrl(source.url) : null;
   const serverName = live?.serverName ?? null;
-  const { data: runners = [] } = useRunners();
-  const runner = remote && live ? runners.find((r) => r.kind === "ssh" && r.sshServerId === live.serverId) : undefined;
-  const stop = useMutation({
-    mutationFn: () => api.runners.remove(runner!.id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: qk.runners });
-      void qc.invalidateQueries({ queryKey: qk.conversationsAll });
-      toast.success(t("sources.remoteStopped", { name: serverName ?? name }), { description: t("sources.remoteStoppedDescription") });
-    },
-    onError: (e) => toastApiError(e, t("sources.remoteStopFailed"), qc),
+  const runner = useSshRunner(remote ? live?.serverId : null);
+  const stop = useRemoveRunner({
+    onRemoved: () => toast.success(t("sources.remoteStopped", { name: serverName ?? name }), { description: t("sources.remoteStoppedDescription") }),
+    failed: t("sources.remoteStopFailed"),
   });
 
   return (
@@ -329,7 +323,7 @@ function SourceRow({
               </DropdownMenuItem>
             )}
             {runner && (
-              <DropdownMenuItem disabled={stop.isPending} onClick={() => stop.mutate()}>
+              <DropdownMenuItem disabled={stop.isPending} onClick={() => stop.mutate(runner.id)}>
                 <Server /> {t("sources.remoteStop")}
               </DropdownMenuItem>
             )}
@@ -346,8 +340,7 @@ function SourceRow({
 
 function RemoteStatus({ live }: { live: WorkspaceSource }) {
   const { t } = useTranslation("workspaces");
-  const { data: runners = [] } = useRunners();
-  const runner = runners.find((r) => r.kind === "ssh" && r.sshServerId === live.serverId);
+  const runner = useSshRunner(live.serverId);
   if (!runner) return <p className="mt-1 text-[11px] text-muted-foreground">{t("sources.remoteNotStarted")}</p>;
   return (
     <>

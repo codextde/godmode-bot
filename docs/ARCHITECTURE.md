@@ -1807,10 +1807,22 @@ headless Godmode that Godmode itself starts on an SSH server (like t3code's SSH 
 * **Lean copy**: `buildSnapshot({ lean: true })` sends `LEAN_SKIPPED` tables (logins, 2FA, app secrets, Composio, API
   tools, SSH servers, browser profiles, VMs) empty, every `*_enc` column null and no vault meta or key; cookies are never
   copied. A lean runner bootstraps only Claude Code, starts no browser tools, reports the vault as "not here" in its
-  health, uses its own Claude Code login (health tells how to sign in) and tells its agents that logins and keys stay
-  on the human's computer.
-* **Removing** the runner (the remote folder's *Stop Godmode on the server*) unpairs it like any runner, then kills the
-  process `runner.json` names over SSH; its data on the server stays.
+  health and tells its agents that logins and keys stay on the human's computer.
+* **Claude login** (`shareClaudeLogin`, `remote/claudeLogin.ts`, `POST /api/link/claude-login`): the controller sends
+  its first-ranked Claude account's token (`shareableClaudeToken`, no usage bookkeeping), else this computer's Claude
+  Code login (`systemClaudeLogin`): on connect, every 15 minutes where it changed, and before chats start or continue
+  only when the one sent last runs out. The runner keeps it in memory only; there `accountForRun` returns it as the
+  `forwarded` account (unless an API key is set), so runs, limits and sign-out handling treat it like any account, and
+  the doctor's Claude login check counts it. A Claude Code login on the server itself still works when nothing is sent.
+  Workspace account pools don't apply on the server yet.
+* **Install from the SSH page** (`installSshGodmode`, `GET /api/ssh/godmode`, `POST /api/ssh/servers/:id/godmode`):
+  adding a server (checkbox, on by default) or the card's *Install* / *Try again* runs `ensureSshRunner` in the
+  background. `ensureSshRunner` keeps installs in progress or failed in memory, whoever started them (the page or a
+  project's first chat), and announces them as `ssh-servers` changes. The card
+  shows the runner's state and version and an *Update* button when it is behind (`POST /api/runners/:id/update`);
+  `auto_update` is on, so it normally catches up by itself on connect and every 15 minutes.
+* **Removing** the runner (the card's *Remove*, the remote folder's *Stop Godmode on the server*, or deleting the server
+  through `deleteServer`'s `onSshServerDeleting` hook) unpairs it like any runner, then kills the process `runner.json` names over SSH; its data on the server stays.
 
 ## Device groups
 

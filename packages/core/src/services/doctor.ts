@@ -12,6 +12,8 @@ import type { DependencyId, DependencyStatus, DoctorReport } from "@godmode/shar
 import { getSettings } from "./settings";
 import { hasAppSecret } from "../vault/vault";
 import { claudeSignedOut, recheckClaudeSignedOut } from "./claudeLogin";
+import { forwardedClaudeLogin } from "../remote/claudeLogin";
+import { config } from "../config";
 import { claudeConfigDir } from "./claudeUpdate";
 import { logger } from "../log";
 import { childEnv, which } from "../util";
@@ -259,6 +261,8 @@ async function checkClaudeAuth(claudePath: string | null): Promise<Check> {
   if (out?.apiKey) return { ...base, ok: false, detail: "Claude refused the Anthropic API key. Check it in Integrations → API keys." };
   if (out) return { ...base, ok: false, detail: "The sign-in ran out. Sign in to Claude again." };
   const apiKey = hasStoredAnthropicKey() || !!process.env.ANTHROPIC_API_KEY;
+  const forwarded = config().role === "runner" && !apiKey ? forwardedClaudeLogin() : null;
+  if (forwarded) return { ...base, ok: true, detail: `Uses ${forwarded.label}` };
   if (claudePath) {
     const res = await runCommand([claudePath, "auth", "status", "--json"], { timeoutMs: 20_000, env: childEnv({ PATH: toolPath() }) });
     try {

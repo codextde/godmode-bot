@@ -5,6 +5,7 @@ import { config } from "../../config";
 import { logger } from "../../log";
 import { acceptedCookies } from "../../remote/browserSessions";
 import { readHandover } from "../../remote/handover";
+import { forwardedClaudeLogin, setForwardedClaudeLogin } from "../../remote/claudeLogin";
 import { fixCheck, runnerHealth } from "../../remote/health";
 import { forgetController, runnerInfo } from "../../remote/linkServer";
 import { readMemoryState, writeMemoryState } from "../../remote/memorySync";
@@ -14,7 +15,7 @@ import { applySnapshot, type ConfigSnapshot } from "../../remote/snapshot";
 import { audit } from "../../services/audit";
 import { installUpdates } from "../../services/maintenance";
 import { checkUpdates } from "../../services/updates";
-import { runCommand, toolPath } from "../../services/doctor";
+import { resetDoctorCache, runCommand, toolPath } from "../../services/doctor";
 import { HttpError, badRequest, childEnv, notFound } from "../../util";
 import { acceptJoin, adoptPushedChat, chatsTakenFrom, deviceIdOf, deviceState, groupForSecondary, makeInvite, peerAway, peerHello, peerLeft, releaseChatsTo } from "../../remote/devices";
 import { ackFrom, changesFor } from "../../remote/replica";
@@ -51,6 +52,14 @@ export function registerLinkRoutes(app: Hono): void {
   });
 
   app.get("/api/link/info", (c) => c.json(runnerInfo()));
+
+  app.post("/api/link/claude-login", async (c) => {
+    const input = await body(c, z.object({ token: z.string().min(20).max(8192), expiresAt: z.number().int().nullable(), label: z.string().max(200) }).nullable());
+    const had = forwardedClaudeLogin()?.label;
+    setForwardedClaudeLogin(input);
+    if (had !== forwardedClaudeLogin()?.label) resetDoctorCache();
+    return c.json({ ok: true as const });
+  });
 
   app.post("/api/link/sync", async (c) => {
     const snapshot = (await c.req.json()) as ConfigSnapshot;

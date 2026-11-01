@@ -88,7 +88,7 @@
     "remoteServer": "SSH-Server",
     "remoteServerPlaceholder": "Server wählen",
     "remotePath": "Ordner auf dem Server",
-    "remoteHint": "Neue Chats laufen dann auf diesem Server, in diesem Ordner: Godmode installiert und startet dort per SSH ein kleines Godmode und öffnet keinen Port. Es bekommt deine Agenten und Anweisungen, aber keine Logins, Schlüssel oder Cookies — Claude Code meldet sich auf dem Server selbst an.",
+    "remoteHint": "Neue Chats laufen dann auf diesem Server, in diesem Ordner: Godmode installiert und startet dort per SSH ein kleines Godmode und öffnet keinen Port. Es bekommt deine Agenten und Anweisungen, und deinen Claude-Login, aber keine Website-Logins, Schlüssel oder Cookies.",
     "remoteNoServers": "Füge den Server zuerst auf der Seite SSH-Server hinzu und wähle ihn dann hier.",
     "remoteOnSave": "Neue Chats laufen nach dem Speichern auf dem Server.",
     "remoteNotStarted": "Godmode startet beim ersten Chat auf dem Server.",

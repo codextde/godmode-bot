@@ -72,7 +72,7 @@ const ENTITY_KEYS: Record<EntityName, readonly unknown[][]> = {
   computer: [qk.computer],
   // VM list + status (installs, image downloads, assignment changes).
   vms: [qk.vms],
-  "ssh-servers": [qk.sshServers],
+  "ssh-servers": [qk.sshServers, qk.sshGodmode],
   // Phones plugged in or out, renamed, assigned.
   android: [qk.android],
   mods: [qk.mods],

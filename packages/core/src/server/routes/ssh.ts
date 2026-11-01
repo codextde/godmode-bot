@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { generateKeyPair, listLocalKeys } from "../../ssh/keys";
 import { assignServer, createServer, deleteServer, execForHuman, getServer, listServers, testServer, tryServer, updateServer } from "../../ssh/service";
 import { disableIdleTimeout } from "../../mcp/http";
+import { installSshGodmode, sshGodmodeStatus } from "../../remote/runners";
 import { body, z } from "../validate";
 
 const hostKey = z.object({ type: z.string().trim().max(60), fingerprint: z.string().trim().max(100) });
@@ -32,9 +33,16 @@ export function registerSshRoutes(app: Hono): void {
 
   app.patch("/api/ssh/servers/:id", async (c) => c.json(updateServer(c.req.param("id"), await body(c, patchSchema))));
 
-  app.delete("/api/ssh/servers/:id", (c) => {
-    deleteServer(c.req.param("id"));
+  app.delete("/api/ssh/servers/:id", async (c) => {
+    await deleteServer(c.req.param("id"));
     return c.json({ ok: true as const });
+  });
+
+  app.get("/api/ssh/godmode", (c) => c.json(sshGodmodeStatus()));
+
+  app.post("/api/ssh/servers/:id/godmode", (c) => {
+    installSshGodmode(c.req.param("id"));
+    return c.json({ ok: true as const }, 202);
   });
 
   /** Sign in to a saved server (pins its host key the first time). */

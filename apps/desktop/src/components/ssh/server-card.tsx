@@ -1,13 +1,15 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Bot,
   Check,
   ChevronDown,
   Copy,
+  Download,
   Ellipsis,
   KeyRound,
   MessageSquare,
@@ -43,7 +45,9 @@ import { AgentAvatar } from "@/components/common";
 import { LiveDot } from "@/components/aicss/Motion";
 import { CopyButton } from "@/components/chat/copy-button";
 import { api, errorMessage } from "@/lib/api";
-import { useAllAgents } from "@/lib/hooks";
+import { useAllAgents, useSshGodmode, useSshRunner } from "@/lib/hooks";
+import { RUNNER_STATE_LABEL, RunnerStateDot, useRemoveRunner } from "@/components/runners/runner-parts";
+import { toastApiError } from "@/components/vault/vault-utils";
 import { cn } from "@/lib/utils";
 import { EASE_OUT } from "@/lib/motion";
 import { SshStatusBadge, keyTypeLabel, sshAddress, sshStatus } from "./ssh-parts";
@@ -123,6 +127,8 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
         </div>
       )}
 
+      <GodmodeOnServer server={server} actions={actions} />
+
       <div className="mt-auto border-t px-4 py-3">
         <UsedBy server={server} actions={actions} />
       </div>
@@ -171,6 +177,96 @@ export function ServerCard({ server, actions, onEdit, onDelete }: { server: SshS
         )}
       </AnimatePresence>
     </article>
+  );
+}
+
+const UPDATING = new Set(["sending", "waiting", "installing", "restarting"]);
+
+function GodmodeOnServer({ server, actions }: { server: SshServer; actions: SshActions }) {
+  const { t } = useTranslation("ssh");
+  const qc = useQueryClient();
+  const runner = useSshRunner(server.id);
+  const { data: installs = {} } = useSshGodmode();
+  const install = installs[server.id];
+  const update = useMutation({
+    mutationFn: (id: string) => api.runners.update(id),
+    onError: (e) => toastApiError(e, t("godmode.updateFailed"), qc),
+  });
+  const remove = useRemoveRunner({ onRemoved: () => toast.success(t("godmode.removed", { name: server.name })), failed: t("godmode.removeFailed") });
+  const installNow = () => actions.installGodmode.mutate(server.id);
+
+  let line: React.ReactNode;
+  let action: React.ReactNode = null;
+  let error: string | null = null;
+  let hint = false;
+  if (install?.state === "installing" || (actions.installGodmode.isPending && actions.installGodmode.variables === server.id)) {
+    line = (
+      <>
+        <Spinner className="size-3" /> {t("godmode.installing")}
+      </>
+    );
+  } else if (runner) {
+    const updating = UPDATING.has(runner.update.state) || update.isPending;
+    line = (
+      <>
+        <RunnerStateDot state={runner.state} />
+        <span>{RUNNER_STATE_LABEL[runner.state]}</span>
+        {runner.version && <span className="font-mono">· {runner.version}</span>}
+        {updating && (
+          <>
+            <Spinner className="size-3" /> {t("godmode.updating")}
+          </>
+        )}
+      </>
+    );
+    action = (
+      <>
+        {runner.update.state === "available" && !updating && (
+          <Button size="xs" variant="outline" onClick={() => update.mutate(runner.id)}>
+            <RefreshCw /> {t("godmode.update", { version: runner.update.target.version })}
+          </Button>
+        )}
+        <Button size="xs" variant="ghost" className="text-muted-foreground" disabled={remove.isPending} onClick={() => remove.mutate(runner.id)}>
+          {t("godmode.remove")}
+        </Button>
+      </>
+    );
+    error = runner.state !== "online" ? runner.error : runner.update.state === "failed" ? runner.update.detail : null;
+  } else if (install?.state === "failed") {
+    line = <span>{t("godmode.failed")}</span>;
+    action = (
+      <Button size="xs" variant="outline" onClick={installNow}>
+        <RefreshCw /> {t("godmode.retry")}
+      </Button>
+    );
+    error = install.error;
+  } else {
+    line = <span>{t("godmode.none")}</span>;
+    action = (
+      <Button size="xs" variant="outline" onClick={installNow}>
+        <Download /> {t("godmode.install")}
+      </Button>
+    );
+    hint = true;
+  }
+
+  return (
+    <div className="border-t px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-medium">{t("godmode.title")}</p>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">{line}</p>
+        </div>
+        <div className="flex items-center gap-1">{action}</div>
+      </div>
+      {error && (
+        <p className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-snug text-warning">
+          <TriangleAlert className="mt-px size-3 shrink-0" />
+          <span className="line-clamp-3 break-words">{error}</span>
+        </p>
+      )}
+      {hint && <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{t("godmode.hint")}</p>}
+    </div>
   );
 }
 

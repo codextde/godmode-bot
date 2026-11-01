@@ -23,6 +23,7 @@ import {
   type RunnerInfo,
   type RunnerKind,
   type RunnerPairingCode,
+  type SshGodmodeStatus,
   type RunnerPatch,
   type RunnerUpdate,
   type Run,
@@ -65,7 +66,11 @@ import { buildSnapshot, snapshotDigest } from "./snapshot";
 import { requireLicense } from "../license/license";
 import { VERSION, BUILD, config } from "../config";
 import { getSettings } from "../services/settings";
+import { shareableClaudeToken } from "../services/claudeAccounts";
+import { claudeLoginUsable, type ForwardedClaudeLogin } from "./claudeLogin";
+import { systemClaudeLogin } from "../services/claudeUsage";
 import { isPrimary, isSecondary, primaryRunnerId } from "./group";
+import { onSshServerDeleting, getServer } from "../ssh/service";
 import { assertServer, closeAllSshTunnels, expandHome, pairingCodeVia, remoteFolderFor, serverHome, sshLinkTarget, sshRunnerFor, stopSshRunner } from "./sshRunners";
 
 const log = logger("runners");
@@ -344,6 +349,7 @@ export async function removeRunner(id: string): Promise<void> {
   l?.stop();
   if (r.kind === "ssh" && r.ssh_server_id) await stopSshRunner(r.ssh_server_id);
   links.delete(id);
+  sentClaudeLogins.delete(id);
   infos.delete(id);
   healths.delete(id);
   subscriptions.delete(id);
@@ -541,6 +547,8 @@ async function connected(id: string, state: LinkState) {
   }
   if (r.kind === "device") await deviceHooks?.deviceConnected(id).catch((err) => logFailure(`could not take the changes of ${r.name}`, err));
   if (dropped()) return;
+  sentClaudeLogins.delete(id);
+  void shareClaudeLogin([id]);
   await releaseChats(id);
   const catchUpNow = async () => {
     try {
@@ -618,6 +626,7 @@ function wireHub() {
 export function startRunners(): void {
   if (started) return;
   started = true;
+  onSshServerDeleting(forgetSshServer);
   wireHub();
   setRunnerReachability((id) => links.get(id)?.state.state === "online");
   setUpdateHost({
@@ -645,6 +654,7 @@ export function startRunners(): void {
     for (const id of links.keys()) void maybeAutoUpdate(id);
     // Chats that moved here and that a runner couldn't drop yet.
     for (const id of links.keys()) void releaseChats(id);
+    void shareClaudeLogin([...links.keys()]);
   }, AUTO_UPDATE_EVERY_MS);
   autoUpdateTimer.unref?.();
   for (const r of all<RunnerRow>("SELECT * FROM runners")) startLink(r);
@@ -665,6 +675,7 @@ export function startRunners(): void {
 
 export function stopRunners(): void {
   started = false;
+  onSshServerDeleting(null);
   setRunnerReachability(null);
   offBus?.();
   offBus = null;
@@ -920,7 +931,7 @@ export async function startRemoteChat(runnerId: string, input: StartChatInput): 
       profileId = null;
     }
   }
-  await syncRunner(runnerId, { agentId, profileId, work: true });
+  await Promise.all([syncRunner(runnerId, { agentId, profileId, work: true }), shareClaudeLogin([runnerId], { force: false })]);
   const { runnerId: _runner, workingDirectory, computerTarget, vmId, androidDeviceIds, ...rest } = input;
   // Another computer of the group is where the app that asked runs: its folders, screen, VMs and phones are named there.
   const kind = row(runnerId)?.kind;
@@ -945,7 +956,7 @@ export async function prepareRemoteMessage(conversationId: string): Promise<void
       profileId = null;
     }
   }
-  await syncRunner(runnerId, { agentId: conv.agentId, profileId, work: true });
+  await Promise.all([syncRunner(runnerId, { agentId: conv.agentId, profileId, work: true }), shareClaudeLogin([runnerId], { force: false })]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -1169,8 +1180,50 @@ export async function runnerExec(runnerId: string, command: string, timeoutSec?:
 /* Runners on SSH servers                                               */
 /* ------------------------------------------------------------------ */
 
+const sentClaudeLogins = new Map<string, ForwardedClaudeLogin>();
+
+async function claudeLoginToShare(): Promise<ForwardedClaudeLogin | null> {
+  const account = await shareableClaudeToken().catch(() => null);
+  if (account) return { token: account.token, expiresAt: null, label: `Claude account ${account.label}` };
+  const own = await systemClaudeLogin();
+  return own && { ...own, label: `the Claude login of ${computerName()}` };
+}
+
+function onlineSshLink(id: string) {
+  const l = links.get(id);
+  return row(id)?.kind === "ssh" && l?.state.state === "online" ? l : null;
+}
+
+/**
+ * Send runners on SSH servers the Claude login to work with: a Claude account signed in from Godmode, else this
+ * computer's Claude Code login. On connect and every 15 minutes (only where it changed); before chats start or go on
+ * only when the one sent last runs out.
+ */
+export async function shareClaudeLogin(ids: string[], opts: { force?: boolean } = {}): Promise<void> {
+  const targets = ids.filter((id) => {
+    if (!onlineSshLink(id)) return false;
+    const sent = sentClaudeLogins.get(id);
+    return opts.force !== false || !sent || !claudeLoginUsable(sent);
+  });
+  if (!targets.length) return;
+  const login = await claudeLoginToShare().catch(() => null);
+  if (!login || !claudeLoginUsable(login)) return;
+  await Promise.all(
+    targets.map(async (id) => {
+      if (sentClaudeLogins.get(id)?.token === login.token) return;
+      try {
+        await onlineSshLink(id)?.json("POST", "/api/link/claude-login", login, { timeoutMs: 15_000 });
+        sentClaudeLogins.set(id, login);
+      } catch (err) {
+        log.warn(`could not send the Claude login to runner ${id}`, err);
+      }
+    }),
+  );
+}
+
 const SSH_ONLINE_TIMEOUT_MS = 3 * 60_000;
 const sshEnsuring = new Map<string, Promise<string>>();
+const sshInstalls = new Map<string, SshGodmodeStatus>();
 
 function waitOnline(id: string, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -1192,6 +1245,10 @@ function waitOnline(id: string, timeoutMs: number): Promise<void> {
 export function ensureSshRunner(serverId: string): Promise<string> {
   let pending = sshEnsuring.get(serverId);
   if (pending) return pending;
+  const known = sshRunnerFor(serverId);
+  if (known && links.get(known)?.state.state === "online") return Promise.resolve(known);
+  sshInstalls.set(serverId, { state: "installing", error: null });
+  bus.changed("ssh-servers");
   pending = (async () => {
     assertServer(serverId);
     let id = sshRunnerFor(serverId);
@@ -1201,7 +1258,7 @@ export function ensureSshRunner(serverId: string): Promise<string> {
         id = (await pairWithCode("", null, { ssh: { code, serverId, name } })).id;
       } catch (err) {
         if (err instanceof HttpError) throw err;
-        throw new HttpError(502, err instanceof Error ? err.message : String(err), "runner_unreachable");
+        throw new HttpError(502, message(err), "runner_unreachable");
       }
     }
     const l = links.get(id);
@@ -1209,7 +1266,21 @@ export function ensureSshRunner(serverId: string): Promise<string> {
     else if (l && l.state.state !== "online" && l.state.state !== "connecting") l.reconnect();
     await waitOnline(id, SSH_ONLINE_TIMEOUT_MS);
     return id;
-  })().finally(() => sshEnsuring.delete(serverId));
+  })()
+    .then(
+      (id) => {
+        sshInstalls.delete(serverId);
+        return id;
+      },
+      (err: unknown) => {
+        sshInstalls.set(serverId, { state: "failed", error: message(err) });
+        throw err;
+      },
+    )
+    .finally(() => {
+      sshEnsuring.delete(serverId);
+      bus.changed("ssh-servers");
+    });
   sshEnsuring.set(serverId, pending);
   return pending;
 }
@@ -1231,6 +1302,27 @@ export async function sshPlacement(input: StartChatInput): Promise<{ runnerId: s
   if (!folder) return null;
   const runnerId = await ensureSshRunner(folder.serverId);
   return { runnerId, workingDirectory: await sshFolder(folder.serverId, folder.path) };
+}
+
+/** Servers where Godmode is being set up, or the last setup failed. */
+export function sshGodmodeStatus(): Record<string, SshGodmodeStatus> {
+  return Object.fromEntries(sshInstalls);
+}
+
+/**
+ * Install and start Godmode on the server now (in the background), so its first chat doesn't wait: the SSH servers page
+ * does it when a server is added, and its Install / Try again buttons.
+ */
+export function installSshGodmode(serverId: string): void {
+  getServer(serverId);
+  void ensureSshRunner(serverId).catch(() => undefined);
+}
+
+/** The server is being deleted: stop and unpair the Godmode that Godmode started there. */
+async function forgetSshServer(serverId: string): Promise<void> {
+  sshInstalls.delete(serverId);
+  const id = sshRunnerFor(serverId);
+  if (id) await removeRunner(id);
 }
 
 /** A folder on the server as its runner names it (`~` resolved). */

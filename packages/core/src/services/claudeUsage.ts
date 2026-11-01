@@ -60,6 +60,12 @@ async function readCredentials(): Promise<OAuthCredentials | null> {
   return parseCredentials(res.stdout.trim());
 }
 
+/** This computer's own Claude Code login (its OAuth access token), for a runner Godmode started on an SSH server. */
+export async function systemClaudeLogin(): Promise<{ token: string; expiresAt: number | null } | null> {
+  const creds = await readCredentials().catch(() => null);
+  return creds ? { token: creds.accessToken, expiresAt: creds.expiresAt } : null;
+}
+
 function toWindow(value: unknown): ClaudeUsageWindow | null {
   if (!value || typeof value !== "object") return null;
   const { utilization, resets_at } = value as { utilization?: unknown; resets_at?: unknown };

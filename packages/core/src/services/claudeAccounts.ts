@@ -32,6 +32,7 @@ import { claudeUsage, keychainService, parseCredentials, parseUsage } from "./cl
 import { resolveClaudeBinary, runCommand, stripAnsi, toolPath } from "./doctor";
 import { notify } from "./notifications";
 import { getSettings } from "./settings";
+import { forwardedClaudeLogin } from "../remote/claudeLogin";
 
 const log = logger("claude-accounts");
 
@@ -79,6 +80,8 @@ interface OAuthBlock {
 }
 
 /** The account a run works with. `token` is null for the system account (Claude Code signs in by itself). */
+export const FORWARDED_CLAUDE_ACCOUNT = "forwarded";
+
 export interface RunAccount {
   id: string;
   label: string;
@@ -272,7 +275,7 @@ function markSignedOut(id: string, why: string) {
  * rejects marks it for a new sign-in.
  */
 export async function noteClaudeAccountSignedOut(id: string): Promise<void> {
-  if (id === SYSTEM_CLAUDE_ACCOUNT) return;
+  if (id === SYSTEM_CLAUDE_ACCOUNT || id === FORWARDED_CLAUDE_ACCOUNT) return;
   const block = readTokens(id);
   if (!block) return;
   await refreshOnce(id, block);
@@ -444,7 +447,11 @@ function ranked(candidates: ClaudeAccount[]): ClaudeAccount[] {
  * runs use its own login).
  */
 export async function accountForRun(workspaceId: string | null): Promise<RunAccount | null> {
-  if (config().role === "runner" || !hasClaudeAccounts()) return null;
+  if (config().role === "runner") {
+    const forwarded = process.env.ANTHROPIC_API_KEY ? null : forwardedClaudeLogin();
+    return forwarded && { id: FORWARDED_CLAUDE_ACCOUNT, label: forwarded.label, token: forwarded.token };
+  }
+  if (!hasClaudeAccounts()) return null;
   if (getSettings().runner.accountAutoSwitch && Date.now() - usageRefreshedAt > 3 * USAGE_FRESH_MS) {
     await Promise.race([refreshClaudeUsage(), new Promise((r) => setTimeout(r, USAGE_WAIT_MS))]).catch(() => {});
   }
@@ -461,6 +468,16 @@ export async function accountForRun(workspaceId: string | null): Promise<RunAcco
   }
   if (candidates.some((a) => a.system)) return null;
   return { id: SYSTEM_CLAUDE_ACCOUNT, label: label(listClaudeAccounts()[0]!), token: null, outsidePool: true };
+}
+
+export async function shareableClaudeToken(): Promise<{ token: string; label: string } | null> {
+  if (!hasClaudeAccounts()) return null;
+  for (const a of ranked(pool(null))) {
+    if (a.system) return null;
+    const token = await accessToken(a.id);
+    if (token) return { token, label: label(a) };
+  }
+  return null;
 }
 
 /** Points the run's Claude Code at the account: its token wins over a stored login and the vault's API key. */

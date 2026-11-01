@@ -269,8 +269,15 @@ export function updateServer(id: string, patch: SshServerPatch): SshServer {
   return getServer(id);
 }
 
-export function deleteServer(id: string): void {
+let deletingHook: ((id: string) => Promise<void>) | null = null;
+
+export function onSshServerDeleting(hook: ((id: string) => Promise<void>) | null): void {
+  deletingHook = hook;
+}
+
+export async function deleteServer(id: string): Promise<void> {
   const current = requireRow(id);
+  if (deletingHook) await deletingHook(id);
   const removed = tx(() => {
     run("DELETE FROM ssh_servers WHERE id = ?", id);
     return removeServerEverywhere(id);

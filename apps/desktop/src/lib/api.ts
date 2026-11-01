@@ -175,6 +175,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   SshGeneratedKey,
   SshLocalKey,
   SshServer,
+  SshGodmodeStatus,
   TeamInstallInput,
   TeamInstallResult,
   TeamTemplate,
@@ -770,6 +771,8 @@ export const api = {
     try: (input: SshTestInput) => post<SshTestResult>("/api/ssh/test", input),
     exec: (id: string, input: SshExecInput) => post<SshExecResult>(`/api/ssh/servers/${id}/exec`, input),
     assign: (id: string, input: SshAssignInput) => post<SshServer>(`/api/ssh/servers/${id}/assign`, input),
+    godmode: () => get<Record<string, SshGodmodeStatus>>("/api/ssh/godmode"),
+    installGodmode: (id: string) => post<{ ok: true }>(`/api/ssh/servers/${id}/godmode`),
     /** Private keys in ~/.ssh on the computer running Godmode. */
     localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),
     generateKey: (comment?: string) => post<SshGeneratedKey>("/api/ssh/keys", comment ? { comment } : {}),
@@ -839,6 +842,7 @@ export const api = {
     remove: (id: string) => del<{ ok: true }>(`/api/runners/${id}`),
     /** Dial the runner again now instead of waiting for the next retry. */
     connect: (id: string) => post<RemoteRunner>(`/api/runners/${id}/connect`),
+    update: (id: string) => post<RemoteRunner>(`/api/runners/${id}/update`),
   },
 
 

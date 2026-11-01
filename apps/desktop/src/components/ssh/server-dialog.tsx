@@ -111,6 +111,7 @@ export function ServerDialog({
   const [removeSudo, setRemoveSudo] = useState(false);
   const [description, setDescription] = useState("");
   const [trustNewKey, setTrustNewKey] = useState(false);
+  const [installGodmode, setInstallGodmode] = useState(true);
   const [testState, setTestState] = useState<TestState | null>(null);
   const [showErrors, setShowErrors] = useState(false);
 
@@ -131,6 +132,7 @@ export function ServerDialog({
     setRemoveSudo(false);
     setDescription(server?.description ?? "");
     setTrustNewKey(false);
+    setInstallGodmode(true);
     setTestState(null);
     setShowErrors(false);
     // Only when the dialog opens: realtime list updates must not reset what the user typed.
@@ -236,6 +238,7 @@ export function ServerDialog({
       actions.put(created);
       toast.success(t("dialog.added"), { description: t("dialog.addedDescription") });
       actions.test.mutate({ server: created, silent: true });
+      if (installGodmode) actions.installGodmode.mutate(created.id);
       onOpenChange(false);
     },
     onError: (e) => toastApiError(e, t("dialog.addFailed"), qc),
@@ -616,6 +619,16 @@ export function ServerDialog({
                 className="max-h-40 min-h-20"
               />
             </Field>
+
+            {!server && (
+              <label htmlFor="ssh-install-godmode" className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+                <Checkbox id="ssh-install-godmode" className="mt-0.5" checked={installGodmode} onCheckedChange={(v) => setInstallGodmode(v === true)} />
+                <span className="min-w-0">
+                  <span className="block">{t("dialog.installGodmode")}</span>
+                  <span className="block text-xs text-muted-foreground">{t("dialog.installGodmodeHint")}</span>
+                </span>
+              </label>
+            )}
 
             <AnimatePresence initial={false}>
               {tested && (

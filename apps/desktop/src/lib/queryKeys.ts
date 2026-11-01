@@ -127,6 +127,7 @@ export const qk = {
   vmStatus: ["vms", "status"] as unknown[],
   vmScreen: (id: string, size: number) => ["vm-screen", id, size],
   sshServers: ["ssh-servers"] as unknown[],
+  sshGodmode: ["ssh-godmode"] as unknown[],
   sshLocalKeys: ["ssh-local-keys"] as unknown[],
   /** Android phones and adb (one entity: "android"). */
   android: ["android"] as unknown[],

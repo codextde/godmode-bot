@@ -95,7 +95,12 @@ export function useSshActions() {
     else toast.error(t("ssh:toast.copyPublicKeyFailed"));
   };
 
-  return { test, testing, forgetHostKey, remove, assign, copyPublicKey, put };
+  const installGodmode = useMutation({
+    mutationFn: (id: string) => api.ssh.installGodmode(id),
+    onError: (e) => toastApiError(e, t("ssh:godmode.installFailed"), qc),
+  });
+
+  return { test, testing, forgetHostKey, remove, assign, copyPublicKey, put, installGodmode };
 }
 
 export type SshActions = ReturnType<typeof useSshActions>;

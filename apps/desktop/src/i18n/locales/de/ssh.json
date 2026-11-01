@@ -159,7 +159,9 @@
     "descriptionPlaceholder": "Produktions-Webserver – Ubuntu, nginx und Postgres. Deploys gehen nach /srv/app.",
     "testConnection": "Verbindung testen",
     "saveChanges": "Änderungen speichern",
-    "addServer": "Server hinzufügen"
+    "addServer": "Server hinzufügen",
+    "installGodmode": "Godmode auf diesem Server installieren",
+    "installGodmodeHint": "Projekte mit einem Ordner hier führen ihre Chats auf dem Server aus. Godmode installiert sich in ~/.local/bin und hält mit diesem Computer Schritt."
   },
   "authorize": {
     "title": "Füge den öffentlichen Schlüssel vor dem Test auf dem Server hinzu",
@@ -187,5 +189,21 @@
     "manyUsers": "Die {{n}} Agenten und Chats, die ihn nutzen, verlieren den Zugriff darauf.",
     "untouched": "Der Server selbst bleibt unberührt.",
     "confirm": "Server löschen"
+  },
+  "godmode": {
+    "title": "Godmode auf diesem Server",
+    "none": "Nicht installiert",
+    "hint": "Installiere es, damit Projekte mit einem Ordner auf diesem Server ihre Chats dort ausführen können.",
+    "install": "Installieren",
+    "installing": "Wird installiert und verbunden…",
+    "failed": "Installation fehlgeschlagen",
+    "retry": "Erneut versuchen",
+    "installFailed": "Godmode konnte nicht auf dem Server installiert werden",
+    "updating": "Wird aktualisiert…",
+    "update": "Auf {{version}} aktualisieren",
+    "updateFailed": "Godmode konnte auf dem Server nicht aktualisiert werden",
+    "remove": "Entfernen",
+    "removed": "Godmode auf {{name}} wurde gestoppt und entfernt",
+    "removeFailed": "Godmode konnte nicht vom Server entfernt werden"
   }
 }
