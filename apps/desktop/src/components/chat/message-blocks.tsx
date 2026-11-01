@@ -148,7 +148,7 @@ function buildItems(blocks: MessageBlock[]): Item[] {
   return items;
 }
 
-function useToolContext(blocks: MessageBlock[]): ToolContext {
+export function useToolContext(blocks: MessageBlock[]): ToolContext {
   const { data: agents = [] } = useAllAgents();
   const needsCredentials = useMemo(
     () => blocks.some((b) => b.type === "tool_use" && /vault_(fill|get)_(login|totp)/.test(b.name)),

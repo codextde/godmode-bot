@@ -39,6 +39,7 @@ import { isOlderRunner, usePlaces, type Place } from "@/lib/places";
 import { VmChip, type InheritedVm } from "@/components/vms/vm-picker";
 import { VmFocus, VmPanel, VmToggle, useChatVm } from "@/components/vms/vm-panel";
 import { SidePanelScopeProvider, sideKey, useChatSidePanel } from "@/components/side-panel/store";
+import { SubagentPanel, findSubagent } from "@/components/side-panel/subagent-panel";
 import { PullRequestPanel } from "@/components/github/pull-request-panel";
 import { ChatDropZone } from "@/components/chat/drop-zone";
 import { Thread } from "@/components/chat/thread";
@@ -223,6 +224,13 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     () => (live ? messages.filter((m) => m.id !== live.messageId && !(m.role === "assistant" && m.runId === live.runId)) : messages),
     [messages, live],
   );
+
+  const subagentSide = useMemo(() => {
+    if (side?.kind !== "subagent") return null;
+    const sources = [live?.blocks ?? [], shownLinger?.blocks ?? [], ...messages.toReversed().map((m) => m.blocks ?? [])];
+    const found = findSubagent(sources, side.id);
+    return found ? { ...found, streaming: found.index === 0 && !!live } : null;
+  }, [side, live, shownLinger, messages]);
 
   const inflight = live
     ? { live, startedAt: live.startedAt, runId: live.runId }
@@ -854,6 +862,16 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           <Suspense key={sideKey(side)} fallback={null}>
             <FilePanel file={side.file} line={side.line} local={side.local} onHide={() => hideSide(conversationId)} />
           </Suspense>
+        )}
+        {showSidePanel && side.kind === "subagent" && subagentSide && (
+          <SubagentPanel
+            key={sideKey(side)}
+            block={subagentSide.block}
+            childBlocks={subagentSide.children}
+            streaming={subagentSide.streaming}
+            agent={agent}
+            onHide={() => hideSide(conversationId)}
+          />
         )}
         {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}
         {showVmPanel && (
