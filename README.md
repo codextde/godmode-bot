@@ -2,29 +2,81 @@
 
 <img src="docs/assets/logo.svg" width="96" height="96" alt="Godmode Bot logo" />
 
-# Godmode Bot
+# Godmode
 
-A desktop app that runs the official Claude Code CLI as a team of persistent agents, with a browser and a local vault
-that types passwords and 2FA codes for them.
+**Your computer work. Done for you.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-22c55e.svg)](LICENSE)
-[![Latest release](https://img.shields.io/github/v/release/codextde/godmode-bot?color=06b6d4)](https://github.com/codextde/godmode-bot/releases/latest)
+Godmode is an AI coworker for everyone who works at a computer. Tell it the task in plain words, like you would a
+colleague. It opens your browser and apps, signs in, clicks through and hands the job back done.
 
-macOS, Windows, Linux, or headless with a web dashboard ·
+<a href="https://usegodmode.com/download"><img src="https://img.shields.io/badge/Download%20for%20Mac-free%20for%2014%20days-10b981?style=for-the-badge&logo=apple&logoColor=white" alt="Download for Mac, free for 14 days" height="44" /></a>
+
+Free for 14 days · No card · No sign-up
+
+[Website](https://usegodmode.com) ·
+[What it can do](https://usegodmode.com/use-cases) ·
 [Features](docs/FEATURES.md) ·
-[Security](SECURITY.md) ·
-[Architecture](docs/ARCHITECTURE.md) ·
-[usegodmode.com](https://usegodmode.com)
+[Security](SECURITY.md)
 
 </div>
 
 <img src="docs/assets/demo.gif" alt="Screen recording: Godmode gets a prompt, opens the Notion, Linear and Slack pricing pages in its own Chrome window and answers with a price table" width="100%" />
 
-<sub>A real screen recording on a Mac, sped up (typing 1.5x, browsing about 4.5x, the answer in real time). Godmode
-looks up three pricing pages in its own Chrome window and answers with a table.
-<a href="https://usegodmode.com/media/hero.mp4">Full-quality video (MP4, 22 s)</a></sub>
+<sub>A real screen recording on a Mac, sped up. Godmode looks up three pricing pages in its own Chrome window and
+answers with a table. <a href="https://usegodmode.com/media/hero.mp4">Full-quality video (MP4, 22 s)</a></sub>
 
-## How it works
+## What you can hand it
+
+You type one sentence. Godmode does the clicking.
+
+| You write | You get back |
+| --- | --- |
+| "Answer the customer emails from today, ask me before sending" | Drafts in your inbox, ready to send |
+| "Download this month's invoices from all supplier portals and put them in the Accounting folder" | Every PDF filed, with a list of totals |
+| "Every Friday at 4, send me last week's Meta and Google ads numbers" | A short report in your inbox every week |
+| "Find 30 bakeries in Munich with a website and an email address" | A spreadsheet with names, links and contacts |
+| "Check the stock of our 20 best sellers and tell me what runs out this month" | A list of what to reorder |
+| "Compare the prices of these three tools for a team of 10" | A table, with sources |
+
+It works in the websites and programs you already use. No coding, no IT project.
+
+## Why people like it
+
+- **It does the whole job, not a draft.** Download, fill in, file, send. It asks you before anything important
+  (sending, paying, deleting, posting), unless your task already says go ahead.
+- **It signs in for you, without seeing your passwords.** Logins and 2FA codes sit in an encrypted vault on your Mac.
+  Godmode types them into the page itself, only on the right website.
+- **It runs on its own.** Every Monday morning, when an email arrives, when a price changes.
+- **It remembers how you like things.** Tell it once.
+- **It works while you work.** It uses its own browser window, so your mouse and keyboard stay yours.
+- **Message it from anywhere.** Phone app, Slack, Telegram or Teams.
+- **A small team, not just one helper.** Give each job its own coworker: one for the inbox, one for invoices, one for
+  your online shop.
+
+## Get started in three steps
+
+1. [Download Godmode for Mac](https://usegodmode.com/download) and open it.
+2. Sign in with your Claude plan once. Godmode thinks with Claude, so it needs a Claude Pro or Max plan from
+   [claude.ai](https://claude.ai) (or an Anthropic API key). The setup walks you through it.
+3. Tell it your first task.
+
+Godmode is free for 14 days, no card needed. After that it is $39 a month, or $29 a month billed yearly, with a 14-day
+money-back guarantee and cancel anytime. Prices and details: [usegodmode.com](https://usegodmode.com/#pricing).
+For a team or company, write to [kontakt@codext.de](mailto:kontakt@codext.de).
+
+Phone: [Godmode on Google Play](https://play.google.com/store/apps/details?id=de.codext.godmode). It pairs with your
+Mac in one scan.
+
+Made by [Codext GmbH](https://codext.de) in Germany.
+
+---
+
+## For developers
+
+Godmode is open source under the MIT license. The official signed Mac builds need a Pro licence after the free
+14 days; a build from source never asks for a key.
+
+### How it works under the hood
 
 - Every agent turn is one `claude -p` call of the official, unmodified Claude Code CLI, in the agent's own folder,
   signed in with your Claude account or an Anthropic API key. Godmode adds its tools over MCP and streams the output
@@ -41,9 +93,7 @@ looks up three pricing pages in its own Chrome window and answers with a table.
 
 The full feature list with screenshots is in [docs/FEATURES.md](docs/FEATURES.md).
 
-## Install
-
-### Free: build from source
+### Build from source
 
 ```bash
 git clone --depth 1 https://github.com/codextde/godmode-bot && cd godmode-bot
@@ -51,37 +101,14 @@ pnpm install
 pnpm dev        # then open http://127.0.0.1:1420
 ```
 
-Needs [Node 22+](https://nodejs.org), [pnpm](https://pnpm.io) and [Bun 1.3+](https://bun.sh). Measured on an Apple
-silicon Mac with an empty pnpm cache (October 22, 2026): the clone took 2 minutes (330 MB), `pnpm install` 3 minutes,
-and `pnpm dev` was up in 3 seconds. In the browser, the onboarding installs Claude Code, uv and Chromium if they are
-missing, and you sign in to Claude once. Every feature, no licence key, no limits. To build your own desktop app,
-server binary or Docker image, see [Build from source](docs/FEATURES.md#build-from-source).
+Needs [Node 22+](https://nodejs.org), [pnpm](https://pnpm.io) and [Bun 1.3+](https://bun.sh). The onboarding installs
+Claude Code, uv and Chromium if they are missing, and you sign in to Claude once. Every feature, no licence key, no
+limits. Official builds are macOS only right now (Apple silicon and Intel, signed and notarized). On Windows and Linux,
+build from source; to build your own desktop app, server binary or Docker image, see
+[Build from source](docs/FEATURES.md#build-from-source). The headless server with a web dashboard is described in
+[setup](docs/FEATURES.md#headless-server--web-dashboard).
 
-### Pro: the official builds
-
-The official builds run free for 7 days without a key or card, then need a Pro licence (14-day trial). Your own build
-from source never asks for a key.
-
-- **macOS**: `.dmg` for Apple silicon and Intel, signed and notarized
-- **Windows**: `.msi` / `.exe`, not code-signed yet, so SmartScreen warns on first launch
-- **Linux**: `.AppImage`, `.deb`, `.rpm`
-- **Headless**: a one-line install script or the Docker image, with a web dashboard
-  ([setup](docs/FEATURES.md#headless-server--web-dashboard))
-
-Download from [GitHub Releases](https://github.com/codextde/godmode-bot/releases/latest) or
-[usegodmode.com](https://usegodmode.com/download). Pro pays for the signed builds, automatic updates, the install
-script, the Docker image and support. Prices are on [usegodmode.com](https://usegodmode.com/#pricing).
-
-The app, browser, vault and automations run on all three systems. macOS gets the most testing, and macOS VMs for
-agents need a Mac with Apple silicon.
-
-### Phone
-
-Android: [Godmode Bot on Google Play](https://play.google.com/store/apps/details?id=de.codext.godmode). iOS: build it
-from source for now ([apps/mobile](apps/mobile/README.md)). The phone pairs with a one-time QR code and reaches your
-computer over Tailscale ([setup](docs/FEATURES.md#phone-app-ios-and-android)).
-
-## What stays local, what goes to Anthropic
+### What stays local, what goes to Anthropic
 
 - **On your machine**: the app, the vault, browser profiles, agent memory, transcripts and logs. The API listens on
   `127.0.0.1` by default.
@@ -95,7 +122,7 @@ computer over Tailscale ([setup](docs/FEATURES.md#phone-app-ios-and-android)).
 - **Godmode's own servers**: no analytics or telemetry in the app. The desktop app looks for updates on
   usegodmode.com, and official builds check their licence key there every 6 hours.
 
-## Security model
+### Security model
 
 - **Vault**: your passphrase is stretched with scrypt (N=2^17) into a key that wraps a random 256-bit data key. Every
   secret is encrypted with AES-256-GCM and bound to its database row. *Remember on this device* (on by default, so
@@ -116,7 +143,7 @@ much, switch off **Full bypass mode** (Settings → AI & Claude → Autonomy; ru
 allow-list and stop more often), give sensitive agents their own macOS VM, or run Godmode on a spare machine or in
 Docker. The full model, the VM isolation and how to report a vulnerability: [SECURITY.md](SECURITY.md).
 
-## Is this allowed with a Claude subscription?
+### Is this allowed with a Claude subscription?
 
 Godmode installs the official, unmodified Claude Code CLI with Anthropic's installer, and you sign in through
 Anthropic's own flow (`claude auth login`, which opens Anthropic's sign-in page in your browser). The token stays in Claude Code's own keychain entry or credentials
@@ -135,7 +162,7 @@ This is not an endorsement by Anthropic. Anthropic says Pro and Max limits assum
 rules for third-party tools changed more than once in 2026. For heavy all-day use or for a company, use an Anthropic
 API key (Max and Team plans now include monthly API credits) or a Team plan. Godmode works with both.
 
-## More
+### More
 
 - [docs/FEATURES.md](docs/FEATURES.md): every feature with screenshots, a quick start, and setup guides for the desktop
   app, the headless server and Docker, the phone app, Godmode Cloud, computer use, macOS VMs, SSH servers,
@@ -143,7 +170,7 @@ API key (Max and Team plans now include monthly API credits) or a Team plan. God
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the core, runner, vault, browser and scheduler fit together.
 - [SECURITY.md](SECURITY.md): the full security model and its caveats.
 
-## Development
+### Development
 
 ```bash
 pnpm install
@@ -157,7 +184,7 @@ Monorepo: `packages/shared` (types) · `packages/core` (daemon) · `apps/desktop
 app, Expo, its own toolchain, see [apps/mobile/README.md](apps/mobile/README.md)) · `apps/cloud` (Godmode Cloud,
 Next.js, see [apps/cloud/README.md](apps/cloud/README.md)). See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Credits
+### Credits
 
 [Claude Code](https://code.claude.com) · [browser-use](https://github.com/browser-use/browser-use) · [Cua](https://github.com/trycua/cua) ·
 [Composio](https://composio.dev) · [Model Context Protocol](https://modelcontextprotocol.io) ·
