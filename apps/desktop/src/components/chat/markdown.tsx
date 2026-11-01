@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { cn } from "@/lib/utils";
 import { CodeBlock as AicssCodeBlock } from "@/components/aicss/CodeBlock";
 import { ChatTable } from "./chat-table";
+import { PaymentQr } from "./payment-qr";
 import { CoreFileLink, CoreImage, isCoreFile } from "./core-file";
 import { content, rehypeLocalFiles, type HastNode } from "./local-file-tree";
 import { FileLink, MessageFilesScope, Picture, useMessageFiles } from "./local-files";
@@ -43,6 +44,7 @@ const components: Components = {
     const className = isValidElement(child) ? (child.props.className ?? "") : "";
     const lang = /language-([\w+#.-]+)/.exec(className)?.[1] ?? "";
     const code = textOf(isValidElement(child) ? child.props.children : children).replace(/\n$/, "");
+    if (lang === "payment") return <PaymentQr source={code} />;
     return <CodeBlock lang={lang} code={code} />;
   },
   a({ node, href, children, ...rest }) {
