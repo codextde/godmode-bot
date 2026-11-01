@@ -285,6 +285,9 @@ function handle(qc: QueryClient, event: ServerEvent) {
       break;
     case "run.finished":
       live.runFinished(event.run);
+      qc.setQueryData<ConversationWithMessages>(qk.conversation(event.run.conversationId), (old) =>
+        old && old.activeRunId === event.run.id ? { ...old, activeRunId: null } : old,
+      );
       qc.invalidateQueries({ queryKey: qk.conversation(event.run.conversationId) });
       qc.invalidateQueries(conversationLists);
       qc.invalidateQueries({ queryKey: qk.runs });
