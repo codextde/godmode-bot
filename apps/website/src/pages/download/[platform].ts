@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
 import { assetRedirect, findAsset, PLATFORMS } from '@/lib/releases';
 import { allowed } from '@/lib/limit';
+import { serverEvent } from '@/lib/serverEvent';
 
 export const prerender = false;
 
-/** /download/mac, /download/windows, … — the latest release's file for that platform. No key needed: the app runs free for 7 days. */
+/** /download/mac, /download/windows, … — the latest release's file for that platform. No key needed: the app has a free period. */
 export const GET: APIRoute = async ({ params, request }) => {
   const platform = params.platform ?? '';
   if (!Object.hasOwn(PLATFORMS, platform)) return new Response('Unknown platform', { status: 404 });
@@ -13,6 +14,7 @@ export const GET: APIRoute = async ({ params, request }) => {
   try {
     const { release, asset } = await findAsset((a) => target.match.test(a.name));
     if (!asset) return new Response(`No ${target.label} build in ${release.tag_name} yet.`, { status: 404 });
+    if (request.method === 'GET') await serverEvent(request, 'download', platform);
     return await assetRedirect(asset);
   } catch (e) {
     console.error('download failed', e);

@@ -118,7 +118,7 @@ export const LEGAL = {
   phone: '+49 7904 5203106',
   email: 'kontakt@codext.de',
   // Bump by hand only when the legal texts change.
-  updated: 'October 5, 2026',
+  updated: 'November 1, 2026',
 } as const;
 
 export const TRACKING = {
