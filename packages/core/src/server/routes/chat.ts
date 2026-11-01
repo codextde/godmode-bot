@@ -9,6 +9,7 @@ import {
   getConversationSummary,
   listConversations,
   listMessagePage,
+  chatAttachmentImage,
   messageImage,
   messageWindow,
   markConversationsRead,
@@ -137,6 +138,18 @@ export function registerChatRoutes(app: Hono): void {
     const { data, mime } = messageImage(c.req.param("id"), c.req.param("messageId"), c.req.param("toolUseId"));
     return c.body(new Uint8Array(data), 200, {
       "Content-Type": mime,
+      "X-Content-Type-Options": "nosniff",
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
+  });
+
+  app.get("/api/conversations/:id/attachment", (c) => {
+    const path = c.req.query("path");
+    if (!path) throw badRequest("path is required");
+    const { data, mime } = chatAttachmentImage(c.req.param("id"), path);
+    return c.body(new Uint8Array(data), 200, {
+      "Content-Type": mime,
+      "Content-Security-Policy": "sandbox; default-src 'none'",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=31536000, immutable",
     });

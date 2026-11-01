@@ -46,6 +46,10 @@ export function ChatFilesScope({
   return <ChatScope.Provider value={scope}>{children}</ChatScope.Provider>;
 }
 
+export function useChatScope() {
+  return useContext(ChatScope);
+}
+
 /** A picture of a runner's chat is on the runner: the address says which one, and the core fetches it over the link. */
 function onRunner(image: string, runnerId: string): string {
   return `${image}${image.includes("?") ? "&" : "?"}runner=${encodeURIComponent(runnerId)}`;
