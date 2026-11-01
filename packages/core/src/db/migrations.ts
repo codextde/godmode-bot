@@ -1897,4 +1897,21 @@ ALTER TABLE runners ADD COLUMN ssh_server_id TEXT;
 ALTER TABLE ssh_servers ADD COLUMN share_logins INTEGER NOT NULL DEFAULT 0;
 `,
   },
+  {
+    id: 114,
+    name: "memory_edits",
+    sql: /* sql */ `
+-- Lines a run (not a dream) added to or removed from its agent's memory files; the next dream reviews them.
+CREATE TABLE IF NOT EXISTS memory_edits (
+  id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL,
+  conversation_id TEXT,
+  trigger TEXT NOT NULL,
+  edits TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS memory_edits_agent ON memory_edits(agent_id, created_at);
+`,
+  },
 ];
