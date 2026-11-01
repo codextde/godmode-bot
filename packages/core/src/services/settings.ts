@@ -50,6 +50,7 @@ export const DEFAULT_SETTINGS: Settings = {
     stealth: true,
     muteAudio: true,
     passkeys: true,
+    captchaLocal: true,
     captchaSolver: "off",
     captchaDailyLimit: 30,
   },

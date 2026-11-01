@@ -130,7 +130,7 @@ import {
 } from "../vault/cards";
 import { nameGuessMatchesHost } from "../vault/match";
 import { chatWorkspaceId, createProfile, currentPage, deleteProfile, fillIntoPage, listProfiles, probeOtpPage, resolveProfileForAgent, solveCaptchaInPage } from "../browser/manager";
-import { SOLVERS, activeSolver, captchaSolverReady } from "../browser/captcha";
+import { SOLVERS, activeSolver, captchaSolvingAvailable } from "../browser/captcha";
 import { currentVmPage, fillIntoVm, probeOtpInVm, solveCaptchaInVm } from "../vm/guest";
 import { getMcpServer, mcpServerInAgentScope } from "../integrations/mcpServers";
 import { apiToolEnvOwners, apiToolKey, apiToolsForAgent, findApiToolForAgent, hasApiTools, markApiToolUsed } from "../integrations/apiTools";
@@ -1529,7 +1529,7 @@ const TOOLS: ToolDef[] = [
   defineTool({
     name: "captcha_solve",
     description:
-      "Solve the CAPTCHA that blocks you on your browser tab: Godmode finds it (reCAPTCHA v2/v3, Cloudflare Turnstile), has the human's CAPTCHA solving service solve it and puts the answer into the page — you never solve a CAPTCHA yourself. Call it when a CAPTCHA appears, then submit the form (the answer expires in about 2 minutes). For a picture with distorted text pass imageSelector (the image) and inputSelector (its text field). hCaptcha, Cloudflare \"Just a moment\" pages and puzzles of other kinds can't be solved this way: give the human a task (live view). Each call counts against a daily limit, so don't call it when no CAPTCHA is visible.",
+      "Solve the CAPTCHA that blocks you on your browser tab — you never solve a CAPTCHA yourself. Godmode finds it (reCAPTCHA, hCaptcha, Cloudflare Turnstile, a Cloudflare \"Just a moment\" page), clicks its checkbox like a person and, when the site wants more, hands it to the human's solving service if one is set up, then puts the answer into the page. Call it when a CAPTCHA appears, then submit the form (an answer expires in about 2 minutes). For a picture with distorted text pass imageSelector (the image) and inputSelector (its text field). When it reports that the human is needed, give them a task (live view). Answers from the solving service count against a daily limit, so don't call it when no CAPTCHA is visible.",
     schema: z.object({
       kind: z.enum(["recaptcha_v2", "recaptcha_v3", "hcaptcha", "turnstile", "image"]).optional().describe("Only this kind; default: what is on the page"),
       imageSelector: z.string().max(500).optional().describe("Image CAPTCHA: CSS selector of the picture"),
@@ -1537,7 +1537,7 @@ const TOOLS: ToolDef[] = [
       caseSensitive: z.boolean().optional().describe("Image CAPTCHA: upper and lower case matter"),
       urlContains: z.string().max(500).optional().describe("Use your tab whose URL contains this, if you have several"),
     }),
-    when: (agent, ctx) => agent.browser.enabled && !isCheckRun(ctx) && captchaSolverReady(),
+    when: (agent, ctx) => agent.browser.enabled && !isCheckRun(ctx) && captchaSolvingAvailable(),
     run: async (args, { agent, ctx }) => {
       if (!getSettings().browser.enabled) return fail("The browser is turned off in Settings.");
       const vmId = vmOfRun(ctx.runId);
@@ -1546,7 +1546,7 @@ const TOOLS: ToolDef[] = [
         : await solveCaptchaInPage(runBrowserProfile(ctx.runId) ?? resolveProfileForAgent(agent, ctx.conversationId).id, { ...args, conversationId: ctx.conversationId });
       const solver = result.solver ?? activeSolver();
       audit(`agent:${agent.id}`, "captcha.solve", solver, { kind: result.kind ?? args.kind ?? null, site: hostnameOf(result.url) || null, ok: result.ok, runId: ctx.runId });
-      if (!result.ok && solver && /API key is wrong|no balance/.test(result.detail)) {
+      if (!result.ok && solver && solver !== "local" && /API key is wrong|no balance/.test(result.detail)) {
         notify("warning", `CAPTCHA solving: ${SOLVERS[solver].label} needs you`, result.detail, "/settings/browser");
       }
       return result.ok ? result.detail : fail(result.detail);

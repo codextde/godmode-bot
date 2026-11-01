@@ -21,6 +21,7 @@ import {
   buildTask,
   adoptStoredSolverKey,
   captchaSolverReady,
+  captchaSolvingAvailable,
   captchaStatus,
   solveTask,
   solverBalance,
@@ -107,7 +108,7 @@ describe("tasks per service", () => {
 
 describe("service API", () => {
   beforeEach(() => {
-    updateSettings({ browser: { captchaSolver: "2captcha", captchaDailyLimit: 30 } });
+    updateSettings({ browser: { captchaLocal: false, captchaSolver: "2captcha", captchaDailyLimit: 30 } });
     vault.setAppSecret("twocaptcha_api_key", KEY);
   });
 
@@ -197,6 +198,26 @@ const IMAGE = `<!doctype html><title>Old form</title>
 <img id="cap" width="160" height="50" src="data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="50"><rect width="160" height="50" fill="#eee"/><text x="20" y="35" font-size="28">W68HP</text></svg>')}">
 <input id="answer" name="captcha">`;
 
+const PASS = "LOCAL-TOKEN-0123456789abcdefghijklmnop";
+
+const CLICK_RECAPTCHA = `<!doctype html><title>Sign up</title>
+<form><input name="email"><iframe title="reCAPTCHA" width="304" height="78" style="border:0" src="/recaptcha/api2/anchor?ar=1&k=6LcClickKey&size=normal"></iframe>
+<textarea name="g-recaptcha-response" style="display:none"></textarea><button>Go</button></form>`;
+
+const ANCHOR = `<!doctype html><body style="margin:0;width:304px;height:78px">
+<script>addEventListener("click", (e) => { if (e.isTrusted && e.clientX > 12 && e.clientX < 44 && e.clientY > 22 && e.clientY < 56) parent.document.querySelector("textarea[name=g-recaptcha-response]").value = ${JSON.stringify(PASS)}; });</script>`;
+
+const CLICK_HCAPTCHA = `<!doctype html><title>Register</title>
+<form><iframe width="303" height="78" style="border:0" src="/hcaptcha.com/checkbox.html#frame=checkbox&sitekey=10000000-ffff"></iframe>
+<textarea name="h-captcha-response" style="display:none"></textarea></form>`;
+
+const HCAPTCHA_BOX = `<!doctype html><body style="margin:0;width:303px;height:78px">
+<script>addEventListener("click", () => { const f = parent.document.createElement("iframe"); f.width = "400"; f.height = "520"; f.src = "/hcaptcha.com/challenge.html#frame=challenge"; parent.document.body.appendChild(f); });</script>`;
+
+const AUTO_TURNSTILE = `<!doctype html><title>Contact</title>
+<form id="f"><div class="cf-turnstile" data-sitekey="0x4AAAAAAAautopass"></div><button>Send</button></form>
+<script>setTimeout(() => { const i = document.createElement("input"); i.type = "hidden"; i.name = "cf-turnstile-response"; i.value = ${JSON.stringify(PASS)}; document.getElementById("f").appendChild(i); }, 800);</script>`;
+
 const NONE = `<!doctype html><title>Plain</title><p>Nothing to solve</p>`;
 
 const chrome = findChrome();
@@ -242,9 +263,20 @@ browserSuite("on a page", () => {
       fetch(req) {
         const html = (b: string) => new Response(b, { headers: { "content-type": "text/html; charset=utf-8" } });
         const path = new URL(req.url).pathname;
-        if (path === "/recaptcha/api2/anchor") return html("<p>badge</p>");
+        if (path === "/recaptcha/api2/anchor") return html(new URL(req.url).searchParams.get("k") === "6LcClickKey" ? ANCHOR : "<p>badge</p>");
+        if (path === "/hcaptcha.com/checkbox.html") return html(HCAPTCHA_BOX);
+        if (path === "/hcaptcha.com/challenge.html") return html("<p>pick all buses</p>");
         if (path === "/recaptcha/api.js") return new Response("", { headers: { "content-type": "text/javascript" } });
-        const pages: Record<string, string> = { "/recaptcha": RECAPTCHA, "/turnstile": TURNSTILE, "/v3": V3, "/image": IMAGE, "/none": NONE };
+        const pages: Record<string, string> = {
+          "/recaptcha": RECAPTCHA,
+          "/turnstile": TURNSTILE,
+          "/v3": V3,
+          "/image": IMAGE,
+          "/none": NONE,
+          "/click-recaptcha": CLICK_RECAPTCHA,
+          "/click-hcaptcha": CLICK_HCAPTCHA,
+          "/auto-turnstile": AUTO_TURNSTILE,
+        };
         return pages[path] ? html(pages[path]!) : new Response("not found", { status: 404 });
       },
     });
@@ -260,7 +292,7 @@ browserSuite("on a page", () => {
   }, 60_000);
 
   beforeEach(() => {
-    updateSettings({ browser: { captchaSolver: "2captcha", captchaDailyLimit: 30 } });
+    updateSettings({ browser: { captchaLocal: false, captchaSolver: "2captcha", captchaDailyLimit: 30 } });
     vault.setAppSecret("twocaptcha_api_key", KEY);
     fakeService();
   });
@@ -329,4 +361,58 @@ browserSuite("on a page", () => {
     expect(r.detail).toContain("daily limit");
     expect(calls).toHaveLength(0);
   }, 30_000);
+
+  describe("clicking locally", () => {
+    beforeEach(() => {
+      updateSettings({ browser: { captchaLocal: true, captchaSolver: "off" } });
+      vault.setAppSecret("twocaptcha_api_key", null);
+    });
+
+    test("makes captcha_solve available without a service", () => {
+      resetSettingsCache();
+      expect(captchaSolvingAvailable()).toBe(true);
+      expect(captchaSolverReady()).toBe(false);
+    });
+
+    test("reCAPTCHA v2: ticks the checkbox with a real click, no service", async () => {
+      await open("/click-recaptcha");
+      const r = await manager.solveCaptchaInPage(profileId, {});
+      expect(r).toMatchObject({ ok: true, kind: "recaptcha_v2", solver: "local" });
+      expect(calls).toHaveLength(0);
+      expect(await evalOn<string>("/click-recaptcha", "document.querySelector('textarea[name=g-recaptcha-response]').value")).toBe(PASS);
+    }, 30_000);
+
+    test("Turnstile that passes on its own needs no click", async () => {
+      await open("/auto-turnstile");
+      const r = await manager.solveCaptchaInPage(profileId, {});
+      expect(r).toMatchObject({ ok: true, kind: "turnstile", solver: "local" });
+      expect(r.detail).toContain("on its own");
+    }, 30_000);
+
+    test("a picture puzzle after the click goes to the human without a service", async () => {
+      await open("/click-hcaptcha");
+      const r = await manager.solveCaptchaInPage(profileId, {});
+      expect(r.ok).toBe(false);
+      expect(r.kind).toBe("hcaptcha");
+      expect(r.detail).toContain("picture puzzle");
+      expect(r.detail).toContain("task");
+    }, 30_000);
+
+    test("a picture puzzle falls back to the service when one is set up", async () => {
+      updateSettings({ browser: { captchaSolver: "2captcha" } });
+      vault.setAppSecret("twocaptcha_api_key", KEY);
+      fakeService();
+      await open("/recaptcha");
+      const r = await manager.solveCaptchaInPage(profileId, {});
+      expect(r).toMatchObject({ ok: true, kind: "recaptcha_v2", solver: "2captcha" });
+      expect(calls[0]!.body.task).toMatchObject({ type: "RecaptchaV2TaskProxyless" });
+    }, 40_000);
+
+    test("image CAPTCHAs need a service", async () => {
+      await open("/image");
+      const r = await manager.solveCaptchaInPage(profileId, { imageSelector: "#cap", inputSelector: "#answer" });
+      expect(r.ok).toBe(false);
+      expect(r.detail).toContain("solving service");
+    }, 30_000);
+  });
 });
