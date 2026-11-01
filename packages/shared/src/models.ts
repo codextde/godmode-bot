@@ -1477,7 +1477,9 @@ export interface HexStatus {
   model: string;
   installed: boolean;
   downloadBytes: number | null;
-  progress: { phase: "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
+  canInstall: boolean;
+  appBytes: number | null;
+  progress: { phase: "installing" | "starting" | "downloading" | "verifying" | "loading"; downloadedBytes: number; totalBytes: number } | null;
   error: string | null;
 }
 export type TtsProvider = "browser" | "openai" | "elevenlabs";

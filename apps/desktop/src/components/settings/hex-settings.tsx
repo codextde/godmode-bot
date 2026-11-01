@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -29,7 +30,18 @@ export function HexSettings({ voice }: { voice: VoiceSettings }) {
 
   const s = status.data;
   const progress = s?.progress;
-  const percent = progress?.phase === "downloading" && progress.totalBytes ? Math.round((progress.downloadedBytes / progress.totalBytes) * 100) : null;
+  const percent = (progress?.phase === "downloading" || progress?.phase === "installing") && progress.totalBytes ? Math.round((progress.downloadedBytes / progress.totalBytes) * 100) : null;
+  const installing = progress?.phase === "installing";
+  const usable = !!s && (!!s.path || s.canInstall);
+  const needsSetup = !!s && usable && !s.installed && !progress && !s.error;
+  const autoKey = `${voice.hexModel}:${voice.language}:${voice.hexPath}`;
+  const autoStarted = useRef<string | null>(null);
+  const { mutate: startPrepare } = prepare;
+  useEffect(() => {
+    if (!needsSetup || autoStarted.current === autoKey) return;
+    autoStarted.current = autoKey;
+    startPrepare();
+  }, [needsSetup, autoKey, startPrepare]);
   const language = voice.language.toLowerCase().startsWith("de") ? "de" : voice.language.toLowerCase().startsWith("en") ? "en" : null;
 
   return (
@@ -47,13 +59,35 @@ export function HexSettings({ voice }: { voice: VoiceSettings }) {
         <SettingRow label={t("voice.hex.app")}>
           <Spinner />
         </SettingRow>
+      ) : s && !s.path && s.canInstall ? (
+        <SettingRow
+          label={t("voice.hex.app")}
+          description={installing ? t("voice.hex.phase.installing", { percent: percent ?? 0 }) : t("voice.hex.autoInstall", { size: s.appBytes ? formatBytes(s.appBytes) : "" })}
+        >
+          {installing ? (
+            <Progress value={percent ?? undefined} className="w-40" />
+          ) : (
+            !progress && (
+              <Button size="sm" onClick={() => prepare.mutate()} disabled={prepare.isPending}>
+                {prepare.isPending ? <Spinner /> : <Download />}
+                {t("voice.hex.installAction")}
+              </Button>
+            )
+          )}
+        </SettingRow>
       ) : !s?.path ? (
-        <Callout tone="warning" title={t("voice.hex.missingTitle")}>
-          {t("voice.hex.missingBody")}{" "}
-          <a href={HEX_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
-            anoma.ly/hex <ExternalLink className="size-3" />
-          </a>
-        </Callout>
+        voice.hexPath.trim() ? (
+          <Callout tone="warning" title={t("voice.hex.notFoundTitle")}>
+            {t("voice.hex.notFoundBody")}
+          </Callout>
+        ) : (
+          <Callout tone="warning" title={t("voice.hex.missingTitle")}>
+            {t("voice.hex.missingBody")}{" "}
+            <a href={HEX_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline">
+              anoma.ly/hex <ExternalLink className="size-3" />
+            </a>
+          </Callout>
+        )
       ) : (
         <SettingRow label={t("voice.hex.app")} description={<span className="break-all font-mono text-[11px]">{s.path}</span>}>
           <span className="text-sm text-muted-foreground">{s.version ? t("voice.hex.version", { version: s.version }) : t("voice.hex.found")}</span>
@@ -81,18 +115,20 @@ export function HexSettings({ voice }: { voice: VoiceSettings }) {
         </Select>
       </SettingRow>
 
-      {s?.path && (
+      {usable && (
         <SettingRow
           label={t("voice.hex.download")}
           description={
-            progress
+            installing
+              ? t("voice.hex.afterInstall")
+              : progress
               ? t(`voice.hex.phase.${progress.phase}`, { percent: percent ?? 0 })
               : s.installed
                 ? t("voice.hex.ready")
-                : t("voice.hex.notDownloaded", { size: s.downloadBytes ? formatBytes(s.downloadBytes) : "" })
+                : t("voice.hex.notDownloaded", { size: formatBytes(s.downloadBytes ?? (HEX_MODELS.find((m) => m.id === voice.hexModel)?.sizeMb ?? 0) * 1024 * 1024) })
           }
         >
-          {progress ? (
+          {installing ? null : progress ? (
             <Progress value={percent ?? undefined} className="w-40" />
           ) : (
             !s.installed && (
