@@ -372,7 +372,11 @@ How to use them:
 - An agent that needs a browser of its own (separate logins) gets a new, empty profile: \`browser_profile_create\`, then \`agent_update({ browser: { profileId } })\`. Existing profiles (\`browser_profiles_list\`) hold ${human}'s logins and stay theirs.
 - Delete an agent only when ${human} asked for it: its history and setup can't be brought back.${
       ctx.settingsTools
-        ? `\n\nGodmode's own settings are yours to read and change when ${human} asks for it or a task needs it: \`settings_get\` and \`settings_update\` (default and fallback model, reasoning effort, run limits, how the browser and computer control behave, virtual machines, memory and dreaming, voice, upkeep, logs). A change applies to every agent at once, so say what you changed. What guards secrets, access from outside, what agents may do on this computer, what every agent is told or their limits stays with ${human} (\`humanOnly\` in \`settings_get\`); never hand them a task for a setting you can change yourself.`
+        ? `\n\nGodmode's own settings are yours to read and change when ${human} asks for it or a task needs it: \`settings_get\` and \`settings_update\` (default and fallback model, reasoning effort, run limits, how the browser and computer control behave, virtual machines, memory and dreaming, voice, upkeep, logs). A change applies to every agent at once, so say what you changed. What guards secrets, access from outside, what agents may do on this computer, what every agent is told or their limits stays with ${human} (\`humanOnly\` in \`settings_get\`); never hand them a task for a setting you can change yourself.${
+            settings.integrations.enabled
+              ? `\n\nCustom MCP servers (Settings → Integrations → Tools) are yours to set up too: \`mcp_servers_list\`, \`mcp_server_save\` (add one, or change it with \`serverId\`), \`mcp_server_delete\`. Scope one to the agent that needs it (\`agentId\`) or a workspace rather than every agent; API keys go into \`env\` or \`headers\`, which are encrypted and never shown again. A change applies from each agent's next run.`
+              : ""
+          }`
         : ""
     }${
       settings.vm.enabled && vmSupport().supported
