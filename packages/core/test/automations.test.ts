@@ -18,6 +18,8 @@ import { createRoutine, getRoutine, listRoutines, readTriggerState, runRoutineNo
 import {
   BATCH_SIZE,
   MAX_RUNS_PER_HOUR,
+  __setScreenerForTests,
+  parseScreen,
   buildEventPrompt,
   describePayload,
   dispatch,
@@ -187,6 +189,7 @@ beforeAll(async () => {
   manager = await createAgent({ name: "Boss" });
   exec("UPDATE agents SET permissions = json_set(permissions, '$.canManageAgents', json('true')) WHERE id = ?", manager.id);
   installFetchMock();
+  __setScreenerForTests(async () => null);
   startAutomationEvents();
 });
 
@@ -283,6 +286,40 @@ describe("event queue", () => {
     finish(started);
     expect(eventsOf(r.id)[0]!.status).toBe("done");
     expect(getRoutine(r.id).lastStatus).toBe("succeeded");
+  });
+
+  test("events that don't match the filter are skipped before a run starts", async () => {
+    const prompts: string[] = [];
+    __setScreenerForTests(async (prompt) => {
+      prompts.push(prompt);
+      return prompt.includes("Order #8") ? "SKIP: the order isn't paid" : "MATCH";
+    });
+    try {
+      const r = webhookRoutine({ filter: "only paid orders" });
+      const skipped = receiveEvent(r.id, { source: "webhook", title: "Order #8", payload: { paid: false } })!;
+      expect(skipped.status).toBe("pending");
+      expect(await dispatch(r.id)).toBeNull();
+      await waitFor(() => eventsOf(r.id)[0]!.status === "skipped", "screened out");
+      expect(eventsOf(r.id)[0]).toMatchObject({ note: "the order isn't paid", payload: null, runId: null });
+      expect(sent).toHaveLength(0);
+      expect(prompts[0]).toContain("only paid orders");
+
+      receiveEvent(r.id, { source: "webhook", title: "Order #9", payload: { paid: true } });
+      await waitFor(() => sent.length === 1, "matching run");
+      expect(sent[0]!.content).toContain("Order #9");
+      expect(sent[0]!.content).not.toContain("Order #8");
+      finish(sent[0]!.run);
+    } finally {
+      __setScreenerForTests(async () => null);
+    }
+  });
+
+  test("screen answers are parsed conservatively", () => {
+    expect(parseScreen("MATCH")).toBeNull();
+    expect(parseScreen(null)).toBeNull();
+    expect(parseScreen("I think it matches")).toBeNull();
+    expect(parseScreen("**SKIP:** only mentions Max\nmore")).toBe("only mentions Max");
+    expect(parseScreen("skip")).toBe("Didn't match the filter");
   });
 
   test("events wait while the automation is busy and are batched into the next run", async () => {
