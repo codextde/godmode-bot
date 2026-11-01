@@ -160,6 +160,23 @@ describe("chats, agents and tickets in a project", () => {
     expect(chatSourcePaths(createConversation({ agentId: agent.id }).id, agent)).toEqual([]);
   });
 
+  test("a global agent's chat may work in a workspace without a project", async () => {
+    const shared = folder("ws-only-shared");
+    const ws = createWorkspace({ name: "Workspace only", sources: [{ kind: "folder", path: shared }] });
+    const other = createWorkspace({ name: "Elsewhere" });
+    const project = createProject({ workspaceId: ws.id, name: "Inside" });
+    const agent = await createAgent({ name: "Drifter" });
+    const chat = createConversation({ agentId: agent.id, workspaceId: ws.id });
+    expect(chatSourcePaths(chat.id, agent)).toEqual([shared]);
+    expect(updateConversation(chat.id, { projectId: project.id })).toMatchObject({ projectId: project.id, workspaceId: ws.id });
+    expect(updateConversation(chat.id, { workspaceId: ws.id })).toMatchObject({ projectId: project.id, workspaceId: ws.id });
+    expect(updateConversation(chat.id, { workspaceId: other.id })).toMatchObject({ projectId: null, workspaceId: other.id });
+    expect(updateConversation(chat.id, { workspaceId: null })).toMatchObject({ projectId: null, workspaceId: null });
+    expect(chatSourcePaths(chat.id, agent)).toEqual([]);
+    const local = await createAgent({ name: "Stays", workspaceId: ws.id });
+    expect(updateConversation(createConversation({ agentId: local.id }).id, { workspaceId: other.id }).workspaceId).toBeNull();
+  });
+
   test("a workspace agent can't work on another workspace's project", async () => {
     const ws = createWorkspace({ name: "Mine" });
     const other = createWorkspace({ name: "Not mine" });

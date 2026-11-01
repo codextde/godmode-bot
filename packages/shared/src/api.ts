@@ -431,6 +431,8 @@ export interface ConversationPatch {
   instructions?: string;
   /** Project the chat works on; null = the agent's. */
   projectId?: ID | null;
+  /** Workspace a global agent's chat works in; null = none. A project in another workspace is cleared. Ignored for workspace agents. */
+  workspaceId?: ID | null;
 }
 
 export interface StartChatResult extends SendMessageResult {

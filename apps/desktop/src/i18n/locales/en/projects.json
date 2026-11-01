@@ -20,7 +20,15 @@
     "setIn": "Set in {{agent}}'s settings",
     "onlyWorkspace": "Only the workspace's context and folders",
     "selected": "Selected",
-    "workOn": "Work on"
+    "workOn": "Work on",
+    "workspace": "Workspace",
+    "noWorkspace": "No workspace",
+    "onlyGlobal": "Only the global context",
+    "tooltipNoWorkspace": "Work in a workspace or project",
+    "findPlace": "Find a workspace or project…",
+    "workspaceMeta_one": "Whole workspace · {{count}} project",
+    "workspaceMeta_other": "Whole workspace · {{count}} projects",
+    "tooltipWorkspace": "This chat works in {{name}}"
   },
   "dialog": {
     "newTitle": "New project",
