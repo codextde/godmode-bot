@@ -60,16 +60,16 @@ function AgentRow({
   const chat = useStartAgentChat();
   const chatting = chat.isPending && chat.variables?.agent.id === agent.id;
   const lead = leadOf(agent, all);
-  const drag = useAgentDrag(agent);
+  const { ref: dragRef, props: dragProps, isDragging } = useAgentDrag(agent);
   return (
     <li
-      ref={drag.ref}
-      {...drag.props}
+      ref={dragRef}
+      {...dragProps}
       className={cn(
         "group relative px-3 py-2 transition-[background-color,opacity] hover:bg-foreground/[0.025]",
         COLUMNS,
         (!!live || agent.status === "running") && "bg-brand/[0.04]",
-        drag.isDragging && "opacity-35",
+        isDragging && "opacity-35",
       )}
     >
       <div className={cn("flex min-w-0 items-center gap-3", !agent.enabled && "opacity-60")}>

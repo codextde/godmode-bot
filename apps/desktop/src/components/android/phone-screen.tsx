@@ -173,7 +173,8 @@ export function PhoneScreen({
             error: () => {
               decoder = null;
               waitingKey = true;
-              if (++failures >= 3) fallBack();
+              failures = failures + 1;
+              if (failures >= 3) fallBack();
               else askKeyframe();
             },
           });
@@ -356,7 +357,8 @@ export function PhoneScreen({
       dx += e.deltaX * unit;
       dy += e.deltaY * unit;
       at = { x: pt.x, y: pt.y };
-      timer ??= setTimeout(() => {
+      if (timer != null) return;
+      timer = setTimeout(() => {
         timer = null;
         const { width, height } = size.current;
         if (!at || !width) return;

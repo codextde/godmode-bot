@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useId, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
@@ -40,6 +40,8 @@ export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab
     },
   });
 
+  const resetCreate = useEffectEvent(() => create.reset());
+
   useEffect(() => {
     // Closed: the key leaves the page once the dialog has faded out.
     if (!tab) {
@@ -50,8 +52,7 @@ export function ConnectAppDialog({ tab, onClose, claudeCode }: { tab: ConnectTab
     setName("");
     setAccess("manage");
     setCreated(null);
-    create.reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    resetCreate();
   }, [tab]);
 
   const ready = client === "claude-code" || name.trim().length > 0;

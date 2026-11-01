@@ -55,7 +55,9 @@ export function QueueTray({
   const [editing, setEditing] = useState<{ id: string; text: string; from: string } | null>(null);
   // Rows that are animating out still hold their old handlers.
   const editingRef = useRef(editing);
-  editingRef.current = editing;
+  useLayoutEffect(() => {
+    editingRef.current = editing;
+  });
   // Right away: moving the focus on blurs the editor, which must not save a second time.
   const closeEditor = () => {
     editingRef.current = null;

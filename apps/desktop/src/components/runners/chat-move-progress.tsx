@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ChatMove, ConversationWithMessages, MoveChatInput } from "@godmode/shared";
 import { ArrowRightLeft, X } from "lucide-react";
@@ -25,13 +25,19 @@ function clock(seconds: number): string {
 
 /** Copy speed from the first bytes of the copy on, once there is enough to tell. */
 function useRate(move: ChatMove | undefined): number | null {
-  const first = useRef<{ at: number; bytes: number } | null>(null);
+  const [first, setFirst] = useState<{ at: number; bytes: number } | null>(null);
   const copying = move?.stage === "copying";
-  if (!copying) first.current = null;
-  else if (!first.current && move.bytes > 0) first.current = { at: Date.now(), bytes: move.bytes };
-  if (!copying || !first.current) return null;
-  const seconds = (Date.now() - first.current.at) / 1000;
-  return seconds >= 1.5 ? (move.bytes - first.current.bytes) / seconds : null;
+  if (!copying) {
+    if (first) setFirst(null);
+    return null;
+  }
+  if (!first) {
+    const bytes = move.bytes;
+    if (bytes > 0) setFirst(() => ({ at: Date.now(), bytes }));
+    return null;
+  }
+  const seconds = (Date.now() - first.at) / 1000;
+  return seconds >= 1.5 ? (move.bytes - first.bytes) / seconds : null;
 }
 
 function useElapsed(since: number): number {
@@ -46,11 +52,11 @@ function useElapsed(since: number): number {
 function ChatMoveToast({ toastId, conversationId, dest, agentName }: { toastId: string; conversationId: string; dest: string; agentName: string }) {
   const { t } = useTranslation("runners");
   const move = useChatMoves((s) => s.moves[conversationId]);
-  const started = useRef(Date.now());
-  const seen = useRef(false);
-  if (move) seen.current = true;
-  const finishing = !move && seen.current;
-  const elapsed = useElapsed(started.current);
+  const [started] = useState(() => Date.now());
+  const [seen, setSeen] = useState(false);
+  if (move && !seen) setSeen(true);
+  const finishing = !move && seen;
+  const elapsed = useElapsed(started);
   const rate = useRate(move);
 
   const percent = move?.stage === "copying" && move.total ? Math.min(100, (move.bytes / move.total) * 100) : finishing || move?.stage === "saving" || move?.stage === "continuing" ? 100 : null;

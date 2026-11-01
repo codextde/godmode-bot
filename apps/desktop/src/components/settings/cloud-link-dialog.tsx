@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Cloud, ExternalLink, RefreshCw, ShieldAlert } from "lucide-react";
@@ -133,11 +133,14 @@ export function CloudLinkDialog({ open, onOpenChange }: { open: boolean; onOpenC
     },
   });
 
-  useEffect(() => {
-    if (!open) return;
+  const onOpened = useEffectEvent(() => {
     link.reset();
     setStarted(status?.state === "linking");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    onOpened();
   }, [open]);
 
   const view = status?.state === "linking" && status.pending ? "pending" : started && status && isLinked(status) ? "linked" : "form";

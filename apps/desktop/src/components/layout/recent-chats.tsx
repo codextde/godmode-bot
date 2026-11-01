@@ -2,7 +2,7 @@ import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, CircleDot, MessagesSquare, Pin, PinOff, Trash2, Workflow, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -165,7 +165,9 @@ export function RecentChats() {
   }
   const slots = rows.flatMap((r) => (r.folded ? [] : [r.c.id])).slice(0, 9);
   const slotsRef = useRef(slots);
-  slotsRef.current = slots;
+  useLayoutEffect(() => {
+    slotsRef.current = slots;
+  });
   const holding = useModifierHeld();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

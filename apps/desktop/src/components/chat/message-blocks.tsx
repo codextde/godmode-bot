@@ -420,12 +420,12 @@ const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write"]);
 type FileEditInput = { file_path?: string; notebook_path?: string; old_string?: string; new_string?: string; content?: string; edits?: { old_string?: string; new_string?: string }[] };
 
 /** Diff rows for file-editing tools (Edit / MultiEdit / Write), or null for anything else. */
-function fileEditOf(block: ToolUseBlock): { file: string; rows: DiffRow[] } | null {
-  const input = (block.input ?? {}) as FileEditInput;
+function fileEditOf(name: string, raw: unknown): { file: string; rows: DiffRow[] } | null {
+  const input = (raw ?? {}) as FileEditInput;
   const file = input.file_path ?? input.notebook_path ?? "";
-  if (block.name === "Edit" && typeof input.new_string === "string") return { file, rows: diffLines(input.old_string ?? "", input.new_string) };
-  if (block.name === "Write" && typeof input.content === "string") return { file, rows: diffLines("", input.content) };
-  if (block.name === "MultiEdit" && Array.isArray(input.edits)) {
+  if (name === "Edit" && typeof input.new_string === "string") return { file, rows: diffLines(input.old_string ?? "", input.new_string) };
+  if (name === "Write" && typeof input.content === "string") return { file, rows: diffLines("", input.content) };
+  if (name === "MultiEdit" && Array.isArray(input.edits)) {
     const rows: DiffRow[] = [];
     input.edits.forEach((e, i) => {
       if (i > 0) rows.push({ old: null, cur: null, type: "fold", text: "⋯" });
@@ -749,7 +749,7 @@ function ToolStep({
   );
   // Keyed by content: streaming deltas re-create `block` on every token, but the edit itself rarely changes.
   const editKey = FILE_EDIT_TOOLS.has(block.name) ? JSON.stringify(block.input) : "";
-  const edit = useMemo(() => (editKey ? fileEditOf(block) : null), [editKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const edit = useMemo(() => (editKey ? fileEditOf(block.name, JSON.parse(editKey)) : null), [editKey, block.name]);
 
   const header = (
     <button

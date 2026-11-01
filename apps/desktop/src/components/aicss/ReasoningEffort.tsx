@@ -185,13 +185,13 @@ export function ReasoningEffort({
   stops,
   value = 1,
   onChange,
-  label,
-  "aria-label": ariaLabel,
+  label: labelProp,
+  "aria-label": ariaLabelProp,
 }: ReasoningEffortProps = {}) {
   const { t } = useTranslation("aicss");
   const STOPS = stops ?? [t("reasoningEffort.low"), t("reasoningEffort.medium"), t("reasoningEffort.high"), t("reasoningEffort.extraHigh")];
-  label ??= t("reasoningEffort.label");
-  ariaLabel ??= t("reasoningEffort.ariaLabel");
+  const label = labelProp ?? t("reasoningEffort.label");
+  const ariaLabel = ariaLabelProp ?? t("reasoningEffort.ariaLabel");
   const count = STOPS.length;
   const rootRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);

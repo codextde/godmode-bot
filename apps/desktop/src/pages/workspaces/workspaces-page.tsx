@@ -199,9 +199,9 @@ export default function WorkspacesPage() {
     else toast.error(t("page.gone"));
   }, [newProjectIn, workspaces, params, setParams]);
   // Kept while the dialog closes, so it can animate out.
-  const lastProjectWorkspace = useRef<Workspace | undefined>(undefined);
-  const projectWorkspace = (projectDialog ? workspaces?.find((w) => w.id === projectDialog.workspaceId) : undefined) ?? (projectDialog ? undefined : lastProjectWorkspace.current);
-  if (projectDialog && projectWorkspace) lastProjectWorkspace.current = projectWorkspace;
+  const [lastProjectWorkspace, setLastProjectWorkspace] = useState<Workspace | undefined>(undefined);
+  const projectWorkspace = (projectDialog ? workspaces?.find((w) => w.id === projectDialog.workspaceId) : undefined) ?? (projectDialog ? undefined : lastProjectWorkspace);
+  if (projectDialog && projectWorkspace && projectWorkspace !== lastProjectWorkspace) setLastProjectWorkspace(projectWorkspace);
   const projectTarget = projectDialog?.projectId ? projectWorkspace?.projects.find((p) => p.id === projectDialog.projectId) : undefined;
   const addProject = (ws: Workspace) => setProjectDialog({ workspaceId: ws.id, projectId: null });
   const editProject = (ws: Workspace, project: Project) => setProjectDialog({ workspaceId: ws.id, projectId: project.id });
@@ -677,10 +677,10 @@ function ScopeCard({
     { key: "totp", label: t("page.stats.totp"), icon: <ShieldCheck /> },
     { key: "integrations", label: t("page.stats.integrations"), icon: <Plug /> },
   ];
-  const dnd = useWorkspaceDnd(workspace);
+  const { ref: dndRef, ...dnd } = useWorkspaceDnd(workspace);
   return (
     <motion.article
-      ref={dnd.ref}
+      ref={dndRef}
       {...dnd.props}
       layout
       initial={reduce ? false : { opacity: 0, y: 8 }}
@@ -859,10 +859,10 @@ function ScopeListRow({
     { label: t("page.stats.logins"), n: counts.logins, icon: <KeyRound /> },
     { label: t("page.stats.integrations"), n: counts.integrations, icon: <Plug /> },
   ];
-  const dnd = useWorkspaceDnd(workspace);
+  const { ref: dndRef, ...dnd } = useWorkspaceDnd(workspace);
   return (
     <div
-      ref={dnd.ref}
+      ref={dndRef}
       {...dnd.props}
       className={cn(
         "group relative flex items-center gap-3 border-b px-4 py-2.5 transition last:border-b-0",
@@ -960,10 +960,10 @@ function ProjectStrip({
 /** One project in a card's strip; drag it to another workspace or out into its own. */
 function ProjectChip({ project: p, current, onOpen, onEdit }: { project: Project; current: boolean; onOpen: () => void; onEdit: () => void }) {
   const { t } = useTranslation("workspaces");
-  const dnd = useProjectDnd(p);
+  const { ref: dndRef, ...dnd } = useProjectDnd(p);
   const reveal = "size-6 text-muted-foreground opacity-0 transition group-hover/project:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [&_svg]:size-3.5";
   return (
-    <li ref={dnd.ref} {...dnd.props} className={cn("group/project relative flex items-center rounded-md transition hover:bg-card", dnd.isDragging && "opacity-35")}>
+    <li ref={dndRef} {...dnd.props} className={cn("group/project relative flex items-center rounded-md transition hover:bg-card", dnd.isDragging && "opacity-35")}>
       <button
         type="button"
         onClick={onOpen}
@@ -1010,10 +1010,10 @@ function ProjectListRow({
 }) {
   const { t } = useTranslation("workspaces");
   const { dateLocale } = useLocale();
-  const dnd = useProjectDnd(project, workspace);
+  const { ref: dndRef, ...dnd } = useProjectDnd(project, workspace);
   return (
     <div
-      ref={dnd.ref}
+      ref={dndRef}
       {...dnd.props}
       className={cn(
         "group relative flex items-center gap-3 border-b py-2 pr-4 pl-8 transition last:border-b-0",

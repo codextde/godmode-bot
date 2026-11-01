@@ -62,6 +62,8 @@ export function useShortPath(): (path: string) => string {
   return (path) => shortPath(path, boot?.homeDir);
 }
 
+const loadDialogPlugin = () => import("@tauri-apps/plugin-dialog");
+
 const looksLikePath = (q: string) => /^(\/|~|[a-zA-Z]:[\\/])/.test(q.trim());
 
 function lastFolder(): string | undefined {
@@ -190,9 +192,8 @@ export function FolderPickerDialog({
       setBrowsed(true);
     } catch (err) {
       toast.error(t("folderPicker.openError"), { description: errorMessage(err) });
-    } finally {
-      setPending(null);
     }
+    setPending(null);
   };
 
   const pick = (p: string) => {
@@ -203,7 +204,7 @@ export function FolderPickerDialog({
 
   const browseNative = async () => {
     try {
-      const { open: openDialog } = await import("@tauri-apps/plugin-dialog");
+      const { open: openDialog } = await loadDialogPlugin();
       const picked = await openDialog({ directory: true, defaultPath: current?.path });
       if (typeof picked === "string") pick(picked);
     } catch (err) {

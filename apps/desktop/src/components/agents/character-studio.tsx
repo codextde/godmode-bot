@@ -162,7 +162,9 @@ export function PersonalityPicker({ value, onChange }: { value: string; onChange
   const isCustom = !!value.trim() && !personalityPreset(value);
   const [custom, setCustom] = useState(isCustom);
   const lastCustom = useRef(isCustom ? value : "");
-  if (isCustom) lastCustom.current = value;
+  useEffect(() => {
+    if (isCustom) lastCustom.current = value;
+  }, [isCustom, value]);
   const customOn = custom || isCustom;
 
   const card = (selected: boolean) =>

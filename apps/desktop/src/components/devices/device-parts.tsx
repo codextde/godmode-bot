@@ -155,7 +155,7 @@ export function HandoffButton({
 }) {
   const { t } = useTranslation("devices");
   const { group, targets, working, handoff, pending } = useHandoff();
-  label ??= t("handoff.label");
+  label = label ?? t("handoff.label");
   const icon = pending ? <Spinner /> : <ArrowRightFromLine />;
   const to = targets.length === 1 ? targets[0] : null;
   const unavailable = group?.role === "secondary" ? (group.primaryName ? t("handoff.primaryAway", { name: group.primaryName }) : t("handoff.primaryAwayFallback")) : t("handoff.noneOnline");

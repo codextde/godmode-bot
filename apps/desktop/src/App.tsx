@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, type Location } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CloudErrorCode, type Bootstrap } from "@godmode/shared";
@@ -46,16 +46,23 @@ const SettingsDialog = lazy(() => import("@/pages/settings/settings-page"));
 
 const isSettingsPath = (pathname: string) => pathname === "/settings" || pathname.startsWith("/settings/");
 
+const listenTauri = <T,>(event: string, handler: (e: { payload: T }) => void) => import("@tauri-apps/api/event").then(({ listen }) => listen<T>(event, handler));
+
+const invokeTauri = (cmd: string, args?: Record<string, unknown>) => import("@tauri-apps/api/core").then(({ invoke }) => invoke(cmd, args));
+
 export function App() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   // The page on screen as the router sees it (through Godmode Cloud the address bar has a /d/<device> prefix).
   const location = useLocation();
   const onScreen = useRef("");
-  onScreen.current = `${location.pathname}${location.search}`;
+  const screenPath = `${location.pathname}${location.search}`;
+  useLayoutEffect(() => {
+    onScreen.current = screenPath;
+  }, [screenPath]);
   const settingsOpen = isSettingsPath(location.pathname);
-  const underSettings = useRef<Location | null>(null);
-  if (!settingsOpen) underSettings.current = location;
+  const [underSettings, setUnderSettings] = useState<Location | null>(settingsOpen ? null : location);
+  if (!settingsOpen && underSettings !== location) setUnderSettings(location);
   const [coreReady, setCoreReady] = useState(false);
   const [coreError, setCoreError] = useState<string | null>(null);
   const [cloudIssue, setCloudIssue] = useState<CloudIssue | null>(null);
@@ -72,8 +79,7 @@ export function App() {
     if (!isTauri) return;
     let stopped = false;
     let unlisten: (() => void) | undefined;
-    void import("@tauri-apps/api/event").then(async ({ listen }) => {
-      const off = await listen<string>("navigate", (e) => navigate(e.payload));
+    void listenTauri<string>("navigate", (e) => navigate(e.payload)).then((off) => {
       if (stopped) off();
       else unlisten = off;
     });
@@ -124,7 +130,7 @@ export function App() {
   const minimizeToTray = boot.data?.settings.general.minimizeToTray;
   useEffect(() => {
     if (!isTauri || minimizeToTray === undefined) return;
-    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("set_close_to_tray", { enabled: minimizeToTray })).catch(() => {});
+    void invokeTauri("set_close_to_tray", { enabled: minimizeToTray }).catch(() => {});
   }, [minimizeToTray]);
 
   // Realtime connection once authenticated
@@ -213,7 +219,7 @@ export function App() {
   return (
     <AppShell>
       <Suspense fallback={<div className="p-8" />}>
-        <Routes location={settingsOpen ? (underSettings.current ?? "/") : location}>
+        <Routes location={settingsOpen ? (underSettings ?? "/") : location}>
           <Route path="/" element={<ChatHome />} />
           <Route path="/chat/:conversationId" element={<ChatConversation />} />
           <Route path="/archived" element={<ArchivedPage />} />
@@ -252,7 +258,7 @@ export function App() {
       </Suspense>
       {settingsOpen && (
         <Suspense fallback={null}>
-          <SettingsDialog closeTo={underSettings.current ?? "/"} />
+          <SettingsDialog closeTo={underSettings ?? "/"} />
         </Suspense>
       )}
     </AppShell>

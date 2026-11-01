@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { TextQuote } from "lucide-react";
@@ -38,7 +38,9 @@ export function QuoteSelection({ onQuote, disabled, children }: { onQuote: (quot
   const pillRef = useRef<HTMLButtonElement>(null);
   const [at, setAt] = useState<{ x: number; y: number; below: boolean } | null>(null);
   const onQuoteRef = useRef(onQuote);
-  onQuoteRef.current = onQuote;
+  useLayoutEffect(() => {
+    onQuoteRef.current = onQuote;
+  });
 
   const quote = () => {
     const picked = selectionIn(containerRef.current);

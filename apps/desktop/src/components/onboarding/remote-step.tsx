@@ -42,9 +42,8 @@ export function RemoteStep({
       onDone(true);
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

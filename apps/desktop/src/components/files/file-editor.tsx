@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trans, useTranslation } from "react-i18next";
@@ -192,11 +192,13 @@ export function FileEditor({
     toast.warning(t("editor.conflictToast", { name: nameOf(path) }), { description: t("editor.conflictToastDescription") });
 
   const saveRef = useRef<() => void>(() => {});
-  saveRef.current = () => {
-    if (!dirty || readOnly || save.isPending || !draft) return;
-    if (conflict) warnConflict();
-    else save.mutate({ content: value, base: draft.base });
-  };
+  useLayoutEffect(() => {
+    saveRef.current = () => {
+      if (!dirty || readOnly || save.isPending || !draft) return;
+      if (conflict) warnConflict();
+      else save.mutate({ content: value, base: draft.base });
+    };
+  });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;

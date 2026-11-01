@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
-import { format, formatDistanceToNowStrict, isToday, isYesterday } from "date-fns";
+import { format, formatDistanceToNowStrict, isToday, isYesterday, type Locale } from "date-fns";
 import { GitCommitHorizontal, History } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { Agent, GitCommit } from "@godmode/shared";
@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/common";
 import { CopyButton } from "@/components/chat/copy-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useReduceAnimations } from "@/lib/motion";
-import { dateLocale, t } from "@/i18n";
+import { t } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 
 /** isomorphic-git reports seconds; accept ISO strings and ms too. */
@@ -23,10 +23,10 @@ function commitDate(ts: string): Date {
   return new Date(ts);
 }
 
-function dayLabel(d: Date) {
+function dayLabel(d: Date, locale: Locale) {
   if (isToday(d)) return t("common:words.today");
   if (isYesterday(d)) return t("common:words.yesterday");
-  return format(d, t("agents:historyTab.dayFormat"), { locale: dateLocale() });
+  return format(d, t("agents:historyTab.dayFormat"), { locale });
 }
 
 export function HistoryTab({ agent }: { agent: Agent }) {
@@ -36,13 +36,15 @@ export function HistoryTab({ agent }: { agent: Agent }) {
   const q = useQuery({ queryKey: qk.agentCommits(agent.id), queryFn: () => api.agents.commits(agent.id) });
 
   const groups = useMemo(() => {
-    const out: { label: string; commits: (GitCommit & { date: Date })[] }[] = [];
+    const out: { label: string; start: number; commits: (GitCommit & { date: Date })[] }[] = [];
+    let count = 0;
     for (const c of q.data ?? []) {
       const date = commitDate(c.timestamp);
-      const label = Number.isNaN(date.getTime()) ? t("historyTab.unknownDate") : dayLabel(date);
+      const label = Number.isNaN(date.getTime()) ? t("historyTab.unknownDate") : dayLabel(date, dateLocale);
       const last = out[out.length - 1];
       if (last?.label === label) last.commits.push({ ...c, date });
-      else out.push({ label, commits: [{ ...c, date }] });
+      else out.push({ label, start: count, commits: [{ ...c, date }] });
+      count = count + 1;
     }
     return out;
   }, [q.data, t, dateLocale]);
@@ -67,7 +69,6 @@ export function HistoryTab({ agent }: { agent: Agent }) {
     );
   }
 
-  let index = 0;
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
@@ -78,10 +79,10 @@ export function HistoryTab({ agent }: { agent: Agent }) {
         <section key={g.label}>
           <h3 className="eyebrow mb-3">{g.label}</h3>
           <ol className="relative space-y-1 border-l pl-6">
-            {g.commits.map((c) => {
+            {g.commits.map((c, j) => {
               const [title, ...rest] = c.message.trim().split("\n");
               const body = rest.join("\n").trim();
-              const i = index++;
+              const i = g.start + j;
               return (
                 <motion.li
                   key={c.oid}

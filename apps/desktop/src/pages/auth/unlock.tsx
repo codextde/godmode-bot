@@ -43,9 +43,8 @@ export function UnlockPage() {
     } catch (err) {
       setError(unlockError(err));
       void controls.start(shake);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const dataDir = boot?.dataDir;
@@ -159,9 +158,8 @@ function RestoreBackupDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       await qc.invalidateQueries();
     } catch (err) {
       setError(err instanceof ApiRequestError && (err.status === 400 || err.status === 401) ? t("restore.wrongPassphrase") : errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

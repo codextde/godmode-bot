@@ -215,9 +215,8 @@ function CardForm({
       setBillingMode("edit");
     } catch (e) {
       if (!isGrantCancelled(e)) toastApiError(e, t("cardDialog.showBillingFailed"), qc);
-    } finally {
-      setRevealingBilling(false);
     }
+    setRevealingBilling(false);
   };
 
   /** What to send: the full input for a new card, only the changed fields for an existing one. */

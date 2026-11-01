@@ -102,26 +102,26 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
       clearTimeout(timer);
     };
   }, [focusId, focusPresent, scrollRef, unstick]);
-  const initialIds = useRef<Set<string> | null>(null);
-  if (initialIds.current === null) initialIds.current = new Set(messages.map((m) => m.id));
+  const [initialIds] = useState(() => new Set(messages.map((m) => m.id)));
   const sentCount = messages.filter((m) => m.role === "user" && !m.source).length;
   const lastSent = useRef(sentCount);
   useLayoutEffect(() => {
     const grew = sentCount > lastSent.current;
     lastSent.current = sentCount;
     const last = messages[messages.length - 1];
-    if (grew && last?.role === "user" && !last.source && !initialIds.current!.has(last.id)) pinTurn();
+    if (grew && last?.role === "user" && !last.source && !initialIds.has(last.id)) pinTurn();
   }, [sentCount, messages, pinTurn]);
 
   const isEmpty = messages.length === 0 && !inflight;
   const days = useMemo(() => {
+    const out: (string | null)[] = [];
     let lastDay = "";
-    return messages.map((m) => {
+    for (const m of messages) {
       const day = dayLabel(m.createdAt);
-      const show = day && day !== lastDay ? day : null;
+      out.push(day && day !== lastDay ? day : null);
       lastDay = day || lastDay;
-      return show;
-    });
+    }
+    return out;
   }, [messages]);
 
   return (
@@ -134,7 +134,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
               key={m.id}
               message={m}
               day={days[i] ?? null}
-              animate={!reduce && !initialIds.current!.has(m.id)}
+              animate={!reduce && !initialIds.has(m.id)}
               flashing={flash === m.id}
               agent={agent}
               delegatedFrom={delegatedFrom}

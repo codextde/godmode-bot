@@ -75,9 +75,8 @@ function CreateVault({ userName, onDone, onBack }: { userName: string; onDone: (
       onDone();
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (
@@ -176,9 +175,8 @@ function UnlockInline({ onDone, onBack }: { onDone: () => void; onBack: () => vo
     } catch (err) {
       setError(unlockError(err));
       void controls.start(shake);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

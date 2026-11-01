@@ -2,8 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { Navigate, NavLink, useLocation, useNavigate, type To } from "react-router";
 import searchIndex from "virtual:settings-search";
 import { useTranslation } from "react-i18next";
-import type { ParseKeys } from "i18next";
-import i18n from "@/i18n";
+import type { ParseKeys, TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import {
   Activity,
@@ -330,11 +329,11 @@ function useLabels(): Record<SectionId, string> {
   return Object.fromEntries(SECTIONS.map((s) => [s.id, t(easy ? (EASY[s.id]?.labelKey ?? EASY_ADVANCED_LABEL[s.id] ?? s.labelKey) : s.labelKey)])) as Record<SectionId, string>;
 }
 
-const searchText = (s: string) => (s.startsWith("@") ? i18n.t(s.slice(1) as never, { ns: "settings" }) : s);
+const searchText = (s: string, t: TFunction<"settings">) => (s.startsWith("@") ? t(s.slice(1) as never, { ns: "settings" }) : s);
 
 function useSearch(query: string): Hit[] {
   const labels = useLabels();
-  const { t, i18n: { language } } = useTranslation("settings");
+  const { t } = useTranslation("settings");
   return useMemo(() => {
     const words = fold(query).split(/\s+/).filter(Boolean);
     if (!words.length) return [];
@@ -344,11 +343,11 @@ function useSearch(query: string): Hit[] {
     };
     return SECTIONS.flatMap((s) => {
       const entry = searchIndex[s.id] ?? { labels: [], text: [] };
-      const settings = entry.labels.map(searchText).filter((l) => l !== labels[s.id] && matches(l));
-      const hit = matches(labels[s.id]) || matches(t(s.labelKey)) || settings.length > 0 || matches(entry.text.map(searchText).join(" "));
+      const settings = entry.labels.map((l) => searchText(l, t)).filter((l) => l !== labels[s.id] && matches(l));
+      const hit = matches(labels[s.id]) || matches(t(s.labelKey)) || settings.length > 0 || matches(entry.text.map((l) => searchText(l, t)).join(" "));
       return hit ? [{ id: s.id, label: labels[s.id], icon: s.icon, settings: settings.slice(0, 5) }] : [];
     }).sort((a, b) => Number(matches(b.label)) - Number(matches(a.label)) || b.settings.length - a.settings.length);
-  }, [query, labels, language, t]);
+  }, [query, labels, t]);
 }
 
 function SettingsSearch({ query, onQuery, onPick }: { query: string; onQuery: (q: string) => void; onPick: (id: SectionId, label: string | null) => void }) {

@@ -38,6 +38,8 @@ const LanguageContext = createContext<LanguageState>({
   setTimeFormat: () => {},
 });
 
+const invokeTauri = <T,>(cmd: string, args?: Record<string, unknown>) => import("@tauri-apps/api/core").then(({ invoke }) => invoke<T>(cmd, args));
+
 const remember = (l: AppLanguage) => {
   try {
     localStorage.setItem(LANGUAGE_KEY, l);
@@ -65,8 +67,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isTauri) return;
     let cancelled = false;
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke<SystemClock>("system_clock"))
+    void invokeTauri<SystemClock>("system_clock")
       .then((c) => !cancelled && setClock(c))
       .catch(() => {});
     return () => {
@@ -86,8 +87,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (i18n.language !== resolved) void i18n.changeLanguage(resolved);
     if (!isTauri) return;
     const tr = i18n.getFixedT(resolved, "common");
-    void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke("set_tray_labels", { open: tr("tray.open"), newChat: tr("tray.newChat"), quit: tr("tray.quit"), checkUpdates: tr("tray.checkUpdates") }))
+    void invokeTauri("set_tray_labels", { open: tr("tray.open"), newChat: tr("tray.newChat"), quit: tr("tray.quit"), checkUpdates: tr("tray.checkUpdates") })
       .catch(() => {});
   }, [resolved]);
 

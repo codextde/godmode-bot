@@ -126,9 +126,8 @@ export function VaultGrantDialog() {
       close(res.grant);
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

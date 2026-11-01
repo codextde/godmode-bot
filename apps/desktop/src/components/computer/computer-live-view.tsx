@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -94,7 +94,9 @@ export function ComputerLiveView({
   const controlled = expandedProp !== undefined;
   const expanded = expandedProp ?? expandedState;
   const onExpandedChangeRef = useRef(onExpandedChange);
-  onExpandedChangeRef.current = onExpandedChange;
+  useLayoutEffect(() => {
+    onExpandedChangeRef.current = onExpandedChange;
+  });
   const setExpanded = useCallback(
     (next: boolean) => {
       if (!controlled) setExpandedState(next);
@@ -110,7 +112,11 @@ export function ComputerLiveView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const size = useRef({ width: 0, height: 0 });
-  size.current = { width: frame?.width ?? 0, height: frame?.height ?? 0 };
+  const frameWidth = frame?.width ?? 0;
+  const frameHeight = frame?.height ?? 0;
+  useLayoutEffect(() => {
+    size.current = { width: frameWidth, height: frameHeight };
+  }, [frameWidth, frameHeight]);
 
   useEffect(() => subscribeComputer(view), [view]);
   useEffect(() => setAgentPointer(null), [view]);
@@ -162,8 +168,12 @@ export function ComputerLiveView({
     const p = place(agentAction.x, agentAction.y);
     if (p && /click|drag/.test(agentAction.action)) ripple(p.x, p.y, true);
   }, [agentAction, place, ripple]);
-  const pointerAt =
-    (target.kind === "window" || target.kind === "tab") && agentPointer && now - agentPointer.at < AGENT_POINTER_IDLE_MS ? place(agentPointer.x, agentPointer.y) : null;
+  const pointerShown = (target.kind === "window" || target.kind === "tab") && !!agentPointer && now - agentPointer.at < AGENT_POINTER_IDLE_MS;
+  const [pointerAt, setPointerAt] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const next = pointerShown && agentPointer ? place(agentPointer.x, agentPointer.y) : null;
+    setPointerAt((prev) => (prev === next || (prev && next && prev.x === next.x && prev.y === next.y) ? prev : next));
+  });
 
   /* ---------------------------- input forwarding ---------------------------- */
 

@@ -3,10 +3,11 @@ import { useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { format, isToday, isYesterday } from "date-fns";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Activity, RefreshCw, Search } from "lucide-react";
 import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { useAllAgents, useRuns } from "@/lib/hooks";
-import { dateLocale, t as translate } from "@/i18n";
+import { dateLocale } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useLiveRunsMap, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
@@ -26,16 +27,16 @@ const STATUSES: ("all" | RunStatus)[] = ["all", "running", "paused", "succeeded"
 
 const TRIGGERS: RunTrigger[] = ["chat", "routine", "check", "dream", "delegation", "task", "followup", "heartbeat", "manual", "api"];
 
-function dayLabel(d: Date) {
-  if (isToday(d)) return translate("common:words.today");
-  if (isYesterday(d)) return translate("common:words.yesterday");
-  return format(d, translate("activity:dayFormat"), { locale: dateLocale() });
+function dayLabel(d: Date, t: TFunction<["activity", "runs", "common"]>) {
+  if (isToday(d)) return t("common:words.today");
+  if (isYesterday(d)) return t("common:words.yesterday");
+  return format(d, t("activity:dayFormat"), { locale: dateLocale() });
 }
 
 /** Every run of every agent, filtered by agent, trigger and outcome; `?run=` opens one. */
 export function ActivityOverview() {
   const reduce = useReduceAnimations();
-  const { t, i18n } = useTranslation(["activity", "runs", "common"]);
+  const { t } = useTranslation(["activity", "runs", "common"]);
   const [params, setParams] = useSearchParams();
   const agentFilter = params.get("agent") ?? "all";
   const statusFilter = params.get("status") ?? "all";
@@ -75,13 +76,13 @@ export function ActivityOverview() {
   const groups = useMemo(() => {
     const out: { label: string; runs: Run[] }[] = [];
     for (const r of runs) {
-      const label = dayLabel(new Date(r.startedAt ?? r.createdAt));
+      const label = dayLabel(new Date(r.startedAt ?? r.createdAt), t);
       const last = out[out.length - 1];
       if (last?.label === label) last.runs.push(r);
       else out.push({ label, runs: [r] });
     }
     return out;
-  }, [runs, i18n.language]);
+  }, [runs, t]);
 
   const successRate = useMemo(() => {
     const finished = runs.filter((r) => r.status === "succeeded" || r.status === "failed");

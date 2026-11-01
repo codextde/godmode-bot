@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Camera, CameraOff, CircleCheck, QrCode, RefreshCw, VideoOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -35,10 +35,8 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
   const [attempt, setAttempt] = useState(0);
   const [flash, setFlash] = useState<{ kind: "added" | "not-otp" | "duplicate"; text: string; at: number } | null>(null);
 
-  const knownRef = useRef(known);
-  knownRef.current = known;
-  const onCodeRef = useRef(onCode);
-  onCodeRef.current = onCode;
+  const isKnown = useEffectEvent((payload: string) => known.has(payload));
+  const emitCode = useEffectEvent((payload: string) => onCode(payload));
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -59,7 +57,7 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
       const video = videoRef.current;
       if (!video || video.readyState < 2 || t - lastScan < SCAN_INTERVAL_MS) return;
       lastScan = t;
-      canvasRef.current ??= document.createElement("canvas");
+      if (canvasRef.current == null) canvasRef.current = document.createElement("canvas");
       const payload = scanVideoFrame(video, canvasRef.current);
       if (!payload) return;
       if (!isOtpUri(payload)) {
@@ -69,7 +67,7 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
         }
         return;
       }
-      if (knownRef.current.has(payload)) {
+      if (isKnown(payload)) {
         if (lastIgnored !== payload) {
           lastIgnored = payload;
           setFlash({ kind: "duplicate", text: tg("vault:camera.duplicate"), at: Date.now() });
@@ -77,7 +75,7 @@ export function CameraScanner({ known, onCode }: { known: Set<string>; onCode: (
         return;
       }
       lastIgnored = payload;
-      onCodeRef.current(payload);
+      emitCode(payload);
       setFlash({ kind: "added", text: tg("vault:camera.added", { what: describe(payload) }), at: Date.now() });
     };
 

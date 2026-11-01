@@ -21,6 +21,8 @@ import { CommitInput, Segmented, SectionHeading, SettingRow, SettingsGroup, useS
 
 type Theme = Settings["general"]["theme"];
 
+const loadAutostart = () => import("@tauri-apps/plugin-autostart");
+
 export function GeneralSection({ settings }: { settings: Settings }) {
   const { t } = useTranslation(["settings", "common"]);
   const { language, setLanguage, timeFormat, setTimeFormat, systemHour12 } = useLanguage();
@@ -39,7 +41,7 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   useEffect(() => {
     if (!isTauri) return;
     let cancelled = false;
-    import("@tauri-apps/plugin-autostart")
+    loadAutostart()
       .then((m) => m.isEnabled())
       .then((v) => !cancelled && setAutostart(v))
       .catch(() => !cancelled && setAutostart(g.launchAtLogin));
@@ -51,16 +53,15 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const toggleAutostart = async (on: boolean) => {
     setAutostartBusy(true);
     try {
-      const m = await import("@tauri-apps/plugin-autostart");
+      const m = await loadAutostart();
       if (on) await m.enable();
       else await m.disable();
       setAutostart(on);
       patch({ general: { launchAtLogin: on } });
     } catch (e) {
       toast.error(t("general.launchAtLoginError"), { description: errorMessage(e) });
-    } finally {
-      setAutostartBusy(false);
     }
+    setAutostartBusy(false);
   };
 
   return (

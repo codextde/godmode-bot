@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { useMutation, useMutationState, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNowStrict } from "date-fns";
@@ -505,11 +505,7 @@ function TaskDetail({
 }
 
 /** Tickets this one waits for: it starts once each is delivered. Chips to remove, a picker to add (no loops: the core says). */
-function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
-  const { t: tr } = useTranslation("tasks");
-  const ADD = "add";
-  const ids = task.waitsFor.map((w) => w.id);
-  // Not what it is part of, nor its own parts (that would hold both), and only its workspace's tickets or global ones.
+function relatedTasks(task: Task, board: Task[]): Set<string> {
   const related = new Set<string>([task.id]);
   for (let up = task.parentId; up && !related.has(up); up = board.find((t) => t.id === up)?.parentId ?? null) related.add(up);
   const below = [task.id];
@@ -520,6 +516,15 @@ function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; o
       below.push(t.id);
     }
   }
+  return related;
+}
+
+function WaitsForField({ task, board, onChange }: { task: Task; board: Task[]; onChange: (ids: string[]) => void }) {
+  const { t: tr } = useTranslation("tasks");
+  const ADD = "add";
+  const ids = task.waitsFor.map((w) => w.id);
+  // Not what it is part of, nor its own parts (that would hold both), and only its workspace's tickets or global ones.
+  const related = relatedTasks(task, board);
   const choices = board
     .filter((t) => !related.has(t.id) && !ids.includes(t.id) && t.status !== "done" && t.status !== "cancelled" && (!t.workspaceId || t.workspaceId === task.workspaceId))
     .sort((a, b) => b.number - a.number);
@@ -885,10 +890,10 @@ function WorkPanel({
       kind === "failed" && /timed out/i.test(reason)
         ? t("work.timedOut")
         : null;
-    const restart = (label: string, icon = <RotateCcw />) =>
+    const restart = (label: string, icon?: ReactNode) =>
       task.agentId ? (
         <Button size="sm" onClick={() => onMove(task, "todo")}>
-          {icon} {label}
+          {icon ?? <RotateCcw />} {label}
         </Button>
       ) : null;
     const chat = task.conversationId ? (
@@ -1227,10 +1232,13 @@ function EditableDescription({
 
   /** The last text sent (null: the last save failed). One save at a time, the newest text waits for it. */
   const sent = useRef<string | null>(stored.trim());
+  const [sentText, setSentText] = useState<string | null>(() => stored.trim());
   const inFlight = useRef(false);
   const queued = useRef<string | null>(null);
   const live = useRef({ editing, draft, stored, mounted: true });
-  Object.assign(live.current, { editing, draft, stored });
+  useLayoutEffect(() => {
+    Object.assign(live.current, { editing, draft, stored });
+  });
 
   const push = (next: string) => {
     if (next === sent.current) return;
@@ -1239,6 +1247,7 @@ function EditableDescription({
       return;
     }
     sent.current = next;
+    setSentText(next);
     inFlight.current = true;
     setSaved(next);
     setStatus("saving");
@@ -1250,6 +1259,7 @@ function EditableDescription({
         },
         () => {
           sent.current = null;
+          setSentText(null);
           setSaved(null);
           setStatus("failed");
           const { editing, stored } = live.current;
@@ -1269,7 +1279,9 @@ function EditableDescription({
       });
   };
   const pushRef = useRef(push);
-  pushRef.current = push;
+  useLayoutEffect(() => {
+    pushRef.current = push;
+  });
 
   useEffect(() => {
     if (!editing || uploading) return;
@@ -1305,7 +1317,9 @@ function EditableDescription({
     setEditing(false);
   };
   const finishRef = useRef(finish);
-  finishRef.current = finish;
+  useLayoutEffect(() => {
+    finishRef.current = finish;
+  });
   useEffect(() => {
     if (!uploading && finishLater.current) finishRef.current();
   }, [uploading]);
@@ -1317,6 +1331,7 @@ function EditableDescription({
     setShownHeight(shown.getBoundingClientRect().height);
     setStart(value);
     sent.current = value.trim();
+    setSentText(value.trim());
     setStatus("idle");
     setEditing(true);
   };
@@ -1404,7 +1419,7 @@ function EditableDescription({
       {/* Clicks here keep the focus in the text (WebKit doesn't focus buttons), so they don't end the edit. */}
       <div className="flex items-center gap-2 border-t bg-paper-2/60 px-3 py-2 rounded-b-xl" onMouseDown={(e) => e.preventDefault()}>
         <SaveStatus
-          status={uploading ? "uploading" : status === "failed" ? status : withoutPlaceholders(draft) !== sent.current ? "saving" : status}
+          status={uploading ? "uploading" : status === "failed" ? status : withoutPlaceholders(draft) !== sentText ? "saving" : status}
           onRetry={() => push(withoutPlaceholders(draft))}
         />
         <Button type="button" size="sm" variant="secondary" className="ml-auto h-7 gap-1.5 px-3 text-xs" onClick={finish} disabled={uploading}>

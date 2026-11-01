@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ChevronRight, Folder, FolderGit2, FolderKanban, Globe2, Maximize2, Minimize2, Paperclip, Target, X } from "lucide-react";
 import { toast } from "sonner";
@@ -47,6 +47,22 @@ interface TaskForm {
 }
 
 /** Pill-shaped select, as in Multica's and Linear's issue composer. */
+const freshForm = (_open: boolean, workspaceId: string | null, projectId: string | null, defaultStatus: TaskStatus | undefined): TaskForm => ({
+  title: "",
+  description: "",
+  type: "general",
+  status: defaultStatus && START_STATUSES.includes(defaultStatus) ? defaultStatus : "todo",
+  workspaceId,
+  projectId,
+  agentId: null,
+  repoChoice: "",
+  repoUrl: "",
+  baseBranch: "",
+  priority: "none",
+  dueDate: null,
+  labels: [],
+});
+
 const PILL = "h-8 w-auto gap-1.5 rounded-full border-border/80 bg-transparent px-3 text-[13px] shadow-none hover:bg-accent/60 [&>svg:last-child]:hidden";
 
 export function TaskDialog({
@@ -84,32 +100,17 @@ export function TaskDialog({
   const [uploading, setUploading] = useState(false);
 
   // Fresh on every open; a draft (what was typed before closing or leaving) wins over it.
-  const base = useMemo<TaskForm>(
-    () => ({
-      title: "",
-      description: "",
-      type: "general",
-      status: defaultStatus && START_STATUSES.includes(defaultStatus) ? defaultStatus : "todo",
-      workspaceId: defaultWorkspaceId,
-      projectId: defaultProjectId,
-      agentId: null,
-      repoChoice: "",
-      repoUrl: "",
-      baseBranch: "",
-      priority: "none",
-      dueDate: null,
-      labels: [],
-    }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const base = useMemo(
+    () => freshForm(open, defaultWorkspaceId, defaultProjectId, defaultStatus),
     [open, defaultWorkspaceId, defaultProjectId, defaultStatus],
   );
   // A part keeps its own draft (per ticket): it never turns up as a plain new task, or the other way round.
   const draftKey = parent ? `${DRAFT}:part:${parent.id}` : DRAFT;
   const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
   // While the dialog animates out, keep showing what it had.
-  const closing = useRef(live);
-  if (open) closing.current = live;
-  const form = open ? live : closing.current;
+  const [closing, setClosing] = useState(live);
+  if (open && closing !== live) setClosing(live);
+  const form = open ? live : closing;
   const { title, description, type, status, workspaceId, agentId, repoChoice, repoUrl, baseBranch } = form;
   // Drafts saved before tickets had these fields.
   const priority = form.priority ?? "none";
@@ -128,11 +129,14 @@ export function TaskDialog({
   useEffect(() => {
     if (open) setGoalOff(false);
   }, [open]);
-  useEffect(() => {
+  const applyGoalWorkspace = useEffectEvent(() => {
     if (open && filterGoal?.workspaceId && workspaceId !== filterGoal.workspaceId) set("workspaceId", filterGoal.workspaceId);
-    // Only when the dialog opens with the goal (the human may pick another workspace afterwards).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, filterGoal?.id]);
+  });
+  const filterGoalId = filterGoal?.id;
+  // Only when the dialog opens with the goal (the human may pick another workspace afterwards).
+  useEffect(() => {
+    applyGoalWorkspace();
+  }, [open, filterGoalId]);
   const goal = filterGoal && !goalOff && (!filterGoal.workspaceId || filterGoal.workspaceId === workspaceId) ? filterGoal : null;
 
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -93,9 +93,9 @@ export function MacPermissionsGuide() {
   // Opened (again, maybe for another permission): start where asked, else at the first one missing.
   const firstMissing = list.find((p) => !p.ok)?.id ?? list[0]?.id ?? null;
   const ready = !!data;
+  const startAt = useEffectEvent((at: PrivacyId | null) => setCurrent(at ?? firstMissing));
   useEffect(() => {
-    if (open && ready) setCurrent(focus ?? firstMissing);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open && ready) startAt(focus);
   }, [open, focus, ready]);
 
   const active = list.find((p) => p.id === current) ?? null;

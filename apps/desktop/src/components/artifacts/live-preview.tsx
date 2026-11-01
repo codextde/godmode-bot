@@ -16,16 +16,14 @@ export interface LiveInput {
   dataText?: string;
 }
 
-function documentOf(input: LiveInput, title: string, lastSpec: { current: unknown }): string | null {
+function documentOf(input: LiveInput, title: string, lastSpec: unknown): string | null {
   if (typeof input.html === "string") {
     const html = safePartialHtml(input.html);
     return html.trim() ? html : null;
   }
-  const spec = input.spec !== undefined && typeof input.spec === "object" ? input.spec : parsePartialJson(input.specText);
-  if (spec && typeof spec === "object") lastSpec.current = spec;
-  if (!lastSpec.current) return null;
+  if (!lastSpec) return null;
   try {
-    return specDocument(lastSpec.current as Parameters<typeof specDocument>[0], title);
+    return specDocument(lastSpec as Parameters<typeof specDocument>[0], title);
   } catch {
     return null;
   }
@@ -38,21 +36,36 @@ export function hasLivePreview(input: LiveInput | undefined): boolean {
 
 export function LivePreview({ input, title, className }: { input: LiveInput; title: string; className?: string }) {
   const reduce = useReduceAnimations();
-  const lastSpec = useRef<unknown>(undefined);
-  const lastData = useRef<unknown>(null);
-  const doc = documentOf(input, title, lastSpec);
-  const parsedData = input.data !== undefined ? input.data : parsePartialJson(input.dataText);
-  if (parsedData !== undefined) lastData.current = parsedData;
-  const data = lastData.current;
+  const specSource = input.spec !== undefined && typeof input.spec === "object" ? input.spec : input.specText;
+  const [lastSpec, setLastSpec] = useState<{ source: unknown; spec: unknown }>({ source: undefined, spec: undefined });
+  let spec = lastSpec.spec;
+  if (typeof input.html !== "string" && specSource !== lastSpec.source) {
+    const parsedSpec = input.spec !== undefined && typeof input.spec === "object" ? input.spec : parsePartialJson(input.specText);
+    if (parsedSpec && typeof parsedSpec === "object") {
+      spec = parsedSpec;
+      setLastSpec({ source: specSource, spec: parsedSpec });
+    }
+  }
+  const doc = documentOf(input, title, spec);
+  const dataSource = input.data !== undefined ? input.data : input.dataText;
+  const [lastData, setLastData] = useState<{ source: unknown; data: unknown }>({ source: undefined, data: null });
+  let data = lastData.data;
+  if (dataSource !== lastData.source) {
+    const parsedData = input.data !== undefined ? input.data : parsePartialJson(input.dataText);
+    if (parsedData !== undefined) {
+      data = parsedData;
+      setLastData({ source: dataSource, data: parsedData });
+    }
+  }
 
   const [slots, setSlots] = useState<[string | null, string | null]>([null, null]);
   const [front, setFront] = useState(0);
   const loadedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wanted = useRef<string | null>(null);
-  wanted.current = doc;
 
   useEffect(() => {
+    wanted.current = doc;
     if (!doc) return;
     const load = () => {
       timer.current = null;

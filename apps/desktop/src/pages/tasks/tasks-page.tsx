@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, FolderGit2, ListFilter, Plus, Search, SquareKanban } from "lucide-react";
@@ -134,11 +134,13 @@ export default function TasksPage() {
   const view = params.get("view") === ARCHIVED ? ARCHIVED : "board";
   // Another workspace in the sidebar: a goal picked in the last one would leave an empty board.
   const shownScope = useRef(scope);
+  const dropGoalFilter = useEffectEvent(() => {
+    if (goalFilter) setFilter("goal", null);
+  });
   useEffect(() => {
     if (scope === shownScope.current) return;
     shownScope.current = scope;
-    if (goalFilter) setFilter("goal", null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    dropGoalFilter();
   }, [scope]);
   const setView = (next: string) => {
     const p = new URLSearchParams(params);
@@ -177,6 +179,7 @@ export default function TasksPage() {
     else next.delete("task");
     setParams(next, { replace: !task });
   };
+  const closeTask = useEffectEvent(() => openTask(null));
   useEffect(() => {
     if (!selectedId || !tasksQ.data || !(archivedQ.data || archivedQ.isError) || selected) return;
     // A link from a notification: the task may live in another scope.
@@ -185,8 +188,7 @@ export default function TasksPage() {
       .then((t) => {
         useUi.getState().setWorkspace(t.workspaceId ?? "global");
       })
-      .catch(() => openTask(null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .catch(() => closeTask());
   }, [selectedId, tasksQ.data, archivedQ.data, archivedQ.isError, selected]);
 
   useEffect(() => {

@@ -242,9 +242,8 @@ export function NameDialog({
       onClose();
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const title = mode?.kind === "rename" ? t("dialogs.name.titleRename", { name: current }) : mode?.kind === "note" ? t("dialogs.name.titleNote") : t("dialogs.name.titleFolder");

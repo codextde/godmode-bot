@@ -215,10 +215,11 @@ function runShape(r: LiveRun): string {
  */
 export function useLiveRunsMap(): Record<string, LiveRun> {
   const shape = useLive((s) => Object.values(s.runs).map(runShape).join("\n"));
-  return useMemo(() => {
-    void shape;
-    return useLive.getState().runs;
-  }, [shape]);
+  return useMemo(() => runsAt(shape), [shape]);
+}
+
+function runsAt(_shape: string): Record<string, LiveRun> {
+  return useLive.getState().runs;
 }
 
 export function useConversationLiveRun(conversationId: string | undefined): LiveRun | null {
@@ -229,7 +230,7 @@ export function useConversationLiveRun(conversationId: string | undefined): Live
     for (const r of Object.values(s.runs)) {
       if (r.conversationId !== conversationId) continue;
       if (r.status !== "queued") return r;
-      waiting ??= r;
+      if (waiting === null) waiting = r;
     }
     return waiting;
   });

@@ -94,7 +94,7 @@ export function ModIconTile({
   icon,
   state,
   size = "md",
-  raised = state === "on",
+  raised: raisedProp,
   className,
 }: {
   icon: ModIcon;
@@ -103,6 +103,7 @@ export function ModIconTile({
   raised?: boolean;
   className?: string;
 }) {
+  const raised = raisedProp ?? state === "on";
   return (
     <div className={cn("relative shrink-0", className)}>
       <div

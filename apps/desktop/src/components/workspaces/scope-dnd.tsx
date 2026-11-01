@@ -419,7 +419,7 @@ function Dock({
   onInside: (inside: boolean) => void;
 }) {
   const { t } = useTranslation(["workspaces", "common"]);
-  const panel = useDroppable({ id: "dock", data: { target: null }, disabled: !dragged });
+  const { setNodeRef: panelRef } = useDroppable({ id: "dock", data: { target: null }, disabled: !dragged });
   const project = dragged?.kind === "project" ? dragged.project : null;
   const from = project ? project.workspaceId : dragged?.kind === "workspace" ? dragged.workspace.id : null;
   const others = workspaces.filter((w) => w.id !== from);
@@ -438,7 +438,7 @@ function Dock({
           className={cn("pointer-events-none fixed bottom-5 z-40 flex justify-center px-4", !at && "inset-x-0")}
         >
           <div
-            ref={panel.setNodeRef}
+            ref={panelRef}
             onPointerEnter={() => onInside(true)}
             onPointerLeave={() => onInside(false)}
             role="group"
@@ -464,13 +464,13 @@ function Dock({
 
 function NewWorkspaceTarget() {
   const { t } = useTranslation(["workspaces", "common"]);
-  const drop = useScopeDrop({ kind: "new" }, "dock:new");
+  const { ref: dropRef, state: dropState } = useScopeDrop({ kind: "new" }, "dock:new");
   return (
     <div
-      ref={drop.ref}
+      ref={dropRef}
       className={cn(
         "flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-brand/40 bg-brand/5 py-1.5 pr-3 pl-1.5 text-sm font-medium text-brand-strong transition-[background-color,border-color,transform] duration-150",
-        drop.state === "valid" && "scale-[1.04] border-solid border-brand/60 bg-brand/15",
+        dropState === "valid" && "scale-[1.04] border-solid border-brand/60 bg-brand/15",
       )}
     >
       <span aria-hidden className="grid size-6 place-items-center rounded-lg bg-brand/15">
@@ -483,14 +483,14 @@ function NewWorkspaceTarget() {
 
 function DockTarget({ workspace, here }: { workspace: Workspace; here: boolean }) {
   const { t } = useTranslation(["workspaces", "common"]);
-  const drop = useScopeDrop({ kind: "workspace", workspace }, `dock:${workspace.id}`);
+  const { ref: dropRef, state: dropState } = useScopeDrop({ kind: "workspace", workspace }, `dock:${workspace.id}`);
   return (
     <div
-      ref={drop.ref}
+      ref={dropRef}
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-xl border border-transparent px-2 py-1.5 text-sm transition-[background-color,border-color,transform] duration-150",
         here ? "text-muted-foreground opacity-50" : "text-foreground",
-        drop.state === "valid" && "scale-[1.04] border-brand/50 bg-brand/10",
+        dropState === "valid" && "scale-[1.04] border-brand/50 bg-brand/10",
       )}
     >
       <WorkspaceTile icon={workspace.icon} color={workspace.color} size="sm" className="size-5 rounded-[5px] text-[11px]" />

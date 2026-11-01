@@ -75,7 +75,8 @@ export default function CardsPage() {
     },
     onError: (e) => !isGrantCancelled(e) && toastApiError(e, t("cardsPage.changeFailed"), qc),
   });
-  const toggleFreeze = useCallback((card: PaymentCard) => freeze.mutate(card), [freeze.mutate]);
+  const freezeCard = freeze.mutate;
+  const toggleFreeze = useCallback((card: PaymentCard) => freezeCard(card), [freezeCard]);
 
   const [toDelete, setToDelete] = useState<PaymentCard | null>(null);
   const del = useMutation({

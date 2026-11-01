@@ -324,14 +324,14 @@ function Dock({
 
 function DockTarget({ workspace, here }: { workspace: Workspace | null; here: boolean }) {
   const { t } = useTranslation("agents");
-  const drop = useAgentDrop({ kind: "workspace", workspaceId: workspace?.id ?? null }, `dock:${workspace?.id ?? "global"}`);
+  const { ref: dropRef, state: dropState } = useAgentDrop({ kind: "workspace", workspaceId: workspace?.id ?? null }, `dock:${workspace?.id ?? "global"}`);
   return (
     <div
-      ref={drop.ref}
+      ref={dropRef}
       className={cn(
         "flex shrink-0 items-center gap-1.5 rounded-xl border border-transparent px-2 py-1.5 text-sm transition-[background-color,border-color,transform] duration-150",
         here ? "text-muted-foreground opacity-50" : "text-foreground",
-        drop.state === "valid" && "scale-[1.04] border-brand/50 bg-brand/10",
+        dropState === "valid" && "scale-[1.04] border-brand/50 bg-brand/10",
       )}
     >
       <GroupIcon workspace={workspace} isGlobal={!workspace} className="size-5" />
@@ -342,7 +342,8 @@ function DockTarget({ workspace, here }: { workspace: Workspace | null; here: bo
 }
 
 /** Makes an agent draggable; the built-in agent stays put. */
-export function useAgentDrag(agent: Agent, id = `agent:${agent.id}`) {
+export function useAgentDrag(agent: Agent, dragId?: string) {
+  const id = dragId ?? `agent:${agent.id}`;
   const { setNodeRef, listeners, isDragging } = useDraggable({ id, data: { agent }, disabled: agent.isDefault });
   return {
     ref: setNodeRef,
@@ -381,9 +382,9 @@ export function DroppableSection({ target, dropId, ...props }: ComponentProps<ty
 
 /** Wraps a card or row so it can be picked up. */
 export function DraggableAgent({ agent, className, children }: { agent: Agent; className?: string; children: ReactNode }) {
-  const drag = useAgentDrag(agent);
+  const { ref: dragRef, props: dragProps, isDragging } = useAgentDrag(agent);
   return (
-    <div ref={drag.ref} {...drag.props} className={cn("h-full transition-opacity", drag.isDragging && "opacity-35", className)}>
+    <div ref={dragRef} {...dragProps} className={cn("h-full transition-opacity", isDragging && "opacity-35", className)}>
       {children}
     </div>
   );

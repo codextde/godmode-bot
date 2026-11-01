@@ -43,9 +43,8 @@ export function useCardDetails() {
         setOpen(true);
       } catch (e) {
         if (!isGrantCancelled(e)) toastApiError(e, tg("vault:cardDetails.showFailed"), qc);
-      } finally {
-        setRevealingId(null);
       }
+      setRevealingId(null);
     },
     [qc],
   );

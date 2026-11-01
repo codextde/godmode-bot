@@ -491,13 +491,12 @@ function QuickAdd({ onSubmit, onClose }: { onSubmit: (title: string) => Promise<
     const t = title.trim();
     if (!t || busy) return;
     setBusy(true);
-    try {
-      await onSubmit(t);
-      setTitle("");
-      ref.current?.focus();
-    } finally {
-      setBusy(false);
-    }
+    await onSubmit(t)
+      .then(() => {
+        setTitle("");
+        ref.current?.focus();
+      })
+      .finally(() => setBusy(false));
   };
   return (
     <div className="rounded-lg border bg-card p-2 shadow-card">
