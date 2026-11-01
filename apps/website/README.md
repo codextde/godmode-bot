@@ -1,7 +1,7 @@
 # Godmode website
 
 The sales site for Godmode — https://usegodmode.com. Astro 7 on Cloudflare Workers, Stripe Checkout for
-Godmode Pro ($39/month or $348/year, both with a 7-day free trial), a D1 database for orders and cookieless analytics, and an admin dashboard.
+Godmode Pro (free for 14 days in the app, then $39/month or $348/year), a D1 database for orders and cookieless analytics, and an admin dashboard.
 
 ```
 src/config/site.ts        prices, guarantee, links, legal details, tracking IDs — edit here first

@@ -1572,8 +1572,8 @@ views. `mobile/` in the core pairs phones and serves them; the desktop's Setting
 
 ## Licence
 
-Godmode is commercial software: a 7-day trial, then a monthly, yearly or Founder Lifetime licence, each with every
-feature (`packages/core/src/license`, `LicenseState` in `@godmode/shared`).
+Godmode's official builds run free for 14 days without a key, then need a monthly or yearly licence (older Founder
+Lifetime keys stay valid), each with every feature (`packages/core/src/license`, `LicenseState` in `@godmode/shared`).
 
 * **Key and state** live in meta keys `license.*` (`key`, `verdict`: the licence server's last answer, `unverified_since`,
   `grace_ends_at`, `first_start`), not in Settings, which paired phones can read. Logs and the UI only see the last 5
@@ -1587,7 +1587,7 @@ feature (`packages/core/src/license`, `LicenseState` in `@godmode/shared`).
   `valid: false`) is not stored; `canceled`, `refunded` and `expired` become `expired`. A key that could not be checked
   yet counts as `unverified` for 7 days from when the first unchecked key was entered.
 * **Grace:** the first start of a version with licences on an install that was used before (onboarding done, runs,
-  chats or more than the default agent) and has no key records `grace_ends_at` = 7 days later, once.
+  chats or more than the default agent) and has no key records `grace_ends_at` = 14 days later, once (`LICENSE_GRACE_MS`).
 * **Gate:** only release builds enforce it: the compiled binary (`COMPILED` in `config.ts`, `Bun.main` inside Bun's
   `$bunfs`), i.e. the app sidecar, the server binaries and the Docker image. From source nothing is refused
   (`GODMODE_LICENSE_ENFORCE=1` turns it on for trying it out), and a runner never refuses: the computer it works for
