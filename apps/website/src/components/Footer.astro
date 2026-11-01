@@ -1,58 +1,106 @@
 ---
 import Logo from './ui/Logo.astro';
 import { LEGAL, SITE } from '@/config/site';
+import { href, langOf } from '@/i18n';
 const year = 2026;
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    tagline: `The AI coworker that does your computer work, start to finish. Made in Germany by ${LEGAL.company}.`,
+    runs: 'Runs on your own Mac',
+    product: 'Product',
+    productLinks: [
+      ['/download', 'Download for Mac'],
+      ['/#jobs', 'What it does'],
+      ['/use-cases', '60 example jobs'],
+      ['/setup', 'Setup service'],
+      ['/playbook', 'Playbook'],
+      ['/#trust', 'Safety'],
+      ['/#pricing', 'Pricing'],
+      ['/vs/grok-bot', 'Godmode vs Grok Bot'],
+      ['/changelog', 'What’s new'],
+    ],
+    company: 'Company',
+    contact: 'Contact',
+    support: 'Support',
+    legal: 'Legal',
+    legalLinks: [
+      ['/legal/imprint', 'Imprint'],
+      ['/legal/privacy', 'Privacy'],
+      ['/legal/terms', 'Terms'],
+      ['/legal/refunds', 'Refunds & cancellation'],
+    ],
+    cookies: 'Cookie settings',
+    rights: 'All rights reserved.',
+    marks: 'Claude is a trademark of Anthropic, PBC. Grok is a trademark of xAI. Godmode is an independent product and not affiliated with Anthropic or xAI.',
+  },
+  de: {
+    tagline: `Der KI-Kollege, der deine Computerarbeit von Anfang bis Ende erledigt. Made in Germany von ${LEGAL.company}.`,
+    runs: 'Läuft auf deinem eigenen Mac',
+    product: 'Produkt',
+    productLinks: [
+      ['/download', 'Für Mac herunterladen'],
+      ['/#jobs', 'Was es kann'],
+      ['/use-cases', '60 Beispiel-Aufgaben'],
+      ['/setup', 'Einrichtung vom Profi'],
+      ['/#trust', 'Sicherheit'],
+      ['/#pricing', 'Preise'],
+      ['/changelog', 'Neuigkeiten (EN)'],
+    ],
+    company: 'Unternehmen',
+    contact: 'Kontakt',
+    support: 'Hilfe',
+    legal: 'Rechtliches',
+    legalLinks: [
+      ['/legal/imprint', 'Impressum'],
+      ['/legal/privacy', 'Datenschutz'],
+      ['/legal/terms', 'AGB'],
+      ['/legal/refunds', 'Erstattung & Kündigung'],
+    ],
+    cookies: 'Cookie-Einstellungen',
+    rights: 'Alle Rechte vorbehalten.',
+    marks: 'Claude ist eine Marke von Anthropic, PBC. Grok ist eine Marke von xAI. Godmode ist ein unabhängiges Produkt und steht in keiner Verbindung zu Anthropic oder xAI.',
+  },
+}[lang];
 ---
 
 <footer class="relative mt-16 border-t border-line bg-bg-2">
   <div class="container-x grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
     <div>
-      <a href="/" class="flex items-center gap-2.5">
+      <a href={href(lang, '/')} class="flex items-center gap-2.5">
         <Logo size={28} />
         <span class="text-[16px] font-semibold tracking-[-0.03em]">Godmode</span>
       </a>
-      <p class="mt-4 max-w-[280px] text-[14px] leading-relaxed text-muted">
-        The AI coworker that does your computer work, start to finish. Made in Germany by {LEGAL.company}.
-      </p>
+      <p class="mt-4 max-w-[280px] text-[14px] leading-relaxed text-muted">{t.tagline}</p>
       <p class="mt-6 flex items-center gap-2 text-[13px] text-muted">
-        <span class="live-dot !size-1.5"></span> Runs on your own Mac
+        <span class="live-dot !size-1.5"></span> {t.runs}
       </p>
     </div>
-    <nav aria-label="Product">
-      <p class="text-[13px] font-semibold text-text">Product</p>
+    <nav aria-label={t.product}>
+      <p class="text-[13px] font-semibold text-text">{t.product}</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
-        <li><a class="hover:text-text" href="/download">Download for Mac</a></li>
-        <li><a class="hover:text-text" href="/#jobs">What it does</a></li>
-        <li><a class="hover:text-text" href="/use-cases">60 example jobs</a></li>
-        <li><a class="hover:text-text" href="/playbook">Playbook</a></li>
-        <li><a class="hover:text-text" href="/#trust">Safety</a></li>
-        <li><a class="hover:text-text" href="/#pricing">Pricing</a></li>
-        <li><a class="hover:text-text" href="/vs/grok-bot">Godmode vs Grok Bot</a></li>
-        <li><a class="hover:text-text" href="/changelog">What’s new</a></li>
+        {t.productLinks.map(([path, label]) => <li><a class="hover:text-text" href={href(lang, path)}>{label}</a></li>)}
       </ul>
     </nav>
-    <nav aria-label="Company">
-      <p class="text-[13px] font-semibold text-text">Company</p>
+    <nav aria-label={t.company}>
+      <p class="text-[13px] font-semibold text-text">{t.company}</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
-        <li><a class="hover:text-text" href={`mailto:${SITE.email}`}>Contact</a></li>
+        <li><a class="hover:text-text" href={`mailto:${SITE.email}`}>{t.contact}</a></li>
         <li><a class="hover:text-text" href="https://codext.de" rel="noopener">Codext GmbH</a></li>
-        <li><a class="hover:text-text" href="/#faq">FAQ</a></li>
-        <li><a class="hover:text-text" href="/support">Support</a></li>
+        <li><a class="hover:text-text" href={href(lang, '/#faq')}>FAQ</a></li>
+        <li><a class="hover:text-text" href={href(lang, '/support')}>{t.support}</a></li>
       </ul>
     </nav>
-    <nav aria-label="Legal">
-      <p class="text-[13px] font-semibold text-text">Legal</p>
+    <nav aria-label={t.legal}>
+      <p class="text-[13px] font-semibold text-text">{t.legal}</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
-        <li><a class="hover:text-text" href="/legal/imprint">Imprint</a></li>
-        <li><a class="hover:text-text" href="/legal/privacy">Privacy</a></li>
-        <li><a class="hover:text-text" href="/legal/terms">Terms</a></li>
-        <li><a class="hover:text-text" href="/legal/refunds">Refunds & cancellation</a></li>
-        <li><button type="button" class="hover:text-text" data-open-consent>Cookie settings</button></li>
+        {t.legalLinks.map(([path, label]) => <li><a class="hover:text-text" href={path}>{label}</a></li>)}
+        <li><button type="button" class="hover:text-text" data-open-consent>{t.cookies}</button></li>
       </ul>
     </nav>
   </div>
   <div class="container-x flex flex-col gap-2 border-t border-line py-6 text-[12.5px] text-dim sm:flex-row sm:gap-8 sm:justify-between">
-    <p>© {year} {LEGAL.company}. All rights reserved.</p>
-    <p>Claude is a trademark of Anthropic, PBC. Grok is a trademark of xAI. Godmode is an independent product and not affiliated with Anthropic or xAI.</p>
+    <p>© {year} {LEGAL.company}. {t.rights}</p>
+    <p>{t.marks}</p>
   </div>
 </footer>

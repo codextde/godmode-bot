@@ -2,6 +2,7 @@
 // The main call to action. Without JS it downloads the Apple silicon build; main.ts sends phones and
 // non-Mac computers to /download, and Macs to /download?start=1 (download starts there, with the install guide).
 import Icon from './Icon.astro';
+import { langOf } from '@/i18n';
 
 interface Props {
   source: string;
@@ -11,7 +12,8 @@ interface Props {
   class?: string;
   full?: boolean;
 }
-const { source, label = 'Download for Mac — free', size = 'lg', variant = 'primary', class: className = '', full = false } = Astro.props;
+const lang = langOf(Astro.url);
+const { source, label = lang === 'de' ? 'Für Mac laden – kostenlos' : 'Download for Mac — free', size = 'lg', variant = 'primary', class: className = '', full = false } = Astro.props;
 ---
 
 <a

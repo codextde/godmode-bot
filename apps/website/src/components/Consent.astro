@@ -2,7 +2,24 @@
 // Marketing pixels (X) only load after an explicit "Accept". First-party analytics are cookieless
 // and anonymous, so they run without consent. "Only necessary" is as prominent as "Accept".
 import { TRACKING } from '@/config/site';
+import { langOf } from '@/i18n';
 const hasMarketing = Boolean(TRACKING.xPixelId);
+const t = {
+  en: {
+    title: 'Cookies, honestly',
+    text: 'We measure visits without cookies. With your OK we also use the X (Twitter) pixel to see which ads bring people here.',
+    privacy: 'Privacy',
+    necessary: 'Only necessary',
+    accept: 'Accept',
+  },
+  de: {
+    title: 'Cookies, ganz ehrlich',
+    text: 'Besuche messen wir ohne Cookies. Mit deinem OK nutzen wir zusätzlich das X-Pixel (Twitter), um zu sehen, welche Anzeigen Leute hierher bringen.',
+    privacy: 'Datenschutz',
+    necessary: 'Nur notwendige',
+    accept: 'Akzeptieren',
+  },
+}[langOf(Astro.url)];
 ---
 
 {
@@ -17,18 +34,17 @@ const hasMarketing = Boolean(TRACKING.xPixelId);
     >
       <div class="window p-5">
         <p id="consent-title" class="text-[15px] font-medium tracking-tight text-text">
-          Cookies, honestly
+          {t.title}
         </p>
         <p id="consent-text" class="mt-1.5 text-[13.5px] leading-relaxed text-muted">
-          We measure visits without cookies. With your OK we also use the X (Twitter) pixel to see which ads bring
-          people here. <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2 hover:text-text">Privacy</a>
+          {t.text} <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2 hover:text-text">{t.privacy}</a>
         </p>
         <div class="mt-4 grid grid-cols-2 gap-2">
           <button type="button" data-consent="necessary" class="btn btn-ghost btn-sm w-full">
-            Only necessary
+            {t.necessary}
           </button>
           <button type="button" data-consent="all" class="btn btn-primary btn-sm w-full">
-            Accept
+            {t.accept}
           </button>
         </div>
       </div>

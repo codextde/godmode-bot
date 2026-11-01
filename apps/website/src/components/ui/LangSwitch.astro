@@ -1,0 +1,33 @@
+---
+// EN | DE toggle. Links to the same page in the other language and remembers the choice (gm_lang), which stops the
+// automatic switch for German browsers.
+import { counterpart, langOf } from '@/i18n';
+
+interface Props {
+  class?: string;
+}
+const { class: className = '' } = Astro.props;
+const lang = langOf(Astro.url);
+const items = [
+  { code: 'en', label: 'EN', name: 'English', href: counterpart(Astro.url.pathname, 'en') },
+  { code: 'de', label: 'DE', name: 'Deutsch', href: counterpart(Astro.url.pathname, 'de') },
+] as const;
+---
+
+<div class:list={['lang-switch', className]} role="group" aria-label={lang === 'de' ? 'Sprache' : 'Language'}>
+  {
+    items.map((i) => (
+      <a
+        href={i.href}
+        hreflang={i.code}
+        lang={i.code}
+        data-lang={i.code}
+        aria-label={i.name}
+        aria-current={i.code === lang ? 'true' : undefined}
+        data-track={`lang_${i.code}`}
+      >
+        {i.label}
+      </a>
+    ))
+  }
+</div>

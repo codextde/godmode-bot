@@ -2,6 +2,7 @@
 import '@/styles/global.css';
 import { SITE, PRICING, TRACKING } from '@/config/site';
 import Consent from '@/components/Consent.astro';
+import { LOCALES, basePath, cleanPath, counterpart, isTranslated, langOf } from '@/i18n';
 
 interface Props {
   title?: string;
@@ -11,9 +12,22 @@ interface Props {
   bare?: boolean;
 }
 
-const { title, description = SITE.description, image = '/media/og-image.png', noindex = false, bare = false } = Astro.props;
-const fullTitle = title ? `${title} · ${SITE.name}` : SITE.title;
-const canonical = new URL(Astro.url.pathname, Astro.site ?? SITE.url).href;
+const lang = langOf(Astro.url);
+const { title, description = SITE.description[lang], image = '/media/og-image.png', noindex = false, bare = false } = Astro.props;
+const fullTitle = title ? `${title} · ${SITE.name}` : SITE.title[lang];
+const siteUrl = Astro.site ?? SITE.url;
+const canonical = new URL(cleanPath(Astro.url.pathname), siteUrl).href;
+const translated = !bare && isTranslated(Astro.url.pathname);
+const alternates = translated
+  ? [
+      { hreflang: 'en', href: new URL(counterpart(Astro.url.pathname, 'en'), siteUrl).href },
+      { hreflang: 'de', href: new URL(counterpart(Astro.url.pathname, 'de'), siteUrl).href },
+      { hreflang: 'x-default', href: new URL(basePath(Astro.url.pathname), siteUrl).href },
+    ]
+  : [];
+// First visit from a German browser on an English page that has a German version: switch once. The language
+// switcher stores the choice in gm_lang, so nobody is sent back and forth.
+const autoDe = translated && lang === 'en' ? counterpart(Astro.url.pathname, 'de') : '';
 const ogImage = new URL(image, Astro.site ?? SITE.url).href;
 
 const jsonLd = {
@@ -22,7 +36,8 @@ const jsonLd = {
   name: SITE.product,
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'macOS',
-  description: SITE.description,
+  description: SITE.description[lang],
+  inLanguage: lang,
   url: Astro.site?.href ?? SITE.url,
   publisher: { '@type': 'Organization', name: 'Codext GmbH', url: 'https://codext.de' },
   offers: [
@@ -48,13 +63,14 @@ const tracking =
 ---
 
 <!doctype html>
-<html lang="en" data-theme={bare ? 'dark' : undefined}>
+<html lang={lang} data-theme={bare ? 'dark' : undefined}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    {alternates.map((a) => <link rel="alternate" hreflang={a.hreflang} href={a.href} />)}
     {noindex && <meta name="robots" content="noindex, nofollow" />}
     <meta name="theme-color" content={bare ? '#0a0a09' : '#faf7f2'} />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -62,6 +78,7 @@ const tracking =
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={SITE.product} />
+    <meta property="og:locale" content={LOCALES[lang]} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
@@ -73,6 +90,18 @@ const tracking =
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
 
+    {
+      autoDe && (
+        <script is:inline define:vars={{ autoDe }}>
+          try {
+            var chosen = /(?:^|; )gm_lang=/.test(document.cookie);
+            var ref = document.referrer && new URL(document.referrer).host === location.host;
+            var de = /^de\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || '');
+            if (!chosen && !ref && de && !/[?&]lang=en\b/.test(location.search)) location.replace(autoDe + location.search + location.hash);
+          } catch (e) {}
+        </script>
+      )
+    }
     <script is:inline>
       document.documentElement.classList.add('js');
       // If the main script never runs, don't leave reveal-on-scroll content invisible.

@@ -2,28 +2,97 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import DownloadButton from '../ui/DownloadButton.astro';
-import { PRICING, SITE, yearlySavings } from '@/config/site';
+import { PRICING, SETUP, SITE, setupPrice, yearlySavings } from '@/config/site';
+import { href, langOf } from '@/i18n';
 
 const { monthly, yearly } = PRICING.plans;
-const included = [
-  'Unlimited AI coworkers, tasks and automations',
-  'Works in your browser and apps, signed in as you',
-  'Runs on a schedule or when an email arrives',
-  'Password vault with 2FA codes',
-  'Message it from your phone, Slack or Telegram',
-  'Every update while you’re subscribed',
-];
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    eyebrow: 'Pricing',
+    h: 'Try it first. *Pay only if it helps.*',
+    lead: `Download Godmode and use everything free for ${PRICING.freeDays} days. No card, no sign-up. If it saves you time, keep it. If not, just stop using it.`,
+    billing: 'Billing',
+    monthly: 'Monthly',
+    yearly: 'Yearly',
+    then: `Free for ${PRICING.freeDays} days, then`,
+    perMonth: '/ month',
+    billedYearly: `Billed $${yearly.price} once a year.`,
+    billedMonthly: 'Billed monthly. Cancel anytime.',
+    included: [
+      'Unlimited AI coworkers, tasks and automations',
+      'Works in your browser and apps, signed in as you',
+      'Runs on a schedule or when an email arrives',
+      'Password vault with 2FA codes',
+      'Message it from your phone, Slack or Telegram',
+      'Every update while you’re subscribed',
+    ],
+    download: 'Download free',
+    noCard: `No card. You only pay if you keep it after ${PRICING.freeDays} days.`,
+    subscribe: 'Already sure? Subscribe now',
+    setupName: 'Done-for-you setup',
+    setupOnce: 'one-time, plus VAT',
+    setupText: 'We set Godmode up with you and build your first automations, so it saves you hours from week one.',
+    setupIncl: [
+      `Workshop: we find your ${SETUP.automations} biggest time sinks`,
+      `Up to ${SETUP.automations} automations built and tested`,
+      `Team training and ${SETUP.supportDays} days of support`,
+    ],
+    setupCta: 'See what’s included',
+    teams: 'Several people, one invoice?',
+    teamsLink: 'Write to us',
+    guarantee: `${PRICING.guaranteeDays}-day money-back guarantee on your first payment`,
+    claude: 'Works with your Claude Pro or Max plan',
+    what: 'What’s that?',
+    invoice: 'Company invoices with VAT ID',
+  },
+  de: {
+    eyebrow: 'Preise',
+    h: 'Erst testen. *Nur zahlen, wenn es hilft.*',
+    lead: `Lade Godmode herunter und nutze alles ${PRICING.freeDays} Tage kostenlos. Ohne Karte, ohne Anmeldung. Spart es dir Zeit, behalte es. Wenn nicht, hör einfach auf.`,
+    billing: 'Abrechnung',
+    monthly: 'Monatlich',
+    yearly: 'Jährlich',
+    then: `${PRICING.freeDays} Tage kostenlos, danach`,
+    perMonth: '/ Monat',
+    billedYearly: `Einmal im Jahr $${yearly.price}.`,
+    billedMonthly: 'Monatliche Zahlung. Jederzeit kündbar.',
+    included: [
+      'Unbegrenzt viele KI-Kollegen, Aufgaben und Automationen',
+      'Arbeitet in deinem Browser und deinen Programmen, angemeldet als du',
+      'Läuft nach Zeitplan oder wenn eine E-Mail kommt',
+      'Passwort-Tresor mit 2FA-Codes',
+      'Schreib ihm vom Handy, aus Slack oder Telegram',
+      'Alle Updates, solange du dabei bist',
+    ],
+    download: 'Kostenlos laden',
+    noCard: `Ohne Karte. Du zahlst nur, wenn du es nach ${PRICING.freeDays} Tagen behältst.`,
+    subscribe: 'Schon überzeugt? Jetzt abonnieren',
+    setupName: 'Einrichtung vom Profi',
+    setupOnce: 'einmalig, zzgl. MwSt.',
+    setupText: 'Wir richten Godmode mit dir ein und bauen deine ersten Automationen, damit es dir ab der ersten Woche Stunden spart.',
+    setupIncl: [
+      `Workshop: wir finden deine ${SETUP.automations} größten Zeitfresser`,
+      `Bis zu ${SETUP.automations} Automationen gebaut und getestet`,
+      `Team-Schulung und ${SETUP.supportDays} Tage Support`,
+    ],
+    setupCta: 'Alle Leistungen ansehen',
+    teams: 'Mehrere Leute, eine Rechnung?',
+    teamsLink: 'Schreib uns',
+    guarantee: `${PRICING.guaranteeDays} Tage Geld-zurück-Garantie auf die erste Zahlung`,
+    claude: 'Läuft mit deinem Claude Pro- oder Max-Abo',
+    what: 'Was ist das?',
+    invoice: 'Firmenrechnung mit USt-IdNr.',
+  },
+}[lang];
 ---
 
 <section id="pricing" class="relative py-16 sm:py-24" data-track-view="pricing">
   <div class="container-x">
     <div class="mx-auto max-w-[720px] text-center">
-      <p class="eyebrow justify-center" data-reveal>Pricing</p>
-      <Words text="Try it first. *Pay only if it helps.*" class="h-section mx-auto mt-4" />
-      <p class="lead mx-auto mt-5 max-w-[560px]" data-reveal style="--d:200">
-        Download Godmode and use everything free for {PRICING.freeDays} days. No card, no sign-up. If it saves you time,
-        keep it. If not, just stop using it.
-      </p>
+      <p class="eyebrow justify-center" data-reveal>{t.eyebrow}</p>
+      <Words text={t.h} class="h-section mx-auto mt-4" />
+      <p class="lead mx-auto mt-5 max-w-[560px]" data-reveal style="--d:200">{t.lead}</p>
     </div>
 
     <div class="mx-auto mt-12 grid max-w-[980px] gap-4 md:grid-cols-[1.35fr_1fr] md:items-start">
@@ -31,28 +100,28 @@ const included = [
         <input type="hidden" name="trial" value="0" />
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-[17px] font-semibold">Godmode Pro</p>
-          <div class="seg" role="radiogroup" aria-label="Billing">
+          <div class="seg" role="radiogroup" aria-label={t.billing}>
             <input type="radio" name="plan" value="monthly" id="plan-monthly" />
-            <label for="plan-monthly">Monthly</label>
+            <label for="plan-monthly">{t.monthly}</label>
             <input type="radio" name="plan" value="yearly" id="plan-yearly" checked />
-            <label for="plan-yearly">Yearly <span class="chip chip-brand !h-5 !px-1.5 !text-[11px]">−{yearlySavings}%</span></label>
+            <label for="plan-yearly">{t.yearly} <span class="chip chip-brand !h-5 !px-1.5 !text-[11px]">−{yearlySavings}%</span></label>
           </div>
         </div>
 
-        <p class="mt-7 text-[16px] font-medium text-brand">Free for {PRICING.freeDays} days, then</p>
+        <p class="mt-7 text-[16px] font-medium text-brand">{t.then}</p>
         <p class="mt-2 flex items-baseline gap-2">
           <span class="price-num" data-show="yearly">${yearly.perMonth}</span>
           <span class="price-num" data-show="monthly">${monthly.price}</span>
-          <span class="text-[16px] text-muted">/ month</span>
+          <span class="text-[16px] text-muted">{t.perMonth}</span>
         </p>
         <p class="mt-2 text-[14.5px] text-muted">
-          <span data-show="yearly">Billed ${yearly.price} once a year.</span>
-          <span data-show="monthly">Billed monthly. Cancel anytime.</span>
+          <span data-show="yearly">{t.billedYearly}</span>
+          <span data-show="monthly">{t.billedMonthly}</span>
         </p>
 
         <ul class="mt-7 grid gap-2.5 text-[15px] text-text-2">
           {
-            included.map((f) => (
+            t.included.map((f) => (
               <li class="flex items-start gap-2.5">
                 <Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" />
                 {f}
@@ -62,39 +131,51 @@ const included = [
         </ul>
 
         <div class="mt-8">
-          <DownloadButton source="pricing" label="Download free" size="lg" full />
-          <p class="mt-3 text-center text-[13.5px] text-muted">No card. You only pay if you keep it after {PRICING.freeDays} days.</p>
+          <DownloadButton source="pricing" label={t.download} size="lg" full />
+          <p class="mt-3 text-center text-[13.5px] text-muted">{t.noCard}</p>
           <p class="mt-4 text-center text-[14px]">
-            <button type="submit" class="link-btn"><span class="btn-label">Already sure? Subscribe now</span></button>
+            <button type="submit" class="link-btn"><span class="btn-label">{t.subscribe}</span></button>
           </p>
         </div>
       </form>
 
       <div class="card flex flex-col p-7 sm:p-10" data-reveal style="--d:100">
-        <p class="text-[17px] font-semibold">For teams</p>
-        <p class="mt-7 text-[30px] leading-tight font-semibold tracking-[-0.03em]">Let’s talk</p>
-        <p class="mt-3 text-[15px] leading-relaxed text-muted">
-          Several people, one invoice. Tell us about your team and we’ll find the right setup together.
+        <p class="flex items-center gap-2 text-[17px] font-semibold">
+          <Icon name="wrench" size={17} class="text-brand" /> {t.setupName}
         </p>
+        <p class="mt-7 flex flex-wrap items-baseline gap-x-2">
+          <span class="text-[34px] leading-tight font-semibold tracking-[-0.03em]">{setupPrice(lang)}</span>
+          <span class="text-[14.5px] text-muted">{t.setupOnce}</span>
+        </p>
+        <p class="mt-3 text-[15px] leading-relaxed text-muted">{t.setupText}</p>
         <ul class="mt-6 grid gap-2.5 text-[15px] text-text-2">
-          <li class="flex items-start gap-2.5"><Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" /> One invoice for your company</li>
-          <li class="flex items-start gap-2.5"><Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" /> Answers for your IT and data protection questions</li>
-          <li class="flex items-start gap-2.5"><Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" /> A direct line to the people who build it</li>
+          {
+            t.setupIncl.map((f) => (
+              <li class="flex items-start gap-2.5">
+                <Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" />
+                {f}
+              </li>
+            ))
+          }
         </ul>
-        <a href={`mailto:${SITE.email}?subject=Godmode%20for%20our%20team`} class="btn btn-ghost btn-lg mt-8 w-full" data-track="teams_mail">
-          <Icon name="mail" size={17} /> Contact us
+        <a href={href(lang, '/setup')} class="btn btn-dark btn-lg group mt-8 w-full" data-track="pricing_setup">
+          {t.setupCta} <Icon name="arrow-right" size={16} class="arrow" />
         </a>
+        <p class="mt-4 text-center text-[13.5px] text-muted">
+          {t.teams}
+          <a href={`mailto:${SITE.email}?subject=Godmode%20Team`} class="font-medium text-text underline decoration-line-3 underline-offset-2" data-track="teams_mail">{t.teamsLink}</a>
+        </p>
       </div>
     </div>
 
     <div class="mx-auto mt-6 flex max-w-[980px] flex-col gap-x-8 gap-y-3 text-[14px] text-muted sm:flex-row sm:flex-wrap sm:justify-center" data-reveal style="--d:150">
-      <span class="flex items-center gap-2"><Icon name="shield-check" size={16} class="text-brand" /> {PRICING.guaranteeDays}-day money-back guarantee on your first payment</span>
+      <span class="flex items-center gap-2"><Icon name="shield-check" size={16} class="text-brand" /> {t.guarantee}</span>
       <span class="flex items-center gap-2">
         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" class="text-claude"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
-        Works with your Claude Pro or Max plan
-        <a href="#faq-claude" class="underline decoration-line-3 underline-offset-2 hover:text-text">What’s that?</a>
+        {t.claude}
+        <a href="#faq-claude" class="underline decoration-line-3 underline-offset-2 hover:text-text">{t.what}</a>
       </span>
-      <span class="flex items-center gap-2"><Icon name="receipt" size={16} class="text-brand" /> Company invoices with VAT ID</span>
+      <span class="flex items-center gap-2"><Icon name="receipt" size={16} class="text-brand" /> {t.invoice}</span>
     </div>
   </div>
 </section>

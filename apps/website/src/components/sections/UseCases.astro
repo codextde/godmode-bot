@@ -2,108 +2,219 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Logo from '../ui/Logo.astro';
+import { href, langOf } from '@/i18n';
 
-const cases = [
-  {
-    key: 'office',
-    label: 'Office & email',
-    icon: 'inbox',
-    when: 'Every morning · 07:30',
-    prompt:
-      'Every morning, go through my inbox and calendar, draft replies to everyone waiting on me, file the attachments in the right folders and send me a short list of what needs me today.',
-    steps: [
-      ['mail', 'Read 84 new emails · 6 need you', ''],
-      ['pen-line', 'Drafted 11 replies for your review', 'drafts'],
-      ['folder', 'Filed 7 attachments in Drive › Documents', ''],
-      ['send', 'Sent your 5-line briefing to Telegram', 'done'],
-    ],
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    eyebrow: 'Watch a run',
+    h: 'Say it once. *It happens every week.*',
+    lead: 'Describe the work in a sentence. Godmode figures out the clicks, runs it on a schedule if you like, and tells you when it’s done.',
+    tabs: 'Use cases',
+    message: 'Message Godmode',
+    done: 'done',
+    note: 'Example runs. Godmode works with the websites and accounts you give it.',
+    all: 'See all 60 jobs',
   },
-  {
-    key: 'finance',
-    label: 'Finance',
-    icon: 'landmark',
-    when: 'Every Monday · 07:00',
-    prompt:
-      'Every Monday, log into our supplier portals, download the new invoices, match them to last week’s payments and post a summary to #finance.',
-    steps: [
-      ['key-round', 'Signed into 6 portals with your saved logins + 2FA', 'secret hidden'],
-      ['file-down', 'Downloaded 23 new invoices to Drive › Invoices', ''],
-      ['scale', 'Matched invoices against the bank payments', '2 mismatches'],
-      ['send', 'Posted summary to Slack #finance', 'done'],
-    ],
+  de: {
+    eyebrow: 'Ein Lauf im Detail',
+    h: 'Einmal sagen. *Jede Woche erledigt.*',
+    lead: 'Beschreib die Arbeit in einem Satz. Godmode findet die Klicks selbst, erledigt es auf Wunsch nach Zeitplan und sagt dir, wenn es fertig ist.',
+    tabs: 'Anwendungsfälle',
+    message: 'Nachricht an Godmode',
+    done: 'fertig',
+    note: 'Beispiel-Läufe. Godmode arbeitet mit den Websites und Konten, die du ihm gibst.',
+    all: 'Alle 60 Aufgaben ansehen',
   },
-  {
-    key: 'marketing',
-    label: 'Marketing & ads',
-    icon: 'megaphone',
-    when: 'Fridays · 16:00',
-    prompt:
-      'Every Friday, pull this week’s spend and sales from Meta, Google and TikTok Ads into our report sheet, ask me before pausing any ad that spent $50 without a sale, and write three new versions of the best one.',
-    steps: [
-      ['globe', 'Opened Meta, Google and TikTok Ads, already signed in', 'your logins'],
-      ['table', 'Copied 31 ads into the weekly report sheet', ''],
-      ['circle-pause', 'Paused 4 ads that spent $50 without a sale', 'your OK'],
-      ['send', 'Wrote 3 new ad texts and sent the report to #marketing', 'done'],
-    ],
-  },
-  {
-    key: 'sales',
-    label: 'Sales',
-    icon: 'handshake',
-    when: 'After every call',
-    prompt:
-      'After each sales call in my calendar, update the deal in HubSpot, draft a follow-up in Gmail and ping me on Telegram if they haven’t replied in 3 days.',
-    steps: [
-      ['calendar', 'Read today’s calls from Google Calendar', ''],
-      ['contact', 'Updated 4 deals in HubSpot with notes + next steps', ''],
-      ['mail', 'Drafted 4 follow-ups in Gmail for your review', 'drafts'],
-      ['bell', 'Scheduled reply checks · Telegram reminder', 'done'],
-    ],
-  },
-  {
-    key: 'shop',
-    label: 'Online shop',
-    icon: 'shopping-bag',
-    when: 'Every morning · 08:00',
-    prompt:
-      'Every morning, check our Shopify stock against the last 30 days of sales, draft reorders for anything that runs out within two weeks, and answer yesterday’s “where is my order” emails with the tracking link.',
-    steps: [
-      ['store', 'Checked stock for 214 products in Shopify', ''],
-      ['package', 'Drafted 3 reorders for products running low', 'drafts'],
-      ['mail', 'Answered 9 “where is my order” emails with tracking links', ''],
-      ['send', 'Sent you a 3-line summary', 'done'],
-    ],
-  },
-  {
-    key: 'support',
-    label: 'Support',
-    icon: 'life-buoy',
-    when: 'When a ticket arrives',
-    prompt:
-      'Answer new Zendesk tickets about shipping using our help center, look up the order in Shopify, and send refunds over $200 to me.',
-    steps: [
-      ['inbox', 'Picked up 12 new tickets in Zendesk', ''],
-      ['shopping-bag', 'Looked up each order in Shopify', ''],
-      ['message-circle-reply', 'Answered 10 with tracking links + help-center answers', ''],
-      ['user-round', 'Sent 2 refunds over $200 to you', 'done'],
-    ],
-  },
-];
+}[lang];
+const cases = {
+  en: [
+    {
+      key: 'office',
+      label: 'Office & email',
+      icon: 'inbox',
+      when: 'Every morning · 07:30',
+      prompt:
+        'Every morning, go through my inbox and calendar, draft replies to everyone waiting on me, file the attachments in the right folders and send me a short list of what needs me today.',
+      steps: [
+        ['mail', 'Read 84 new emails · 6 need you', ''],
+        ['pen-line', 'Drafted 11 replies for your review', 'drafts'],
+        ['folder', 'Filed 7 attachments in Drive › Documents', ''],
+        ['send', 'Sent your 5-line briefing to Telegram', 'done'],
+      ],
+    },
+    {
+      key: 'finance',
+      label: 'Finance',
+      icon: 'landmark',
+      when: 'Every Monday · 07:00',
+      prompt:
+        'Every Monday, log into our supplier portals, download the new invoices, match them to last week’s payments and post a summary to #finance.',
+      steps: [
+        ['key-round', 'Signed into 6 portals with your saved logins + 2FA', 'secret hidden'],
+        ['file-down', 'Downloaded 23 new invoices to Drive › Invoices', ''],
+        ['scale', 'Matched invoices against the bank payments', '2 mismatches'],
+        ['send', 'Posted summary to Slack #finance', 'done'],
+      ],
+    },
+    {
+      key: 'marketing',
+      label: 'Marketing & ads',
+      icon: 'megaphone',
+      when: 'Fridays · 16:00',
+      prompt:
+        'Every Friday, pull this week’s spend and sales from Meta, Google and TikTok Ads into our report sheet, ask me before pausing any ad that spent $50 without a sale, and write three new versions of the best one.',
+      steps: [
+        ['globe', 'Opened Meta, Google and TikTok Ads, already signed in', 'your logins'],
+        ['table', 'Copied 31 ads into the weekly report sheet', ''],
+        ['circle-pause', 'Paused 4 ads that spent $50 without a sale', 'your OK'],
+        ['send', 'Wrote 3 new ad texts and sent the report to #marketing', 'done'],
+      ],
+    },
+    {
+      key: 'sales',
+      label: 'Sales',
+      icon: 'handshake',
+      when: 'After every call',
+      prompt:
+        'After each sales call in my calendar, update the deal in HubSpot, draft a follow-up in Gmail and ping me on Telegram if they haven’t replied in 3 days.',
+      steps: [
+        ['calendar', 'Read today’s calls from Google Calendar', ''],
+        ['contact', 'Updated 4 deals in HubSpot with notes + next steps', ''],
+        ['mail', 'Drafted 4 follow-ups in Gmail for your review', 'drafts'],
+        ['bell', 'Scheduled reply checks · Telegram reminder', 'done'],
+      ],
+    },
+    {
+      key: 'shop',
+      label: 'Online shop',
+      icon: 'shopping-bag',
+      when: 'Every morning · 08:00',
+      prompt:
+        'Every morning, check our Shopify stock against the last 30 days of sales, draft reorders for anything that runs out within two weeks, and answer yesterday’s “where is my order” emails with the tracking link.',
+      steps: [
+        ['store', 'Checked stock for 214 products in Shopify', ''],
+        ['package', 'Drafted 3 reorders for products running low', 'drafts'],
+        ['mail', 'Answered 9 “where is my order” emails with tracking links', ''],
+        ['send', 'Sent you a 3-line summary', 'done'],
+      ],
+    },
+    {
+      key: 'support',
+      label: 'Support',
+      icon: 'life-buoy',
+      when: 'When a ticket arrives',
+      prompt:
+        'Answer new Zendesk tickets about shipping using our help center, look up the order in Shopify, and send refunds over $200 to me.',
+      steps: [
+        ['inbox', 'Picked up 12 new tickets in Zendesk', ''],
+        ['shopping-bag', 'Looked up each order in Shopify', ''],
+        ['message-circle-reply', 'Answered 10 with tracking links + help-center answers', ''],
+        ['user-round', 'Sent 2 refunds over $200 to you', 'done'],
+      ],
+    },
+  ],
+  de: [
+    {
+      key: 'office',
+      label: 'Büro & E-Mail',
+      icon: 'inbox',
+      when: 'Jeden Morgen · 07:30',
+      prompt:
+        'Geh jeden Morgen mein Postfach und meinen Kalender durch, entwirf Antworten an alle, die auf mich warten, leg die Anhänge in die richtigen Ordner und schick mir eine kurze Liste, was heute mich braucht.',
+      steps: [
+        ['mail', '84 neue E-Mails gelesen · 6 brauchen dich', ''],
+        ['pen-line', '11 Antworten zum Prüfen entworfen', 'Entwürfe'],
+        ['folder', '7 Anhänge in Drive › Dokumente abgelegt', ''],
+        ['send', 'Dein 5-Zeilen-Briefing an Telegram geschickt', 'done'],
+      ],
+    },
+    {
+      key: 'finance',
+      label: 'Finanzen',
+      icon: 'landmark',
+      when: 'Jeden Montag · 07:00',
+      prompt:
+        'Melde dich jeden Montag in unseren Lieferantenportalen an, lade die neuen Rechnungen herunter, gleich sie mit den Zahlungen der letzten Woche ab und poste eine Zusammenfassung in #finanzen.',
+      steps: [
+        ['key-round', 'In 6 Portalen mit gespeicherten Logins + 2FA angemeldet', 'Secret verborgen'],
+        ['file-down', '23 neue Rechnungen nach Drive › Rechnungen geladen', ''],
+        ['scale', 'Rechnungen mit den Bankzahlungen abgeglichen', '2 Abweichungen'],
+        ['send', 'Zusammenfassung in Slack #finanzen gepostet', 'done'],
+      ],
+    },
+    {
+      key: 'marketing',
+      label: 'Marketing & Werbung',
+      icon: 'megaphone',
+      when: 'Freitags · 16:00',
+      prompt:
+        'Hol jeden Freitag die Ausgaben und Verkäufe der Woche aus Meta, Google und TikTok Ads in unsere Report-Tabelle, frag mich, bevor du eine Anzeige pausierst, die 50 $ ohne Verkauf ausgegeben hat, und schreib drei neue Versionen der besten.',
+      steps: [
+        ['globe', 'Meta, Google und TikTok Ads geöffnet, schon angemeldet', 'deine Logins'],
+        ['table', '31 Anzeigen in die Wochen-Tabelle übertragen', ''],
+        ['circle-pause', '4 Anzeigen pausiert, die 50 $ ohne Verkauf ausgegeben haben', 'dein OK'],
+        ['send', '3 neue Anzeigentexte geschrieben, Report an #marketing geschickt', 'done'],
+      ],
+    },
+    {
+      key: 'sales',
+      label: 'Vertrieb',
+      icon: 'handshake',
+      when: 'Nach jedem Call',
+      prompt:
+        'Aktualisiere nach jedem Vertriebscall in meinem Kalender den Deal in HubSpot, entwirf ein Follow-up in Gmail und schreib mir auf Telegram, wenn nach 3 Tagen keine Antwort kam.',
+      steps: [
+        ['calendar', 'Heutige Calls aus Google Kalender gelesen', ''],
+        ['contact', '4 Deals in HubSpot mit Notizen + nächsten Schritten aktualisiert', ''],
+        ['mail', '4 Follow-ups in Gmail zum Prüfen entworfen', 'Entwürfe'],
+        ['bell', 'Antwort-Checks geplant · Telegram-Erinnerung', 'done'],
+      ],
+    },
+    {
+      key: 'shop',
+      label: 'Onlineshop',
+      icon: 'shopping-bag',
+      when: 'Jeden Morgen · 08:00',
+      prompt:
+        'Gleich jeden Morgen unseren Shopify-Bestand mit den Verkäufen der letzten 30 Tage ab, entwirf Nachbestellungen für alles, was in zwei Wochen ausgeht, und beantworte die „Wo ist meine Bestellung?“-Mails von gestern mit dem Tracking-Link.',
+      steps: [
+        ['store', 'Bestand von 214 Produkten in Shopify geprüft', ''],
+        ['package', '3 Nachbestellungen für knappe Produkte entworfen', 'Entwürfe'],
+        ['mail', '9 „Wo ist meine Bestellung?“-Mails mit Tracking-Link beantwortet', ''],
+        ['send', 'Dir eine 3-Zeilen-Zusammenfassung geschickt', 'done'],
+      ],
+    },
+    {
+      key: 'support',
+      label: 'Kundenservice',
+      icon: 'life-buoy',
+      when: 'Wenn ein Ticket kommt',
+      prompt:
+        'Beantworte neue Zendesk-Tickets zum Versand mit unserem Hilfe-Center, schau die Bestellung in Shopify nach und schick Erstattungen über 200 $ an mich.',
+      steps: [
+        ['inbox', '12 neue Tickets in Zendesk übernommen', ''],
+        ['shopping-bag', 'Jede Bestellung in Shopify nachgeschaut', ''],
+        ['message-circle-reply', '10 mit Tracking-Links + Hilfe-Center-Antworten beantwortet', ''],
+        ['user-round', '2 Erstattungen über 200 $ an dich weitergegeben', 'done'],
+      ],
+    },
+  ],
+}[lang];
 ---
 
 <section id="runs" class="relative py-16 sm:py-24" data-track-view="use_cases">
   <div class="container-x">
     <div class="max-w-[760px]">
-      <p class="eyebrow" data-reveal>Watch a run</p>
-      <Words text="Say it once. *It happens every week.*" class="h-section mt-4" />
+      <p class="eyebrow" data-reveal>{t.eyebrow}</p>
+      <Words text={t.h} class="h-section mt-4" />
       <p class="lead mt-5 max-w-[600px]" data-reveal style="--d:200">
-        Describe the work in a sentence. Godmode figures out the clicks, runs it on a schedule if you like, and tells you
-        when it’s done.
+        {t.lead}
       </p>
     </div>
 
     <div class="mt-14" data-tabs data-reveal style="--d:100">
-      <div role="tablist" aria-label="Use cases" class="tablist -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
+      <div role="tablist" aria-label={t.tabs} class="tablist -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 sm:mx-0 sm:px-0">
         {
           cases.map((c, i) => (
             <button
@@ -135,7 +246,7 @@ const cases = [
                 <div class="prompt-box mt-6">
                   <div class="flex items-center gap-2 border-b border-line px-4 py-2.5 text-[12px] font-medium text-muted">
                     <Logo size={18} />
-                    Message Godmode
+                    {t.message}
                   </div>
                   <p class="min-h-[132px] px-4 py-4 text-[17px] leading-relaxed tracking-[-0.01em] text-text sm:text-[18px]">
                     <span data-type={c.prompt}>{c.prompt}</span>
@@ -150,7 +261,7 @@ const cases = [
                       <Icon name={icon} size={15} />
                     </span>
                     <span class="flex-1 text-[14.5px] text-text-2">{text}</span>
-                    {tag && <span class:list={['chip', tag === 'done' && 'chip-brand']}>{tag}</span>}
+                    {tag && <span class:list={['chip', tag === 'done' && 'chip-brand']}>{tag === 'done' ? t.done : tag}</span>}
                   </li>
                 ))}
               </ol>
@@ -159,8 +270,8 @@ const cases = [
         }
       </div>
       <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p class="text-[12.5px] text-dim">Example runs. Godmode works with the websites and accounts you give it.</p>
-        <a href="/use-cases" class="btn btn-ghost btn-sm self-start" data-track="usecases_all">See all 60 jobs <Icon name="arrow-right" size={14} /></a>
+        <p class="text-[12.5px] text-dim">{t.note}</p>
+        <a href={href(lang, '/use-cases')} class="btn btn-ghost btn-sm self-start" data-track="usecases_all">{t.all} <Icon name="arrow-right" size={14} /></a>
       </div>
     </div>
   </div>

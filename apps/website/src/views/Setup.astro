@@ -1,0 +1,496 @@
+---
+import Base from '@/layouts/Base.astro';
+import Nav from '@/components/Nav.astro';
+import Footer from '@/components/Footer.astro';
+import Icon from '@/components/ui/Icon.astro';
+import Words from '@/components/ui/Words.astro';
+import Character from '@/components/ui/Character.astro';
+import { FOUNDER, LEGAL, PRICING, SETUP, SITE, setupPrice } from '@/config/site';
+import { href, langOf } from '@/i18n';
+
+const lang = langOf(Astro.url);
+const price = setupPrice(lang);
+const t = {
+  en: {
+    title: 'Done-for-you setup',
+    description: `We set Godmode up for your business and build your first ${SETUP.automations} automations with you: workshop, installation, testing, team training and ${SETUP.supportDays} days of support. ${price} one-time.`,
+    eyebrow: 'Done-for-you setup',
+    h1: 'We set it up. *You get your hours back.*',
+    lead: `You tell us where your week goes. We set Godmode up on your Macs and build the automations that take that work off your plate, tested on your real accounts. One fixed price, done in about ${SETUP.deliveryDays} days.`,
+    priceNote: 'one-time · plus VAT · fixed price',
+    cta: 'Request your setup',
+    how: 'How it works',
+    trust: ['Nothing to pay up front', 'Free intro call first', `Done in about ${SETUP.deliveryDays} days`],
+    forEyebrow: 'Who it’s for',
+    forH: 'For teams that want results, *not another tool to learn.*',
+    forCards: [
+      ['store', 'Small businesses and teams', 'Agencies, shops, offices, consultants and trades: anyone whose people spend hours a week clicking through the same websites.'],
+      ['clock', 'Busywork you can name', 'Invoices from portals, inbox triage, reports, CRM updates, order emails. If it happens every week, we can usually automate it.'],
+      ['zap', 'No time to tinker', 'You could set it up yourself. But you’d rather have it running next week, done right the first time.'],
+    ],
+    inclEyebrow: 'What’s included',
+    inclH: `Everything for ${price}. *No hourly billing.*`,
+    incl: [
+      ['messages-square', `Kickoff workshop (${SETUP.kickoffMinutes} min)`, 'On a video call we go through your week and pick the jobs that cost the most time. You get a written plan of what we build and what it saves.'],
+      ['laptop', 'Installation on your Macs', 'Godmode, your Claude plan, the password vault with your logins and 2FA codes, and messages from your phone, Slack or Telegram. All set up and checked.'],
+      ['workflow', `Up to ${SETUP.automations} automations, built for you`, 'We write them, run them on your real accounts and fix every snag until they run reliably on their own, on a schedule or when an email arrives.'],
+      ['server', 'Always-on option', 'Want it working around the clock? We set Godmode up on a Mac that stays on, like a Mac mini, reachable from your phone. Hardware not included.'],
+      ['graduation-cap', `Team training (${SETUP.trainingMinutes} min)`, 'Your people learn how to hand off tasks, approve steps and build new automations themselves, so it keeps growing after we leave.'],
+      ['life-buoy', `${SETUP.supportDays} days of support`, 'Changes, fixes and new ideas by email for a month after handover. Plus a short handbook of what runs when.'],
+    ],
+    stepsEyebrow: 'How it works',
+    stepsH: 'From first call to *running automations.*',
+    steps: [
+      [`Free intro call (${SETUP.introMinutes} min)`, 'We listen, check that Godmode fits your work and answer your questions. If it doesn’t fit, we tell you.'],
+      ['Workshop and plan', `${SETUP.kickoffMinutes} minutes on your week. You get a written plan with the automations we build. Then the invoice.`],
+      ['Build and test', 'We install Godmode and build the automations with you over screen sharing, tested on your real accounts.'],
+      ['Handover and training', 'Your team sees everything run, learns to work with it and gets the handbook.'],
+      [`${SETUP.supportDays} days of support`, 'We stay on call for changes and fixes while it settles into your week.'],
+    ],
+    mathEyebrow: 'Does it pay off?',
+    mathH: 'An example calculation',
+    math: [
+      ['5 h', 'saved per person and week'],
+      ['× €50', 'cost per hour'],
+      ['≈ €1,000', 'per person and month'],
+    ],
+    mathText: `With these numbers the setup pays for itself within three months for a single person. Your numbers will differ, and in the intro call we work them out with you before you spend anything.`,
+    exEyebrow: 'Examples we set up',
+    examples: [
+      'Download invoices from supplier portals every Monday and file them for the accountant',
+      'Sort the inbox every morning, draft replies and send a short to-do list',
+      'Pull ad numbers from Meta, Google and TikTok into the weekly report',
+      'Update the CRM after every sales call and draft the follow-up',
+      'Answer “where is my order?” emails with the tracking link',
+      'Reply to new Google reviews and flag anything under 3 stars',
+    ],
+    priceH: 'One price. Everything above.',
+    priceList: [
+      'Fixed price, no hourly billing',
+      'Invoice from Codext GmbH after the intro call, nothing up front',
+      'Remote via screen sharing, wherever you are',
+    ],
+    priceSep: `Not included: the Godmode subscription ($${PRICING.plans.monthly.price} a month per Mac, or $${PRICING.plans.yearly.perMonth} billed yearly) and your Claude plan.`,
+    formH: 'Request your setup',
+    formLead: 'Tell us a little about your work. We reply within one business day with times for the free intro call.',
+    name: 'Your name',
+    company: 'Company',
+    email: 'Work email',
+    phone: 'Phone',
+    optional: '(optional)',
+    size: 'How many people would use Godmode?',
+    sizes: [['1', 'Just me'], ['2-5', '2–5'], ['6-20', '6–20'], ['21+', '21+']],
+    message: 'What should Godmode take off your plate?',
+    messagePh: 'e.g. We download about 40 invoices a month from 6 portals, and every Monday someone builds the ad report by hand…',
+    submit: 'Send request',
+    privacy: ['We only use your details to answer your request.', 'Privacy policy'],
+    doneH: 'Thanks, we got it.',
+    doneText: 'We’ll reply within one business day with times for your free intro call. Questions in the meantime? Email',
+    error: 'That didn’t work. Please check your details or email us.',
+    founder: `You work directly with the people who build Godmode at ${LEGAL.company}, a German software company and Shopify Premier Partner.`,
+    faqH: 'Questions about the setup',
+    faqs: [
+      ['Do we need Macs?', 'Yes. Godmode runs on Macs with Apple chip or Intel today. A Mac mini that stays on works great as a shared, always-on coworker for a team.'],
+      ['Is it all remote?', 'Yes. Workshop, setup and training happen over video call and screen sharing, so it works wherever you are.'],
+      ['What about our passwords and data?', 'Your logins go into the encrypted vault on your Mac and never to us. During setup you type them in yourself while we guide you. Happy to sign an NDA before we start.'],
+      ['What if an automation breaks later?', `Within the ${SETUP.supportDays} days we fix it. After that your team knows how to adjust it, and we are an email away.`],
+      ['Can we try Godmode first?', `Of course. Godmode is free for ${PRICING.freeDays} days. Many teams try it first and book the setup once they see what it can do.`],
+    ],
+  },
+  de: {
+    title: 'Einrichtung vom Profi',
+    description: `Wir richten Godmode für deine Firma ein und bauen mit dir die ersten ${SETUP.automations} Automationen: Workshop, Installation, Tests, Team-Schulung und ${SETUP.supportDays} Tage Support. ${price} einmalig.`,
+    eyebrow: 'Einrichtung vom Profi',
+    h1: 'Wir richten es ein. *Du bekommst deine Stunden zurück.*',
+    lead: `Du erzählst uns, wo deine Woche hingeht. Wir richten Godmode auf euren Macs ein und bauen die Automationen, die dir diese Arbeit abnehmen, getestet mit euren echten Konten. Ein Festpreis, fertig in etwa ${SETUP.deliveryDays} Tagen.`,
+    priceNote: 'einmalig · zzgl. MwSt. · Festpreis',
+    cta: 'Einrichtung anfragen',
+    how: 'So läuft es ab',
+    trust: ['Keine Vorauszahlung', 'Erst ein kostenloses Kennenlernen', `Fertig in etwa ${SETUP.deliveryDays} Tagen`],
+    forEyebrow: 'Für wen',
+    forH: 'Für Teams, die Ergebnisse wollen, *nicht noch ein Tool zum Lernen.*',
+    forCards: [
+      ['store', 'Kleine Firmen und Teams', 'Agenturen, Shops, Büros, Berater und Handwerk: alle, deren Leute jede Woche Stunden durch dieselben Websites klicken.'],
+      ['clock', 'Kleinkram mit Namen', 'Rechnungen aus Portalen, Postfach sortieren, Reports, CRM pflegen, Bestell-Mails. Was jede Woche anfällt, können wir meist automatisieren.'],
+      ['zap', 'Keine Zeit zum Basteln', 'Du könntest es selbst einrichten. Aber du willst, dass es nächste Woche läuft, und zwar gleich richtig.'],
+    ],
+    inclEyebrow: 'Was drin ist',
+    inclH: `Alles für ${price}. *Keine Abrechnung nach Stunden.*`,
+    incl: [
+      ['messages-square', `Kickoff-Workshop (${SETUP.kickoffMinutes} Min.)`, 'Im Videocall gehen wir deine Woche durch und suchen die Aufgaben, die am meisten Zeit kosten. Du bekommst einen schriftlichen Plan, was wir bauen und was es spart.'],
+      ['laptop', 'Installation auf euren Macs', 'Godmode, dein Claude-Abo, der Passwort-Tresor mit euren Logins und 2FA-Codes und Nachrichten vom Handy, aus Slack oder Telegram. Alles eingerichtet und geprüft.'],
+      ['workflow', `Bis zu ${SETUP.automations} Automationen, für dich gebaut`, 'Wir schreiben sie, lassen sie mit euren echten Konten laufen und beheben jeden Haken, bis sie zuverlässig allein laufen, nach Zeitplan oder wenn eine E-Mail kommt.'],
+      ['server', 'Rund um die Uhr, wenn du willst', 'Soll er Tag und Nacht arbeiten? Wir richten Godmode auf einem Mac ein, der immer an bleibt, zum Beispiel einem Mac mini, erreichbar vom Handy. Hardware nicht inklusive.'],
+      ['graduation-cap', `Team-Schulung (${SETUP.trainingMinutes} Min.)`, 'Deine Leute lernen, Aufgaben abzugeben, Schritte freizugeben und neue Automationen selbst zu bauen. So wächst es weiter, wenn wir fertig sind.'],
+      ['life-buoy', `${SETUP.supportDays} Tage Support`, 'Änderungen, Fehlerbehebung und neue Ideen per E-Mail, einen Monat lang nach der Übergabe. Dazu ein kurzes Handbuch, was wann läuft.'],
+    ],
+    stepsEyebrow: 'So läuft es ab',
+    stepsH: 'Vom ersten Gespräch zu *laufenden Automationen.*',
+    steps: [
+      [`Kostenloses Kennenlernen (${SETUP.introMinutes} Min.)`, 'Wir hören zu, prüfen, ob Godmode zu eurer Arbeit passt, und beantworten deine Fragen. Passt es nicht, sagen wir dir das.'],
+      ['Workshop und Plan', `${SETUP.kickoffMinutes} Minuten über deine Woche. Du bekommst einen schriftlichen Plan mit den Automationen, die wir bauen. Dann kommt die Rechnung.`],
+      ['Bauen und testen', 'Wir installieren Godmode und bauen die Automationen mit dir per Bildschirmfreigabe, getestet mit euren echten Konten.'],
+      ['Übergabe und Schulung', 'Dein Team sieht alles laufen, lernt damit zu arbeiten und bekommt das Handbuch.'],
+      [`${SETUP.supportDays} Tage Support`, 'Wir bleiben für Änderungen und Fehler erreichbar, bis alles in eurer Woche angekommen ist.'],
+    ],
+    mathEyebrow: 'Lohnt sich das?',
+    mathH: 'Ein Rechenbeispiel',
+    math: [
+      ['5 Std.', 'gespart pro Person und Woche'],
+      ['× 50 €', 'Kosten pro Stunde'],
+      ['≈ 1.000 €', 'pro Person und Monat'],
+    ],
+    mathText: 'Mit diesen Zahlen hat sich die Einrichtung schon bei einer einzigen Person in drei Monaten bezahlt. Deine Zahlen sind anders, und im Kennenlernen rechnen wir sie mit dir durch, bevor du etwas ausgibst.',
+    exEyebrow: 'Beispiele, die wir einrichten',
+    examples: [
+      'Jeden Montag Rechnungen aus Lieferantenportalen laden und für die Buchhaltung ablegen',
+      'Jeden Morgen das Postfach sortieren, Antworten entwerfen und eine kurze To-do-Liste schicken',
+      'Werbezahlen aus Meta, Google und TikTok in den Wochenreport übertragen',
+      'Nach jedem Vertriebscall das CRM pflegen und das Follow-up entwerfen',
+      '„Wo ist meine Bestellung?“-Mails mit dem Tracking-Link beantworten',
+      'Auf neue Google-Bewertungen antworten und alles unter 3 Sternen melden',
+    ],
+    priceH: 'Ein Preis. Alles oben drin.',
+    priceList: [
+      'Festpreis, keine Abrechnung nach Stunden',
+      'Rechnung von der Codext GmbH nach dem Kennenlernen, keine Vorauszahlung',
+      'Remote per Bildschirmfreigabe, egal wo du bist',
+    ],
+    priceSep: `Nicht enthalten: das Godmode-Abo ($${PRICING.plans.monthly.price} im Monat pro Mac oder $${PRICING.plans.yearly.perMonth} bei jährlicher Zahlung) und dein Claude-Abo.`,
+    formH: 'Einrichtung anfragen',
+    formLead: 'Erzähl uns kurz von deiner Arbeit. Wir melden uns innerhalb eines Werktags mit Terminen für das kostenlose Kennenlernen.',
+    name: 'Dein Name',
+    company: 'Firma',
+    email: 'Geschäftliche E-Mail',
+    phone: 'Telefon',
+    optional: '(optional)',
+    size: 'Wie viele Leute würden Godmode nutzen?',
+    sizes: [['1', 'Nur ich'], ['2-5', '2–5'], ['6-20', '6–20'], ['21+', '21+']],
+    message: 'Was soll Godmode dir abnehmen?',
+    messagePh: 'z. B. Wir laden jeden Monat rund 40 Rechnungen aus 6 Portalen, und jeden Montag baut jemand den Werbereport von Hand…',
+    submit: 'Anfrage senden',
+    privacy: ['Wir nutzen deine Angaben nur, um deine Anfrage zu beantworten.', 'Datenschutz'],
+    doneH: 'Danke, ist angekommen.',
+    doneText: 'Wir melden uns innerhalb eines Werktags mit Terminen für dein kostenloses Kennenlernen. Fragen bis dahin? Schreib an',
+    error: 'Das hat nicht geklappt. Bitte prüf deine Angaben oder schreib uns eine E-Mail.',
+    founder: `Du arbeitest direkt mit den Leuten, die Godmode bauen: ${LEGAL.company}, eine deutsche Softwarefirma und Shopify Premier Partner.`,
+    faqH: 'Fragen zur Einrichtung',
+    faqs: [
+      ['Brauchen wir Macs?', 'Ja. Godmode läuft derzeit auf Macs mit Apple-Chip oder Intel. Ein Mac mini, der immer an bleibt, ist ein super Kollege für das ganze Team.'],
+      ['Läuft alles remote?', 'Ja. Workshop, Einrichtung und Schulung laufen per Videocall und Bildschirmfreigabe, egal wo ihr sitzt.'],
+      ['Was ist mit unseren Passwörtern und Daten?', 'Eure Logins landen im verschlüsselten Tresor auf eurem Mac und nie bei uns. Bei der Einrichtung tippst du sie selbst ein, wir leiten dich an. Eine Vertraulichkeitsvereinbarung unterschreiben wir gern vorab.'],
+      ['Was, wenn später eine Automation hakt?', `Innerhalb der ${SETUP.supportDays} Tage beheben wir das. Danach weiß dein Team, wie man sie anpasst, und wir sind eine E-Mail entfernt.`],
+      ['Können wir Godmode erst testen?', `Klar. Godmode ist ${PRICING.freeDays} Tage kostenlos. Viele Teams testen erst und buchen die Einrichtung, wenn sie sehen, was er kann.`],
+    ],
+  },
+}[lang];
+---
+
+<Base title={t.title} description={t.description}>
+  <Nav home={false} />
+  <main>
+    <section class="relative isolate overflow-hidden pt-[120px] pb-12 sm:pt-[150px] sm:pb-16">
+      <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[800px]" aria-hidden="true"></div>
+      <div class="container-x grid items-center gap-12 lg:grid-cols-[1.25fr_1fr]">
+        <div>
+          <p class="eyebrow" data-reveal>{t.eyebrow}</p>
+          <Words as="h1" text={t.h1} class="h-section mt-5 !text-[clamp(38px,5.4vw,68px)]" delay={80} />
+          <p class="lead mt-6 max-w-[600px] !text-text-2" data-reveal style="--d:350">{t.lead}</p>
+          <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:450">
+            <a href="#request" class="btn btn-primary btn-lg group" data-track="setup_hero_request">
+              {t.cta} <Icon name="arrow-right" size={17} class="arrow" />
+            </a>
+            <a href="#steps" class="btn btn-ghost btn-lg" data-track="setup_hero_how">{t.how}</a>
+          </div>
+          <p class="hero-note mt-6 !justify-start" data-reveal style="--d:520">
+            {
+              t.trust.map((x, i) => (
+                <>
+                  {i > 0 && <span aria-hidden="true" class="text-line-3">·</span>}
+                  <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {x}</span>
+                </>
+              ))
+            }
+          </p>
+        </div>
+
+        <div class="price-card is-featured relative p-7 sm:p-9" data-reveal="scale" style="--d:300">
+          <div class="absolute -top-9 right-6" aria-hidden="true">
+            <Character size={72} mood="happy" seed="setup" follow />
+          </div>
+          <p class="text-[15px] font-semibold text-brand">{t.eyebrow}</p>
+          <p class="mt-4 flex flex-wrap items-baseline gap-x-3">
+            <span class="price-num">{price}</span>
+          </p>
+          <p class="mt-1 text-[14.5px] text-muted">{t.priceNote}</p>
+          <ul class="mt-6 grid gap-2.5 text-[15px] text-text-2">
+            {
+              t.incl.map(([, title]) => (
+                <li class="flex items-start gap-2.5">
+                  <Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" />
+                  {title}
+                </li>
+              ))
+            }
+          </ul>
+          <a href="#request" class="btn btn-dark btn-lg mt-7 w-full" data-track="setup_card_request">{t.cta}</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="relative py-14 sm:py-20">
+      <div class="container-x">
+        <div class="max-w-[760px]">
+          <p class="eyebrow" data-reveal>{t.forEyebrow}</p>
+          <Words text={t.forH} class="h-section mt-4" />
+        </div>
+        <div class="mt-12 grid gap-4 md:grid-cols-3">
+          {
+            t.forCards.map(([icon, title, text], i) => (
+              <div class="card p-6 sm:p-7" data-reveal style={`--d:${i * 90}`}>
+                <span class="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand">
+                  <Icon name={icon} size={20} />
+                </span>
+                <h3 class="mt-5 text-[17px] font-semibold tracking-[-0.015em]">{title}</h3>
+                <p class="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <section id="included" class="relative py-14 sm:py-20" data-track-view="setup_included">
+      <div class="container-x">
+        <div class="mx-auto max-w-[760px] text-center">
+          <p class="eyebrow justify-center" data-reveal>{t.inclEyebrow}</p>
+          <Words text={t.inclH} class="h-section mx-auto mt-4" />
+        </div>
+        <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {
+            t.incl.map(([icon, title, text], i) => (
+              <div class="card p-6 sm:p-7" data-reveal style={`--d:${(i % 3) * 80}`}>
+                <span class="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand">
+                  <Icon name={icon} size={20} />
+                </span>
+                <h3 class="mt-5 text-[17px] font-semibold tracking-[-0.015em]">{title}</h3>
+                <p class="mt-2 text-[15px] leading-relaxed text-muted">{text}</p>
+              </div>
+            ))
+          }
+        </div>
+
+        <div class="mt-14" data-reveal>
+          <p class="text-center text-[14px] font-medium text-muted">{t.exEyebrow}</p>
+          <div class="mx-auto mt-5 flex max-w-[980px] flex-wrap justify-center gap-2.5">
+            {
+              t.examples.map((x) => (
+                <span class="idea-chip !cursor-default">
+                  <Icon name="repeat" size={14} class="text-brand" />
+                  <span>{x}</span>
+                </span>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="steps" class="relative py-14 sm:py-20" data-track-view="setup_steps">
+      <div class="container-x grid gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+        <div class="lg:sticky lg:top-28 lg:self-start">
+          <p class="eyebrow" data-reveal>{t.stepsEyebrow}</p>
+          <Words text={t.stepsH} class="h-section mt-4" />
+          <div class="card-soft mt-10 p-6 sm:p-7" data-reveal style="--d:200">
+            <p class="text-[13px] font-semibold text-muted">{t.mathEyebrow}</p>
+            <p class="mt-1 text-[18px] font-semibold tracking-[-0.015em]">{t.mathH}</p>
+            <div class="mt-5 grid grid-cols-3 gap-3">
+              {
+                t.math.map(([n, label], i) => (
+                  <div>
+                    <p class:list={['text-[clamp(22px,2.6vw,30px)] leading-none font-semibold tracking-[-0.03em]', i === 2 && 'text-brand']}>{n}</p>
+                    <p class="mt-2 text-[13px] leading-snug text-muted">{label}</p>
+                  </div>
+                ))
+              }
+            </div>
+            <p class="mt-5 text-[14.5px] leading-relaxed text-text-2">{t.mathText}</p>
+          </div>
+        </div>
+        <ol class="timeline grid gap-3">
+          {
+            t.steps.map(([title, text], i) => (
+              <li class="card relative flex gap-4 p-5 sm:p-6" data-reveal style={`--d:${i * 70}`}>
+                <span class="step-num relative z-[1] flex-none">{i + 1}</span>
+                <div>
+                  <h3 class="h-card">{title}</h3>
+                  <p class="mt-1.5 text-[15px] leading-relaxed text-muted">{text}</p>
+                </div>
+              </li>
+            ))
+          }
+        </ol>
+      </div>
+    </section>
+
+    <section id="request" class="relative py-14 sm:py-20" data-track-view="setup_request">
+      <div class="container-x">
+        <div class="final-panel grid gap-10 p-6 sm:p-10 lg:grid-cols-[0.85fr_1.15fr] lg:p-14">
+          <div>
+            <p class="eyebrow">{t.priceH}</p>
+            <p class="mt-5 flex flex-wrap items-baseline gap-x-3">
+              <span class="price-num">{price}</span>
+              <span class="text-[14.5px] text-muted">{t.priceNote}</span>
+            </p>
+            <ul class="mt-6 grid gap-2.5 text-[15px] text-text-2">
+              {
+                t.priceList.map((x) => (
+                  <li class="flex items-start gap-2.5">
+                    <Icon name="check" size={17} stroke={2.4} class="mt-0.5 flex-none text-brand" />
+                    {x}
+                  </li>
+                ))
+              }
+            </ul>
+            <p class="mt-5 text-[13.5px] leading-relaxed text-muted">{t.priceSep}</p>
+            <div class="mt-8 flex items-start gap-3 border-t border-line pt-6">
+              <Character size={40} mood="happy" seed="setup-founder" />
+              <p class="text-[14px] leading-relaxed text-text-2">
+                {t.founder}
+                <span class="mt-1 block font-semibold text-text">{FOUNDER.name}, {lang === 'de' ? 'Gründer' : 'founder'}</span>
+              </p>
+            </div>
+          </div>
+
+          <form class="setup-form card p-6 sm:p-8" data-setup-form data-error={t.error} novalidate>
+            <div data-form-body>
+              <h2 class="text-[24px] font-semibold tracking-[-0.025em]">{t.formH}</h2>
+              <p class="mt-2 text-[15px] leading-relaxed text-muted">{t.formLead}</p>
+              <div class="mt-6 grid gap-4 sm:grid-cols-2">
+                <label class="field">
+                  <span>{t.name}</span>
+                  <input class="field-input" name="name" required autocomplete="name" maxlength="120" />
+                </label>
+                <label class="field">
+                  <span>{t.company}</span>
+                  <input class="field-input" name="company" autocomplete="organization" maxlength="160" />
+                </label>
+                <label class="field">
+                  <span>{t.email}</span>
+                  <input class="field-input" name="email" type="email" required autocomplete="email" maxlength="254" />
+                </label>
+                <label class="field">
+                  <span>{t.phone} <small>{t.optional}</small></span>
+                  <input class="field-input" name="phone" type="tel" autocomplete="tel" maxlength="40" />
+                </label>
+              </div>
+              <fieldset class="field mt-5">
+                <span>{t.size}</span>
+                <div class="size-pick">
+                  {
+                    t.sizes.map(([value, label], i) => (
+                      <>
+                        <input type="radio" name="team_size" id={`size-${i}`} value={value} checked={i === 1} />
+                        <label for={`size-${i}`}>{label}</label>
+                      </>
+                    ))
+                  }
+                </div>
+              </fieldset>
+              <label class="field mt-5">
+                <span>{t.message}</span>
+                <textarea class="field-input" name="message" rows="4" maxlength="4000" placeholder={t.messagePh}></textarea>
+              </label>
+              <label class="sr-only" aria-hidden="true">Website<input name="website" tabindex="-1" autocomplete="off" /></label>
+              <button type="submit" class="btn btn-primary btn-lg mt-6 w-full">
+                <span class="btn-label">{t.submit}</span>
+                <span class="btn-spinner" aria-hidden="true"></span>
+              </button>
+              <p data-status role="status" class="mt-3 min-h-[20px] text-center text-[13.5px] text-[var(--warn)]"></p>
+              <p class="text-center text-[12.5px] text-dim">
+                {t.privacy[0]} <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2">{t.privacy[1]}</a>
+              </p>
+            </div>
+            <div data-form-done class="py-8 text-center" role="status">
+              <Character size={84} mood="happy" seed="setup-done" class="mx-auto block" />
+              <p class="mt-5 text-[24px] font-semibold tracking-[-0.025em]">{t.doneH}</p>
+              <p class="mx-auto mt-3 max-w-[380px] text-[15px] leading-relaxed text-muted">
+                {t.doneText} <a href={`mailto:${SITE.email}`} class="font-medium text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a>.
+              </p>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section class="relative pt-6 pb-16 sm:pb-24">
+      <div class="container-x max-w-[860px]">
+        <h2 class="text-center text-[clamp(26px,3.2vw,36px)] font-semibold tracking-[-0.03em]">{t.faqH}</h2>
+        <div class="mt-10 divide-y divide-line border-y border-line">
+          {
+            t.faqs.map(([q, a], i) => (
+              <details class="faq group" data-faq={`setup_${i}`}>
+                <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[18px] font-semibold tracking-[-0.015em] transition-colors hover:text-brand">
+                  {q}
+                  <span class="plus grid size-8 flex-none place-items-center rounded-full bg-surface ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
+                    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+                  </span>
+                </summary>
+                <p class="max-w-[640px] pb-7 text-[16px] leading-[1.7] text-muted">{a}</p>
+              </details>
+            ))
+          }
+        </div>
+        <p class="mt-10 text-center text-[15px] text-muted">
+          <a href={href(lang, '/download')} class="font-medium text-brand underline decoration-[var(--brand-line)] underline-offset-4">
+            {lang === 'de' ? `Oder erst selbst testen: ${PRICING.freeDays} Tage kostenlos` : `Or try it yourself first: free for ${PRICING.freeDays} days`}
+          </a>
+        </p>
+      </div>
+    </section>
+  </main>
+  <Footer />
+  <script type="application/ld+json" set:html={JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: t.title,
+    description: t.description,
+    provider: { '@type': 'Organization', name: LEGAL.company, url: 'https://codext.de' },
+    areaServed: ['DE', 'AT', 'CH', 'Worldwide'],
+    offers: { '@type': 'Offer', price: SETUP.price, priceCurrency: SETUP.currency },
+  })} />
+</Base>
+
+<script>
+  import { attribution, track, xEvent } from '@/scripts/analytics';
+  const form = document.querySelector<HTMLFormElement>('[data-setup-form]');
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const status = form.querySelector<HTMLElement>('[data-status]');
+    if (!form.checkValidity()) {
+      form.reportValidity();
+      return;
+    }
+    const btn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (btn) btn.dataset.loading = 'true';
+    if (status) status.textContent = '';
+    const data = Object.fromEntries(new FormData(form));
+    const a = attribution();
+    try {
+      const res = await fetch('/api/setup-request', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...data, locale: document.documentElement.lang, utm_source: a.utm_source, utm_campaign: a.utm_campaign }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      form.classList.add('is-done');
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      track('lead', 'setup');
+      xEvent('lead');
+    } catch {
+      if (status) status.textContent = form.dataset.error ?? '';
+    } finally {
+      if (btn) delete btn.dataset.loading;
+    }
+  });
+</script>

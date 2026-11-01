@@ -5,9 +5,14 @@ export const SITE = {
   name: 'Godmode',
   product: 'Godmode Bot',
   url: import.meta.env.SITE ?? 'https://usegodmode.com',
-  title: 'Godmode — your computer work, done for you',
-  description:
-    'Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words and it does the job start to finish in your own browser and apps: emails, invoices, spreadsheets, online shop orders, ad reports. No coding. Download it for Mac and use it free for 14 days.',
+  title: {
+    en: 'Godmode — your computer work, done for you',
+    de: 'Godmode — deine Computerarbeit, für dich erledigt',
+  },
+  description: {
+    en: 'Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words and it does the job start to finish in your own browser and apps: emails, invoices, spreadsheets, online shop orders, ad reports. No coding. Download it for Mac and use it free for 14 days.',
+    de: 'Godmode ist der KI-Kollege für alle, die am Computer arbeiten. Sag ihm die Aufgabe in normalen Worten, und er erledigt sie von Anfang bis Ende in deinem Browser und deinen Programmen: E-Mails, Rechnungen, Tabellen, Shop-Bestellungen, Werbe-Reports. Ohne Programmieren. Für Mac herunterladen und 14 Tage kostenlos nutzen.',
+  },
   email: 'kontakt@codext.de',
   model: 'Claude Opus 5.5',
   repo: 'https://github.com/codextde/godmode-bot',
@@ -104,6 +109,23 @@ export function trialCancelBy(from = Date.now()): string {
     timeZone: 'UTC',
   });
 }
+
+/** Done-for-you setup by Codext: one fixed price, invoiced after the intro call (net, plus VAT where it applies). */
+export const SETUP = {
+  price: 2500,
+  currency: 'EUR',
+  automations: 5,
+  kickoffMinutes: 90,
+  trainingMinutes: 60,
+  supportDays: 30,
+  deliveryDays: 14,
+  introMinutes: 20,
+  notify: 'daniel.ehrhardt@codext.de',
+} as const;
+
+/** "€2,500" / "2.500 €" */
+export const setupPrice = (lang: 'en' | 'de') =>
+  new Intl.NumberFormat(lang === 'de' ? 'de-DE' : 'en-IE', { style: 'currency', currency: SETUP.currency, maximumFractionDigits: 0 }).format(SETUP.price);
 
 export const FOUNDER = {
   name: 'Daniel Ehrhardt',

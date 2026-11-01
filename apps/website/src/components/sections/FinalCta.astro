@@ -4,6 +4,24 @@ import Character from '../ui/Character.astro';
 import DownloadButton from '../ui/DownloadButton.astro';
 import Icon from '../ui/Icon.astro';
 import { PRICING } from '@/config/site';
+import { langOf } from '@/i18n';
+
+const t = {
+  en: {
+    h: 'Stop doing work *a computer can do.*',
+    lead: 'Give Godmode your most boring task this week. If it doesn’t save you time, you’ve lost nothing.',
+    free: `Free for ${PRICING.freeDays} days`,
+    card: 'No card',
+    signup: 'No sign-up',
+  },
+  de: {
+    h: 'Schluss mit Arbeit, *die ein Computer kann.*',
+    lead: 'Gib Godmode diese Woche deine langweiligste Aufgabe. Spart er dir keine Zeit, hast du nichts verloren.',
+    free: `${PRICING.freeDays} Tage kostenlos`,
+    card: 'Ohne Karte',
+    signup: 'Ohne Anmeldung',
+  },
+}[langOf(Astro.url)];
 ---
 
 <section class="relative pt-4 pb-16 sm:pb-24">
@@ -16,19 +34,19 @@ import { PRICING } from '@/config/site';
         <Character character={{ body: 'kitty', eyes: 'dots', mouth: 'cat', top: 'none', face: 'shades', neck: 'none' }} color="rose" size={64} seed="cta-4" follow />
         <Character character={{ body: 'ghost', eyes: 'wide', mouth: 'smile', top: 'antenna', face: 'none', neck: 'scarf' }} color="sky" size={54} seed="cta-5" follow />
       </div>
-      <Words text="Stop doing work *a computer can do.*" class="h-display mx-auto mt-8 max-w-[13ch] !text-[clamp(40px,6.4vw,84px)]" />
+      <Words text={t.h} class="h-display mx-auto mt-8 max-w-[13ch] !text-[clamp(40px,6.4vw,84px)]" />
       <p class="lead mx-auto mt-6 max-w-[520px]" data-reveal style="--d:300">
-        Give Godmode your most boring task this week. If it doesn’t save you time, you’ve lost nothing.
+        {t.lead}
       </p>
       <div class="mt-10 flex justify-center" data-reveal style="--d:450">
         <DownloadButton source="final" size="xl" />
       </div>
       <p class="hero-note mt-5" data-reveal style="--d:520">
-        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> Free for {PRICING.freeDays} days</span>
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.free}</span>
         <span aria-hidden="true" class="text-line-3">·</span>
-        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No card</span>
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.card}</span>
         <span aria-hidden="true" class="text-line-3">·</span>
-        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No sign-up</span>
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.signup}</span>
       </p>
     </div>
   </div>
