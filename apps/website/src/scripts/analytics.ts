@@ -2,7 +2,7 @@
 
 type Tracking = {
   x: string;
-  xEvents: { purchase: string; checkout: string; lead: string; pricing: string };
+  xEvents: { purchase: string; checkout: string; lead: string; pricing: string; download: string };
 };
 
 declare global {

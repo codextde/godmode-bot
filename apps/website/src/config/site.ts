@@ -132,6 +132,8 @@ export const TRACKING = {
     checkout: import.meta.env.PUBLIC_X_EVENT_CHECKOUT ?? '',
     lead: import.meta.env.PUBLIC_X_EVENT_LEAD ?? '',
     pricing: import.meta.env.PUBLIC_X_EVENT_PRICING ?? '',
+    // A Mac download started; falls back to the Lead event until its own event exists.
+    download: import.meta.env.PUBLIC_X_EVENT_DOWNLOAD || import.meta.env.PUBLIC_X_EVENT_LEAD || '',
   },
   // Optional: Cloudflare Web Analytics beacon token (cookieless).
   cfBeacon: import.meta.env.PUBLIC_CF_BEACON ?? '',

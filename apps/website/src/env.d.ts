@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly PUBLIC_X_EVENT_CHECKOUT?: string;
   readonly PUBLIC_X_EVENT_LEAD?: string;
   readonly PUBLIC_X_EVENT_PRICING?: string;
+  readonly PUBLIC_X_EVENT_DOWNLOAD?: string;
   readonly PUBLIC_CF_BEACON?: string;
 }
 
