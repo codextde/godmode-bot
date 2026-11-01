@@ -1,8 +1,7 @@
-import { useIsFetching, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Star } from "lucide-react";
-import type { TFunction } from "i18next";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { ClaudeAccount, ClaudeUsage, ClaudeUsageWindow } from "@godmode/shared";
+import { DefaultTag, useAccountName, useClaudeAccounts } from "@/components/claude-accounts/shared";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
@@ -80,9 +79,7 @@ function Row({ label, window }: { label: string; window: ClaudeUsageWindow }) {
   );
 }
 
-function Rings({ usage }: { usage: ClaudeUsage }) {
-  const fiveHour = usage.fiveHour ? left(usage.fiveHour) : null;
-  const week = usage.week ? left(usage.week) : 100;
+function Rings({ fiveHour, week }: { fiveHour: number | null; week: number }) {
   const outer = SIZE / 2 - STROKE / 2;
   const inner = outer - STROKE - GAP;
   const lowest = Math.min(fiveHour ?? 100, week);
@@ -100,36 +97,33 @@ function Rings({ usage }: { usage: ClaudeUsage }) {
   );
 }
 
-function ringLabel(t: TFunction<"layout">, usage: ClaudeUsage): string {
-  const week = usage.week ? left(usage.week) : 100;
-  return usage.fiveHour ? t("usage.label", { fiveHour: left(usage.fiveHour), week }) : t("usage.labelWeek", { week });
+function UsageRows({ usage }: { usage: ClaudeUsage & { week: ClaudeUsageWindow } }) {
+  const { t } = useTranslation("layout");
+  return (
+    <>
+      {usage.fiveHour && <Row label={t("usage.fiveHour")} window={usage.fiveHour} />}
+      <Row label={t("usage.week")} window={usage.week} />
+    </>
+  );
 }
 
-function accountName(t: TFunction<"layout">, account: ClaudeAccount): string {
-  return account.name || account.email || (account.system ? t("usage.thisComputer") : t("usage.account"));
+function hasWeek(usage: ClaudeUsage | null): usage is ClaudeUsage & { week: ClaudeUsageWindow } {
+  return !!usage?.week;
 }
 
 function AccountUsage({ account }: { account: ClaudeAccount }) {
   const { t } = useTranslation("layout");
-  const usage = account.usage;
+  const accountName = useAccountName();
   return (
     <div className="flex flex-col gap-1.5 border-t border-current/15 pt-2 first:border-t-0 first:pt-0">
       <div className="flex min-w-0 items-center gap-1.5">
-        <span className="truncate font-medium">{accountName(t, account)}</span>
-        {account.isDefault && (
-          <span className="inline-flex shrink-0 items-center gap-0.5 rounded-[4px] bg-current/10 px-1 text-[10px] leading-4 font-medium">
-            <Star className="size-2 fill-current" aria-hidden />
-            {t("usage.default")}
-          </span>
-        )}
+        <span className="truncate font-medium">{accountName(account)}</span>
+        {account.isDefault && <DefaultTag className="shrink-0 bg-current/10 text-current" />}
       </div>
       {account.needsSignIn ? (
         <span className="text-warning">{t("usage.signedOut")}</span>
-      ) : usage?.week ? (
-        <>
-          {usage.fiveHour && <Row label={t("usage.fiveHour")} window={usage.fiveHour} />}
-          <Row label={t("usage.week")} window={usage.week} />
-        </>
+      ) : hasWeek(account.usage) ? (
+        <UsageRows usage={account.usage} />
       ) : (
         <span className="opacity-70">{t("usage.noReading")}</span>
       )}
@@ -139,67 +133,38 @@ function AccountUsage({ account }: { account: ClaudeAccount }) {
 
 export function UsageRing() {
   const { t } = useTranslation("layout");
+  const accountName = useAccountName();
   const qc = useQueryClient();
-  const accounts = useQuery({ queryKey: qk.claudeAccounts, queryFn: api.claudeAccounts.list, refetchInterval: 60_000, refetchOnWindowFocus: true });
+  const accounts = useClaudeAccounts();
   const list = accounts.data?.accounts ?? [];
+  const shown = list.find((a) => a.isDefault && hasWeek(a.usage)) ?? list.find((a) => hasWeek(a.usage));
+  if (!shown || !hasWeek(shown.usage)) return null;
+  const usage = shown.usage;
   const multi = list.length > 1;
-  const usage = useQuery({
-    queryKey: qk.claudeUsage,
-    queryFn: () => api.doctor.claudeUsage(),
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
-    enabled: accounts.isFetched && !multi,
-  });
-  const fetchingUsage = useIsFetching({ queryKey: qk.claudeUsage }) > 0;
-  const fetchingAccounts = useIsFetching({ queryKey: qk.claudeAccounts }) > 0;
-
-  if (multi) {
-    const shown = [list.find((a) => a.isDefault), ...list].find((a) => a?.usage?.state === "ok" && a.usage.week) ?? null;
-    if (!shown?.usage) return null;
-    const refresh = () => void qc.fetchQuery({ queryKey: qk.claudeAccounts, queryFn: api.claudeAccounts.refresh, staleTime: 0 });
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("size-8", fetchingAccounts && "opacity-70")}
-            aria-label={`${accountName(t, shown)}: ${ringLabel(t, shown.usage)}`}
-            onClick={refresh}
-          >
-            <Rings usage={shown.usage} />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent className="w-72">
-          <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto py-0.5">
-            <p className="font-semibold">{t("usage.title")}</p>
-            {list.map((a) => (
-              <AccountUsage key={a.id} account={a} />
-            ))}
-            <p className="opacity-60">{t("usage.hintAccounts", { name: accountName(t, shown) })}</p>
-          </div>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
-  const refresh = () => void qc.fetchQuery({ queryKey: qk.claudeUsage, queryFn: () => api.doctor.claudeUsage(true), staleTime: 0 });
-  const data = usage.data;
-  if (!data?.week) return null;
+  const name = accountName(shown);
+  const fiveHour = usage.fiveHour ? left(usage.fiveHour) : null;
+  const week = left(usage.week);
+  const label = fiveHour === null ? t("usage.labelWeek", { week }) : t("usage.label", { fiveHour, week });
+  const refresh = () => void qc.fetchQuery({ queryKey: qk.claudeAccounts, queryFn: api.claudeAccounts.refresh, staleTime: 0 });
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" className={cn("size-8", fetchingUsage && "opacity-70")} aria-label={ringLabel(t, data)} onClick={refresh}>
-          <Rings usage={data} />
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("size-8", accounts.isFetching && "opacity-70")}
+          aria-label={multi ? `${name}: ${label}` : label}
+          onClick={refresh}
+        >
+          <Rings fiveHour={fiveHour} week={week} />
         </Button>
       </TooltipTrigger>
-      <TooltipContent className="w-64">
-        <div className="flex flex-col gap-2 py-0.5">
+      <TooltipContent className={multi ? "w-72" : "w-64"}>
+        <div className="flex max-h-[70vh] flex-col gap-2 overflow-y-auto py-0.5">
           <p className="font-semibold">{t("usage.title")}</p>
-          {data.fiveHour && <Row label={t("usage.fiveHour")} window={data.fiveHour} />}
-          <Row label={t("usage.week")} window={data.week} />
-          {data.state !== "ok" && <p className="text-warning">{t("usage.stale")}</p>}
-          <p className="opacity-60">{data.fiveHour ? t("usage.hint") : t("usage.hintWeek")}</p>
+          {multi ? list.map((a) => <AccountUsage key={a.id} account={a} />) : <UsageRows usage={usage} />}
+          {usage.state !== "ok" && <p className="text-warning">{t("usage.stale")}</p>}
+          <p className="opacity-60">{multi ? t("usage.hintAccounts", { name }) : fiveHour === null ? t("usage.hintWeek") : t("usage.hint")}</p>
         </div>
       </TooltipContent>
     </Tooltip>

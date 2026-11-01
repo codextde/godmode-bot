@@ -131,9 +131,6 @@
     "stale": "Gerade nicht aktualisierbar – zeigt den letzten Stand",
     "hint": "Äußerer Ring: 5 Stunden · innerer Ring: Woche. Klicken zum Aktualisieren.",
     "hintWeek": "Dein Plan hat kein 5-Stunden-Limit, nur ein Wochenlimit. Klicken zum Aktualisieren.",
-    "thisComputer": "Dieser Computer",
-    "account": "Claude-Konto",
-    "default": "Standard",
     "signedOut": "Abgemeldet – in den Einstellungen neu anmelden",
     "noReading": "Noch kein Messwert",
     "hintAccounts": "Der Ring zeigt {{name}}. Klicken zum Aktualisieren."

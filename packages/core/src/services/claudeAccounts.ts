@@ -360,6 +360,10 @@ async function fetchAccountUsage(row: AccountRow): Promise<ClaudeUsage> {
   }
 }
 
+function usageFingerprint(): string {
+  return JSON.stringify([...usageCache].map(([id, { value }]) => [id, value.state, value.plan, value.fiveHour, value.week]));
+}
+
 /** Fetches the usage of every account (one request each). */
 export function refreshClaudeUsage(): Promise<void> {
   usageRefresh ??= (async () => {
@@ -369,12 +373,13 @@ export function refreshClaudeUsage(): Promise<void> {
       ...list.map((r) => fetchAccountUsage(r).catch(() => null)),
     ]);
     const at = (usageRefreshedAt = Date.now());
+    const before = usageFingerprint();
     if (results[0]) usageCache.set(SYSTEM_CLAUDE_ACCOUNT, { at, value: results[0] });
     list.forEach((r, i) => {
       const value = results[i + 1];
       if (value) usageCache.set(r.id, { at, value });
     });
-    changed();
+    if (usageFingerprint() !== before) changed();
   })().finally(() => {
     usageRefresh = null;
   });
