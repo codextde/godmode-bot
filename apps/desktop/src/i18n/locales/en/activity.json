@@ -1,7 +1,5 @@
 {
   "dayFormat": "EEEE, MMM d",
-  "title": "Activity",
-  "description": "Every run across your agents.",
   "runningNow": "Running now",
   "liveNow": "Live now",
   "searchPlaceholder": "Search prompts & results…",

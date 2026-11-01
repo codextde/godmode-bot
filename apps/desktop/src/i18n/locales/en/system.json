@@ -22,16 +22,8 @@
     "files": {
       "description": "What your agents keep: their files, notes and memory. Look through it, tidy it up, and put back what you deleted."
     },
-    "activity": {
-      "title": "History",
-      "description": "Everything your agents did."
-    },
     "calls": {
       "title": "Phone calls"
-    },
-    "plugins": {
-      "title": "Add-ons",
-      "description": "Extra skills for your agents. Add one, switch it off or remove it any time."
     },
     "cards": {
       "title": "Payment cards"

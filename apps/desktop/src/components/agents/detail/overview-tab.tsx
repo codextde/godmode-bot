@@ -79,7 +79,7 @@ export function OverviewTab({ agent }: { agent: Agent }) {
             <h2 className="text-sm font-medium tracking-[-0.01em]">{easy ? t("overviewTab.recentWork") : t("overviewTab.recentRuns")}</h2>
             {activityOn && (
               <Button variant="ghost" size="sm" asChild className="text-muted-foreground">
-                <Link to={`/activity?agent=${agent.id}`}>
+                <Link to={`/settings/activity?agent=${agent.id}`}>
                   {t("overviewTab.allActivity")} <ArrowRight />
                 </Link>
               </Button>

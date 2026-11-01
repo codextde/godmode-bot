@@ -22,16 +22,8 @@
     "files": {
       "description": "Was deine Agenten aufbewahren: ihre Dateien, Notizen und ihr Gedächtnis. Sieh es durch, räum auf und hol Gelöschtes zurück."
     },
-    "activity": {
-      "title": "Verlauf",
-      "description": "Alles, was deine Agenten gemacht haben."
-    },
     "calls": {
       "title": "Anrufe"
-    },
-    "plugins": {
-      "title": "Erweiterungen",
-      "description": "Zusätzliche Fähigkeiten für deine Agenten. Jederzeit hinzufügen, ausschalten oder entfernen."
     },
     "cards": {
       "title": "Zahlungskarten"

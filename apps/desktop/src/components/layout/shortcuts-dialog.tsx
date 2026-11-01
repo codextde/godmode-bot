@@ -14,7 +14,7 @@ export const GO_TO = [
   { key: "a", to: "/agents", label: "nav.agents" },
   { key: "u", to: "/automations", label: "nav.automations" },
   { key: "i", to: "/inbox", label: "nav.inbox" },
-  { key: "y", to: "/activity", label: "nav.activity" },
+  { key: "y", to: "/settings/activity", label: "nav.activity" },
   { key: "l", to: "/vault/logins", label: "nav.passwords" },
   { key: "s", to: "/settings/general", label: "nav.settings" },
 ] as const;

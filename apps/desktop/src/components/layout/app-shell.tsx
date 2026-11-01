@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Activity,
   ArrowLeft,
   Bot,
   Box,
@@ -18,7 +17,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Phone,
-  Puzzle,
   Search,
   Server,
   Settings,
@@ -27,7 +25,6 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { modState, modUpdateAvailable } from "@godmode/shared";
 import {
   Sidebar,
   SidebarContent,
@@ -65,7 +62,8 @@ import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
 import { FreeTrialChip, LicenseBanner } from "@/components/license/license-banner";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { useBootstrap, useMods } from "@/lib/hooks";
+import { useBootstrap } from "@/lib/hooks";
+import { usePluginsWaiting } from "@/components/mods/use-plugins-waiting";
 import { useEasyMode } from "@/lib/mode";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
@@ -132,9 +130,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const waiting = attention?.total ?? (boot?.counts.openQuestions ?? 0) + (boot?.counts.openMissingLogins ?? 0);
   const inboxCount = waiting || (boot?.counts.unreadNotifications ?? 0);
   const hiddenNav = useUi((s) => s.hiddenNav);
-  const { data: mods = [] } = useMods();
-  // Plugins that wait for the human: an agent's draft or install to review, code the check refuses, an update.
-  const modsWaiting = mods.filter((m) => ["review", "broken"].includes(modState(m)) || modUpdateAvailable(m)).length;
   const easy = useEasyMode();
 
   // Notices when the human comes back after a while (Home then sums up what happened).
@@ -197,9 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { to: "/tasks", label: t("nav.tasks"), icon: <SquareKanban />, badge: (attention?.review ?? 0) + (attention?.blocked ?? 0) || undefined },
     { to: "/agents", label: t("nav.agents"), icon: <Bot />, badge: runningCount || undefined },
     { to: "/automations", label: t("nav.automations"), icon: <Workflow />, badge: attention?.automation || undefined },
-    { to: "/activity", label: t("nav.activity"), icon: <Activity /> },
     { to: "/calls", label: t("nav.calls"), icon: <Phone /> },
-    { to: "/plugins", label: t("nav.plugins"), icon: <Puzzle />, badge: modsWaiting || undefined },
     { to: "/vault/logins", label: t("nav.passwords"), icon: <KeyRound />, also: ["/vault/2fa", "/vault/passkeys"] },
     { to: "/vault/cards", label: t("nav.cards"), icon: <CreditCard /> },
   ];
@@ -220,10 +213,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     easyItem("/vault/logins", t("nav.passwords")),
   ];
   const easyMore: NavItem[] = [
-    easyItem("/activity", t("system:easyPages.activity.title")),
     easyItem("/calls", t("system:easyPages.calls.title")),
     easyItem("/vault/cards", t("system:easyPages.cards.title")),
-    easyItem("/plugins", t("system:easyPages.plugins.title")),
     easyItem("/browser", t("nav.browser")),
     easyItem("/computer", t("system:easyPages.computer.title")),
     easyItem("/vms", t("nav.vms")),
@@ -687,6 +678,7 @@ function FooterBar() {
   const { data: boot } = useBootstrap();
   // People waiting to talk to a bot: Settings → Messaging shows who.
   const requests = boot?.settings.messaging.enabled ? boot.counts.messagingRequests : 0;
+  const plugins = usePluginsWaiting();
   const connected = useLive((s) => s.connected);
   const qc = useQueryClient();
   const lock = useMutation({
@@ -729,16 +721,28 @@ function FooterBar() {
             variant={SETTINGS_PATHS.some((p) => location.pathname.startsWith(p)) ? "secondary" : "ghost"}
             size="icon"
             className="relative size-8"
-            aria-label={requests ? t("footer.settingsWaitingLabel", { count: requests }) : t("common:words.settings")}
+            aria-label={
+              requests
+                ? t("footer.settingsWaitingLabel", { count: requests })
+                : plugins
+                  ? t("footer.settingsPluginsLabel", { count: plugins })
+                  : t("common:words.settings")
+            }
             asChild
           >
-            <Link to={requests ? "/settings/messaging" : "/settings/general"}>
+            <Link to={requests ? "/settings/messaging" : plugins ? "/settings/plugins" : "/settings/general"}>
               <Settings className="size-4" />
-              {requests > 0 && <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand ring-2 ring-card" aria-hidden />}
+              {requests + plugins > 0 && <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-brand ring-2 ring-card" aria-hidden />}
             </Link>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>{requests ? t("footer.settingsWaiting", { count: requests }) : t("footer.settingsShortcut", { shortcut: `${modKey},` })}</TooltipContent>
+        <TooltipContent>
+          {requests
+            ? t("footer.settingsWaiting", { count: requests })
+            : plugins
+              ? t("footer.settingsPlugins", { count: plugins })
+              : t("footer.settingsShortcut", { shortcut: `${modKey},` })}
+        </TooltipContent>
       </Tooltip>
     </div>
   );

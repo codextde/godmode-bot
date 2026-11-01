@@ -43,6 +43,7 @@ import {
   X,
 } from "lucide-react";
 import { EmptyState } from "@/components/common";
+import { usePluginsWaiting } from "@/components/mods/use-plugins-waiting";
 import { AboutSection } from "@/components/settings/about-section";
 import { ActivitySection } from "@/components/settings/activity-section";
 import { AiSection } from "@/components/settings/ai-section";
@@ -417,17 +418,23 @@ type Marks = Partial<Record<SectionId, ReactNode>>;
 function useMarks(): Marks {
   const { t } = useTranslation(["settings", "common"]);
   const { data: boot } = useBootstrap();
+  const plugins = usePluginsWaiting();
   if (!boot) return {};
   const marks: Marks = {};
   for (const feature of FEATURES) if (!featureOn(boot.settings, feature)) marks[FEATURE_SECTION[feature] as SectionId] = <span className="text-[11px] text-muted-foreground/70">{t("common:status.off")}</span>;
   const requests = featureOn(boot.settings, "messaging") ? boot.counts.messagingRequests : 0;
-  if (requests)
-    marks.messaging = (
-      <span className="rounded-[5px] bg-brand-soft px-1.5 font-mono text-[10.5px] leading-4 font-medium text-brand-strong tabular-nums" aria-label={t("page.waiting", { count: requests })}>
-        {requests}
-      </span>
-    );
+  if (requests) marks.messaging = <WaitingMark count={requests} />;
+  if (plugins) marks.plugins = <WaitingMark count={plugins} />;
   return marks;
+}
+
+function WaitingMark({ count }: { count: number }) {
+  const { t } = useTranslation("settings");
+  return (
+    <span className="rounded-[5px] bg-brand-soft px-1.5 font-mono text-[10.5px] leading-4 font-medium text-brand-strong tabular-nums" aria-label={t("page.waiting", { count })}>
+      {count}
+    </span>
+  );
 }
 
 function SectionNav({ active }: { active: SectionId }) {

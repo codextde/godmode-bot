@@ -78,11 +78,10 @@
     "title": "Activity",
     "titleEasy": "History",
     "summary": "Every run of every agent in one place: what it did, how long it took and where it failed.",
-    "offNote": "It leaves the sidebar while it's off. Runs are still recorded, and links to a run still open it.",
+    "offNote": "Runs are still recorded while it's off, and links to a run still open it.",
     "pointRuns": "Every run, newest first",
     "pointFilter": "Filter by agent, trigger or outcome",
-    "pointSteps": "Open a run to see each step it took",
-    "linkDescription": "In the sidebar under Work."
+    "pointSteps": "Open a run to see each step it took"
   },
   "artifacts": {
     "title": "Artifacts",
@@ -140,8 +139,7 @@
     "offNote": "Runs load no plugins while it's off. Your plugins and their settings stay as they are.",
     "pointGit": "Install any plugin from a git repository",
     "pointHooks": "Small hooks your agents write for you",
-    "pointChecked": "Each one checked, switched off until you allow it",
-    "linkDescription": "Install, switch on and pick the agents each plugin is for."
+    "pointChecked": "Each one checked, switched off until you allow it"
   },
   "files": {
     "title": "Files",

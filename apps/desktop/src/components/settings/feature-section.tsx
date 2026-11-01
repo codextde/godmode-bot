@@ -30,9 +30,7 @@ export const FEATURE_SECTION: Record<Feature, string> = {
 
 /** Pages in the sidebar that belong to a feature: they leave it while the feature is off. */
 export const PAGE_FEATURE: Record<string, Feature> = {
-  "/activity": "activity",
   "/calls": "phone",
-  "/plugins": "plugins",
   "/vault/cards": "cards",
   "/vms": "vm",
   "/ssh": "ssh",
@@ -55,6 +53,7 @@ export function FeatureSection({
   icon,
   points,
   offNote,
+  showWhileOff,
   children,
 }: {
   feature: Feature;
@@ -64,6 +63,8 @@ export function FeatureSection({
   icon: ReactNode;
   points: { icon: ReactNode; text: string }[];
   offNote?: string;
+  /** Shows the feature itself even while it's off (a link to one of its records). */
+  showWhileOff?: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation(["settings", "common"]);
@@ -89,7 +90,7 @@ export function FeatureSection({
         </label>
       </header>
 
-      {on ? (
+      {on || showWhileOff ? (
         <motion.div key="on" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
           {children}
         </motion.div>

@@ -28,7 +28,6 @@
     "automations": "Automationen",
     "activity": "Aktivität",
     "calls": "Anrufe",
-    "plugins": "Plugins",
     "passwords": "Passwörter",
     "cards": "Karten",
     "browser": "Browser",
@@ -97,6 +96,10 @@
     "settingsWaitingLabel_other": "Einstellungen ({{count}} warten in Messaging)",
     "settingsWaiting_one": "Einstellungen · {{count}} wartet in Messaging",
     "settingsWaiting_other": "Einstellungen · {{count}} warten in Messaging",
+    "settingsPlugins_one": "Einstellungen · {{count}} Plugin wartet auf dich",
+    "settingsPlugins_other": "Einstellungen · {{count}} Plugins warten auf dich",
+    "settingsPluginsLabel_one": "Einstellungen ({{count}} Plugin wartet auf dich)",
+    "settingsPluginsLabel_other": "Einstellungen ({{count}} Plugins warten auf dich)",
     "settingsShortcut": "Einstellungen ({{shortcut}})"
   },
   "splash": {

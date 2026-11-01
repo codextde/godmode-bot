@@ -1,7 +1,5 @@
 {
   "page": {
-    "title": "Plugins",
-    "description": "Give your agents new skills, subagents, commands and guardrails. These are Claude Code plugins: install them from GitHub, add one Godmode made, or write your own — and switch them off, update or remove them any time.",
     "askPrompt": "Write a Claude Code plugin for Godmode that ",
     "askGodmode": "Ask Godmode to write one",
     "addPlugin": "Add plugin",

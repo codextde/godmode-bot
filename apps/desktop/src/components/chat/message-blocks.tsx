@@ -323,7 +323,7 @@ function ModNote({ level, text, name }: { level: "info" | "warning" | "success";
     <div className={cn("flex flex-wrap items-start gap-x-2 gap-y-1 rounded-lg border px-3 py-2 text-[13px]", NOTICE[level].cls)}>
       {mod ? (
         <Link
-          to={`/plugins?plugin=${mod.id}`}
+          to={`/settings/plugins?plugin=${mod.id}`}
           title={t("blocks.pluginNote", { name: mod.title })}
           className={cn(chip, "transition outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50")}
         >
