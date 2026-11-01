@@ -79,7 +79,7 @@ export default function MyTasks() {
               ) : null}
               {adding ? <AddTask onDone={() => setAdding(false)} /> : null}
             </View>
-          ) : null
+          ) : undefined
         }
         renderSectionHeader={({ section }) => (
           <View style={{ paddingHorizontal: space.sm, paddingTop: space.lg }}>
@@ -95,7 +95,7 @@ export default function MyTasks() {
             </View>
           ) : list.isError ? (
             <ErrorState title={t("myTasks.loadFailed")} error={errorText(list.error)} onRetry={() => void list.refetch()} />
-          ) : adding ? null : (
+          ) : adding ? undefined : (
             <EmptyState
               icon="person"
               title={t("myTasks.emptyTitle")}

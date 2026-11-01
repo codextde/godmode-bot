@@ -1,7 +1,7 @@
 import { Button as MenuButton, Host, Image as SwiftImage, Menu } from "@expo/ui/swift-ui";
 import { accessibilityLabel, background, contentShape, frame, shapes } from "@expo/ui/swift-ui/modifiers";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, TextInput, View, type TextInputInstance } from "react-native";
 import { useTranslation } from "react-i18next";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
 import type { SlashCommand } from "@godmode/shared";
@@ -61,7 +61,7 @@ export function Composer({
 }) {
   const c = useColors();
   const { t: tr } = useTranslation(["components", "common"]);
-  const input = useRef<TextInput>(null);
+  const input = useRef<TextInputInstance>(null);
   const draft = useDraft(draftKey);
   const setDraft = useDrafts((s) => s.set);
   const { text, files } = draft;

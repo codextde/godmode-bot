@@ -41,7 +41,6 @@
       ]
     },
     "plugins": [
-      "./plugins/with-scene-lifecycle",
       "expo-router",
       [
         "expo-font",
@@ -157,7 +156,10 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "expo-image",
+      "expo-localization",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,
