@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { PasswordInput } from "@/components/vault/password-input";
 import { toastApiError } from "@/components/vault/vault-utils";
 import { api } from "@/lib/api";
@@ -80,6 +81,14 @@ export function CaptchaSolving({ browser }: { browser: BrowserSettings }) {
       icon={<Puzzle />}
       description={t("captcha.description")}
     >
+      <SettingRow label={t("captcha.local")} htmlFor="captcha-local" disabled={!browser.enabled} description={t("captcha.localDescription")}>
+        <Switch
+          id="captcha-local"
+          checked={browser.captchaLocal}
+          disabled={!browser.enabled}
+          onCheckedChange={(captchaLocal) => patchAsync({ browser: { captchaLocal } }).catch(() => {})}
+        />
+      </SettingRow>
       <SettingRow
         label={t("captcha.service")}
         htmlFor="captcha-solver"
