@@ -2,10 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import type { Agent, MessageBlock, Task } from "@godmode/shared";
 import { taskEventText } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, until, type TestEnv } from "./fixtures/runner-harness";
-import { callTool } from "../src/mcp/tools";
+import { callTool, listToolsFor } from "../src/mcp/tools";
 import { deleteAgent, ensureDefaultAgent, updateAgent } from "../src/agents/service";
 import { getAccessToken } from "../src/server/auth";
-import { deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
+import { createConversation, deleteConversation, getConversation, sendMessage, startChat } from "../src/services/conversations";
 import { listAttention } from "../src/services/attention";
 import { listAudit } from "../src/services/audit";
 import { listNotifications } from "../src/services/notifications";
@@ -15,7 +15,7 @@ import { run as sql } from "../src/db";
 import { answerQuestion, getQuestion, openQuestionOf, setRemoteAnswerer, setRemoteQuestionFetcher } from "../src/services/questions";
 import { adoptQuestion } from "../src/remote/mirror";
 import { stopPauses } from "../src/services/pauses";
-import { cancelRun, getRun, listRuns, waitForRun } from "../src/runner/runner";
+import { cancelRun, getRun, listRuns, startRun, waitForRun } from "../src/runner/runner";
 import { createTask, getTask, listTaskEvents, startTasks, stopTasks } from "../src/tasks/service";
 
 let env: TestEnv;
@@ -175,6 +175,32 @@ describe("an agent gives the human a task", () => {
     } finally {
       await updateAgent(agent.id, { reportsTo: null });
     }
+  }, 30_000);
+
+  test("a delegated run can't give tasks but takes back its own and its team's", async () => {
+    const godmode = await ensureDefaultAgent();
+    const first = await chatWithTask();
+    const delegated = async (a: Agent) => {
+      const conv = createConversation({ agentId: a.id, origin: "delegation" });
+      const r = await startRun({ agentId: a.id, conversationId: conv.id, prompt: "Withdraw the duplicate", trigger: "delegation", parentRunId: first.run.id, depth: 1 });
+      await waitForRun(r.id, 10_000);
+      return { runId: r.id, agentId: a.id, conversationId: conv.id, workspaceId: null, depth: 1 };
+    };
+    const lead = await delegated(godmode);
+    const tools = listToolsFor(godmode, lead).map((t) => t.name);
+    expect(tools).toContain("human_task_cancel");
+    expect(tools).toContain("human_tasks_list");
+    expect(tools).not.toContain("human_task_create");
+    expect((await callTool(lead, "human_tasks_list", {})).content[0]!.text).toContain(`"ref": "H-${first.task.number}"`);
+    const back = await callTool(lead, "human_task_cancel", { id: `H-${first.task.number}`, reason: "Duplicate" });
+    expect(back.content[0]!.text).toBe(`H-${first.task.number} is off the list.`);
+    expect(getHumanTask(first.task.id)).toMatchObject({ status: "withdrawn", closedReason: "Godmode: Duplicate" });
+
+    const second = await chatWithTask();
+    const own = await delegated(agent);
+    expect((await callTool(own, "human_task_create", { title: "Another one" })).isError).toBe(true);
+    expect((await callTool(own, "human_task_cancel", { id: second.task.id })).isError).toBeUndefined();
+    expect(getHumanTask(second.task.id).status).toBe("withdrawn");
   }, 30_000);
 
   test("at most five open tasks per chat; deleting the chat withdraws them", async () => {
