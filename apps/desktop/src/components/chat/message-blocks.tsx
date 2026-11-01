@@ -476,7 +476,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   const runningIdx = streaming ? tools.findIndex((s) => stepRunning(s.block, true)) : -1;
   const failed = tools.filter((s) => s.block.isError).length;
   const images = tools.filter((s) => s.block.image).map((s) => s.block.image!);
-  const expanded = manual ?? false;
+  const expanded = manual ?? (streaming && !easy);
   const single = tools.length === 1;
 
   if (tools.length === 0) {
