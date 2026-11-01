@@ -27,7 +27,7 @@ const RUN = /^\/api\/runs\/([A-Za-z0-9_-]{1,100})(\/cancel|\/log)?$/;
 const BROWSER = /^\/api\/browser\/profiles\/[A-Za-z0-9_-]{1,100}\/(input|navigate)$/;
 const PROXY = /^\/api\/runners\/([A-Za-z0-9_-]{1,100})\/proxy(\/.*)$/;
 /** Chat sub-routes the runner answers. `files` resolves the paths in its messages on its own disk. */
-const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|continue|retry|followup|followup\/run|files)$/;
+const FORWARDED = /^\/(messages|queue\/send|queue\/[A-Za-z0-9_-]{1,100}|pause|continue|retry|followup|followup\/run|files|attachment)$/;
 /** Chat sub-routes that start a new run on the runner (continuing a paused one isn't new work). */
 const STARTS_RUN = /^\/(messages|retry|followup\/run|queue\/send)$/;
 const MAX_BODY = 64 * 1024 * 1024;

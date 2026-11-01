@@ -3,8 +3,8 @@
  * A conversation belongs to one agent; every user turn starts a run (runner/runner.ts) that streams
  * into one assistant message. A human-readable transcript is kept in the agent repo.
  */
-import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, extname, join, sep } from "node:path";
 import type {
   Agent,
   Attachment,
@@ -33,6 +33,7 @@ import { normalizeSshServerIds, parseServerIds } from "../ssh/assignments";
 import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignments";
 import { redact, SECRET_MASK } from "../vault/vault";
 import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
+import { resolveRepoPath } from "../agents/repo";
 import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
@@ -469,6 +470,34 @@ export function messageImage(conversationId: string, messageId: string, toolUseI
   if (!image) throw notFound("Picture");
   const data = Buffer.from(image, "base64");
   return { data: new Uint8Array(data), mime: imageMime(data) };
+}
+
+export function chatAttachmentImage(conversationId: string, path: string): { data: Uint8Array; mime: string } {
+  const agent = getAgent(requireConversationRow(conversationId).agent_id);
+  const { abs, rel } = resolveRepoPath(agent.repoPath, path);
+  if (!rel.startsWith("workspace/uploads/")) throw notFound("Picture");
+  let real: string;
+  try {
+    real = realpathSync(abs);
+  } catch {
+    throw notFound("Picture");
+  }
+  const root = realpathSync(join(agent.repoPath, "workspace", "uploads"));
+  if (!real.startsWith(root + sep)) throw notFound("Picture");
+  const stat = statSync(real);
+  if (!stat.isFile() || stat.size > MAX_ATTACHMENT_BYTES) throw notFound("Picture");
+  const data = readFileSync(real);
+  const mime = sniffImage(data);
+  if (!mime) throw notFound("Picture");
+  return { data: new Uint8Array(data), mime };
+}
+
+function sniffImage(data: Uint8Array): string | null {
+  if (data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return "image/png";
+  if (data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
+  if (data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46) return "image/gif";
+  if (data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return "image/webp";
+  return null;
 }
 
 function imageMime(data: Uint8Array): string {

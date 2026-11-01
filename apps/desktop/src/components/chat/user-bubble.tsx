@@ -1,13 +1,27 @@
 import type { Attachment } from "@godmode/shared";
 import { cn } from "@/lib/utils";
+import { AttachmentImages, isShownPicture } from "./attachment-images";
 import { AttachmentList } from "./attachments";
+import { useChatScope } from "./local-files";
 import { CommandText } from "./slash-commands";
 
 /** What the human wrote, right-aligned: in the thread, and inside a turn where the agent picked a queued message up. */
-export function UserBubble({ content, attachments, dim }: { content: string; attachments: Pick<Attachment, "name" | "mime" | "size">[]; dim?: boolean }) {
+export function UserBubble({
+  content,
+  attachments,
+  dim,
+}: {
+  content: string;
+  attachments: (Pick<Attachment, "name" | "mime" | "size"> & { path?: string })[];
+  dim?: boolean;
+}) {
+  const { conversationId } = useChatScope();
+  const pictures = attachments.filter((a) => isShownPicture(a, conversationId));
+  const others = attachments.filter((a) => !isShownPicture(a, conversationId));
   return (
     <>
-      {attachments.length > 0 && <AttachmentList files={attachments} className="mb-1.5 max-w-[85%] justify-end" />}
+      {pictures.length > 0 && conversationId && <AttachmentImages files={pictures} conversationId={conversationId} className={cn("mb-1.5 max-w-[85%]", dim && "opacity-70")} />}
+      {others.length > 0 && <AttachmentList files={others} className="mb-1.5 max-w-[85%] justify-end" />}
       {content && (
         <div
           className={cn(
