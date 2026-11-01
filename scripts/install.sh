@@ -5,7 +5,7 @@
 #
 # Environment:
 #   GODMODE_LICENSE       your license key (welcome page, invoice or billing portal), stored for `godmode serve`;
-#                         optional: Godmode runs free for 7 days without one
+#                         optional: Godmode runs free for 14 days without one
 #   GODMODE_VERSION       release tag to install, e.g. v0.2.0 (default: latest)
 #   GODMODE_INSTALL_DIR   target directory (default: ~/.local/bin)
 #

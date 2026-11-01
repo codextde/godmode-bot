@@ -67,7 +67,7 @@ export function downloadTable(tag: string, assets: Asset[]): string {
     "",
     "Not sure? Macs with an M chip (M1 and newer) take **ARM64**, almost every Windows and Linux PC takes **x86-64**. Installed apps update themselves.",
     "",
-    "Official builds run free for 7 days, then need a Pro key. Your own build from source never asks for one.",
+    "Official builds run free for 14 days, then need a Pro key. Your own build from source never asks for one.",
     "",
     `Server: \`curl -fsSL https://usegodmode.com/install.sh | sh\` or \`docker pull ghcr.io/${REPO}:${version}\`. Checksums: ${
       assets.some((a) => a.name === "SHA256SUMS") ? `[SHA256SUMS](${url(tag, "SHA256SUMS")})` : "SHA256SUMS"
