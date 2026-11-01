@@ -13,6 +13,7 @@ import {
   LICENSE_SITE,
   isLicenseKey,
   normalizeLicenseKey,
+  type LicenseEndReason,
   type LicensePlan,
   type LicenseState,
   type LicenseStatus,
@@ -58,6 +59,8 @@ interface Verdict {
   trialEndsAt: string | null;
   renewsAt: string | null;
   cancelAtPeriodEnd: boolean;
+  /** Why a key stopped working (`reason` next to `status`; older servers don't send it). */
+  endReason: LicenseEndReason | null;
   manageUrl: string | null;
   checkedAt: string;
 }
@@ -141,7 +144,9 @@ export function licenseBaseUrl(): string {
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const PLANS: readonly string[] = ["monthly", "yearly", "lifetime"];
-const ENDED: readonly string[] = ["canceled", "refunded", "expired"];
+/** Statuses of a refused key that once worked; `past_due` and `unpaid` from a server that ended them itself. */
+const ENDED: readonly string[] = ["canceled", "refunded", "expired", "past_due", "unpaid"];
+const END_REASONS: readonly string[] = ["trial_ended", "canceled", "payment_failed", "refunded"];
 
 function statusOf(v: Verdict): LicenseStatus {
   if (v.valid) return v.status === "trialing" ? "trial" : v.status === "past_due" ? "past_due" : "active";
@@ -155,6 +160,22 @@ function shortDate(at: string | number): string {
 function refusedKeyMessage(v: Verdict): string {
   if (v.status === "pending") return "The payment for this licence isn't complete yet. Finish the checkout, then try the key again.";
   return "This licence key isn't valid. Check it for typos, or subscribe to get one.";
+}
+
+/** Why an ended key stopped working; a key the server refused without saying why counts by its status. */
+function endReasonOf(v: Verdict): LicenseEndReason | null {
+  if (statusOf(v) !== "expired") return null;
+  if (v.endReason) return v.endReason;
+  if (v.status === "past_due" || v.status === "unpaid") return "payment_failed";
+  if (v.status === "refunded") return "refunded";
+  return null;
+}
+
+function endedMessage(reason: LicenseEndReason | null): string {
+  if (reason === "trial_ended") return "Your trial has ended. Subscribe to keep your agents working.";
+  if (reason === "canceled") return "Your subscription has ended. Subscribe again to keep your agents working.";
+  if (reason === "payment_failed") return "Your last payment didn't go through, so new work is paused. Update your payment method to keep your agents working.";
+  return "Your Godmode licence has ended. Renew it or add another key to keep your agents working.";
 }
 
 /**
@@ -206,6 +227,7 @@ export function licenseState(): LicenseState {
     refuses = status === "invalid" || status === "expired";
   }
   const blocked = enforced && refuses && !graceOpen;
+  const endReason = verdict && status === "expired" ? endReasonOf(verdict) : null;
 
   let message: string | null = null;
   if (blocked) {
@@ -214,7 +236,7 @@ export function licenseState(): LicenseState {
     } else if (status === "missing") message = "Godmode needs a licence to start new work. Subscribe or add your licence key.";
     else if (status === "unverified") message = "Godmode couldn't check your licence key for 7 days. Connect to the internet, then refresh the licence.";
     else if (status === "invalid") message = refusedKeyMessage(verdict!);
-    else message = "Your Godmode licence has ended. Renew it or add another key to keep your agents working.";
+    else message = endedMessage(endReason);
   } else if (status === "grace" && graceEndsAt) {
     message = `Free until ${shortDate(graceEndsAt)}. Then pick a plan to keep your agents working.`;
   } else if (status === "unverified" && unverifiedUntil) {
@@ -232,6 +254,7 @@ export function licenseState(): LicenseState {
     trialEndsAt: verdict?.trialEndsAt ?? null,
     renewsAt: verdict?.renewsAt ?? null,
     cancelAtPeriodEnd: verdict?.cancelAtPeriodEnd ?? false,
+    endReason,
     graceEndsAt,
     unverifiedUntil,
     checkedAt: verdict?.checkedAt ?? null,
@@ -283,6 +306,7 @@ function parseVerdict(body: unknown, checkedAt: string): Verdict | null {
     trialEndsAt: time(b.trialEndsAt),
     renewsAt: time(b.renewsAt),
     cancelAtPeriodEnd: b.cancelAtPeriodEnd === true,
+    endReason: b.valid === false && typeof b.reason === "string" && END_REASONS.includes(b.reason) ? (b.reason as LicenseEndReason) : null,
     manageUrl: safeUrl(b.manageUrl),
     checkedAt,
   };
