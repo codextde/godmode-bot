@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   GithubErrorCode,
   pullRequestUrl,
+  type PullRequestAutoMerge,
   type PullRequestCheck,
   type PullRequestCheckState,
   type PullRequestFile,
@@ -325,6 +326,14 @@ function mergeableOf(pull: Json): PullRequestView["mergeable"] {
   }
 }
 
+function autoMergeOf(pull: Json): PullRequestAutoMerge | null {
+  const auto = pull.auto_merge;
+  if (!auto || typeof auto !== "object") return null;
+  const raw = str(obj(auto).merge_method);
+  const method = raw === "merge" || raw === "squash" || raw === "rebase" ? raw : "merge";
+  return { method, enabledBy: str(obj(obj(auto).enabled_by).login) };
+}
+
 function checkRunState(run: Json): PullRequestCheckState {
   if (run.status !== "completed") return "pending";
   switch (run.conclusion) {
@@ -474,6 +483,8 @@ async function load(ref: PullRequestRef, opts: { interactive: boolean; force: bo
     headSha: sha,
     mergeMethods: repo ? mergeMethods : [],
     canMerge: signedIn && !settled && !!repo && obj(repository.permissions).push === true,
+    autoMerge: settled ? null : autoMergeOf(pull),
+    autoMergeAllowed: !settled && repository.allow_auto_merge === true,
   };
 }
 
@@ -498,34 +509,40 @@ function forget(ref: PullRequestRef) {
   for (const key of [...cache.keys()]) if (key.includes(marker)) cache.delete(key);
 }
 
-export async function mergePullRequest(ref: PullRequestRef, method: PullRequestMergeMethod, headSha: string): Promise<PullRequestView> {
+function refusalOf(text: string): string {
+  try {
+    const parsed = obj(JSON.parse(text));
+    return str(parsed.message) || str(obj(arr(parsed.errors)[0]).message);
+  } catch {
+    return "";
+  }
+}
+
+async function writeGithub(ref: PullRequestRef, path: string, method: string, payload: unknown): Promise<unknown> {
   const cred = await credential();
   if (!cred.token) throw new HttpError(403, "Sign this computer in to GitHub first: run “gh auth login” in Terminal", GithubErrorCode.Unauthorized);
-  const path = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/merge`;
   try {
-    await withSlot(async () => {
+    return await withSlot(async () => {
       admit(cred.scope, true);
-      const res = await send(path, cred, null, { method: "PUT", body: { merge_method: method, sha: headSha } });
+      const res = await send(path, cred, null, { method, body: payload });
       observe(cred.scope, res.headers);
+      const text = await res.text().catch(() => "");
       if (res.ok) {
         recordSuccess(cred.scope);
-        return;
+        try {
+          return JSON.parse(text) as unknown;
+        } catch {
+          return null;
+        }
       }
-      const text = await res.text().catch(() => "");
       if (isRateLimited(res.status, res.headers, text)) throw new GithubFailure("rate_limited", "GitHub's rate limit is used up", recordRateLimit(cred.scope, res.headers));
       if (res.status === 401) {
         heldToken = null;
         throw new GithubFailure("unauthorized", "GitHub refused this computer's GitHub login");
       }
       if (res.status === 404) throw new GithubFailure("not_found", "GitHub can't find this pull request");
-      let message = "";
-      try {
-        message = str(obj(JSON.parse(text)).message);
-      } catch {
-        message = "";
-      }
-      if (res.status === 409) message = "The pull request changed since it was loaded. Look at the new changes, then merge again.";
-      throw new HttpError(409, message || `GitHub refused the merge (HTTP ${res.status})`, GithubErrorCode.MergeRefused);
+      const message = res.status === 409 ? "The pull request changed since it was loaded. Look at the new changes, then merge again." : refusalOf(text);
+      throw new HttpError(409, message || `GitHub refused it (HTTP ${res.status})`, GithubErrorCode.MergeRefused);
     });
   } catch (err) {
     if (err instanceof GithubPaused) throw toHttpError(new GithubFailure("rate_limited", err.message, err.retryAtMs));
@@ -533,6 +550,32 @@ export async function mergePullRequest(ref: PullRequestRef, method: PullRequestM
   } finally {
     forget(ref);
   }
+}
+
+export async function mergePullRequest(ref: PullRequestRef, method: PullRequestMergeMethod, headSha: string): Promise<PullRequestView> {
+  const path = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}/merge`;
+  await writeGithub(ref, path, "PUT", { merge_method: method, sha: headSha });
   log.info(`Merged ${ref.owner}/${ref.repo}#${ref.number} (${method})`);
+  return getPullRequest(ref, { force: true });
+}
+
+const ENABLE_AUTO_MERGE = "mutation($id: ID!, $method: PullRequestMergeMethod!) { enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: $method }) { clientMutationId } }";
+const DISABLE_AUTO_MERGE = "mutation($id: ID!) { disablePullRequestAutoMerge(input: { pullRequestId: $id }) { clientMutationId } }";
+
+export async function setAutoMerge(ref: PullRequestRef, method: PullRequestMergeMethod | null): Promise<PullRequestView> {
+  const base = `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}`;
+  let id: string;
+  try {
+    id = str(obj((await read(`${base}/pulls/${ref.number}`, { ttlMs: DETAIL_TTL_MS, interactive: true })).body).node_id);
+  } catch (err) {
+    throw toHttpError(err);
+  }
+  if (!id) throw new HttpError(404, "GitHub can't find this pull request", GithubErrorCode.NotFound);
+  const query = method ? ENABLE_AUTO_MERGE : DISABLE_AUTO_MERGE;
+  const variables = method ? { id, method: method.toUpperCase() } : { id };
+  const answer = obj(await writeGithub(ref, "/graphql", "POST", { query, variables }));
+  const problem = str(obj(arr(answer.errors)[0]).message);
+  if (problem) throw new HttpError(409, problem, GithubErrorCode.MergeRefused);
+  log.info(`${method ? `Enabled auto-merge (${method})` : "Disabled auto-merge"} for ${ref.owner}/${ref.repo}#${ref.number}`);
   return getPullRequest(ref, { force: true });
 }

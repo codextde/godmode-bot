@@ -454,7 +454,7 @@ function preferredMethod(methods: PullRequestMergeMethod[]): PullRequestMergeMet
 function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
   const { t } = useTranslation("chat");
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<"now" | "auto" | null>(null);
   const [method, setMethod] = useState<PullRequestMergeMethod | null>(() => preferredMethod(pr.mergeMethods));
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -475,45 +475,75 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
     wantsChanges && t("pullRequest.merge.warnChanges"),
     pr.mergeable === "blocked" && t("pullRequest.merge.warnBlocked"),
   ].filter((w): w is string => !!w);
+  const offerAuto = pr.autoMergeAllowed && !pr.autoMerge && !blocker && (running > 0 || pr.mergeable === "blocked");
 
-  const merge = async () => {
-    if (!method) return;
+  const start = (mode: "now" | "auto") => {
+    setProblem(null);
+    setMethod(preferredMethod(pr.mergeMethods));
+    setOpen(mode);
+  };
+
+  const run = async (work: () => Promise<PullRequestView>, done: string, inDialog = true) => {
     setBusy(true);
     setProblem(null);
     try {
-      localStorage.setItem(METHOD_KEY, method);
-      const view = await api.github.merge({ url, method, headSha: pr.headSha });
+      const view = await work();
       qc.setQueryData(qk.pullRequest(url), view);
-      setOpen(false);
-      toast.success(t("pullRequest.merge.done", { number: pr.ref.number, base: pr.baseBranch }));
+      setOpen(null);
+      toast.success(done);
     } catch (err) {
-      setProblem(err instanceof Error ? err.message : String(err));
+      const reason = err instanceof Error ? err.message : String(err);
+      if (inDialog) setProblem(reason);
+      else toast.error(t("pullRequest.autoMerge.disableFailed", { reason }));
       if (err instanceof ApiRequestError && err.code === GithubErrorCode.MergeRefused) void qc.invalidateQueries({ queryKey: qk.pullRequest(url) });
     } finally {
       setBusy(false);
     }
   };
 
+  const confirm = async () => {
+    if (!method || !open) return;
+    localStorage.setItem(METHOD_KEY, method);
+    if (open === "auto") await run(() => api.github.autoMerge({ url, method }), t("pullRequest.autoMerge.enabled", { number: pr.ref.number }));
+    else await run(() => api.github.merge({ url, method, headSha: pr.headSha }), t("pullRequest.merge.done", { number: pr.ref.number, base: pr.baseBranch }));
+  };
+
+  const turnOff = () => run(() => api.github.autoMerge({ url, method: null }), t("pullRequest.autoMerge.disabled", { number: pr.ref.number }), false);
+
+  if (pr.autoMerge) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-brand/30 bg-brand-soft/30 px-3 py-2">
+        <GitMerge className="size-4 shrink-0 text-brand" />
+        <p className="min-w-0 flex-1 text-xs">
+          {t("pullRequest.autoMerge.on", { method: t(`pullRequest.merge.methods.${pr.autoMerge.method}.label`), base: pr.baseBranch })}
+          {pr.autoMerge.enabledBy && <span className="text-muted-foreground"> · {t("pullRequest.autoMerge.by", { login: pr.autoMerge.enabledBy })}</span>}
+        </p>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => void turnOff()}>
+          {busy ? <RefreshCw className="animate-spin" /> : <X />} {t("pullRequest.autoMerge.turnOff")}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
       <GitMerge className="size-4 shrink-0 text-muted-foreground" />
       <p className="min-w-0 flex-1 text-xs text-muted-foreground">{blocker ?? t("pullRequest.merge.into", { base: pr.baseBranch })}</p>
-      <Button
-        size="sm"
-        disabled={!!blocker || !method}
-        onClick={() => {
-          setProblem(null);
-          setMethod(preferredMethod(pr.mergeMethods));
-          setOpen(true);
-        }}
-      >
+      {offerAuto && (
+        <Button size="sm" variant="outline" disabled={!method} onClick={() => start("auto")}>
+          {t("pullRequest.autoMerge.button")}
+        </Button>
+      )}
+      <Button size="sm" disabled={!!blocker || !method} onClick={() => start("now")}>
         <GitMerge /> {t("pullRequest.merge.button")}
       </Button>
-      <AlertDialog open={open} onOpenChange={(v) => !busy && setOpen(v)}>
+      <AlertDialog open={!!open} onOpenChange={(v) => !busy && !v && setOpen(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t("pullRequest.merge.confirmTitle", { number: pr.ref.number, base: pr.baseBranch })}</AlertDialogTitle>
-            <AlertDialogDescription className="break-words">{pr.title}</AlertDialogDescription>
+            <AlertDialogTitle>
+              {open === "auto" ? t("pullRequest.autoMerge.confirmTitle", { number: pr.ref.number, base: pr.baseBranch }) : t("pullRequest.merge.confirmTitle", { number: pr.ref.number, base: pr.baseBranch })}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="break-words">{open === "auto" ? t("pullRequest.autoMerge.explain") : pr.title}</AlertDialogDescription>
           </AlertDialogHeader>
           {pr.mergeMethods.length > 1 && (
             <div className="grid gap-1.5" role="radiogroup" aria-label={t("pullRequest.merge.how")}>
@@ -532,7 +562,7 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
               ))}
             </div>
           )}
-          {warnings.length > 0 && (
+          {open === "now" && warnings.length > 0 && (
             <p className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 px-3 py-2 text-xs">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
               <span>{t("pullRequest.merge.headsUp", { warnings: warnings.join(", ") })}</span>
@@ -541,13 +571,19 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
           {problem && (
             <p className="flex gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-destructive" role="alert">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
-              <span>{t("pullRequest.merge.refused", { reason: problem })}</span>
+              <span>{open === "auto" ? t("pullRequest.autoMerge.refused", { reason: problem }) : t("pullRequest.merge.refused", { reason: problem })}</span>
             </p>
           )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>{t("pullRequest.merge.cancel")}</AlertDialogCancel>
-            <Button onClick={() => void merge()} disabled={busy || !method}>
-              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />} {method ? t(`pullRequest.merge.methods.${method}.label`) : t("pullRequest.merge.button")}
+            {open === "now" && offerAuto && (
+              <Button variant="outline" onClick={() => setOpen("auto")} disabled={busy}>
+                {t("pullRequest.autoMerge.button")}
+              </Button>
+            )}
+            <Button onClick={() => void confirm()} disabled={busy || !method}>
+              {busy ? <RefreshCw className="animate-spin" /> : <GitMerge />}{" "}
+              {open === "auto" ? t("pullRequest.autoMerge.confirm") : method ? t(`pullRequest.merge.methods.${method}.label`) : t("pullRequest.merge.button")}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

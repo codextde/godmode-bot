@@ -1282,6 +1282,19 @@
           "hint": "Die Commits, neu auf den Basis-Branch gesetzt"
         }
       }
+    },
+    "autoMerge": {
+      "button": "Auto-Merge",
+      "confirmTitle": "#{{number}} automatisch in {{base}} mergen?",
+      "explain": "GitHub mergt ihn selbst, sobald die nötigen Reviews und Checks durch sind.",
+      "confirm": "Auto-Merge aktivieren",
+      "enabled": "Auto-Merge für #{{number}} aktiviert",
+      "disabled": "Auto-Merge für #{{number}} deaktiviert",
+      "disableFailed": "Auto-Merge konnte nicht deaktiviert werden: {{reason}}",
+      "refused": "GitHub hat Auto-Merge nicht aktiviert: {{reason}}",
+      "on": "Auto-Merge an ({{method}}): wird in {{base}} gemergt, sobald die Checks durch sind",
+      "by": "von {{login}}",
+      "turnOff": "Ausschalten"
     }
   },
   "filePanel": {

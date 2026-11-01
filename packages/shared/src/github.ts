@@ -37,6 +37,16 @@ export interface PullRequestMergeInput {
   headSha: string;
 }
 
+export interface PullRequestAutoMergeInput {
+  url: string;
+  method: PullRequestMergeMethod | null;
+}
+
+export interface PullRequestAutoMerge {
+  method: PullRequestMergeMethod;
+  enabledBy: string;
+}
+
 export interface PullRequestView {
   ref: PullRequestRef;
   url: string;
@@ -68,6 +78,8 @@ export interface PullRequestView {
   headSha: string;
   mergeMethods: PullRequestMergeMethod[];
   canMerge: boolean;
+  autoMerge: PullRequestAutoMerge | null;
+  autoMergeAllowed: boolean;
 }
 
 export const GithubErrorCode = {
