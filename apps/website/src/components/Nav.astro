@@ -1,8 +1,8 @@
 ---
 import Logo from './ui/Logo.astro';
 import Icon from './ui/Icon.astro';
-import CheckoutButton from './ui/CheckoutButton.astro';
-import { PRICING, yearlySavings } from '@/config/site';
+import DownloadButton from './ui/DownloadButton.astro';
+import { PRICING } from '@/config/site';
 
 interface Props {
   home?: boolean;
@@ -10,11 +10,9 @@ interface Props {
 const { home = true } = Astro.props;
 const base = home ? '' : '/';
 const links = [
-  { href: '#use-cases', label: 'Use cases' },
-  { href: '#features', label: 'Features' },
-  { href: '#crew', label: 'Your team' },
-  { href: '#security', label: 'Security' },
-  { href: '#compare', label: 'Compare' },
+  { href: '#jobs', label: 'What it does' },
+  { href: '#how', label: 'How it works' },
+  { href: '#trust', label: 'Safety' },
   { href: '#pricing', label: 'Pricing' },
   { href: '#faq', label: 'FAQ' },
 ];
@@ -38,10 +36,8 @@ const links = [
     </nav>
 
     <div class="flex items-center gap-2">
-      <a href={base + '#pricing'} class="btn btn-ghost btn-sm hidden sm:inline-flex" data-track="nav_pricing">
-        From ${PRICING.plans.yearly.perMonth}/mo
-      </a>
-      <CheckoutButton plan="monthly" label="Start free trial" source="nav" size="sm" class="hidden sm:block" />
+      <a href="/use-cases" class="nav-link hidden md:inline-flex lg:hidden xl:inline-flex" data-track="nav_use_cases">Examples</a>
+      <DownloadButton source="nav" label="Download free" size="sm" class="hidden sm:inline-flex" />
       <button
         type="button"
         class="btn btn-ghost btn-sm !px-2.5 lg:hidden"
@@ -58,10 +54,10 @@ const links = [
   <div id="mobile-menu" data-menu class="mobile-menu lg:hidden">
     <nav class="container-x flex flex-col py-4" aria-label="Mobile">
       {
-        links.map((l, i) => (
+        [...links, { href: '/use-cases', label: 'Examples' }].map((l, i) => (
           <a
-            href={base + l.href}
-            class="flex items-center justify-between border-b border-line py-4 text-[22px] font-medium tracking-tight"
+            href={l.href.startsWith('/') ? l.href : base + l.href}
+            class="flex items-center justify-between border-b border-line py-4 text-[22px] font-semibold tracking-tight"
             style={`--i:${i}`}
           >
             {l.label}
@@ -70,11 +66,8 @@ const links = [
         ))
       }
       <div class="mt-6 grid gap-2">
-        <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="menu" full size="lg" />
-        <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="menu" variant="ghost" full size="lg" />
-        <p class="mt-1 text-center text-[13px] text-muted">
-          Then ${PRICING.plans.monthly.price}/mo, or ${PRICING.plans.yearly.perMonth}/mo yearly. Cancel anytime.
-        </p>
+        <DownloadButton source="menu" label="Download free" size="lg" full />
+        <p class="mt-1 text-center text-[13.5px] text-muted">Free for {PRICING.freeDays} days · No card · No sign-up</p>
       </div>
     </nav>
   </div>

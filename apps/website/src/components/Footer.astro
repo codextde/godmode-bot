@@ -4,7 +4,7 @@ import { LEGAL, SITE } from '@/config/site';
 const year = 2026;
 ---
 
-<footer class="relative mt-16 border-t border-line">
+<footer class="relative mt-16 border-t border-line bg-bg-2">
   <div class="container-x grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
     <div>
       <a href="/" class="flex items-center gap-2.5">
@@ -14,26 +14,25 @@ const year = 2026;
       <p class="mt-4 max-w-[280px] text-[14px] leading-relaxed text-muted">
         The AI coworker that does your computer work, start to finish. Made in Germany by {LEGAL.company}.
       </p>
-      <p class="mt-6 flex items-center gap-2 font-mono text-[11px] text-dim">
-        <span class="live-dot !size-1.5"></span> All systems local
+      <p class="mt-6 flex items-center gap-2 text-[13px] text-muted">
+        <span class="live-dot !size-1.5"></span> Runs on your own Mac
       </p>
     </div>
     <nav aria-label="Product">
-      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Product</p>
+      <p class="text-[13px] font-semibold text-text">Product</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
-        <li><a class="hover:text-text" href="/#features">Features</a></li>
-        <li><a class="hover:text-text" href="/#security">Security</a></li>
-        <li><a class="hover:text-text" href="/#pricing">Pricing</a></li>
-        <li><a class="hover:text-text" href="/use-cases">Use case library</a></li>
+        <li><a class="hover:text-text" href="/download">Download for Mac</a></li>
+        <li><a class="hover:text-text" href="/#jobs">What it does</a></li>
+        <li><a class="hover:text-text" href="/use-cases">60 example jobs</a></li>
         <li><a class="hover:text-text" href="/playbook">Playbook</a></li>
+        <li><a class="hover:text-text" href="/#trust">Safety</a></li>
+        <li><a class="hover:text-text" href="/#pricing">Pricing</a></li>
         <li><a class="hover:text-text" href="/vs/grok-bot">Godmode vs Grok Bot</a></li>
-        <li><a class="hover:text-text" href="/download">Download</a></li>
-        <li><a class="hover:text-text" href="/changelog">Changelog</a></li>
-        <li><a class="hover:text-text" href={SITE.repo} rel="noopener">Source code (MIT)</a></li>
+        <li><a class="hover:text-text" href="/changelog">What’s new</a></li>
       </ul>
     </nav>
     <nav aria-label="Company">
-      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Company</p>
+      <p class="text-[13px] font-semibold text-text">Company</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
         <li><a class="hover:text-text" href={`mailto:${SITE.email}`}>Contact</a></li>
         <li><a class="hover:text-text" href="https://codext.de" rel="noopener">Codext GmbH</a></li>
@@ -42,7 +41,7 @@ const year = 2026;
       </ul>
     </nav>
     <nav aria-label="Legal">
-      <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Legal</p>
+      <p class="text-[13px] font-semibold text-text">Legal</p>
       <ul class="mt-4 space-y-2.5 text-[14px] text-muted">
         <li><a class="hover:text-text" href="/legal/imprint">Imprint</a></li>
         <li><a class="hover:text-text" href="/legal/privacy">Privacy</a></li>
@@ -52,7 +51,7 @@ const year = 2026;
       </ul>
     </nav>
   </div>
-  <div class="container-x flex flex-col gap-2 border-t border-line py-6 text-[12px] text-dim sm:flex-row sm:justify-between">
+  <div class="container-x flex flex-col gap-2 border-t border-line py-6 text-[12.5px] text-dim sm:flex-row sm:gap-8 sm:justify-between">
     <p>© {year} {LEGAL.company}. All rights reserved.</p>
     <p>Claude is a trademark of Anthropic, PBC. Grok is a trademark of xAI. Godmode is an independent product and not affiliated with Anthropic or xAI.</p>
   </div>

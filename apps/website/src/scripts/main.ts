@@ -1,7 +1,6 @@
 import { attribution, initConsent, track, xEvent } from './analytics';
-import { initDotField } from './dotfield';
 import { initCharacters } from './characters';
-import { FOUNDING, isPlan, PRICING } from '@/config/site';
+import { isPlan, PRICING } from '@/config/site';
 
 window.__gm = true;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -19,19 +18,6 @@ const revealIO = new IntersectionObserver(
   { rootMargin: '0px 0px -8% 0px', threshold: 0.12 },
 );
 document.querySelectorAll('[data-reveal],[data-words]').forEach((el) => revealIO.observe(el));
-
-// Cursor spotlight on cards ----------------------------------------------------------------------
-document.addEventListener(
-  'pointermove',
-  (e) => {
-    const card = (e.target as HTMLElement).closest<HTMLElement>('.card');
-    if (!card) return;
-    const r = card.getBoundingClientRect();
-    card.style.setProperty('--mx', `${e.clientX - r.left}px`);
-    card.style.setProperty('--my', `${e.clientY - r.top}px`);
-  },
-  { passive: true },
-);
 
 // Nav: solid after scrolling, highlight the section in view ----------------------------------------
 const nav = document.querySelector<HTMLElement>('[data-nav]');
@@ -98,24 +84,6 @@ menu?.addEventListener('click', (e) => {
   }
 });
 
-// Hero: the product window starts tilted and settles flat as you scroll ---------------------------
-const tilt = document.querySelector<HTMLElement>('[data-tilt]');
-if (tilt && !reduced) {
-  let raf = 0;
-  const update = () => {
-    raf = 0;
-    const r = tilt.getBoundingClientRect();
-    const p = Math.min(1, Math.max(0, 1 - (r.top - innerHeight * 0.15) / (innerHeight * 0.75)));
-    tilt.style.setProperty('--t', p.toFixed(3));
-  };
-  addEventListener('scroll', () => (raf ||= requestAnimationFrame(update)), { passive: true });
-  update();
-}
-
-// Dot field behind the hero ---------------------------------------------------------------------
-const field = document.querySelector<HTMLCanvasElement>('[data-dotfield]');
-if (field) initDotField(field, reduced);
-
 // Agent characters (eyes follow the pointer, crew picker, expression + studio demos) ----------------
 initCharacters(reduced);
 
@@ -163,40 +131,6 @@ modal?.addEventListener('click', (e) => {
   }
 });
 modal?.addEventListener('close', () => modal.querySelector('video')?.pause());
-
-// Count-up numbers -------------------------------------------------------------------------------
-const fmt = (n: number, decimals = 0) =>
-  n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-function countUp(el: HTMLElement, to: number, duration = 1400) {
-  const decimals = Number(el.dataset.decimals ?? 0);
-  const prefix = el.dataset.prefix ?? '';
-  const suffix = el.dataset.suffix ?? '';
-  if (reduced) {
-    el.textContent = prefix + fmt(to, decimals) + suffix;
-    return;
-  }
-  const from = Number(el.dataset.from ?? 0);
-  const start = performance.now();
-  const step = (now: number) => {
-    const p = Math.min(1, (now - start) / duration);
-    const eased = 1 - Math.pow(1 - p, 4);
-    el.textContent = prefix + fmt(from + (to - from) * eased, decimals) + suffix;
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
-}
-const countIO = new IntersectionObserver(
-  (entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      const el = e.target as HTMLElement;
-      countUp(el, Number(el.dataset.count));
-      countIO.unobserve(el);
-    }
-  },
-  { threshold: 0.6 },
-);
-document.querySelectorAll<HTMLElement>('[data-count]').forEach((el) => countIO.observe(el));
 
 // Typewriter (used by use-case prompts) ----------------------------------------------------------
 async function typeInto(el: HTMLElement, text: string, signal: { cancelled: boolean }) {
@@ -282,46 +216,6 @@ document.querySelectorAll<HTMLElement>('[data-tabs]').forEach((root) => {
   startIO.observe(root);
 });
 
-// ROI calculator ----------------------------------------------------------------------------------
-const roi = document.querySelector<HTMLElement>('[data-roi]');
-if (roi) {
-  const hours = roi.querySelector<HTMLInputElement>('[name="hours"]')!;
-  const rate = roi.querySelector<HTMLInputElement>('[name="rate"]')!;
-  const out = (k: string) => roi.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
-  let tracked = false;
-  const paint = (input: HTMLInputElement) => {
-    const p = ((Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min))) * 100;
-    input.style.setProperty('--p', `${p}%`);
-  };
-  const update = () => {
-    const h = Number(hours.value);
-    const r = Number(rate.value);
-    // Assume Godmode takes over 70% of the repetitive hours you describe — deliberately conservative.
-    const savedHoursYear = Math.round(h * 0.7 * 48);
-    const savedYear = savedHoursYear * r;
-    const yearlyCost = Number(roi.dataset.roiCost) || PRICING.plans.yearly.price;
-    const paybackDays = savedYear > 0 ? Math.max(1, Math.ceil(yearlyCost / (savedYear / 365))) : 0;
-    out('hours').textContent = String(h);
-    out('rate').textContent = `$${r}`;
-    out('saved-hours').textContent = fmt(savedHoursYear);
-    out('saved').textContent = `$${fmt(savedYear)}`;
-    out('payback').textContent = paybackDays <= 1 ? '1 day' : `${paybackDays} days`;
-    out('weekly-loss').textContent = `$${fmt(Math.round(h * 0.7 * r))}`;
-    paint(hours);
-    paint(rate);
-  };
-  [hours, rate].forEach((i) =>
-    i.addEventListener('input', () => {
-      update();
-      if (!tracked) {
-        tracked = true;
-        track('roi_calc');
-      }
-    }),
-  );
-  update();
-}
-
 // Checkout forms: attach attribution, show progress, fire conversion events -----------------------
 document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form) => {
   form.addEventListener('submit', () => {
@@ -347,55 +241,6 @@ document.querySelectorAll<HTMLFormElement>('form[data-checkout]').forEach((form)
     xEvent('checkout', { value: PRICING.plans[plan].price, currency: PRICING.currency, contents: [{ content_id: plan }] });
   });
 });
-// Founding 100: live countdown to the real deadline, and seats left once enough are taken.
-const countdowns = document.querySelectorAll<HTMLElement>('[data-countdown]');
-if (countdowns.length) {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const tick = () => {
-    const ms = Number(countdowns[0].dataset.end) - Date.now();
-    if (ms <= 0) {
-      countdowns.forEach((el) => el.setAttribute('data-ended', ''));
-      return false;
-    }
-    const s = Math.floor(ms / 1000);
-    const parts = { d: String(Math.floor(s / 86400)), h: pad(Math.floor(s / 3600) % 24), m: pad(Math.floor(s / 60) % 60), s: pad(s % 60) };
-    countdowns.forEach((el) =>
-      el.querySelectorAll<HTMLElement>('[data-cd]').forEach((b) => {
-        const v = parts[b.dataset.cd as keyof typeof parts];
-        if (b.textContent !== v) b.textContent = v;
-      }),
-    );
-    return true;
-  };
-  if (tick()) {
-    const timer = setInterval(() => {
-      if (!tick()) clearInterval(timer);
-    }, 1000);
-  }
-}
-
-const foundingSlots = document.querySelectorAll<HTMLElement>('[data-founding-slot]');
-if (foundingSlots.length) {
-  const elapsed = (Date.now() - FOUNDING.start) / (FOUNDING.end - FOUNDING.start);
-  foundingSlots.forEach((slot) => slot.style.setProperty('--taken', `${Math.max(0, Math.min(100, elapsed * 100))}%`));
-  fetch('/api/offer', { cache: 'no-store' })
-    .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-    .then((res: unknown) => {
-      const data = (res ?? {}) as { seats?: unknown; left?: unknown; open?: unknown };
-      foundingSlots.forEach((slot) => {
-        const label = slot.querySelector<HTMLElement>('[data-founding-label]');
-        if (data.open === false) {
-          if (label) label.textContent = 'Founding seats are gone';
-          slot.style.setProperty('--taken', '100%');
-        } else if (typeof data.left === 'number' && typeof data.seats === 'number') {
-          if (label) label.textContent = `${data.left} of ${data.seats} seats left`;
-          slot.style.setProperty('--taken', `${Math.min(100, ((data.seats - data.left) / data.seats) * 100)}%`);
-        }
-      });
-    })
-    .catch(() => {});
-}
-
 // Back/forward cache: reset spinners when the visitor returns from Stripe.
 addEventListener('pageshow', (e) => {
   if (e.persisted) document.querySelectorAll<HTMLButtonElement>('[data-loading]').forEach((b) => delete b.dataset.loading);
@@ -423,7 +268,7 @@ document.querySelectorAll<HTMLFormElement>('form[data-lead]').forEach((form) => 
       });
       if (!res.ok) throw new Error(await res.text());
       form.classList.add('is-done');
-      if (status) status.textContent = 'You’re on the list. Check your inbox soon.';
+      if (status) status.textContent = form.dataset.done ?? 'You’re on the list. Check your inbox soon.';
       track('lead', form.dataset.lead);
       xEvent('lead');
     } catch {
@@ -433,6 +278,24 @@ document.querySelectorAll<HTMLFormElement>('form[data-lead]').forEach((form) => 
     }
   });
 });
+
+// Download buttons --------------------------------------------------------------------------------
+// Without JS they download the Apple silicon build. Phones and non-Mac computers get the download page (send it to
+// your Mac, or the Windows waitlist); Macs get the page that starts the download and shows the install steps.
+const ua = navigator.userAgent;
+const phone = /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+const mac = /Macintosh|Mac OS X/.test(ua) && !phone;
+document.querySelectorAll<HTMLAnchorElement>('a[data-dl]').forEach((a) => {
+  a.href = mac ? '/download?start=1' : '/download';
+});
+
+// FAQ links (#faq-claude) open their answer.
+const openFaq = () => {
+  const d = location.hash.startsWith('#faq-') ? document.querySelector<HTMLDetailsElement>(location.hash) : null;
+  if (d) d.open = true;
+};
+addEventListener('hashchange', openFaq);
+openFaq();
 
 // Generic click tracking + section views ---------------------------------------------------------
 document.addEventListener('click', (e) => {
