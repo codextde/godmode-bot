@@ -15,6 +15,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   CardPurchasePatch,
   PaymentCard,
   PullRequestView,
+  PullRequestAutoMergeInput,
   PullRequestMergeInput,
   PaymentCardInput,
   PaymentCardSecrets,
@@ -542,6 +543,7 @@ export const api = {
     pull: (url: string, opts: { background?: boolean; refresh?: boolean } = {}) =>
       get<PullRequestView>("/api/github/pull", { url, background: opts.background ? 1 : undefined, refresh: opts.refresh ? 1 : undefined }),
     merge: (input: PullRequestMergeInput) => post<PullRequestView>("/api/github/pull/merge", input),
+    autoMerge: (input: PullRequestAutoMergeInput) => post<PullRequestView>("/api/github/pull/auto-merge", input),
   },
 
   tasks: {

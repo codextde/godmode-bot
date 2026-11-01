@@ -1,6 +1,6 @@
 import type { Hono } from "hono";
 import { parsePullRequestUrl } from "@godmode/shared";
-import { getPullRequest, mergePullRequest } from "../../github/pullRequests";
+import { getPullRequest, mergePullRequest, setAutoMerge } from "../../github/pullRequests";
 import { audit } from "../../services/audit";
 import { badRequest } from "../../util";
 import { body, z } from "../validate";
@@ -19,6 +19,15 @@ export function registerGithubRoutes(app: Hono): void {
     if (!ref) throw badRequest("Not a GitHub pull request link");
     const view = await mergePullRequest(ref, input.method, input.headSha);
     audit("user", "github.pull.merge", `${ref.owner}/${ref.repo}#${ref.number}`, { method: input.method });
+    return c.json(view);
+  });
+
+  app.post("/api/github/pull/auto-merge", async (c) => {
+    const input = await body(c, z.object({ url: z.string().min(1).max(500), method: z.enum(["merge", "squash", "rebase"]).nullable() }));
+    const ref = parsePullRequestUrl(input.url);
+    if (!ref) throw badRequest("Not a GitHub pull request link");
+    const view = await setAutoMerge(ref, input.method);
+    audit("user", input.method ? "github.pull.auto_merge.enable" : "github.pull.auto_merge.disable", `${ref.owner}/${ref.repo}#${ref.number}`, input.method ? { method: input.method } : {});
     return c.json(view);
   });
 }

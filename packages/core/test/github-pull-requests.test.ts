@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { parsePullRequestUrl } from "@godmode/shared";
-import { __setGithubForTests, checksOf, getPullRequest, mergePullRequest, reviewsOf } from "../src/github/pullRequests";
+import { __setGithubForTests, checksOf, getPullRequest, mergePullRequest, reviewsOf, setAutoMerge } from "../src/github/pullRequests";
 import { HttpError } from "../src/util";
 
 const ref = { owner: "acme", repo: "app", number: 7 };
@@ -219,6 +219,45 @@ describe("mergePullRequest", () => {
     const err = (await mergePullRequest(ref, "merge", sha).catch((e) => e)) as HttpError;
     expect(err.status).toBe(403);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("setAutoMerge", () => {
+  test("enables auto-merge through GraphQL with the pull request's node id and shows it", async () => {
+    const clock = { now: 1_000_000 };
+    let enabled = false;
+    const bodies: unknown[] = [];
+    __setGithubForTests({
+      now: () => clock.now,
+      token: async () => "ghp_testtokentesttokentesttoken",
+      fetch: async (url, init) => {
+        if (url.endsWith("/graphql")) {
+          bodies.push(JSON.parse(String(init.body)));
+          enabled = true;
+          return json({ data: { enablePullRequestAutoMerge: { clientMutationId: null } } });
+        }
+        if (url.endsWith("/pulls/7")) return json({ ...pull(), mergeable_state: "blocked", node_id: "PR_kw7", auto_merge: enabled ? { merge_method: "squash", enabled_by: { login: "ana" } } : null });
+        if (url.endsWith("/repos/acme/app")) return json({ allow_squash_merge: true, allow_auto_merge: true, permissions: { push: true } });
+        return ok(url);
+      },
+    });
+    const before = await getPullRequest(ref);
+    expect(before.autoMerge).toBeNull();
+    expect(before.autoMergeAllowed).toBe(true);
+    const view = await setAutoMerge(ref, "squash");
+    expect(bodies[0]).toMatchObject({ variables: { id: "PR_kw7", method: "SQUASH" } });
+    expect(view.autoMerge).toEqual({ method: "squash", enabledBy: "ana" });
+  });
+
+  test("GitHub's GraphQL error comes through as a refusal", async () => {
+    const clock = { now: 1_000_000 };
+    answers(clock, (url) =>
+      url.endsWith("/graphql") ? json({ errors: [{ message: "Pull request is in clean status" }] }) : url.endsWith("/pulls/7") ? json({ ...pull(), node_id: "PR_kw7" }) : ok(url),
+    );
+    const err = (await setAutoMerge(ref, "merge").catch((e) => e)) as HttpError;
+    expect(err.status).toBe(409);
+    expect(err.code).toBe("github_merge_refused");
+    expect(err.message).toContain("clean status");
   });
 });
 

@@ -1282,6 +1282,19 @@
           "hint": "The commits, replayed on the base branch"
         }
       }
+    },
+    "autoMerge": {
+      "button": "Auto-merge",
+      "confirmTitle": "Auto-merge #{{number}} into {{base}}?",
+      "explain": "GitHub merges it on its own once the required reviews and checks pass.",
+      "confirm": "Enable auto-merge",
+      "enabled": "Auto-merge on for #{{number}}",
+      "disabled": "Auto-merge off for #{{number}}",
+      "disableFailed": "Couldn't turn off auto-merge: {{reason}}",
+      "refused": "GitHub didn't enable auto-merge: {{reason}}",
+      "on": "Auto-merge on ({{method}}): merges into {{base}} once checks pass",
+      "by": "by {{login}}",
+      "turnOff": "Turn off"
     }
   },
   "filePanel": {
