@@ -77,8 +77,16 @@ trust line. "Agents" is fine once the reader knows what Godmode is ("AI coworker
 
 ## Offer (since 2026-11-01)
 
-Download for Mac and use it free for 14 days: no card, no sign-up. The app handles the free period. After that
-$39/month, or $29/month billed yearly ($348/year), with a 14-day money-back guarantee on the first payment. The main
-call to action is always "Download for Mac — free"; the price is shown, but lower on the page. Website "Subscribe"
-buttons check out with `trial=0` (billed today). The Founding 100 offer (code FOUNDING20, price lock, setup call,
-10 hours back or refund) ended on 2026-11-01 07:00 UTC and is no longer shown on public pages.
+**Download free, pay later.** Godmode for Mac is free for 14 days: no card, no sign-up, just download. After that
+$39/month, or $29/month billed yearly. 14-day money-back guarantee on the first payment, cancel anytime. The Founding
+100 offer (setup call, FOUNDING20, price lock) ended on October 31: never mention it again.
+
+- The one call to action everywhere (site, ads, posts, emails, README): **Download for Mac, free.** Link
+  https://usegodmode.com/download (add utm_source/utm_medium/utm_campaign). Never send people straight to checkout.
+- Lead with what it does, not the price. Say "free for 14 days, no card" right next to the download button. The price
+  shows on the pricing section, in the FAQ and in the app when the free days end (it then shows what Godmode already
+  did for the user).
+- Mac only for now (Apple silicon and Intel). Windows and Linux people: "Mac only right now, Windows is on the list."
+- Needs a Claude Pro or Max plan (or an Anthropic API key). Don't hide it in answers, don't lead with it.
+- Teams and companies: same download, contact kontakt@codext.de for several seats or help setting it up.
+- Website "Subscribe" buttons and the app's end screen check out with `trial=0` (billed today, no second trial).

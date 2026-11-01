@@ -64,7 +64,7 @@ Everything Godmode does, the screenshots, and the setup guides for each part. Ba
 | **Backup & restore** | Encrypted `.godmode-backup` archives of your whole setup, including agent repositories. |
 | **Cleanup** | Settings → Cleanup shows what Godmode's data folder holds, checks tools, permissions, updates, the database and disk space in one go, and frees what piles up: browser caches, worktrees of finished tasks, unused clones, agents' scratch files and old run logs, unpacked agent history, leftovers of interrupted runs, old logs and the database's free pages — once a day on its own, or with one click. Anything that may still hold work stays. |
 | **Diagnostic log** | Errors, slow spots and how every run went, with secrets masked. Settings → Logs groups recurring problems and copies an AI-ready report — paste it into Claude to find bugs and speed things up. |
-| **Desktop + dashboard** | Native app for macOS, Windows and Linux — or run headless on any device and use the web dashboard. |
+| **Desktop + dashboard** | Native app for macOS (Windows and Linux from source), or run headless on any device and use the web dashboard. |
 | **Device groups** | Use Godmode on several Macs as one (Settings → Devices): every Mac has your agents, logins and chats, a chat can run on any of them — pick it under **Run on** — and move between them, also while it works. Close the lid and hand the work to another Mac. Encrypted end to end. |
 | **Phone app** | Control Godmode from your iPhone or Android phone: hand over tasks, follow answers as they're written, stop runs, run automations and watch an agent's browser, shared screen or VM live — tap to take control. Pair once by scanning a QR code; the phone talks to your computer over [Tailscale](https://tailscale.com), or through the gateway of a Godmode Cloud you link it to. Liquid Glass on iOS 26. |
 | **Godmode Cloud** (optional) | A self-hosted account service: open your computer's dashboard in any browser and reach it from your phone without Tailscale, with accounts, invites, roles, an admin dashboard and Stripe plans. Godmode works fully without it; nothing leaves your computer unless you link it to a cloud. See [apps/cloud](../apps/cloud/README.md). |
@@ -204,9 +204,9 @@ Godmode is open source under the [MIT License](../LICENSE). Two ways to run it:
 
 - **Build it yourself, free.** Clone this repo and run it from source or build your own app
   ([Build from source](#build-from-source)). Every feature, no licence key, no limits.
-- **Godmode Pro, the official builds.** A signed and notarized macOS app, Windows and Linux builds, automatic updates,
-  the install script and Docker image, and support from the people who build it. The official builds run free for 14
-  days without a key or card, then need a Pro licence. Prices are on
+- **Godmode Pro, the official builds.** A signed and notarized macOS app, automatic updates, the install script and
+  support from the people who build it. The official builds run free for 14 days without a key or card, then need a
+  Pro licence. Prices are on
   [usegodmode.com](https://usegodmode.com/#pricing). Pro pays for Godmode's development.
 
 ### Desktop app
@@ -215,8 +215,7 @@ Download the official app from [GitHub Releases](https://github.com/codextde/god
 [usegodmode.com/download](https://usegodmode.com/download):
 
 - **macOS**: `.dmg` (Apple silicon and Intel), signed and notarized
-- **Windows**: `.msi` / `.exe` (x64). Not code-signed yet, so SmartScreen warns on first launch
-- **Linux**: `.AppImage` / `.deb` / `.rpm` (x64 and arm64)
+- **Windows and Linux**: no official builds right now (the last ones are v0.2.38); build from source
 
 The app keeps itself up to date: new versions download in the background (from `usegodmode.com/api/update`,
 which mirrors the signed bundles of the latest release), and a **Restart** button appears in the sidebar once one is
