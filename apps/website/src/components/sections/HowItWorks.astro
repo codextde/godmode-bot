@@ -1,53 +1,84 @@
 ---
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
+import Logo from '../ui/Logo.astro';
+import Character from '../ui/Character.astro';
+import { PRICING } from '@/config/site';
 
 const steps = [
   {
-    n: '1',
-    icon: 'download',
-    title: 'Install it',
-    time: '2 minutes',
-    text: 'Download the app for Mac or Windows and sign in with your Claude account. Setup installs everything else for you. No technical skills needed.',
+    title: 'Download and open',
+    text: `Free for ${PRICING.freeDays} days, no card and no sign-up. Setup walks you through everything in a few minutes, including signing in with your Claude plan.`,
   },
   {
-    n: '2',
-    icon: 'key-round',
-    title: 'Give it access',
-    time: '5 minutes',
-    text: 'Bring over your Chrome logins and your passwords from Chrome, 1Password or Dashlane, and your 2FA codes from a screenshot. All encrypted, all on your computer.',
+    title: 'Tell it the task in plain words',
+    text: 'Type it like you would ask a colleague. Or send it from your phone, Slack or Telegram. Want it every Monday? Just say so.',
   },
   {
-    n: '3',
-    icon: 'sparkles',
-    title: 'Hand over the work',
-    time: 'forever',
-    text: 'Tell it the task like you would a colleague, or let it run every week by itself. Watch it work, take over anytime, or just wait for the result.',
+    title: 'It does the work and checks with you',
+    text: 'It signs in, clicks through and hands it back done. Before it sends, pays or deletes anything, it asks you, unless you already told it to go ahead.',
   },
 ];
 ---
 
-<section class="relative py-20 sm:py-28">
+<section id="how" class="relative py-16 sm:py-24" data-track-view="how">
   <div class="container-x">
-    <div class="mx-auto max-w-[760px] text-center">
-      <p class="eyebrow justify-center" data-reveal><span class="n">07</span> How it works</p>
-      <Words text="From download to *done* before your coffee cools." class="h-section mt-6" />
+    <div class="mx-auto max-w-[720px] text-center">
+      <p class="eyebrow justify-center" data-reveal>How it works</p>
+      <Words text="Three steps. *No coding.*" class="h-section mx-auto mt-4" />
     </div>
-    <ol class="steps relative mt-16 grid gap-3 md:grid-cols-3">
-      <div class="steps-line pointer-events-none absolute top-[52px] right-[16%] left-[16%] hidden h-px md:block" aria-hidden="true"></div>
+
+    <ol class="mt-14 grid gap-4 md:grid-cols-3">
       {
         steps.map((s, i) => (
-          <li class="card p-7 sm:p-8" data-reveal style={`--d:${i * 120}`}>
-            <div class="flex items-center justify-between">
-              <span class="step-num grid size-11 place-items-center rounded-full bg-bg font-mono text-[14px] ring-1 ring-line-2">{s.n}</span>
-              <span class="chip">
-                <Icon name="timer" size={11} /> {s.time}
-              </span>
+          <li class="card flex flex-col p-6 sm:p-7" data-reveal style={`--d:${i * 120}`}>
+            <div class="mock p-4" aria-hidden="true">
+              {i === 0 && (
+                <div class="flex h-[132px] items-center justify-center gap-5">
+                  <span class="flex flex-col items-center gap-2">
+                    <Logo size={56} />
+                    <span class="text-[12px] font-medium text-text-2">Godmode</span>
+                  </span>
+                  <Icon name="arrow-right" size={20} class="text-dim" />
+                  <span class="flex flex-col items-center gap-2">
+                    <span class="grid size-14 place-items-center rounded-2xl bg-surface ring-1 ring-line-2">
+                      <Icon name="app-window" size={26} class="text-muted" />
+                    </span>
+                    <span class="text-[12px] font-medium text-text-2">Applications</span>
+                  </span>
+                </div>
+              )}
+              {i === 1 && (
+                <div class="flex h-[132px] flex-col justify-end gap-2">
+                  <div class="rounded-2xl rounded-bl-md bg-surface p-3 text-[13.5px] leading-snug text-text ring-1 ring-line">
+                    Download last month’s invoices from our supplier portals and put them in Dropbox.
+                  </div>
+                  <div class="flex items-center justify-between rounded-full bg-surface py-1.5 pr-1.5 pl-4 ring-1 ring-line">
+                    <span class="text-[12.5px] text-dim">Message Godmode…</span>
+                    <span class="grid size-7 place-items-center rounded-full bg-brand text-white">
+                      <Icon name="arrow-up" size={14} stroke={2.4} />
+                    </span>
+                  </div>
+                </div>
+              )}
+              {i === 2 && (
+                <div class="flex h-[132px] flex-col justify-end gap-2">
+                  <div class="flex items-start gap-2.5 rounded-2xl bg-surface p-3 ring-1 ring-line">
+                    <Character size={30} mood="happy" seed="how" />
+                    <p class="text-[13.5px] leading-snug text-text">23 invoices filed. Send the 7 payment reminders now?</p>
+                  </div>
+                  <div class="flex justify-end gap-2">
+                    <span class="rounded-full bg-surface px-3 py-1.5 text-[12.5px] font-medium text-text-2 ring-1 ring-line">Not yet</span>
+                    <span class="rounded-full bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white">Yes, send</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <h3 class="h-card mt-7 flex items-center gap-2.5">
-              <Icon name={s.icon} size={18} class="text-brand" /> {s.title}
-            </h3>
-            <p class="mt-2.5 text-[15px] leading-relaxed text-muted">{s.text}</p>
+            <div class="mt-6 flex items-center gap-3">
+              <span class="step-num">{i + 1}</span>
+              <h3 class="h-card">{s.title}</h3>
+            </div>
+            <p class="mt-3 text-[15.5px] leading-relaxed text-muted">{s.text}</p>
           </li>
         ))
       }

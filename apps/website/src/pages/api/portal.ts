@@ -9,6 +9,14 @@ import { siteBase } from '@/config/site';
 
 export const prerender = false;
 
+/** The open invoice of a subscription whose payment failed: paying it there reactivates the subscription at once. */
+const openInvoiceUrl = async (subscriptionId: string): Promise<string | null> => {
+  const sub = await stripe().subscriptions.retrieve(subscriptionId, { expand: ['latest_invoice'] });
+  const invoice = sub.latest_invoice;
+  if (!invoice || typeof invoice === 'string' || invoice.status !== 'open') return null;
+  return invoice.hosted_invoice_url ?? null;
+};
+
 const openPortal = async (customer: string, returnUrl: string) => {
   const portal = await stripe().billingPortal.sessions.create({ customer, return_url: returnUrl });
   return new Response(null, { status: 303, headers: { location: portal.url, 'cache-control': 'no-store' } });
@@ -16,7 +24,8 @@ const openPortal = async (customer: string, returnUrl: string) => {
 
 /**
  * Opens the Stripe customer portal for the buyer whose signed order cookie this browser holds, or for the
- * license in ?key=GM-… (the app's "Manage subscription" button).
+ * license in ?key=GM-… (the app's "Manage subscription" button). With &pay=1 (a payment that failed) it opens the
+ * subscription's open invoice instead when there is one.
  */
 export const GET: APIRoute = async ({ url, cookies, request }) => {
   const rawKey = url.searchParams.get('key');
@@ -26,10 +35,17 @@ export const GET: APIRoute = async ({ url, cookies, request }) => {
     if (!(await allowed('CHECKOUT_LIMIT', request))) return new Response('Too many requests', { status: 429 });
     try {
       const row = await db()
-        .prepare('SELECT customer_id FROM orders WHERE license_key = ? AND livemode >= ?')
+        .prepare('SELECT customer_id, subscription_id FROM orders WHERE license_key = ? AND livemode >= ?')
         .bind(key, minLivemode())
-        .first<{ customer_id: string | null }>();
+        .first<{ customer_id: string | null; subscription_id: string | null }>();
       if (!row?.customer_id) return new Response('No billing account for this license', { status: 404 });
+      if (url.searchParams.get('pay') === '1' && row.subscription_id) {
+        const invoice = await openInvoiceUrl(row.subscription_id).catch((e) => {
+          console.error('open invoice lookup failed', e);
+          return null;
+        });
+        if (invoice) return new Response(null, { status: 303, headers: { location: invoice, 'cache-control': 'no-store' } });
+      }
       return await openPortal(row.customer_id, `${siteBase(url.origin)}/download`);
     } catch (e) {
       console.error('portal failed', e);

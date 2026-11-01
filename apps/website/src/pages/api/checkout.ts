@@ -57,6 +57,8 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
     const input = await readInput(request);
     if (RETIRED.has(input.plan)) return unavailable(wantsJson);
     plan = planFrom(input.plan);
+    // trial=0: the free period already happened in the app (or the buyer skips it), so the first payment is due today.
+    const trial = input.trial !== '0';
     const attribution: Attribution = {};
     for (const k of ATTR_KEYS) if (input[k]) attribution[k] = input[k].slice(0, 200);
 
@@ -93,7 +95,9 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
         : {}),
       custom_text: {
         submit: {
-          message: founding
+          message: !trial
+            ? `Billed today: ${priceLabel(plan)}. Cancel anytime. A ${PRICING.guaranteeDays}-day money-back guarantee covers your first payment.`
+            : founding
             ? `Founding 100: ${PRICING.trialDays} days free, then ${priceLabel(plan)}, locked for as long as you stay. Cancel anytime before ${trialCancelBy()} and you pay nothing. ${FOUNDING.outcomeHours} hours back in your first ${FOUNDING.outcomeDays} paid days, or a full refund.`
             : `${PRICING.trialDays} days free, then ${priceLabel(plan)}. Cancel anytime before ${trialCancelBy()} and you pay nothing. After that, a ${PRICING.guaranteeDays}-day money-back guarantee covers your first payment.`,
         },
@@ -118,8 +122,12 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
     params.payment_method_collection = 'always';
     params.subscription_data = {
       metadata,
-      trial_period_days: PRICING.trialDays,
-      trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+      ...(trial
+        ? {
+            trial_period_days: PRICING.trialDays,
+            trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } },
+          }
+        : {}),
       // Shown in the customer portal, so subscribers can always find their key there.
       description: `Godmode Pro${founding ? ' Founding' : ''} — ${plan === 'yearly' ? 'Yearly' : 'Monthly'} · License ${licenseKey}`,
     };
@@ -143,6 +151,7 @@ export const POST: APIRoute = async ({ request, url, cookies }) => {
 };
 
 // A plain GET (e.g. a link in an ad, an email or the app) starts checkout too: /api/checkout?plan=yearly.
+// Add trial=0 to charge today without a Stripe trial: website buttons do, and the app's end-of-free-period screen should.
 // Link previewers and scanners get the pricing section instead of a Stripe session.
 export const GET: APIRoute = async (ctx) => {
   if (RETIRED.has(ctx.url.searchParams.get('plan') ?? '')) return unavailable(false);
@@ -151,6 +160,7 @@ export const GET: APIRoute = async (ctx) => {
     return new Response(null, { status: 303, headers: { location: '/#pricing' } });
   }
   const form = new URLSearchParams({ plan });
+  if (ctx.url.searchParams.get('trial') === '0') form.set('trial', '0');
   for (const k of ATTR_KEYS) {
     const v = ctx.url.searchParams.get(k);
     if (v) form.set(k, v);

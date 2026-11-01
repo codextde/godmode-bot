@@ -1,11 +1,40 @@
-# X Ads launch plan — Godmode
+# Ads plan: Godmode (download-first, since 2026-11-01)
 
-> Status 2026-10-18: every X ad is paused since 2026-10-10 (EUR ~500, no sale). A new paid test needs Daniel's explicit OK
-> (cap, kill rule, payback). If one ever runs, it follows marketing/positioning.md: everyday computer workers, not
-> developers. Target small-business owners, office and admin staff, marketers, e-commerce sellers and freelancers
-> (interests: small business, productivity, Microsoft Excel, Shopify, e-commerce, digital marketing, virtual assistants;
-> keywords: busywork, virtual assistant, invoices, spreadsheets, "where is my order", ads report). The developer keyword
-> list below (claude code, openclaw, hermes agent, grok bot) is retired.
+> Every paid ad is paused since 2026-10-10 (EUR ~500 on X, no sale). A new paid test needs Daniel's explicit OK (network,
+> hard total cap, kill rule, why it pays back). Organic posts use the same copy. Old card-trial plan below for reference.
+
+## What changed
+
+- The ad no longer sells a card trial. It sells a **free download**: "Godmode for Mac, free for 14 days, no card, no
+  sign-up." The app shows the price when the free days end, together with what Godmode already did for the user.
+- Landing page: https://usegodmode.com (hero = big "Download for Mac, free" button) or /download for retargeting.
+  UTMs on every link: `utm_source=<network>&utm_medium=paid&utm_campaign=dl_<angle>`.
+- Conversion event: the download click (`download_mac*` in /api/track and the pixel's Lead/Download event), then
+  activation (first_seen in /admin) and paid. Target: cost per download <= $8, download -> paid >= 5% = <= $160 per
+  paying customer (payback 4-6 months at $39). Kill an ad after $40 with no download, kill the test after the cap.
+- Audience: Mac users who do office work: small-business owners, office and admin staff, assistants, marketers,
+  e-commerce sellers, bookkeepers, agencies. Desktop placements first (people download on a Mac), phones only with the
+  "send it to my computer" landing.
+
+## Ad copy (download-first)
+
+1. **Stop doing work a computer can do.** Tell Godmode the task in plain words. It opens your browser, signs in, clicks
+   through and finishes the job. Free for 14 days on your Mac. No card. [Download free]
+2. **ChatGPT tells you how. Godmode does it.** Invoices downloaded and filed, emails answered, the spreadsheet
+   updated. Your AI coworker on your Mac. Free for 14 days, no card. [Download for Mac]
+3. **Monday's busywork, done before you're up.** "Every Monday at 7, collect last week's invoices and send me the
+   totals." That's the whole setup. Free for 14 days. [Try it free]
+4. **It logged into 6 supplier portals and filed 23 invoices. I was making coffee.** Godmode, the AI coworker for
+   everyone at a computer. Mac, free for 14 days. [Download free]
+5. **The coworker who does the copy-paste.** No coding, no IT project. It asks before sending, paying or deleting.
+   Free for 14 days, no card. [Download for Mac]
+
+Visuals: real screen recordings (hero.mp4, UGC Studio clips with Maya), the light website hero, before/after cards
+("You write" / "You get back"). No dark terminal screenshots, no model names as the hook, no "AI generated" label.
+
+---
+
+# Old plan (card trial, retired 2026-11-01)
 
 Ads account: https://ads.x.com/manager/18ce55kuefv/campaigns · Landing page: https://usegodmode.com
 

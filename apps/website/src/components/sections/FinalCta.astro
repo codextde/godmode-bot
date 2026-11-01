@@ -1,45 +1,35 @@
 ---
 import Words from '../ui/Words.astro';
-import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
-import CheckoutButton from '../ui/CheckoutButton.astro';
-import Countdown from '../ui/Countdown.astro';
-import CouponCode from '../ui/CouponCode.astro';
-import { COUPON, FOUNDING, PRICING, yearlySavings } from '@/config/site';
+import DownloadButton from '../ui/DownloadButton.astro';
+import Icon from '../ui/Icon.astro';
+import { PRICING } from '@/config/site';
 ---
 
-<section class="relative overflow-hidden py-24 sm:py-32">
-  <div class="final-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
-  <div class="container-x text-center">
-    <div class="final-logo face-row relative mx-auto w-fit" data-reveal="scale" aria-hidden="true">
-      <Character character={{ body: 'drop', eyes: 'happy', mouth: 'grin', top: 'sprout', face: 'blush', neck: 'none' }} color="orange" size={54} seed="cta-1" follow />
-      <Character character={{ body: 'gumdrop', eyes: 'dots', mouth: 'smile', top: 'none', face: 'glasses', neck: 'bowtie' }} color="amber" size={64} seed="cta-2" follow />
-      <Character size={96} seed="cta-3" follow class="relative z-[1] mx-1" />
-      <Character character={{ body: 'kitty', eyes: 'dots', mouth: 'cat', top: 'none', face: 'shades', neck: 'none' }} color="rose" size={64} seed="cta-4" follow />
-      <Character character={{ body: 'ghost', eyes: 'wide', mouth: 'smile', top: 'antenna', face: 'none', neck: 'scarf' }} color="sky" size={54} seed="cta-5" follow />
+<section class="relative pt-4 pb-16 sm:pb-24">
+  <div class="container-x">
+    <div class="final-panel px-6 py-16 text-center sm:px-12 sm:py-24">
+      <div class="face-row relative mx-auto w-fit" data-reveal="scale" aria-hidden="true">
+        <Character character={{ body: 'drop', eyes: 'happy', mouth: 'grin', top: 'sprout', face: 'blush', neck: 'none' }} color="orange" size={54} seed="cta-1" follow />
+        <Character character={{ body: 'gumdrop', eyes: 'dots', mouth: 'smile', top: 'none', face: 'glasses', neck: 'bowtie' }} color="amber" size={64} seed="cta-2" follow />
+        <Character size={96} seed="cta-3" follow class="relative z-[1] mx-1" />
+        <Character character={{ body: 'kitty', eyes: 'dots', mouth: 'cat', top: 'none', face: 'shades', neck: 'none' }} color="rose" size={64} seed="cta-4" follow />
+        <Character character={{ body: 'ghost', eyes: 'wide', mouth: 'smile', top: 'antenna', face: 'none', neck: 'scarf' }} color="sky" size={54} seed="cta-5" follow />
+      </div>
+      <Words text="Stop doing work *a computer can do.*" class="h-display mx-auto mt-8 max-w-[13ch] !text-[clamp(40px,6.4vw,84px)]" />
+      <p class="lead mx-auto mt-6 max-w-[520px]" data-reveal style="--d:300">
+        Give Godmode your most boring task this week. If it doesn’t save you time, you’ve lost nothing.
+      </p>
+      <div class="mt-10 flex justify-center" data-reveal style="--d:450">
+        <DownloadButton source="final" size="xl" />
+      </div>
+      <p class="hero-note mt-5" data-reveal style="--d:520">
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> Free for {PRICING.freeDays} days</span>
+        <span aria-hidden="true" class="text-line-3">·</span>
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No card</span>
+        <span aria-hidden="true" class="text-line-3">·</span>
+        <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No sign-up</span>
+      </p>
     </div>
-    <Words text="Stop doing work *a computer can do.*" class="h-display text-grad mx-auto mt-8 max-w-[13ch] !text-[clamp(42px,7vw,96px)]" />
-    <p class="lead mx-auto mt-7 max-w-[560px]" data-reveal style="--d:300">
-      Claim a founding seat today. The founder sets up your first {FOUNDING.setupAutomations} automations with you, and if
-      Godmode doesn’t give you {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, you pay nothing.
-    </p>
-    <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:450">
-      <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="final" size="lg" />
-      <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="final" variant="ghost" size="lg" />
-    </div>
-    <div class="mt-5" data-reveal style="--d:500">
-      <a href="/download" class="group inline-flex items-center gap-2 text-[14px] text-text-2 transition-colors hover:text-text" data-track="final_download">
-        <Icon name="download" size={15} class="text-brand" />
-        No card? Download it and use it free for 7 days
-        <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
-      </a>
-    </div>
-    <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:550">
-      <Icon name="shield-check" size={14} class="text-brand" />
-      $0 today · price locked for life · founding offer ends in <Countdown />
-    </p>
-    <p class="mt-4 flex flex-wrap items-center justify-center gap-2 text-[13px] text-muted" data-reveal style="--d:600">
-      Extra {COUPON.percentOff}% off with <CouponCode size="sm" />
-    </p>
   </div>
 </section>

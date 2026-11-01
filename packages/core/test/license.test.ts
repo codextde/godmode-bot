@@ -291,6 +291,41 @@ describe("keys and the licence server", () => {
     expect(() => requireLicense()).toThrow("licence has ended");
   });
 
+  test("an ended key says why: trial ended, cancelled, or a payment that failed", async () => {
+    answer = trial();
+    await putKey(KEY);
+    const ended = (status: string, reason?: string) =>
+      json({ valid: false, plan: "monthly", status, reason, trialEndsAt: now - DAY, renewsAt: null, cancelAtPeriodEnd: false, manageUrl: `https://usegodmode.com/api/portal?key=${KEY}&pay=1` });
+
+    answer = ended("canceled", "trial_ended");
+    expect(await refreshLicense()).toMatchObject({ status: "expired", endReason: "trial_ended", blocked: true, message: "Your trial has ended. Subscribe to keep your agents working." });
+    expect(() => requireLicense()).toThrow("Your trial has ended");
+    await refreshLicense(); // the refused run asked the server again
+
+    answer = ended("canceled", "canceled");
+    expect(await refreshLicense()).toMatchObject({ endReason: "canceled", message: "Your subscription has ended. Subscribe again to keep your agents working." });
+
+    answer = ended("expired", "payment_failed");
+    const failed = await refreshLicense();
+    expect(failed).toMatchObject({ status: "expired", endReason: "payment_failed", blocked: true, manageUrl: `https://usegodmode.com/api/portal?key=${KEY}&pay=1` });
+    expect(failed.message).toStartWith("Your last payment didn't go through");
+
+    answer = ended("refunded", "refunded");
+    expect(await refreshLicense()).toMatchObject({ endReason: "refunded", message: expect.stringContaining("licence has ended") });
+
+    // A server that ends a past-due key itself, without a reason, still reads as a failed payment, not a mistyped key.
+    for (const status of ["past_due", "unpaid"]) {
+      answer = ended(status);
+      expect(await refreshLicense()).toMatchObject({ status: "expired", endReason: "payment_failed", blocked: true });
+    }
+
+    answer = ended("canceled", "something_new");
+    expect(await refreshLicense()).toMatchObject({ status: "expired", endReason: null, message: expect.stringContaining("licence has ended") });
+
+    answer = trial();
+    expect(await refreshLicense()).toMatchObject({ status: "trial", endReason: null, blocked: false });
+  });
+
   test("the older answer { valid, plan, status } is read with the rest as null", async () => {
     answer = json({ valid: true, plan: "lifetime", status: "active" });
     const { body } = await putKey(KEY);

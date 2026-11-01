@@ -2,55 +2,16 @@ import type { APIRoute } from 'astro';
 import { db } from '@/lib/db';
 import { isLicenseKey } from '@/lib/license';
 import { minLivemode } from '@/lib/entitlement';
+import { licenseVerdict, type LicenseOrder } from '@/lib/license-status';
 
 export const prerender = false;
 
-type Status = 'trialing' | 'active' | 'past_due' | 'canceled' | 'refunded' | 'expired' | 'pending';
-
-type Row = {
-  plan: string;
-  mode: string;
-  status: string;
-  sub_status: string | null;
-  trial_end: number | null;
-  period_end: number | null;
+type Row = LicenseOrder & {
   cancel_at_period_end: number | null;
-  comp: number | null;
   customer_id: string | null;
 };
 
 const headers = { 'cache-control': 'no-store' };
-
-/** Order state → the license status the app understands. */
-function statusOf(row: Row): Status {
-  if (row.status === 'refunded') return 'refunded';
-  if (row.status === 'open' || row.status === 'pending') return 'pending';
-  if (row.status === 'expired' || row.status === 'failed') return 'expired';
-  if (row.comp || row.mode !== 'subscription') return row.status === 'paid' ? 'active' : 'expired';
-  switch (row.sub_status) {
-    case 'trialing':
-      return 'trialing';
-    case 'active':
-      return 'active';
-    // Stripe is still retrying the payment; `unpaid` means it gave up.
-    case 'past_due':
-      return 'past_due';
-    case 'unpaid':
-      return 'expired';
-    case 'canceled':
-    case 'incomplete_expired':
-      return 'canceled';
-    case 'paused':
-      return 'expired';
-    case 'incomplete':
-      return 'pending';
-  }
-  // Orders from before subscription details were stored.
-  if (row.status === 'paid') return 'active';
-  if (row.status === 'past_due') return 'past_due';
-  if (row.status === 'canceled') return 'canceled';
-  return 'expired';
-}
 
 /** Activation for /admin and the lifecycle emails: only the app's own checks count, at most one write an hour. */
 async function markSeen(key: string, userAgent: string | null) {
@@ -80,19 +41,20 @@ export const GET: APIRoute = async ({ url, request }) => {
   if (!row) return Response.json({ valid: false, reason: 'unknown' }, { status: 404, headers });
   await markSeen(key, request.headers.get('user-agent')).catch((e) => console.error('license seen update failed', e));
 
-  const status = statusOf(row);
-  const valid = status === 'trialing' || status === 'active' || status === 'past_due';
+  const { valid, status, reason } = licenseVerdict(row, Date.now());
   const subscription = row.mode === 'subscription' && !row.comp;
   const plan = row.plan === 'yearly' || row.plan === 'monthly' ? row.plan : 'lifetime';
+  const owes = subscription && (row.sub_status === 'past_due' || row.sub_status === 'unpaid');
   return Response.json(
     {
       valid,
       plan,
       status,
-      trialEndsAt: subscription && status === 'trialing' ? (row.trial_end ?? null) : null,
+      reason,
+      trialEndsAt: subscription && (status === 'trialing' || reason === 'trial_ended') ? (row.trial_end ?? null) : null,
       renewsAt: subscription && valid ? (row.period_end ?? null) : null,
       cancelAtPeriodEnd: subscription && Boolean(row.cancel_at_period_end),
-      manageUrl: row.customer_id ? `${url.origin}/api/portal?key=${key}` : null,
+      manageUrl: row.customer_id ? `${url.origin}/api/portal?key=${key}${owes ? '&pay=1' : ''}` : null,
     },
     { headers },
   );

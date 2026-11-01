@@ -24,7 +24,7 @@ writing the same emails. Not developers (they are welcome, but we don't sell to 
   - Runs on its own: every Monday, when an email arrives, when a price changes.
   - Remembers how you like things.
   - Message it from your phone, Slack, Telegram or Teams.
-  - Runs on your own computer, Mac or Windows.
+  - Runs on your own Mac (Apple chip or Intel). Windows is not available yet; there is a waitlist.
 
 ## Jobs to show (use these, in this order of priority)
 
@@ -45,7 +45,7 @@ Never lead with coding, bug fixing, pull requests, test suites or servers.
 - Not "always asks first": asking is the default, it skips it when the task already says to do that step.
 - Passwords are hidden from the AI and blacked out in chats and logs, not in screenshots.
 - Banks that confirm logins in their phone app still need the user; say "it asks you when a site wants your phone".
-- The always-on version for a spare computer installs with one copy-paste command (Founding members get help).
+- The always-on version for a spare computer installs with one copy-paste command (we help by email).
 
 ## Words
 
@@ -75,7 +75,18 @@ trust line. "Agents" is fine once the reader knows what Godmode is ("AI coworker
 - "Stop copy-pasting between tabs." (screen recording of Godmode doing it)
 - "POV: you told your computer what to do in one sentence."
 
-## Offer (unchanged)
+## Offer (since 2026-11-01)
 
-14 days free, then $39/month or $29/month yearly. Founding 100 until October 31: setup call with the founder,
-price locked, 10 hours back in 30 days or full refund, code FOUNDING20.
+**Download free, pay later.** Godmode for Mac is free for 14 days: no card, no sign-up, just download. After that
+$39/month, or $29/month billed yearly. 14-day money-back guarantee on the first payment, cancel anytime. The Founding
+100 offer (setup call, FOUNDING20, price lock) ended on October 31: never mention it again.
+
+- The one call to action everywhere (site, ads, posts, emails, README): **Download for Mac, free.** Link
+  https://usegodmode.com/download (add utm_source/utm_medium/utm_campaign). Never send people straight to checkout.
+- Lead with what it does, not the price. Say "free for 14 days, no card" right next to the download button. The price
+  shows on the pricing section, in the FAQ and in the app when the free days end (it then shows what Godmode already
+  did for the user).
+- Mac only for now (Apple silicon and Intel). Windows and Linux people: "Mac only right now, Windows is on the list."
+- Needs a Claude Pro or Max plan (or an Anthropic API key). Don't hide it in answers, don't lead with it.
+- Teams and companies: same download, contact kontakt@codext.de for several seats or help setting it up.
+- Website "Subscribe" buttons and the app's end screen check out with `trial=0` (billed today, no second trial).

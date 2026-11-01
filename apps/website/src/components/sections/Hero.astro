@@ -3,110 +3,70 @@ import { Image } from 'astro:assets';
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import Character from '../ui/Character.astro';
-import CheckoutButton from '../ui/CheckoutButton.astro';
-import Countdown from '../ui/Countdown.astro';
-import CouponCode from '../ui/CouponCode.astro';
-import { COUPON, FOUNDING, PRICING } from '@/config/site';
+import DownloadButton from '../ui/DownloadButton.astro';
+import { PRICING } from '@/config/site';
 import recording from '@/assets/shots/hero-recording.jpg';
 ---
 
-<section data-hero class="relative isolate overflow-hidden pt-[112px] sm:pt-[132px]">
-  <!-- Light from above + dot field -->
-  <div class="hero-light pointer-events-none absolute inset-x-0 top-0 -z-10 h-[980px]" aria-hidden="true"></div>
-  <canvas data-dotfield class="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[900px] w-full" aria-hidden="true"
-  ></canvas>
+<section data-hero class="relative isolate overflow-hidden pt-[112px] sm:pt-[140px]">
+  <div class="hero-wash pointer-events-none absolute inset-x-0 top-0 -z-10 h-[900px]" aria-hidden="true"></div>
 
   <div class="container-x relative text-center">
     <div data-reveal style="--d:0">
-      <a href="/use-cases" class="pill group mx-auto" data-track="hero_pill">
-        <span class="flex items-center gap-2 rounded-full bg-[rgb(217_119_87/0.14)] py-1 pr-2.5 pl-2 text-[12.5px] whitespace-nowrap text-[#f0a488]">
-          <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"
-            ><path
-              fill="currentColor"
-              d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg
-          >
-          Powered by Claude
-        </span>
-        <span class="whitespace-nowrap text-text-2"><span class="hidden sm:inline">60 everyday jobs people hand to Godmode</span><span class="sm:hidden">60 jobs it does for you</span></span>
+      <a href="#jobs" class="pill group mx-auto" data-track="hero_pill">
+        <span class="rounded-full bg-brand-soft px-2.5 py-1 text-[12.5px] font-semibold text-brand">New</span>
+        <span class="whitespace-nowrap text-text-2"><span class="sm:hidden">Your AI coworker</span><span class="hidden sm:inline">Your AI coworker for everyday computer work</span></span>
         <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
       </a>
     </div>
 
-    <Words
-      as="h1"
-      text="Your computer work. *Done for you.*"
-      class="h-display text-grad mx-auto mt-7 max-w-[12.5ch] pb-2"
-      delay={120}
-    />
+    <Words as="h1" text="Your computer work. *Done for you.*" class="h-display mx-auto mt-7 max-w-[12ch] pb-2" delay={120} />
 
-    <p class="lead mx-auto mt-6 max-w-[660px]" data-reveal style="--d:450">
-      Godmode is the AI coworker for everyone who works at a computer. Tell it the task in plain words, like you would a
-      colleague. It opens your browser and apps, signs in, clicks through and finishes the job: emails answered, invoices
-      filed, the spreadsheet updated, the ads report in your inbox.
+    <p class="lead mx-auto mt-6 max-w-[620px] !text-text-2" data-reveal style="--d:450">
+      Tell Godmode what you need in plain words. It opens your browser and apps, signs in, clicks through and finishes the
+      job, while you do something else.
     </p>
 
-    <div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:600">
-      <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="hero" size="lg" />
+    <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:600">
+      <DownloadButton source="hero" size="xl" />
       <button type="button" class="btn btn-ghost btn-lg group" data-open-video="hero">
-        <span class="play-ring grid size-7 place-items-center rounded-full bg-text text-bg">
+        <span class="play-ring grid size-7 place-items-center rounded-full bg-brand text-white">
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1.2v7.6L8.6 5z" fill="currentColor"></path></svg>
         </span>
         Watch it work
       </button>
     </div>
-    <div class="mt-5" data-reveal style="--d:660">
-      <a href="/download" class="group inline-flex items-center gap-2 text-[14px] text-text-2 transition-colors hover:text-text" data-track="hero_download">
-        <Icon name="download" size={15} class="text-brand" />
-        No card? Download it and use it free for 7 days
-        <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
-      </a>
-    </div>
 
-    <ul class="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] text-muted" data-reveal style="--d:720">
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Founder sets up your first {FOUNDING.setupAutomations} automations</li>
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> {FOUNDING.outcomeHours} hours back in {FOUNDING.outcomeDays} days, or full refund</li>
-      <li class="flex items-center gap-1.5"><Icon name="check" size={14} class="text-brand" /> Then ${PRICING.plans.yearly.perMonth}/mo, locked for life</li>
-    </ul>
-
-    <p class="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[13px] text-muted" data-reveal style="--d:760">
-      <span class="flex items-center gap-1.5"><Icon name="laptop" size={14} class="text-dim" /> Mac, Windows and Linux</span>
-      <span class="flex items-center gap-1.5"><Icon name="message-circle" size={14} class="text-dim" /> No coding, just plain words</span>
-      <span class="flex items-center gap-1.5"><Icon name="lock-keyhole" size={14} class="text-dim" /> Your passwords stay on your computer</span>
+    <p class="hero-note mt-5" data-reveal style="--d:680">
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> Free for {PRICING.freeDays} days</span>
+      <span aria-hidden="true" class="text-line-3">·</span>
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No card</span>
+      <span aria-hidden="true" class="text-line-3">·</span>
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No sign-up</span>
     </p>
-
-    <div class="mt-7 flex flex-col items-center gap-3" data-reveal style="--d:800">
-      <div class="founding-strip">
-        <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Founding price ends in</span>
-        <Countdown variant="boxes" />
-      </div>
-      <p class="flex flex-wrap items-center justify-center gap-2 text-[13px] text-muted">
-        Extra {COUPON.percentOff}% off with code <CouponCode size="sm" /> at checkout
-      </p>
-    </div>
+    <p class="mt-2 text-[13px] text-dim" data-reveal style="--d:720">For Mac with Apple chip or Intel. No coding needed.</p>
   </div>
 
-  <!-- Product window -->
-  <div class="container-x relative mt-20 sm:mt-24" data-reveal="fade" style="--d:800">
+  <div class="container-x relative mt-16 sm:mt-20" data-reveal="fade" style="--d:800">
     <div class="tilt-stage">
-      <div data-tilt class="tilt window hero-window relative mx-auto max-w-[1120px]">
-        <!-- The mascot peeks over the window; its eyes follow the cursor. -->
+      <div class="window hero-window relative mx-auto max-w-[1080px]">
         <div class="hero-mascot" data-mascot aria-hidden="true">
           <Character size={92} follow class="mascot-idle" seed="hero" />
           <Character size={92} mood="happy" class="mascot-happy" seed="hero" />
           <span class="say"><span class="sm:hidden">Hi, I’m Godmode!</span><span class="hidden sm:inline">Hi, I’m Godmode. Hand me the busywork.</span></span>
         </div>
-        <div class="window-bar">
+        <div class="window-bar traffic">
           <i></i><i></i><i></i>
-          <div class="mx-auto flex items-center gap-2 font-mono text-[11px] text-dim">
-            <span class="live-dot !size-1.5"></span> Real screen recording · sped up
+          <div class="mx-auto flex items-center gap-2 text-[12px] font-medium text-muted">
+            <span class="live-dot !size-1.5"></span> Real screen recording, sped up
           </div>
         </div>
-        <div class="hero-screen relative aspect-video bg-bg">
+        <div class="hero-screen relative aspect-video bg-surface-3">
           <Image
             src={recording}
             alt="A real Mac desktop: Godmode looked up Notion, Linear and Slack pricing in its own Chrome window and answered with a table of what a 10-person team pays per month."
             widths={[640, 960, 1280, 1600, 2000]}
-            sizes="(min-width: 1200px) 1120px, 94vw"
+            sizes="(min-width: 1200px) 1080px, 94vw"
             loading="eager"
             fetchpriority="high"
             class="absolute inset-0 size-full object-cover object-top"
@@ -127,26 +87,18 @@ import recording from '@/assets/shots/hero-recording.jpg';
         </div>
       </div>
 
-      <!-- Floating status chips -->
-      <div class="float-chip left-[2%] top-[18%] hidden md:flex" style="--fd:0s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="globe" size={15} /></span>
+      <div class="float-chip left-[0%] top-[22%] hidden lg:flex" style="--fd:0s">
+        <span class="grid size-8 place-items-center rounded-xl bg-brand-soft text-brand"><Icon name="key-round" size={16} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">Its own Chrome window</b>
-          <span class="font-mono text-[11px] text-dim">real pages, nothing staged</span>
+          <b class="block text-[13.5px] font-semibold text-text">Signs in for you</b>
+          <span class="text-[12px] text-muted">never sees your passwords</span>
         </span>
       </div>
-      <div class="float-chip right-[1%] top-[42%] hidden md:flex" style="--fd:-2s">
-        <span class="grid size-7 place-items-center rounded-lg bg-brand-soft text-brand"><Icon name="table" size={15} /></span>
+      <div class="float-chip right-[0%] top-[46%] hidden lg:flex" style="--fd:-2s">
+        <span class="grid size-8 place-items-center rounded-xl bg-peach-soft text-[#8a3d1f]"><Icon name="hand" size={16} /></span>
         <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">Three sites, one table</b>
-          <span class="font-mono text-[11px] text-dim">prices checked live</span>
-        </span>
-      </div>
-      <div class="float-chip bottom-[10%] left-[6%] hidden lg:flex" style="--fd:-4s">
-        <span class="grid size-7 place-items-center rounded-lg bg-[rgb(255_250_240/0.06)] text-text-2"><Icon name="mouse-pointer-2" size={15} /></span>
-        <span class="text-left">
-          <b class="block text-[13px] font-medium text-text">Your cursor is free</b>
-          <span class="font-mono text-[11px] text-dim">working in the background</span>
+          <b class="block text-[13.5px] font-semibold text-text">Checks with you</b>
+          <span class="text-[12px] text-muted">by default, before it sends or pays</span>
         </span>
       </div>
     </div>
