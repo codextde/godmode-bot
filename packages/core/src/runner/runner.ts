@@ -115,7 +115,8 @@ import { MAX_RETRIES, dropPause, limitReached, pauseOf, pausedConversations, pau
 import { issueRunToken, revokeRunToken } from "../mcp/tokens";
 import { claudeMemEnv, claudeMemPluginDir, stopClaudeMemWorkers } from "../memory/claudeMem";
 import { modsForRun, removeRunMods } from "../mods/service";
-import { memoryDigest, memoryForPrompt } from "../memory/files";
+import { memoryDigest, memoryForPrompt, snapshotMemory, type MemorySnapshot } from "../memory/files";
+import { recordMemoryEdits } from "../memory/edits";
 import { applyZaiEnv, claudeEnv, killTree, resolveClaudeCommand, zaiKey } from "./claude";
 import { buildMcpConfig, gatewayUrl, removeMcpConfigFile, writeMcpConfigFile } from "./mcpConfig";
 import { effortFor, ultracodeFor } from "./models";
@@ -409,6 +410,7 @@ interface Job {
   private?: boolean;
   /** Godmode ended it because a `/goal` kept it going with nothing to do: it succeeded. */
   goalPaused?: boolean;
+  memoryBefore?: MemorySnapshot;
   /** The agent ended the chat's `/goal` (`goal_clear`) when the hook had blocked this many times: Godmode clears it once the process is done. */
   goalClear?: { reason: string; atCheck: number };
   /** Where its Claude Code keeps sessions (GLM runs have a config folder of their own); null = the default. */
@@ -1312,7 +1314,6 @@ export function buildEnv(agent: Agent, inFolder = false, apiKeys = true): Record
   const env = claudeEnv();
   // Load CLAUDE.md files from --add-dir folders: the agent's repo when the cwd is an attached folder, and the workspace's folders.
   if (inFolder) env.CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD = "1";
-  env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   // `claude -p` stops background subagents still running 10 minutes after the main turn ended, and the agent never
   // hears back from them. The watchdog and the run timeout decide when a run has gone quiet for too long instead.
   env.CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS ??= "0";
@@ -2278,6 +2279,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         glmDelegation: !glm && config().role !== "runner" && zaiKey() ? GLM_MODELS[0]!.id : null,
       });
   const memoryNow = memoryDigest(agent.repoPath);
+  if (!dreaming && job.trigger !== "check" && !job.private && !job.memoryBefore) job.memoryBefore = snapshotMemory(agent.repoPath);
 
   const effort = effortFor(model, job.trigger === "check" ? "low" : conv.effort || agent.effort || settings.runner.effort || null);
   job.model = model;
@@ -2373,6 +2375,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const extraArgs = (settings.runner.extraArgs ?? []).filter((a) => typeof a === "string" && a.length > 0);
 
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
+  if (job.private || !folder) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
   if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
@@ -2897,6 +2900,13 @@ async function finalize(job: Job, outcome: Outcome, agent: Agent | null, started
   const claudeError = outcome.status === "failed" && (text.trim() === error?.trim() || /^(?:Failed to authenticate[.:]|API Error:)/.test(text.trim()));
   if (outcome.status !== "cancelled" && job.trigger !== "dream" && !claudeError) await detectMissingLogin(job, agent, text);
 
+  const memoryBefore = job.memoryBefore;
+  job.memoryBefore = undefined;
+  if (memoryBefore && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
+    safely("record memory edits", () =>
+      recordMemoryEdits({ agentId: job.agentId, runId: job.runId, conversationId: job.conversationId, trigger: job.trigger, repoPath: agent.repoPath, before: memoryBefore }),
+    );
+  }
   // Condition checks change nothing worth a commit; the task run that follows commits as usual. Dreams commit their
   // memory changes themselves (memory/dreaming.ts).
   if (getSettings().memory.autoCommit && job.trigger !== "check" && job.trigger !== "dream" && !job.private) {
