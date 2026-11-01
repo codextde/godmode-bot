@@ -566,7 +566,9 @@
       "helper": "Helper",
       "backgroundSubagent": "Background subagent",
       "subagent": "Subagent",
-      "report": "Report"
+      "report": "Report",
+      "openSide": "Open in the side panel",
+      "closeSide": "Close"
     },
     "subagents": {
       "subagents_one": "{{count}} subagent",

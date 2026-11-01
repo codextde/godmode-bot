@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type RefObject } from "react";
+import { useContext, useEffect, useMemo, useState, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, CharacterMood, MessageBlock } from "@godmode/shared";
 import { BABY_FACE_SCALE, babyCharacter, defaultCharacter, readableModelId, reportPreview, shortenPaths } from "@godmode/shared";
-import { ArrowUpRight, ChevronRight } from "lucide-react";
+import { ArrowUpRight, ChevronRight, PanelRightOpen } from "lucide-react";
+import { SidePanelScope, useChatSidePanel } from "@/components/side-panel/store";
 import { Character } from "@/components/character";
 import { formatDuration, formatElapsed, formatTokens, useModelLabel } from "@/components/runs/run-status";
 import { ThinkingState } from "@/components/aicss/ThinkingState";
@@ -23,7 +24,7 @@ export type ParentAgent = Pick<Agent, "id" | "name" | "color" | "character">;
 
 export const SUBAGENT_TOOLS = new Set(["Task", "Agent"]);
 
-type Phase = "running" | "done" | "failed" | "stopped";
+export type Phase = "running" | "done" | "failed" | "stopped";
 
 const MOOD: Record<Phase, CharacterMood> = { running: "working", done: "happy", failed: "error", stopped: "sleeping" };
 
@@ -36,6 +37,15 @@ export function subagentState(block: ToolUseBlock, streaming: boolean) {
   const result = background ? task?.summary : block.result;
   const phase: Phase = running ? "running" : failed ? "failed" : status === "stopped" ? "stopped" : "done";
   return { task, background, status, running, failed, result, phase };
+}
+
+function useSubagentSide(id: string) {
+  const scope = useContext(SidePanelScope);
+  const show = useChatSidePanel((s) => s.show);
+  const hide = useChatSidePanel((s) => s.hide);
+  if (!scope) return null;
+  const active = scope.current?.kind === "subagent" && scope.current.id === id;
+  return { active, toggle: () => (active ? hide(scope.conversationId) : show(scope.conversationId, { kind: "subagent", id })) };
 }
 
 export function subagentAnchor(id: string) {
@@ -57,7 +67,7 @@ export function SubagentAvatar({ agent, phase, size, seed, className }: { agent?
   return <Character character={character} color={agent?.color ?? "violet"} mood={MOOD[phase]} size={size} faceScale={BABY_FACE_SCALE} phaseSeed={seed} className={className} />;
 }
 
-function useSubagentView(block: ToolUseBlock, childBlocks: MessageBlock[], streaming: boolean, ctx: ToolContext) {
+export function useSubagentView(block: ToolUseBlock, childBlocks: MessageBlock[], streaming: boolean, ctx: ToolContext) {
   const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
   const modelLabel = useModelLabel();
@@ -84,7 +94,7 @@ function useSubagentView(block: ToolUseBlock, childBlocks: MessageBlock[], strea
   return { ...state, meta, status, stats, type: easy ? undefined : meta.detail };
 }
 
-function SubagentBody({ childBlocks, running, background, result, agent }: { childBlocks: MessageBlock[]; running: boolean; background: boolean; result?: string; agent?: ParentAgent }) {
+export function SubagentBody({ childBlocks, running, background, result, agent }: { childBlocks: MessageBlock[]; running: boolean; background: boolean; result?: string; agent?: ParentAgent }) {
   const { t } = useTranslation("chat");
   return (
     <div className="space-y-3">
@@ -105,12 +115,12 @@ function SubagentBody({ childBlocks, running, background, result, agent }: { chi
   );
 }
 
-function TypeChip({ type }: { type?: string }) {
+export function TypeChip({ type }: { type?: string }) {
   if (!type) return null;
   return <span className="shrink-0 rounded-full border px-1.5 py-px font-mono text-[10.5px] text-muted-foreground">{type}</span>;
 }
 
-function Timer({ since, durationMs, running }: { since?: number; durationMs?: number; running: boolean }) {
+export function Timer({ since, durationMs, running }: { since?: number; durationMs?: number; running: boolean }) {
   if (running && since) return <Elapsed since={since} />;
   if (!running && durationMs) return <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">{formatDuration(durationMs)}</span>;
   return null;
@@ -126,8 +136,9 @@ export function SubagentCard({ block, ctx, childBlocks, streaming, agent }: { bl
   const easy = useEasyMode();
   const view = useSubagentView(block, childBlocks, streaming, ctx);
   const { task, background, running, failed, phase } = view;
+  const side = useSubagentSide(block.id);
   const [open, setOpen] = useState<boolean | null>(null);
-  const expanded = open ?? (running && !background);
+  const expanded = !side && (open ?? (running && !background));
   const kind = easy
     ? background
       ? t("blocks.subagent.helperBackground")
@@ -141,9 +152,11 @@ export function SubagentCard({ block, ctx, childBlocks, streaming, agent }: { bl
     <div id={subagentAnchor(block.id)} className={cn("scroll-mt-24 rounded-xl border bg-card shadow-card", failed && "border-destructive/30", running && "full-motion:glow-border")}>
       <button
         type="button"
-        onClick={() => setOpen(!expanded)}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40"
+        onClick={() => (side ? side.toggle() : setOpen(!expanded))}
+        aria-expanded={side ? undefined : expanded}
+        aria-current={side?.active ? "true" : undefined}
+        title={side ? t("blocks.subagent.openSide") : undefined}
+        className={cn("flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40", side?.active && "bg-accent/50")}
       >
         <SubagentAvatar agent={agent} phase={phase} size={30} seed={block.id} />
         <span className="min-w-0 flex-1">
@@ -159,7 +172,11 @@ export function SubagentCard({ block, ctx, childBlocks, streaming, agent }: { bl
           </span>
         </span>
         <Timer since={task?.startedAt} durationMs={task?.durationMs} running={running} />
-        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+        {side ? (
+          <PanelRightOpen className={cn("size-4 shrink-0 text-muted-foreground", side.active && "text-foreground")} />
+        ) : (
+          <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+        )}
       </button>
       <Collapse open={expanded}>
         <div className="border-t px-3.5 py-3">
@@ -174,15 +191,20 @@ function SubagentRow({ entry, ctx, streaming, agent }: { entry: SubagentEntry; c
   const { block, children } = entry;
   const view = useSubagentView(block, children, streaming, ctx);
   const { task, background, running, failed, phase } = view;
-  const [open, setOpen] = useState(false);
+  const { t } = useTranslation("chat");
+  const side = useSubagentSide(block.id);
+  const [state, setOpen] = useState(false);
+  const open = !side && state;
 
   return (
     <li id={subagentAnchor(block.id)} className="scroll-mt-24">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-        className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition hover:bg-accent/50"
+        onClick={() => (side ? side.toggle() : setOpen(!open))}
+        aria-expanded={side ? undefined : open}
+        aria-current={side?.active ? "true" : undefined}
+        title={side ? t("blocks.subagent.openSide") : undefined}
+        className={cn("group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-[13px] transition hover:bg-accent/50", side?.active && "bg-accent/50")}
       >
         <SubagentAvatar agent={agent} phase={phase} size={22} seed={block.id} />
         <span className={cn("min-w-0 shrink truncate font-medium", running && "text-shimmer")}>{view.meta.title}</span>
@@ -190,7 +212,11 @@ function SubagentRow({ entry, ctx, streaming, agent }: { entry: SubagentEntry; c
         <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", failed && "text-destructive", phase === "done" && "text-foreground/70")}>{view.status}</span>
         {view.stats.length > 0 && <span className="hidden shrink-0 text-[11px] text-muted-foreground tabular-nums @lg:inline">{view.stats.join(" · ")}</span>}
         <Timer since={task?.startedAt} durationMs={task?.durationMs} running={running} />
-        <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+        {side ? (
+          <PanelRightOpen className={cn("size-3.5 shrink-0 text-muted-foreground", side.active && "text-foreground")} />
+        ) : (
+          <ChevronRight className={cn("size-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+        )}
       </button>
       <Collapse open={open}>
         <div className="py-2 pr-2 pl-10">

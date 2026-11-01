@@ -2,7 +2,7 @@ import { createContext } from "react";
 import { create } from "zustand";
 import type { ChatFile } from "@godmode/shared";
 
-export type ChatSide = { kind: "pull"; url: string } | { kind: "file"; file: ChatFile; line: number | null; local: boolean };
+export type ChatSide = { kind: "pull"; url: string } | { kind: "file"; file: ChatFile; line: number | null; local: boolean } | { kind: "subagent"; id: string };
 
 interface SidePanelState {
   open: Record<string, ChatSide | null>;
@@ -21,7 +21,7 @@ export const SidePanelScopeProvider = SidePanelScope.Provider;
 
 export function sideKey(side: ChatSide | null): string | null {
   if (!side) return null;
-  return side.kind === "pull" ? `pull:${side.url}` : `file:${side.file.path}`;
+  return side.kind === "pull" ? `pull:${side.url}` : side.kind === "file" ? `file:${side.file.path}` : `subagent:${side.id}`;
 }
 
 export function lineOf(ref: string): number | null {
