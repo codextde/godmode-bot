@@ -13,7 +13,6 @@
     "label": "Projekt: {{name}}",
     "labelDefault": "Projekt: {{name}} (Standard)",
     "project": "Projekt",
-    "hint": "Läufe in diesem Chat bekommen Kontext, Ordner und Repositories des Projekts und surfen mit seinem Browserprofil.",
     "find": "Projekt suchen…",
     "empty": "Kein Projekt mit diesem Namen.",
     "default": "Standard – {{name}}",

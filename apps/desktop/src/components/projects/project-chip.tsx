@@ -103,16 +103,12 @@ export function ProjectChip({
         <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
       <PopoverContent align="start" side="top" sideOffset={8} className="w-80 overflow-hidden rounded-xl p-0">
-        <div className="border-b px-3 pt-2.5 pb-2">
-          <p className="text-[13px] font-medium">{t("chip.project")}</p>
-          <p className="text-xs text-muted-foreground">{t("chip.hint")}</p>
-        </div>
-        <Command>
-          {groups.reduce((n, w) => n + w.projects.length, 0) > 6 && <CommandInput placeholder={t("chip.find")} />}
+        <Command loop>
+          <CommandInput placeholder={t("chip.find")} aria-label={t("chip.find")} />
           <CommandList className="max-h-72">
             <CommandEmpty>{t("chip.empty")}</CommandEmpty>
             <CommandGroup>
-              <CommandItem value="__default" keywords={["none", "default"]} onSelect={() => pick(null)} className="gap-2.5 py-2">
+              <CommandItem value="__default" keywords={["none", "default", t("chip.noProject"), inherited?.project.name ?? ""].filter(Boolean)} onSelect={() => pick(null)} className="gap-2.5 py-2">
                 <span className="grid size-6 shrink-0 place-items-center rounded-md border border-dashed text-muted-foreground">
                   <FolderKanban className="size-3.5" />
                 </span>
@@ -145,7 +141,7 @@ export function ProjectChip({
                 <CommandGroup>
                   <CommandItem
                     value="__new"
-                    keywords={["new project", "create"]}
+                    keywords={["new project", "create", t("dialog.newTitle")]}
                     onSelect={() => {
                       setOpen(false);
                       navigate(`/workspaces?newProject=${newIn}`);
