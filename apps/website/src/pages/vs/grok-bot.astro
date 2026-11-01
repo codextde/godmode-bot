@@ -6,8 +6,9 @@ import Icon from '@/components/ui/Icon.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
 import ComputerUse from '@/components/sections/ComputerUse.astro';
-import { PRICING, SITE, yearlySavings } from '@/config/site';
+import { PRICING, SITE } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
 const checked = 'October 22, 2026';
@@ -16,7 +17,7 @@ type Mark = 'yes' | 'no' | 'partial';
 const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   {
     label: 'Where the work happens',
-    us: ['yes', 'On your Mac, Windows or Linux computer, plus a separate Mac of its own on your Mac'],
+    us: ['yes', 'On your own Mac, plus a separate Mac of its own inside it if you like'],
     them: ['partial', 'One cloud computer that all your Bots share. It can run commands on yours if you approve each one'],
   },
   {
@@ -76,19 +77,19 @@ const rows: { label: string; us: [Mark, string]; them: [Mark, string] }[] = [
   },
   {
     label: 'Keeps working with your laptop shut',
-    us: ['partial', 'Yes, when it runs on an always-on Mac mini, PC or server'],
+    us: ['partial', 'Yes, when it runs on an always-on Mac, like a Mac mini'],
     them: ['yes', 'Yes, it lives in the cloud'],
   },
   {
     label: 'Price',
-    us: ['yes', `${PRICING.trialDays} days free, then $${monthly.price}/mo or $${yearly.perMonth}/mo yearly, plus your Claude plan`],
+    us: ['yes', `${PRICING.freeDays} days free with no card, then $${monthly.price}/mo or $${yearly.perMonth}/mo yearly, plus your Claude plan`],
     them: ['partial', 'In the X Subscription from $30/mo (Premium; Plus doesn’t include it). Older Cursor and SuperGrok plans keep it'],
   },
 ];
 
 const mark = {
   yes: { icon: 'check', cls: 'text-brand', sr: 'Yes' },
-  no: { icon: 'x', cls: 'text-[rgb(240_82_91/0.8)]', sr: 'No' },
+  no: { icon: 'x', cls: 'text-danger', sr: 'No' },
   partial: { icon: 'minus', cls: 'text-warn', sr: 'Partly' },
 } as const;
 
@@ -142,7 +143,7 @@ const sameTask = {
 };
 
 const steps = [
-  ['download', 'Install Godmode', 'macOS, Windows or Linux. Sign in with your Claude plan or an Anthropic API key.'],
+  ['download', 'Install Godmode', 'Download it for your Mac, free for 14 days. Sign in with your Claude plan or an Anthropic API key.'],
   ['import', 'Bring your logins', 'Bring over your Chrome logins and your passwords from Chrome, 1Password or Bitwarden. 2FA codes from a screenshot of your authenticator QR code.'],
   ['users', 'Recreate your Bots in one message', 'Tell the main agent what each Bot did (“a sales assistant that updates HubSpot after every call”). It creates the agent, its memory and its schedule.'],
 ];
@@ -154,7 +155,7 @@ const faqs = [
   },
   {
     q: 'Is Godmode cheaper than Grok Bot?',
-    a: `No, Grok Bot is cheaper to start. It comes with the X Subscription from $30 a month (Premium; Plus doesn’t include it), and older Cursor and SuperGrok plans keep it. Its usage comes out of a weekly pool shared with the rest of your plan, then paid top-ups. Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after a ${PRICING.trialDays}-day free trial, plus the Claude plan or API key you already have. You pay more for agents that work on your own computer with the logins you already have.`,
+    a: `No, Grok Bot is cheaper to start. It comes with the X Subscription from $30 a month (Premium; Plus doesn’t include it), and older Cursor and SuperGrok plans keep it. Its usage comes out of a weekly pool shared with the rest of your plan, then paid top-ups. Godmode is $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly, after ${PRICING.freeDays} free days with no card, plus the Claude plan or API key you already have. You pay more for agents that work on your own computer with the logins you already have.`,
   },
   {
     q: 'Doesn’t Grok Bot use Claude now?',
@@ -200,15 +201,15 @@ const jsonLd = {
       <div class="vs-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
       <div class="container-x">
         <div class="max-w-[900px]">
-          <p class="eyebrow" data-reveal><span class="n">vs</span> Godmode vs Grok Bot</p>
-          <Words as="h1" text="Grok Bot rents you a computer. *Godmode works on yours.*" class="h-section mt-6 !text-[clamp(38px,6vw,76px)]" />
+          <p class="eyebrow" data-reveal>Godmode vs Grok Bot</p>
+          <Words as="h1" text="Grok Bot rents you a computer. *Godmode works on yours.*" class="h-section mt-4 !text-[clamp(38px,6vw,76px)]" />
           <p class="lead mt-7 max-w-[660px]" data-reveal style="--d:200">
             Both give you AI teammates that click through websites and apps to finish real work. Grok Bot does it on a
             cloud computer you sign into from scratch. Godmode's agent does it on your own machine, already signed
             in, with {SITE.model} on every task and a vault that types your 2FA codes for it.
           </p>
           <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:320">
-            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="vs_grok_hero" size="lg" />
+            <DownloadButton source="vs_grok_hero" />
             <a href="#table" class="btn btn-ghost btn-lg" data-track="vs_grok_table">See the full comparison</a>
           </div>
           <ul class="mt-9 flex flex-wrap gap-2" data-reveal style="--d:420">
@@ -247,8 +248,8 @@ const jsonLd = {
     <section class="pb-20 sm:pb-28">
       <div class="container-x">
         <div class="max-w-[760px]">
-          <p class="eyebrow" data-reveal><span class="n">01</span> Same task, two agents</p>
-          <Words text="One sentence. *Very different mornings.*" class="h-section mt-6" />
+          <p class="eyebrow" data-reveal>Same task, two agents</p>
+          <Words text="One sentence. *Very different mornings.*" class="h-section mt-4" />
         </div>
         <div class="card mt-12 overflow-hidden" data-reveal style="--d:100">
           <div class="border-b border-line p-6 sm:p-8">
@@ -256,7 +257,7 @@ const jsonLd = {
           </div>
           <div class="grid md:grid-cols-2">
             <div class="border-b border-line p-6 sm:p-8 md:border-r md:border-b-0">
-              <p class="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-dim uppercase"><Icon name="cloud" size={13} /> Grok Bot</p>
+              <p class="flex items-center gap-2 text-[13px] font-semibold text-muted"><Icon name="cloud" size={13} /> Grok Bot</p>
               <ol class="mt-5 space-y-2">
                 {sameTask.them.map(([icon, text]) => (
                   <li class="flex items-center gap-3 rounded-xl px-3.5 py-3 text-[14.5px] text-muted ring-1 ring-line">
@@ -267,7 +268,7 @@ const jsonLd = {
               <p class="mt-5 text-[13px] text-dim">You: needed whenever a portal asks for a login or a 2FA code.</p>
             </div>
             <div class="vs-us p-6 sm:p-8">
-              <p class="flex items-center gap-2 font-mono text-[11px] tracking-[0.12em] text-brand uppercase"><Logo size={16} /> Godmode</p>
+              <p class="flex items-center gap-2 text-[13px] font-semibold text-brand"><Logo size={16} /> Godmode</p>
               <ol class="mt-5 space-y-2">
                 {sameTask.us.map(([icon, text]) => (
                   <li class="flex items-center gap-3 rounded-xl bg-brand-soft px-3.5 py-3 text-[14.5px] text-text ring-1 ring-[var(--brand-line)]">
@@ -285,8 +286,8 @@ const jsonLd = {
     <section id="table" class="scroll-mt-24 pb-20 sm:pb-28">
       <div class="container-x">
         <div class="max-w-[760px]">
-          <p class="eyebrow" data-reveal><span class="n">02</span> Side by side</p>
-          <Words text="Godmode vs Grok Bot, *feature by feature.*" class="h-section mt-6" />
+          <p class="eyebrow" data-reveal>Side by side</p>
+          <Words text="Godmode vs Grok Bot, *feature by feature.*" class="h-section mt-4" />
         </div>
         <p class="mt-10 flex items-center justify-end gap-1.5 text-[12px] text-dim md:hidden">Swipe to compare <Icon name="arrow-right" size={12} /></p>
         <div class="card mt-3 overflow-hidden md:mt-12" data-reveal style="--d:100">
@@ -332,8 +333,8 @@ const jsonLd = {
     <section class="pb-20 sm:pb-28">
       <div class="container-x">
         <div class="max-w-[760px]">
-          <p class="eyebrow" data-reveal><span class="n">03</span> Why people switch</p>
-          <Words text="Six reasons Godmode *gets more done.*" class="h-section mt-6" />
+          <p class="eyebrow" data-reveal>Why people switch</p>
+          <Words text="Six reasons Godmode *gets more done.*" class="h-section mt-4" />
         </div>
         <div class="mt-12 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
           {reasons.map((r, i) => (
@@ -349,19 +350,19 @@ const jsonLd = {
       </div>
     </section>
 
-    <ComputerUse eyebrow="04" title="Four ways it works. *All on your computer.*" table={false} />
+    <ComputerUse title="Four ways it works. *All on your computer.*" table={false} />
 
     <section class="py-20 sm:py-28">
       <div class="container-x">
         <div class="max-w-[760px]">
-          <p class="eyebrow" data-reveal><span class="n">05</span> Switching</p>
-          <Words text="From Grok Bot to Godmode *in ten minutes.*" class="h-section mt-6" />
+          <p class="eyebrow" data-reveal>Switching</p>
+          <Words text="From Grok Bot to Godmode *in ten minutes.*" class="h-section mt-4" />
         </div>
         <ol class="mt-12 grid gap-3 md:grid-cols-3">
           {steps.map(([icon, title, text], i) => (
             <li class="card p-7" data-reveal style={`--d:${i * 80}`}>
               <div class="flex items-center justify-between">
-                <span class="grid size-10 place-items-center rounded-xl bg-[rgb(255_250_240/0.04)] text-text-2 ring-1 ring-line"><Icon name={icon} size={18} /></span>
+                <span class="grid size-10 place-items-center rounded-xl bg-surface-2 text-text-2 ring-1 ring-line"><Icon name={icon} size={18} /></span>
                 <span class="font-mono text-[12px] text-dim">0{i + 1}</span>
               </div>
               <h3 class="h-card mt-5">{title}</h3>
@@ -379,13 +380,13 @@ const jsonLd = {
     <section class="pb-20 sm:pb-28">
       <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
         <div class="lg:sticky lg:top-28 lg:self-start">
-          <p class="eyebrow" data-reveal><span class="n">06</span> FAQ</p>
-          <Words text="Godmode or Grok Bot? *Straight answers.*" class="h-section mt-6 !text-[clamp(30px,4vw,48px)]" />
+          <p class="eyebrow" data-reveal>FAQ</p>
+          <Words text="Godmode or Grok Bot? *Straight answers.*" class="h-section mt-4 !text-[clamp(30px,4vw,48px)]" />
         </div>
         <div class="divide-y divide-line border-y border-line">
           {faqs.map((f, i) => (
             <details class="faq group" data-faq={`grok_${i}`} data-reveal style={`--d:${Math.min(i, 6) * 40}`}>
-              <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-white">
+              <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-brand">
                 {f.q}
                 <span class="plus grid size-8 flex-none place-items-center rounded-full ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
                   <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
@@ -403,12 +404,14 @@ const jsonLd = {
         <div class="card p-8 text-center sm:p-14" data-reveal>
           <h2 class="mx-auto max-w-[18ch] text-[clamp(28px,4vw,48px)] leading-[1.05] font-semibold tracking-[-0.04em]">Keep your logins. Lose the busywork.</h2>
           <p class="mx-auto mt-4 max-w-[540px] text-muted">
-            {PRICING.trialDays} days free, then ${monthly.price}/month or ${yearly.perMonth}/month billed yearly. $0 today, cancel anytime.
+            Free for {PRICING.freeDays} days. No card, no sign-up. Then ${monthly.price}/month, or ${yearly.perMonth}/month billed yearly.
           </p>
-          <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="vs_grok_final" size="lg" />
-            <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="vs_grok_final" variant="ghost" size="lg" />
+          <div class="mt-8 flex justify-center">
+            <DownloadButton source="vs_grok_final" />
           </div>
+          <p class="mt-5 text-[14px]">
+            <CheckoutButton plan="monthly" label="Already sure? Subscribe now" source="vs_grok_final" variant="link" />
+          </p>
         </div>
       </div>
     </section>
@@ -419,8 +422,8 @@ const jsonLd = {
 <style>
   .vs-glow {
     background:
-      radial-gradient(60% 50% at 18% 0%, rgb(47 214 144 / 0.14), transparent 70%),
-      radial-gradient(40% 40% at 90% 10%, rgb(255 250 240 / 0.05), transparent 70%);
+      radial-gradient(60% 50% at 18% 0%, rgb(227 243 234 / 0.95), transparent 70%),
+      radial-gradient(40% 40% at 90% 10%, rgb(253 235 226 / 0.9), transparent 70%);
   }
-  .vs-us { background: rgb(47 214 144 / 0.03); }
+  .vs-us { background: rgb(227 243 234 / 0.35); }
 </style>

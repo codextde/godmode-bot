@@ -4,8 +4,8 @@ import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import Words from '@/components/ui/Words.astro';
-import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import { PRICING, yearlySavings } from '@/config/site';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
+import { PRICING } from '@/config/site';
 
 type How = 'browser' | 'app' | 'desktop' | 'vm' | 'chat';
 const howLabel: Record<How, [string, string]> = {
@@ -161,8 +161,8 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
   <main class="pt-36 pb-16" data-track-view="use_case_library">
     <div class="container-x">
       <div class="max-w-[860px]">
-        <p class="eyebrow" data-reveal><span class="n">●</span> Use cases</p>
-        <Words as="h1" text={`${total} problems you solve *with one message.*`} class="h-section mt-6" />
+        <p class="eyebrow" data-reveal>Example jobs</p>
+        <Words as="h1" text={`${total} problems you solve *with one message.*`} class="h-section mt-4" />
         <p class="lead mt-6 max-w-[640px]" data-reveal style="--d:200">
           Write it the way you’d ask a colleague. Godmode works out the clicks, signs in with your saved logins and
           does the whole job in your browser, your apps or on its own Mac. Every example below is a real message you
@@ -200,7 +200,7 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
               {g.items.map(([problem, message, how, when]) => (
                 <article class="card flex flex-col p-6">
                   <p class="text-[16.5px] leading-snug font-medium tracking-[-0.015em]">{problem}</p>
-                  <p class="mt-4 flex-1 rounded-xl bg-[rgb(0_0_0/0.28)] p-4 text-[14px] leading-relaxed text-text-2 ring-1 ring-line">
+                  <p class="mt-4 flex-1 rounded-2xl bg-surface-2 p-4 text-[14px] leading-relaxed text-text-2 ring-1 ring-line">
                     {message}
                   </p>
                   <div class="mt-4 flex flex-wrap items-center gap-1.5">
@@ -239,11 +239,10 @@ const total = groups.reduce((n, g) => n + g.items.length, 0);
       <div class="card mt-3 p-8 text-center sm:p-12" data-reveal>
         <h2 class="text-[clamp(26px,3.4vw,40px)] font-semibold tracking-[-0.04em]">Which one is first for you?</h2>
         <p class="mx-auto mt-3 max-w-[520px] text-muted">
-          {PRICING.trialDays} days free, then ${PRICING.plans.monthly.price}/month or ${PRICING.plans.yearly.perMonth}/month billed yearly. Cancel anytime.
+          Free for {PRICING.freeDays} days. No card, no sign-up. Then ${PRICING.plans.monthly.price}/month, or ${PRICING.plans.yearly.perMonth}/month billed yearly.
         </p>
         <div class="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-          <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="use_cases" size="lg" />
-          <CheckoutButton plan="yearly" label={`Or yearly — $${PRICING.plans.yearly.perMonth}/mo, save ${yearlySavings}%`} source="use_cases" variant="ghost" size="lg" />
+          <DownloadButton source="use_cases" />
         </div>
       </div>
     </div>

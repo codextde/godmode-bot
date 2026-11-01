@@ -112,9 +112,9 @@ function LicenseCard({ state: s }: { state: LicenseState }) {
       <>
         {s.message && !freeWeek && <Callout tone={s.blocked ? "warning" : "info"}>{s.message}</Callout>}
         <SettingsGroup
-          title={t("license.activate.title")}
+          title={freeWeek ? t("license.activate.trialTitle") : t("license.activate.title")}
           icon={<Sparkles />}
-          description={t("license.activate.description")}
+          description={freeWeek ? t("license.activate.trialDescription") : t("license.activate.description")}
           actions={<ToneBadge tone={status.tone}>{t(status.labelKey)}</ToneBadge>}
         >
           {freeWeek && (

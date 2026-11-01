@@ -5,7 +5,7 @@ import { serverEvent } from '@/lib/serverEvent';
 
 export const prerender = false;
 
-/** /download/mac, /download/windows, … — the latest release's file for that platform. No key needed: the app has a free period. */
+/** /download/mac, /download/windows, … — the latest release's file for that platform. No key needed: the app runs free for 14 days. */
 export const GET: APIRoute = async ({ params, request }) => {
   const platform = params.platform ?? '';
   if (!Object.hasOwn(PLATFORMS, platform)) return new Response('Unknown platform', { status: 404 });

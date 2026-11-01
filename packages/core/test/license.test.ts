@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from "bun:test";
-import type { LicenseState } from "@godmode/shared";
+import { licenseDeepLink, licenseKeyFromDeepLink, type LicenseState, type LicenseUsage } from "@godmode/shared";
 import { setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { get, getMeta, run as sql, setMeta } from "../src/db";
+import { get, getMeta, insert, run as sql, setMeta } from "../src/db";
 import { getAccessToken } from "../src/server/auth";
 import { ensureDefaultAgent } from "../src/agents/service";
 import { waitForRun } from "../src/runner/runner";
@@ -24,6 +24,7 @@ import {
   licenseEnforced,
   licenseState,
   noteLicenseRefusal,
+  licenseUsage,
   refreshLicense,
   requireLicense,
   LicenseRequiredError,
@@ -98,18 +99,19 @@ async function putKey(key: string): Promise<{ status: number; body: LicenseState
   return { status: res.status, body: await res.json() };
 }
 
-describe("the free week", () => {
+describe("the free trial", () => {
   const day = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
-  test("a new install without a key runs free for 7 days from its first start, and restarts don't extend them", () => {
+  test("a new install without a key runs free for 14 days from its first start, and restarts don't extend them", () => {
     const firstStart = new Date(now).toISOString();
-    const ends = now + LICENSE_GRACE_MS;
+    const ends = now + 14 * DAY;
+    expect(LICENSE_GRACE_MS).toBe(14 * DAY);
     initLicense();
     const s = licenseState();
     expect(s.status).toBe("grace");
     expect(s.blocked).toBe(false);
     expect(s.graceEndsAt).toBe(new Date(ends).toISOString());
-    expect(s.message).toBe(`Free until ${day(ends)}. Then add your licence key or start the 14-day free trial.`);
+    expect(s.message).toBe(`Free until ${day(ends)}. Then pick a plan to keep your agents working.`);
     expect(() => requireLicense()).not.toThrow();
 
     now += 3 * DAY;
@@ -117,25 +119,33 @@ describe("the free week", () => {
     expect(licenseState().graceEndsAt).toBe(s.graceEndsAt);
     expect(getMeta("license.first_start")).toBe(firstStart);
 
-    now += 5 * DAY;
+    now += 10 * DAY;
+    initLicense();
+    expect(licenseState()).toMatchObject({ status: "grace", blocked: false });
+
+    now += DAY;
     initLicense();
     const after = licenseState();
     expect(after.status).toBe("missing");
     expect(after.blocked).toBe(true);
     expect(after.graceEndsAt).toBe(s.graceEndsAt);
-    expect(after.message).toBe(`Your 7 free days ended on ${day(ends)}. Add your licence key or start the free trial to keep your agents working.`);
+    expect(after.message).toBe(`Your free trial ended on ${day(ends)}. Subscribe or add your licence key to keep your agents working.`);
+    expect(after.message).not.toContain("free trial to");
     expect(() => requireLicense()).toThrow(LicenseRequiredError);
     expect(getMeta("license.first_start")).toBe(firstStart);
   });
 
-  test("an install that already has its days keeps them as they are", () => {
+  test("an install that already has its days keeps them as they are (an older 7-day trial isn't extended)", () => {
     setMeta("license.first_start", new Date(now - 6 * DAY).toISOString());
     setMeta("license.grace_ends_at", new Date(now + DAY).toISOString());
     initLicense();
     expect(licenseState()).toMatchObject({ status: "grace", blocked: false, graceEndsAt: new Date(now + DAY).toISOString() });
+    now += 2 * DAY;
+    initLicense();
+    expect(licenseState()).toMatchObject({ status: "missing", blocked: true, graceEndsAt: new Date(now - DAY).toISOString() });
   });
 
-  test("an older install that was refused without a key gets its 7 days from this start", () => {
+  test("an older install that was refused without a key gets its 14 days from this start", () => {
     setMeta("license.first_start", new Date(now - 20 * DAY).toISOString());
     initLicense();
     expect(licenseState()).toMatchObject({ status: "grace", blocked: false, graceEndsAt: new Date(now + LICENSE_GRACE_MS).toISOString() });
@@ -441,5 +451,78 @@ describe("follow-ups while the licence refuses runs", () => {
     const added = listNotifications().slice(0, listNotifications().length - before);
     expect(added.map((n) => n.title)).toEqual(["Godmode needs an active licence"]);
     sql("DELETE FROM followups WHERE conversation_id = ?", chat.conversation.id);
+  });
+});
+
+describe("what the human is told", () => {
+  test("without a key and without a free trial, the way on is to subscribe or add a key", () => {
+    expect(licenseState()).toMatchObject({
+      status: "missing",
+      blocked: true,
+      message: "Godmode needs a licence to start new work. Subscribe or add your licence key.",
+    });
+  });
+
+  test("a key the server doesn't know points to a subscription, not a trial", async () => {
+    const { status, body } = await putKey(OTHER);
+    expect(status).toBe(400);
+    expect(body.error).toBe("This licence key isn't valid. Check it for typos, or subscribe to get one.");
+  });
+});
+
+describe("what Godmode did so far", () => {
+  const usage = async () => (await (await api("GET", "/api/license/usage")).json()) as LicenseUsage;
+
+  test("counts finished work and what is set up, not condition checks, memory, heartbeats, sub-runs or failures", async () => {
+    const agentId = (await ensureDefaultAgent()).id;
+    const before = await usage();
+    expect(before).toEqual(licenseUsage());
+    const at = new Date().toISOString();
+    let n = 0;
+    const addRun = (trigger: string, status: string, durationMs: number, extra: Record<string, string> = {}) =>
+      insert("runs", { id: `usage-run-${++n}`, agent_id: agentId, conversation_id: "usage-chat", trigger, status, prompt: "x", duration_ms: durationMs, created_at: at, ...extra });
+    addRun("chat", "succeeded", 60 * 60_000);
+    addRun("routine", "succeeded", 30 * 60_000);
+    addRun("chat", "failed", 60_000);
+    addRun("check", "succeeded", 60_000);
+    addRun("dream", "succeeded", 60_000);
+    addRun("heartbeat", "succeeded", 60_000);
+    addRun("delegation", "succeeded", 60_000, { parent_run_id: "usage-run-1" });
+    insert("agents", { id: "usage-agent-off", name: "Off", slug: "usage-agent-off", enabled: 0, repo_path: "/tmp/off", created_at: at, updated_at: at });
+    insert("routines", { id: "usage-routine-on", agent_id: agentId, name: "On", cron: "0 9 * * *", prompt: "x", enabled: 1, created_at: at, updated_at: at });
+    insert("routines", { id: "usage-routine-off", agent_id: agentId, name: "Off", cron: "0 9 * * *", prompt: "x", enabled: 0, created_at: at, updated_at: at });
+    insert("credentials", { id: "usage-login", name: "Bank", created_at: at, updated_at: at });
+
+    const after = await usage();
+    expect(after.tasksDone - before.tasksDone).toBe(2);
+    expect(after.automationRuns - before.automationRuns).toBe(1);
+    expect(after.minutesWorked - before.minutesWorked).toBe(90);
+    expect(after.agents).toBe(before.agents);
+    expect(after.automations - before.automations).toBe(1);
+    expect(after.logins - before.logins).toBe(1);
+  });
+
+  test("since: the first start, or the first finished run when that came earlier", () => {
+    setMeta("license.first_start", "2026-10-01T08:00:00.000Z");
+    sql("DELETE FROM runs WHERE id = 'usage-run-early'");
+    const agentId = get<{ id: string }>("SELECT id FROM agents WHERE is_default = 1")!.id;
+    expect(licenseUsage().since! <= "2026-10-01T08:00:00.000Z").toBe(true);
+    insert("runs", { id: "usage-run-early", agent_id: agentId, conversation_id: "usage-chat", trigger: "chat", status: "succeeded", prompt: "x", created_at: "2020-01-02T03:04:05.000Z" });
+    expect(licenseUsage().since).toBe("2020-01-02T03:04:05.000Z");
+  });
+});
+
+describe("godmode://license links", () => {
+  test("carry a key from the welcome page to the app; anything else is ignored", () => {
+    expect(licenseDeepLink(KEY.toLowerCase())).toBe(`godmode://license?key=${KEY}`);
+    expect(licenseKeyFromDeepLink(licenseDeepLink(KEY))).toBe(KEY);
+    expect(licenseKeyFromDeepLink(`godmode://license/?key=${KEY.toLowerCase()}`)).toBe(KEY);
+    expect(licenseKeyFromDeepLink(`GODMODE://LICENSE?key=${KEY}`)).toBe(KEY);
+    expect(licenseKeyFromDeepLink(`godmode://license?key=GM-NOT-A-KEY`)).toBeNull();
+    expect(licenseKeyFromDeepLink(`godmode://license?plan=yearly&key=${KEY}`)).toBe(KEY);
+    expect(licenseKeyFromDeepLink(`godmode://license?key=${encodeURIComponent(KEY)}%`)).toBeNull();
+    expect(licenseKeyFromDeepLink(`godmode://chat?key=${KEY}`)).toBeNull();
+    expect(licenseKeyFromDeepLink(`https://license?key=${KEY}`)).toBeNull();
+    expect(licenseKeyFromDeepLink("not a url")).toBeNull();
   });
 });

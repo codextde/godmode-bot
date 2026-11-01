@@ -4,11 +4,10 @@ import Icon from '../ui/Icon.astro';
 import Logo from '../ui/Logo.astro';
 
 interface Props {
-  eyebrow: string;
   title?: string;
   table?: boolean;
 }
-const { eyebrow, title = 'Chatbots tell you how. *Godmode does it.*', table = true } = Astro.props;
+const { title = 'Chatbots tell you how. *Godmode does it.*', table = true } = Astro.props;
 
 const modes = [
   {
@@ -50,8 +49,8 @@ const versus: [string, string, string][] = [
   <div class="container-x">
     <div class="grid items-end gap-8 lg:grid-cols-[1.15fr_0.85fr]">
       <div class="max-w-[760px]">
-        <p class="eyebrow" data-reveal><span class="n">{eyebrow}</span> Where it works</p>
-        <Words text={title} class="h-section mt-6" />
+        <p class="eyebrow" data-reveal>Where it works</p>
+        <Words text={title} class="h-section mt-4" />
       </div>
       <p class="lead max-w-[440px]" data-reveal style="--d:150">
         Godmode uses a computer the way you do. It works where your work already is: in your browser, in your programs,
@@ -63,12 +62,12 @@ const versus: [string, string, string][] = [
       {
         modes.map((m, i) => (
           <article class="card flex flex-col p-7" data-reveal style={`--d:${i * 70}`}>
-            <span class="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand ring-1 ring-[var(--brand-line)]">
+            <span class="grid size-10 place-items-center rounded-xl bg-brand-soft text-brand">
               <Icon name={m.icon} size={18} />
             </span>
             <h3 class="h-card mt-5">{m.title}</h3>
             <p class="mt-2.5 flex-1 text-[15px] leading-relaxed text-muted">{m.text}</p>
-            <p class="mt-5 border-t border-line pt-4 font-mono text-[11px] tracking-[0.02em] text-dim">{m.how}</p>
+            <p class="mt-5 border-t border-line pt-4 text-[12.5px] font-medium text-dim">{m.how}</p>
           </article>
         ))
       }

@@ -1,71 +1,127 @@
 ---
+import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 
-const rowA = [
-  ['file-down', 'Download every invoice from 14 supplier portals'],
-  ['mail', 'Reply to every customer who is still waiting'],
-  ['contact', 'Update the CRM after every sales call'],
-  ['chart-column', 'Pull the ad numbers from Meta, Google & TikTok'],
-  ['newspaper', 'Write and schedule this week’s social posts'],
-  ['receipt', 'File expense receipts into accounting'],
-  ['table', 'Update the sales spreadsheet every Friday'],
-  ['package', 'Answer “where is my order?” with the tracking link'],
-];
-const rowB = [
-  ['plane', 'Book the cheapest flight that fits my calendar'],
-  ['alarm-clock', 'Chase unpaid invoices, politely'],
-  ['briefcase', 'Post the job ad on five job boards'],
-  ['users', 'Research leads and put them in a sheet'],
-  ['eye', 'Watch competitor prices and tell me what changed'],
-  ['clipboard-list', 'Fill in the same form for 30 customers'],
-  ['shopping-cart', 'Reorder office supplies when we run low'],
-  ['calendar-check', 'Prepare my Monday briefing from inbox & calendar'],
+type Job = [ask: string, done: string];
+const groups: { name: string; icon: string; jobs: Job[] }[] = [
+  {
+    name: 'Email & admin',
+    icon: 'inbox',
+    jobs: [
+      ['Go through my inbox, draft replies to everyone who is waiting on me and tell me what needs me today.', '11 replies drafted, 6 emails that need you'],
+      ['Fill in the supplier form with our company details. Show me before you submit.', 'Form filled, screenshot waiting for your OK'],
+    ],
+  },
+  {
+    name: 'Finance',
+    icon: 'receipt',
+    jobs: [
+      ['Download all invoices from my supplier portals and file them in Dropbox.', '23 invoices filed, list in your inbox'],
+      ['Find invoices more than 14 days overdue and draft a friendly reminder for each customer.', '7 reminders in your drafts'],
+    ],
+  },
+  {
+    name: 'Marketing',
+    icon: 'megaphone',
+    jobs: [
+      ['Put this week’s ad numbers from Meta, Google and TikTok into our report sheet.', 'Report updated, 4 ads that don’t sell flagged'],
+      ['Reply to new Google reviews in our voice. Send me anything under 3 stars.', '12 replies posted, 1 waiting for you'],
+    ],
+  },
+  {
+    name: 'Online shop',
+    icon: 'shopping-bag',
+    jobs: [
+      ['Answer today’s “where is my order?” emails with the tracking link.', '9 customers answered'],
+      ['Check stock against last month’s sales and draft reorders for anything running low.', '3 reorders drafted for your OK'],
+    ],
+  },
+  {
+    name: 'Sales',
+    icon: 'handshake',
+    jobs: [
+      ['After each call today, update the deal in HubSpot and draft the follow-up email.', '4 deals updated, 4 follow-ups drafted'],
+      ['Find the website, team size and right contact for every company in this sheet.', '60 rows filled in'],
+    ],
+  },
+  {
+    name: 'Research',
+    icon: 'search',
+    jobs: [
+      ['Compare these four project tools for a 12-person team: price, features, what fits us.', 'Comparison table and a clear pick'],
+      ['Every morning, check the tender portals for new website projects in our region.', 'New tenders in your inbox at 8:00'],
+    ],
+  },
 ];
 const tools =
-  'Gmail · Outlook · Excel · Google Sheets · Word · WhatsApp Web · Slack · HubSpot · Shopify · Amazon · eBay · Etsy · Meta Ads · Google Ads · TikTok Ads · Canva · Instagram · LinkedIn · QuickBooks · DATEV · PayPal · any bank portal · any website'.split(
+  'Gmail · Outlook · Excel · Google Sheets · Word · WhatsApp Web · Slack · HubSpot · Shopify · Amazon · eBay · Etsy · Meta Ads · Google Ads · TikTok Ads · Canva · Instagram · LinkedIn · QuickBooks · DATEV · PayPal · your bank · any website'.split(
     ' · ',
   );
 ---
 
-<section class="relative py-14 sm:py-20" aria-label="Things Godmode does">
-  <div class="container-x text-center" data-reveal>
-    <p class="eyebrow justify-center"><span class="n">●</span> Monday, 08:00 — before you’re up</p>
-  </div>
-  <div class="marquee-wrap mask-x mt-8 flex flex-col gap-3 overflow-hidden">
-    {
-      [rowA, rowB].map((row, r) => (
-        <div class:list={['marquee gap-3', r === 1 && 'reverse']} style={`--dur:${r ? 70 : 60}s`}>
-          {[...row, ...row].map(([icon, text], i) => (
-            <div class="task-pill" aria-hidden={i >= row.length ? 'true' : undefined}>
-              <Icon name={icon} size={16} class="text-muted" />
-              <span>{text}</span>
-              <span class="task-done">
-                <Icon name="check" size={12} stroke={2.5} />
+<section id="jobs" class="relative py-16 sm:py-24" data-track-view="jobs">
+  <div class="container-x">
+    <div class="mx-auto max-w-[760px] text-center">
+      <p class="eyebrow justify-center" data-reveal>What it can do</p>
+      <Words text="You type the task. *You get it back done.*" class="h-section mx-auto mt-4" />
+      <p class="lead mx-auto mt-5 max-w-[580px]" data-reveal style="--d:200">
+        Write it the way you would ask a colleague. A few things people hand to Godmode every week:
+      </p>
+    </div>
+
+    <div class="mt-14 grid gap-x-5 gap-y-10 md:grid-cols-2 lg:grid-cols-3">
+      {
+        groups.map((g, gi) => (
+          <div data-reveal style={`--d:${(gi % 3) * 80}`}>
+            <h3 class="flex items-center gap-2.5 text-[16px] font-semibold tracking-[-0.01em]">
+              <span class="grid size-8 place-items-center rounded-xl bg-brand-soft text-brand">
+                <Icon name={g.icon} size={16} />
               </span>
+              {g.name}
+            </h3>
+            <div class="mt-4 grid gap-3">
+              {g.jobs.map(([ask, done], ji) => (
+                <article class:list={['job-card', ji > 0 && 'max-sm:hidden']}>
+                  <p class="job-ask">“{ask}”</p>
+                  <p class="job-done">
+                    <span class="tick">
+                      <Icon name="check" size={13} stroke={3} />
+                    </span>
+                    <span>
+                      <span class="sr-only">Result: </span>
+                      {done}
+                    </span>
+                  </p>
+                </article>
+              ))}
             </div>
-          ))}
-        </div>
-      ))
-    }
+          </div>
+        ))
+      }
+    </div>
+
+    <div class="mt-12 flex flex-col items-center gap-3 text-center" data-reveal>
+      <a href="/use-cases" class="btn btn-ghost" data-track="jobs_all">
+        See 60 more jobs <Icon name="arrow-right" size={15} class="arrow" />
+      </a>
+      <p class="text-[13px] text-dim">Examples. Godmode works with the websites and accounts you give it.</p>
+    </div>
   </div>
 
-  <div class="container-x mt-14">
-    <p class="text-center text-[13px] text-dim" data-reveal>
-      If you can open it on your computer, Godmode can use it. No coding, no special integrations.
+  <div class="container-x mt-20">
+    <p class="text-center text-[14px] font-medium text-muted" data-reveal>
+      Works in the websites and programs you already use. It signs in with your own logins. No coding.
     </p>
-    <div class="marquee-wrap mask-x mt-5 overflow-hidden" data-reveal style="--d:100">
-      <div class="marquee items-center gap-10" style="--dur:80s">
-        {
-          [...tools, ...tools].map((t, i) => (
-            <span
-              class="text-[17px] font-medium tracking-[-0.02em] whitespace-nowrap text-[rgb(244_242_237/0.38)]"
-              aria-hidden={i >= tools.length ? 'true' : undefined}
-            >
-              {t}
-            </span>
-          ))
-        }
-      </div>
+  </div>
+  <div class="marquee-wrap mask-x mt-6 overflow-hidden" data-reveal style="--d:100">
+    <div class="marquee items-center gap-10" style="--dur:80s">
+      {
+        [...tools, ...tools].map((t, i) => (
+          <span class="marquee-tool" aria-hidden={i >= tools.length ? 'true' : undefined}>
+            {t}
+          </span>
+        ))
+      }
     </div>
   </div>
 </section>

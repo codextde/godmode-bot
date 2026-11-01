@@ -111,6 +111,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   Goal,
   GoalInput,
   LicenseState,
+  LicenseUsage,
   GitCommit,
   HeartbeatBeat,
   LocalChromeProfile,
@@ -876,6 +877,8 @@ export const api = {
     set: (key: string) => put<LicenseState>("/api/license", { key }),
     remove: () => del<LicenseState>("/api/license"),
     refresh: () => post<LicenseState>("/api/license/refresh"),
+    /** What Godmode did so far (for the end of the free trial). */
+    usage: () => get<LicenseUsage>("/api/license/usage"),
   },
 
   /** What the agents on this computer used over the last `days` days (from its run history). */

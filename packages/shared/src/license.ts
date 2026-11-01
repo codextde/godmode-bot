@@ -12,9 +12,59 @@ export function isLicenseKey(input: string): boolean {
   return LICENSE_KEY_PATTERN.test(normalizeLicenseKey(input));
 }
 
+/** `godmode://license?key=GM-…`: the welcome page after checkout hands the key to the desktop app with it. */
+export function licenseDeepLink(key: string): string {
+  return `godmode://license?key=${encodeURIComponent(normalizeLicenseKey(key))}`;
+}
+
+const LICENSE_LINK = /^godmode:\/\/license\/?\?([^#]*)/i;
+
+/** The licence key in a `godmode://license?key=…` link, or null for any other link. */
+export function licenseKeyFromDeepLink(link: string): string | null {
+  const query = LICENSE_LINK.exec(link.trim())?.[1];
+  const value = query?.split("&").find((part) => part.startsWith("key="))?.slice(4);
+  if (!value) return null;
+  try {
+    const key = normalizeLicenseKey(decodeURIComponent(value));
+    return isLicenseKey(key) ? key : null;
+  } catch {
+    return null;
+  }
+}
+
+/** How long a new install without a key runs free. */
+export const LICENSE_FREE_DAYS = 14;
+
+/** Godmode Pro's prices in USD, as sold on usegodmode.com (keep in step with the site's PRICING). */
+export const LICENSE_PRICING = {
+  guaranteeDays: 14,
+  monthly: { perMonth: 39, price: 39 },
+  yearly: { perMonth: 29, price: 348 },
+} as const;
+
+/** What the yearly plan saves against twelve months, in percent (rounded down). */
+export const LICENSE_YEARLY_SAVINGS = Math.floor((1 - LICENSE_PRICING.yearly.price / (LICENSE_PRICING.monthly.price * 12)) * 100);
+
+/** GET /api/license/usage: what Godmode did on this computer so far, for the end of the free trial. */
+export interface LicenseUsage {
+  /** Since when: the first start, or the first run when that came earlier. */
+  since: ISODate | null;
+  /** Finished runs started by the human, an automation or the API (not condition checks, memory or heartbeats). */
+  tasksDone: number;
+  /** Of `tasksDone`, the ones an automation started. */
+  automationRuns: number;
+  /** How long those runs worked, in minutes. */
+  minutesWorked: number;
+  agents: number;
+  /** Automations that are switched on. */
+  automations: number;
+  /** Logins saved in the vault. */
+  logins: number;
+}
+
 /**
  * - `active`, `trial`, `past_due` (Stripe still retries the payment): the key is good.
- * - `grace`: the free week: an install without a key runs free for 7 days from its first start.
+ * - `grace`: the free trial: an install without a key runs free for `LICENSE_FREE_DAYS` from its first start.
  * - `unverified`: a key that could not be checked yet; accepted for 7 days after it was entered.
  * - `missing`, `invalid`, `expired`: new runs are refused (in release builds).
  */
@@ -31,7 +81,7 @@ export interface LicenseState {
   trialEndsAt: ISODate | null;
   renewsAt: ISODate | null;
   cancelAtPeriodEnd: boolean;
-  /** The end of the free week of an install without a key (set once, never extended). */
+  /** The end of the free trial of an install without a key (set once, never extended). */
   graceEndsAt: ISODate | null;
   /** The end of the window an unverified key is accepted for. */
   unverifiedUntil: ISODate | null;

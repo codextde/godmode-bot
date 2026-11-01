@@ -3,6 +3,7 @@
 mod clock;
 mod commands;
 mod core;
+mod deep_link;
 mod ota;
 mod paths;
 mod tray;
@@ -49,6 +50,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         // Must be registered first: a second launch just focuses the running instance.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| tray::show_main_window(app)))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 // Visibility is ours to decide (tray / autostart), never restore it.
@@ -65,6 +67,7 @@ pub fn run() {
         .manage(Arc::new(Updater::new()))
         .manage(patches)
         .manage(CloseToTray(AtomicBool::new(true)))
+        .manage(deep_link::PendingLinks::default())
         .invoke_handler(tauri::generate_handler![
             clock::system_clock,
             commands::core_info,
@@ -72,6 +75,7 @@ pub fn run() {
             commands::core_logs_path,
             commands::restart_app,
             set_close_to_tray,
+            deep_link::take_deep_links,
             tray::set_tray_labels,
             updater::update_state,
             updater::check_for_updates,
@@ -84,6 +88,7 @@ pub fn run() {
             core::start(handle.clone());
             updater::start(handle.clone());
             tray::create(handle)?;
+            deep_link::start(handle);
             let after_update = updater::take_relaunch_marker(handle);
             let start_hidden = CLOSE_TO_TRAY && !after_update && std::env::args().any(|arg| arg == AUTOSTART_ARG);
             if !start_hidden {
