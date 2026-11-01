@@ -18,10 +18,10 @@ export const RECORDINGS: Recording[] = [
     slug: 'vault-login',
     label: 'Logins and 2FA',
     icon: 'key-round',
-    title: 'Signs in with password and 2FA code, without ever seeing them',
+    title: 'Fills in password and 2FA from the vault. The AI only sees “Secret hidden”',
     task: 'Sign in to authenticationtest.com with my saved login, including the 2FA code, and tell me what the page says once I’m in.',
     result:
-      'Signed in on the first try. Username, password and 2FA code came from the encrypted vault and show up only as “Secret hidden”.',
+      'Signed in on the first try on a public test site. Godmode typed the saved username, password and 2FA code into the page itself; in the chat they show up only as “Secret hidden”.',
     feature: 'Password vault',
     realRun: '20 seconds',
     speed: 'almost real time',

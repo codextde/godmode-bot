@@ -218,7 +218,7 @@ html.menu-open { overflow: hidden; }
 /* Recordings gallery ------------------------------------------------------------------------------ */
 .rec-grid { display: grid; gap: 16px; }
 @media (min-width: 1024px) { .rec-grid { grid-template-columns: 330px minmax(0, 1fr); gap: 24px; align-items: start; } }
-.rec-list { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 6px; scrollbar-width: none; }
+.rec-list { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 6px; scrollbar-width: none; }
 .rec-list::-webkit-scrollbar { display: none; }
 @media (min-width: 1024px) { .rec-list { flex-direction: column; margin: 0; padding: 0; overflow: visible; } }
 .rec-tab {
@@ -268,7 +268,27 @@ html.menu-open { overflow: hidden; }
 .rec-progress { position: absolute; inset: auto 16px 0; height: 2px; border-radius: 2px; overflow: hidden; }
 .rec-progress i { display: block; width: 100%; height: 100%; background: var(--brand); transform: scaleX(var(--p, 0)); transform-origin: 0 50%; opacity: 0; }
 .rec-tab[aria-selected="true"] .rec-progress i { opacity: 1; }
-.rec-panel { margin: 0; }
+.rec-panel { margin: 0; border-radius: 18px; }
+.rec-panel:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+.rec-toggle {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-2) inset;
+  transition: color 0.2s ease, box-shadow 0.2s ease;
+}
+.rec-toggle:hover { color: var(--text); box-shadow: 0 0 0 1px var(--line-3) inset; }
+.rec-toggle:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.rec-toggle .i-play, .rec-toggle[aria-pressed="true"] .i-pause { display: none; }
+.rec-toggle[aria-pressed="true"] .i-play { display: block; }
 .rec-caption {
   display: grid;
   gap: 20px;

@@ -132,70 +132,115 @@ modal?.addEventListener('click', (e) => {
 });
 modal?.addEventListener('close', () => modal.querySelector('video')?.pause());
 
-// Recordings gallery: plays the selected recording while in view, then moves on to the next ----------
+// Recordings gallery: plays the selected recording while in view and moves on to the next until the visitor
+// picks one or pauses. Clicks always play; blocked autoplay or reduced motion falls back to native controls.
 document.querySelectorAll<HTMLElement>('[data-recs]').forEach((root) => {
   const tabs = [...root.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
   const panels = [...root.querySelectorAll<HTMLElement>('[role="tabpanel"]')];
   const videos = panels.map((p) => p.querySelector('video')!);
+  const toggle = root.querySelector<HTMLButtonElement>('[data-rec-toggle]');
   let current = 0;
   let visible = false;
+  let auto = !reduced;
+  let paused = false;
+  let raf = 0;
 
-  const play = () => {
-    const v = videos[current];
-    if (!visible || reduced || !v) return;
-    if (v.preload === 'none') v.preload = 'auto';
-    void v.play().catch(() => {});
+  const showControls = (v: HTMLVideoElement) => {
+    v.controls = true;
+    if (v.preload === 'none') v.preload = 'metadata';
   };
-  const select = (i: number, focus = false) => {
+  const setPaused = (p: boolean) => {
+    paused = p;
+    if (toggle) {
+      toggle.setAttribute('aria-pressed', String(p));
+      toggle.setAttribute('aria-label', p ? 'Play recording' : 'Pause recording');
+    }
+  };
+  const tick = () => {
+    const v = videos[current];
+    if (v?.duration) tabs[current].style.setProperty('--p', String(v.currentTime / v.duration));
+    raf = v && !v.paused ? requestAnimationFrame(tick) : 0;
+  };
+  const play = (byUser = false) => {
+    const v = videos[current];
+    if (!v || (!byUser && (!visible || !auto || paused))) return;
+    if (v.preload === 'none') v.preload = 'auto';
+    v.play().then(
+      () => setPaused(false),
+      () => showControls(v),
+    );
+  };
+  const select = (i: number, byUser = false) => {
+    const next = (i + tabs.length) % tabs.length;
+    if (byUser) {
+      auto = false;
+      videos.forEach((v) => (v.loop = true));
+    }
+    if (next === current && byUser) return play(true);
     videos[current]?.pause();
     tabs[current]?.style.setProperty('--p', '0');
-    current = (i + tabs.length) % tabs.length;
+    current = next;
     tabs.forEach((t, j) => {
       t.setAttribute('aria-selected', String(j === current));
       t.tabIndex = j === current ? 0 : -1;
     });
     panels.forEach((p, j) => (p.hidden = j !== current));
     const v = videos[current];
-    if (v) {
-      if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
-      v.currentTime = 0;
-    }
+    if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
+    v.currentTime = 0;
+    if (reduced) showControls(v);
     const list = tabs[current].parentElement!;
-    if (list.scrollWidth > list.clientWidth) {
+    if (list.scrollWidth > list.clientWidth && !list.contains(document.activeElement)) {
       const left = tabs[current].getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft - 16;
       list.scrollTo({ left, behavior: reduced ? 'auto' : 'smooth' });
     }
-    if (focus) tabs[current].focus({ preventScroll: true });
-    play();
+    if (byUser) play(true);
+    else play();
   };
 
   tabs.forEach((t, i) =>
     t.addEventListener('click', () => {
-      select(i);
+      select(i, true);
       track('recording', t.dataset.key);
     }),
   );
   root.querySelector('[role="tablist"]')?.addEventListener('keydown', (e) => {
     const k = (e as KeyboardEvent).key;
-    if (k === 'ArrowDown' || k === 'ArrowRight') select(current + 1, true);
-    else if (k === 'ArrowUp' || k === 'ArrowLeft') select(current - 1, true);
-    else return;
+    const to = { ArrowDown: current + 1, ArrowRight: current + 1, ArrowUp: current - 1, ArrowLeft: current - 1, Home: 0, End: tabs.length - 1 }[k];
+    if (to === undefined) return;
     e.preventDefault();
+    select(to, true);
+    tabs[current].focus();
+  });
+  toggle?.addEventListener('click', () => {
+    const v = videos[current];
+    if (v.paused) {
+      setPaused(false);
+      play(true);
+    } else {
+      auto = false;
+      v.pause();
+      setPaused(true);
+    }
   });
   videos.forEach((v, i) => {
-    v.addEventListener('timeupdate', () => {
-      if (v.duration) tabs[i].style.setProperty('--p', String(v.currentTime / v.duration));
+    v.addEventListener('play', () => {
+      if (i === current && !raf) raf = requestAnimationFrame(tick);
     });
-    v.addEventListener('ended', () => select(i + 1));
+    v.addEventListener('ended', () => {
+      if (auto) select(i + 1);
+    });
   });
+  if (reduced) videos.forEach(showControls);
+  const stage = root.querySelector('[data-rec-stage]') ?? root;
   new IntersectionObserver(
     ([e]) => {
       visible = e.isIntersecting;
       if (visible) play();
       else videos[current]?.pause();
     },
-    { threshold: 0.35 },
-  ).observe(root);
+    { threshold: 0.4 },
+  ).observe(stage);
 });
 
 // Typewriter (used by use-case prompts) ----------------------------------------------------------

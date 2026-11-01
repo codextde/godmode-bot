@@ -1,9 +1,8 @@
 ---
-import apple from '@/assets/brand/apple.svg?raw';
 import github from '@/assets/brand/github.svg?raw';
 import claude from '@/assets/brand/claude.svg?raw';
 
-const marks = { apple, github, claude } as const;
+const marks = { github, claude } as const;
 
 interface Props {
   name: keyof typeof marks;

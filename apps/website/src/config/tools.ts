@@ -18,7 +18,7 @@ export const TOOLS_OFFICE: Tool[] = [
   { slug: 'trello', name: 'Trello' },
   { slug: 'asana', name: 'Asana' },
   { slug: 'airtable', name: 'Airtable' },
-  { slug: 'chrome', name: 'Any website' },
+  { slug: 'globe', name: 'Any website' },
 ];
 
 export const TOOLS_BUSINESS: Tool[] = [

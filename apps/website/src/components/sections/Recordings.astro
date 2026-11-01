@@ -16,7 +16,7 @@ const single = recs.length === 1;
         <Words text="Don’t take our word for it. *Watch it work.*" class="h-section mt-4" />
       </div>
       <p class="lead max-w-[460px]" data-reveal style="--d:150">
-        Real jobs on a normal Mac with a fresh install, recorded in November 2026. Nothing staged: we only cut the waiting and sped it up.
+        Real runs of Godmode on a normal Mac, recorded in November 2026. The login and invoice demos use test data. We only cut the waiting and sped it up.
       </p>
     </div>
 
@@ -47,10 +47,14 @@ const single = recs.length === 1;
         }
       </div>
 
-      <div class="min-w-0">
+      <div class="relative min-w-0" data-rec-stage>
+        <button type="button" class="rec-toggle" data-rec-toggle aria-pressed="false" aria-label="Pause recording">
+          <svg class="i-pause" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h2v9H3zM7 1.5h2v9H7z" fill="currentColor"></path></svg>
+          <svg class="i-play" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.4v9.2L10.4 6z" fill="currentColor"></path></svg>
+        </button>
         {
           recs.map((r, i) => (
-            <figure role="tabpanel" id={`rec-${r.slug}`} aria-labelledby={`rec-tab-${r.slug}`} hidden={i !== 0} class="rec-panel">
+            <figure role="tabpanel" id={`rec-${r.slug}`} aria-labelledby={`rec-tab-${r.slug}`} hidden={i !== 0} class="rec-panel" tabindex="0">
               <div class="window">
                 <div class="window-bar traffic">
                   <i />
@@ -59,6 +63,7 @@ const single = recs.length === 1;
                   <span class="mx-auto flex items-center gap-2 text-[12px] font-medium text-muted">
                     <span class="live-dot !size-1.5" /> Real screen recording, {r.speed}
                   </span>
+                  <span class="w-[33px]" aria-hidden="true" />
                 </div>
                 <div class="relative aspect-[16/10] bg-surface-3">
                   <video

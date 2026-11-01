@@ -9,7 +9,7 @@ import premier from '@/assets/brand/shopify-premier.svg?raw';
 
 const facts = [
   {
-    mark: 'apple',
+    icon: 'shield-check',
     title: 'Notarized by Apple',
     text: `The Mac app is signed by ${LEGAL.company}, and Apple checks it before it opens.`,
   },
@@ -35,9 +35,9 @@ const facts = [
     cta: 'Imprint',
   },
   {
-    icon: 'shield-check',
+    icon: 'rotate-ccw',
     title: `${PRICING.guaranteeDays}-day money-back`,
-    text: `Free for ${PRICING.freeDays} days without a card. If you pay and change your mind, you get your money back.`,
+    text: `Free for ${PRICING.freeDays} days without a card. Changed your mind after paying? Email us within ${PRICING.guaranteeDays} days of your first payment for a full refund.`,
     href: '/legal/refunds',
     cta: 'Refund policy',
   },
@@ -57,7 +57,7 @@ const facts = [
         <blockquote class="mt-5 text-[clamp(19px,2vw,23px)] font-medium leading-[1.45] tracking-[-0.02em] text-text">
           We built Godmode for our own team first. Today it does a big part of the office work at Codext: it drafts our
           monthly invoices, works through our ticket inbox and answers our shop customers. If something doesn’t work for
-          you, write to us. A real person answers, usually the same day.
+          you, write to us. A real person answers, usually within a day.
         </blockquote>
         <figcaption class="mt-8 flex items-center gap-4">
           <Image src={daniel} alt="Daniel Ehrhardt" width={112} height={112} class="founder-photo" />
