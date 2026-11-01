@@ -4,9 +4,10 @@
  * The key and the licence server's last answer live in meta keys `license.*` (not in Settings, which paired phones can
  * read). The key is checked at start, every 6 hours and on demand against `<site>/api/license`; network errors and 5xx
  * keep the last answer. Release builds refuse new runs while the licence is missing, invalid or expired; an install
- * without a key runs free for 7 days from its first start, and a key that could not be checked yet counts for 7 days.
+ * without a key runs free for 14 days from its first start, and a key that could not be checked yet counts for 7 days.
  */
 import {
+  LICENSE_FREE_DAYS,
   LICENSE_INVALID,
   LICENSE_REQUIRED,
   LICENSE_SITE,
@@ -15,9 +16,10 @@ import {
   type LicensePlan,
   type LicenseState,
   type LicenseStatus,
+  type LicenseUsage,
 } from "@godmode/shared";
 import { COMPILED, VERSION, config } from "../config";
-import { deleteMeta, getMeta, setMeta } from "../db";
+import { deleteMeta, get, getMeta, setMeta } from "../db";
 import { bus } from "../events/bus";
 import { logger } from "../log";
 import { audit } from "../services/audit";
@@ -28,7 +30,7 @@ const log = logger("license");
 
 const DAY_MS = 86_400_000;
 export const LICENSE_CHECK_INTERVAL_MS = 6 * 3_600_000;
-export const LICENSE_GRACE_MS = 7 * DAY_MS;
+export const LICENSE_GRACE_MS = LICENSE_FREE_DAYS * DAY_MS;
 export const LICENSE_UNVERIFIED_MS = 7 * DAY_MS;
 /** A subscription not confirmed for this long after its trial or period ended counts as unverified again. */
 export const LICENSE_STALE_MS = 14 * DAY_MS;
@@ -41,7 +43,7 @@ const META = {
   verdict: "license.verdict",
   /** Since when a key has waited for its first answer; kept across key changes until one is answered. */
   unverifiedSince: "license.unverified_since",
-  /** The end of the free week; set once, never moved or cleared. */
+  /** The end of the free trial; set once, never moved or cleared. */
   graceEndsAt: "license.grace_ends_at",
   /** When this install first ran a version with licences. */
   firstStart: "license.first_start",
@@ -152,7 +154,7 @@ function shortDate(at: string | number): string {
 
 function refusedKeyMessage(v: Verdict): string {
   if (v.status === "pending") return "The payment for this licence isn't complete yet. Finish the checkout, then try the key again.";
-  return "This licence key isn't valid. Check it for typos, or start a free trial to get one.";
+  return "This licence key isn't valid. Check it for typos, or subscribe to get one.";
 }
 
 /**
@@ -208,13 +210,13 @@ export function licenseState(): LicenseState {
   let message: string | null = null;
   if (blocked) {
     if (status === "missing" && graceEndsAt) {
-      message = `Your 7 free days ended on ${shortDate(graceEndsAt)}. Add your licence key or start the free trial to keep your agents working.`;
-    } else if (status === "missing") message = "Godmode needs a licence to start new work. Add your licence key or start the 14-day free trial.";
+      message = `Your free trial ended on ${shortDate(graceEndsAt)}. Subscribe or add your licence key to keep your agents working.`;
+    } else if (status === "missing") message = "Godmode needs a licence to start new work. Subscribe or add your licence key.";
     else if (status === "unverified") message = "Godmode couldn't check your licence key for 7 days. Connect to the internet, then refresh the licence.";
     else if (status === "invalid") message = refusedKeyMessage(verdict!);
     else message = "Your Godmode licence has ended. Renew it or add another key to keep your agents working.";
   } else if (status === "grace" && graceEndsAt) {
-    message = `Free until ${shortDate(graceEndsAt)}. Then add your licence key or start the 14-day free trial.`;
+    message = `Free until ${shortDate(graceEndsAt)}. Then pick a plan to keep your agents working.`;
   } else if (status === "unverified" && unverifiedUntil) {
     message = `Your key couldn't be checked yet. Godmode accepts it until ${shortDate(unverifiedUntil)} and tries again every few hours.`;
   } else if (status === "past_due") {
@@ -418,7 +420,7 @@ export function noteLicenseRefusal(what: string, err: HttpError) {
 /**
  * Before anything can start a run: takes the key from `GODMODE_LICENSE` (and keeps it from child processes) — at once
  * when none is stored, after the next check when it differs from the stored one — and, in builds that check licences,
- * gives the install its 7 free days once, from the first start without a key (a new install: its very first start).
+ * gives the install its 14 free days once, from the first start without a key (a new install: its very first start).
  * Restarts never extend them.
  */
 export function initLicense(): void {
@@ -437,9 +439,31 @@ export function initLicense(): void {
   if (!getMeta(META.firstStart)) setMeta(META.firstStart, iso(clock()));
   if (licenseEnforced() && !getMeta(META.key) && !getMeta(META.graceEndsAt)) {
     setMeta(META.graceEndsAt, iso(clock() + LICENSE_GRACE_MS));
-    log.info("no licence key: free for 7 days");
+    log.info(`no licence key: free for ${LICENSE_FREE_DAYS} days`);
   }
   signature = JSON.stringify(licenseState());
+}
+
+/** Runs that did something for the human: not condition checks, memory consolidation or heartbeats, nor sub-runs. */
+const WORK = "status = 'succeeded' AND parent_run_id IS NULL AND trigger NOT IN ('check', 'dream', 'heartbeat')";
+
+/** What Godmode did on this computer so far: a few counts, for the end of the free trial. */
+export function licenseUsage(): LicenseUsage {
+  const count = (sql: string) => get<{ n: number }>(sql)?.n ?? 0;
+  const runs = get<{ n: number; routine: number; ms: number; first: string | null }>(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(trigger = 'routine'), 0) AS routine, COALESCE(SUM(duration_ms), 0) AS ms, MIN(created_at) AS first FROM runs WHERE ${WORK}`,
+  );
+  const firstStart = getMeta(META.firstStart);
+  const since = [firstStart, runs?.first].filter((v): v is string => !!v && !Number.isNaN(Date.parse(v))).sort((a, b) => Date.parse(a) - Date.parse(b))[0];
+  return {
+    since: since ? iso(Date.parse(since)) : null,
+    tasksDone: runs?.n ?? 0,
+    automationRuns: runs?.routine ?? 0,
+    minutesWorked: Math.round((runs?.ms ?? 0) / 60_000),
+    agents: count("SELECT COUNT(*) AS n FROM agents WHERE enabled = 1"),
+    automations: count("SELECT COUNT(*) AS n FROM routines WHERE enabled = 1"),
+    logins: count("SELECT COUNT(*) AS n FROM credentials"),
+  };
 }
 
 export function startLicense(): void {

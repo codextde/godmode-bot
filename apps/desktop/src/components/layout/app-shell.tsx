@@ -63,7 +63,7 @@ import { UsageRing } from "@/components/layout/usage-ring";
 import { useTheme } from "@/components/theme-provider";
 import { PageScrollContext } from "@/components/layout/page-scroll";
 import { Callout } from "@/components/settings/settings-kit";
-import { LicenseBanner } from "@/components/license/license-banner";
+import { FreeTrialChip, LicenseBanner } from "@/components/license/license-banner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useBootstrap, useMods } from "@/lib/hooks";
 import { useEasyMode } from "@/lib/mode";
@@ -300,6 +300,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ClaudeUpdateButton />
           <UpdateButton />
           <DeviceIndicator />
+          <FreeTrialChip />
           {cloudContext && <CloudComputerLink />}
           <FooterBar />
         </SidebarFooter>

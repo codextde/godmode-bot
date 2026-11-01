@@ -156,6 +156,7 @@ export const qk = {
   cloud: ["cloud"] as unknown[],
   cloudBilling: ["cloud", "billing"] as unknown[],
   license: ["license"] as unknown[],
+  licenseUsage: ["license", "usage"] as unknown[],
   /** What agents used on this computer over the last `days` days. */
   usage: (days: number) => ["usage", days],
   chromeProfiles: ["chrome-profiles"] as unknown[],

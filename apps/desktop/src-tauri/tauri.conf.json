@@ -100,6 +100,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["godmode"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENBNTYyMDhDNkU1MDI1ODYKUldTR0pWQnVqQ0JXeXR3ZUlWZHRLOWVaZTRSd0h1UUhpbCtCUnJGL0txRTlyVnFIOTBvZkU1dE4K",
       "endpoints": [
