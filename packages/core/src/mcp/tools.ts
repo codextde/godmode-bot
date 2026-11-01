@@ -151,6 +151,7 @@ import { listGoals } from "../tasks/goals";
 import { addTaskNote, createTask, findTask, getTask, listTaskEvents, listTasks, reportBlocked, sendTaskMessage, taskForConversation, updateTask } from "../tasks/service";
 import { describeNow, noteId, tagged } from "../runner/prompt";
 import { zaiKey } from "../runner/claude";
+import { summarizeNotification, wantsSummary } from "../runner/notificationSummary";
 import { artifactExists, createArtifact, getArtifact, listArtifacts, updateArtifact } from "../services/artifacts";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
@@ -1588,7 +1589,11 @@ const TOOLS: ToolDef[] = [
     }),
     run: async ({ title, body, level, call }, { agent, ctx }) => {
       const task = taskForConversation(ctx.conversationId);
-      notify(level ?? "info", `${agent.name}: ${redact(title)}`, redact(body ?? ""), task ? `/tasks?task=${task.id}` : `/chat/${ctx.conversationId}`);
+      const heading = `${agent.name}: ${redact(title)}`;
+      const link = task ? `/tasks?task=${task.id}` : `/chat/${ctx.conversationId}`;
+      const text = redact(body ?? "");
+      if (!wantsSummary(text)) notify(level ?? "info", heading, text, link);
+      else void summarizeNotification(heading, text).then((short) => notify(level ?? "info", heading, short, link));
       if (ctx.runId) markRunNotifiedUser(ctx.runId);
       if (!call) return "Notification sent.";
       if (!canAsk(agent, ctx)) return "Notification sent. No call: this kind of run can't phone the human.";

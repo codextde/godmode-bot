@@ -1366,6 +1366,10 @@ export interface GeneralSettings {
   desktopNotifications: boolean;
   language: AppLanguage;
   timeFormat: TimeFormat;
+  /** Haiku names new chats from their first message. */
+  aiChatTitles: boolean;
+  /** Haiku shortens long notifications from agents to two or three sentences. */
+  aiNotificationSummaries: boolean;
 }
 
 /** Where Claude Code summarized the conversation (`/compact`, `/compress` or by itself once the chat got long). */

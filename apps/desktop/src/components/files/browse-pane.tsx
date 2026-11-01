@@ -339,7 +339,7 @@ export function BrowsePane({
                         <span className="truncate font-mono text-xs">{h.path}</span>
                         {h.line !== null && <span className="shrink-0 text-[11px] text-muted-foreground">{t("browse.line", { n: h.line })}</span>}
                       </span>
-                      {h.snippet && <span className="mt-0.5 line-clamp-2 block pl-6 text-xs text-muted-foreground">{h.snippet}</span>}
+                      {h.snippet && <span className="mt-0.5 line-clamp-2 pl-6 text-xs text-muted-foreground">{h.snippet}</span>}
                     </button>
                   </li>
                 ))}

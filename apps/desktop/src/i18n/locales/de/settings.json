@@ -35,6 +35,14 @@
       "reduceAnimations": "Animationen reduzieren",
       "reduceAnimationsDescription": "Weniger und kürzere Animationen: Nachrichten erscheinen sofort, Menüs blenden nur ein, keine leuchtenden Rahmen, während Agenten arbeiten."
     },
+    "summaries": {
+      "title": "KI-Zusammenfassungen",
+      "description": "Kurze Texte, die Haiku für dich schreibt. Jeder ist ein schneller, günstiger Aufruf über dein Claude-Konto.",
+      "chatTitles": "Chat-Titel",
+      "chatTitlesDescription": "Neue Chats nach ihrer ersten Nachricht benennen statt nach deren ersten Wörtern.",
+      "notifications": "Benachrichtigungen zusammenfassen",
+      "notificationsDescription": "Lange Benachrichtigungen von Agents auf zwei oder drei Sätze kürzen. Der volle Text bleibt im Chat."
+    },
     "desktop": {
       "title": "Desktop",
       "onlyDesktop": "Diese Optionen gelten nur für die Desktop-App.",

@@ -82,7 +82,7 @@ import { EASY_PAGES, MODE_LABEL, useInterfaceMode, useSetInterfaceMode } from "@
 
 /** Settings sections by what people look for there (Cloud, License and Billing are under Navigate). */
 const SETTINGS = [
-  { id: "general", label: "general", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple" },
+  { id: "general", label: "general", icon: SlidersHorizontal, words: "name startup tray notifications desktop easy professional mode interface simple summaries titles haiku ai" },
   { id: "ai", label: "ai", icon: Sparkles, words: "model effort ultracode limit" },
   { id: "browser", label: "browser", icon: Globe, words: "chromium profiles cookies" },
   { id: "computer", label: "computer", icon: MonitorUp, words: "screen share control mac" },

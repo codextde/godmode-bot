@@ -35,6 +35,14 @@
       "reduceAnimations": "Reduce animations",
       "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
     },
+    "summaries": {
+      "title": "AI summaries",
+      "description": "Short texts Haiku writes for you. Each one is a quick, cheap call on your Claude account.",
+      "chatTitles": "Chat titles",
+      "chatTitlesDescription": "Name new chats from their first message instead of using its first words.",
+      "notifications": "Notification summaries",
+      "notificationsDescription": "Shorten long notifications from agents to two or three sentences. The full text stays in the chat."
+    },
     "desktop": {
       "title": "Desktop",
       "onlyDesktop": "These options only apply to the desktop app.",

@@ -401,7 +401,7 @@ function TriggerTypePicker({
                         <span className="text-sm font-medium">{type.name}</span>
                         <KindBadge kind={type.kind} />
                       </span>
-                      {type.description && <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-muted-foreground">{type.description}</span>}
+                      {type.description && <span className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">{type.description}</span>}
                     </span>
                   </Label>
                 </motion.div>

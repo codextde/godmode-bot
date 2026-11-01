@@ -215,7 +215,7 @@ function NotificationRow({ n, onOpen }: { n: AppNotification; onOpen: () => void
           <span className={cn("truncate text-sm", n.read ? "text-foreground/80" : "font-medium text-foreground")}>{n.title}</span>
           {!n.read && <span className="size-1.5 shrink-0 rounded-full bg-brand" aria-hidden />}
         </span>
-        {n.body && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{n.body}</span>}
+        {n.body && <span className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{n.body}</span>}
         <span className="mt-1 block text-[11px] text-muted-foreground/80">{when}</span>
       </span>
       {n.link && <ChevronRight className="mt-2 size-4 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100" />}

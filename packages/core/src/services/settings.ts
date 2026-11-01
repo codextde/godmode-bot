@@ -16,6 +16,8 @@ export const DEFAULT_SETTINGS: Settings = {
     desktopNotifications: true,
     language: "system",
     timeFormat: "system",
+    aiChatTitles: true,
+    aiNotificationSummaries: true,
   },
   runner: {
     claudePath: "",

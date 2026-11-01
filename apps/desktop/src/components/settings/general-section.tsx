@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Clock, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { Bell, Clock, Sparkles, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { AppLanguage, Settings, TimeFormat } from "@godmode/shared";
@@ -138,6 +138,23 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           description={t("general.appearance.reduceAnimationsDescription")}
         >
           <Switch id="reduce-animations" checked={reduceAnimations} onCheckedChange={setReduceAnimations} />
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("general.summaries.title")} icon={<Sparkles />} description={t("general.summaries.description")}>
+        <SettingRow label={t("general.summaries.chatTitles")} htmlFor="ai-chat-titles" description={t("general.summaries.chatTitlesDescription")}>
+          <Switch id="ai-chat-titles" checked={g.aiChatTitles} onCheckedChange={(aiChatTitles) => patch({ general: { aiChatTitles } })} />
+        </SettingRow>
+        <SettingRow
+          label={t("general.summaries.notifications")}
+          htmlFor="ai-notification-summaries"
+          description={t("general.summaries.notificationsDescription")}
+        >
+          <Switch
+            id="ai-notification-summaries"
+            checked={g.aiNotificationSummaries}
+            onCheckedChange={(aiNotificationSummaries) => patch({ general: { aiNotificationSummaries } })}
+          />
         </SettingRow>
       </SettingsGroup>
 

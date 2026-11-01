@@ -183,7 +183,7 @@ function StructureCard({ team, root, index, onPick }: { team: TeamTemplate; root
             {text.name}
             <span className="shrink-0 rounded-[5px] border bg-secondary px-1.5 py-px text-[10px] whitespace-nowrap font-medium text-muted-foreground tabular-nums">{t("teamTemplates.agentCount", { count: total })}</span>
           </span>
-          <span className="mt-0.5 line-clamp-2 block text-[13px] leading-5 text-muted-foreground">{text.description}</span>
+          <span className="mt-0.5 line-clamp-2 text-[13px] leading-5 text-muted-foreground">{text.description}</span>
         </span>
       </span>
       <MiniChart root={root} />

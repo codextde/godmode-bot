@@ -1066,7 +1066,7 @@ function placeholderTitles(content: string, attachments: Attachment[]): Set<stri
 
 function nameChat(conversationId: string, current: string, content: string, attachments: Attachment[]) {
   const placeholders = placeholderTitles(content, attachments);
-  if (!placeholders.has(current)) return;
+  if (!placeholders.has(current) || !getSettings().general.aiChatTitles) return;
   void generateChatTitle(
     content,
     attachments.map((a) => a.name),
