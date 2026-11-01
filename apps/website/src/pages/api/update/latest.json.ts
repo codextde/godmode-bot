@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { assetText, latestRelease } from '@/lib/releases';
+import { serverEvent } from '@/lib/serverEvent';
 
 export const prerender = false;
 
@@ -8,7 +9,8 @@ export const prerender = false;
  * points every bundle at /api/update/asset/… on this site. Bundles are verified by the app with the
  * updater public key, so serving them through here doesn't change their trust.
  */
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async ({ url, request }) => {
+  await serverEvent(request, 'app_check', url.searchParams.get('target') ?? '');
   try {
     const release = await latestRelease();
     const manifest = release.assets.find((a) => a.name === 'latest.json');
