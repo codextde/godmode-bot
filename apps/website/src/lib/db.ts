@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import type Stripe from 'stripe';
 import { stripe } from './stripe';
+import { recoveryFromSession } from './recovery';
 
 export const db = () => env.DB;
 
@@ -204,4 +205,60 @@ export async function revokeForCharge(charge: Stripe.Charge) {
   } else {
     await syncSubscription(sub);
   }
+}
+
+/**
+ * Keeps what an expired checkout left behind (email, consent, recovery link, attribution). Stripe sends the email
+ * only with promotional consent; an opt-in from /checkout/canceled already on the row is kept.
+ */
+export async function recordExpiredCheckout(s: Stripe.Checkout.Session, now = Date.now()) {
+  const r = recoveryFromSession(s, now);
+  await db()
+    .prepare(
+      `INSERT INTO checkout_recovery (session_id, created_at, expired_at, plan, email, consent, consent_source, recovery_url,
+         recovery_expires_at, utm_source, utm_medium, utm_campaign, utm_content, referrer, livemode)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ?6 = 'opt_in' THEN 'stripe' END, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+       ON CONFLICT(session_id) DO UPDATE SET
+         expired_at = COALESCE(checkout_recovery.expired_at, excluded.expired_at),
+         plan = COALESCE(excluded.plan, checkout_recovery.plan),
+         email = CASE WHEN checkout_recovery.consent_source = 'site' THEN checkout_recovery.email
+                      ELSE COALESCE(excluded.email, checkout_recovery.email) END,
+         consent = CASE WHEN checkout_recovery.consent_source = 'site' THEN checkout_recovery.consent ELSE excluded.consent END,
+         consent_source = CASE WHEN checkout_recovery.consent_source = 'site' THEN 'site' ELSE excluded.consent_source END,
+         recovery_url = excluded.recovery_url, recovery_expires_at = excluded.recovery_expires_at,
+         utm_source = excluded.utm_source, utm_medium = excluded.utm_medium, utm_campaign = excluded.utm_campaign,
+         utm_content = excluded.utm_content, referrer = excluded.referrer, livemode = excluded.livemode`,
+    )
+    .bind(
+      r.session_id,
+      r.created_at,
+      r.expired_at,
+      r.plan,
+      r.email,
+      r.consent,
+      r.recovery_url,
+      r.recovery_expires_at,
+      r.utm_source,
+      r.utm_medium,
+      r.utm_campaign,
+      r.utm_content,
+      r.referrer,
+      r.livemode,
+    )
+    .run();
+}
+
+/** An explicit "email me this checkout" from /checkout/canceled, for a checkout this site opened. */
+export async function recordSiteOptIn(sessionId: string, email: string) {
+  const res = await db()
+    .prepare(
+      `INSERT INTO checkout_recovery (session_id, created_at, plan, email, consent, consent_source, utm_source, utm_medium,
+         utm_campaign, utm_content, referrer, livemode)
+       SELECT session_id, created_at, plan, ?2, 'opt_in', 'site', utm_source, utm_medium, utm_campaign, utm_content, referrer, livemode
+       FROM orders WHERE session_id = ?1 AND status IN ('open', 'expired')
+       ON CONFLICT(session_id) DO UPDATE SET email = excluded.email, consent = 'opt_in', consent_source = 'site'`,
+    )
+    .bind(sessionId, email)
+    .run();
+  return res.meta.changes > 0;
 }

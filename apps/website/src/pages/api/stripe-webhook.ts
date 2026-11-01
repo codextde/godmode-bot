@@ -2,7 +2,7 @@ import type { APIRoute } from 'astro';
 import type Stripe from 'stripe';
 import { env } from 'cloudflare:workers';
 import { cryptoProvider, stripe } from '@/lib/stripe';
-import { db, revokeForCharge, syncSubscription, upsertFromSession } from '@/lib/db';
+import { db, recordExpiredCheckout, revokeForCharge, syncSubscription, upsertFromSession } from '@/lib/db';
 import { sendWelcome } from '@/lib/mail';
 
 export const prerender = false;
@@ -75,6 +75,7 @@ async function handle(event: Stripe.Event) {
       break;
     case 'checkout.session.expired':
       await upsertFromSession(event.data.object, 'expired');
+      await recordExpiredCheckout(event.data.object);
       break;
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':

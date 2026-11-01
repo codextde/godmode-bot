@@ -87,7 +87,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     if (!isTauri) return;
     const tr = i18n.getFixedT(resolved, "common");
     void import("@tauri-apps/api/core")
-      .then(({ invoke }) => invoke("set_tray_labels", { open: tr("tray.open"), newChat: tr("tray.newChat"), quit: tr("tray.quit") }))
+      .then(({ invoke }) => invoke("set_tray_labels", { open: tr("tray.open"), newChat: tr("tray.newChat"), quit: tr("tray.quit"), checkUpdates: tr("tray.checkUpdates") }))
       .catch(() => {});
   }, [resolved]);
 

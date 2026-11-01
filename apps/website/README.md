@@ -12,7 +12,8 @@ src/pages/checkout/*      success page (license key + downloads) and the abandon
 src/pages/admin           sales dashboard (HTTP Basic auth, password = ADMIN_PASSWORD)
 src/pages/api/license     license lookup for the desktop app: GET /api/license?key=GM-… (trial/renewal state)
 src/pages/api/portal      Stripe customer portal by welcome-page cookie or ?key=GM-…
-migrations/               D1 schema (orders, events, leads, stripe_events)
+migrations/               D1 schema (orders, events, leads, stripe_events, emails, checkout_recovery)
+test/                     bun test: license rules, the webhook and email rules on an in-memory D1 (`pnpm test`)
 scripts/stripe-setup.mjs  creates products/prices, webhook and customer portal (idempotent)
 video/                    HyperFrames sources for the site and ad videos → public/media/
 marketing/x-ads-plan.md   X Ads campaigns, targeting, copy and tracking setup
@@ -44,7 +45,7 @@ Feature flags in `wrangler.jsonc` → `vars`:
 | `STRIPE_AUTOMATIC_TAX` | `false` | Stripe Tax has an active registration (otherwise no tax is collected) |
 | `STRIPE_MANAGED_PAYMENTS` | `false` | your account is approved for Stripe Managed Payments (Stripe as merchant of record) |
 | `STRIPE_REQUIRE_TOS` | `false` | a Terms URL is set in Dashboard → Settings → Public details (adds the terms + EU withdrawal-waiver checkbox) |
-| `STRIPE_COLLECT_PROMOTIONS` | `false` | promotional emails are enabled in Dashboard → Settings → Checkout (enables abandoned-cart recovery emails) |
+| `STRIPE_COLLECT_PROMOTIONS` | `false` | the account is a US business (Stripe's promotional-consent checkbox; Stripe rejects it for the DE account) |
 
 ## Going live with Stripe
 
@@ -70,6 +71,16 @@ Prices, the trial length and the guarantee live in `src/config/site.ts`; the Str
 answers 410 / redirects to pricing, and `pnpm stripe:setup` deactivates the old lifetime prices (never deletes them).
 Licenses sold earlier (lifetime, and the $50 monthly plan, whose price stays active so it keeps renewing) stay valid.
 Free licenses can be issued from `/admin` and don't count toward revenue.
+
+## Abandoned checkouts
+
+Every Godmode Checkout Session has Stripe's `after_expiration.recovery` on. When one expires, the webhook stores the
+recovery link, plan, attribution, and the email and consent if there are any (`checkout_recovery`). The hourly cron
+then sends one short email from Daniel, a day after the checkout expired, with the recovery link and the free
+download, but only to people who opted in and never more than once per address (`src/lib/recovery.ts`). Stripe only
+reports email and consent on expired sessions where it collected promotional consent, which it doesn't do for a DE
+business, so the opt-in comes from "Get this checkout by email" on `/checkout/canceled` (`/api/remind`). Unsubscribes
+(`/unsubscribe`, also one-click from the mail client) land in `unsubscribes`.
 
 ## Analytics
 

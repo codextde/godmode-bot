@@ -1,5 +1,7 @@
 //! Godmode Bot desktop shell: hosts the React UI, supervises the core daemon (sidecar) and lives in the tray.
 
+#[cfg(target_os = "macos")]
+mod app_menu;
 mod clock;
 mod commands;
 mod core;
@@ -47,7 +49,10 @@ pub fn run() {
         !cfg!(debug_assertions) && updater::canary_enabled_in(paths::data_dir_before_start()),
     ));
     ota::PatchAssets::wrap(&mut context, patches.clone());
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu::build).on_menu_event(app_menu::on_event);
+    let app = builder
         // Must be registered first: a second launch just focuses the running instance.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| tray::show_main_window(app)))
         .plugin(tauri_plugin_deep_link::init())
