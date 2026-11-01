@@ -9,7 +9,7 @@ import {
   getConversationSummary,
   listConversations,
   listMessagePage,
-  chatAttachmentImage,
+  chatAttachmentFile,
   messageImage,
   messageWindow,
   markConversationsRead,
@@ -146,7 +146,7 @@ export function registerChatRoutes(app: Hono): void {
   app.get("/api/conversations/:id/attachment", (c) => {
     const path = c.req.query("path");
     if (!path) throw badRequest("path is required");
-    const { data, mime } = chatAttachmentImage(c.req.param("id"), path);
+    const { data, mime } = chatAttachmentFile(c.req.param("id"), path);
     return c.body(new Uint8Array(data), 200, {
       "Content-Type": mime,
       "Content-Security-Policy": "sandbox; default-src 'none'",

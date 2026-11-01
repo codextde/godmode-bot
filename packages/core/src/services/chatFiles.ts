@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Agent, ChatFile } from "@godmode/shared";
-import { MARKDOWN_NAME, MAX_CHAT_FILE_REFS, MAX_CHAT_MARKDOWN_BYTES, MAX_CHAT_TEXT_BYTES, MAX_TASK_ATTACHMENT_BYTES, chatImageUrl, chatMarkdownUrl, chatTextUrl, isPreviewableText } from "@godmode/shared";
+import { MARKDOWN_NAME, MAX_CHAT_FILE_REFS, MAX_CHAT_MARKDOWN_BYTES, MAX_CHAT_PDF_BYTES, MAX_CHAT_TEXT_BYTES, MAX_TASK_ATTACHMENT_BYTES, PDF_NAME, chatImageUrl, chatMarkdownUrl, chatPdfUrl, chatTextUrl, isPreviewableText } from "@godmode/shared";
 import { getAgent } from "../agents/service";
 import { get } from "../db";
 import { sniffType } from "../integrations/apiToolRequest";
@@ -135,10 +135,32 @@ function openText(path: string, withText: boolean): { version: number; text: str
   }
 }
 
+export function isPdf(head: Uint8Array): boolean {
+  return head[0] === 0x25 && head[1] === 0x50 && head[2] === 0x44 && head[3] === 0x46 && head[4] === 0x2d;
+}
+
+function openPdf(path: string, withData: boolean): { version: number; data: Buffer | null } | null {
+  if (!PDF_NAME.test(path) || kindOf(path) !== "file") return null;
+  let fd: number | null = null;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+    const stat = fstatSync(fd);
+    if (!stat.isFile() || stat.size === 0 || stat.size > MAX_CHAT_PDF_BYTES) return null;
+    const head = Buffer.alloc(5);
+    if (!isPdf(head.subarray(0, readSync(fd, head, 0, head.length, 0)))) return null;
+    return { version: stat.mtimeMs, data: withData ? readFileSync(fd) : null };
+  } catch {
+    return null;
+  } finally {
+    if (fd !== null) closeSync(fd);
+  }
+}
+
 function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
   const image = found.kind === "file" && IMAGE_NAME.test(found.path) ? openImage(found.path, false) : null;
   const markdown = found.kind === "file" ? openMarkdown(found.path, false) : null;
   const text = found.kind === "file" && !image && !markdown ? openText(found.path, false) : null;
+  const pdf = found.kind === "file" ? openPdf(found.path, false) : null;
   return {
     ref,
     ...found,
@@ -146,6 +168,7 @@ function describe(ref: string, found: { path: string; kind: Kind }): ChatFile {
     image: image && chatImageUrl(found.path, image.version),
     markdown: markdown && chatMarkdownUrl(found.path, markdown.version),
     ...(text ? { text: chatTextUrl(found.path, text.version) } : {}),
+    ...(pdf ? { pdf: chatPdfUrl(found.path, pdf.version) } : {}),
   };
 }
 
@@ -201,6 +224,12 @@ export function readChatMarkdown(input: string): string {
   const file = openMarkdown(absolute(input), true);
   if (file?.text == null) throw notFound("Markdown file");
   return file.text;
+}
+
+export function readChatPdf(input: string): Buffer {
+  const file = openPdf(absolute(input), true);
+  if (!file?.data) throw notFound("PDF");
+  return file.data;
 }
 
 export function readChatText(input: string): string {

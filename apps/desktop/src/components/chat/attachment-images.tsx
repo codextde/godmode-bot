@@ -7,13 +7,43 @@ import { cn } from "@/lib/utils";
 import { AttachmentChip } from "./attachments";
 import { downloadCoreFile, useCoreFileUrl } from "./core-file";
 import { Lightbox } from "./lightbox";
+import { useOpenPdf } from "@/components/pdf/open-pdf";
 
 type Shown = Pick<Attachment, "name" | "mime" | "size"> & { path?: string };
 
 const PICTURE = /^image\/(png|jpe?g|gif|webp)$/i;
 
-export function attachmentImageUrl(conversationId: string, path: string): string {
+export function attachmentUrl(conversationId: string, path: string): string {
   return `/api/conversations/${encodeURIComponent(conversationId)}/attachment?path=${encodeURIComponent(path)}`;
+}
+
+export function isShownPdf(file: Shown, conversationId: string | null): file is Shown & { path: string } {
+  return !!conversationId && !!file.path && (file.mime === "application/pdf" || /\.pdf$/i.test(file.name));
+}
+
+export function PdfAttachments({ files, conversationId, className }: { files: (Shown & { path: string })[]; conversationId: string; className?: string }) {
+  const { t } = useTranslation("chat");
+  const { openPdf, current, dialog } = useOpenPdf();
+  return (
+    <div className={cn("flex flex-wrap justify-end gap-1.5", className)}>
+      {files.map((f, i) => {
+        const url = attachmentUrl(conversationId, f.path);
+        return (
+          <button
+            key={`${f.path}-${i}`}
+            type="button"
+            aria-current={current === url ? "true" : undefined}
+            title={t("pdf.open", { name: f.name })}
+            onClick={() => openPdf({ url, name: f.name, path: null, local: false })}
+            className="rounded-xl text-left transition focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none [&>div]:transition-colors [&>div]:hover:bg-accent aria-[current=true]:[&>div]:border-foreground/25"
+          >
+            <AttachmentChip name={f.name} mime="application/pdf" size={f.size} />
+          </button>
+        );
+      })}
+      {dialog}
+    </div>
+  );
 }
 
 export function isShownPicture(file: Shown, conversationId: string | null): file is Shown & { path: string } {
@@ -25,7 +55,7 @@ export function AttachmentImages({ files, conversationId, className }: { files: 
   return (
     <div className={cn("flex flex-wrap justify-end gap-1.5", className)}>
       {files.map((f, i) => (
-        <AttachmentImage key={`${f.path}-${i}`} file={f} url={attachmentImageUrl(conversationId, f.path)} single={single} />
+        <AttachmentImage key={`${f.path}-${i}`} file={f} url={attachmentUrl(conversationId, f.path)} single={single} />
       ))}
     </div>
   );

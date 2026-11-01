@@ -1,8 +1,10 @@
 import { createContext } from "react";
 import { create } from "zustand";
 import type { ChatFile } from "@godmode/shared";
+import type { PdfSource } from "@/components/pdf/pdf-viewer";
 
-export type ChatSide = { kind: "pull"; url: string } | { kind: "file"; file: ChatFile; line: number | null; local: boolean };
+export type ChatSide = { kind: "pull"; url: string } | { kind: "file"; file: ChatFile; line: number | null; local: boolean }
+  | { kind: "pdf"; source: PdfSource };
 
 interface SidePanelState {
   open: Record<string, ChatSide | null>;
@@ -21,6 +23,7 @@ export const SidePanelScopeProvider = SidePanelScope.Provider;
 
 export function sideKey(side: ChatSide | null): string | null {
   if (!side) return null;
+  if (side.kind === "pdf") return `pdf:${side.source.url}`;
   return side.kind === "pull" ? `pull:${side.url}` : `file:${side.file.path}`;
 }
 

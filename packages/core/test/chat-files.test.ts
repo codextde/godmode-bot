@@ -275,6 +275,28 @@ describe("code for the side panel", () => {
   });
 });
 
+describe("PDFs for the viewer", () => {
+  test("real PDFs are served, other files under a .pdf name never", async () => {
+    const work = join(agent.repoPath, "workspace");
+    writeFileSync(join(work, "fake.pdf"), "not a pdf");
+    const files = byRef(await resolveRefs("workspace/report.pdf", "workspace/fake.pdf", "workspace/plan.md"));
+    const url = files["workspace/report.pdf"]!.pdf!;
+    expect(url).toStartWith(`/api/files/pdf?path=${encodeURIComponent(join(work, "report.pdf"))}&v=`);
+    expect(files["workspace/fake.pdf"]!.pdf).toBeUndefined();
+    expect(files["workspace/plan.md"]!.pdf).toBeUndefined();
+
+    const { status, res } = await call("GET", url);
+    expect(status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(await res.text()).toBe("%PDF-1.4");
+
+    for (const path of [join(work, "fake.pdf"), join(work, "plan.md"), join(work, "gone.pdf")]) {
+      expect([path, (await call("GET", `/api/files/pdf?path=${encodeURIComponent(path)}`)).status]).toEqual([path, 404]);
+    }
+    expect((await app.request(`http://127.0.0.1${url}`)).status).toBe(401);
+  });
+});
+
 describe("showing a file in the file manager", () => {
   test("only for the app on this computer", async () => {
     const path = join(shots, "01-positions.png");

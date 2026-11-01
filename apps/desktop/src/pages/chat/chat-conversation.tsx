@@ -64,6 +64,7 @@ import { useUi } from "@/stores/ui";
 import { currentLanguage } from "@/i18n";
 
 const FilePanel = lazy(() => import("@/components/side-panel/file-panel"));
+const PdfPanel = lazy(() => import("@/components/pdf/pdf-viewer"));
 
 const NO_INHERITED_VMS: InheritedVm[] = [];
 
@@ -853,6 +854,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         {showSidePanel && side.kind === "file" && (
           <Suspense key={sideKey(side)} fallback={null}>
             <FilePanel file={side.file} line={side.line} local={side.local} onHide={() => hideSide(conversationId)} />
+          </Suspense>
+        )}
+        {showSidePanel && side.kind === "pdf" && (
+          <Suspense key={sideKey(side)} fallback={null}>
+            <PdfPanel source={side.source} onHide={() => hideSide(conversationId)} />
           </Suspense>
         )}
         {showArtifactPanel && <ArtifactPanel key={`artifact-${artifactId}`} id={artifactId!} onHide={() => hideArtifact(conversationId)} />}

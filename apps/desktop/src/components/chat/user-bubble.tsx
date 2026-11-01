@@ -1,6 +1,6 @@
 import type { Attachment } from "@godmode/shared";
 import { cn } from "@/lib/utils";
-import { AttachmentImages, isShownPicture } from "./attachment-images";
+import { AttachmentImages, PdfAttachments, isShownPdf, isShownPicture } from "./attachment-images";
 import { AttachmentList } from "./attachments";
 import { useChatScope } from "./local-files";
 import { CommandText } from "./slash-commands";
@@ -17,10 +17,12 @@ export function UserBubble({
 }) {
   const { conversationId } = useChatScope();
   const pictures = attachments.filter((a) => isShownPicture(a, conversationId));
-  const others = attachments.filter((a) => !isShownPicture(a, conversationId));
+  const pdfs = attachments.filter((a) => isShownPdf(a, conversationId));
+  const others = attachments.filter((a) => !isShownPicture(a, conversationId) && !isShownPdf(a, conversationId));
   return (
     <>
       {pictures.length > 0 && conversationId && <AttachmentImages files={pictures} conversationId={conversationId} className={cn("mb-1.5 max-w-[85%]", dim && "opacity-70")} />}
+      {pdfs.length > 0 && conversationId && <PdfAttachments files={pdfs} conversationId={conversationId} className="mb-1.5 max-w-[85%]" />}
       {others.length > 0 && <AttachmentList files={others} className="mb-1.5 max-w-[85%] justify-end" />}
       {content && (
         <div

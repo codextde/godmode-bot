@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Agent } from "@godmode/shared";
 import { makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { chatAttachmentImage, createConversation } from "../src/services/conversations";
+import { chatAttachmentFile, createConversation } from "../src/services/conversations";
 
 let env: TestEnv;
 let agent: Agent;
@@ -18,6 +18,7 @@ beforeAll(async () => {
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, "shot.png"), PNG);
   writeFileSync(join(dir, "notes.txt"), "hello");
+  writeFileSync(join(dir, "doc.pdf"), "%PDF-1.4\n%%EOF\n");
   writeFileSync(join(agent.repoPath, "workspace", "outside.png"), PNG);
 });
 
@@ -26,15 +27,19 @@ afterAll(async () => {
 });
 
 test("serves a picture from the chat agent's uploads", () => {
-  const { mime, data } = chatAttachmentImage(chatId, "workspace/uploads/2026-11-01/shot.png");
+  const { mime, data } = chatAttachmentFile(chatId, "workspace/uploads/2026-11-01/shot.png");
   expect(mime).toBe("image/png");
   expect(data.length).toBe(PNG.length);
 });
 
-test("refuses files that aren't pictures or live outside uploads", () => {
-  expect(() => chatAttachmentImage(chatId, "workspace/uploads/2026-11-01/notes.txt")).toThrow();
-  expect(() => chatAttachmentImage(chatId, "workspace/outside.png")).toThrow();
-  expect(() => chatAttachmentImage(chatId, "workspace/uploads/../outside.png")).toThrow();
-  expect(() => chatAttachmentImage(chatId, "../../etc/passwd")).toThrow();
-  expect(() => chatAttachmentImage(chatId, "workspace/uploads/2026-11-01/missing.png")).toThrow();
+test("serves a PDF from the chat agent's uploads", () => {
+  expect(chatAttachmentFile(chatId, "workspace/uploads/2026-11-01/doc.pdf").mime).toBe("application/pdf");
+});
+
+test("refuses files that aren't pictures or PDFs or live outside uploads", () => {
+  expect(() => chatAttachmentFile(chatId, "workspace/uploads/2026-11-01/notes.txt")).toThrow();
+  expect(() => chatAttachmentFile(chatId, "workspace/outside.png")).toThrow();
+  expect(() => chatAttachmentFile(chatId, "workspace/uploads/../outside.png")).toThrow();
+  expect(() => chatAttachmentFile(chatId, "../../etc/passwd")).toThrow();
+  expect(() => chatAttachmentFile(chatId, "workspace/uploads/2026-11-01/missing.png")).toThrow();
 });

@@ -223,6 +223,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["GET", "/api/files/image", A],
   ["GET", "/api/files/markdown", A],
   ["GET", "/api/files/text", A],
+  ["GET", "/api/files/pdf", A],
   ["POST", "/api/files/reveal", refused(COMPUTER_ONLY)],
 
   ["GET", "/api/mcp-servers", A],

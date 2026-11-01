@@ -1294,5 +1294,15 @@
     "close": "Schließen",
     "gone": "{{name}} gibt es nicht mehr oder kann nicht angezeigt werden.",
     "failed": "{{name}} konnte nicht gelesen werden: {{message}}"
+  },
+  "pdf": {
+    "pages_one": "{{count}} Seite",
+    "pages_other": "{{count}} Seiten",
+    "page": "Seite {{page}} von {{count}}",
+    "zoomIn": "Vergrößern",
+    "zoomOut": "Verkleinern",
+    "open": "{{name}} öffnen",
+    "gone": "{{name}} gibt es nicht mehr, oder es ist kein PDF.",
+    "failed": "{{name}} ließ sich nicht öffnen: {{message}}"
   }
 }

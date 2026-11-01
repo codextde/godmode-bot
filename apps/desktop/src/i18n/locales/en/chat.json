@@ -1294,5 +1294,15 @@
     "close": "Close",
     "gone": "{{name}} isn't there anymore, or can't be shown.",
     "failed": "Couldn't read {{name}}: {{message}}"
+  },
+  "pdf": {
+    "pages_one": "{{count}} page",
+    "pages_other": "{{count}} pages",
+    "page": "Page {{page}} of {{count}}",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "open": "Open {{name}}",
+    "gone": "{{name}} isn't there anymore, or isn't a PDF.",
+    "failed": "Couldn't open {{name}}: {{message}}"
   }
 }

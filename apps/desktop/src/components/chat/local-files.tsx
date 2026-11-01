@@ -16,6 +16,7 @@ import { isTauri } from "@/lib/core";
 import { isMac } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useOpenPdf } from "@/components/pdf/open-pdf";
 import { fileIcon } from "./attachments";
 import { downloadCoreFile, useCoreFileUrl } from "./core-file";
 import { Lightbox } from "./lightbox";
@@ -109,7 +110,7 @@ export function useMessageFiles(markdown: string): MessageFiles | null {
     if (!data?.files.length) return null;
     const files = runnerId
       ? data.files.map((f) =>
-          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null, text: f.text ? onRunner(f.text, runnerId) : null } : f,
+          f.remote ? { ...f, image: f.image && onRunner(f.image, runnerId), markdown: f.markdown ? onRunner(f.markdown, runnerId) : null, text: f.text ? onRunner(f.text, runnerId) : null, pdf: f.pdf ? onRunner(f.pdf, runnerId) : null } : f,
         )
       : data.files;
     const pictures = new Map(files.filter((f) => f.image).map((f) => [f.path, f]));
@@ -239,6 +240,9 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
       {children}
     </>
   );
+  if (file.pdf) {
+    return <PdfLink file={file} local={local} className={className} hint={label} show={show}>{content}</PdfLink>;
+  }
   if (file.text && side) {
     const current = side.current;
     const open = (e: MouseEvent | KeyboardEvent) => {
@@ -279,6 +283,33 @@ export function FileLink({ file, chip, children }: { file: ChatFile; chip?: bool
     >
       {content}
     </span>
+  );
+}
+
+function PdfLink({ file, local, className, hint, show, children }: { file: ChatFile; local: boolean; className: string; hint: string; show: () => void; children: ReactNode }) {
+  const { t } = useTranslation("chat");
+  const { openPdf, current, dialog } = useOpenPdf();
+  const open = (e: MouseEvent | KeyboardEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if ("metaKey" in e && (e.metaKey || e.ctrlKey)) return show();
+    openPdf({ url: file.pdf!, name: file.name, path: file.path, local: local && !file.remote });
+  };
+  return (
+    <>
+      <span
+        role="button"
+        tabIndex={0}
+        title={t("files.sideHint", { action: hint, path: file.path })}
+        aria-current={current === file.pdf ? "true" : undefined}
+        className={className}
+        onClick={open}
+        onKeyDown={(e: KeyboardEvent) => (e.key === "Enter" || e.key === " ") && open(e)}
+      >
+        {children}
+      </span>
+      {dialog}
+    </>
   );
 }
 

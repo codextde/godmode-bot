@@ -34,6 +34,7 @@ import { normalizeAndroidDeviceIds, parseDeviceIds } from "../android/assignment
 import { redact, SECRET_MASK } from "../vault/vault";
 import { getAgent, getDefaultAgentId, setAgentFailedRun } from "../agents/service";
 import { resolveRepoPath } from "../agents/repo";
+import { isPdf } from "./chatFiles";
 import { activeRunForConversation, cancelRun, findRunLog, listActiveRuns, listRuns, retryQueued, startRun, waitForRun } from "../runner/runner";
 import { remoteRunForConversation } from "../remote/activeRuns";
 import { closeChatTabs } from "../browser/manager";
@@ -472,23 +473,23 @@ export function messageImage(conversationId: string, messageId: string, toolUseI
   return { data: new Uint8Array(data), mime: imageMime(data) };
 }
 
-export function chatAttachmentImage(conversationId: string, path: string): { data: Uint8Array; mime: string } {
+export function chatAttachmentFile(conversationId: string, path: string): { data: Uint8Array; mime: string } {
   const agent = getAgent(requireConversationRow(conversationId).agent_id);
   const { abs, rel } = resolveRepoPath(agent.repoPath, path);
-  if (!rel.startsWith("workspace/uploads/")) throw notFound("Picture");
+  if (!rel.startsWith("workspace/uploads/")) throw notFound("File");
   let real: string;
   try {
     real = realpathSync(abs);
   } catch {
-    throw notFound("Picture");
+    throw notFound("File");
   }
   const root = realpathSync(join(agent.repoPath, "workspace", "uploads"));
-  if (!real.startsWith(root + sep)) throw notFound("Picture");
+  if (!real.startsWith(root + sep)) throw notFound("File");
   const stat = statSync(real);
-  if (!stat.isFile() || stat.size > MAX_ATTACHMENT_BYTES) throw notFound("Picture");
+  if (!stat.isFile() || stat.size > MAX_ATTACHMENT_BYTES) throw notFound("File");
   const data = readFileSync(real);
-  const mime = sniffImage(data);
-  if (!mime) throw notFound("Picture");
+  const mime = sniffImage(data) ?? (isPdf(data) ? "application/pdf" : null);
+  if (!mime) throw notFound("File");
   return { data: new Uint8Array(data), mime };
 }
 
