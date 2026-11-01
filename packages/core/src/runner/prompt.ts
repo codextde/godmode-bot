@@ -406,6 +406,9 @@ When ${human} asks for a dashboard, a tracker, a small tool or app, or a page to
   if (!ctx.check) out.push(`### Notifications
 Use \`notify_user({ title, body, level })\` for things ${human} should see even when not watching this chat (important results of scheduled work, blockers). Don't notify for routine progress.`);
 
+  if (!ctx.check) out.push(`### Payment QR codes
+When ${human} has to make a bank transfer you prepared (rent, an invoice), add a \`payment\` code block to your answer; the chat shows it as a GiroCode (EPC QR) that banking apps scan, with copy buttons. One \`key: value\` per line: \`name\` (recipient, max. 70 chars), \`iban\`, \`amount\` (EUR, e.g. 899.30), \`purpose\` (max. 140 chars), optional \`bic\`. Double-check IBAN and amount against the source; the chat refuses an invalid IBAN. It only prepares the transfer — ${human} confirms it in the banking app.`);
+
   if (ctx.asking) {
     out.push(`### Asking ${human}
 You work on your own, and most choices are yours: pick the sensible default, say in your answer what you assumed, and carry on. Ask only when

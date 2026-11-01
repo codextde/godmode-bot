@@ -1295,5 +1295,18 @@
     "close": "Schließen",
     "gone": "{{name}} gibt es nicht mehr oder kann nicht angezeigt werden.",
     "failed": "{{name}} konnte nicht gelesen werden: {{message}}"
+  },
+  "payment": {
+    "qrLabel": "Überweisungs-QR-Code (GiroCode)",
+    "scan": "Mit der Banking-App scannen",
+    "recipient": "Empfänger",
+    "purpose": "Verwendungszweck",
+    "invalid": {
+      "name": "Überweisungs-QR nicht angezeigt: Empfängername fehlt oder ist länger als 70 Zeichen.",
+      "iban": "Überweisungs-QR nicht angezeigt: Die IBAN ist ungültig.",
+      "bic": "Überweisungs-QR nicht angezeigt: Die BIC ist ungültig.",
+      "amount": "Überweisungs-QR nicht angezeigt: Der Betrag ist ungültig.",
+      "purpose": "Überweisungs-QR nicht angezeigt: Der Verwendungszweck ist zu lang (max. 140 Zeichen)."
+    }
   }
 }

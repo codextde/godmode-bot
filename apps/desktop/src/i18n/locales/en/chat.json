@@ -1295,5 +1295,18 @@
     "close": "Close",
     "gone": "{{name}} isn't there anymore, or can't be shown.",
     "failed": "Couldn't read {{name}}: {{message}}"
+  },
+  "payment": {
+    "qrLabel": "Payment QR code (GiroCode)",
+    "scan": "Scan with your banking app",
+    "recipient": "Recipient",
+    "purpose": "Reference",
+    "invalid": {
+      "name": "Payment QR not shown: the recipient name is missing or longer than 70 characters.",
+      "iban": "Payment QR not shown: the IBAN is not valid.",
+      "bic": "Payment QR not shown: the BIC is not valid.",
+      "amount": "Payment QR not shown: the amount is not valid.",
+      "purpose": "Payment QR not shown: the reference is too long (max. 140 characters)."
+    }
   }
 }
