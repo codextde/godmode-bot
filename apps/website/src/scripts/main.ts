@@ -300,7 +300,9 @@ openFaq();
 // Generic click tracking + section views ---------------------------------------------------------
 document.addEventListener('click', (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>('[data-track]');
-  if (el) track('click', el.dataset.track);
+  if (!el) return;
+  track('click', el.dataset.track);
+  if (el.dataset.track?.startsWith('download_mac')) xEvent('download', { content_type: 'mac_app' });
 });
 const viewIO = new IntersectionObserver(
   (entries) => {

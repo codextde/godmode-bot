@@ -234,7 +234,7 @@ Astro.response.headers.set('referrer-policy', 'same-origin');
 </Base>
 
 <script>
-  import { track } from '@/scripts/analytics';
+  import { track, xEvent } from '@/scripts/analytics';
   // Apple silicon or Intel? Browsers report both as "Intel Mac", but Chrome and Firefox name the graphics chip.
   // Safari hides it, so Apple silicon stays the default there.
   const main = document.querySelector<HTMLAnchorElement>('[data-dl-main]');
@@ -269,6 +269,7 @@ Astro.response.headers.set('referrer-policy', 'same-origin');
     history.replaceState(null, '', params.size ? `?${params}` : location.pathname);
     document.querySelector<HTMLElement>('[data-dl-started]')?.style.setProperty('display', 'flex');
     track('click', main.dataset.track);
+    xEvent('download', { content_type: 'mac_app' });
     setTimeout(() => (location.href = target), 400);
   }
 </script>
