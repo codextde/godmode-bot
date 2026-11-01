@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { isHumanTaskWaiting } from "@godmode/shared";
-import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { NativeTabs } from "expo-router/native-tabs";
 import { useTranslation } from "react-i18next";
 import { DynamicColorIOS, Platform } from "react-native";
 import { LiveAccessory } from "@/components/live-accessory";
