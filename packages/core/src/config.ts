@@ -113,3 +113,8 @@ export function selfCommand(): string[] {
 export function isLoopbackHost(host: string): boolean {
   return host === "127.0.0.1" || host === "localhost" || host === "::1";
 }
+
+/** A runner Godmode started on an SSH server: it gets no secrets and only needs Claude Code (remote/sshRunners.ts). */
+export function leanRunner(): boolean {
+  return process.env.GODMODE_RUNNER_LEAN === "1";
+}

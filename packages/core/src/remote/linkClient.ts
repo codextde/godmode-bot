@@ -55,7 +55,11 @@ interface Pending {
 }
 
 /** What each failure means to someone looking at the runner. */
+/** The runner's way in couldn't be prepared (an SSH tunnel): its message is for the human as it is. */
+export class LinkPrepareError extends Error {}
+
 function describe(err: unknown, name: string): string {
+  if (err instanceof LinkPrepareError) return err.message;
   if (err instanceof LinkError) {
     switch (err.code) {
       case "protocol_mismatch":
@@ -182,6 +186,8 @@ export interface RemoteLinkOptions {
   ownName: string;
   onEvent(event: ServerEvent): void;
   onState(state: LinkState): void;
+  /** Called before every dial: where the runner can be reached right now (a runner behind an SSH tunnel opens it here). */
+  prepare?(): Promise<{ addresses: string[]; port: number }>;
 }
 
 export class RemoteLink {
@@ -253,7 +259,12 @@ export class RemoteLink {
     this.connecting = true;
     this.setState({ state: "connecting" });
     try {
-      const dialed = await dial(this.opts.addresses, this.opts.port, (t) =>
+      const target = this.opts.prepare
+        ? await this.opts.prepare().catch((err: unknown) => {
+            throw new LinkPrepareError(`Can't reach ${this.opts.name}: ${err instanceof Error ? err.message : String(err)}`);
+          })
+        : { addresses: this.opts.addresses, port: this.opts.port };
+      const dialed = await dial(target.addresses, target.port, (t) =>
         SecureChannel.initiator(t, { identity: this.opts.identity, remoteKey: this.opts.runnerKey, mode: "session", name: this.opts.ownName, handshakeTimeoutMs: HANDSHAKE_TIMEOUT_MS }),
       );
       this.connecting = false;

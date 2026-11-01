@@ -300,6 +300,18 @@ describe("building a snapshot", () => {
     expect(snapshot.vault).toMatchObject({ kdf: expect.any(String), wrappedDek: expect.any(String), canary: expect.any(String) });
   });
 
+  test("a lean copy for a runner on an SSH server carries no secrets and no vault key", () => {
+    const lean = buildSnapshot({ lean: true });
+    expect(Object.keys(lean.tables).sort()).toEqual([...MIRRORED].sort());
+    for (const table of ["credentials", "totp", "secrets", "composio_connections", "api_tools", "ssh_servers", "browser_profiles", "vms"]) expect(lean.tables[table]).toEqual([]);
+    expect(lean.tables.agents!.map((r) => r.id)).toContain("agt_helper");
+    for (const rows of Object.values(lean.tables)) for (const r of rows) for (const [column, value] of Object.entries(r)) if (column.endsWith("_enc")) expect(value).toBeNull();
+    expect(lean.vault).toEqual({ kdf: null, wrappedDek: null, canary: null, dek: null });
+    expect(JSON.stringify(lean)).not.toContain(PASSWORD);
+    expect(snapshotDigest({ lean: true })).toBe(lean.digest);
+    expect(lean.digest).not.toBe(buildSnapshot().digest);
+  });
+
   test("the digest ignores when a login was last used", () => {
     const before = snapshotDigest();
     sql("UPDATE credentials SET last_used_at = ?, updated_at = ? WHERE id = 'cred_github'", LATER, LATER);

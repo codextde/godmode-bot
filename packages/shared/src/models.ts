@@ -78,8 +78,9 @@ export interface Project {
 }
 
 /**
- * A folder on this computer or a git repository attached to a workspace. Godmode clones repositories into its data
- * directory; every run of an agent in the workspace gets them (`--add-dir`).
+ * A folder on this computer, a git repository or a folder on an SSH server attached to a workspace. Godmode clones
+ * repositories into its data directory; every run of an agent in the workspace gets them (`--add-dir`). A remote folder
+ * moves the chats there onto its server: Claude Code runs on the server, in that folder.
  *  - `ready`: usable (a repository is cloned)
  *  - `cloning` / `syncing`: a clone or an update is in progress
  *  - `missing`: the folder is gone, or the repository isn't cloned yet (the next run or a sync clones it)
@@ -89,10 +90,14 @@ export type WorkspaceSourceStatus = "ready" | "cloning" | "syncing" | "missing" 
 
 export interface WorkspaceSource {
   id: ID;
-  kind: "folder" | "git";
+  kind: "folder" | "git" | "remote";
   name: string;
-  /** The folder, or where the repository is cloned. */
+  /** The folder, where the repository is cloned, or the folder on the server (remote). */
   path: string;
+  /** The SSH server of a remote folder. */
+  serverId?: ID | null;
+  /** That server's name (null when it was deleted). */
+  serverName?: string | null;
   /** Clone URL (git only). */
   url: string | null;
   /** Branch to check out (git only); null = the repository's default branch. */

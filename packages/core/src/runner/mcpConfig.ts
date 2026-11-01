@@ -15,6 +15,7 @@ import { browserMcpServer } from "../browser/manager";
 import { mcpServersForAgent } from "../integrations/mcpServers";
 import { guestBrowserServer, guestCuaServer } from "../vm/guest";
 import { getSettings } from "../services/settings";
+import { leanRunner } from "../config";
 import { logger } from "../log";
 import type { McpConfigFile, McpServerJson } from "../types";
 
@@ -83,7 +84,7 @@ export async function buildMcpConfig(
   if (opts.vm) {
     // Work in a VM stays in the VM: its browser runs there, and no browser starts on this computer.
     if (opts.vm.browser) servers[BROWSER_MCP_NAME] = guestBrowserServer(opts.vm.id, opts.vm.browser);
-  } else if (agent.browser.enabled && getSettings().browser.enabled && opts.run) {
+  } else if (agent.browser.enabled && getSettings().browser.enabled && opts.run && !leanRunner()) {
     try {
       const browser = await browserMcpServer(agent, opts.run, opts.browserProfileId);
       if (browser) servers[BROWSER_MCP_NAME] = browser;

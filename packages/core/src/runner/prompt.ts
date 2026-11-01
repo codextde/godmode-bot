@@ -4,7 +4,7 @@
  * the tool guide (browser, vault login procedure, missing logins, delegation, management) and policies.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { arch, platform } from "node:os";
+import { arch, hostname as osHostname, platform } from "node:os";
 import { join } from "node:path";
 import type { Agent, ComputerTarget, PauseReason, QuestionKind, RetryCause, Settings, RunEnd, RunTrigger } from "@godmode/shared";
 import { computerTargetLabel, memoryBudget, withinReach } from "@godmode/shared";
@@ -14,6 +14,7 @@ import type { RunSource } from "../services/workspaceSources";
 import type { PromptSshServer } from "../ssh/service";
 import type { PromptAndroidDevice } from "../android/service";
 import { vmSupport } from "../vm/tart";
+import { leanRunner } from "../config";
 
 export interface PromptContext {
   agent: Agent;
@@ -270,7 +271,11 @@ You are "${agent.name}", an autonomous AI coworker running inside Godmode Bot on
       ? `\n- macOS asks the person at this computer before a command may open Desktop, Documents, Downloads, iCloud Drive or a removable drive, and the command waits until someone answers. Prefer other folders; when the task needs one of these, tell ${human} first.`
       : ""
   }
-- ${userName ? `The human you work for: ${userName}` : "The human you work for has not set a name."}
+- ${userName ? `The human you work for: ${userName}` : "The human you work for has not set a name."}${
+    leanRunner()
+      ? `\n- This Godmode runs on the server ${osHostname()}, started by ${human}'s Godmode over SSH. ${human}'s logins, 2FA codes, API keys and browser stay on their own computer and aren't here: when a task needs one of them, say so in your final answer.`
+      : ""
+  }
 ${workplace}`);
 
   out.push(`## Tools

@@ -22,6 +22,7 @@ import {
   type RunnerHealthSummary,
   type RunnerInfo,
   type RunnerKind,
+  type RunnerPairingCode,
   type RunnerPatch,
   type RunnerUpdate,
   type Run,
@@ -62,8 +63,10 @@ import { adoptChat, applyRunnerEvent, catchUp, chatMovedHere, forgetHeavyChats, 
 import { forgetRunnerUpdates, maybeAutoUpdate, prepareRunnerUpdates, resetRunnerUpdates, runnerConnected, runnerUpdate, setUpdateHost, updateRunnerSoftware } from "./runnerUpdates";
 import { buildSnapshot, snapshotDigest } from "./snapshot";
 import { requireLicense } from "../license/license";
-import { VERSION, BUILD } from "../config";
+import { VERSION, BUILD, config } from "../config";
+import { getSettings } from "../services/settings";
 import { isPrimary, isSecondary, primaryRunnerId } from "./group";
+import { assertServer, closeAllSshTunnels, expandHome, pairingCodeVia, remoteFolderFor, serverHome, sshLinkTarget, sshRunnerFor, stopSshRunner } from "./sshRunners";
 
 const log = logger("runners");
 
@@ -96,6 +99,8 @@ export interface RunnerRow {
   created_at: string;
   updated_at: string;
   kind: RunnerKind;
+  /** kind "ssh": the SSH server it works on. */
+  ssh_server_id?: string | null;
 }
 
 /** What a device link is told about events and states (remote/devices.ts sets it). */
@@ -181,7 +186,7 @@ function requireRow(id: string): RunnerRow {
 /** The setup's digest as a runner (or a device) would report it after a sync; cached until the setup changes. */
 function currentDigest(kind: RunnerKind = "runner"): string {
   let digest = digestCache.get(kind);
-  if (!digest) digestCache.set(kind, (digest = snapshotDigest({ device: kind === "device" })));
+  if (!digest) digestCache.set(kind, (digest = snapshotDigest({ device: kind === "device", lean: kind === "ssh" })));
   return digest;
 }
 
@@ -231,7 +236,8 @@ function toRunner(r: RunnerRow): RemoteRunner {
     conversations: get<{ c: number }>("SELECT COUNT(*) AS c FROM conversations WHERE runner_id = ?", r.id)?.c ?? 0,
     syncBrowser: r.sync_browser === 1,
     update: r.kind === "device" ? DEVICE_UPDATE(r) : runnerUpdate(r, state.state),
-    kind: r.kind === "device" ? "device" : "runner",
+    kind: r.kind === "device" || r.kind === "ssh" ? r.kind : "runner",
+    sshServerId: r.ssh_server_id ?? null,
   };
 }
 
@@ -336,6 +342,7 @@ export async function removeRunner(id: string): Promise<void> {
   const l = links.get(id);
   if (l?.state.state === "online") await l.json("POST", "/api/link/forget", undefined, { timeoutMs: 5_000 }).catch(() => undefined);
   l?.stop();
+  if (r.kind === "ssh" && r.ssh_server_id) await stopSshRunner(r.ssh_server_id);
   links.delete(id);
   infos.delete(id);
   healths.delete(id);
@@ -385,10 +392,16 @@ export async function removeRunner(id: string): Promise<void> {
 export async function pairWithCode(
   text: string,
   via: string | null = null,
-  opts: { kind?: RunnerKind; /** Called with the row's id before its link starts. */ prepared?: (id: string) => void } = {},
+  opts: {
+    kind?: RunnerKind;
+    /** Called with the row's id before its link starts. */
+    prepared?: (id: string) => void;
+    /** kind "ssh": the code as the SSH tunnel reaches it, and the server. */
+    ssh?: { code: RunnerPairingCode; serverId: string; name: string };
+  } = {},
 ): Promise<RemoteRunner> {
-  const kind = opts.kind ?? "runner";
-  const code = parseRunnerCode(text);
+  const kind = opts.ssh ? "ssh" : (opts.kind ?? "runner");
+  const code = opts.ssh?.code ?? parseRunnerCode(text);
   if (!code) throw badRequest("That isn't a runner's pairing code. It starts with gmr1.");
   let key: string;
   try {
@@ -404,14 +417,24 @@ export async function pairWithCode(
   let id: string;
   if (existing) {
     id = existing.id;
-    update("runners", id, { addresses: JSON.stringify(addresses), port: code.port, hostname: code.hostname, platform: info.platform, arch: info.arch, version: info.version, kind, updated_at: ts });
+    update("runners", id, {
+      addresses: JSON.stringify(addresses),
+      port: code.port,
+      hostname: code.hostname,
+      platform: info.platform,
+      arch: info.arch,
+      version: info.version,
+      kind,
+      ...(opts.ssh ? { ssh_server_id: opts.ssh.serverId } : {}),
+      updated_at: ts,
+    });
     links.get(id)?.stop();
     links.delete(id);
   } else {
     id = newId("rnr");
     insert("runners", {
       id,
-      name: code.name.trim().slice(0, 80) || code.hostname || "Runner",
+      name: (opts.ssh?.name ?? code.name).trim().slice(0, 80) || code.hostname || "Runner",
       hostname: code.hostname,
       public_key: key,
       addresses: JSON.stringify(addresses),
@@ -419,8 +442,9 @@ export async function pairWithCode(
       platform: info.platform,
       arch: info.arch,
       version: info.version,
-      sync_browser: 1,
+      sync_browser: opts.ssh ? 0 : 1,
       kind,
+      ssh_server_id: opts.ssh?.serverId ?? null,
       last_address: address,
       last_seen_at: ts,
       created_at: ts,
@@ -454,6 +478,7 @@ function startLink(r: RunnerRow) {
     port: r.port,
     name: r.name,
     ownName: computerName(),
+    ...(r.kind === "ssh" && r.ssh_server_id ? { prepare: () => sshLinkTarget(r.ssh_server_id!) } : {}),
     onEvent: (event) => {
       if (event.type === "replica.changed") {
         if (r.kind === "device") deviceHooks?.replicaHint(id);
@@ -651,6 +676,7 @@ export function stopRunners(): void {
   syncTimer = null;
   for (const l of links.values()) l.stop();
   links.clear();
+  closeAllSshTunnels();
 }
 
 /** Try to connect now instead of at the next retry. */
@@ -750,7 +776,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
       syncing.add(id);
       emit(id);
       try {
-        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot({ device: r.kind === "device" }), { timeoutMs: SYNC_TIMEOUT_MS });
+        const result = await l.json<{ digest: string; warnings: string[] }>("POST", "/api/link/sync", buildSnapshot({ device: r.kind === "device", lean: r.kind === "ssh" }), { timeoutMs: SYNC_TIMEOUT_MS });
         for (const w of result.warnings ?? []) log.warn(`${r.name}: ${w}`);
         const complete = result.digest === digest;
         update("runners", id, {
@@ -788,7 +814,7 @@ export function syncRunner(id: string, opts: { agentId?: string; profileId?: str
         logFailure(warnings.at(-1)!, err);
       }
     }
-    if (opts.profileId && r.sync_browser === 1) {
+    if (opts.profileId && r.sync_browser === 1 && r.kind !== "ssh") {
       try {
         cookies = await copyCookies(r, l, opts.profileId);
       } catch (err) {
@@ -897,7 +923,9 @@ export async function startRemoteChat(runnerId: string, input: StartChatInput): 
   await syncRunner(runnerId, { agentId, profileId, work: true });
   const { runnerId: _runner, workingDirectory, computerTarget, vmId, androidDeviceIds, ...rest } = input;
   // Another computer of the group is where the app that asked runs: its folders, screen, VMs and phones are named there.
-  const own = row(runnerId)?.kind === "device" ? { workingDirectory, computerTarget, vmId, androidDeviceIds } : {};
+  const kind = row(runnerId)?.kind;
+  // A runner on an SSH server works in the project's folder there.
+  const own = kind === "device" ? { workingDirectory, computerTarget, vmId, androidDeviceIds } : kind === "ssh" && workingDirectory ? { workingDirectory } : {};
   const result = await l.json<StartChatResult>("POST", "/api/chat", { ...rest, ...own, agentId }, { timeoutMs: 120_000 });
   const conversation = adoptChat(runnerId, result);
   return { ...result, conversation };
@@ -1135,4 +1163,77 @@ export async function clearRunnerLog(runnerId: string): Promise<void> {
 /** A command on the runner (retiring an old runner, the updater's bridge). */
 export async function runnerExec(runnerId: string, command: string, timeoutSec?: number): Promise<{ code: number | null; stdout: string; stderr: string; timedOut: boolean }> {
   return link(runnerId).json("POST", "/api/link/exec", { command, ...(timeoutSec ? { timeoutMs: Math.min(timeoutSec, 900) * 1000 } : {}) }, { timeoutMs: 16 * 60_000 });
+}
+
+/* ------------------------------------------------------------------ */
+/* Runners on SSH servers                                               */
+/* ------------------------------------------------------------------ */
+
+const SSH_ONLINE_TIMEOUT_MS = 3 * 60_000;
+const sshEnsuring = new Map<string, Promise<string>>();
+
+function waitOnline(id: string, timeoutMs: number): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      const state = links.get(id)?.state;
+      if (state?.state === "online") return resolve();
+      if (Date.now() - started > timeoutMs) return reject(new HttpError(409, state?.error ?? "The runner on the server didn't come online.", "runner_offline"));
+      setTimeout(tick, 250).unref?.();
+    };
+    tick();
+  });
+}
+
+/**
+ * The runner on this SSH server, online: Godmode installs and starts it there and pairs with it the first time.
+ * Resolves with the runner's id and the server's home folder.
+ */
+export function ensureSshRunner(serverId: string): Promise<string> {
+  let pending = sshEnsuring.get(serverId);
+  if (pending) return pending;
+  pending = (async () => {
+    assertServer(serverId);
+    let id = sshRunnerFor(serverId);
+    if (!id) {
+      try {
+        const { code, name } = await pairingCodeVia(serverId);
+        id = (await pairWithCode("", null, { ssh: { code, serverId, name } })).id;
+      } catch (err) {
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(502, err instanceof Error ? err.message : String(err), "runner_unreachable");
+      }
+    }
+    const l = links.get(id);
+    if (!l && started) startLink(requireRow(id));
+    else if (l && l.state.state !== "online" && l.state.state !== "connecting") l.reconnect();
+    await waitOnline(id, SSH_ONLINE_TIMEOUT_MS);
+    return id;
+  })().finally(() => sshEnsuring.delete(serverId));
+  sshEnsuring.set(serverId, pending);
+  return pending;
+}
+
+/**
+ * Where a new chat goes when its project (or workspace) has a folder on an SSH server: onto that server's runner, in
+ * that folder. Null for chats that stay here — a private one, one with a folder or VM of this computer, or one whose
+ * project has no remote folder.
+ */
+export async function sshPlacement(input: StartChatInput): Promise<{ runnerId: string; workingDirectory: string } | null> {
+  if (config().role === "runner" || !getSettings().ssh.enabled) return null;
+  if (input.runnerId || input.private || input.workingDirectory || input.vmId || input.computerTarget) return null;
+  const agentId = input.agentId || getDefaultAgentId();
+  if (!agentId) return null;
+  const agent = getAgent(agentId);
+  const projectId = input.projectId !== undefined ? input.projectId : agent.projectId;
+  const project = projectId ? get<{ workspace_id: string }>("SELECT workspace_id FROM projects WHERE id = ?", projectId) : null;
+  const folder = remoteFolderFor({ projectId: project ? projectId : null, workspaceId: agent.workspaceId ?? project?.workspace_id ?? null });
+  if (!folder) return null;
+  const runnerId = await ensureSshRunner(folder.serverId);
+  return { runnerId, workingDirectory: await sshFolder(folder.serverId, folder.path) };
+}
+
+/** A folder on the server as its runner names it (`~` resolved). */
+export async function sshFolder(serverId: string, path: string): Promise<string> {
+  return expandHome(path, await serverHome(serverId));
 }

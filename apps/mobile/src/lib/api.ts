@@ -426,7 +426,7 @@ export type SettingsPatch = {
 };
 
 /** Folders are kept as they are (`path`); repositories are added by their clone URL. */
-export type SourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
+export type SourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null } | { kind: "remote"; serverId: string; path: string };
 
 export type WorkspacePatch = {
   name?: string;

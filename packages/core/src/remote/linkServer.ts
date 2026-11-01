@@ -188,6 +188,11 @@ export function forgetController(controllerId: string): void {
 /* Listener                                                             */
 /* ------------------------------------------------------------------ */
 
+/** Where the link listens: every interface, or only loopback for a runner Godmode reaches through an SSH tunnel. */
+function configuredHost(): string {
+  return getMeta("link.host") === "127.0.0.1" ? "127.0.0.1" : "0.0.0.0";
+}
+
 function configuredPort(): number {
   const raw = getMeta("link.port");
   if (raw === null) return RUNNER_DEFAULT_PORT;
@@ -219,7 +224,7 @@ export function startLinkServer(h: Handler): number | null {
   for (const port of candidates) {
     try {
       server = Bun.serve<LinkSocketData>({
-        hostname: "0.0.0.0",
+        hostname: configuredHost(),
         port,
         idleTimeout: 60,
         fetch: (req, srv) => {

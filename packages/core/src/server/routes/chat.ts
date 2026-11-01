@@ -35,7 +35,7 @@ import { autoRetryOf } from "../../services/resume";
 import { body, computerTargetSchema, z } from "../validate";
 import { shareComputer } from "../../computer/share";
 import { validateTarget } from "../../computer/service";
-import { startRemoteChat } from "../../remote/runners";
+import { sshPlacement, startRemoteChat } from "../../remote/runners";
 import { selfDeviceId } from "../../remote/group";
 import { search } from "../../services/search";
 
@@ -281,6 +281,8 @@ export function registerChatRoutes(app: Hono): void {
     if (input.private && input.runnerId && input.runnerId !== selfDeviceId()) throw badRequest("A private chat stays on this computer");
     // A secondary names itself by its id in the primary's list: a chat for it starts here.
     if (input.runnerId && input.runnerId === selfDeviceId()) input.runnerId = null;
+    const onServer = await sshPlacement(input);
+    if (onServer) return c.json(await startRemoteChat(onServer.runnerId, { ...input, ...onServer }), 201);
     if (input.runnerId) return c.json(await startRemoteChat(input.runnerId, input), 201);
     // Check the shared window/screen/tab before the chat exists, so a stale pick doesn't leave an empty chat.
     const computerTarget = input.computerTarget ? await validateTarget(input.computerTarget) : null;

@@ -161,10 +161,23 @@ export function withOwnFields(section: string, incoming: string, local: string |
 /** VMs are machines on the computer they were made on: another full Godmode of the group keeps its own. */
 const DEVICE_SKIPPED = new Set(["vms"]);
 
+/**
+ * What a runner on an SSH server gets without: the vault's contents and whatever only works with a secret, and this
+ * computer's VMs. Sent empty, so the runner drops what an earlier copy left there.
+ */
+export const LEAN_SKIPPED = new Set(["credentials", "totp", "secrets", "composio_connections", "api_tools", "ssh_servers", "browser_profiles", "vms"]);
+
+/** Sealed columns (`*_enc`) of the tables a lean copy keeps: left empty. */
+const SEALED = /_enc$/;
+
 function collect(opts: SnapshotOptions = {}): Parts {
   const tables: Record<string, Row[]> = {};
   for (const spec of TABLES) {
     if (opts.device && DEVICE_SKIPPED.has(spec.table)) continue;
+    if (opts.lean && LEAN_SKIPPED.has(spec.table)) {
+      tables[spec.table] = [];
+      continue;
+    }
     const columns = columnsOf(spec.table);
     const pk = columns.find((c) => c.pk)?.name;
     if (!pk) continue;
@@ -174,7 +187,7 @@ function collect(opts: SnapshotOptions = {}): Parts {
       ...(spec.only ? [spec.only.value] : []),
     );
     tables[spec.table] = rows
-      .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, encodeValue(v)])))
+      .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, opts.lean && SEALED.test(k) ? null : encodeValue(v)])))
       .sort((a, b) => (String(a[pk]) < String(b[pk]) ? -1 : 1));
   }
 
@@ -184,7 +197,7 @@ function collect(opts: SnapshotOptions = {}): Parts {
     const kept = keptFields(section);
     settings[section] = isObject(value) ? Object.fromEntries(Object.entries(value).filter(([field]) => !kept.includes(field))) : value;
   }
-  return { tables, settings, vault: vault.vaultMetaForBackup() };
+  return { tables, settings, vault: opts.lean ? { kdf: null, wrappedDek: null, canary: null } : vault.vaultMetaForBackup() };
 }
 
 /** JSON with object keys in a fixed order, so the same setup always hashes the same. */
@@ -207,11 +220,13 @@ function digestOf(parts: Parts): string {
 export interface SnapshotOptions {
   /** For another computer of the device group rather than a runner. */
   device?: boolean;
+  /** For a runner on an SSH server: no secrets, no vault key (see LEAN_SKIPPED). */
+  lean?: boolean;
 }
 
 export function buildSnapshot(opts: SnapshotOptions = {}): ConfigSnapshot {
   // The key first: reading it gives a vault from before canaries its canary, which the snapshot has to carry.
-  const dek = vault.isUnlocked() ? vault.exportKeyForBackup().toString("base64") : null;
+  const dek = !opts.lean && vault.isUnlocked() ? vault.exportKeyForBackup().toString("base64") : null;
   const parts = collect(opts);
   return { v: 1, digest: digestOf(parts), tables: parts.tables, settings: parts.settings, vault: { ...parts.vault, dek } };
 }

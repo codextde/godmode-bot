@@ -60,11 +60,16 @@ export interface RemoteRunner {
   /** Copy the browser sessions (cookies) of the profile a chat uses before it starts. */
   syncBrowser: boolean;
   update: RunnerUpdate;
-  /** "device": another full Godmode of the same device group (devices.ts), not a headless runner. */
+  /**
+   * "device": another full Godmode of the same device group (devices.ts), not a headless runner. "ssh": a headless
+   * runner Godmode started on an SSH server and reaches through an SSH tunnel; it gets the setup without secrets.
+   */
   kind: RunnerKind;
+  /** The SSH server an "ssh" runner works on. */
+  sshServerId?: ID | null;
 }
 
-export type RunnerKind = "runner" | "device";
+export type RunnerKind = "runner" | "device" | "ssh";
 
 export interface RunnerPatch {
   name?: string;

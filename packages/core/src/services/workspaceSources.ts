@@ -49,10 +49,12 @@ export interface SourceRow {
   workspace_id: string;
   /** null = the workspace's own; else one of its projects'. */
   project_id: string | null;
-  kind: "folder" | "git";
+  kind: "folder" | "git" | "remote";
   path: string;
   url: string | null;
   branch: string | null;
+  /** The SSH server of a remote folder. */
+  server_id?: string | null;
   position: number;
   error: string | null;
   note: string | null;
@@ -70,6 +72,24 @@ export interface RunSource {
   path: string;
   url: string | null;
   branch: string | null;
+}
+
+const MAX_REMOTE_PATH = 1000;
+
+/** A folder on an SSH server as it is saved: absolute, or in the home folder (`~`, `~/…`). Null when it isn't one. */
+export function normalizeRemotePath(raw: string | null | undefined): string | null {
+  let p = (raw ?? "").trim();
+  if (!p || p.length > MAX_REMOTE_PATH || /[\0\r\n]/.test(p)) return null;
+  if (!p.startsWith("/") && p !== "~" && !p.startsWith("~/")) return null;
+  p = p.replace(/\/{2,}/g, "/");
+  if (p.length > 1 && p.endsWith("/")) p = p.replace(/\/+$/, "");
+  if (p.split("/").some((seg) => seg === "..")) return null;
+  return p;
+}
+
+function serverNameOf(serverId: string | null | undefined): string | null {
+  if (!serverId) return null;
+  return get<{ name: string }>("SELECT name FROM ssh_servers WHERE id = ?", serverId)?.name ?? null;
 }
 
 const busy = new Map<string, { kind: "cloning" | "syncing"; done: Promise<void>; abort: AbortController }>();
@@ -105,11 +125,32 @@ export function isRepoFolder(path: string): boolean {
 
 function nameOf(row: SourceRow): string {
   if (row.kind === "folder") return basename(row.path) || row.path;
+  if (row.kind === "remote") return row.path === "~" ? "~" : row.path.split("/").filter(Boolean).pop() || row.path;
   const parsed = parseGitUrl(row.url ?? "");
   return "error" in parsed ? row.path : parsed.name;
 }
 
 function toModel(row: SourceRow): WorkspaceSource {
+  if (row.kind === "remote") {
+    const serverName = serverNameOf(row.server_id);
+    return {
+      id: row.id,
+      kind: "remote",
+      name: nameOf(row),
+      path: row.path,
+      url: null,
+      branch: null,
+      serverId: row.server_id ?? null,
+      serverName,
+      git: false,
+      status: serverName ? "ready" : "missing",
+      error: serverName ? null : "Its SSH server was deleted. Remove the folder, or add the server again and pick the folder anew.",
+      note: null,
+      commit: null,
+      headBranch: null,
+      syncedAt: null,
+    };
+  }
   if (row.kind === "folder") {
     const problem = workingDirectoryProblem(row.path);
     return {
@@ -210,6 +251,17 @@ export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[], 
   };
 
   inputs.forEach((input, position) => {
+    if (input.kind === "remote") {
+      const serverId = typeof input.serverId === "string" ? input.serverId.trim() : "";
+      const path = normalizeRemotePath(input.path);
+      if (!path) throw badRequest("Enter the folder on the server as an absolute path (/srv/app) or in the home folder (~/app).");
+      const key = `remote:${serverId}:${path}`;
+      if (known(key, (r) => r.kind === "remote" && r.server_id === serverId && r.path === path, position)) return;
+      if (!serverNameOf(serverId)) throw badRequest("Pick one of your SSH servers for the remote folder.");
+      seen.add(key);
+      added.push(newRow(workspaceId, projectId, { kind: "remote", path, url: null, branch: null, server_id: serverId, position }, ts));
+      return;
+    }
     if (input.kind === "folder") {
       const raw = input.path?.trim() ?? "";
       if (raw && known(`folder:${raw}`, (r) => r.kind === "folder" && r.path === raw, position)) return;
@@ -245,12 +297,13 @@ export function setSources(workspaceId: string, inputs: WorkspaceSourceInput[], 
   };
 }
 
-function newRow(workspaceId: string, projectId: string | null, v: Pick<SourceRow, "kind" | "path" | "url" | "branch" | "position">, ts: string): SourceRow {
+function newRow(workspaceId: string, projectId: string | null, v: Pick<SourceRow, "kind" | "path" | "url" | "branch" | "position" | "server_id">, ts: string): SourceRow {
   return {
     id: newId("src"),
     workspace_id: workspaceId,
     project_id: projectId,
     ...v,
+    server_id: v.server_id ?? null,
     error: null,
     note: null,
     commit_sha: null,
@@ -591,6 +644,14 @@ async function prepareSource(
   opts: { onActivity: (label: string) => void; signal: AbortSignal },
 ): Promise<{ source?: RunSource; notice?: string }> {
   const name = nameOf(row);
+  if (row.kind === "remote") {
+    const serverName = serverNameOf(row.server_id);
+    return {
+      notice: serverName
+        ? `This run works on this computer, so the folder ${row.path} on ${serverName} isn't part of it. New chats of the ${row.project_id ? "project" : "workspace"} run on ${serverName}, in that folder.`
+        : `The remote folder "${row.path}" was skipped: its SSH server was deleted.`,
+    };
+  }
   if (row.kind === "folder") {
     const problem = workingDirectoryProblem(row.path);
     return problem

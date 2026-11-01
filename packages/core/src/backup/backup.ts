@@ -41,7 +41,7 @@ import { startMessaging, stopMessaging } from "../messaging/service";
 import { shutdownBrowsers } from "../browser/manager";
 import { resetComposioState } from "../integrations/composio";
 import { workingDirectoryProblem } from "../services/folders";
-import { isSafeCloneDir } from "../services/workspaceSources";
+import { isSafeCloneDir, normalizeRemotePath } from "../services/workspaceSources";
 import * as vault from "../vault/vault";
 import { assertSafeKdf, openWithPassphrase, sealWithPassphrase } from "../vault/crypto";
 import { badRequest, conflict, HttpError, slugify } from "../util";
@@ -449,7 +449,9 @@ function sanitizeDump(dump: DbDump): string[] {
   let droppedSources = 0;
   tables.workspace_sources = rowsOf("workspace_sources").filter((row) => {
     const ok =
-      row.kind === "folder"
+      row.kind === "remote"
+        ? typeof row.server_id === "string" && typeof row.path === "string" && normalizeRemotePath(row.path) === row.path
+        : row.kind === "folder"
         ? typeof row.path === "string" && !workingDirectoryProblem(row.path)
         : row.kind === "git" &&
           typeof row.url === "string" &&

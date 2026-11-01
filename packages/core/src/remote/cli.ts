@@ -15,6 +15,7 @@ import { sleep } from "../util";
 import { safeEqual } from "../vault/crypto";
 import * as vault from "../vault/vault";
 import { runnerHealth } from "./health";
+import { createRunnerCode } from "./pairing";
 import { installService, serviceStatus, serviceSupported, uninstallService } from "./launchd";
 
 /** How long `runner install` waits for the service it just started. */
@@ -123,9 +124,10 @@ interface CommandContext {
 export const USAGE = `Usage:
   godmode runner install [--link-port <n>] [--no-service]
                                       Set the runner up to start when you log in (again)
-  godmode runner serve [--link-port <n>] [--port <n>] [--data-dir <dir>]
+  godmode runner serve [--link-port <n>] [--link-host 127.0.0.1] [--port <n>] [--data-dir <dir>]
                                       Run the runner in the foreground (--port: its loopback API, random by default)
   godmode runner status               Show the service, the link port, paired computers and the health checks
+  godmode runner pairing-code         Print a one-time code a Godmode signed in over SSH pairs this runner with
   godmode runner uninstall            Stop and remove the service (your data stays)`;
 
 function dataDirOf(ctx: CommandContext): string {
@@ -199,7 +201,19 @@ async function serve(ctx: CommandContext): Promise<number> {
     return 2;
   }
   // Only what a runner takes: it has no dashboard to serve and its API never listens beyond loopback.
-  await ctx.host.serve({ port: ctx.values.port, "data-dir": ctx.values["data-dir"], "link-port": linkPort });
+  const linkHost = ctx.values["link-host"];
+  if (linkHost !== undefined && linkHost !== "127.0.0.1" && linkHost !== "0.0.0.0") {
+    ctx.print(`"${String(linkHost)}" isn't supported — use 127.0.0.1 (reached through an SSH tunnel) or 0.0.0.0.`);
+    return 2;
+  }
+  await ctx.host.serve({ port: ctx.values.port, "data-dir": ctx.values["data-dir"], "link-port": linkPort, ...(linkHost ? { "link-host": linkHost } : {}) });
+  return 0;
+}
+
+async function pairingCode(ctx: CommandContext): Promise<number> {
+  open(ctx);
+  const { code } = await createRunnerCode();
+  ctx.print(code);
   return 0;
 }
 
@@ -257,7 +271,7 @@ async function uninstall(ctx: CommandContext): Promise<number> {
   return 0;
 }
 
-const commands: Record<string, (ctx: CommandContext, positionals: string[]) => Promise<number>> = { install, serve, status, uninstall };
+const commands: Record<string, (ctx: CommandContext, positionals: string[]) => Promise<number>> = { install, serve, status, uninstall, "pairing-code": pairingCode };
 
 /** Runs `godmode runner <argv…>` and resolves with the exit code. `serve` resolves once the runner listens. */
 export async function runRunnerCli(argv: string[], host: RunnerCliHost): Promise<number> {
@@ -266,6 +280,7 @@ export async function runRunnerCli(argv: string[], host: RunnerCliHost): Promise
     options: {
       port: { type: "string" },
       "link-port": { type: "string" },
+      "link-host": { type: "string" },
       "data-dir": { type: "string" },
       "no-service": { type: "boolean" },
     },

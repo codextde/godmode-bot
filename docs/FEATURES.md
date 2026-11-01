@@ -380,6 +380,7 @@ trusts only that key from then on. Then pick the server for a **chat** (the *SSH
 | **What the agent gets** | An `ssh` tool set: `shell` (a command in the user's shell; `sudo: true` runs it as root and Godmode types the saved password into sudo's prompt), `read_file` / `write_file` / `edit_file` (SFTP, or the shell when a server has none), and `upload` / `download` between the chat's folders on your computer and the server. |
 | **Secrets** | The password, key and passphrase are sealed in the vault and never part of the prompt; transcripts and tool results mask them, also when a command prints them. The agent works in that account's shell, so give it an account with only the rights it needs — a narrow `NOPASSWD` sudo rule is safer than a saved sudo password. |
 | **Checking in** | Each server card shows whether it was reachable, its OS and pinned host key, which agents and chats use it, and a **Run command** box for a quick look yourself. |
+| **Projects on a server** | A project folder on the server: in a project's (or workspace's) **Folders & repositories**, click **Add remote folder**, pick the server and enter the folder (`~/code/app`, `/srv/app`). New chats there run *on the server*, in that folder: Godmode installs `godmode` in `~/.local/bin` over SSH, starts a small headless Godmode on loopback and reaches it through the SSH connection — no port is opened. Claude Code works there with all its tools and the project's own `CLAUDE.md`, and you watch the chat live as usual. The server gets your agents, instructions, memory (merged back after every run) and project context, but **no secrets**: no logins, 2FA codes, API keys, cookies or vault key. Claude Code signs in on the server itself (`ssh` in once and run `claude`). **Stop Godmode on the server** in the folder's ⋯ menu stops it and turns its chats into chats of this computer. Linux (glibc, x64/arm64) and macOS servers. |
 
 ### Plugins — give your agents new skills and guardrails
 
@@ -535,6 +536,7 @@ Every run is committed, so you can see exactly what an agent learned and did —
 - [x] Agents working in a dedicated macOS VM (Tart / Virtualization.framework): shell, files and screen, assigned per agent, chat or workspace
 - [x] API tools: any API with a key (Nano Banana, OpenAI, ElevenLabs…) for agents, global / workspace / agent
 - [x] SSH servers: agents run commands, edit files and copy files on remote machines — password or key, sudo, pinned host keys
+- [x] Projects on SSH servers: chats of a project with a remote folder run on the server (headless Godmode started over SSH, reached through the SSH connection, no secrets there)
 - [x] Plugins: Claude Code plugins for agents — one-click installs from GitHub (Claude Video, oh-my-claudecode), updates and uninstall, a gallery of guardrails, options, an editor, drafts written by Godmode, checked before they run
 - [ ] Windows / Linux VMs
 - [x] Phone app (iOS / Android): chats, runs, automations, live browser, screen and VM views, paired over Tailscale

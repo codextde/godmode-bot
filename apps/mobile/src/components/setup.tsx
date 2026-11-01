@@ -102,7 +102,9 @@ const STATUS: Record<WorkspaceSource["status"], { tone: "neutral" | "brand" | "w
 };
 
 export function inputsOf(sources: WorkspaceSource[]): SourceInput[] {
-  return sources.map((s) => (s.kind === "folder" ? { kind: "folder", path: s.path } : { kind: "git", url: s.url ?? "", branch: s.branch }));
+  return sources.map((s): SourceInput =>
+    s.kind === "remote" ? { kind: "remote", serverId: s.serverId ?? "", path: s.path } : s.kind === "folder" ? { kind: "folder", path: s.path } : { kind: "git", url: s.url ?? "", branch: s.branch },
+  );
 }
 
 /** Folders and repositories every agent in the workspace or project works with. */
@@ -145,7 +147,8 @@ export function Sources({
     <Group title={t("setup.sourcesTitle")} footer={footer}>
       {sources.map((s) => {
         const status = STATUS[s.status];
-        const where = s.kind === "git" ? [s.headBranch ?? s.branch ?? t("setup.defaultBranch"), s.commit?.slice(0, 7)].filter(Boolean).join(" · ") : s.path;
+        const where =
+          s.kind === "git" ? [s.headBranch ?? s.branch ?? t("setup.defaultBranch"), s.commit?.slice(0, 7)].filter(Boolean).join(" · ") : s.kind === "remote" ? `${s.serverName ?? "?"}:${s.path}` : s.path;
         return (
           <View key={s.id} style={styles.source}>
             <View style={[styles.sourceIcon, { backgroundColor: c.sunken }]}>

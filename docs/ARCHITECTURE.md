@@ -108,6 +108,11 @@ system prompt, and a one-line restatement on resumed turns. Dreams don't get the
   (`core.hooksPath`, `core.fsmonitor` on the command line), pins the SSH command through the environment, and runs that
   may edit files but not run commands (no permission bypass, VM runs) get `Edit(**/.git/**)` plus the clones' `.git`
   denied, so a clone's git settings can't be used to run programs on this computer.
+* **Remote folders** (`kind = 'remote'`, `server_id` = an SSH server, `path` absolute or `~/…` on it, migration 112)
+  aren't added to runs on this computer (they get a notice). They move the *new chats* of their project (else of the
+  workspace) onto that server: `POST /api/chat` asks `sshPlacement` (remote/runners.ts) and starts the chat on the
+  server's runner, in that folder (see "Runners on SSH servers"). Chats with a folder, VM or shared screen of their own,
+  private chats, and work that doesn't start through `POST /api/chat` (automations, tickets, delegations) stay here.
 * Removing a repository or deleting its workspace stops a running clone and moves the clone to `repos/.trash/` (it may
   hold unpushed work). Backups carry the records, not the clones: restored repositories are cloned again, restored
   folders must exist on the new machine.
@@ -1695,7 +1700,7 @@ that was never linked never talks to a cloud; nothing leaves the computer unless
 
 A **runner** is a headless Godmode core on another computer (macOS for now) that works for the human's Godmode — the
 **controller** — so chats go on while the controller's lid is closed. Runners were superseded by device groups (below),
-which are built on the same link: new runners can't be paired any more, and the app offers no runner for new chats.
+which are built on the same link: new runners can't be paired by hand any more, and the app offers no runner for new chats — except the runners Godmode starts on SSH servers for remote folders (below).
 Runners paired earlier keep connecting, updating and serving the chats that live on them; Settings → Devices lists them
 under "Older runners" with a Remove button. Everything lives in `packages/core/src/remote/` (not `runner/`, which is
 the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
@@ -1783,6 +1788,29 @@ the Claude run executor); shared types are in `packages/shared/src/remote.ts`.
   licence key) comes back as `unsupported` with a command to run there.
 * **Removing a runner** tells it to forget this computer, fails its working runs and turns its chats into chats of this
   computer. Backups carry no runners, controllers or `link.*` meta, and restored chats lose their runner.
+
+### Runners on SSH servers
+
+`packages/core/src/remote/sshRunners.ts`. A runner row with `kind = 'ssh'` and `ssh_server_id` (migration 112) is a
+headless Godmode that Godmode itself starts on an SSH server (like t3code's SSH environments):
+
+* **Launch** (`launchScript`, piped into `sh -l -s` over a dedicated ssh2 connection, so PATH is the login shell's):
+  installs `godmode` with `install.sh` into `~/.local/bin` when it is missing (this version, else the latest; the
+  updater brings it to this computer's version afterwards), then starts `godmode runner serve --link-host 127.0.0.1
+  --link-port 0` with `GODMODE_RUNNER_LEAN=1` under `nohup`, or reuses the one `runner.json` names. It prints the home
+  folder and the link port. Runs again before every dial, because an update restarts the runner on another port.
+* **Tunnel**: a listener on 127.0.0.1 here whose connections go through `forwardOut` to the runner's loopback link port.
+  `RemoteLink`'s `prepare` hook returns it as the only address, so the encrypted link and everything on it (mirror,
+  routing, live views, updates, chat moves) work unchanged. Nothing listens on the server beyond loopback.
+* **Pairing** (`ensureSshRunner`): `godmode runner pairing-code` over SSH prints a one-time `gmr1.` code (SSH access is
+  the authorization), pointed at the tunnel and passed to `pairWithCode`. Later chats reuse the row.
+* **Lean copy**: `buildSnapshot({ lean: true })` sends `LEAN_SKIPPED` tables (logins, 2FA, app secrets, Composio, API
+  tools, SSH servers, browser profiles, VMs) empty, every `*_enc` column null and no vault meta or key; cookies are never
+  copied. A lean runner bootstraps only Claude Code, starts no browser tools, reports the vault as "not here" in its
+  health, uses its own Claude Code login (health tells how to sign in) and tells its agents that logins and keys stay
+  on the human's computer.
+* **Removing** the runner (the remote folder's *Stop Godmode on the server*) unpairs it like any runner, then kills the
+  process `runner.json` names over SSH; its data on the server stays.
 
 ## Device groups
 

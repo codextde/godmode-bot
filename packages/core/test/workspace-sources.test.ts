@@ -117,6 +117,44 @@ describe("workspace folders", () => {
   });
 });
 
+describe("remote folders", () => {
+  const TS = "2026-01-01T00:00:00.000Z";
+  const server = (id: string, name: string) =>
+    run("INSERT INTO ssh_servers (id, name, host, username, created_at, updated_at) VALUES (?, ?, 'box.example.com', 'dev', ?, ?)", id, name, TS, TS);
+
+  test("name a folder on one of the SSH servers, normalized, and stay out of this computer's runs", async () => {
+    server("ssh_dev", "Dev box");
+    const ws = createWorkspace({ name: "Remote", sources: [{ kind: "remote", serverId: "ssh_dev", path: "~/code//app/" }] });
+    expect(ws.sources[0]).toMatchObject({ kind: "remote", name: "app", path: "~/code/app", serverId: "ssh_dev", serverName: "Dev box", status: "ready", git: false });
+    expect(updateWorkspace(ws.id, { sources: [{ kind: "remote", serverId: "ssh_dev", path: "~/code/app" }] }).sources[0]!.id).toBe(ws.sources[0]!.id);
+    const prepared = await prepareSources([{ workspaceId: ws.id, projectId: null }], { onActivity: () => {}, signal: new AbortController().signal });
+    expect(prepared.sources).toEqual([]);
+    expect(prepared.notices[0]).toContain("on Dev box");
+    run("DELETE FROM ssh_servers WHERE id = 'ssh_dev'");
+    expect(getWorkspace(ws.id).sources[0]).toMatchObject({ status: "missing", serverName: null });
+  });
+
+  test("refuse relative paths, parent folders and unknown servers", () => {
+    server("ssh_other", "Other box");
+    const ws = createWorkspace({ name: "Remote guarded" });
+    for (const input of [
+      { serverId: "ssh_other", path: "code/app" },
+      { serverId: "ssh_other", path: "/srv/../etc" },
+      { serverId: "ssh_other", path: "" },
+      { serverId: "ssh_missing", path: "/srv/app" },
+    ]) {
+      let err: unknown;
+      try {
+        updateWorkspace(ws.id, { sources: [{ kind: "remote", ...input }] });
+      } catch (e) {
+        err = e;
+      }
+      expect(status(err)).toBe(400);
+    }
+    expect(getWorkspace(ws.id).sources).toEqual([]);
+  });
+});
+
 describe("workspace repositories", () => {
   test("bad URLs and branches are refused", () => {
     const ws = createWorkspace({ name: "Bad URLs" });

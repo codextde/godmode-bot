@@ -67,7 +67,10 @@ export interface ProjectInput {
   sources?: WorkspaceSourceInput[];
 }
 
-export type WorkspaceSourceInput = { kind: "folder"; path: string } | { kind: "git"; url: string; branch?: string | null };
+export type WorkspaceSourceInput =
+  | { kind: "folder"; path: string }
+  | { kind: "git"; url: string; branch?: string | null }
+  | { kind: "remote"; serverId: string; path: string };
 
 /** Items a workspace owns besides its agents, chats, tasks and repositories; they go along when it becomes a project. */
 export type ScopeItemKind =

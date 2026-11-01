@@ -1880,4 +1880,14 @@ ALTER TABLE workspaces ADD COLUMN claude_accounts TEXT;
     name: "search_index",
     sql: SEARCH_INDEX_SQL,
   },
+  {
+    id: 112,
+    name: "remote_folders",
+    sql: /* sql */ `
+-- kind 'remote': a folder on an SSH server (\`path\` on the server); the chats there run Claude Code on it.
+ALTER TABLE workspace_sources ADD COLUMN server_id TEXT;
+-- kind 'ssh': a runner Godmode starts on this SSH server and reaches through an SSH tunnel.
+ALTER TABLE runners ADD COLUMN ssh_server_id TEXT;
+`,
+  },
 ];

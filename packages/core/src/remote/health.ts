@@ -9,6 +9,7 @@ import type { ComputerStatus, DependencyId, DependencyStatus, DoctorReport, Runn
 import { computerStatus, requestComputerPermissions } from "../computer/service";
 import { config } from "../config";
 import { getMeta } from "../db";
+import { leanRunner } from "../config";
 import { logger } from "../log";
 import { installDependency, resolveGh, runCommand, runDoctor, toolPath } from "../services/doctor";
 import { probeFullDiskAccess } from "../services/fullDiskAccess";
@@ -27,7 +28,7 @@ const DISK_WARN_BYTES = 10 * GB;
 const DISK_FAIL_BYTES = 2 * GB;
 const FULL_DISK_ACCESS_URL = "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 /** What a fresh runner needs before it can work, in the order it has to be installed (uv brings browser-use and Chrome). */
-const BOOTSTRAP: DependencyId[] = ["claude", "uv", "browser-use", "chrome"];
+const FULL_BOOTSTRAP: DependencyId[] = ["claude", "uv", "browser-use", "chrome"];
 
 type Fix = NonNullable<RunnerCheck["fix"]>;
 type FixResult = { ok: boolean; output: string };
@@ -108,6 +109,12 @@ export function setHealthDeps(overrides: Partial<HealthDeps> | null) {
 
 const INSTALL: Fix = { kind: "install", label: "Install" };
 
+const LEAN_CLAUDE_AUTH: Fix = {
+  kind: "manual",
+  label: "Sign in to Claude",
+  hint: "Your logins stay on your computer, so Claude Code on the server signs in by itself: connect with `ssh` and run `claude` once (or `claude setup-token` for a login that lasts a year).",
+};
+
 /** How each check is fixed. `git` is not here: its hint is the doctor's, which depends on the platform. */
 const FIXES: Record<string, Fix> = {
   claude: INSTALL,
@@ -169,7 +176,8 @@ const failing = (required: boolean): RunnerCheckStatus => (required ? "fail" : "
 
 function dependencyCheck(dep: DependencyStatus, report: DoctorReport): RunnerCheck {
   const detail = dep.detail.split("\n")[0] || (dep.ok ? (dep.version ?? "Found") : "Not found");
-  return make(dep.id, "software", dep.name, dep.ok ? "ok" : failing(dep.required), detail, dep.required, dep.id === "git" ? gitFix(report) : FIXES[dep.id]);
+  const fix = dep.id === "git" ? gitFix(report) : dep.id === "claude-auth" && leanRunner() ? LEAN_CLAUDE_AUTH : FIXES[dep.id];
+  return make(dep.id, "software", dep.name, dep.ok ? "ok" : failing(dep.required), detail, dep.required, fix);
 }
 
 async function ghCheck(): Promise<RunnerCheck> {
@@ -254,8 +262,9 @@ async function inspect(refresh: boolean): Promise<RunnerHealth> {
   const configured = deps.configDigest() !== null;
   // Screen control is only needed when agents may use the computer.
   const screen = computer?.enabled ?? false;
+  const lean = leanRunner();
   const checks: RunnerCheck[] = [
-    ...software("claude", "claude-auth", "uv", "browser-use", "chrome", "git"),
+    ...(lean ? software("claude", "claude-auth", "git") : software("claude", "claude-auth", "uv", "browser-use", "chrome", "git")),
     gh,
     ...software("cua-driver"),
     ...(mac
@@ -272,7 +281,7 @@ async function inspect(refresh: boolean): Promise<RunnerHealth> {
           ),
         ]
       : []),
-    vaultCheck(),
+    lean ? make("vault", "access", "Vault", "ok", "Not on this server — logins and keys stay on your computer", false) : vaultCheck(),
     make("config", "access", "Setup", configured ? "ok" : "fail", configured ? "Copied from Godmode" : "Nothing copied yet", true),
     ...(service ? [serviceCheck(service), keepAwakeCheck()] : []),
     ...(session ? [session] : []),
@@ -361,6 +370,7 @@ export async function fixCheck(id: string): Promise<FixResult> {
  * per process start; what can't be installed (or isn't required) is left to the health view.
  */
 export function bootstrapDependencies(): Promise<void> {
+  const BOOTSTRAP: DependencyId[] = leanRunner() ? ["claude"] : FULL_BOOTSTRAP;
   bootstrap ??= (async () => {
     // Everything this start will install is on its way from now on, also what waits for uv.
     const first = await deps.doctor(false);

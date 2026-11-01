@@ -328,7 +328,8 @@ const scopeFields = {
   instructions: z.string().max(20_000).optional().describe("Context every run in it gets: goals, conventions, people, links"),
 };
 
-const asInput = (s: WorkspaceSource): WorkspaceSourceInput => (s.kind === "git" ? { kind: "git", url: s.url ?? "", branch: s.branch } : { kind: "folder", path: s.path });
+const asInput = (s: WorkspaceSource): WorkspaceSourceInput =>
+  s.kind === "git" ? { kind: "git", url: s.url ?? "", branch: s.branch } : s.kind === "remote" ? { kind: "remote", serverId: s.serverId ?? "", path: s.path } : { kind: "folder", path: s.path };
 
 /** A workspace by id or (case-insensitive) name. */
 function findWorkspace(ref: string): Workspace | null {

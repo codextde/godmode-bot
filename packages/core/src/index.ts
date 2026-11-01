@@ -309,6 +309,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
   if (runner) {
     // The way in for the computers it works for: encrypted, on every interface, at the port they were paired with.
     if (typeof values["link-port"] === "number") setMeta("link.port", String(values["link-port"]));
+    if (values["link-host"] === "127.0.0.1" || values["link-host"] === "0.0.0.0") setMeta("link.host", values["link-host"]);
     settleUpdate();
     void executableDigest()?.catch((err) => log.warn("could not hash this program", err));
     const linkPort = startLinkServer({ app, websocket: websocketHandler });

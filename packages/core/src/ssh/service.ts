@@ -25,7 +25,7 @@ import { getConversationSummary, updateConversation } from "../services/conversa
 import { HttpError, badRequest, newId, notFound, now, parseJson } from "../util";
 import { open, openOptional, seal } from "../vault/vault";
 import { removeServerEverywhere, sshAssignments } from "./assignments";
-import { OS_PROBE, SshError, addressOf, connect, describeOs, dropConnection, execOn, withConnection, type Connection, type ConnectTarget } from "./client";
+import { OS_PROBE, SshError, addressOf, connect, describeOs, dropConnection, execOn, withConnection, type Connection, type ConnectTarget, type Session } from "./client";
 import { SshKeyError, parsePrivateKey, readLocalKey } from "./keys";
 
 const log = logger("ssh");
@@ -385,6 +385,20 @@ export async function useServer<T>(id: string, fn: (conn: Connection) => Promise
     },
     signal,
   );
+}
+
+/** A connection of its own to the server (not pooled), for work that holds it for long: a run on the server. */
+export async function connectServer(id: string, signal?: AbortSignal): Promise<Session> {
+  const r = requireRow(id);
+  const target = targetOf(r);
+  try {
+    const session = await connect(target, signal);
+    recordConnected(id, target, session.hostKey);
+    return session;
+  } catch (err) {
+    if (err instanceof SshError && err.message !== "Cancelled") recordFailure(id, err.message);
+    throw err;
+  }
 }
 
 async function probe(target: ConnectTarget): Promise<SshTestResult> {
