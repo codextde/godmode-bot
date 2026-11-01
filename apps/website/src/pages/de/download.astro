@@ -1,0 +1,11 @@
+---
+import Download from '@/views/Download.astro';
+import { downloadRequest } from '@/views/download-request';
+
+export const prerender = false;
+
+const r = await downloadRequest(Astro);
+if (r instanceof Response) return r;
+---
+
+<Download {...r} />

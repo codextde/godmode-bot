@@ -3,52 +3,105 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import { LEGAL } from '@/config/site';
 
-const points = [
-  {
-    icon: 'lock-keyhole',
-    title: 'Your passwords stay on your computer',
-    text: 'They live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI never sees them. In chats and logs they are blacked out.',
+import { langOf } from '@/i18n';
+
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    eyebrow: 'Safe by design',
+    h: 'You stay *in charge.*',
+    lead: 'Handing work to an AI should feel like handing it to a careful colleague. So Godmode keeps your keys at home and checks with you before the big steps.',
+    sees: 'What the AI sees when it signs in',
+    you: 'You:',
+    ask: 'Log into the supplier portal and download September’s invoice.',
+    login: 'Filled your login',
+    totp: 'Filled the 2FA code',
+    hidden: '[secret hidden]',
+    signed: 'Signed in. Invoice saved to Documents.',
+    claude: 'Powered by Claude from Anthropic. Your tasks are processed under your own Claude account.',
+    points: [
+      {
+        icon: 'lock-keyhole',
+        title: 'Your passwords stay on your computer',
+        text: 'They live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI never sees them. In chats and logs they are blacked out.',
+      },
+      {
+        icon: 'hand',
+        title: 'It asks before anything important',
+        text: 'Sending, paying, deleting, posting: by default it stops and asks you first. You can watch every step and take over with one click.',
+      },
+      {
+        icon: 'laptop',
+        title: 'It runs on your own Mac',
+        text: 'Your logins, notes and history stay on your computer. The app has no tracking and sends nothing to us.',
+      },
+      {
+        icon: 'building-2',
+        title: `Made by ${LEGAL.company} in Germany`,
+        text: 'A real company you can call. Questions go to a human, usually answered within a day.',
+      },
+    ],
   },
-  {
-    icon: 'hand',
-    title: 'It asks before anything important',
-    text: 'Sending, paying, deleting, posting: by default it stops and asks you first. You can watch every step and take over with one click.',
+  de: {
+    eyebrow: 'Sicher gebaut',
+    h: 'Du behältst *die Kontrolle.*',
+    lead: 'Arbeit an eine KI abzugeben, sollte sich anfühlen wie an einen sorgfältigen Kollegen. Darum bleiben deine Schlüssel bei dir, und Godmode fragt dich vor den großen Schritten.',
+    sees: 'Was die KI beim Anmelden sieht',
+    you: 'Du:',
+    ask: 'Melde dich im Lieferantenportal an und lade die Rechnung vom September herunter.',
+    login: 'Deinen Login eingetragen',
+    totp: 'Den 2FA-Code eingetragen',
+    hidden: '[Secret verborgen]',
+    signed: 'Angemeldet. Rechnung in Dokumente gespeichert.',
+    claude: 'Angetrieben von Claude von Anthropic. Deine Aufgaben laufen über dein eigenes Claude-Konto.',
+    points: [
+      {
+        icon: 'lock-keyhole',
+        title: 'Deine Passwörter bleiben auf deinem Computer',
+        text: 'Sie liegen in einem verschlüsselten Tresor auf deinem Mac. Godmode tippt sie selbst in die Login-Seite, die KI sieht sie also nie. In Chats und Logs sind sie geschwärzt.',
+      },
+      {
+        icon: 'hand',
+        title: 'Er fragt vor allem Wichtigen',
+        text: 'Senden, bezahlen, löschen, posten: Standardmäßig hält er an und fragt dich zuerst. Du siehst jeden Schritt live und kannst mit einem Klick übernehmen.',
+      },
+      {
+        icon: 'laptop',
+        title: 'Er läuft auf deinem eigenen Mac',
+        text: 'Deine Logins, Notizen und dein Verlauf bleiben auf deinem Computer. Die App hat kein Tracking und schickt uns nichts.',
+      },
+      {
+        icon: 'building-2',
+        title: `Von ${LEGAL.company} aus Deutschland`,
+        text: 'Eine echte Firma, die du anrufen kannst. Fragen beantwortet ein Mensch, meist innerhalb eines Tages.',
+      },
+    ],
   },
-  {
-    icon: 'laptop',
-    title: 'It runs on your own Mac',
-    text: 'Your logins, notes and history stay on your computer. The app has no tracking and sends nothing to us.',
-  },
-  {
-    icon: 'building-2',
-    title: `Made by ${LEGAL.company} in Germany`,
-    text: 'A real company you can call. Questions go to a human, usually answered within a day.',
-  },
-];
+}[lang];
+const points = t.points;
 ---
 
 <section id="trust" class="relative py-16 sm:py-24" data-track-view="security">
   <div class="container-x">
     <div class="grid items-start gap-12 lg:grid-cols-[0.9fr_1.1fr]">
       <div class="lg:sticky lg:top-28">
-        <p class="eyebrow" data-reveal>Safe by design</p>
-        <Words text="You stay *in charge.*" class="h-section mt-4" />
+        <p class="eyebrow" data-reveal>{t.eyebrow}</p>
+        <Words text={t.h} class="h-section mt-4" />
         <p class="lead mt-5 max-w-[440px]" data-reveal style="--d:200">
-          Handing work to an AI should feel like handing it to a careful colleague. So Godmode keeps your keys at home and
-          checks with you before the big steps.
+          {t.lead}
         </p>
 
         <div class="card mt-8 max-w-[460px] p-5" data-reveal style="--d:250">
-          <p class="text-[12.5px] font-semibold text-muted">What the AI sees when it signs in</p>
+          <p class="text-[12.5px] font-semibold text-muted">{t.sees}</p>
           <div class="mt-3 space-y-2 text-[14px] leading-relaxed text-text-2">
-            <p><span class="font-semibold text-text">You:</span> Log into the supplier portal and download September’s invoice.</p>
+            <p><span class="font-semibold text-text">{t.you}</span> {t.ask}</p>
             <p>
-              <span class="font-semibold text-brand">Godmode:</span> Filled your login <span class="redact">[secret hidden]</span>
+              <span class="font-semibold text-brand">Godmode:</span> {t.login} <span class="redact">{t.hidden}</span>
             </p>
             <p>
-              <span class="font-semibold text-brand">Godmode:</span> Filled the 2FA code <span class="redact">[secret hidden]</span>
+              <span class="font-semibold text-brand">Godmode:</span> {t.totp} <span class="redact">{t.hidden}</span>
             </p>
-            <p><span class="font-semibold text-brand">Godmode:</span> Signed in. Invoice saved to Documents.</p>
+            <p><span class="font-semibold text-brand">Godmode:</span> {t.signed}</p>
           </div>
         </div>
       </div>
@@ -67,7 +120,7 @@ const points = [
         }
         <p class="flex items-center gap-2 text-[13.5px] text-muted sm:col-span-2" data-reveal>
           <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" class="text-claude"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
-          Powered by Claude from Anthropic. Your tasks are processed under your own Claude account.
+          {t.claude}
         </p>
       </div>
     </div>

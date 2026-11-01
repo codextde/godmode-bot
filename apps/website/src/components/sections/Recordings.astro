@@ -3,8 +3,36 @@ import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 import { RECORDINGS } from '@/config/recordings';
 import { TOOL_BY_SLUG } from '@/config/tools';
+import { langOf } from '@/i18n';
 
-const recs = RECORDINGS.map((r) => ({ ...r, src: `/media/rec/${r.slug}` }));
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    eyebrow: 'Real screen recordings',
+    h: 'Don’t take our word for it. *Watch it work.*',
+    lead: 'Real runs of Godmode on a normal Mac, recorded in November 2026. The login and invoice demos use test data. We only cut the waiting and sped it up.',
+    list: 'Recordings',
+    pause: 'Pause recording',
+    play: 'Play recording',
+    rec: 'Real screen recording',
+    typed: 'You typed',
+    back: 'It came back with',
+    run: 'Real run',
+  },
+  de: {
+    eyebrow: 'Echte Bildschirmaufnahmen',
+    h: 'Glaub nicht uns. *Schau ihm zu.*',
+    lead: 'Echte Läufe von Godmode auf einem normalen Mac, aufgenommen im November 2026. Die Login- und Rechnungs-Demos nutzen Testdaten. Wir haben nur das Warten herausgeschnitten und beschleunigt.',
+    list: 'Aufnahmen',
+    pause: 'Aufnahme pausieren',
+    play: 'Aufnahme abspielen',
+    rec: 'Echte Bildschirmaufnahme',
+    typed: 'Eingetippt (auf Englisch)',
+    back: 'Zurück kam',
+    run: 'Echte Dauer',
+  },
+}[lang];
+const recs = RECORDINGS.map((r) => ({ ...r, ...r[lang], src: `/media/rec/${r.slug}` }));
 const single = recs.length === 1;
 ---
 
@@ -12,16 +40,16 @@ const single = recs.length === 1;
   <div class="container-x">
     <div class="grid items-end gap-6 lg:grid-cols-[1.1fr_0.9fr]">
       <div class="max-w-[720px]">
-        <p class="eyebrow" data-reveal><span class="live-dot !size-1.5"></span> Real screen recordings</p>
-        <Words text="Don’t take our word for it. *Watch it work.*" class="h-section mt-4" />
+        <p class="eyebrow" data-reveal><span class="live-dot !size-1.5"></span> {t.eyebrow}</p>
+        <Words text={t.h} class="h-section mt-4" />
       </div>
       <p class="lead max-w-[460px]" data-reveal style="--d:150">
-        Real runs of Godmode on a normal Mac, recorded in November 2026. The login and invoice demos use test data. We only cut the waiting and sped it up.
+        {t.lead}
       </p>
     </div>
 
     <div class="rec-grid mt-12" data-recs data-reveal style="--d:100">
-      <div role="tablist" aria-label="Recordings" class="rec-list">
+      <div role="tablist" aria-label={t.list} class="rec-list">
         {
           recs.map((r, i) => (
             <button
@@ -48,7 +76,7 @@ const single = recs.length === 1;
       </div>
 
       <div class="relative min-w-0" data-rec-stage>
-        <button type="button" class="rec-toggle" data-rec-toggle aria-pressed="false" aria-label="Pause recording">
+        <button type="button" class="rec-toggle" data-rec-toggle aria-pressed="false" aria-label={t.pause} data-label-pause={t.pause} data-label-play={t.play}>
           <svg class="i-pause" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.5h2v9H3zM7 1.5h2v9H7z" fill="currentColor"></path></svg>
           <svg class="i-play" width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 1.4v9.2L10.4 6z" fill="currentColor"></path></svg>
         </button>
@@ -61,7 +89,7 @@ const single = recs.length === 1;
                   <i />
                   <i />
                   <span class="mx-auto flex items-center gap-2 text-[12px] font-medium text-muted">
-                    <span class="live-dot !size-1.5" /> Real screen recording, {r.speed}
+                    <span class="live-dot !size-1.5" /> {t.rec}, {r.speed}
                   </span>
                   <span class="w-[33px]" aria-hidden="true" />
                 </div>
@@ -74,7 +102,7 @@ const single = recs.length === 1;
                     preload="none"
                     poster={i === 0 ? `${r.src}-poster.jpg` : undefined}
                     data-poster={`${r.src}-poster.jpg`}
-                    aria-label={`Real screen recording: ${r.title}. ${r.result}`}
+                    aria-label={`${t.rec}: ${r.title}. ${r.result}`}
                   >
                     <source src={`${r.src}.webm`} type="video/webm" />
                     <source src={`${r.src}.mp4`} type="video/mp4" />
@@ -83,11 +111,11 @@ const single = recs.length === 1;
               </div>
               <figcaption class="rec-caption">
                 <div>
-                  <p class="rec-k">You typed</p>
+                  <p class="rec-k">{t.typed}</p>
                   <p class="mt-1.5 text-[15px] leading-relaxed text-text">“{r.task}”</p>
                 </div>
                 <div>
-                  <p class="rec-k">It came back with</p>
+                  <p class="rec-k">{t.back}</p>
                   <p class="mt-1.5 flex items-start gap-2 text-[15px] leading-relaxed text-text-2">
                     <span class="tick mt-0.5">
                       <Icon name="check" size={13} stroke={3} />
@@ -97,14 +125,14 @@ const single = recs.length === 1;
                   <div class="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 text-[12.5px] text-dim">
                     {r.tools && (
                       <span class="flex items-center gap-1.5">
-                        {r.tools.map((t) => (
-                          <img src={`/logos/${t}.svg`} alt={TOOL_BY_SLUG[t]?.name ?? t} title={TOOL_BY_SLUG[t]?.name} width="16" height="16" loading="lazy" class="size-4" />
+                        {r.tools.map((tool) => (
+                          <img src={`/logos/${tool}.svg`} alt={TOOL_BY_SLUG[tool]?.name ?? tool} title={TOOL_BY_SLUG[tool]?.name} width="16" height="16" loading="lazy" class="size-4" />
                         ))}
                       </span>
                     )}
                     <span class="font-medium text-muted">{r.feature}</span>
                     <span aria-hidden="true">·</span>
-                    <span>Real run: {r.realRun}</span>
+                    <span>{t.run}: {r.realRun}</span>
                   </div>
                 </div>
               </figcaption>

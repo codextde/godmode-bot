@@ -5,27 +5,67 @@ import Logo from '../ui/Logo.astro';
 import Character from '../ui/Character.astro';
 import { PRICING } from '@/config/site';
 
-const steps = [
-  {
-    title: 'Download and open',
-    text: `Free for ${PRICING.freeDays} days, no card and no sign-up. Setup walks you through everything in a few minutes, including signing in with your Claude plan.`,
+import { langOf } from '@/i18n';
+
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    eyebrow: 'How it works',
+    h: 'Three steps. *No coding.*',
+    apps: 'Applications',
+    ask: 'Download last month’s invoices from our supplier portals and put them in Dropbox.',
+    placeholder: 'Message Godmode…',
+    done: '23 invoices filed. Send the 7 payment reminders now?',
+    no: 'Not yet',
+    yes: 'Yes, send',
+    steps: [
+      {
+        title: 'Download and open',
+        text: `Free for ${PRICING.freeDays} days, no card and no sign-up. Setup walks you through everything in a few minutes, including signing in with your Claude plan.`,
+      },
+      {
+        title: 'Tell it the task in plain words',
+        text: 'Type it like you would ask a colleague. Or send it from your phone, Slack or Telegram. Want it every Monday? Just say so.',
+      },
+      {
+        title: 'It does the work and checks with you',
+        text: 'It signs in, clicks through and hands it back done. Before it sends, pays or deletes anything, it asks you, unless you already told it to go ahead.',
+      },
+    ],
   },
-  {
-    title: 'Tell it the task in plain words',
-    text: 'Type it like you would ask a colleague. Or send it from your phone, Slack or Telegram. Want it every Monday? Just say so.',
+  de: {
+    eyebrow: 'So geht’s',
+    h: 'Drei Schritte. *Ohne Programmieren.*',
+    apps: 'Programme',
+    ask: 'Lade die Rechnungen vom letzten Monat aus unseren Lieferantenportalen herunter und leg sie in Dropbox ab.',
+    placeholder: 'Nachricht an Godmode…',
+    done: '23 Rechnungen abgelegt. Soll ich die 7 Zahlungserinnerungen jetzt senden?',
+    no: 'Noch nicht',
+    yes: 'Ja, senden',
+    steps: [
+      {
+        title: 'Herunterladen und öffnen',
+        text: `${PRICING.freeDays} Tage kostenlos, ohne Karte und ohne Anmeldung. Die Einrichtung führt dich in wenigen Minuten durch alles, auch durch die Anmeldung mit deinem Claude-Abo.`,
+      },
+      {
+        title: 'Sag ihm die Aufgabe in normalen Worten',
+        text: 'Schreib es so, wie du einen Kollegen fragen würdest. Oder schick es vom Handy, aus Slack oder Telegram. Soll es jeden Montag passieren? Sag es einfach.',
+      },
+      {
+        title: 'Er erledigt die Arbeit und fragt dich vorher',
+        text: 'Er meldet sich an, klickt sich durch und gibt sie dir erledigt zurück. Bevor er etwas sendet, bezahlt oder löscht, fragt er dich, außer du hast es ihm schon erlaubt.',
+      },
+    ],
   },
-  {
-    title: 'It does the work and checks with you',
-    text: 'It signs in, clicks through and hands it back done. Before it sends, pays or deletes anything, it asks you, unless you already told it to go ahead.',
-  },
-];
+}[lang];
+const steps = t.steps;
 ---
 
 <section id="how" class="relative py-16 sm:py-24" data-track-view="how">
   <div class="container-x">
     <div class="mx-auto max-w-[720px] text-center">
-      <p class="eyebrow justify-center" data-reveal>How it works</p>
-      <Words text="Three steps. *No coding.*" class="h-section mx-auto mt-4" />
+      <p class="eyebrow justify-center" data-reveal>{t.eyebrow}</p>
+      <Words text={t.h} class="h-section mx-auto mt-4" />
     </div>
 
     <ol class="mt-14 grid gap-4 md:grid-cols-3">
@@ -44,17 +84,17 @@ const steps = [
                     <span class="grid size-14 place-items-center rounded-2xl bg-surface ring-1 ring-line-2">
                       <Icon name="app-window" size={26} class="text-muted" />
                     </span>
-                    <span class="text-[12px] font-medium text-text-2">Applications</span>
+                    <span class="text-[12px] font-medium text-text-2">{t.apps}</span>
                   </span>
                 </div>
               )}
               {i === 1 && (
                 <div class="flex h-[132px] flex-col justify-end gap-2">
                   <div class="rounded-2xl rounded-bl-md bg-surface p-3 text-[13.5px] leading-snug text-text ring-1 ring-line">
-                    Download last month’s invoices from our supplier portals and put them in Dropbox.
+                    {t.ask}
                   </div>
                   <div class="flex items-center justify-between rounded-full bg-surface py-1.5 pr-1.5 pl-4 ring-1 ring-line">
-                    <span class="text-[12.5px] text-dim">Message Godmode…</span>
+                    <span class="text-[12.5px] text-dim">{t.placeholder}</span>
                     <span class="grid size-7 place-items-center rounded-full bg-brand text-white">
                       <Icon name="arrow-up" size={14} stroke={2.4} />
                     </span>
@@ -65,11 +105,11 @@ const steps = [
                 <div class="flex h-[132px] flex-col justify-end gap-2">
                   <div class="flex items-start gap-2.5 rounded-2xl bg-surface p-3 ring-1 ring-line">
                     <Character size={30} mood="happy" seed="how" />
-                    <p class="text-[13.5px] leading-snug text-text">23 invoices filed. Send the 7 payment reminders now?</p>
+                    <p class="text-[13.5px] leading-snug text-text">{t.done}</p>
                   </div>
                   <div class="flex justify-end gap-2">
-                    <span class="rounded-full bg-surface px-3 py-1.5 text-[12.5px] font-medium text-text-2 ring-1 ring-line">Not yet</span>
-                    <span class="rounded-full bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white">Yes, send</span>
+                    <span class="rounded-full bg-surface px-3 py-1.5 text-[12.5px] font-medium text-text-2 ring-1 ring-line">{t.no}</span>
+                    <span class="rounded-full bg-brand px-3 py-1.5 text-[12.5px] font-semibold text-white">{t.yes}</span>
                   </div>
                 </div>
               )}

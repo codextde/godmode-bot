@@ -12,6 +12,7 @@ import { HttpError, hostnameOf, sleep } from "../util";
 import { getAppSecret, hasAppSecret, isUnlocked } from "../vault/vault";
 import { attachToPage, pickActivePage, type CdpClient, type PageSession, type PageTarget } from "./cdp";
 import { childFrameSessions } from "./fill";
+import { clickSolve, type ClickKind } from "./captchaClick";
 
 export type CaptchaKind = "recaptcha_v2" | "recaptcha_v3" | "hcaptcha" | "turnstile" | "cloudflare_challenge" | "image";
 export type SolverId = Exclude<CaptchaSolver, "off">;
@@ -95,6 +96,14 @@ export function activeSolver(settings: Pick<Settings, "browser"> = getSettings()
 export function captchaSolverReady(settings?: Pick<Settings, "browser">): boolean {
   const id = activeSolver(settings);
   return !!id && isUnlocked() && keySet(SOLVERS[id].secret);
+}
+
+export function localSolverOn(settings: Pick<Settings, "browser"> = getSettings()): boolean {
+  return settings.browser.captchaLocal !== false;
+}
+
+export function captchaSolvingAvailable(settings: Pick<Settings, "browser"> = getSettings()): boolean {
+  return localSolverOn(settings) || captchaSolverReady(settings);
 }
 
 export function captchaStatus(): CaptchaStatus {
@@ -441,12 +450,13 @@ export interface SolveResult {
   url: string;
   detail: string;
   kind?: CaptchaKind;
-  solver?: SolverId;
+  solver?: SolverId | "local";
 }
 
 type BrowserHandle = { client: CdpClient; port?: number; chatPage?: (urlContains?: string) => PageTarget | null };
 
 const TOKEN_TIMEOUT_MS = 150_000;
+const CLICKABLE = new Set<CaptchaKind>(["recaptcha_v2", "hcaptcha", "turnstile", "cloudflare_challenge"]);
 const IMAGE_TIMEOUT_MS = 60_000;
 
 async function detect(sessions: PageSession[]): Promise<FoundCaptcha[]> {
@@ -504,11 +514,13 @@ function limitReached(): string | null {
 
 /** Solve the CAPTCHA on an attached page and put the answer in. */
 export async function solveOnPage(page: PageSession, url: string, opts: SolveOptions = {}): Promise<SolveResult> {
-  const id = activeSolver();
-  if (!id) return { ok: false, url, detail: "CAPTCHA solving is off. The human can pick a solver in Settings → Browser → CAPTCHA solving." };
-  const label = SOLVERS[id].label;
+  const local = localSolverOn();
+  const id = captchaSolverReady() ? activeSolver() : null;
+  if (!id && !local) return { ok: false, url, detail: "CAPTCHA solving is off. The human can switch it on in Settings → Browser → CAPTCHA solving." };
+  const label = id ? SOLVERS[id].label : "";
 
   if (opts.kind === "image" || opts.imageSelector) {
+    if (!id) return { ok: false, url, kind: "image", detail: "Image CAPTCHAs need a solving service, and none is set up. Give the human a task to type it in the live view." };
     if (!opts.imageSelector || !opts.inputSelector) return { ok: false, url, detail: "For an image CAPTCHA pass imageSelector (the picture) and inputSelector (the field for its text)." };
     const image = await imageOf(page, opts.imageSelector);
     if (!image) return { ok: false, url, detail: `"${opts.imageSelector}" is not a CAPTCHA picture on the page (an img, canvas or svg up to ${MAX_IMAGE.width}×${MAX_IMAGE.height} px).` };
@@ -533,11 +545,31 @@ export async function solveOnPage(page: PageSession, url: string, opts: SolveOpt
     };
   }
   const what = CAPTCHA_KIND_LABEL[target.kind];
+  const host = hostnameOf(target.url) || url;
+  let clickNote = "";
+  if (local && target.frame === 0 && CLICKABLE.has(target.kind) && !(target.kind === "recaptcha_v2" && target.invisible)) {
+    const r = await clickSolve(page, target.kind as ClickKind);
+    if (r.ok) {
+      const how = r.clicked ? "clicked its checkbox and the site let the browser through" : "waited and it passed on its own";
+      const next = target.kind === "cloudflare_challenge" ? "The page behind it is open now; carry on." : "Submit the form now if the site hasn't already continued.";
+      return { ok: true, url, kind: target.kind, solver: "local", detail: `Godmode passed the ${what} on ${host} in ${r.seconds} s (it ${how}). ${next}` };
+    }
+    clickNote =
+      r.reason === "challenge"
+        ? `Godmode clicked the ${what} checkbox, but the site wants a picture puzzle. `
+        : r.clicked
+          ? `Godmode clicked the ${what} checkbox, but the site didn't let the browser through. `
+          : "";
+  }
+  if (!id) {
+    if (target.kind === "recaptcha_v3") return { ok: false, url, kind: target.kind, detail: `${what} has nothing to click: it rates the browser in the background. Just carry on; if the site turns you away, give the human a task to do it in the live view.` };
+    return { ok: false, url, kind: target.kind, solver: "local", detail: `${clickNote}Give the human a task to solve the ${what} on ${host} in the live view. (A solving service in Settings → Browser → CAPTCHA solving could take these over.)` };
+  }
   if (target.kind === "cloudflare_challenge") {
-    return { ok: false, url, kind: target.kind, detail: `This is a ${what} ("Just a moment…"), which solving services can't pass from outside this browser. Wait 10 to 20 seconds and reload once; if it stays, give the human a task to pass it in the live view.` };
+    return { ok: false, url, kind: target.kind, detail: `${clickNote}This is a ${what} ("Just a moment…"), which solving services can't pass from outside this browser. Wait 10 to 20 seconds and reload once; if it stays, give the human a task to pass it in the live view.` };
   }
   const task = buildTask(id, { kind: target.kind, found: target });
-  if (!task) return { ok: false, url, kind: target.kind, detail: `${label} doesn't solve ${what}. Give the human a task to solve it in the live view.` };
+  if (!task) return { ok: false, url, kind: target.kind, detail: `${clickNote}${label} doesn't solve ${what}. Give the human a task to solve it in the live view.` };
   const refused = limitReached();
   if (refused) return { ok: false, url, kind: target.kind, detail: refused };
 
@@ -547,7 +579,6 @@ export async function solveOnPage(page: PageSession, url: string, opts: SolveOpt
     `(${INJECT})(${JSON.stringify({ kind: target.kind, token: solved.answer, sitekey: target.sitekey })})`,
     { timeoutMs: 10_000 },
   );
-  const host = hostnameOf(target.url) || url;
   const how = [
     r.filled ? `filled the answer into ${r.filled === 1 ? "the response field" : `${r.filled} response fields`}` : "",
     r.called ? "called the site's CAPTCHA callback" : "",

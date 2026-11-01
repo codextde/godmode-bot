@@ -1440,6 +1440,8 @@ export interface BrowserSettings {
   muteAudio: boolean;
   /** The browser creates and signs in with passkeys stored in the vault instead of Chrome's own passkey dialogs. */
   passkeys: boolean;
+  /** Godmode passes CAPTCHA checkboxes (Turnstile, Cloudflare pages, reCAPTCHA, hCaptcha) itself with a human-like click, before any solving service. */
+  captchaLocal: boolean;
   /** Service that solves CAPTCHAs agents hit (its API key is a vault app secret); "off" leaves them to the human. */
   captchaSolver: CaptchaSolver;
   /** Most CAPTCHAs sent to the solver per day, across all agents. */

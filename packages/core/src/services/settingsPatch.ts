@@ -80,7 +80,8 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
   const diagnostics = patch.diagnostics as { verbose?: unknown } | undefined;
   if (diagnostics !== undefined && (typeof diagnostics !== "object" || diagnostics === null || Array.isArray(diagnostics))) throw badRequest("Invalid log settings");
   if (diagnostics?.verbose !== undefined && typeof diagnostics.verbose !== "boolean") throw badRequest("diagnostics.verbose must be true or false");
-  const browser = patch.browser as { captchaSolver?: unknown; captchaDailyLimit?: unknown } | undefined;
+  const browser = patch.browser as { captchaLocal?: unknown; captchaSolver?: unknown; captchaDailyLimit?: unknown } | undefined;
+  if (browser?.captchaLocal !== undefined && typeof browser.captchaLocal !== "boolean") throw badRequest("browser.captchaLocal must be true or false");
   if (browser?.captchaSolver !== undefined && !CAPTCHA_SOLVERS.includes(browser.captchaSolver as CaptchaSolver)) {
     throw badRequest(`browser.captchaSolver must be one of ${CAPTCHA_SOLVERS.join(", ")}`);
   }

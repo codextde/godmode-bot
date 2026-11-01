@@ -312,10 +312,13 @@ describe("event queue", () => {
     ingestEvent(r.id, { source: "webhook", title: "newsletter", payload: {} });
     finish((await dispatch(r.id))!, "succeeded", "Skipped: it's a newsletter, not an invoice");
     expect(eventsOf(r.id)[0]).toMatchObject({ status: "skipped", note: "it's a newsletter, not an invoice" });
+    const skippedChat = get<{ archived: number }>("SELECT archived FROM conversations WHERE id = ?", sent.at(-1)!.conversationId)!;
+    expect(skippedChat.archived).toBe(1);
 
     ingestEvent(r.id, { source: "webhook", title: "invoice", payload: {} });
     finish((await dispatch(r.id))!, "failed", null, "browser crashed");
     expect(eventsOf(r.id)[0]).toMatchObject({ status: "failed", note: "browser crashed" });
+    expect(get<{ archived: number }>("SELECT archived FROM conversations WHERE id = ?", sent.at(-1)!.conversationId)!.archived).toBe(0);
   });
 
   test("duplicates are dropped; paused automations skip events and pausing skips waiting ones", async () => {

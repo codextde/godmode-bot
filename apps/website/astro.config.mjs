@@ -13,6 +13,7 @@ export default defineConfig({
   integrations: [
     sitemap({
       filter: (page) => !/\/(admin|checkout)(\/|$)/.test(page),
+      i18n: { defaultLocale: 'en', locales: { en: 'en', de: 'de' } },
     }),
   ],
   prefetch: { prefetchAll: false, defaultStrategy: 'hover' },

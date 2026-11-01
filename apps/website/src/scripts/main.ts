@@ -2,6 +2,14 @@ import { attribution, initConsent, track, xEvent } from './analytics';
 import { initCharacters } from './characters';
 import { isPlan, PRICING } from '@/config/site';
 
+const de = document.documentElement.lang === 'de';
+// The visitor picked a language: stop the automatic switch for German browsers.
+document.querySelectorAll<HTMLAnchorElement>('[data-lang]').forEach((a) =>
+  a.addEventListener('click', () => {
+    document.cookie = `gm_lang=${a.dataset.lang}; path=/; max-age=31536000; samesite=lax`;
+  }),
+);
+
 window.__gm = true;
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -153,7 +161,7 @@ document.querySelectorAll<HTMLElement>('[data-recs]').forEach((root) => {
     paused = p;
     if (toggle) {
       toggle.setAttribute('aria-pressed', String(p));
-      toggle.setAttribute('aria-label', p ? 'Play recording' : 'Pause recording');
+      toggle.setAttribute('aria-label', (p ? toggle.dataset.labelPlay : toggle.dataset.labelPause) ?? '');
     }
   };
   const tick = () => {
@@ -379,11 +387,14 @@ document.querySelectorAll<HTMLFormElement>('form[data-lead]').forEach((form) => 
       });
       if (!res.ok) throw new Error(await res.text());
       form.classList.add('is-done');
-      if (status) status.textContent = form.dataset.done ?? 'You’re on the list. Check your inbox soon.';
+      if (status) status.textContent = form.dataset.done ?? (de ? 'Du stehst auf der Liste.' : 'You’re on the list. Check your inbox soon.');
       track('lead', form.dataset.lead);
       xEvent('lead');
     } catch {
-      if (status) status.textContent = 'That didn’t work — please check the address and try again.';
+      if (status)
+        status.textContent = de
+          ? 'Das hat nicht geklappt. Bitte prüf die Adresse und versuch es noch mal.'
+          : 'That didn’t work — please check the address and try again.';
     } finally {
       if (btn) delete btn.dataset.loading;
     }
@@ -397,7 +408,7 @@ const ua = navigator.userAgent;
 const phone = /iPhone|iPad|iPod|Android/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
 const mac = /Macintosh|Mac OS X/.test(ua) && !phone;
 document.querySelectorAll<HTMLAnchorElement>('a[data-dl]').forEach((a) => {
-  a.href = mac ? '/download?start=1' : '/download';
+  a.href = (de ? '/de/download' : '/download') + (mac ? '?start=1' : '');
 });
 
 // FAQ links (#faq-claude) open their answer.
@@ -440,7 +451,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((b) =>
       await navigator.clipboard.writeText(b.dataset.copy ?? '');
       const label = b.querySelector('[data-copy-label]');
       const prev = label?.textContent;
-      if (label) label.textContent = 'Copied';
+      if (label) label.textContent = de ? 'Kopiert' : 'Copied';
       setTimeout(() => label && prev && (label.textContent = prev), 1600);
     } catch {
       /* ignore */

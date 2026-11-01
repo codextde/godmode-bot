@@ -7,6 +7,51 @@ import DownloadButton from '../ui/DownloadButton.astro';
 import BrandMark from '../ui/BrandMark.astro';
 import { PRICING, SITE } from '@/config/site';
 import recording from '@/assets/shots/hero-recording.jpg';
+import { langOf } from "@/i18n";
+const lang = langOf(Astro.url);
+
+const t = {
+  en: {
+    pillNew: 'New',
+    pillShort: 'Your AI coworker',
+    pillLong: 'Your AI coworker for everyday computer work',
+    h1: 'Your computer work. *Done for you.*',
+    lead: 'Tell Godmode what you need in plain words. It opens your browser and apps, signs in, clicks through and finishes the job, while you do something else.',
+    watch: 'Watch it work',
+    free: `Free for ${PRICING.freeDays} days`,
+    card: 'No card',
+    signup: 'No sign-up',
+    mac: 'For Mac with Apple chip or Intel. No coding needed.',
+    trust: ['Notarized by Apple', 'Open source', 'Made in Germany by Codext GmbH', 'Runs on your Claude plan'],
+    hiShort: 'Hi, I’m Godmode!',
+    hiLong: 'Hi, I’m Godmode. Hand me the busywork.',
+    rec: 'Real screen recording, sped up',
+    alt: 'A real Mac desktop: Godmode looked up Notion, Linear and Slack pricing in its own Chrome window and answered with a table of what a 10-person team pays per month.',
+    videoLabel: 'Real screen recording, sped up: Godmode opens Notion, Linear and Slack pricing in its own browser and answers with a table of what a 10-person team pays per month.',
+    chip1: ['Signs in for you', 'never sees your passwords'],
+    chip2: ['Checks with you', 'by default, before it sends or pays'],
+  },
+  de: {
+    pillNew: 'Neu',
+    pillShort: 'Dein KI-Kollege',
+    pillLong: 'Dein KI-Kollege für die tägliche Computerarbeit',
+    h1: 'Deine Computerarbeit. *Für dich erledigt.*',
+    lead: 'Sag Godmode in normalen Worten, was du brauchst. Er öffnet deinen Browser und deine Programme, meldet sich an, klickt sich durch und erledigt die Aufgabe, während du etwas anderes machst.',
+    watch: 'Im Einsatz ansehen',
+    free: `${PRICING.freeDays} Tage kostenlos`,
+    card: 'Ohne Karte',
+    signup: 'Ohne Anmeldung',
+    mac: 'Für Mac mit Apple-Chip oder Intel. Ohne Programmieren.',
+    trust: ['Von Apple notarisiert', 'Open Source', 'Made in Germany von der Codext GmbH', 'Läuft mit deinem Claude-Abo'],
+    hiShort: 'Hi, ich bin Godmode!',
+    hiLong: 'Hi, ich bin Godmode. Gib mir den Kleinkram.',
+    rec: 'Echte Bildschirmaufnahme, beschleunigt',
+    alt: 'Ein echter Mac-Desktop: Godmode hat die Preise von Notion, Linear und Slack in seinem eigenen Chrome-Fenster nachgeschlagen und mit einer Tabelle geantwortet, was ein Team mit 10 Leuten im Monat zahlt.',
+    videoLabel: 'Echte Bildschirmaufnahme, beschleunigt: Godmode öffnet die Preise von Notion, Linear und Slack in seinem eigenen Browser und antwortet mit einer Tabelle, was ein Team mit 10 Leuten im Monat zahlt.',
+    chip1: ['Meldet sich für dich an', 'sieht nie deine Passwörter'],
+    chip2: ['Fragt dich vorher', 'standardmäßig, bevor er sendet oder zahlt'],
+  },
+}[lang];
 ---
 
 <section data-hero class="relative isolate overflow-hidden pt-[112px] sm:pt-[140px]">
@@ -15,17 +60,16 @@ import recording from '@/assets/shots/hero-recording.jpg';
   <div class="container-x relative text-center">
     <div data-reveal style="--d:0">
       <a href="#jobs" class="pill group mx-auto" data-track="hero_pill">
-        <span class="rounded-full bg-brand-soft px-2.5 py-1 text-[12.5px] font-semibold text-brand">New</span>
-        <span class="whitespace-nowrap text-text-2"><span class="sm:hidden">Your AI coworker</span><span class="hidden sm:inline">Your AI coworker for everyday computer work</span></span>
+        <span class="rounded-full bg-brand-soft px-2.5 py-1 text-[12.5px] font-semibold text-brand">{t.pillNew}</span>
+        <span class="whitespace-nowrap text-text-2"><span class="sm:hidden">{t.pillShort}</span><span class="hidden sm:inline">{t.pillLong}</span></span>
         <Icon name="arrow-right" size={14} class="text-dim transition-transform duration-500 group-hover:translate-x-0.5" />
       </a>
     </div>
 
-    <Words as="h1" text="Your computer work. *Done for you.*" class="h-display mx-auto mt-7 max-w-[12ch] pb-2" delay={120} />
+    <Words as="h1" text={t.h1} class={`h-display mx-auto mt-7 pb-2 ${lang === "de" ? "max-w-[15ch]" : "max-w-[12ch]"}`} delay={120} />
 
     <p class="lead mx-auto mt-6 max-w-[620px] !text-text-2" data-reveal style="--d:450">
-      Tell Godmode what you need in plain words. It opens your browser and apps, signs in, clicks through and finishes the
-      job, while you do something else.
+      {t.lead}
     </p>
 
     <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row" data-reveal style="--d:600">
@@ -34,23 +78,23 @@ import recording from '@/assets/shots/hero-recording.jpg';
         <span class="play-ring grid size-7 place-items-center rounded-full bg-brand text-white">
           <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 1.2v7.6L8.6 5z" fill="currentColor"></path></svg>
         </span>
-        Watch it work
+        {t.watch}
       </button>
     </div>
 
     <p class="hero-note mt-5" data-reveal style="--d:680">
-      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> Free for {PRICING.freeDays} days</span>
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.free}</span>
       <span aria-hidden="true" class="text-line-3">·</span>
-      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No card</span>
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.card}</span>
       <span aria-hidden="true" class="text-line-3">·</span>
-      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> No sign-up</span>
+      <span><Icon name="check" size={15} class="text-brand" stroke={2.4} /> {t.signup}</span>
     </p>
-    <p class="mt-2 text-[13px] text-dim" data-reveal style="--d:720">For Mac with Apple chip or Intel. No coding needed.</p>
+    <p class="mt-2 text-[13px] text-dim" data-reveal style="--d:720">{t.mac}</p>
     <div class="trust-row mt-7" data-reveal style="--d:780">
-      <span><Icon name="shield-check" size={15} class="text-text" /> Notarized by Apple</span>
-      <a href={SITE.repo} target="_blank" rel="noopener" data-track="hero_github"><BrandMark name="github" size={15} class="text-text" /> Open source</a>
-      <a href="#proof" data-track="hero_proof"><Icon name="building-2" size={15} class="text-text" /> Made in Germany by Codext GmbH</a>
-      <span><BrandMark name="claude" size={15} class="text-claude" /> Runs on your Claude plan</span>
+      <span><Icon name="shield-check" size={15} class="text-text" /> {t.trust[0]}</span>
+      <a href={SITE.repo} target="_blank" rel="noopener" data-track="hero_github"><BrandMark name="github" size={15} class="text-text" /> {t.trust[1]}</a>
+      <a href="#proof" data-track="hero_proof"><Icon name="building-2" size={15} class="text-text" /> {t.trust[2]}</a>
+      <span><BrandMark name="claude" size={15} class="text-claude" /> {t.trust[3]}</span>
     </div>
   </div>
 
@@ -60,18 +104,18 @@ import recording from '@/assets/shots/hero-recording.jpg';
         <div class="hero-mascot" data-mascot aria-hidden="true">
           <Character size={92} follow class="mascot-idle" seed="hero" />
           <Character size={92} mood="happy" class="mascot-happy" seed="hero" />
-          <span class="say"><span class="sm:hidden">Hi, I’m Godmode!</span><span class="hidden sm:inline">Hi, I’m Godmode. Hand me the busywork.</span></span>
+          <span class="say"><span class="sm:hidden">{t.hiShort}</span><span class="hidden sm:inline">{t.hiLong}</span></span>
         </div>
         <div class="window-bar traffic">
           <i></i><i></i><i></i>
           <div class="mx-auto flex items-center gap-2 text-[12px] font-medium text-muted">
-            <span class="live-dot !size-1.5"></span> Real screen recording, sped up
+            <span class="live-dot !size-1.5"></span> {t.rec}
           </div>
         </div>
         <div class="hero-screen relative aspect-video bg-surface-3">
           <Image
             src={recording}
-            alt="A real Mac desktop: Godmode looked up Notion, Linear and Slack pricing in its own Chrome window and answered with a table of what a 10-person team pays per month."
+            alt={t.alt}
             widths={[640, 960, 1280, 1600, 2000]}
             sizes="(min-width: 1200px) 1080px, 94vw"
             loading="eager"
@@ -86,7 +130,7 @@ import recording from '@/assets/shots/hero-recording.jpg';
             autoplay
             preload="metadata"
             data-autoplay
-            aria-label="Real screen recording, sped up: Godmode opens Notion, Linear and Slack pricing in its own browser and answers with a table of what a 10-person team pays per month."
+            aria-label={t.videoLabel}
           >
             <source src="/media/hero.webm" type="video/webm" />
             <source src="/media/hero.mp4" type="video/mp4" />
@@ -97,15 +141,15 @@ import recording from '@/assets/shots/hero-recording.jpg';
       <div class="float-chip left-[0%] top-[22%] hidden lg:flex" style="--fd:0s">
         <span class="grid size-8 place-items-center rounded-xl bg-brand-soft text-brand"><Icon name="key-round" size={16} /></span>
         <span class="text-left">
-          <b class="block text-[13.5px] font-semibold text-text">Signs in for you</b>
-          <span class="text-[12px] text-muted">never sees your passwords</span>
+          <b class="block text-[13.5px] font-semibold text-text">{t.chip1[0]}</b>
+          <span class="text-[12px] text-muted">{t.chip1[1]}</span>
         </span>
       </div>
       <div class="float-chip right-[0%] top-[46%] hidden lg:flex" style="--fd:-2s">
         <span class="grid size-8 place-items-center rounded-xl bg-peach-soft text-[#8a3d1f]"><Icon name="hand" size={16} /></span>
         <span class="text-left">
-          <b class="block text-[13.5px] font-semibold text-text">Checks with you</b>
-          <span class="text-[12px] text-muted">by default, before it sends or pays</span>
+          <b class="block text-[13.5px] font-semibold text-text">{t.chip2[0]}</b>
+          <span class="text-[12px] text-muted">{t.chip2[1]}</span>
         </span>
       </div>
     </div>

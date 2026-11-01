@@ -2,66 +2,140 @@
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
 
+import { href, langOf } from '@/i18n';
+
 type Job = [ask: string, done: string];
-const groups: { name: string; icon: string; jobs: Job[] }[] = [
-  {
-    name: 'Email & admin',
-    icon: 'inbox',
-    jobs: [
-      ['Go through my inbox, draft replies to everyone who is waiting on me and tell me what needs me today.', '11 replies drafted, 6 emails that need you'],
-      ['Fill in the supplier form with our company details. Show me before you submit.', 'Form filled, screenshot waiting for your OK'],
-    ],
+type Group = { name: string; icon: string; jobs: Job[] };
+const lang = langOf(Astro.url);
+const groups = ({
+  en: [
+    {
+      name: 'Email & admin',
+      icon: 'inbox',
+      jobs: [
+        ['Go through my inbox, draft replies to everyone who is waiting on me and tell me what needs me today.', '11 replies drafted, 6 emails that need you'],
+        ['Fill in the supplier form with our company details. Show me before you submit.', 'Form filled, screenshot waiting for your OK'],
+      ],
+    },
+    {
+      name: 'Finance',
+      icon: 'receipt',
+      jobs: [
+        ['Download all invoices from my supplier portals and file them in Dropbox.', '23 invoices filed, list in your inbox'],
+        ['Find invoices more than 14 days overdue and draft a friendly reminder for each customer.', '7 reminders in your drafts'],
+      ],
+    },
+    {
+      name: 'Marketing',
+      icon: 'megaphone',
+      jobs: [
+        ['Put this week’s ad numbers from Meta, Google and TikTok into our report sheet.', 'Report updated, 4 ads that don’t sell flagged'],
+        ['Reply to new Google reviews in our voice. Send me anything under 3 stars.', '12 replies posted, 1 waiting for you'],
+      ],
+    },
+    {
+      name: 'Online shop',
+      icon: 'shopping-bag',
+      jobs: [
+        ['Answer today’s “where is my order?” emails with the tracking link.', '9 customers answered'],
+        ['Check stock against last month’s sales and draft reorders for anything running low.', '3 reorders drafted for your OK'],
+      ],
+    },
+    {
+      name: 'Sales',
+      icon: 'handshake',
+      jobs: [
+        ['After each call today, update the deal in HubSpot and draft the follow-up email.', '4 deals updated, 4 follow-ups drafted'],
+        ['Find the website, team size and right contact for every company in this sheet.', '60 rows filled in'],
+      ],
+    },
+    {
+      name: 'Research',
+      icon: 'search',
+      jobs: [
+        ['Compare these four project tools for a 12-person team: price, features, what fits us.', 'Comparison table and a clear pick'],
+        ['Every morning, check the tender portals for new website projects in our region.', 'New tenders in your inbox at 8:00'],
+      ],
+    },
+  ],
+  de: [
+    {
+      name: 'E-Mail & Büro',
+      icon: 'inbox',
+      jobs: [
+        ['Geh mein Postfach durch, schreib Antwortentwürfe an alle, die auf mich warten, und sag mir, was heute wirklich mich braucht.', '11 Antworten entworfen, 6 Mails brauchen dich'],
+        ['Füll das Lieferantenformular mit unseren Firmendaten aus. Zeig es mir, bevor du es abschickst.', 'Formular ausgefüllt, Screenshot wartet auf dein OK'],
+      ],
+    },
+    {
+      name: 'Finanzen',
+      icon: 'receipt',
+      jobs: [
+        ['Lade alle Rechnungen aus meinen Lieferantenportalen herunter und leg sie in Dropbox ab.', '23 Rechnungen abgelegt, Liste in deinem Postfach'],
+        ['Such Rechnungen, die mehr als 14 Tage überfällig sind, und entwirf für jeden Kunden eine freundliche Erinnerung.', '7 Erinnerungen in deinen Entwürfen'],
+      ],
+    },
+    {
+      name: 'Marketing',
+      icon: 'megaphone',
+      jobs: [
+        ['Trag die Werbezahlen dieser Woche aus Meta, Google und TikTok in unsere Report-Tabelle ein.', 'Report aktualisiert, 4 Anzeigen ohne Verkäufe markiert'],
+        ['Antworte auf neue Google-Bewertungen in unserem Ton. Alles unter 3 Sternen schick mir.', '12 Antworten gepostet, 1 wartet auf dich'],
+      ],
+    },
+    {
+      name: 'Onlineshop',
+      icon: 'shopping-bag',
+      jobs: [
+        ['Beantworte die „Wo ist meine Bestellung?“-Mails von heute mit dem Tracking-Link.', '9 Kunden beantwortet'],
+        ['Gleich den Lagerbestand mit den Verkäufen vom letzten Monat ab und entwirf Nachbestellungen für alles, was knapp wird.', '3 Nachbestellungen warten auf dein OK'],
+      ],
+    },
+    {
+      name: 'Vertrieb',
+      icon: 'handshake',
+      jobs: [
+        ['Aktualisiere nach jedem Call heute den Deal in HubSpot und entwirf die Follow-up-Mail.', '4 Deals aktualisiert, 4 Follow-ups entworfen'],
+        ['Finde für jede Firma in dieser Tabelle Website, Teamgröße und den richtigen Ansprechpartner.', '60 Zeilen ausgefüllt'],
+      ],
+    },
+    {
+      name: 'Recherche',
+      icon: 'search',
+      jobs: [
+        ['Vergleich diese vier Projekt-Tools für ein Team mit 12 Leuten: Preis, Funktionen, was zu uns passt.', 'Vergleichstabelle und eine klare Empfehlung'],
+        ['Prüf jeden Morgen die Ausschreibungsportale auf neue Website-Projekte in unserer Region.', 'Neue Ausschreibungen um 8:00 in deinem Postfach'],
+      ],
+    },
+  ],
+} satisfies Record<'en' | 'de', Group[]>)[lang];
+const t = {
+  en: {
+    eyebrow: 'What it can do',
+    h: 'You type the task. *You get it back done.*',
+    lead: 'Write it the way you would ask a colleague. A few things people hand to Godmode every week:',
+    result: 'Result: ',
+    more: 'See 60 more jobs',
+    note: 'Examples. Godmode works with the websites and accounts you give it.',
   },
-  {
-    name: 'Finance',
-    icon: 'receipt',
-    jobs: [
-      ['Download all invoices from my supplier portals and file them in Dropbox.', '23 invoices filed, list in your inbox'],
-      ['Find invoices more than 14 days overdue and draft a friendly reminder for each customer.', '7 reminders in your drafts'],
-    ],
+  de: {
+    eyebrow: 'Was es kann',
+    h: 'Du schreibst die Aufgabe. *Du bekommst sie erledigt zurück.*',
+    lead: 'Schreib es so, wie du einen Kollegen fragen würdest. Ein paar Dinge, die Leute Godmode jede Woche geben:',
+    result: 'Ergebnis: ',
+    more: '60 weitere Aufgaben ansehen',
+    note: 'Beispiele. Godmode arbeitet mit den Websites und Konten, die du ihm gibst.',
   },
-  {
-    name: 'Marketing',
-    icon: 'megaphone',
-    jobs: [
-      ['Put this week’s ad numbers from Meta, Google and TikTok into our report sheet.', 'Report updated, 4 ads that don’t sell flagged'],
-      ['Reply to new Google reviews in our voice. Send me anything under 3 stars.', '12 replies posted, 1 waiting for you'],
-    ],
-  },
-  {
-    name: 'Online shop',
-    icon: 'shopping-bag',
-    jobs: [
-      ['Answer today’s “where is my order?” emails with the tracking link.', '9 customers answered'],
-      ['Check stock against last month’s sales and draft reorders for anything running low.', '3 reorders drafted for your OK'],
-    ],
-  },
-  {
-    name: 'Sales',
-    icon: 'handshake',
-    jobs: [
-      ['After each call today, update the deal in HubSpot and draft the follow-up email.', '4 deals updated, 4 follow-ups drafted'],
-      ['Find the website, team size and right contact for every company in this sheet.', '60 rows filled in'],
-    ],
-  },
-  {
-    name: 'Research',
-    icon: 'search',
-    jobs: [
-      ['Compare these four project tools for a 12-person team: price, features, what fits us.', 'Comparison table and a clear pick'],
-      ['Every morning, check the tender portals for new website projects in our region.', 'New tenders in your inbox at 8:00'],
-    ],
-  },
-];
+}[lang];
 ---
 
 <section id="jobs" class="relative py-16 sm:py-24" data-track-view="jobs">
   <div class="container-x">
     <div class="mx-auto max-w-[760px] text-center">
-      <p class="eyebrow justify-center" data-reveal>What it can do</p>
-      <Words text="You type the task. *You get it back done.*" class="h-section mx-auto mt-4" />
+      <p class="eyebrow justify-center" data-reveal>{t.eyebrow}</p>
+      <Words text={t.h} class="h-section mx-auto mt-4" />
       <p class="lead mx-auto mt-5 max-w-[580px]" data-reveal style="--d:200">
-        Write it the way you would ask a colleague. A few things people hand to Godmode every week:
+        {t.lead}
       </p>
     </div>
 
@@ -84,7 +158,7 @@ const groups: { name: string; icon: string; jobs: Job[] }[] = [
                       <Icon name="check" size={13} stroke={3} />
                     </span>
                     <span>
-                      <span class="sr-only">Result: </span>
+                      <span class="sr-only">{t.result}</span>
                       {done}
                     </span>
                   </p>
@@ -97,10 +171,10 @@ const groups: { name: string; icon: string; jobs: Job[] }[] = [
     </div>
 
     <div class="mt-12 flex flex-col items-center gap-3 text-center" data-reveal>
-      <a href="/use-cases" class="btn btn-ghost" data-track="jobs_all">
-        See 60 more jobs <Icon name="arrow-right" size={15} class="arrow" />
+      <a href={href(lang, '/use-cases')} class="btn btn-ghost" data-track="jobs_all">
+        {t.more} <Icon name="arrow-right" size={15} class="arrow" />
       </a>
-      <p class="text-[13px] text-dim">Examples. Godmode works with the websites and accounts you give it.</p>
+      <p class="text-[13px] text-dim">{t.note}</p>
     </div>
   </div>
 

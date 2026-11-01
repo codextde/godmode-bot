@@ -1,88 +1,189 @@
 ---
 import Words from '../ui/Words.astro';
 import WaitlistForm from '../ui/WaitlistForm.astro';
-import { PRICING, SITE } from '@/config/site';
+import Icon from '../ui/Icon.astro';
+import { PRICING, SETUP, SITE, setupPrice } from '@/config/site';
+import { href, langOf } from '@/i18n';
 
 const { monthly, yearly } = PRICING.plans;
+const lang = langOf(Astro.url);
+type Item = { key: string; q: string; a: string; waitlist?: boolean; link?: [string, string] };
 
-const faqs: { key: string; q: string; a: string; waitlist?: boolean }[] = [
-  {
-    key: 'code',
-    q: 'Do I need to know how to code?',
-    a: 'No. If you can explain the task to a colleague, you can hand it to Godmode. You type or say what you need in plain words, and it does the clicking. Setup is a normal Mac app install and walks you through the rest.',
+const t = {
+  en: {
+    eyebrow: 'Questions',
+    h: 'Good questions. *Straight answers.*',
+    else: 'Something else? Email',
+    human: 'A human answers, usually within a day.',
   },
-  {
-    key: 'chatgpt',
-    q: 'How is this different from ChatGPT?',
-    a: 'ChatGPT answers in a chat window, and then you do the work. Godmode does the work: it signs in to the websites and programs you use, clicks through, finishes the task and hands you the result. It can also do it again by itself every week, or whenever an email arrives.',
+  de: {
+    eyebrow: 'Fragen',
+    h: 'Gute Fragen. *Klare Antworten.*',
+    else: 'Noch etwas anderes? Schreib an',
+    human: 'Ein Mensch antwortet, meist innerhalb eines Tages.',
   },
-  {
-    key: 'after',
-    q: `What happens after ${PRICING.freeDays} days?`,
-    a: `Godmode asks if you want to keep it. Pick monthly ($${monthly.price} a month) or yearly ($${yearly.perMonth} a month, billed $${yearly.price} once a year). If you don’t, nothing is charged, because you never gave us a card. Everything you set up stays on your Mac, so you can pick up where you left off.`,
-  },
-  {
-    key: 'card',
-    q: 'Do I need a credit card to try it?',
-    a: `No. Download it and use every feature free for ${PRICING.freeDays} days. No card, no account. You only enter payment details if you decide to keep it.`,
-  },
-  {
-    key: 'claude',
-    q: 'Do I need a Claude plan?',
-    a: 'Yes. Godmode thinks with Claude, the AI from Anthropic. You sign in with your Claude Pro or Max plan once during setup. No plan yet? The setup shows you how to get one. If Godmode works for you all day, Max fits better than Pro. An Anthropic API key works too.',
-  },
-  {
-    key: 'safe',
-    q: 'Is my data safe? Does it see my passwords?',
-    a: 'Your passwords and 2FA codes live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Your logins, notes and history stay on your computer, and the app sends nothing to us. The tasks you give and the pages it reads are processed by Claude under your own Claude account.',
-  },
-  {
-    key: 'ask',
-    q: 'Will it do things without asking me?',
-    a: 'By default it asks you before important steps like sending an email, paying, deleting or posting. If your task already says to do that step (“send the reminders”), it goes ahead. You can watch every step live and take over with one click. When a website wants a code from your phone, it asks you for that too.',
-  },
-  {
-    key: 'windows',
-    q: 'Does it work on Windows?',
-    a: 'Not yet. Godmode is for Mac for now, with Apple chip or Intel. Leave your email and we’ll tell you when the Windows version is ready.',
-    waitlist: true,
-  },
-  {
-    key: 'team',
-    q: 'Can my team use it?',
-    a: `Yes. Each person installs Godmode on their own Mac and gets the same ${PRICING.freeDays} free days. For several people on one invoice, email ${SITE.email} and we’ll set it up with you.`,
-  },
-  {
-    key: 'cancel',
-    q: 'How do I cancel?',
-    a: `In two clicks, in the billing portal (linked in the app and in your receipt), or by email. It keeps working until the end of the month or year you paid for. And if it’s not for you, email us within ${PRICING.guaranteeDays} days of your first payment and we refund it in full, no questions asked.`,
-  },
-  {
-    key: 'offline',
-    q: 'Does it work when my Mac is off?',
-    a: 'It works while your Mac is on and awake. Want it working around the clock? Run it on a spare Mac that stays on, like a Mac mini, and reach it from your phone. Email us and we’ll help you set it up.',
-  },
-  {
-    key: 'cant',
-    q: 'What can’t it do?',
-    a: 'Some websites block robots with puzzles (CAPTCHAs) or want a code from your phone. Then you click “Take control” for a moment and it carries on. Like any AI it can make mistakes, so check important work until you trust a routine.',
-  },
-  {
-    key: 'invoice',
-    q: 'Can I get an invoice for my company?',
-    a: 'Yes. Add your company name and VAT ID at checkout and you get a proper invoice by email. Payments are handled by Stripe; we never see your card.',
-  },
-];
+}[lang];
+
+const faqs = ({
+  en: [
+    {
+      key: 'code',
+      q: 'Do I need to know how to code?',
+      a: 'No. If you can explain the task to a colleague, you can hand it to Godmode. You type or say what you need in plain words, and it does the clicking. Setup is a normal Mac app install and walks you through the rest.',
+    },
+    {
+      key: 'chatgpt',
+      q: 'How is this different from ChatGPT?',
+      a: 'ChatGPT answers in a chat window, and then you do the work. Godmode does the work: it signs in to the websites and programs you use, clicks through, finishes the task and hands you the result. It can also do it again by itself every week, or whenever an email arrives.',
+    },
+    {
+      key: 'after',
+      q: `What happens after ${PRICING.freeDays} days?`,
+      a: `Godmode asks if you want to keep it. Pick monthly ($${monthly.price} a month) or yearly ($${yearly.perMonth} a month, billed $${yearly.price} once a year). If you don’t, nothing is charged, because you never gave us a card. Everything you set up stays on your Mac, so you can pick up where you left off.`,
+    },
+    {
+      key: 'card',
+      q: 'Do I need a credit card to try it?',
+      a: `No. Download it and use every feature free for ${PRICING.freeDays} days. No card, no account. You only enter payment details if you decide to keep it.`,
+    },
+    {
+      key: 'claude',
+      q: 'Do I need a Claude plan?',
+      a: 'Yes. Godmode thinks with Claude, the AI from Anthropic. You sign in with your Claude Pro or Max plan once during setup. No plan yet? The setup shows you how to get one. If Godmode works for you all day, Max fits better than Pro. An Anthropic API key works too.',
+    },
+    {
+      key: 'setup',
+      q: 'Can you set it up for me?',
+      a: `Yes. With our done-for-you setup (${setupPrice('en')} one-time, plus VAT) we find your biggest time sinks in a workshop, set Godmode up on your Macs and build up to ${SETUP.automations} automations with you, tested on your real accounts. Your team gets a training and you get ${SETUP.supportDays} days of support.`,
+      link: ['/setup', 'See the setup service'],
+    },
+    {
+      key: 'safe',
+      q: 'Is my data safe? Does it see my passwords?',
+      a: 'Your passwords and 2FA codes live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI only learns that a password was filled, never what it is, and only on that login’s own website. Your logins, notes and history stay on your computer, and the app sends nothing to us. The tasks you give and the pages it reads are processed by Claude under your own Claude account.',
+    },
+    {
+      key: 'ask',
+      q: 'Will it do things without asking me?',
+      a: 'By default it asks you before important steps like sending an email, paying, deleting or posting. If your task already says to do that step (“send the reminders”), it goes ahead. You can watch every step live and take over with one click. When a website wants a code from your phone, it asks you for that too.',
+    },
+    {
+      key: 'windows',
+      q: 'Does it work on Windows?',
+      a: 'Not yet. Godmode is for Mac for now, with Apple chip or Intel. Leave your email and we’ll tell you when the Windows version is ready.',
+      waitlist: true,
+    },
+    {
+      key: 'team',
+      q: 'Can my team use it?',
+      a: `Yes. Each person installs Godmode on their own Mac and gets the same ${PRICING.freeDays} free days. For several people on one invoice, email ${SITE.email} and we’ll set it up with you.`,
+    },
+    {
+      key: 'cancel',
+      q: 'How do I cancel?',
+      a: `In two clicks, in the billing portal (linked in the app and in your receipt), or by email. It keeps working until the end of the month or year you paid for. And if it’s not for you, email us within ${PRICING.guaranteeDays} days of your first payment and we refund it in full, no questions asked.`,
+    },
+    {
+      key: 'offline',
+      q: 'Does it work when my Mac is off?',
+      a: 'It works while your Mac is on and awake. Want it working around the clock? Run it on a spare Mac that stays on, like a Mac mini, and reach it from your phone. Email us and we’ll help you set it up.',
+    },
+    {
+      key: 'cant',
+      q: 'What can’t it do?',
+      a: 'Some websites block robots with puzzles (CAPTCHAs) or want a code from your phone. Then you click “Take control” for a moment and it carries on. Like any AI it can make mistakes, so check important work until you trust a routine.',
+    },
+    {
+      key: 'invoice',
+      q: 'Can I get an invoice for my company?',
+      a: 'Yes. Add your company name and VAT ID at checkout and you get a proper invoice by email. Payments are handled by Stripe; we never see your card.',
+    },
+  ],
+  de: [
+    {
+      key: 'code',
+      q: 'Muss ich programmieren können?',
+      a: 'Nein. Wenn du die Aufgabe einem Kollegen erklären kannst, kannst du sie Godmode geben. Du schreibst oder sagst in normalen Worten, was du brauchst, und er übernimmt das Klicken. Die Installation ist eine ganz normale Mac-App und führt dich durch den Rest.',
+    },
+    {
+      key: 'chatgpt',
+      q: 'Was ist der Unterschied zu ChatGPT?',
+      a: 'ChatGPT antwortet in einem Chatfenster, und dann machst du die Arbeit. Godmode macht die Arbeit: Er meldet sich bei den Websites und Programmen an, die du nutzt, klickt sich durch, erledigt die Aufgabe und gibt dir das Ergebnis. Auf Wunsch macht er das jede Woche wieder von selbst, oder immer dann, wenn eine E-Mail kommt.',
+    },
+    {
+      key: 'after',
+      q: `Was passiert nach ${PRICING.freeDays} Tagen?`,
+      a: `Godmode fragt dich, ob du ihn behalten willst. Monatlich ($${monthly.price} im Monat) oder jährlich ($${yearly.perMonth} im Monat, einmal im Jahr $${yearly.price}). Wenn nicht, wird nichts abgebucht, denn du hast uns nie eine Karte gegeben. Alles, was du eingerichtet hast, bleibt auf deinem Mac, du kannst also jederzeit weitermachen.`,
+    },
+    {
+      key: 'card',
+      q: 'Brauche ich zum Testen eine Kreditkarte?',
+      a: `Nein. Herunterladen und alle Funktionen ${PRICING.freeDays} Tage kostenlos nutzen. Ohne Karte, ohne Konto. Zahlungsdaten gibst du nur ein, wenn du ihn behalten willst.`,
+    },
+    {
+      key: 'claude',
+      q: 'Brauche ich ein Claude-Abo?',
+      a: 'Ja. Godmode denkt mit Claude, der KI von Anthropic. Du meldest dich bei der Einrichtung einmal mit deinem Claude Pro- oder Max-Abo an. Noch kein Abo? Die Einrichtung zeigt dir, wie du eins bekommst. Arbeitet Godmode den ganzen Tag für dich, passt Max besser als Pro. Ein Anthropic API-Key geht auch.',
+    },
+    {
+      key: 'setup',
+      q: 'Könnt ihr das für mich einrichten?',
+      a: `Ja. Bei der Einrichtung vom Profi (${setupPrice('de')} einmalig, zzgl. MwSt.) finden wir in einem Workshop deine größten Zeitfresser, richten Godmode auf euren Macs ein und bauen mit dir bis zu ${SETUP.automations} Automationen, getestet mit euren echten Konten. Dein Team bekommt eine Schulung und du ${SETUP.supportDays} Tage Support.`,
+      link: ['/setup', 'Zur Einrichtung vom Profi'],
+    },
+    {
+      key: 'safe',
+      q: 'Sind meine Daten sicher? Sieht er meine Passwörter?',
+      a: 'Deine Passwörter und 2FA-Codes liegen in einem verschlüsselten Tresor auf deinem Mac. Godmode tippt sie selbst in die Login-Seite. Die KI erfährt nur, dass ein Passwort eingetragen wurde, nie welches, und nur auf der Website, zu der der Login gehört. Deine Logins, Notizen und dein Verlauf bleiben auf deinem Computer, und die App schickt uns nichts. Deine Aufgaben und die Seiten, die er liest, verarbeitet Claude über dein eigenes Claude-Konto.',
+    },
+    {
+      key: 'ask',
+      q: 'Macht er Dinge, ohne mich zu fragen?',
+      a: 'Standardmäßig fragt er dich vor wichtigen Schritten wie dem Senden einer E-Mail, Bezahlen, Löschen oder Posten. Steht der Schritt schon in deiner Aufgabe („schick die Erinnerungen“), macht er ihn. Du kannst jeden Schritt live verfolgen und mit einem Klick übernehmen. Will eine Website einen Code von deinem Handy, fragt er dich auch danach.',
+    },
+    {
+      key: 'windows',
+      q: 'Läuft es auf Windows?',
+      a: 'Noch nicht. Godmode gibt es vorerst für Mac, mit Apple-Chip oder Intel. Hinterlass deine E-Mail, und wir sagen dir Bescheid, wenn die Windows-Version fertig ist.',
+      waitlist: true,
+    },
+    {
+      key: 'team',
+      q: 'Kann mein Team es nutzen?',
+      a: `Ja. Jede Person installiert Godmode auf ihrem eigenen Mac und bekommt dieselben ${PRICING.freeDays} kostenlosen Tage. Für mehrere Leute auf einer Rechnung schreib an ${SITE.email}, und wir richten es mit dir ein.`,
+    },
+    {
+      key: 'cancel',
+      q: 'Wie kündige ich?',
+      a: `Mit zwei Klicks im Abrechnungsportal (verlinkt in der App und in deiner Quittung) oder per E-Mail. Er läuft bis zum Ende des bezahlten Monats oder Jahres weiter. Und wenn es nichts für dich ist, schreib uns innerhalb von ${PRICING.guaranteeDays} Tagen nach deiner ersten Zahlung, und du bekommst alles zurück, ohne Rückfragen.`,
+    },
+    {
+      key: 'offline',
+      q: 'Arbeitet er, wenn mein Mac aus ist?',
+      a: 'Er arbeitet, solange dein Mac an und wach ist. Soll er rund um die Uhr laufen? Dann nimm einen Mac, der immer an bleibt, zum Beispiel einen Mac mini, und erreich ihn vom Handy aus. Schreib uns, wir helfen dir beim Einrichten.',
+    },
+    {
+      key: 'cant',
+      q: 'Was kann er nicht?',
+      a: 'Manche Websites blocken Roboter mit Rätseln (CAPTCHAs) oder wollen einen Code von deinem Handy. Dann klickst du kurz auf „Übernehmen“, und er macht danach weiter. Wie jede KI kann er Fehler machen, prüf wichtige Arbeit also, bis du einem Ablauf vertraust.',
+    },
+    {
+      key: 'invoice',
+      q: 'Bekomme ich eine Rechnung für meine Firma?',
+      a: 'Ja. Gib beim Bezahlen deinen Firmennamen und deine USt-IdNr. an, und du bekommst eine ordentliche Rechnung per E-Mail. Die Zahlung läuft über Stripe, deine Karte sehen wir nie.',
+    },
+  ],
+} satisfies Record<'en' | 'de', Item[]>)[lang];
 ---
 
 <section id="faq" class="relative py-16 sm:py-24" data-track-view="faq">
   <div class="container-x grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
     <div class="lg:sticky lg:top-28 lg:self-start">
-      <p class="eyebrow" data-reveal>Questions</p>
-      <Words text="Good questions. *Straight answers.*" class="h-section mt-4" />
+      <p class="eyebrow" data-reveal>{t.eyebrow}</p>
+      <Words text={t.h} class="h-section mt-4" />
       <p class="mt-6 max-w-[360px] text-[16px] leading-relaxed text-muted" data-reveal style="--d:200">
-        Something else? Email <a href={`mailto:${SITE.email}`} class="font-medium text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a>.
-        A human answers, usually within a day.
+        {t.else} <a href={`mailto:${SITE.email}`} class="font-medium text-text underline decoration-line-3 underline-offset-2">{SITE.email}</a>.
+        {t.human}
       </p>
     </div>
     <div class="divide-y divide-line border-y border-line">
@@ -98,6 +199,11 @@ const faqs: { key: string; q: string; a: string; waitlist?: boolean }[] = [
             <div class="max-w-[640px] pb-7">
               <p class="text-[16px] leading-[1.7] text-muted">{f.a}</p>
               {f.waitlist && <WaitlistForm source="windows" class="mt-5" />}
+              {f.link && (
+                <a href={href(lang, f.link[0])} class="mt-4 inline-flex items-center gap-1.5 text-[15px] font-medium text-brand" data-track={`faq_${f.key}_link`}>
+                  {f.link[1]} <Icon name="arrow-right" size={15} />
+                </a>
+              )}
             </div>
           </details>
         ))

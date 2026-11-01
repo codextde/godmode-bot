@@ -1,24 +1,45 @@
 ---
 // "Tell me when Windows is ready": stored as a lead (source = windows) through /api/lead.
+import { href, langOf } from '@/i18n';
+
 interface Props {
   source: string;
   class?: string;
 }
 const { source, class: className = '' } = Astro.props;
+const lang = langOf(Astro.url);
+const t = {
+  en: {
+    done: 'Thanks! We’ll email you when it’s ready.',
+    email: 'Your email',
+    placeholder: 'you@company.com',
+    submit: 'Tell me when it’s ready',
+    note: 'One email when Windows is ready, nothing else.',
+    privacy: 'Privacy',
+  },
+  de: {
+    done: 'Danke! Wir schreiben dir, sobald es so weit ist.',
+    email: 'Deine E-Mail',
+    placeholder: 'du@firma.de',
+    submit: 'Sag mir Bescheid',
+    note: 'Eine E-Mail, wenn Windows fertig ist, sonst nichts.',
+    privacy: 'Datenschutz',
+  },
+}[lang];
 const id = `wl-${source}`;
 ---
 
-<form data-lead={source} data-done="Thanks! We’ll email you when it’s ready." class:list={['lead-form', className]}>
+<form data-lead={source} data-done={t.done} class:list={['lead-form', className]}>
   <div class="flex flex-col gap-2 sm:flex-row">
-    <label class="sr-only" for={id}>Your email</label>
-    <input id={id} name="email" type="email" required autocomplete="email" placeholder="you@company.com" class="input flex-1" />
+    <label class="sr-only" for={id}>{t.email}</label>
+    <input id={id} name="email" type="email" required autocomplete="email" placeholder={t.placeholder} class="input flex-1" />
     <button type="submit" class="btn btn-dark !h-[50px]">
-      <span class="btn-label">Tell me when it’s ready</span>
+      <span class="btn-label">{t.submit}</span>
       <span class="btn-spinner" aria-hidden="true"></span>
     </button>
   </div>
   <p data-status role="status" class="mt-2 min-h-[20px] text-[13.5px] text-muted"></p>
   <p class="text-[12px] text-dim">
-    One email when Windows is ready, nothing else. <a href="/legal/privacy" class="underline decoration-line-3 underline-offset-2">Privacy</a>
+    {t.note} <a href={href(lang, '/legal/privacy')} class="underline decoration-line-3 underline-offset-2">{t.privacy}</a>
   </p>
 </form>
