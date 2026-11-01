@@ -772,6 +772,7 @@ export const api = {
     exec: (id: string, input: SshExecInput) => post<SshExecResult>(`/api/ssh/servers/${id}/exec`, input),
     assign: (id: string, input: SshAssignInput) => post<SshServer>(`/api/ssh/servers/${id}/assign`, input),
     godmode: () => get<Record<string, SshGodmodeStatus>>("/api/ssh/godmode"),
+    folders: (id: string, path?: string, hidden = false) => get<FolderListing>(`/api/ssh/servers/${id}/folders`, { path, hidden: hidden ? 1 : undefined }),
     installGodmode: (id: string) => post<{ ok: true }>(`/api/ssh/servers/${id}/godmode`),
     /** Private keys in ~/.ssh on the computer running Godmode. */
     localKeys: () => get<SshLocalKey[]>("/api/ssh/local-keys"),

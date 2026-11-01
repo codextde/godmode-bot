@@ -385,6 +385,7 @@ const RULES: [methods: string, path: string, rule: Rule][] = [
   ["POST", "/api/ssh/servers/:id/exec", S],
   ["POST", "/api/ssh/servers/:id/assign", S],
   ["GET", "/api/ssh/godmode", A],
+  ["GET", "/api/ssh/servers/:id/folders", S],
   ["POST", "/api/ssh/servers/:id/godmode", S],
   ["POST", "/api/ssh/test", sshTest],
   ["GET", "/api/ssh/local-keys", S],

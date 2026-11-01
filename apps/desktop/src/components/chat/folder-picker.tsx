@@ -110,6 +110,11 @@ function crumbsOf({ path, home }: FolderListing): Crumb[] {
   return out;
 }
 
+export interface FolderSource {
+  key: string;
+  list: (path: string | undefined, hidden: boolean) => Promise<FolderListing>;
+}
+
 export function FolderPickerDialog({
   open,
   onOpenChange,
@@ -118,6 +123,7 @@ export function FolderPickerDialog({
   title,
   description,
   onCloseAutoFocus,
+  source,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -126,6 +132,7 @@ export function FolderPickerDialog({
   title?: string;
   description?: string;
   onCloseAutoFocus?: (e: Event) => void;
+  source?: FolderSource;
 }) {
   const { t } = useTranslation(["chat", "common"]);
   const qc = useQueryClient();
@@ -139,20 +146,22 @@ export function FolderPickerDialog({
 
   useEffect(() => {
     if (!open) return;
-    setPath(value ?? lastFolder());
+    setPath(value ?? (source ? undefined : lastFolder()));
     setQuery("");
     setBrowsed(false);
     // Only when the dialog opens: later changes of `value` must not reset the browsing position.
   }, [open]);
 
+  const list = source?.list ?? api.folders.list;
+  const keyOf = (p: string) => (source ? [...qk.folderList(p, hidden), source.key] : qk.folderList(p, hidden));
   const listing = useQuery({
-    queryKey: qk.folderList(path ?? "", hidden),
-    queryFn: () => api.folders.list(path, hidden),
+    queryKey: keyOf(path ?? ""),
+    queryFn: () => list(path, hidden),
     enabled: open,
     placeholderData: keepPreviousData,
     retry: false,
   });
-  const recent = useQuery({ queryKey: qk.recentFolders, queryFn: api.folders.recent, enabled: open, staleTime: 30_000 });
+  const recent = useQuery({ queryKey: qk.recentFolders, queryFn: api.folders.recent, enabled: open && !source, staleTime: 30_000 });
 
   // A remembered folder may be gone: start at home instead of an error.
   useEffect(() => {
@@ -171,11 +180,11 @@ export function FolderPickerDialog({
     setPending(target);
     try {
       const data = await qc.fetchQuery({
-        queryKey: qk.folderList(target, hidden),
-        queryFn: () => api.folders.list(target, hidden),
+        queryKey: keyOf(target),
+        queryFn: () => list(target, hidden),
         staleTime: 10_000,
       });
-      qc.setQueryData(qk.folderList(data.path, hidden), data);
+      qc.setQueryData(keyOf(data.path), data);
       setPath(data.path);
       setQuery("");
       setBrowsed(true);
@@ -187,7 +196,7 @@ export function FolderPickerDialog({
   };
 
   const pick = (p: string) => {
-    rememberFolder(p);
+    if (!source) rememberFolder(p);
     onPick(p);
     onOpenChange(false);
   };
@@ -216,7 +225,7 @@ export function FolderPickerDialog({
     }
   };
 
-  const recents = (recent.data ?? []).filter((p) => p !== current?.path).slice(0, 4);
+  const recents = (source ? [] : (recent.data ?? [])).filter((p) => p !== current?.path).slice(0, 4);
   const entries = current?.entries ?? [];
   const currentName = current ? (crumbs.at(-1)?.home ? t("folderPicker.home") : folderName(current.path) || current.path) : "";
 
@@ -391,7 +400,7 @@ export function FolderPickerDialog({
         </Command>
 
         <div className="flex items-center gap-2 border-t bg-muted/30 px-4 py-3">
-          {isTauri && (
+          {isTauri && !source && (
             <Button type="button" variant="ghost" size="sm" onClick={() => void browseNative()} className="-ml-1 text-muted-foreground">
               {isMac ? t("folderPicker.openFinder") : t("folderPicker.browse")}
             </Button>

@@ -3,6 +3,7 @@ import { generateKeyPair, listLocalKeys } from "../../ssh/keys";
 import { assignServer, createServer, deleteServer, execForHuman, getServer, listServers, testServer, tryServer, updateServer } from "../../ssh/service";
 import { disableIdleTimeout } from "../../mcp/http";
 import { installSshGodmode, sshGodmodeStatus } from "../../remote/runners";
+import { listServerFolders } from "../../ssh/folders";
 import { body, z } from "../validate";
 
 const hostKey = z.object({ type: z.string().trim().max(60), fingerprint: z.string().trim().max(100) });
@@ -40,6 +41,11 @@ export function registerSshRoutes(app: Hono): void {
   });
 
   app.get("/api/ssh/godmode", (c) => c.json(sshGodmodeStatus()));
+
+  app.get("/api/ssh/servers/:id/folders", async (c) => {
+    getServer(c.req.param("id"));
+    return c.json(await listServerFolders(c.req.param("id"), c.req.query("path"), c.req.query("hidden") === "1"));
+  });
 
   app.post("/api/ssh/servers/:id/godmode", (c) => {
     installSshGodmode(c.req.param("id"));

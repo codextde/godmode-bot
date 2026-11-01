@@ -96,7 +96,10 @@
     "remoteStop": "Godmode auf dem Server stoppen",
     "remoteStopped": "Godmode auf {{name}} gestoppt",
     "remoteStoppedDescription": "Seine Chats sind jetzt Chats dieses Computers. Der nächste Chat hier startet es wieder.",
-    "remoteStopFailed": "Godmode auf dem Server konnte nicht gestoppt werden"
+    "remoteStopFailed": "Godmode auf dem Server konnte nicht gestoppt werden",
+    "remoteBrowse": "Durchsuchen",
+    "remotePickTitle": "Ordner auf {{name}} wählen",
+    "remotePickDescription": "Die Ordner auf {{address}}, über SSH gelesen."
   },
   "scope": {
     "globalNoProjects": "Global kann keine Projekte haben",

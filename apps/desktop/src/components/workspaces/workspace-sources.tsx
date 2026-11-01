@@ -545,7 +545,9 @@ function AddRemoteFolder({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceI
   const { data: servers = [], isLoading } = useSshServers();
   const [serverId, setServerId] = useState("");
   const [path, setPath] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const chosen = serverId || (servers.length === 1 ? servers[0]!.id : "");
+  const server = servers.find((s) => s.id === chosen);
   const trimmed = path.trim();
   const valid = !!chosen && (trimmed.startsWith("/") || trimmed === "~" || trimmed.startsWith("~/")) && !trimmed.split("/").includes("..");
 
@@ -603,10 +605,24 @@ function AddRemoteFolder({ onAdd, onCancel }: { onAdd: (source: WorkspaceSourceI
               onKeyDown={onKeyDown}
               className="font-mono text-[13px] sm:flex-1"
             />
+            <Button type="button" variant="outline" onClick={() => setBrowsing(true)} disabled={!chosen}>
+              <FolderOpen /> {t("sources.remoteBrowse")}
+            </Button>
             <Button type="button" onClick={submit} disabled={!valid}>
               {t("common:actions.add")}
             </Button>
           </div>
+          {server && (
+            <FolderPickerDialog
+              open={browsing}
+              onOpenChange={setBrowsing}
+              value={valid ? trimmed : null}
+              onPick={setPath}
+              title={t("sources.remotePickTitle", { name: server.name })}
+              description={t("sources.remotePickDescription", { address: `${server.username}@${server.host}` })}
+              source={{ key: `ssh:${server.id}`, list: (p, hidden) => api.ssh.folders(server.id, p, hidden) }}
+            />
+          )}
           <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{t("sources.remoteHint")}</p>
         </>
       )}
