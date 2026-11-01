@@ -13,7 +13,6 @@
     "label": "Project: {{name}}",
     "labelDefault": "Project: {{name}} (default)",
     "project": "Project",
-    "hint": "Runs in this chat get the project's context, folders and repositories, and browse with its profile.",
     "find": "Find a project…",
     "empty": "No project with that name.",
     "default": "Default — {{name}}",
