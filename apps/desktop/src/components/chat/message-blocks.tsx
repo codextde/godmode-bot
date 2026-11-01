@@ -190,7 +190,6 @@ export function MessageBlocks({
 }) {
   const items = useMemo(() => buildItems(blocks), [blocks]);
   const ctx = useToolContext(blocks);
-  const lastBlock = blocks[blocks.length - 1];
   return (
     <div className={cn("flex min-w-0 flex-col", compact ? "gap-2" : "gap-3")}>
       {items.map((item, idx) => {
@@ -201,7 +200,7 @@ export function MessageBlocks({
             return (
               <div key={item.key} className="min-w-0">
                 {streaming ? (
-                  <StreamingMarkdown text={item.text} className={cn(compact && "text-[0.85rem]", active && lastBlock?.type === "text" && "gm-streaming")} />
+                  <StreamingMarkdown text={item.text} className={cn(compact && "text-[0.85rem]")} />
                 ) : (
                   <Markdown className={cn(compact && "text-[0.85rem]")}>{item.text}</Markdown>
                 )}

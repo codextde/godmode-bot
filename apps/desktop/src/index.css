@@ -536,24 +536,6 @@
   background-size: 28px 28px;
 }
 
-/* aicss "Streaming Text" caret (MIT): a solid block riding the end of the text while tokens stream in. */
-.gm-streaming > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
-.gm-streaming > :is(ul, ol):last-child > li:last-child::after {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 1.05em;
-  margin-left: 3px;
-  border-radius: 1px;
-  background: var(--foreground);
-  opacity: 0.85;
-  vertical-align: text-bottom;
-  animation: gm-caret-in 160ms ease-out;
-}
-@keyframes gm-caret-in {
-  from { opacity: 0; }
-}
-
 .gm-fade {
   animation: gm-fade-in 420ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
