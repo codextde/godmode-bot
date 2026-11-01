@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
@@ -102,9 +102,11 @@ export function ConnectDialog({
     }
   }
   const loaded = !!agents.data;
+  const onLoaded = useEffectEvent(() => {
+    if (provider && !agentIds.length) preselect();
+  });
   useEffect(() => {
-    if (loaded && provider && !agentIds.length) preselect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (loaded) onLoaded();
   }, [loaded]);
   const p = provider ?? shown;
   if (!p) return null;
@@ -129,9 +131,8 @@ export function ConnectDialog({
       if (!name) setName(result.bot.name);
     } catch (err) {
       setVerifyError(errorMessage(err));
-    } finally {
-      setChecking(false);
     }
+    setChecking(false);
   };
 
   const connect = async () => {
@@ -152,12 +153,14 @@ export function ConnectDialog({
       void qc.invalidateQueries({ queryKey: qk.messaging });
       toast.success(t("connect.connectedToast", { name: conn.name }));
     } catch (err) {
-      if (isGrantCancelled(err)) return;
+      if (isGrantCancelled(err)) {
+        setSaving(false);
+        return;
+      }
       if (isVaultLocked(err)) toastApiError(err, "", qc);
       else toast.error(t("connect.connectError"), { description: errorMessage(err) });
-    } finally {
-      setSaving(false);
     }
+    setSaving(false);
   };
 
   const index = STEPS.findIndex((s) => s.id === step);

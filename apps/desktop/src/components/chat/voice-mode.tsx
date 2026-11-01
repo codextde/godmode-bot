@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { Agent, CharacterMood, Message } from "@godmode/shared";
 import { Mic, MicOff, Square, X } from "lucide-react";
@@ -107,7 +107,9 @@ function VoiceModeOverlay({ agent, busy, activity, lastMessage, onSend, onStop }
   const [transcript, setTranscript] = useState("");
   const [reply, setReply] = useState("");
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  });
   const emptyStreak = useRef(0);
   const speakLevel = useRef(0);
   const levelRef = useRef(0);

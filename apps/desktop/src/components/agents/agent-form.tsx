@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useState, type ComponentProps, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "react-router";
 import { Trans, useTranslation } from "react-i18next";
@@ -332,15 +332,14 @@ export function AgentForm({
   };
 
   // Save shortcut
-  const submitRef = useRef(submit);
-  submitRef.current = submit;
+  const onSaveShortcut = useEffectEvent(() => submit());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = isMac ? e.metaKey : e.ctrlKey;
       if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
-        submitRef.current();
+        onSaveShortcut();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -1315,14 +1314,17 @@ function TeamField({
   const [resetNote, setResetNote] = useState<string | null>(null);
 
   // A new workspace can put the chosen lead out of bounds: back to the built-in agent, and say why.
-  useEffect(() => {
+  const checkLead = useEffectEvent(() => {
     if (!current) return;
     if (leadProblem(self, current, team) === "workspace") {
       setResetNote(t("agentForm.team.resetNote", { lead: builtin?.name ?? "Godmode", name: current.name }));
       onChange(null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, current?.id]);
+  });
+  const currentId = current?.id;
+  useEffect(() => {
+    checkLead();
+  }, [workspaceId, currentId]);
 
   if (isDefault) {
     return (

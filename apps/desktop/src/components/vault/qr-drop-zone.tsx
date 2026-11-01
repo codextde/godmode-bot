@@ -22,6 +22,11 @@ export interface QrImage {
 
 let seq = 0;
 
+const nextQrId = () => {
+  seq += 1;
+  return `qr-${seq}`;
+};
+
 /** Holds dropped/pasted screenshots and decodes each one locally. */
 export function useQrImages() {
   const [items, setItems] = useState<QrImage[]>([]);
@@ -38,7 +43,7 @@ export function useQrImages() {
   const addFiles = useCallback((files: File[] | FileList) => {
     const images = Array.from(files).filter((f) => f.type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|heic|avif)$/i.test(f.name));
     for (const file of images) {
-      const id = `qr-${++seq}`;
+      const id = nextQrId();
       const url = URL.createObjectURL(file);
       urls.current.add(url);
       setItems((prev) => [...prev, { id, name: file.name || tg("vault:qrDrop.pastedImage"), url, status: "decoding", found: [] }]);

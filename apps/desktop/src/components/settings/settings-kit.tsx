@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { CircleAlert, Info, ShieldAlert, TriangleAlert } from "lucide-react";
@@ -65,14 +65,16 @@ export function useSettingsPatch() {
  * Local draft for a text-like value that commits after `delay` ms idle (null = only on blur/Enter).
  * Pending edits are flushed on unmount (e.g. when switching sections).
  */
-function useCommitDraft<T>(value: T, onCommit: (v: T) => void, delay: number | null = 600) {
+function useCommitDraft<T>(value: T, onCommit: (v: T, reset: (v: T) => void) => void, delay: number | null = 600) {
   const [draft, setDraftState] = useState(value);
   const focused = useRef(false);
   const dirty = useRef(false);
   const committed = useRef(value);
   const latest = useRef({ draft: value, onCommit });
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  latest.current = { draft, onCommit };
+  useLayoutEffect(() => {
+    latest.current = { draft, onCommit };
+  });
 
   useEffect(() => {
     committed.current = value;
@@ -84,12 +86,22 @@ function useCommitDraft<T>(value: T, onCommit: (v: T) => void, delay: number | n
     timer.current = null;
   };
 
-  const flush = (v: T = latest.current.draft) => {
+  /** Replace the draft without saving (e.g. revert invalid input). */
+  const reset = (v: T) => {
+    clearTimer();
+    dirty.current = false;
+    committed.current = v;
+    latest.current.draft = v;
+    setDraftState(v);
+  };
+
+  const flush = (next?: T) => {
+    const v = next === undefined ? latest.current.draft : next;
     clearTimer();
     dirty.current = false;
     if (JSON.stringify(v) !== JSON.stringify(committed.current)) {
       committed.current = v;
-      latest.current.onCommit(v);
+      latest.current.onCommit(v, reset);
     }
   };
 
@@ -106,15 +118,6 @@ function useCommitDraft<T>(value: T, onCommit: (v: T) => void, delay: number | n
     dirty.current = true;
     clearTimer();
     if (delay !== null) timer.current = setTimeout(() => flush(v), delay);
-  };
-
-  /** Replace the draft without saving (e.g. revert invalid input). */
-  const reset = (v: T) => {
-    clearTimer();
-    dirty.current = false;
-    committed.current = v;
-    latest.current.draft = v;
-    setDraftState(v);
   };
 
   return {
@@ -166,7 +169,7 @@ export function CommitTextarea({
   className,
   ...props
 }: Omit<ComponentProps<typeof Textarea>, "value" | "onChange" | "defaultValue"> & { value: string; onCommit: (v: string) => void }) {
-  const d = useCommitDraft(value, onCommit, 800);
+  const d = useCommitDraft(value, (v) => onCommit(v), 800);
   return (
     <Textarea
       {...props}
@@ -232,19 +235,19 @@ export function NumberField({
   disabled?: boolean;
 }) {
   const toText = (v: number | null) => (v === null || v === undefined ? "" : String(v));
-  const d = useCommitDraft(toText(value), (text) => {
+  const d = useCommitDraft(toText(value), (text, reset) => {
     const t = text.trim();
     if (!t) {
       if (allowEmpty) onCommit(null);
-      else d.reset(toText(value));
+      else reset(toText(value));
       return;
     }
     let n = Number(t);
-    if (!Number.isFinite(n)) return d.reset(toText(value));
+    if (!Number.isFinite(n)) return reset(toText(value));
     if (min !== undefined) n = Math.max(min, n);
     if (max !== undefined) n = Math.min(max, n);
     if (step >= 1) n = Math.round(n);
-    if (String(n) !== t) d.reset(String(n));
+    if (String(n) !== t) reset(String(n));
     onCommit(n);
   }, null);
   return (

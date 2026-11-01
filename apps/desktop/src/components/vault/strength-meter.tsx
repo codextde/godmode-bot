@@ -10,7 +10,7 @@ const LABEL_KEY = ["strength.tooWeak", "strength.weak", "strength.fair", "streng
 
 export function useStrength(password: string, userInputs: string[] = []): StrengthResult {
   const key = userInputs.join("\u0000");
-  return useMemo(() => estimateStrength(password, userInputs), [password, key]);
+  return useMemo(() => estimateStrength(password, key.split("\u0000")), [password, key]);
 }
 
 /** Five-segment strength bar with label, crack-time estimate and the top hint. */

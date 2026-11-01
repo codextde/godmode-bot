@@ -32,6 +32,7 @@ import { useSmoothText } from "./use-smooth-text";
 import { UserBubble } from "./user-bubble";
 import { CopyButton } from "./copy-button";
 import { Lightbox } from "./lightbox";
+import { useCoreFileUrl } from "./core-file";
 import { PauseMarker } from "./pause";
 import { QuestionCard, viewOfBlock } from "./question-card";
 import { ArtifactCard } from "@/components/artifacts/artifact-panel";
@@ -419,12 +420,12 @@ const FILE_EDIT_TOOLS = new Set(["Edit", "MultiEdit", "Write"]);
 type FileEditInput = { file_path?: string; notebook_path?: string; old_string?: string; new_string?: string; content?: string; edits?: { old_string?: string; new_string?: string }[] };
 
 /** Diff rows for file-editing tools (Edit / MultiEdit / Write), or null for anything else. */
-function fileEditOf(block: ToolUseBlock): { file: string; rows: DiffRow[] } | null {
-  const input = (block.input ?? {}) as FileEditInput;
+function fileEditOf(name: string, raw: unknown): { file: string; rows: DiffRow[] } | null {
+  const input = (raw ?? {}) as FileEditInput;
   const file = input.file_path ?? input.notebook_path ?? "";
-  if (block.name === "Edit" && typeof input.new_string === "string") return { file, rows: diffLines(input.old_string ?? "", input.new_string) };
-  if (block.name === "Write" && typeof input.content === "string") return { file, rows: diffLines("", input.content) };
-  if (block.name === "MultiEdit" && Array.isArray(input.edits)) {
+  if (name === "Edit" && typeof input.new_string === "string") return { file, rows: diffLines(input.old_string ?? "", input.new_string) };
+  if (name === "Write" && typeof input.content === "string") return { file, rows: diffLines("", input.content) };
+  if (name === "MultiEdit" && Array.isArray(input.edits)) {
     const rows: DiffRow[] = [];
     input.edits.forEach((e, i) => {
       if (i > 0) rows.push({ old: null, cur: null, type: "fold", text: "⋯" });
@@ -439,6 +440,16 @@ function imageSrc(image: string): string {
   if (image.startsWith("data:")) return image;
   const mime = image.startsWith("/9j/") ? "image/jpeg" : image.startsWith("R0lG") ? "image/gif" : image.startsWith("UklG") ? "image/webp" : "image/png";
   return `data:${mime};base64,${image}`;
+}
+
+type Picture = Pick<ToolUseBlock, "image" | "imageUrl">;
+
+const hasPicture = (b: Picture) => !!(b.image || b.imageUrl);
+
+function usePictureSrc(picture: Picture): string | null {
+  const data = useMemo(() => (picture.image ? imageSrc(picture.image) : null), [picture.image]);
+  const remote = useCoreFileUrl(data ? undefined : picture.imageUrl, true);
+  return data ?? remote.src;
 }
 
 function StreamingMarkdown({ text, className }: { text: string; className?: string }) {
@@ -608,7 +619,7 @@ function CompactToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolC
   const metas = tools.map((s) => describe(s.block.name, s.block.input, ctx));
   const runningIdx = streaming ? tools.findIndex((s) => stepRunning(s.block, true)) : -1;
   const failed = tools.filter((s) => s.block.isError).length;
-  const images = tools.filter((s) => s.block.image).map((s) => s.block.image!);
+  const images = tools.filter((s) => hasPicture(s.block)).map((s) => s.block);
   const expanded = manual ?? (streaming && !easy);
   const single = tools.length === 1;
 
@@ -651,7 +662,7 @@ function CompactToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolC
       {!expanded && images.length > 0 && (
         <span className="mt-1 flex gap-1">
           {images.slice(-3).map((img, i) => (
-            <Thumbnail key={i} image={img} />
+            <Thumbnail key={i} picture={img} />
           ))}
         </span>
       )}
@@ -738,7 +749,7 @@ function ToolStep({
   );
   // Keyed by content: streaming deltas re-create `block` on every token, but the edit itself rarely changes.
   const editKey = FILE_EDIT_TOOLS.has(block.name) ? JSON.stringify(block.input) : "";
-  const edit = useMemo(() => (editKey ? fileEditOf(block) : null), [editKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const edit = useMemo(() => (editKey ? fileEditOf(block.name, JSON.parse(editKey)) : null), [editKey, block.name]);
 
   const header = (
     <button
@@ -769,7 +780,7 @@ function ToolStep({
 
   const body = (
     <>
-      {block.image && <Screenshot image={block.image} alt={meta.title} />}
+      {hasPicture(block) && <Screenshot picture={block} alt={meta.title} />}
       <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>
     </>
   );
@@ -793,10 +804,11 @@ function ToolStep({
   );
 }
 
-function Screenshot({ image, alt }: { image: string; alt: string }) {
+function Screenshot({ picture, alt }: { picture: Picture; alt: string }) {
   const { t } = useTranslation(["chat", "common"]);
   const [zoom, setZoom] = useState(false);
-  const src = imageSrc(image);
+  const src = usePictureSrc(picture);
+  if (!src) return <div className="mt-1 mb-1.5 h-32 w-56 max-w-full animate-pulse rounded-lg border bg-muted/30" />;
   return (
     <>
       <button
@@ -812,10 +824,11 @@ function Screenshot({ image, alt }: { image: string; alt: string }) {
   );
 }
 
-function Thumbnail({ image }: { image: string }) {
+function Thumbnail({ picture }: { picture: Picture }) {
   const { t } = useTranslation("chat");
   const [zoom, setZoom] = useState(false);
-  const src = imageSrc(image);
+  const src = usePictureSrc(picture);
+  if (!src) return <div className="h-10 w-16 animate-pulse rounded-md border bg-muted/30" />;
   return (
     <>
       <button

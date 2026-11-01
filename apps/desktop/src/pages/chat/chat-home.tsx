@@ -44,7 +44,7 @@ import { useVoiceSession } from "@/lib/voice";
 import { useDraft } from "@/lib/drafts";
 import { AwaySummaryCard } from "@/components/attention/away-summary";
 import { OffersCard } from "@/components/attention/offers-card";
-import { useLive, type LiveRun } from "@/stores/live";
+import { useLiveRunsMap, type LiveRun } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
@@ -500,7 +500,7 @@ function RunningNow({ agents }: { agents: Agent[] }) {
   const reduce = useReduceAnimations();
   const { t } = useTranslation("chat");
   const inScope = useInScope();
-  const runs = Object.values(useLive((s) => s.runs)).filter(inScope);
+  const runs = Object.values(useLiveRunsMap()).filter(inScope);
   const list = runs.filter((r) => r.status === "running");
   const queued = runs.length - list.length;
   if (list.length === 0) return null;
@@ -551,7 +551,7 @@ function RunningCard({ run, agent, index }: { run: LiveRun; agent?: Agent; index
 function RecentChats({ agents }: { agents: Agent[] }) {
   const { t } = useTranslation("chat");
   const { data: conversations = [], isLoading } = useScopedConversations();
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : []))), [liveRuns]);
   const recent = useMemo(
     () =>

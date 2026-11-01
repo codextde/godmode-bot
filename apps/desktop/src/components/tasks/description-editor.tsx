@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { EditorContent, Node, NodeViewWrapper, ReactNodeViewRenderer, mergeAttributes, useEditor, useEditorState, type Editor, type JSONContent, type NodeViewProps } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
@@ -150,6 +150,10 @@ const TaskLink = Link.extend({
 const PlainBreak = HardBreak.extend({ renderMarkdown: () => "\n" });
 
 let uploadSeq = 0;
+const nextUploadId = () => {
+  uploadSeq = uploadSeq + 1;
+  return `upload-${uploadSeq}`;
+};
 
 /**
  * The task description, as you'll read it: headings, lists, checklists and code render while you type (Markdown
@@ -190,7 +194,9 @@ export const DescriptionEditor = forwardRef<
   const emitted = useRef(value);
   // The editor is set up once: its handlers read the latest props through these.
   const props = useRef({ onChange, qc });
-  props.current = { onChange, qc };
+  useLayoutEffect(() => {
+    props.current = { onChange, qc };
+  });
   const uploadRef = useRef<(files: File[], at?: number) => void>(() => {});
 
   const editor = useEditor({
@@ -256,68 +262,70 @@ export const DescriptionEditor = forwardRef<
 
   useEffect(() => onBusyChange?.(uploads > 0), [uploads, onBusyChange]);
 
-  uploadRef.current = (files, at) => {
-    if (!files.length) return;
-    for (const file of files) {
-      if (file.size > MAX_TASK_ATTACHMENT_BYTES) {
-        toast.error(t("editor.tooLarge", { name: file.name }), { description: t("editor.maxSize", { size: formatBytes(MAX_TASK_ATTACHMENT_BYTES) }) });
-        continue;
-      }
-      const id = `upload-${++uploadSeq}`;
-      const image = file.type.startsWith("image/");
-      const preview = image ? URL.createObjectURL(file) : null;
-      const node = { type: "uploading", attrs: { id, name: file.name || "file", preview } };
-      const pos = at ?? editor.state.selection.from;
-      const $pos = editor.state.doc.resolve(Math.min(pos, editor.state.doc.content.size));
-      // An image gets a line of its own; a file chip goes where the cursor is.
-      const own = image && $pos.parent.isTextblock && $pos.parent.content.size > 0;
-      // A file right after an image goes on the next line, not glued to it.
-      const before = $pos.nodeBefore;
-      const afterImage = before?.type.name === "image" || (before?.type.name === "uploading" && !!before.attrs.preview);
-      editor
-        .chain()
-        .focus()
-        // Not an undo step: undoing it would drop the file when it lands (remove a file with its ×).
-        .setMeta("addToHistory", false)
-        .insertContentAt(
-          pos,
-          image
-            ? own
-              ? { type: "paragraph", content: [node] }
-              : [node]
-            : [...(afterImage ? [{ type: "hardBreak" }] : []), node, { type: "text", text: " " }],
-        )
-        .run();
-      // Where it can't go (a code block, say): at the end.
-      if (!findUpload(editor, id)) {
+  useLayoutEffect(() => {
+    uploadRef.current = (files, at) => {
+      if (!files.length) return;
+      for (const file of files) {
+        if (file.size > MAX_TASK_ATTACHMENT_BYTES) {
+          toast.error(t("editor.tooLarge", { name: file.name }), { description: t("editor.maxSize", { size: formatBytes(MAX_TASK_ATTACHMENT_BYTES) }) });
+          continue;
+        }
+        const id = nextUploadId();
+        const image = file.type.startsWith("image/");
+        const preview = image ? URL.createObjectURL(file) : null;
+        const node = { type: "uploading", attrs: { id, name: file.name || "file", preview } };
+        const pos = at ?? editor.state.selection.from;
+        const $pos = editor.state.doc.resolve(Math.min(pos, editor.state.doc.content.size));
+        // An image gets a line of its own; a file chip goes where the cursor is.
+        const own = image && $pos.parent.isTextblock && $pos.parent.content.size > 0;
+        // A file right after an image goes on the next line, not glued to it.
+        const before = $pos.nodeBefore;
+        const afterImage = before?.type.name === "image" || (before?.type.name === "uploading" && !!before.attrs.preview);
         editor
           .chain()
+          .focus()
+          // Not an undo step: undoing it would drop the file when it lands (remove a file with its ×).
           .setMeta("addToHistory", false)
-          .insertContentAt(editor.state.doc.content.size, { type: "paragraph", content: [node] })
+          .insertContentAt(
+            pos,
+            image
+              ? own
+                ? { type: "paragraph", content: [node] }
+                : [node]
+              : [...(afterImage ? [{ type: "hardBreak" }] : []), node, { type: "text", text: " " }],
+          )
           .run();
+        // Where it can't go (a code block, say): at the end.
+        if (!findUpload(editor, id)) {
+          editor
+            .chain()
+            .setMeta("addToHistory", false)
+            .insertContentAt(editor.state.doc.content.size, { type: "paragraph", content: [node] })
+            .run();
+        }
+        at = undefined; // the next one goes after this one
+        pending.current++;
+        setUploads((n) => n + 1);
+        api.tasks
+          .upload(file)
+          .then((a) => {
+            const done = a.mime.startsWith("image/")
+              ? editor.schema.nodes.image!.create({ src: a.url, alt: a.name })
+              : editor.schema.nodes.fileChip!.create({ href: a.url, name: a.name });
+            replaceUpload(editor, id, done);
+          })
+          .catch((err) => {
+            replaceUpload(editor, id, null);
+            toastApiError(err, t("editor.attachError", { name: file.name }), props.current.qc);
+          })
+          .finally(() => {
+            if (preview) URL.revokeObjectURL(preview);
+            pending.current--;
+            setUploads((n) => n - 1);
+          });
       }
-      at = undefined; // the next one goes after this one
-      pending.current++;
-      setUploads((n) => n + 1);
-      api.tasks
-        .upload(file)
-        .then((a) => {
-          const done = a.mime.startsWith("image/")
-            ? editor.schema.nodes.image!.create({ src: a.url, alt: a.name })
-            : editor.schema.nodes.fileChip!.create({ href: a.url, name: a.name });
-          replaceUpload(editor, id, done);
-        })
-        .catch((err) => {
-          replaceUpload(editor, id, null);
-          toastApiError(err, t("editor.attachError", { name: file.name }), props.current.qc);
-        })
-        .finally(() => {
-          if (preview) URL.revokeObjectURL(preview);
-          pending.current--;
-          setUploads((n) => n - 1);
-        });
-    }
-  };
+    };
+  });
 
   useImperativeHandle(
     ref,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Cable, Check, ClipboardPaste, Copy, KeyRound, LaptopMinimalCheck, LogOut, MessagesSquare, MonitorPause, MonitorSmartphone, MoonStar, Network, Plus, RefreshCw, Timer, Trash2, TriangleAlert, Unlink, X } from "lucide-react";
@@ -221,9 +221,10 @@ function InviteCode({ becomesPrimary }: { becomesPrimary?: boolean }) {
   const now = useNow(1000);
   const [copied, setCopied] = useState(false);
 
+  const createInvite = useEffectEvent(() => create.mutate());
+
   useEffect(() => {
-    create.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    createInvite();
   }, []);
 
   const invite = create.data;

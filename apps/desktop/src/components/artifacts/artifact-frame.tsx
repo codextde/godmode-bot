@@ -69,13 +69,15 @@ export function ArtifactFrame({
   const { resolved } = useTheme();
   const ref = useRef<HTMLIFrameElement>(null);
   const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
   const key = useMemo(() => hashOf(html), [html]);
   // One token per loaded document; what it said it saved isn't sent back to it.
   const session = useRef<Session>({ key: "", token: "", loaded: false, lastData: "", pending: 0, queued: null });
-  if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null), pending: 0, queued: null };
   const latest = useRef({ html, data, theme: resolved });
-  latest.current = { html, data, theme: resolved };
+  useLayoutEffect(() => {
+    handlersRef.current = handlers;
+    if (session.current.key !== key) session.current = { key, token: randomToken(), loaded: false, lastData: JSON.stringify(data ?? null), pending: 0, queued: null };
+    latest.current = { html, data, theme: resolved };
+  });
 
   // Layout effect: listening before the frame's page can say it is there.
   useLayoutEffect(() => {

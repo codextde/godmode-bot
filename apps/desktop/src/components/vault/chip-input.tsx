@@ -4,12 +4,14 @@ import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
+const trimChip = (s: string) => s.trim();
+
 /** Tag/chip input: Enter, comma, space or Tab commits; Backspace on empty removes the last chip. */
 export function ChipInput({
   value,
   onChange,
   placeholder,
-  normalize = (s) => s.trim(),
+  normalize = trimChip,
   validate,
   className,
   id,

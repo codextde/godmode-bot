@@ -12,7 +12,7 @@ import { qk } from "@/lib/queryKeys";
 import { useMissingLogins, useScopeWorkspace } from "@/lib/hooks";
 import { modKey } from "@/lib/desktop";
 import { clearDraft, useDraft } from "@/lib/drafts";
-import { useLive, type LiveRun } from "@/stores/live";
+import { useLive, useLiveRunsMap, type LiveRun } from "@/stores/live";
 import { AgentAvatar, Kbd } from "@/components/common";
 import { liveMood } from "@/components/chat/conversation-mood";
 import { LiveDot } from "@/components/aicss/Motion";
@@ -52,7 +52,7 @@ export function useAgentLiveRuns(agentId: string | undefined): LiveRun[] {
           .join(",")
       : "",
   );
-  const runs = useLive((s) => s.runs);
+  const runs = useLiveRunsMap();
   return useMemo(() => (ids ? ids.split(",").flatMap((id) => (runs[id] ? [runs[id]] : [])) : []), [ids, runs]);
 }
 

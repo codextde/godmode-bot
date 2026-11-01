@@ -80,11 +80,17 @@ export function WorkspaceDialog({
   const [look, setLook] = useState(randomLook);
   const newLook = useRef(false);
   // Fresh on every open; live updates (clone progress) must not reset the form.
-  const base = useMemo(() => formFrom(workspace, look), [open, workspace?.id, look]);
+  const [baseSource, setBaseSource] = useState(() => ({ open, id: workspace?.id, look, workspace }));
+  let source = baseSource;
+  if (source.open !== open || source.id !== workspace?.id || source.look !== look) {
+    source = { open, id: workspace?.id, look, workspace };
+    setBaseSource(source);
+  }
+  const base = useMemo(() => formFrom(source.workspace, source.look), [source]);
   const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
-  const closing = useRef(live);
-  if (open) closing.current = live;
-  const form = open ? live : closing.current;
+  const [closing, setClosing] = useState(live);
+  if (open && closing !== live) setClosing(live);
+  const form = open ? live : closing;
   const { name, icon, color, description, instructions, vmId, browserProfileId, sources, autoMerge, claudeAccounts } = form;
   const set =
     <K extends keyof WorkspaceForm>(key: K) =>

@@ -137,9 +137,11 @@ export function Composer({
 
   // Revoke thumbnails on unmount, unless they stay in the draft
   const attachmentsRef = useRef(attachments);
-  attachmentsRef.current = attachments;
   const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
+  useLayoutEffect(() => {
+    attachmentsRef.current = attachments;
+    disabledRef.current = disabled;
+  });
   const keepsFiles = !!filesKey;
   useEffect(() => () => {
     if (!keepsFiles) attachmentsRef.current.forEach((a) => a.previewUrl && URL.revokeObjectURL(a.previewUrl));
@@ -182,7 +184,7 @@ export function Composer({
     if (files.length === 0 || disabledRef.current) return;
     const read = await readAttachments(files, totalBytes(attachmentsRef.current), toast.warning);
     if (read.length) setAttachments((prev) => [...prev, ...read]);
-  }, []);
+  }, [setAttachments]);
 
   useImperativeHandle(
     ref,
@@ -203,7 +205,7 @@ export function Composer({
       },
       addFiles: (files: File[]) => void addFiles(files),
     }),
-    [addFiles],
+    [addFiles, setText],
   );
 
   const canSend = (text.trim().length > 0 || attachments.length > 0) && !busy && !blocked && !disabled;

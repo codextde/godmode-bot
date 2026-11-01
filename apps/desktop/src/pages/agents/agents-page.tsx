@@ -96,27 +96,24 @@ export default function AgentsPage() {
   const passesFilter = (a: Agent) =>
     filter === "running" ? isRunning(a) : filter === "needs" ? needsYou(a) : filter === "scheduled" ? (routineCounts.get(a.id) ?? 0) > 0 : filter === "disabled" ? !a.enabled : true;
 
-  const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return agents
-      .filter((a) => {
-        if (!passesFilter(a)) return false;
-        if (!q) return true;
-        return `${a.name} ${a.role} ${a.description} ${a.instructions}`.toLowerCase().includes(q);
-      })
-      .sort(
-        (a, b) =>
-          Number(b.isDefault) - Number(a.isDefault) ||
-          Number(isRunning(b)) - Number(isRunning(a)) ||
-          Number(b.enabled) - Number(a.enabled) ||
-          (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? "") ||
-          a.name.localeCompare(b.name),
-      );
-  }, [agents, search, filter, routineCounts, running, missingFor]);
+  const query = search.trim().toLowerCase();
+  const visible = agents
+    .filter((a) => {
+      if (!passesFilter(a)) return false;
+      if (!query) return true;
+      return `${a.name} ${a.role} ${a.description} ${a.instructions}`.toLowerCase().includes(query);
+    })
+    .sort(
+      (a, b) =>
+        Number(b.isDefault) - Number(a.isDefault) ||
+        Number(isRunning(b)) - Number(isRunning(a)) ||
+        Number(b.enabled) - Number(a.enabled) ||
+        (b.lastRunAt ?? "").localeCompare(a.lastRunAt ?? "") ||
+        a.name.localeCompare(b.name),
+    );
 
   // The chart keeps everyone of the filter in place and dims what the search doesn't match.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const chartAgents = useMemo(() => agents.filter(passesFilter), [agents, filter, routineCounts, running, missingFor]);
+  const chartAgents = agents.filter(passesFilter);
   const matches = useMemo(() => (search.trim() ? new Set(visible.map((a) => a.id)) : null), [visible, search]);
 
   const stats = (list: Agent[]) => ({ working: list.filter(isRunning).length, needsYou: list.filter(needsYou).length });

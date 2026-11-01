@@ -7,7 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AgentAvatar } from "@/components/common";
 import { useWorkspaces } from "@/lib/hooks";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { cn } from "@/lib/utils";
 
 /** Pill button that opens a searchable agent list. */
@@ -26,7 +26,7 @@ export function AgentPicker({
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { data: workspaces = [] } = useWorkspaces();
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const running = useMemo(() => new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.agentId] : []))), [liveRuns]);
   const current = agents.find((a) => a.id === value) ?? null;
 

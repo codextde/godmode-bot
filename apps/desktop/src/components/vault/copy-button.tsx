@@ -35,13 +35,16 @@ export function CopyButton({
     setBusy(true);
     try {
       const v = value ?? (await getValue?.());
-      if (!v) return;
-      await (secret ? copySecret(v, toastLabel ?? t("actions.copied")) : copyText(v, toastLabel ?? t("actions.copied")));
-      setDone(true);
-      setTimeout(() => setDone(false), 1400);
-    } finally {
+      if (v) {
+        await (secret ? copySecret(v, toastLabel ?? t("actions.copied")) : copyText(v, toastLabel ?? t("actions.copied")));
+        setDone(true);
+        setTimeout(() => setDone(false), 1400);
+      }
+    } catch (err) {
       setBusy(false);
+      throw err;
     }
+    setBusy(false);
   };
   return (
     <Tooltip>

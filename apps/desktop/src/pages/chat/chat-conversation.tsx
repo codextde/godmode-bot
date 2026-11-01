@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -95,7 +95,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   useViewing(conversationId);
   usePrivateChatLifetime(conversationId, !!conv?.private);
   const queueRef = useRef<QueueTrayHandle>(null);
-  const mountedAt = useRef(Date.now());
+  const [mountedAt] = useState(() => Date.now());
   // A profile picked mid-run applies from the next message: keep showing the browser the running agent drives.
   const [runProfile, setRunProfile] = useState<{ runId: string; profileId: string | null } | null>(null);
   if ((live?.runId ?? null) !== (runProfile?.runId ?? null)) setRunProfile(live ? { runId: live.runId, profileId: conv?.browserProfileId ?? null } : null);
@@ -197,12 +197,17 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const { pause } = usePauseActions(conversationId);
   const pausing = pause.isPending || live?.activity === "Pausing…" || live?.activity === "Asking you…";
   const answeringRef = useRef(false);
-  answeringRef.current = !!waiting;
   const busyRef = useRef(false);
-  busyRef.current = !!activeRunId;
   // While the agent works, is paused or older messages still wait, a new message joins the queue.
   const queueingRef = useRef(false);
-  queueingRef.current = !!activeRunId || !!paused || queue.length > 0;
+  const isAnswering = !!waiting;
+  const isBusy = !!activeRunId;
+  const isQueueing = !!activeRunId || !!paused || queue.length > 0;
+  useLayoutEffect(() => {
+    answeringRef.current = isAnswering;
+    busyRef.current = isBusy;
+    queueingRef.current = isQueueing;
+  }, [isAnswering, isBusy, isQueueing]);
 
   // Keep the last live turn on screen until the stored message replaces it (no flicker on finish).
   const [linger, setLinger] = useState<LiveRun | null>(null);
@@ -220,9 +225,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   const shownLinger = linger && !lingerDone && !live ? linger : null;
 
   // Hide the stored copy of the in-flight assistant message while it streams.
+  const liveMessageId = live?.messageId;
+  const liveRunId = live?.runId;
   const visibleMessages = useMemo(
-    () => (live ? messages.filter((m) => m.id !== live.messageId && !(m.role === "assistant" && m.runId === live.runId)) : messages),
-    [messages, live],
+    () => (liveRunId !== undefined ? messages.filter((m) => m.id !== liveMessageId && !(m.role === "assistant" && m.runId === liveRunId)) : messages),
+    [messages, liveMessageId, liveRunId],
   );
 
   const subagentSide = useMemo(() => {
@@ -237,7 +244,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
     : shownLinger
       ? { live: shownLinger, startedAt: shownLinger.startedAt, runId: null }
       : conv?.activeRunId
-        ? { live: null, startedAt: mountedAt.current, runId: conv.activeRunId }
+        ? { live: null, startedAt: mountedAt, runId: conv.activeRunId }
         : null;
 
   const send = useMutation({
@@ -476,7 +483,9 @@ function ConversationView({ conversationId }: { conversationId: string }) {
 
   // Read replies aloud: a dictated message with auto-speak on. Voice mode speaks by itself.
   const settingsRef = useRef(voiceSettings);
-  settingsRef.current = voiceSettings;
+  useLayoutEffect(() => {
+    settingsRef.current = voiceSettings;
+  }, [voiceSettings]);
   useEffect(
     () =>
       onServerEvent((e) => {

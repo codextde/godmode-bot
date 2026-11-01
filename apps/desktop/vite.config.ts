@@ -3,6 +3,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { transformSync } from "oxc-transform-react";
 import { defineConfig, type Plugin } from "vite";
 
 const CORE_URL = process.env.GODMODE_CORE_URL ?? "http://127.0.0.1:7777";
@@ -85,9 +86,31 @@ function settingsSearch(): Plugin {
   };
 }
 
+/**
+ * React Compiler (Oxc's Rust port) on the app's own components, before plugin-react turns JSX into calls and adds Fast
+ * Refresh: it memoizes components and hooks so a change re-renders only what reads it.
+ */
+function reactCompiler(): Plugin {
+  const src = path.resolve(__dirname, "src") + path.sep;
+  return {
+    name: "godmode-react-compiler",
+    enforce: "pre",
+    transform(code, id) {
+      const file = id.split("?")[0]!;
+      if (!file.startsWith(src) || !/\.(tsx|ts)$/.test(file) || file.endsWith(".d.ts")) return null;
+      const result = transformSync(file, code, { jsx: "preserve", sourcemap: true, reactCompiler: { target: "19" } });
+      if (result.fatal) {
+        this.warn(`React Compiler skipped ${path.relative(__dirname, file)}: ${result.errors.map((e) => e.message).join("; ")}`);
+        return null;
+      }
+      return { code: result.code, map: result.map };
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss(), devToken(), settingsSearch()],
+  plugins: [reactCompiler(), react(), tailwindcss(), devToken(), settingsSearch()],
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
   },

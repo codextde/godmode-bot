@@ -6,6 +6,7 @@ import { Archive, ArchiveRestore, RefreshCw, Search, Trash2 } from "lucide-react
 import type { ReactNode } from "react";
 import type { Agent, Conversation } from "@godmode/shared";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { AgentAvatar, EmptyState, PageBody, PageHeader } from "@/components/common";
 import { useArchiveChat, useDeleteChat } from "@/components/chat/chat-actions";
 import { chatStatus } from "@/components/chat/chat-status";
@@ -17,14 +18,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedConversations } from "@/lib/hooks";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { useUi } from "@/stores/ui";
-import { dateLocale, t } from "@/i18n";
+import { dateLocale } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 
 const LIMIT = 200;
 
-function bucket(d: Date, now: Date): string {
+function bucket(d: Date, now: Date, t: TFunction<["chat", "common"]>): string {
   if (isToday(d)) return t("common:words.today");
   if (isYesterday(d)) return t("common:words.yesterday");
   const days = differenceInCalendarDays(now, d);
@@ -43,7 +44,7 @@ export default function ArchivedPage() {
   const archived = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope });
   // Archiving only files a chat: these still work, wait or come back on their own.
   const { data: ongoing = [] } = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope, ongoing: true });
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const live = (c: Conversation) => {
     const statuses = Object.values(liveRuns).flatMap((r) => (r.conversationId === c.id ? [r.status] : []));
     const queued = !statuses.includes("running") && statuses.includes("queued");
@@ -63,7 +64,7 @@ export default function ArchivedPage() {
     const out: { label: string; items: Conversation[] }[] = [];
     for (const c of list) {
       if (shown.has(c.id)) continue;
-      const label = bucket(new Date(c.lastMessageAt ?? c.createdAt), now);
+      const label = bucket(new Date(c.lastMessageAt ?? c.createdAt), now, t);
       const last = out[out.length - 1];
       if (last?.label === label) last.items.push(c);
       else out.push({ label, items: [c] });

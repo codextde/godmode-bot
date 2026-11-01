@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { Conversation } from "@godmode/shared";
@@ -78,9 +78,9 @@ export function MoveChatDialog({
     if (open) setTo(initial ?? targets[0] ?? null);
   }, [open, initial, targets]);
   // Once moved the chat works elsewhere: the closing dialog keeps saying where it came from.
-  const shown = useRef(from);
-  if (open) shown.current = from;
-  const origin = shown.current;
+  const [shown, setShown] = useState(from);
+  if (open && shown !== from) setShown(from);
+  const origin = open ? from : shown;
   const name = origin ? placeName(origin) : t("move.theOtherComputer");
   const away = !!origin && origin.state !== "online";
   const dest = to?.here ? thisComputerInline() : to ? placeName(to) : t("move.theOtherComputerInline");

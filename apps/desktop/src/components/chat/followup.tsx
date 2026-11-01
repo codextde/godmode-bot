@@ -115,9 +115,8 @@ export function FollowupTimePicker({
       setOpen(false);
     } catch {
       /* the caller shows why */
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

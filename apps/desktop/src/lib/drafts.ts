@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { storageKey } from "./core";
 
 /**
@@ -103,7 +103,9 @@ export function useDraft<T>(key: string | undefined, initial: T, { persist = tru
   if (current !== state) setState(current);
   const value = current.value;
   const initialRef = useRef(initial);
-  initialRef.current = initial;
+  useLayoutEffect(() => {
+    initialRef.current = initial;
+  });
 
   useEffect(() => {
     if (!key) return;

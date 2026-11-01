@@ -7,14 +7,18 @@ export function messageImagePath(conversationId: string, messageId: string, tool
   return `/api/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/images/${encodeURIComponent(toolUseId)}`;
 }
 
-/** A message for a slow link: each screenshot becomes its own request (`imageUrl`) and long tool output is cut. */
-export function liteMessage(message: Message): Message {
+/**
+ * A message for a slow link: each screenshot becomes its own request (`imageUrl`) and long tool output is cut. With
+ * `cutResults` false only the screenshots go (the desktop app, which shows tool output in full).
+ */
+export function liteMessage(message: Message, cutResults = true): Message {
   let changed = false;
   const blocks = message.blocks.map((b) => {
-    if (b.type !== "tool_use" || (!b.image && (b.result?.length ?? 0) <= LITE_RESULT_CHARS)) return b;
+    const long = cutResults && (b.type === "tool_use" ? (b.result?.length ?? 0) > LITE_RESULT_CHARS : false);
+    if (b.type !== "tool_use" || (!b.image && !long)) return b;
     changed = true;
     const { image, ...rest } = b;
-    const cut = !!b.result && b.result.length > LITE_RESULT_CHARS;
+    const cut = long;
     return {
       ...rest,
       ...(image ? { imageUrl: messageImagePath(message.conversationId, message.id, b.id) } : {}),

@@ -179,17 +179,17 @@ function Hub({ agent, dim, reports }: { agent: Agent; dim: boolean; reports: Age
   const workspaces = new Set(reports.flatMap((a) => (a.workspaceId ? [a.workspaceId] : []))).size;
   const where = global ? t("orgChart.hub.whereGlobalAnd", { count: workspaces }) : t("orgChart.hub.whereWorkspaces", { count: workspaces });
   const label = t("orgChart.hub.ariaLabel", { name: agent.name, role: agent.role || t("orgChart.noRoleLower"), status: agentPresenceLabel(presence) });
-  const drop = useAgentDrop({ kind: "hub", agent }, "hub");
+  const { ref: dropRef, state: dropState } = useAgentDrop({ kind: "hub", agent }, "hub");
   return (
     <div className="flex flex-col items-start gap-3 @2xl:flex-row @2xl:items-center">
       <div
-        ref={drop.ref}
+        ref={dropRef}
         className={cn(
           "group relative flex w-full max-w-sm items-center gap-3 rounded-xl border bg-card p-3 pr-4 shadow-card transition-[box-shadow,border-color,opacity] hover:border-foreground/15 hover:shadow-float",
           presence.state === "working" && "glow-border",
           dim && "opacity-40",
-          drop.state === "available" && "border-brand/30",
-          drop.state === "valid" && "border-brand/60 ring-4 ring-brand/15",
+          dropState === "available" && "border-brand/30",
+          dropState === "valid" && "border-brand/60 ring-4 ring-brand/15",
         )}
       >
         <AgentAvatar agent={agent} size="lg" mood={mood} still={dim} />

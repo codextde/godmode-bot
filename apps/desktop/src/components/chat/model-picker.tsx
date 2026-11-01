@@ -156,9 +156,8 @@ export function ModelPicker({
       qc.setQueryData(qk.models, await api.models.get(true));
     } catch (err) {
       toast.error(t("modelPicker.reloadError"), { description: errorMessage(err) });
-    } finally {
-      setRefreshing(false);
     }
+    setRefreshing(false);
   };
 
   const onListKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {

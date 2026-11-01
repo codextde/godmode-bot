@@ -71,6 +71,7 @@ export function LicenseKeyForm({
       qc.setQueryData(qk.license, state);
       if (state.blocked) {
         setError(state.message ?? t("keyForm.cantUse"));
+        setBusy(false);
         return;
       }
       setKey("");
@@ -81,9 +82,8 @@ export function LicenseKeyForm({
     } catch (err) {
       setError(errorMessage(err));
       input.current?.focus();
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

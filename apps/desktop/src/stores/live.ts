@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { applyRunDelta, type MessageBlock, type Run, type RunDelta } from "@godmode/shared";
 
@@ -203,6 +204,24 @@ export const useLive = create<LiveState>((set, get) => ({
 }));
 
 /** Live run currently streaming into a conversation (if any). */
+function runShape(r: LiveRun): string {
+  const last = r.blocks[r.blocks.length - 1];
+  return `${r.runId}|${r.status}|${r.conversationId}|${r.agentId}|${r.trigger ?? ""}|${r.activity ?? ""}|${r.blocks.length}|${last?.type ?? ""}|${last?.type === "tool_use" && last.result !== undefined ? 1 : 0}`;
+}
+
+/**
+ * The live runs for lists, badges and labels: a new map only when a run starts, ends, changes status or moves to its next
+ * step, not on every streamed token. Their `blocks` may be behind; read a single run with `useLive` to follow its text.
+ */
+export function useLiveRunsMap(): Record<string, LiveRun> {
+  const shape = useLive((s) => Object.values(s.runs).map(runShape).join("\n"));
+  return useMemo(() => runsAt(shape), [shape]);
+}
+
+function runsAt(_shape: string): Record<string, LiveRun> {
+  return useLive.getState().runs;
+}
+
 export function useConversationLiveRun(conversationId: string | undefined): LiveRun | null {
   return useLive((s) => {
     if (!conversationId) return null;
@@ -211,7 +230,7 @@ export function useConversationLiveRun(conversationId: string | undefined): Live
     for (const r of Object.values(s.runs)) {
       if (r.conversationId !== conversationId) continue;
       if (r.status !== "queued") return r;
-      waiting ??= r;
+      if (waiting === null) waiting = r;
     }
     return waiting;
   });

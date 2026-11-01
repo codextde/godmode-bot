@@ -95,6 +95,8 @@ function seatsOf(node: OrgTemplateNode, byId: Map<string, AgentTemplate>, path =
 
 const flat = (s: Seat): Seat[] => [s, ...s.reports.flatMap(flat)];
 
+const templateTexts = (agents: AgentTemplate[], _language: string) => new Map(agents.map((a) => [a.id, templateText(a)]));
+
 export function StructureIcon({ icon, className }: { icon: string; className?: string }) {
   const Icon = ICONS[icon] ?? Users;
   return (
@@ -114,7 +116,7 @@ export function TeamTemplates({ kinds = ["company", "team"] }: { kinds?: TeamTem
   const { data: agents = [] } = useAgentTemplates();
   const [kind, setKind] = useState<TeamTemplate["kind"]>(kinds[0]!);
   const [picked, setPicked] = useState<TeamTemplate | null>(null);
-  const byId = useMemo(() => new Map(agents.map((a) => [a.id, templateText(a)])), [agents, i18n.language]);
+  const byId = useMemo(() => templateTexts(agents, i18n.language), [agents, i18n.language]);
   if (teams.isError) return null;
   const shown = (teams.data ?? []).filter((tpl) => tpl.kind === kind);
   return (

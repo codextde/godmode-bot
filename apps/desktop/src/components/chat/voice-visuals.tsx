@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 import { Orb, type OrbVariant } from "@/components/aicss/Orb";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,9 @@ export function VoiceOrb({
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const phaseRef = useRef(phase);
-  phaseRef.current = phase;
+  useLayoutEffect(() => {
+    phaseRef.current = phase;
+  });
 
   useEffect(() => {
     let raf = 0;

@@ -39,9 +39,8 @@ export function ReminderEmailForm({ onSkip, onSaved, className }: { onSkip?: () 
       onSaved?.();
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (
@@ -106,9 +105,8 @@ export function ReminderEmailSet({ email, className }: { email: string; classNam
       qc.setQueryData(qk.license, await api.license.removeReminders());
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ChevronDown, FileKey, FileSpreadsheet, Lock, Search, ShieldCheck, Trash2, TriangleAlert, Upload, X } from "lucide-react";
@@ -141,8 +141,7 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
     if (step.kind === "review") preview.mutate({ file: step.file, scope: next });
   };
 
-  const readRef = useRef(readFile);
-  readRef.current = readFile;
+  const readDropped = useEffectEvent((file: File) => readFile(file));
   useEffect(() => {
     if (step.kind !== "pick") return;
     const onDragOver = (e: DragEvent) => e.preventDefault();
@@ -150,7 +149,7 @@ function ImportFlow({ defaultWorkspaceId, onClose }: { defaultWorkspaceId: strin
       if (e.defaultPrevented) return;
       e.preventDefault();
       const file = e.dataTransfer?.files?.[0];
-      if (file) readRef.current(file);
+      if (file) readDropped(file);
     };
     // On the document: ahead of the app-wide drop guard on window.
     document.addEventListener("dragover", onDragOver);

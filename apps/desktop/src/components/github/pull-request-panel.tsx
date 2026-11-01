@@ -86,9 +86,8 @@ export function PullRequestPanel({ conversationId, url, onHide }: { conversation
       qc.setQueryData(qk.pullRequest(url), await api.github.pull(url, { refresh: true }));
     } catch {
       await query.refetch();
-    } finally {
-      setRefreshing(false);
     }
+    setRefreshing(false);
   };
   const width = "min(44vw, 620px)";
   const data = query.data;
@@ -496,9 +495,8 @@ function MergeBar({ pr, url }: { pr: PullRequestView; url: string }) {
       if (inDialog) setProblem(reason);
       else toast.error(t("pullRequest.autoMerge.disableFailed", { reason }));
       if (err instanceof ApiRequestError && err.code === GithubErrorCode.MergeRefused) void qc.invalidateQueries({ queryKey: qk.pullRequest(url) });
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const confirm = async () => {

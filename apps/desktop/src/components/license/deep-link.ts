@@ -50,6 +50,9 @@ async function activate(qc: QueryClient, key: string) {
   }
 }
 
+const loadTauriCore = () => import("@tauri-apps/api/core");
+const loadTauriEvent = () => import("@tauri-apps/api/event");
+
 /** Takes the links the desktop shell received (waiting ones first, on a cold start) once the core can be asked. */
 export function useLicenseDeepLinks(enabled: boolean) {
   const qc = useQueryClient();
@@ -61,7 +64,7 @@ export function useLicenseDeepLinks(enabled: boolean) {
     const drain = () => {
       draining = draining.then(async () => {
         if (stopped) return;
-        const { invoke } = await import("@tauri-apps/api/core");
+        const { invoke } = await loadTauriCore();
         // An older shell without the command answers with an error: no links then.
         const links = await invoke<string[]>("take_deep_links").catch(() => [] as string[]);
         for (const link of links) {
@@ -70,7 +73,7 @@ export function useLicenseDeepLinks(enabled: boolean) {
         }
       }).catch(() => {});
     };
-    void import("@tauri-apps/api/event").then(async ({ listen }) => {
+    void loadTauriEvent().then(async ({ listen }) => {
       const off = await listen("deep-link", drain);
       if (stopped) off();
       else unlisten = off;

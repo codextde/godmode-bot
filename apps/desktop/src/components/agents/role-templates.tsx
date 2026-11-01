@@ -30,6 +30,8 @@ const searchText = (t: AgentTemplate) => {
   return [t.name, t.role, t.description, AGENT_TEMPLATE_CATEGORY_LABELS[t.category], ...(t.covers ?? []), shown.name, shown.role, shown.description, translate(`agents:roleTemplates.category.${t.category}`), ...(shown.covers ?? [])].join(" ");
 };
 
+const matching = (templates: AgentTemplate[], terms: RegExp[], _language: string) => templates.filter((t) => terms.every((re) => re.test(searchText(t))));
+
 /**
  * Every role a company has, by department: one agent per job, or one all-in-one agent per department that covers
  * them all. Searchable, because there are many.
@@ -55,7 +57,7 @@ export function RoleTemplates({
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const terms = useMemo(() => wordStarts(query), [query]);
-  const found = useMemo(() => templates.filter((t) => terms.every((re) => re.test(searchText(t)))), [templates, terms, i18n.language]);
+  const found = useMemo(() => matching(templates, terms, i18n.language), [templates, terms, i18n.language]);
   const inFilter = (t: AgentTemplate, f: Filter) => f === "all" || (f === "all-in-one" ? !!t.covers : t.category === f);
   const shown = found.filter((t) => inFilter(t, filter));
   const grouped = AGENT_TEMPLATE_CATEGORIES.map((c) => ({ category: c, items: shown.filter((t) => t.category === c) })).filter((g) => g.items.length > 0);

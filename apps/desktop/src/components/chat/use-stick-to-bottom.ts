@@ -5,6 +5,8 @@ const FOLLOW_TAU_MS = 70;
 const JUMP_TAU_MS = 110;
 const PIN_OFFSET = 64;
 
+const maxTop = (el: HTMLElement) => Math.max(0, el.scrollHeight - el.clientHeight);
+
 export function useStickToBottom({ threshold = 72, reduceMotion = false }: { threshold?: number; reduceMotion?: boolean } = {}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -12,12 +14,12 @@ export function useStickToBottom({ threshold = 72, reduceMotion = false }: { thr
   const stickRef = useRef(true);
   const pinnedRef = useRef(false);
   const reduceRef = useRef(reduceMotion);
-  reduceRef.current = reduceMotion;
+  useLayoutEffect(() => {
+    reduceRef.current = reduceMotion;
+  });
   const [atBottom, setAtBottom] = useState(true);
 
   const engine = useRef({ frame: 0, last: 0, tau: FOLLOW_TAU_MS, mountedAt: 0, pointerDown: false, scrollbarDrag: false });
-
-  const maxTop = (el: HTMLElement) => Math.max(0, el.scrollHeight - el.clientHeight);
 
   const layoutSpacer = useCallback(() => {
     const el = scrollRef.current;
@@ -38,14 +40,14 @@ export function useStickToBottom({ threshold = 72, reduceMotion = false }: { thr
     if (spacer.style.height !== next) spacer.style.height = next;
   }, []);
 
-  const tick = useCallback((now: number) => {
+  const tick = useCallback(function step(now: number) {
     const e = engine.current;
     e.frame = 0;
     const el = scrollRef.current;
     if (!el || !stickRef.current) return;
     if (e.pointerDown) {
       e.last = now;
-      e.frame = requestAnimationFrame(tick);
+      e.frame = requestAnimationFrame(step);
       return;
     }
     const target = maxTop(el);
@@ -57,9 +59,9 @@ export function useStickToBottom({ threshold = 72, reduceMotion = false }: { thr
     }
     const dt = Math.min(64, Math.max(1, now - (e.last || now - 16)));
     e.last = now;
-    const step = diff * (1 - Math.exp(-dt / e.tau));
-    el.scrollTop += Math.abs(step) < 1 ? Math.sign(diff) : step;
-    e.frame = requestAnimationFrame(tick);
+    const delta = diff * (1 - Math.exp(-dt / e.tau));
+    el.scrollTop += Math.abs(delta) < 1 ? Math.sign(diff) : delta;
+    e.frame = requestAnimationFrame(step);
   }, []);
 
   const kick = useCallback(() => {

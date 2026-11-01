@@ -9,7 +9,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FollowupTimePicker, followupIn, followupWhen, useFollowupActions } from "@/components/chat/followup";
 import { useNow } from "@/components/vault/use-now";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { useReduceAnimations } from "@/lib/motion";
 
 /** Chats agents will pick up again on their own (followup_schedule), soonest first. */
@@ -18,7 +18,7 @@ export function FollowupsSection({ followups, agentById }: { followups: Followup
   const { t } = useTranslation(["automations", "common"]);
   const now = useNow(30_000);
   const actions = useFollowupActions();
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const busy = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])));
   if (!followups.length) return null;
 

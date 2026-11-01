@@ -2,7 +2,7 @@ import { Link, useLocation, useMatch, useNavigate } from "react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, formatDistanceToNowStrict } from "date-fns";
 import type { Agent, Conversation, Workspace } from "@godmode/shared";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { AlarmClock, Archive, Bot, CheckCheck, ChevronDown, CircleCheck, CircleDot, MessagesSquare, Pin, PinOff, Trash2, Workflow, Zap } from "lucide-react";
 import { toast } from "sonner";
@@ -38,7 +38,7 @@ import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { isMac, modKey } from "@/lib/desktop";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
 import { useReduceAnimations } from "@/lib/motion";
 import { dateLocale, intlLocale, t as translate } from "@/i18n";
@@ -81,7 +81,7 @@ export function RecentChats() {
   const { data: workspaces = [] } = useWorkspaces();
   const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
   const { pathname } = useLocation();
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const runningConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])));
   const queuedConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "queued" ? [r.conversationId] : [])));
   const { setArchived } = useArchiveChat();
@@ -165,7 +165,9 @@ export function RecentChats() {
   }
   const slots = rows.flatMap((r) => (r.folded ? [] : [r.c.id])).slice(0, 9);
   const slotsRef = useRef(slots);
-  slotsRef.current = slots;
+  useLayoutEffect(() => {
+    slotsRef.current = slots;
+  });
   const holding = useModifierHeld();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

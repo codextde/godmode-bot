@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
@@ -83,7 +83,9 @@ export function LiveView({
   const controlled = expandedProp !== undefined;
   const expanded = expandedProp ?? expandedState;
   const onExpandedChangeRef = useRef(onExpandedChange);
-  onExpandedChangeRef.current = onExpandedChange;
+  useLayoutEffect(() => {
+    onExpandedChangeRef.current = onExpandedChange;
+  });
   const setExpanded = useCallback(
     (next: boolean) => {
       if (!controlled) setExpandedState(next);
@@ -101,7 +103,11 @@ export function LiveView({
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const frameSize = useRef({ width: 0, height: 0 });
-  frameSize.current = { width: frame?.width ?? 0, height: frame?.height ?? 0 };
+  const frameWidth = frame?.width ?? 0;
+  const frameHeight = frame?.height ?? 0;
+  useLayoutEffect(() => {
+    frameSize.current = { width: frameWidth, height: frameHeight };
+  }, [frameWidth, frameHeight]);
 
   // Subscribe to frames while the profile is running.
   useEffect(() => {

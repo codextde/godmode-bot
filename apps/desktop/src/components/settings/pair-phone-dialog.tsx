@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Trans, useTranslation } from "react-i18next";
@@ -44,11 +44,16 @@ export function PairPhoneDialog({
     },
   });
 
+  const createOffer = useEffectEvent(() => create.mutate());
+  const renewOffer = useEffectEvent(() => {
+    if (!create.isPending) create.mutate();
+  });
+
   useEffect(() => {
     if (!open) return;
     setPaired(null);
     setOffer(null);
-    create.mutate();
+    createOffer();
     const off = onServerEvent((e) => {
       if (e.type === "mobile.paired") setPaired(e.device);
     });
@@ -56,15 +61,13 @@ export function PairPhoneDialog({
       off();
       void api.mobile.cancelPairing().catch(() => undefined);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const remaining = offer ? Math.max(0, Math.round((new Date(offer.expiresAt).getTime() - now) / 1000)) : 0;
   const expired = !!offer && remaining === 0;
 
   useEffect(() => {
-    if (open && expired && !paired && !create.isPending) create.mutate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (open && expired && !paired) renewOffer();
   }, [open, expired, paired]);
 
   const address = offer?.urls[0]?.replace(/^https?:\/\//, "");

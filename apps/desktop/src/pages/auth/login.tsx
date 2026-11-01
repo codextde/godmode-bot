@@ -94,9 +94,8 @@ function PasswordForm() {
     } catch (err) {
       setError(loginError(err, "password"));
       void controls.start(shake);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (
@@ -146,9 +145,8 @@ function TokenForm() {
     } catch (err) {
       setError(loginError(err, "token"));
       void controls.start(shake);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

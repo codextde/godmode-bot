@@ -69,6 +69,7 @@ export function SetupStep({
   const [details, setDetails] = useState(false);
   const busy = useRef(false);
   const signInTried = useRef(false);
+  const [signInStarted, setSignInStarted] = useState(false);
 
   const refresh = useCallback(async () => {
     const next = await api.doctor.get(true);
@@ -80,6 +81,7 @@ export function SetupStep({
   const signIn = (r: DoctorReport) => {
     if (signInTried.current || !maySignIn || !find(r, "claude")?.ok || !missing(find(r, "claude-auth"))) return;
     signInTried.current = true;
+    setSignInStarted(true);
     if (login.state !== "waiting") login.start.mutate();
   };
 
@@ -102,23 +104,23 @@ export function SetupStep({
         }
         setJobs((j) => ({ ...j, [id]: { state: "installing" } }));
         const res = await api.doctor.install(id).catch((e) => ({ ok: false, output: errorMessage(e) }));
-        let ok = res.ok;
-        try {
-          r = await refresh();
-          // A check that started before the install finished may still say it is missing.
-          if (res.ok && !find(r, id)?.ok) r = await refresh();
-          ok = find(r, id)?.ok ?? res.ok;
-        } finally {
-          setJobs((j) => ({ ...j, [id]: { state: ok ? "done" : "failed", output: res.output } }));
-        }
+        const settle = (ok: boolean) => setJobs((j) => ({ ...j, [id]: { state: ok ? "done" : "failed", output: res.output } }));
+        // A check that started before the install finished may still say it is missing.
+        const checked = await refresh()
+          .then((next) => (res.ok && !find(next, id)?.ok ? refresh() : next))
+          .catch((e: unknown) => {
+            settle(res.ok);
+            throw e;
+          });
+        r = checked;
+        settle(find(r, id)?.ok ?? res.ok);
       }
       signIn(r);
     } catch (e) {
       setError(errorMessage(e));
-    } finally {
-      busy.current = false;
-      setRunning(false);
     }
+    busy.current = false;
+    setRunning(false);
   };
 
   const allOk = !!report && ROW_IDS.every((id) => !missing(find(report, id)));
@@ -147,7 +149,7 @@ export function SetupStep({
           ? "failed"
           : !started
             ? "idle"
-            : login.start.isPending || (running && maySignIn && (!claudeOk || !signInTried.current))
+            : login.start.isPending || (running && maySignIn && (!claudeOk || !signInStarted))
               ? "waiting"
               : claudeOk && maySignIn
                 ? "action"

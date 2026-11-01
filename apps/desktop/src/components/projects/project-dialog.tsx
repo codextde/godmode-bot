@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -76,11 +76,16 @@ export function ProjectDialog({
   const draftKey = project ? `project:${project.id}` : newKey;
   const [look, setLook] = useState(() => randomLook(workspace));
   const newLook = useRef(false);
-  const base = useMemo(() => formFrom(project, look), [open, project?.id, look]);
+  const [baseOf, setBaseOf] = useState(() => ({ open, id: project?.id, look, form: formFrom(project, look) }));
+  let base = baseOf.form;
+  if (baseOf.open !== open || baseOf.id !== project?.id || baseOf.look !== look) {
+    base = formFrom(project, look);
+    setBaseOf({ open, id: project?.id, look, form: base });
+  }
   const [live, setForm, kept] = useDraft(open ? draftKey : undefined, base);
-  const closing = useRef(live);
-  if (open) closing.current = live;
-  const form = open ? live : closing.current;
+  const [closing, setClosing] = useState(live);
+  if (open && closing !== live) setClosing(live);
+  const form = open ? live : closing;
   const { name, icon, color, description, instructions, browserProfileId, sources } = form;
   const set =
     <K extends keyof ProjectForm>(key: K) =>

@@ -41,6 +41,15 @@ export function VoiceSection({ settings }: { settings: Settings }) {
   const [playing, setPlaying] = useState<"loading" | "playing" | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const stop = () => {
+    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setPlaying(null);
+  };
+
   useEffect(() => setRate(v.rate), [v.rate]);
   useEffect(() => () => stop(), []);
 
@@ -52,15 +61,6 @@ export function VoiceSection({ settings }: { settings: Settings }) {
   }, [voices, lang]);
 
   const usesOpenAi = v.sttProvider === "openai" || v.ttsProvider === "openai";
-
-  function stop() {
-    if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel();
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    setPlaying(null);
-  }
 
   const testVoice = async () => {
     if (playing) return stop();
