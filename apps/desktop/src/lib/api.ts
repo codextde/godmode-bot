@@ -97,6 +97,7 @@ import type { DeviceGroup, DeviceGroupPatch, DeviceInvite, HandoffInput, Handoff
   Conversation,
   ConversationPatch,
   ConversationWithMessages,
+  MessagePage,
   Credential,
   CredentialInput,
   DependencyId,
@@ -681,7 +682,9 @@ export const api = {
     /** `ongoing`: only chats with work ahead (working, standing still, or continuing by themselves later). */
     list: (q: { agentId?: string; workspaceId?: ScopeFilter; projectId?: string; search?: string; limit?: number; archived?: boolean; ongoing?: boolean } = {}) =>
       get<Conversation[]>("/api/conversations", q),
-    get: (id: string) => get<ConversationWithMessages>(`/api/conversations/${id}`, { lite: "images" }),
+    get: (id: string, limit?: number) => get<ConversationWithMessages>(`/api/conversations/${id}`, { lite: "images", ...(limit ? { limit } : {}) }),
+    /** The page of messages before `before` (screenshots as `imageUrl`). */
+    messages: (id: string, before: string, limit: number) => get<MessagePage>(`/api/conversations/${id}/messages`, { before, limit, lite: "images" }),
     create: (input: { agentId: string; title?: string; workspaceId?: string | null; projectId?: string | null }) => post<Conversation>("/api/conversations", input),
     update: (id: string, input: ConversationPatch) => patch<Conversation>(`/api/conversations/${id}`, input),
     delete: (id: string) => del<{ ok: true }>(`/api/conversations/${id}`),
