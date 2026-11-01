@@ -35,6 +35,14 @@
       "reduceAnimations": "Reduce animations",
       "reduceAnimationsDescription": "Fewer and shorter animations: messages appear instantly, menus only fade, no glowing borders while agents work."
     },
+    "chat": {
+      "title": "Chat",
+      "description": "How conversations look on this computer.",
+      "toolCalls": "Tool calls",
+      "toolCallsDescription": "Cards show each step with its command and keep the steps open while the agent works. Compact folds every group into one muted line; click it for the steps.",
+      "cards": "Cards",
+      "compact": "Compact"
+    },
     "summaries": {
       "title": "AI summaries",
       "description": "Short texts Haiku writes for you. Each one is a quick, cheap call on your Claude account.",

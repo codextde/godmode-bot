@@ -12,6 +12,9 @@ export type RecentSource = "mine" | "automations" | "agents" | "all";
 export type WorkspacesView = "grid" | "list";
 export type InboxView = "list" | "board";
 
+/** How a chat shows the agent's tool calls: cards with the steps open while it works, or one muted line each. */
+export type ToolCallView = "cards" | "compact";
+
 export type WorkspacesSort = "name" | "active" | "attention";
 
 interface UiState {
@@ -56,6 +59,7 @@ interface UiState {
   hideSuggestions: boolean;
   sidebarWidth: number | null;
   reduceAnimations: boolean;
+  toolCallView: ToolCallView;
   /** Sidebar sections open by default that the human folded. */
   collapsedNav: string[];
   /** Pages the human took out of the sidebar's Work section. */
@@ -91,6 +95,7 @@ interface UiState {
   setHideSuggestions: (v: boolean) => void;
   setSidebarWidth: (width: number | null) => void;
   setReduceAnimations: (v: boolean) => void;
+  setToolCallView: (v: ToolCallView) => void;
 }
 
 export const useUi = create<UiState>()(
@@ -124,6 +129,7 @@ export const useUi = create<UiState>()(
       hideSuggestions: false,
       sidebarWidth: null,
       reduceAnimations: false,
+      toolCallView: "cards",
       setWorkspace: (workspace, project = null) =>
         set((s) => ({
           workspace,
@@ -163,6 +169,7 @@ export const useUi = create<UiState>()(
       setHideSuggestions: (hideSuggestions) => set({ hideSuggestions }),
       setSidebarWidth: (sidebarWidth) => set({ sidebarWidth }),
       setReduceAnimations: (reduceAnimations) => set({ reduceAnimations }),
+      setToolCallView: (toolCallView) => set({ toolCallView }),
     }),
     {
       // Per computer in cloud mode: the selected workspace id belongs to one computer.
@@ -193,6 +200,7 @@ export const useUi = create<UiState>()(
         hideSuggestions: s.hideSuggestions,
         sidebarWidth: s.sidebarWidth,
         reduceAnimations: s.reduceAnimations,
+        toolCallView: s.toolCallView,
       }),
     },
   ),

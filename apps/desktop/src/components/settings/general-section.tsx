@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Clock, Sparkles, Gauge, Languages, Laptop, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
+import { Bell, Clock, Sparkles, Gauge, Languages, Laptop, MessagesSquare, Monitor, Moon, Palette, Send, Sun, UserRound } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { AppLanguage, Settings, TimeFormat } from "@godmode/shared";
@@ -12,7 +12,7 @@ import { paletteBlurb } from "@/lib/palettes";
 import { notifyDesktop } from "@/lib/desktop";
 import { errorMessage } from "@/lib/api";
 import { useSetInterfaceMode } from "@/lib/mode";
-import { useUi } from "@/stores/ui";
+import { useUi, type ToolCallView } from "@/stores/ui";
 import { useLanguage } from "@/i18n/language";
 import { ModePicker } from "./mode-picker";
 import { PalettePicker } from "./palette-picker";
@@ -30,6 +30,8 @@ export function GeneralSection({ settings }: { settings: Settings }) {
   const { setMode } = useSetInterfaceMode();
   const reduceAnimations = useUi((s) => s.reduceAnimations);
   const setReduceAnimations = useUi((s) => s.setReduceAnimations);
+  const toolCallView = useUi((s) => s.toolCallView);
+  const setToolCallView = useUi((s) => s.setToolCallView);
 
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [autostartBusy, setAutostartBusy] = useState(false);
@@ -138,6 +140,20 @@ export function GeneralSection({ settings }: { settings: Settings }) {
           description={t("general.appearance.reduceAnimationsDescription")}
         >
           <Switch id="reduce-animations" checked={reduceAnimations} onCheckedChange={setReduceAnimations} />
+        </SettingRow>
+      </SettingsGroup>
+
+      <SettingsGroup title={t("general.chat.title")} icon={<MessagesSquare />} description={t("general.chat.description")}>
+        <SettingRow label={t("general.chat.toolCalls")} description={t("general.chat.toolCallsDescription")}>
+          <Segmented<ToolCallView>
+            aria-label={t("general.chat.toolCalls")}
+            value={toolCallView}
+            onChange={setToolCallView}
+            options={[
+              { value: "cards", label: t("general.chat.cards") },
+              { value: "compact", label: t("general.chat.compact") },
+            ]}
+          />
         </SettingRow>
       </SettingsGroup>
 
