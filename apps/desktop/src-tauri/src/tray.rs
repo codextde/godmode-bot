@@ -27,12 +27,19 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, open: &str, new_chat: &str, quit: 
 
 /// The app sends the tray labels in its language once it knows it.
 #[tauri::command]
-pub fn set_tray_labels<R: Runtime>(
-    app: AppHandle<R>,
+pub fn set_tray_labels(
+    app: AppHandle,
     open: String,
     new_chat: String,
     quit: String,
+    check_updates: Option<String>,
 ) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    if let Some(label) = &check_updates {
+        crate::app_menu::set_label(&app, label);
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = check_updates;
     let tray = app.tray_by_id("main").ok_or("no tray")?;
     let menu = build_menu(&app, &open, &new_chat, &quit).map_err(|e| e.to_string())?;
     tray.set_menu(Some(menu)).map_err(|e| e.to_string())

@@ -74,6 +74,7 @@
   "tray": {
     "open": "Open Godmode",
     "newChat": "New chat",
-    "quit": "Quit Godmode"
+    "quit": "Quit Godmode",
+    "checkUpdates": "Check for Updates…"
   }
 }
