@@ -7,9 +7,8 @@ import Icon from '@/components/ui/Icon.astro';
 import Logo from '@/components/ui/Logo.astro';
 import Words from '@/components/ui/Words.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
-import Countdown from '@/components/ui/Countdown.astro';
-import CouponCode from '@/components/ui/CouponCode.astro';
-import { COUPON, FOUNDING, PRICING, SITE, yearlySavings } from '@/config/site';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
+import { PRICING, SITE } from '@/config/site';
 import icon from '@/assets/showcase/radiowelle/icon.png';
 import player from '@/assets/showcase/radiowelle/01-player.png';
 import home from '@/assets/showcase/radiowelle/02-home.png';
@@ -103,26 +102,18 @@ const faqs = [
             Radiowelle was built, tested, listed and submitted to the App Store and Google Play. He touched the keyboard
             once, for Apple’s 2FA. Apple approved it on the first try the next day, Google Play two days later.
           </p>
-          <div class="founding-strip mt-6 !py-2 !pr-2" data-reveal style="--d:260">
+          <div class="pill mt-6 !h-auto flex-wrap !py-2 !pr-2 !pl-4" data-reveal style="--d:260">
             <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Live in both stores</span>
             <a href="https://apps.apple.com/app/id6820185211" rel="noopener" class="chip" data-track="showcase_radiowelle_live_ios"><Icon name="apple" size={12} /> App Store</a>
             <a href="https://play.google.com/store/apps/details?id=de.codext.radiowelle" rel="noopener" class="chip" data-track="showcase_radiowelle_live_play"><Icon name="smartphone" size={12} /> Google Play</a>
           </div>
           <div class="mt-9 flex flex-col gap-3 sm:flex-row" data-reveal style="--d:320">
-            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="showcase_radiowelle_hero" size="lg" />
+            <DownloadButton source="showcase_radiowelle_hero" />
             <a href="https://github.com/codextde/radiowelle" rel="noopener" class="btn btn-ghost btn-lg" data-track="showcase_radiowelle_github">
               <Icon name="git-branch" size={16} /> See the code
             </a>
           </div>
-          <div class="mt-6" data-reveal style="--d:400">
-            <a href="/#pricing" class="founding-strip" data-track="showcase_countdown">
-              <span class="flex items-center gap-2"><span class="live-dot !size-1.5"></span> Founding price ends in</span>
-              <Countdown variant="boxes" />
-            </a>
-            <p class="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-muted">
-              Extra {COUPON.percentOff}% off with <CouponCode size="sm" /> · price locked for life
-            </p>
-          </div>
+          <p class="mt-4 text-[14px] text-muted" data-reveal style="--d:400">Free for {PRICING.freeDays} days · No card · No sign-up</p>
         </div>
         <div class="sc-phones relative mx-auto flex w-full max-w-[520px] justify-center" data-reveal="scale" style="--d:200">
           <Image src={home} alt="Radiowelle home screen" width={300} class="sc-phone sc-phone-back" loading="eager" />
@@ -227,7 +218,7 @@ const faqs = [
         <div class="divide-y divide-line border-y border-line">
           {faqs.map((f, i) => (
             <details class="faq group" data-faq={`showcase_radiowelle_${i}`} data-reveal style={`--d:${i * 40}`}>
-              <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-white">
+              <summary class="flex cursor-pointer items-center justify-between gap-6 py-6 text-[17px] font-medium tracking-[-0.015em] transition-colors hover:text-brand">
                 {f.q}
                 <span class="plus grid size-8 flex-none place-items-center rounded-full ring-1 ring-line-2 transition-colors group-hover:ring-line-3" aria-hidden="true">
                   <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>
@@ -245,15 +236,13 @@ const faqs = [
         <div class="card p-8 text-center sm:p-14" data-reveal>
           <h2 class="mx-auto max-w-[18ch] text-[clamp(28px,4vw,48px)] leading-[1.05] font-semibold tracking-[-0.04em]">What would you ship with one message?</h2>
           <p class="mx-auto mt-4 max-w-[560px] text-muted">
-            {PRICING.trialDays} days free, then ${monthly.price}/month or ${yearly.perMonth}/month billed yearly. Founding 100 closes
-            {FOUNDING.endLabel}: after that it’s ${FOUNDING.listPrice.monthly}/month.
+            Free for {PRICING.freeDays} days, no card. Then ${monthly.price}/month, or ${yearly.perMonth}/month billed yearly.
           </p>
           <div class="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="showcase_radiowelle_final" size="lg" />
-            <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="showcase_radiowelle_final" variant="ghost" size="lg" />
+            <DownloadButton source="showcase_radiowelle_final" />
           </div>
-          <p class="mt-6 flex items-center justify-center gap-2 text-[13px] text-muted">
-            <Icon name="shield-check" size={14} class="text-brand" /> $0 today · price locked for life · founding offer ends in <Countdown />
+          <p class="mt-5 text-[13.5px] text-muted">
+            <CheckoutButton plan="monthly" label="Already sure? Subscribe now" source="showcase_radiowelle_final" variant="link" />
           </p>
         </div>
       </div>
@@ -265,8 +254,8 @@ const faqs = [
 <style>
   .sc-glow {
     background:
-      radial-gradient(55% 45% at 80% 10%, rgb(47 214 144 / 0.16), transparent 70%),
-      radial-gradient(40% 40% at 10% 0%, rgb(255 250 240 / 0.05), transparent 70%);
+      radial-gradient(55% 45% at 80% 10%, rgb(227 243 234 / 0.95), transparent 70%),
+      radial-gradient(40% 40% at 10% 0%, rgb(253 235 226 / 0.9), transparent 70%);
   }
   .sc-phones { height: clamp(380px, 46vw, 560px); }
   .sc-phone {
@@ -274,8 +263,8 @@ const faqs = [
     width: clamp(190px, 22vw, 260px);
     height: auto;
     border-radius: 28px;
-    box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.7);
-    outline: 1px solid rgb(255 250 240 / 0.08);
+    box-shadow: 0 30px 80px -24px rgb(70 52 30 / 0.4);
+    outline: 1px solid var(--line-2);
   }
   .sc-phone-back { left: 6%; top: 6%; transform: rotate(-6deg); opacity: 0.85; }
   .sc-phone-front { right: 6%; top: 0; transform: rotate(4deg); }
@@ -287,7 +276,7 @@ const faqs = [
     top: 8px;
     bottom: 8px;
     width: 1px;
-    background: linear-gradient(to bottom, var(--brand-line), rgb(255 250 240 / 0.06));
+    background: linear-gradient(to bottom, var(--brand-line), var(--line));
   }
   .sc-step { position: relative; }
   .sc-dot {
@@ -299,10 +288,10 @@ const faqs = [
     width: 31px;
     height: 31px;
     border-radius: 999px;
-    background: var(--bg);
+    background: var(--surface);
     color: var(--brand);
     box-shadow: inset 0 0 0 1px var(--brand-line);
   }
-  .sc-step.is-human .sc-dot { color: var(--warn, #f5b84b); box-shadow: inset 0 0 0 1px rgb(245 184 75 / 0.45); }
-  .sc-step.is-human .card { box-shadow: inset 0 0 0 1px rgb(245 184 75 / 0.3); }
+  .sc-step.is-human .sc-dot { color: var(--warn); box-shadow: inset 0 0 0 1px rgb(154 98 18 / 0.4); }
+  .sc-step.is-human .card { box-shadow: inset 0 0 0 1px rgb(154 98 18 / 0.3), var(--shadow); }
 </style>

@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { differenceInCalendarDays, format } from "date-fns";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { ArrowDownToLine, ArrowRight, Bot, ChevronDown, CircleCheck, CircleDashed, Cookie, KeyRound, ShieldCheck } from "lucide-react";
@@ -73,7 +73,7 @@ export function DoneStep({
       ? t("done.trialUntil", { date: format(new Date(license!.trialEndsAt), t("done.shortDate"), { locale: dateLocale }) })
       : t("done.activated")
     : freeUntil
-      ? t("done.freeUntil", { date: format(freeUntil, t("done.shortDate"), { locale: dateLocale }) })
+      ? t("done.freeTrial", { count: Math.max(1, differenceInCalendarDays(freeUntil, new Date())) })
       : license && !license.enforced
         ? t("done.freeBuild")
         : blocked
@@ -113,7 +113,7 @@ export function DoneStep({
           <SummaryRow
             i={3}
             ok={licensed || !!freeUntil || (!!license && !license.enforced) ? true : blocked ? false : null}
-            label="Godmode Pro"
+            label={freeUntil ? t("done.freeTrialLabel") : "Godmode Pro"}
             detail={licenseDetail}
             action={
               needsKey && license?.enforced ? (

@@ -4,11 +4,37 @@
   "gate": {
     "nothingChanged": "Noch keine Änderung",
     "checkFailed": "Lizenz konnte nicht geprüft werden",
-    "freeWeekOver": "Deine Gratiswoche ist vorbei",
     "activateTitle": "Godmode aktivieren",
-    "subtitle": "Starte deine kostenlose Testphase oder gib deinen Lizenzschlüssel ein, damit deine Agenten weiterarbeiten.",
+    "subtitle": "Wähl einen Plan oder gib deinen Lizenzschlüssel ein, damit deine Agenten weiterarbeiten.",
     "keyEndingIn": "Schlüssel endet auf <key>{{hint}}</key>",
-    "dataSafe": "Deine Agenten, Chats und Logins bleiben sicher auf diesem Computer."
+    "dataSafe": "Nichts wird gelöscht. Deine Agenten, Logins und Erinnerungen bleiben auf diesem Computer.",
+    "dataSafeMac": "Nichts wird gelöscht. Deine Agenten, Logins und Erinnerungen bleiben auf diesem Mac.",
+    "trialOver": "Deine Testphase ist vorbei",
+    "endedTitle": "Deine Lizenz ist abgelaufen",
+    "readyTitle": "Godmode ist bereit, wenn du es bist",
+    "readyText": "Wähl einen Plan und gib Godmode deine erste Aufgabe. Es arbeitet weiter, während du dich um anderes kümmerst.",
+    "doneInDays_one": "In {{days}} Tagen hat Godmode eine Aufgabe für dich erledigt.",
+    "doneInDays_other": "In {{days}} Tagen hat Godmode {{formatted}} Aufgaben für dich erledigt.",
+    "doneSoFar_one": "Bisher hat Godmode eine Aufgabe für dich erledigt.",
+    "doneSoFar_other": "Bisher hat Godmode {{formatted}} Aufgaben für dich erledigt.",
+    "yourAgents_one": "Dein Agent",
+    "yourAgents_other": "Deine {{count}} Agenten",
+    "automationCount_one": "{{count}} Automation",
+    "automationCount_other": "{{count}} Automationen",
+    "readyBoth": "{{agents}} und {{automations}} sind bereit, weiterzumachen.",
+    "readyAgents_one": "Dein Agent ist bereit, weiterzumachen.",
+    "readyAgents_other": "Deine {{count}} Agenten sind bereit, weiterzumachen.",
+    "readyAutomations_one": "Deine Automation ist bereit, weiterzumachen.",
+    "readyAutomations_other": "Deine {{count}} Automationen sind bereit, weiterzumachen.",
+    "stats": {
+      "time": "Arbeit für dich",
+      "hoursValue": "{{value}} Std.",
+      "minutesValue": "{{value}} Min.",
+      "automationRuns_one": "Automationslauf",
+      "automationRuns_other": "Automationsläufe",
+      "logins_one": "Login gespeichert",
+      "logins_other": "Logins gespeichert"
+    }
   },
   "banner": {
     "trialEnds": {
@@ -29,11 +55,17 @@
     "viewLicence": "Lizenz ansehen",
     "pastDue": "Die letzte Zahlung ist fehlgeschlagen. Aktualisiere deine Zahlungsmethode, damit Godmode weiterläuft.",
     "updatePayment": "Zahlung aktualisieren",
-    "grace": "Kostenlos bis {{date}}. Danach füge deinen Lizenzschlüssel hinzu oder starte die 14-tägige Testphase.",
-    "startTrial": "Testphase starten",
     "addKey": "Schlüssel hinzufügen",
     "unverified": "Dein Lizenzschlüssel konnte noch nicht geprüft werden. Godmode akzeptiert ihn bis {{date}}.",
-    "dismiss": "Für heute ausblenden"
+    "dismiss": "Für heute ausblenden",
+    "freeTrial": {
+      "today": "Deine Testphase endet heute.",
+      "tomorrow": "Deine Testphase endet morgen.",
+      "daysLeft_one": "Noch {{count}} Tag in deiner Testphase.",
+      "daysLeft_other": "Noch {{count}} Tage in deiner Testphase.",
+      "hint": "Wähl einen Plan, dann läuft alles, was du eingerichtet hast, einfach weiter."
+    },
+    "seePlans": "Pläne ansehen"
   },
   "keyForm": {
     "label": "Lizenzschlüssel",
@@ -44,11 +76,42 @@
     "activated": "Godmode ist aktiviert"
   },
   "panel": {
-    "startTrial": "14 Tage kostenlos testen",
-    "seePlans": "Pläne ansehen",
-    "finishCheckout": "Schließe den Kauf im Browser ab und füge dann unten deinen Lizenzschlüssel ein.",
-    "pricing": "14 Tage kostenlos, danach 39 $ im Monat. Jederzeit kündbar.",
     "lostKey": "Schlüssel verloren?",
     "lostKeyHint": "Er steht auf der Seite nach dem Kauf und auf deinen Rechnungen."
+  },
+  "chip": {
+    "label": "Testphase",
+    "today": "endet heute",
+    "daysLeft_one": "noch {{count}} Tag",
+    "daysLeft_other": "noch {{count}} Tage",
+    "until": "Gratis bis {{date}}"
+  },
+  "plans": {
+    "label": "Plan",
+    "monthly": "Monatlich",
+    "yearly": "Jährlich",
+    "amount": "{{price}} $",
+    "month": "/ Monat",
+    "billedMonthly": "Monatlich abgerechnet",
+    "billedYearly": "{{price}} $ einmal im Jahr",
+    "save": "{{percent}} % sparen",
+    "perMonth": "{{price}} $/Monat",
+    "perYear": "{{price}} $/Jahr",
+    "keep": "Godmode behalten",
+    "subscribe": "Abonnieren",
+    "guarantee": "{{days}} Tage Geld-zurück-Garantie. Jederzeit kündbar.",
+    "finishCheckout": "Schließ den Kauf im Browser ab. Klick dann auf der Willkommensseite auf „Open Godmode“ oder füg deinen Schlüssel unten ein."
+  },
+  "deepLink": {
+    "activating": "Lizenz wird aktiviert…",
+    "alreadyActive": "Diese Lizenz ist schon aktiv",
+    "failed": "Lizenz konnte nicht aktiviert werden",
+    "replaceTitle": "Neuen Lizenzschlüssel verwenden?",
+    "replaceText": "Godmode hat schon einen gültigen Schlüssel (endet auf {{old}}). Durch den Schlüssel mit der Endung {{next}} ersetzen?",
+    "replace": "Neuen Schlüssel verwenden",
+    "keep": "Aktuellen behalten",
+    "confirmTitle": "Diesen Lizenzschlüssel aktivieren?",
+    "confirmText": "Ein Link möchte den Lizenzschlüssel mit der Endung {{next}} zu Godmode hinzufügen. Mach nur weiter, wenn du ihn gerade gekauft oder von jemandem bekommen hast, dem du vertraust.",
+    "cancel": "Abbrechen"
   }
 }

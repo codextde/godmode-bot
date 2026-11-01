@@ -11,10 +11,18 @@
       @font-face { font-family: "Geist Mono"; src: url("assets/fonts/geist-mono.woff2") format("woff2"); font-weight: 100 900; }
       @font-face { font-family: "Instrument Serif"; src: url("assets/fonts/instrument-serif-italic.woff2") format("woff2"); font-style: italic; }
       html, body { width: 1200px; height: 630px; }
+      :root { --bg: #faf7f2; --s1: #ffffff; --s2: #f6f2eb; --line: rgba(70,52,30,0.09); --line-2: rgba(70,52,30,0.14);
+        --fg: #1f1b16; --muted: #655d52; --em: #0b7651; --em-soft: #e3f3ea; --em-line: rgba(11,118,81,0.28); --claude: #a94f2b; }
+      .bg-field { background: #faf7f2; }
+      .bg-glow { background: radial-gradient(closest-side, rgba(227,243,234,1), rgba(227,243,234,0) 100%); }
+      .bg-warm { background: radial-gradient(closest-side, rgba(253,235,226,1), rgba(253,235,226,0) 100%); }
+      .grain, .guide-v, .guide-h { display: none; }
+      h1 .serif { color: var(--em); }
+      .claude-dot { box-shadow: none; }
       #shot { position: absolute; left: 676px; top: 112px; width: 600px; height: 420px; border-radius: 18px; overflow: hidden;
         border: 1px solid var(--line-2); background: var(--s1);
-        box-shadow: 0 40px 90px rgba(0,0,0,0.7), 0 10px 30px rgba(0,0,0,0.45); }
-      #shot .ftb { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: #151515; border-bottom: 1px solid rgba(255,255,255,0.06);
+        box-shadow: 0 40px 90px -30px rgba(70,52,30,0.35), 0 4px 14px rgba(70,52,30,0.08); }
+      #shot .ftb { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: var(--s2); border-bottom: 1px solid var(--line);
         display: flex; align-items: center; padding: 0 12px; }
       #shot .ftb .traffic i { width: 10px; height: 10px; }
       #shot .panel { position: absolute; left: 26px; right: 70px; top: 54px; }
@@ -23,7 +31,7 @@
         font-size: 18px; line-height: 1.4; color: var(--fg); }
       #shot .steps { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; list-style: none; padding: 0; }
       #shot .steps li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line);
-        background: rgba(255,250,240,0.02); font-size: 15px; color: #d8d4cc; }
+        background: #fff; font-size: 15px; color: #433c33; }
       #shot .steps li::before { content: ""; width: 16px; height: 16px; flex: none; border-radius: 50%; background: var(--em-soft);
         box-shadow: inset 0 0 0 1.5px var(--em); }
       #shot .tag { margin-left: auto; font-family: var(--mono); font-size: 11.5px; font-weight: 400; padding: 3px 8px; border-radius: 999px;
@@ -35,8 +43,9 @@
       .brandrow b { font-size: 25px; font-weight: 600; letter-spacing: -0.02em; }
       h1 { font-size: 56px; margin-top: 34px; width: 590px; line-height: 1.04; }
       h1 .serif { font-size: 72px; }
-      .sub { margin-top: 28px; font-family: var(--mono); font-size: 15px; letter-spacing: 0.14em; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
-      .by { margin-top: 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; color: #d8d4cc; }
+      .sub { margin-top: 30px; display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; padding: 12px 22px; border-radius: 999px;
+        background: var(--em); color: #fff; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; }
+      .by { margin-top: 14px; display: flex; align-items: center; gap: 10px; font-size: 18px; color: #433c33; }
     </style>
   </head>
   <body>
@@ -53,7 +62,7 @@
             <div class="label">You · Monday 08:00</div>
             <div class="msg">Download this month’s invoices from our supplier portals, file them in Drive and send me the total.</div>
             <ul class="steps">
-              <li>Signed into 6 portals with your logins<b class="tag">secret hidden</b></li>
+              <li>Signed in to 6 portals with your logins<b class="tag">secret hidden</b></li>
               <li>Downloaded 23 new invoices</li>
               <li>Filed them in Drive › Invoices</li>
               <li>Sent you the total<b class="tag ok">done</b></li>
@@ -63,7 +72,7 @@
         <div id="left">
           <div class="brandrow"><div class="logo" data-logo></div><b>Godmode Bot</b></div>
           <h1 class="headline" id="h">Your computer work.<br><span class="serif">Done for you.</span></h1>
-          <div class="sub">Your browser · Your apps · Your logins</div>
+          <div class="sub">Download for Mac · Free for 14 days</div>
           <div class="by"><span class="claude-dot"></span>Powered by Claude</div>
         </div>
         <div class="grain" data-layout-ignore></div>

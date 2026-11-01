@@ -1,10 +1,11 @@
 ---
-// Where Stripe sends people who leave checkout. Answer the likely reason and point to the free trial.
+// Where Stripe sends people who leave checkout. Answer the likely reason and point to the free download.
 import Base from '@/layouts/Base.astro';
 import Nav from '@/components/Nav.astro';
 import Footer from '@/components/Footer.astro';
 import Icon from '@/components/ui/Icon.astro';
 import CheckoutButton from '@/components/ui/CheckoutButton.astro';
+import DownloadButton from '@/components/ui/DownloadButton.astro';
 import { PRICING, SITE, yearlySavings } from '@/config/site';
 
 const { monthly, yearly } = PRICING.plans;
@@ -12,12 +13,12 @@ const reasons = [
   {
     icon: 'wallet',
     q: 'I don’t want to pay before I’ve tried it.',
-    a: `You don’t have to. Start the ${PRICING.trialDays}-day free trial: nothing is charged today, and if you cancel before day ${PRICING.trialDays} you pay nothing. After that it’s $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly.`,
+    a: `You don’t have to. Download Godmode and use it free for ${PRICING.freeDays} days: no card, no sign-up. If you keep it after that, it’s $${monthly.price} a month, or $${yearly.perMonth} a month billed yearly.`,
   },
   {
     icon: 'shield-question',
     q: 'Not sure it will work for my tasks.',
-    a: `That’s what the trial is for. Hand it your hardest workflow this week. And if you only notice after your first payment, a ${PRICING.guaranteeDays}-day money-back guarantee still has you covered.`,
+    a: `That’s what the free days are for. Hand it your most boring task this week. And if you only notice after your first payment, a ${PRICING.guaranteeDays}-day money-back guarantee still has you covered.`,
   },
   {
     icon: 'lock-keyhole',
@@ -31,7 +32,7 @@ const reasons = [
   <Nav home={false} />
   <main class="relative pt-36 pb-24">
     <div class="container-x max-w-[900px]">
-      <div id="checkout-error" hidden class="mb-10 flex items-start gap-3 rounded-2xl p-4 text-[14px] ring-1 ring-[rgb(240_82_91/0.35)]" style="background: rgb(240 82 91 / 0.06)">
+      <div id="checkout-error" hidden class="mb-10 flex items-start gap-3 rounded-2xl p-4 text-[14px] ring-1 ring-[rgb(184_50_59/0.3)]" style="background: rgb(184 50 59 / 0.06)">
         <Icon name="triangle-alert" size={18} class="mt-0.5 flex-none text-danger" />
         <p class="text-text-2">
           Checkout is briefly unavailable — sorry about that. Please try again in a minute, or email
@@ -39,9 +40,9 @@ const reasons = [
         </p>
       </div>
 
-      <p class="eyebrow"><span class="n">●</span> No charge was made</p>
-      <h1 class="h-section mt-5 max-w-[16ch]">Not sure yet? <span class="serif text-muted">Try it free for {PRICING.trialDays} days.</span></h1>
-      <p class="lead mt-5 max-w-[560px]">No charge today, cancel anytime before day {PRICING.trialDays}. Here’s what usually holds people back — and why it shouldn’t.</p>
+      <p class="eyebrow">No charge was made</p>
+      <h1 class="h-section mt-5 max-w-[16ch]">Not sure yet? <span class="serif">Try it free for {PRICING.freeDays} days.</span></h1>
+      <p class="lead mt-5 max-w-[560px]">No card, no sign-up. Just download it. Here’s what usually holds people back, and why it shouldn’t.</p>
 
       <div class="mt-12 grid gap-3">
         {
@@ -60,8 +61,8 @@ const reasons = [
       </div>
 
       <div class="mt-10 flex flex-col gap-3 sm:flex-row">
-        <CheckoutButton plan="monthly" label={`Start ${PRICING.trialDays}-day free trial`} source="recovery" size="lg" />
-        <CheckoutButton plan="yearly" label={`Or yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="recovery" variant="ghost" size="lg" />
+        <DownloadButton source="recovery" />
+        <CheckoutButton plan="yearly" label={`Subscribe yearly — $${yearly.perMonth}/mo, save ${yearlySavings}%`} source="recovery" variant="ghost" size="lg" />
       </div>
       <p class="mt-6 text-[14px] text-muted">
         Have a question first? <a class="text-text underline decoration-line-3 underline-offset-2" href={`mailto:${SITE.email}?subject=Question%20about%20Godmode`}>Ask the founder directly</a>.

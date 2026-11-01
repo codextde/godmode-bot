@@ -24,7 +24,7 @@ writing the same emails. Not developers (they are welcome, but we don't sell to 
   - Runs on its own: every Monday, when an email arrives, when a price changes.
   - Remembers how you like things.
   - Message it from your phone, Slack, Telegram or Teams.
-  - Runs on your own Mac.
+  - Runs on your own Mac (Apple chip or Intel). Windows is not available yet; there is a waitlist.
 
 ## Jobs to show (use these, in this order of priority)
 
@@ -45,7 +45,7 @@ Never lead with coding, bug fixing, pull requests, test suites or servers.
 - Not "always asks first": asking is the default, it skips it when the task already says to do that step.
 - Passwords are hidden from the AI and blacked out in chats and logs, not in screenshots.
 - Banks that confirm logins in their phone app still need the user; say "it asks you when a site wants your phone".
-- The always-on version for a spare computer installs with one copy-paste command (we help teams set it up).
+- The always-on version for a spare computer installs with one copy-paste command (we help by email).
 
 ## Words
 
@@ -89,3 +89,4 @@ $39/month, or $29/month billed yearly. 14-day money-back guarantee on the first 
 - Mac only for now (Apple silicon and Intel). Windows and Linux people: "Mac only right now, Windows is on the list."
 - Needs a Claude Pro or Max plan (or an Anthropic API key). Don't hide it in answers, don't lead with it.
 - Teams and companies: same download, contact kontakt@codext.de for several seats or help setting it up.
+- Website "Subscribe" buttons and the app's end screen check out with `trial=0` (billed today, no second trial).

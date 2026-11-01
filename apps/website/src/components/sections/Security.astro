@@ -1,98 +1,75 @@
 ---
 import Words from '../ui/Words.astro';
 import Icon from '../ui/Icon.astro';
+import { LEGAL } from '@/config/site';
 
 const points = [
   {
-    icon: 'eye-off',
-    title: 'Fill, don’t reveal',
-    text: 'Godmode types your passwords and 2FA codes into the login page itself. The AI only ever learns that a password was filled, never what it is.',
-  },
-  {
-    icon: 'link-2',
-    title: 'Only on the right website',
-    text: 'Your bank login is only ever filled into your bank’s real website. Fake lookalike pages and phishing tricks get nothing.',
-  },
-  {
-    icon: 'hard-drive',
-    title: 'Encrypted on your computer',
-    text: 'Every password is encrypted with AES-256-GCM. The key stays in your computer’s keychain, or only behind your passphrase if you prefer. Your passwords and history never touch our servers.',
-  },
-  {
-    icon: 'box',
-    title: 'Only what each job needs',
-    text: 'Give each AI coworker only the logins and folders its job needs, and give sensitive work a separate Mac of its own.',
-  },
-  {
-    icon: 'scroll-text',
-    title: 'Everything on the record',
-    text: 'A record of every time a password is used. Passwords are blacked out in chats and logs. Every task it did is saved.',
+    icon: 'lock-keyhole',
+    title: 'Your passwords stay on your computer',
+    text: 'They live in an encrypted vault on your Mac. Godmode types them into the login page itself, so the AI never sees them. In chats and logs they are blacked out.',
   },
   {
     icon: 'hand',
-    title: 'You stay in charge',
-    text: 'Watch every step live, take over with one click, stop any task instantly. It asks before important steps you didn’t already ask for.',
+    title: 'It asks before anything important',
+    text: 'Sending, paying, deleting, posting: by default it stops and asks you first. You can watch every step and take over with one click.',
+  },
+  {
+    icon: 'laptop',
+    title: 'It runs on your own Mac',
+    text: 'Your logins, notes and history stay on your computer. The app has no tracking and sends nothing to us.',
+  },
+  {
+    icon: 'building-2',
+    title: `Made by ${LEGAL.company} in Germany`,
+    text: 'A real company you can call. Questions go to a human, usually answered within a day.',
   },
 ];
 ---
 
-<section id="security" class="relative overflow-hidden py-20 sm:py-28" data-track-view="security">
-  <div class="security-glow pointer-events-none absolute inset-0 -z-10" aria-hidden="true"></div>
+<section id="trust" class="relative py-16 sm:py-24" data-track-view="security">
   <div class="container-x">
-    <div class="grid items-end gap-10 lg:grid-cols-[1.1fr_1fr]">
-      <div>
-        <p class="eyebrow" data-reveal><span class="n">08</span> Security</p>
-        <Words text="Built like a vault. *Not like a demo.*" class="h-section mt-6" />
-      </div>
-      <p class="lead max-w-[460px]" data-reveal style="--d:200">
-        You’re handing an AI the keys to your work. So the keys stay on your computer, encrypted, and the AI never gets to
-        hold them.
-      </p>
-    </div>
+    <div class="grid items-start gap-12 lg:grid-cols-[0.9fr_1.1fr]">
+      <div class="lg:sticky lg:top-28">
+        <p class="eyebrow" data-reveal>Safe by design</p>
+        <Words text="You stay *in charge.*" class="h-section mt-4" />
+        <p class="lead mt-5 max-w-[440px]" data-reveal style="--d:200">
+          Handing work to an AI should feel like handing it to a careful colleague. So Godmode keeps your keys at home and
+          checks with you before the big steps.
+        </p>
 
-    <div class="mt-16 grid gap-3 lg:grid-cols-[1fr_1.35fr]">
-      <!-- Context window visual -->
-      <div class="card p-6 sm:p-8" data-reveal>
-        <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">What the AI sees</p>
-        <div class="ctx mt-5 space-y-2.5 font-mono text-[12.5px] leading-relaxed">
-          <div class="ctx-line" style="--c:0"><span class="text-muted">you</span> Log into the Acme portal and download September’s invoice.</div>
-          <div class="ctx-line" style="--c:1"><span class="text-brand">godmode</span> Filling your Acme login from the vault</div>
-          <div class="ctx-line ctx-result" style="--c:2">
-            <span class="text-dim">filled</span> email ✓ password ✓
-            <span class="redact">[secret hidden]</span>
+        <div class="card mt-8 max-w-[460px] p-5" data-reveal style="--d:250">
+          <p class="text-[12.5px] font-semibold text-muted">What the AI sees when it signs in</p>
+          <div class="mt-3 space-y-2 text-[14px] leading-relaxed text-text-2">
+            <p><span class="font-semibold text-text">You:</span> Log into the supplier portal and download September’s invoice.</p>
+            <p>
+              <span class="font-semibold text-brand">Godmode:</span> Filled your login <span class="redact">[secret hidden]</span>
+            </p>
+            <p>
+              <span class="font-semibold text-brand">Godmode:</span> Filled the 2FA code <span class="redact">[secret hidden]</span>
+            </p>
+            <p><span class="font-semibold text-brand">Godmode:</span> Signed in. Invoice saved to Documents.</p>
           </div>
-          <div class="ctx-line" style="--c:3"><span class="text-brand">godmode</span> The site asks for a 2FA code</div>
-          <div class="ctx-line ctx-result" style="--c:4">
-            <span class="text-dim">filled</span> 2FA code ✓ <span class="redact">[secret hidden]</span>
-          </div>
-          <div class="ctx-line" style="--c:5"><span class="text-muted">godmode</span> Signed in. Downloaded invoice INV-2026-0931.pdf.</div>
-        </div>
-        <div class="mt-6 flex flex-wrap gap-2">
-          <span class="chip chip-brand"><Icon name="shield-check" size={11} /> AES-256-GCM, key in your OS keychain</span>
-          <span class="chip">Stays on your computer</span>
-          <span class="chip">No tracking in the app</span>
         </div>
       </div>
 
-      <div class="grid gap-3 sm:grid-cols-2">
+      <div class="grid gap-4 sm:grid-cols-2">
         {
           points.map((p, i) => (
-            <div class="card p-6" data-reveal style={`--d:${(i % 2) * 80 + Math.floor(i / 2) * 60}`}>
-              <span class="grid size-9 place-items-center rounded-lg bg-brand-soft text-brand ring-1 ring-[rgb(47_214_144/0.25)]">
-                <Icon name={p.icon} size={17} />
+            <div class="card p-6 sm:p-7" data-reveal style={`--d:${(i % 2) * 80 + Math.floor(i / 2) * 60}`}>
+              <span class="grid size-11 place-items-center rounded-2xl bg-brand-soft text-brand">
+                <Icon name={p.icon} size={20} />
               </span>
-              <h3 class="mt-5 text-[16px] font-medium tracking-[-0.015em]">{p.title}</h3>
-              <p class="mt-1.5 text-[14px] leading-relaxed text-muted">{p.text}</p>
+              <h3 class="mt-5 text-[17px] font-semibold tracking-[-0.015em]">{p.title}</h3>
+              <p class="mt-2 text-[15px] leading-relaxed text-muted">{p.text}</p>
             </div>
           ))
         }
+        <p class="flex items-center gap-2 text-[13.5px] text-muted sm:col-span-2" data-reveal>
+          <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" class="text-claude"><path fill="currentColor" d="M12 2l1.9 6.2L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.8z"></path></svg>
+          Powered by Claude from Anthropic. Your tasks are processed under your own Claude account.
+        </p>
       </div>
     </div>
-    <p class="mt-6 max-w-[860px] text-[12.5px] leading-relaxed text-dim" data-reveal>
-      Plainly stated: Godmode can use your computer without asking at every click, so it can finish the job. Treat it like a
-      trusted coworker and give sensitive work a separate Mac of its own. On that separate Mac it controls the whole
-      machine, so signing in there is best effort and closer to showing it a password; it’s off until you allow it. Your
-      tasks and the pages it reads are processed by Claude under your own Anthropic account.
-    </p>
   </div>
 </section>
