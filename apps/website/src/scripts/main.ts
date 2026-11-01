@@ -156,8 +156,16 @@ document.querySelectorAll<HTMLElement>('[data-recs]').forEach((root) => {
     });
     panels.forEach((p, j) => (p.hidden = j !== current));
     const v = videos[current];
-    if (v) v.currentTime = 0;
-    if (focus) tabs[current].focus();
+    if (v) {
+      if (!v.poster && v.dataset.poster) v.poster = v.dataset.poster;
+      v.currentTime = 0;
+    }
+    const list = tabs[current].parentElement!;
+    if (list.scrollWidth > list.clientWidth) {
+      const left = tabs[current].getBoundingClientRect().left - list.getBoundingClientRect().left + list.scrollLeft - 16;
+      list.scrollTo({ left, behavior: reduced ? 'auto' : 'smooth' });
+    }
+    if (focus) tabs[current].focus({ preventScroll: true });
     play();
   };
 
