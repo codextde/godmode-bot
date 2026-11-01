@@ -88,7 +88,7 @@ const purchase =
 const handoffUrl = licenseKey ? `${Astro.url.origin}/download?key=${licenseKey}` : '';
 // Godmode on this computer takes the key from this link and activates it (desktop builds that know godmode:// links).
 const openAppUrl = licenseKey ? licenseDeepLink(licenseKey) : '';
-const mailBody = `Your Godmode license key: ${licenseKey}\n\nDownload Godmode on your Mac or PC (your key is already filled in):\n${handoffUrl}\n`;
+const mailBody = `Your Godmode license key: ${licenseKey}\n\nDownload Godmode on your Mac (your key is already filled in):\n${handoffUrl}\n`;
 const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent('Your Godmode license')}&body=${encodeURIComponent(mailBody)}`;
 
 const founding = session?.metadata?.founding === '1';
@@ -213,7 +213,7 @@ const steps = [
               <div class="card p-6 sm:p-8" data-reveal style="--d:300">
                 <p class="font-mono text-[11px] tracking-[0.12em] text-dim uppercase">Your license key</p>
                 <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <code class="flex-1 rounded-xl bg-[rgb(0_0_0/0.35)] px-4 py-3.5 font-mono text-[16px] tracking-[0.04em] break-all text-text ring-1 ring-line-2 sm:text-[19px] sm:tracking-[0.06em]">
+                  <code class="flex-1 rounded-xl bg-surface-2 px-4 py-3.5 font-mono text-[16px] tracking-[0.04em] break-all text-text ring-1 ring-line-2 sm:text-[19px] sm:tracking-[0.06em]">
                     {licenseKey}
                   </code>
                   <button type="button" class="btn btn-ghost" data-copy={licenseKey}>
@@ -249,7 +249,7 @@ const steps = [
                       <span class="hidden sm:inline">Installing on another computer?</span>
                     </p>
                     <p class="mt-1.5 text-[14px] leading-relaxed text-muted">
-                      Godmode runs on your Mac or PC. Send yourself this link — it opens the download with your key filled in.
+                      Godmode runs on your Mac. Send yourself this link. It opens the download with your key filled in.
                     </p>
                   </div>
                 </div>
@@ -267,27 +267,16 @@ const steps = [
               </div>
 
               <div data-reveal style="--d:350">
-                <div class="grid gap-3 sm:grid-cols-3">
+                <div class="grid gap-3 sm:grid-cols-2">
                   <a href="/download/mac" class="card flex items-center gap-4 p-5" data-track="download_mac">
                     <Icon name="apple" size={22} />
-                    <span><b class="block text-[15px] font-medium">macOS</b><span class="text-[12.5px] text-muted">Apple silicon</span></span>
+                    <span><b class="block text-[15px] font-medium">Download for Mac</b><span class="text-[12.5px] text-muted">Apple chip (M1 or newer)</span></span>
                   </a>
-                  <a href="/download/windows" class="card flex items-center gap-4 p-5" data-track="download_windows">
-                    <Icon name="monitor" size={22} />
-                    <span><b class="block text-[15px] font-medium">Windows</b><span class="text-[12.5px] text-muted">.msi / .exe</span></span>
-                  </a>
-                  <a href="/download/linux" class="card flex items-center gap-4 p-5" data-track="download_linux">
-                    <Icon name="terminal" size={22} />
-                    <span><b class="block text-[15px] font-medium">Linux</b><span class="text-[12.5px] text-muted">AppImage</span></span>
+                  <a href="/download/mac-intel" class="card flex items-center gap-4 p-5" data-track="download_mac-intel">
+                    <Icon name="apple" size={22} />
+                    <span><b class="block text-[15px] font-medium">Mac with Intel chip</b><span class="text-[12.5px] text-muted">Older Macs</span></span>
                   </a>
                 </div>
-                <p class="mt-3 text-center text-[12.5px] text-dim">
-                  Also: <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/mac-intel">macOS Intel</a> ·
-                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/windows-msi">Windows MSI</a> ·
-                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-deb">.deb</a> ·
-                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download/linux-rpm">.rpm</a> ·
-                  <a class="hover:text-text underline decoration-line-2 underline-offset-2" href="/download">headless server & all builds</a>
-                </p>
               </div>
             </div>
 
