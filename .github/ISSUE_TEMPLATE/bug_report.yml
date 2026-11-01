@@ -40,7 +40,7 @@ body:
     attributes:
       label: Godmode version
       description: Settings → About, or `godmode version`.
-      placeholder: "0.2.39"
+      placeholder: "0.2.40"
     validations:
       required: true
   - type: dropdown
