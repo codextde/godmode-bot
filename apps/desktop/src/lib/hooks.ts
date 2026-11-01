@@ -1,5 +1,5 @@
-import type { Agent, Conversation, Project } from "@godmode/shared";
-import { useQuery } from "@tanstack/react-query";
+import type { Agent, Conversation, ConversationWithMessages, Project } from "@godmode/shared";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { BUILTIN_MODELS, type ModelCatalog } from "@godmode/shared";
 import { api, type ScopeFilter } from "./api";
@@ -100,15 +100,53 @@ export function useArchivedConversations(agentId?: string, search = "", { enable
   });
 }
 
+/** How many of a chat's latest messages it opens with; older ones come a page at a time as the human scrolls up. */
+export const CHAT_PAGE = 40;
+
+/**
+ * A refetched window of the latest messages, with the older pages the human already scrolled to kept in front of it.
+ * Without an overlap (more new messages than a page) the window starts over.
+ */
+function withOlderPages(fresh: ConversationWithMessages, old: ConversationWithMessages | undefined): ConversationWithMessages {
+  if (fresh.hasMore === undefined || !old?.messages.length || !fresh.messages.length) return fresh;
+  const at = old.messages.findIndex((m) => m.id === fresh.messages[0]!.id);
+  if (at <= 0) return fresh;
+  return { ...fresh, messages: [...old.messages.slice(0, at), ...fresh.messages], hasMore: old.hasMore };
+}
+
 export function useConversation(id: string | undefined) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: qk.conversation(id ?? ""),
     queryFn: async () => {
-      const conversation = await api.conversations.get(id!);
+      const conversation = withOlderPages(await api.conversations.get(id!, CHAT_PAGE), qc.getQueryData<ConversationWithMessages>(qk.conversation(id!)));
       return { ...conversation, queue: withPending(conversation.id, conversation.queue) };
     },
     enabled: !!id,
   });
+}
+
+const loadingOlder = new Set<string>();
+
+/** The page of messages before the oldest one shown, put in front of the cached chat. False when nothing was loaded. */
+export async function loadOlderMessages(qc: QueryClient, id: string): Promise<boolean> {
+  const cached = qc.getQueryData<ConversationWithMessages>(qk.conversation(id));
+  const first = cached?.messages.find((m) => !m.id.startsWith("pending-"));
+  if (!cached?.hasMore || !first || loadingOlder.has(id)) return false;
+  loadingOlder.add(id);
+  try {
+    const page = await api.conversations.messages(id, first.id, CHAT_PAGE);
+    qc.setQueryData<ConversationWithMessages>(qk.conversation(id), (old) => {
+      if (!old || old.messages.find((m) => !m.id.startsWith("pending-"))?.id !== first.id) return old;
+      const known = new Set(old.messages.map((m) => m.id));
+      return { ...old, messages: [...page.messages.filter((m) => !known.has(m.id)), ...old.messages], hasMore: page.hasMore };
+    });
+    return page.messages.length > 0;
+  } catch {
+    return false;
+  } finally {
+    loadingOlder.delete(id);
+  }
 }
 
 const BUILTIN_CATALOG: ModelCatalog = { models: BUILTIN_MODELS, source: "builtin", claudeVersion: null, fetchedAt: "", error: null };

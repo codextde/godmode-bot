@@ -81,9 +81,14 @@ export interface ThreadProps {
   /** Under the last message while nothing is in flight (what to do about a turn that ended early). */
   after?: ReactNode;
   focusId?: string | null;
+  /** Older messages wait on the core: `onLoadOlder` fetches the page before the first one when the human scrolls up. */
+  hasMore?: boolean;
+  onLoadOlder?: () => Promise<boolean>;
 }
 
-export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId }: ThreadProps) {
+const LOAD_OLDER_PX = 800;
+
+export function Thread({ messages, agent, inflight, onStop, stopping, onPause, pausing, empty, delegatedFrom, after, focusId, hasMore, onLoadOlder }: ThreadProps) {
   const { t } = useTranslation("chat");
   const reduce = useReduceAnimations();
   const { scrollRef, contentRef, spacerRef, atBottom, scrollToBottom, pinTurn, unstick } = useStickToBottom({ reduceMotion: reduce });
@@ -112,6 +117,31 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
     if (grew && last?.role === "user" && !last.source && !initialIds.has(last.id)) pinTurn();
   }, [sentCount, messages, pinTurn]);
 
+  const firstId = messages[0]?.id;
+  const kept = useRef<{ firstId: string | undefined; height: number } | null>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || !onLoadOlder) return;
+    const check = () => {
+      if (el.scrollTop > LOAD_OLDER_PX || kept.current) return;
+      kept.current = { firstId, height: el.scrollHeight };
+      void onLoadOlder().then((loaded) => {
+        if (!loaded) kept.current = null;
+      });
+    };
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    return () => el.removeEventListener("scroll", check);
+  }, [scrollRef, hasMore, onLoadOlder, firstId]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const before = kept.current;
+    if (!el || !before || before.firstId === firstId) return;
+    kept.current = null;
+    el.scrollTop += el.scrollHeight - before.height;
+  }, [scrollRef, firstId]);
+  const anchor = messages.findIndex((m) => initialIds.has(m.id));
+
   const isEmpty = messages.length === 0 && !inflight;
   const days = useMemo(() => {
     const out: (string | null)[] = [];
@@ -134,7 +164,7 @@ export function Thread({ messages, agent, inflight, onStop, stopping, onPause, p
               key={m.id}
               message={m}
               day={days[i] ?? null}
-              animate={!reduce && !initialIds.has(m.id)}
+              animate={!reduce && i > anchor && !initialIds.has(m.id)}
               flashing={flash === m.id}
               agent={agent}
               delegatedFrom={delegatedFrom}

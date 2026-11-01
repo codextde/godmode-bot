@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -54,7 +54,7 @@ import { useVoiceSettings } from "@/hooks/use-voice";
 import { api, ApiRequestError, errorMessage, isLicenseRequired } from "@/lib/api";
 import { newQueueId, pendingQueued, withPending } from "@/lib/pending-queue";
 import { qk } from "@/lib/queryKeys";
-import { useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
+import { loadOlderMessages, useAllAgents, useBootstrap, useConversation, useRunners, useWorkspaces } from "@/lib/hooks";
 import { ProjectChip, type PlacePick } from "@/components/projects/project-chip";
 import { effectiveProject, useProjectIndex } from "@/components/projects/project-utils";
 import { onServerEvent, settleRun, viewConversation } from "@/lib/realtime";
@@ -179,6 +179,11 @@ function ConversationView({ conversationId }: { conversationId: string }) {
   }, [computerTarget]);
 
   const messages = useMemo(() => conv?.messages ?? [], [conv?.messages]);
+  const loadOlder = useCallback(() => loadOlderMessages(qc, conversationId), [qc, conversationId]);
+  const focusMissing = !!focusMessage && !!conv?.hasMore && !messages.some((m) => m.id === focusMessage);
+  useEffect(() => {
+    if (focusMissing) void loadOlder();
+  }, [focusMissing, messages, loadOlder]);
   const queue = useMemo(() => conv?.queue ?? [], [conv?.queue]);
   const activeRunId = live?.runId ?? conv?.activeRunId ?? null;
   // The chat's run stands still (one that continues is live again before the chat says so). Runs that came after it wait.
@@ -599,6 +604,8 @@ function ConversationView({ conversationId }: { conversationId: string }) {
               <Thread
                 messages={visibleMessages}
                 focusId={focusMessage}
+                hasMore={!!conv.hasMore}
+                onLoadOlder={loadOlder}
                 agent={agent}
                 delegatedFrom={conv.delegatedFrom}
                 inflight={inflight}
