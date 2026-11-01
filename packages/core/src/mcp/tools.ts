@@ -5,7 +5,7 @@
  * (connect/connectors.ts) calls as the built-in agent, and only the tools in CONNECTOR_TOOLS.
  */
 import { callOnPrimary, runsOnPrimary } from "../remote/deviceTools";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 import type {
   Agent,
@@ -27,7 +27,11 @@ import type {
 } from "@godmode/shared";
 import {
   ARTIFACT_BRIDGE_DOC,
+  ARTIFACT_KIT_DOC,
+  MAX_ARTIFACT_DATA,
   MAX_ARTIFACT_HTML,
+  checkSpec,
+  specDocument,
   AGENT_COLORS,
   GLM_MODELS,
   AGENT_TEMPLATE_CATEGORIES,
@@ -68,7 +72,7 @@ import {
 } from "@godmode/shared";
 import type { RunContext } from "../types";
 import type { CardFillKind } from "../browser/fill";
-import { HttpError, domainMatches, hostnameOf, parseJson, sleep } from "../util";
+import { HttpError, badRequest, domainMatches, hostnameOf, parseJson, sleep } from "../util";
 import { logger } from "../log";
 import { hasAppSecret, isUnlocked, redact } from "../vault/vault";
 import { audit } from "../services/audit";
@@ -153,6 +157,7 @@ import { describeNow, noteId, tagged } from "../runner/prompt";
 import { zaiKey } from "../runner/claude";
 import { summarizeNotification, wantsSummary } from "../runner/notificationSummary";
 import { artifactExists, createArtifact, getArtifact, listArtifacts, updateArtifact } from "../services/artifacts";
+import { checkArtifactRender } from "../services/artifactCheck";
 import { NOTE_MAX, cancelFollowup, followupsAllowed, getFollowup, inWords, parseDueAt, scheduleFollowup } from "../services/followups";
 import { autoRetryOf, continueCutOffRun, latestContinuation } from "../services/resume";
 import { askQuestion, listQuestions } from "../services/questions";
@@ -169,6 +174,7 @@ const TERMINAL = new Set(["succeeded", "failed", "cancelled"]);
 
 export interface ToolCallResult {
   content: { type: "text"; text: string }[];
+  images?: { data: string; mimeType: string }[];
   isError?: boolean;
 }
 
@@ -177,12 +183,14 @@ interface ToolEnv {
   agent: Agent;
 }
 
-type ToolOutput = string | { text: string; isError?: boolean };
+type ToolImage = { data: string; mimeType: string };
+type ToolOutput = string | { text: string; isError?: boolean; images?: ToolImage[] };
 
 interface ToolDef {
   name: string;
   description: string;
   schema: z.ZodType;
+  alwaysLoad?: boolean;
   /** Tool is listed/allowed for this agent (in this run). Default: always. */
   when?: (agent: Agent, ctx: RunContext) => boolean;
   run: (args: never, env: ToolEnv) => Promise<ToolOutput> | ToolOutput;
@@ -192,6 +200,7 @@ function defineTool<S extends z.ZodType>(def: {
   name: string;
   description: string;
   schema: S;
+  alwaysLoad?: boolean;
   when?: (agent: Agent, ctx: RunContext) => boolean;
   run: (args: z.infer<S>, env: ToolEnv) => Promise<ToolOutput> | ToolOutput;
 }): ToolDef {
@@ -927,6 +936,50 @@ const canArtifact = (_agent: Agent, ctx: RunContext) =>
 const androidOn = () => getSettings().android.enabled;
 const pluginsOn = () => getSettings().plugins.enabled;
 const vmsOn = () => getSettings().vm.enabled;
+
+async function artifactCode(input: { spec?: Record<string, unknown>; html?: string; htmlPath?: string }, title: string): Promise<string | null> {
+  const given = [input.spec, input.html, input.htmlPath].filter((v) => v !== undefined).length;
+  if (given > 1) throw badRequest("Pass only one of spec, html and htmlPath");
+  if (input.spec) {
+    const wrong = checkSpec(input.spec);
+    if (wrong) throw badRequest(`The spec is not valid: ${wrong}`);
+    return specDocument(input.spec as Parameters<typeof specDocument>[0], title);
+  }
+  if (input.htmlPath) return readAgentFile(input.htmlPath, MAX_ARTIFACT_HTML, "HTML");
+  return input.html ?? null;
+}
+
+async function artifactData(data: unknown, dataPath: string | undefined): Promise<unknown> {
+  if (dataPath === undefined) return data;
+  if (data !== undefined) throw badRequest("Pass data or dataPath, not both");
+  const text = await readAgentFile(dataPath, MAX_ARTIFACT_DATA, "data");
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (err) {
+    throw badRequest(`${dataPath} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+async function readAgentFile(path: string, max: number, what: string): Promise<string> {
+  const p = path.trim();
+  if (!isAbsolute(p)) throw badRequest(`The ${what} file must be an absolute path`);
+  const file = Bun.file(p);
+  if (!(await file.exists())) throw badRequest(`There is no file ${p} on this computer: pass the ${what} itself instead`);
+  if (file.size > max) throw badRequest(`${p} is too big (${file.size.toLocaleString("en-US")} bytes, at most ${max.toLocaleString("en-US")})`);
+  return file.text();
+}
+
+async function withRenderCheck(done: string, html: string, data: unknown, check: boolean | undefined, tail = ""): Promise<ToolOutput> {
+  const end = tail ? `\n\n${tail}` : "";
+  if (check === false) return `${done}${end}`;
+  const seen = await checkArtifactRender(html, data);
+  if (!seen) return `${done}\n\n(No render check: no Chrome or Chromium to render it here.)${end}`;
+  const lines = [done, "", seen.errors.length ? `The page reported ${seen.errors.length} error${seen.errors.length === 1 ? "" : "s"} — fix them with artifact_update:` : "The page rendered without errors."];
+  for (const e of seen.errors) lines.push(`- ${e}`);
+  for (const w of seen.warnings) lines.push(`Note: ${w}`);
+  lines.push("The screenshot below shows it at desktop width in light mode. Fix what looks broken or cramped; otherwise you are done.");
+  return { text: `${lines.join("\n")}${end}`, images: seen.image ? [{ data: seen.image, mimeType: "image/jpeg" }] : [] };
+}
 
 /** Agents change their own artifacts; managers anyone's. */
 function artifactRefusal(agent: Agent, id: string): string | null {
@@ -1823,49 +1876,69 @@ const TOOLS: ToolDef[] = [
 
   defineTool({
     name: "artifact_create",
-    description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or a file they asked for). It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to.
-Write one complete HTML document (\`html\`) and put the numbers and records into \`data\` (JSON), not into the code: a refresh then only rewrites the data. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again (a shop, Stripe, a spreadsheet, a website).
+    alwaysLoad: true,
+    description: `Build an artifact: a small web app the human opens right in Godmode — a sales dashboard, a KPI tracker, a deal board, a calculator, a planner. Use it whenever they ask for a dashboard, a tracker, a tool or a page to look at or work with (not for a one-off answer or a file they asked for). It shows next to this chat and on the Artifacts page; they change it by chatting with you, and every code change is a version they can go back to. The human watches it appear while you type it.
+Write it straight into this call — no draft file, no preview of your own: the result shows you a screenshot of the rendered page and the errors it threw. Fix what looks wrong with artifact_update.
+Pass exactly one of: \`spec\` (a component tree the built-in kit renders — the fastest way and the default for dashboards, reports and KPI pages), \`html\` (a whole document, for interactive tools: forms, boards, calculators; it can use the kit's classes and helpers) or \`htmlPath\` (an HTML file you already wrote). Numbers and records go into \`data\` (or \`dataPath\`, a JSON file you already have), not into the code: a refresh then only rewrites the data. Give it a \`refreshPrompt\` when the data comes from somewhere you can fetch again.
+${ARTIFACT_KIT_DOC}
 ${ARTIFACT_BRIDGE_DOC}
-Make it look like a polished 2026 product: clean layout, real hierarchy, readable charts, good empty and loading states, responsive from 360 px, light and dark through the --gm-* variables; no emojis as icons, no lorem ipsum. Sample data is fine when real data isn't reachable yet — say so in the app and in your answer.`,
+Polished, calm, real hierarchy, responsive from 360 px, light and dark; no emojis as icons, no lorem ipsum. Sample data only when real data isn't reachable — say so in the app and in your answer.`,
     schema: z.object({
       title: z.string().min(1).max(120).describe("Short name, e.g. \"Sales dashboard\""),
       description: z.string().max(1000).optional().describe("One line: what it shows or does"),
-      html: z.string().min(1).max(MAX_ARTIFACT_HTML).describe("The complete HTML document"),
+      spec: z.record(z.string(), z.unknown()).optional().describe("The page as a component tree for the built-in kit (see above)"),
+      html: z.string().min(1).max(MAX_ARTIFACT_HTML).optional().describe("The complete HTML document"),
+      htmlPath: z.string().min(1).max(4096).optional().describe("Absolute path of an HTML file you already wrote, instead of html"),
       data: z.unknown().optional().describe("The artifact's data as JSON (an object); the app reads it as godmode.data"),
+      dataPath: z.string().min(1).max(4096).optional().describe("Absolute path of a JSON file with the data, instead of data"),
       refreshPrompt: z.string().max(4000).optional().describe("How to get fresh data when the human presses Refresh: where from and what to update"),
+      check: z.boolean().optional().describe("Render it and return a screenshot and its errors (default true)"),
     }),
     when: canArtifact,
-    run: ({ title, description, html, data, refreshPrompt }, { agent, ctx }) => {
-      const a = createArtifact({ title, description, html, data, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
-      return `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page. In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.`;
+    run: async ({ title, description, spec, html, htmlPath, data, dataPath, refreshPrompt, check }, { agent, ctx }) => {
+      const code = await artifactCode({ spec, html, htmlPath }, title);
+      if (!code) return fail("Pass the artifact as spec, html or htmlPath.");
+      const content = await artifactData(data, dataPath);
+      const a = createArtifact({ title, description, html: code, data: content, refreshPrompt }, { agentId: agent.id, conversationId: ctx.conversationId, workspaceId: ctx.workspaceId ?? agent.workspaceId }, `agent:${agent.id}`);
+      const done = `Created the artifact "${a.title}" (id ${a.id}, version 1). It opened next to this chat and is on the Artifacts page.`;
+      return withRenderCheck(done, a.html, a.data, check, "In your answer say in a line or two what it shows and what they can ask you to change; don't paste the code.");
     },
   }),
 
   defineTool({
     name: "artifact_update",
-    description: `Change an artifact you made: its code, its data, its title or how it refreshes. For a small code change pass \`edits\` (each \`find\` copied exactly from the current HTML — read it with artifact_get — and its \`replace\`); for a big one the whole new \`html\`. A code change is a new version (say what changed in \`note\`). \`data\` replaces the whole data (read it first: the app may have saved entries the human made). After a refresh, pass only \`data\`.`,
+    alwaysLoad: true,
+    description: `Change an artifact you made: its code, its data, its title or how it refreshes. For a small code change pass \`edits\` (each \`find\` copied exactly from the current code — read it with artifact_get — and its \`replace\`; a spec artifact keeps its spec as indented JSON in the code, so edits can change single props); for a big one the whole new \`spec\`, \`html\` or \`htmlPath\`. A code change is a new version (say what changed in \`note\`) and comes back with a screenshot and the page's errors. \`data\` (or \`dataPath\`) replaces the whole data (read it first: the app may have saved entries the human made). After a refresh, pass only \`data\`.`,
     schema: z.object({
       id: z.string().min(1).max(100).describe("The artifact's id"),
+      spec: z.record(z.string(), z.unknown()).optional().describe("The whole new component tree (replaces the code)"),
       html: z.string().min(1).max(MAX_ARTIFACT_HTML).optional().describe("The whole new HTML document"),
+      htmlPath: z.string().min(1).max(4096).optional().describe("Absolute path of an HTML file with the whole new document"),
       edits: z
         .array(z.object({ find: z.string().min(1), replace: z.string(), all: z.boolean().optional().describe("Replace every occurrence") }))
         .max(50)
         .optional()
-        .describe("Text replacements in the current HTML, applied in order"),
+        .describe("Text replacements in the current code, applied in order"),
       data: z.unknown().optional().describe("The new data (replaces all of it)"),
+      dataPath: z.string().min(1).max(4096).optional().describe("Absolute path of a JSON file with the new data"),
       title: z.string().min(1).max(120).optional(),
       description: z.string().max(1000).optional(),
       refreshPrompt: z.string().max(4000).optional(),
       note: z.string().max(500).optional().describe("What changed in the code, in a few words"),
+      check: z.boolean().optional().describe("After a code change: render it and return a screenshot and its errors (default true)"),
     }),
     when: canArtifact,
-    run: ({ id, html, edits, data, title, description, refreshPrompt, note }, { agent }) => {
+    run: async ({ id, spec, html, htmlPath, edits, data, dataPath, title, description, refreshPrompt, note, check }, { agent }) => {
       const refused = artifactRefusal(agent, id);
       if (refused) return fail(refused);
       const before = getArtifact(id);
-      const a = updateArtifact(id, { html, edits, data, title, description, refreshPrompt, note }, `agent:${agent.id}`);
-      const parts = [a.version !== before.version ? `the code is version ${a.version}` : null, data !== undefined ? "the data is saved" : null].filter(Boolean);
-      return `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`;
+      const code = await artifactCode({ spec, html, htmlPath }, title ?? before.title);
+      const content = await artifactData(data, dataPath);
+      const a = updateArtifact(id, { html: code ?? undefined, edits, data: content, title, description, refreshPrompt, note }, `agent:${agent.id}`);
+      const codeChanged = a.version !== before.version;
+      const parts = [codeChanged ? `the code is version ${a.version}` : null, content !== undefined ? "the data is saved" : null].filter(Boolean);
+      const done = `Updated "${a.title}"${parts.length ? `: ${parts.join(", ")}` : ""}. It reloads by itself where it is open.`;
+      return codeChanged ? withRenderCheck(done, a.html, a.data, check) : done;
     },
   }),
 
@@ -3676,7 +3749,7 @@ export function connectorTools(): ConnectorTool[] {
 }
 
 /** Tools listed for this agent in this run (permission-filtered). */
-export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown> }[] {
+export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; description: string; inputSchema: Record<string, unknown>; _meta?: Record<string, unknown> }[] {
   const dream = isDreamRun(ctx);
   return TOOLS.filter((t) => (!dream || DREAM_TOOLS.has(t.name)) && (!t.when || t.when(agent, ctx)) && !connectorRefusal(ctx, t.name)).map((t) => {
     let schema = schemaCache.get(t.name);
@@ -3684,7 +3757,7 @@ export function listToolsFor(agent: Agent, ctx: RunContext): { name: string; des
       schema = inputSchema(t.schema);
       schemaCache.set(t.name, schema);
     }
-    return { name: t.name, description: t.description, inputSchema: schema };
+    return { name: t.name, description: t.description, inputSchema: schema, ...(t.alwaysLoad ? { _meta: { "anthropic/alwaysLoad": true } } : {}) };
   });
 }
 
@@ -3715,8 +3788,9 @@ export async function callTool(ctx: RunContext, name: string, args: unknown): Pr
 }
 
 async function runTool(tool: ToolDef, ctx: RunContext, name: string, args: unknown): Promise<ToolCallResult> {
-  const result = (text: string, isError = false): ToolCallResult => ({
+  const result = (text: string, isError = false, images: ToolImage[] = []): ToolCallResult => ({
     content: [{ type: "text", text }],
+    ...(images.length ? { images } : {}),
     ...(isError ? { isError: true } : {}),
   });
   try {
@@ -3727,7 +3801,7 @@ async function runTool(tool: ToolDef, ctx: RunContext, name: string, args: unkno
     if (!DREAM_TOOLS.has(name) && isDreamRun(ctx)) return result(`The tool ${name} is not available while dreaming.`, true);
     const parsed = tool.schema.parse(args ?? {});
     const out = await tool.run(parsed as never, { ctx, agent });
-    return typeof out === "string" ? result(out) : result(out.text, out.isError === true);
+    return typeof out === "string" ? result(out) : result(out.text, out.isError === true, out.images);
   } catch (err) {
     if (!(err instanceof HttpError) && !(err instanceof z.ZodError)) log.warn(`tool ${name} failed (run ${ctx.runId})`, err);
     return result(toolErrorMessage(err), true);

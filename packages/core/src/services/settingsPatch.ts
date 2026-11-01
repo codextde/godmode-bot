@@ -123,6 +123,10 @@ export function checkSettingsPatch(patch: Record<string, unknown>, needsGrant: (
     const value = patch[feature] as Record<string, unknown> | undefined;
     if (isObject(value) && value.enabled !== undefined && typeof value.enabled !== "boolean") throw badRequest(`${feature}.enabled must be true or false`);
   }
+  const artifacts = patch.artifacts as Record<string, unknown> | undefined;
+  if (isObject(artifacts) && artifacts.builderModel !== undefined && (typeof artifacts.builderModel !== "string" || artifacts.builderModel.length > 200)) {
+    throw badRequest("artifacts.builderModel must be a model id (or empty)");
+  }
   const maintenance = patch.maintenance as Record<string, unknown> | undefined;
   if (maintenance !== undefined) {
     if (typeof maintenance !== "object" || maintenance === null || Array.isArray(maintenance)) throw badRequest("Invalid upkeep settings");

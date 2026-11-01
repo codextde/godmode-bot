@@ -44,6 +44,7 @@ import { startAppTriggers, stopAppTriggers } from "./integrations/composioTrigge
 import { startMessaging, stopMessaging } from "./messaging/service";
 import { adoptStoredSolverKey } from "./browser/captcha";
 import { shutdownBrowsers, ensureDefaultProfile } from "./browser/manager";
+import { stopArtifactCheck } from "./services/artifactCheck";
 import { shutdownComputer } from "./computer/service";
 import { stopHex } from "./voice/hex";
 import { shutdownVms, startVms } from "./vm/service";
@@ -402,6 +403,7 @@ async function serve(values: Record<string, unknown>, role?: CoreConfig["role"])
     }
     await shutdownRunner();
     await shutdownBrowsers();
+    await stopArtifactCheck().catch(() => undefined);
     await shutdownComputer();
     await stopHex().catch(() => undefined);
     await shutdownVms().catch((err) => log.warn("could not stop VMs", err));

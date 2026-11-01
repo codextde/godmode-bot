@@ -15,6 +15,7 @@ import { BROWSER_MCP_NAME, isPlaceholderReply, toolActivity, type ActivityNames 
  * `/clear` and `/compact` become notices, and so does what a mod posts (`ui_log`, `ui_toast`, `ui_status`).
  */
 import type { MessageBlock, QueuedMessage, RunUsage, ToolTask, ToolTaskAgent } from "@godmode/shared";
+import { ARTIFACT_PREVIEW_STEP, ARTIFACT_TOOL_NAME, partialArtifactInput } from "./partialArtifact";
 
 /** Longest tool result text kept per tool_use block (UI + DB). */
 export const MAX_TOOL_RESULT_CHARS = 20_000;
@@ -64,6 +65,7 @@ interface StreamState {
   indexMap: Map<number, number>;
   /** stream content block index → accumulated input_json_delta */
   jsonBuf: Map<number, string>;
+  previewAt: Map<number, number>;
 }
 
 type Json = Record<string, unknown>;
@@ -554,7 +556,7 @@ export class StreamAccumulator {
     const key = parent ?? "";
     let s = this.streams.get(key);
     if (!s) {
-      s = { messageId: null, indexMap: new Map(), jsonBuf: new Map() };
+      s = { messageId: null, indexMap: new Map(), jsonBuf: new Map(), previewAt: new Map() };
       this.streams.set(key, s);
     }
     return s;
@@ -596,6 +598,7 @@ export class StreamAccumulator {
         s.messageId = str(msg?.id) ?? null;
         s.indexMap.clear();
         s.jsonBuf.clear();
+        s.previewAt.clear();
         if (msg && str(msg.model)) this.model = str(msg.model);
         return !!parent && !!msg && this.noteSubagentModel(parent, str(msg.model));
       }
@@ -641,8 +644,12 @@ export class StreamAccumulator {
           return true;
         }
         if (delta.type === "input_json_delta" && block.type === "tool_use") {
-          s.jsonBuf.set(index, (s.jsonBuf.get(index) ?? "") + (str(delta.partial_json) ?? ""));
-          return false;
+          const buf = (s.jsonBuf.get(index) ?? "") + (str(delta.partial_json) ?? "");
+          s.jsonBuf.set(index, buf);
+          if (!ARTIFACT_TOOL_NAME.test(block.name) || buf.length - (s.previewAt.get(index) ?? 0) < ARTIFACT_PREVIEW_STEP) return false;
+          s.previewAt.set(index, buf.length);
+          block.input = partialArtifactInput(buf) as unknown as Record<string, unknown>;
+          return true;
         }
         return false;
       }
@@ -651,6 +658,7 @@ export class StreamAccumulator {
         const blockIdx = s.indexMap.get(index);
         const buf = s.jsonBuf.get(index);
         s.jsonBuf.delete(index);
+        s.previewAt.delete(index);
         if (blockIdx === undefined || buf === undefined || buf.trim() === "") return false;
         const block = this.blocks[blockIdx]!;
         if (block.type !== "tool_use") return false;

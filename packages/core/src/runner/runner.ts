@@ -146,6 +146,7 @@ import { forgetAndroidRun } from "../android/tools";
 import { parseComputerTarget } from "../computer/targets";
 import { timedSync } from "../diagnostics/slow";
 import { StreamAccumulator, addUsage, detectLoginFailure, displayToolName, redactBlock, usedBrowser } from "./stream";
+import { ARTIFACT_BUILDER_AGENT, ARTIFACT_BUILDER_DEF } from "./artifactBuilder";
 import { tailLines } from "./tail";
 import { requireLicense } from "../license/license";
 
@@ -2229,6 +2230,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
     chat: conv.instructions ?? "",
   });
   const digest = instructionsDigest(standing);
+  const artifactsHere = settings.artifacts.enabled && job.trigger !== "check" && config().role !== "runner";
+  const builderModel = artifactsHere && !dreaming && !glm && settings.artifacts.builderModel?.trim() ? settings.artifacts.builderModel.trim() : null;
   const systemPrompt = dreaming
     ? buildDreamSystemPrompt(agent, settings)
     : buildSystemPrompt({
@@ -2253,7 +2256,8 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
         memory: settings.memory.injectMemory && job.trigger !== "check" ? memoryForPrompt(agent.repoPath, memoryBudget(settings.memory.dreaming.maxMemoryChars).limit) : null,
         followups: job.trigger !== "check" && job.trigger !== "delegation" && !job.private,
         privateChat: job.private,
-        artifacts: settings.artifacts.enabled && job.trigger !== "check" && config().role !== "runner",
+        artifacts: artifactsHere,
+        artifactBuilder: builderModel,
         calls:
           job.trigger !== "check" && job.trigger !== "delegation" && config().role !== "runner" && settings.phone.enabled && elevenLabsKey() !== null
             ? { owner: !!settings.phone.ownerNumber && settings.phone.callOwner }
@@ -2341,13 +2345,14 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   // The VM's shared folder: how files move between the VM and the host.
   if (vm) baseArgs.push("--add-dir", vm.hostSharedDir);
   for (const source of sources) baseArgs.push("--add-dir", source.path);
-  if (agent.subagents.length && !dreaming) {
+  if ((agent.subagents.length || builderModel) && !dreaming) {
     const defs: Record<string, { description: string; prompt: string; model?: string }> = {};
     for (const s of agent.subagents) {
       if (!s.name?.trim()) continue;
       // In a GLM run every subagent is on GLM too: a Claude id would be sent to Z.ai.
       defs[s.name.trim()] = { description: s.description, prompt: s.prompt, ...(s.model && !glm ? { model: s.model } : {}) };
     }
+    if (builderModel && !defs[ARTIFACT_BUILDER_AGENT]) defs[ARTIFACT_BUILDER_AGENT] = { ...ARTIFACT_BUILDER_DEF, model: builderModel };
     if (Object.keys(defs).length) {
       const json = JSON.stringify(defs);
       baseArgs.push("--agents", viaFiles ? writeTempFile(res, `godmode-agents-${job.runId}.json`, json) : json);
@@ -2370,6 +2375,7 @@ async function runClaude(job: Job, agent: Agent, res: Resources): Promise<Outcom
   const env = buildEnv(agent, !!folder || sources.length > 0, toolKeysInEnv);
   // Claude Code's own auto memory would keep what a private chat said.
   if (job.private) env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
+  if (artifactsHere && !glm) env.CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING ??= "1";
   // Without it a headless Claude Code keeps a mod's failures to its debug log: a hook that throws, a module that
   // doesn't load. With it they reach the chat as notes from the mod. It also watches the folders — the run's own copies.
   if (mods?.dirs.length) env.CLAUDE_CODE_PLUGIN_DIR_WATCH = "1";

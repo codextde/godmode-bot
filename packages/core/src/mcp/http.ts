@@ -31,6 +31,13 @@ const DEFAULT_PROTOCOL_VERSION = "2025-06-18";
 let keepaliveMs = 15_000;
 const SLOW_TOOL_MS = 10_000;
 
+function withImages(result: unknown): unknown {
+  if (!isObj(result) || !Array.isArray(result.images) || !Array.isArray(result.content)) return result;
+  const { images, ...rest } = result;
+  const pictures = images.filter((i): i is { data: string; mimeType: string } => isObj(i) && typeof i.data === "string" && typeof i.mimeType === "string");
+  return { ...rest, content: [...result.content, ...pictures.map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType }))] };
+}
+
 function toolResultText(result: Record<string, unknown>): string {
   const content = Array.isArray(result.content) ? result.content : [];
   const text = content.map((c) => (isObj(c) && typeof c.text === "string" ? c.text : "")).join(" ").trim();
@@ -72,7 +79,7 @@ const rpcError = (id: JsonRpcId, code: number, message: string): JsonRpcResponse
 export interface McpServerDef {
   name: string;
   instructions: string;
-  list: (ctx: RunContext) => { name: string; description: string; inputSchema: Record<string, unknown> }[];
+  list: (ctx: RunContext) => { name: string; description: string; inputSchema: Record<string, unknown>; _meta?: Record<string, unknown> }[];
   call: (ctx: RunContext, name: string, args: unknown) => Promise<unknown>;
   isUnknownTool: (err: unknown) => boolean;
 }
@@ -163,7 +170,7 @@ export async function handleRpc(ctx: RunContext, msg: unknown, server: McpServer
         if (isObj(result) && result.isError === true) log.info("tool call returned an error", { tool, ms, runId: ctx.runId, error: toolResultText(result) });
         else if (ms >= SLOW_TOOL_MS) log.info("slow tool call", { tool, ms, runId: ctx.runId });
         else log.debug("tool call", { tool, ms, runId: ctx.runId });
-        return ok(id, result);
+        return ok(id, withImages(result));
       } catch (err) {
         if (server.isUnknownTool(err)) {
           log.warn("unknown tool called", { tool, runId: ctx.runId });

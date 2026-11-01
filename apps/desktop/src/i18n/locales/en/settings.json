@@ -90,7 +90,13 @@
     "summary": "Agents build dashboards and small apps you open right in Godmode, and change them when you ask in plain words.",
     "pointKinds": "Dashboards, trackers, planners and calculators",
     "pointPanel": "Opens next to the chat it was built in",
-    "pointVersions": "Every change is a version you can go back to"
+    "pointVersions": "Every change is a version you can go back to",
+    "speed": {
+      "title": "Speed",
+      "builder": "Artifact builder",
+      "builderDescription": "A fast model writes the artifact's code while the agent plans it and gathers the data.",
+      "builderOff": "Off (the agent writes it)"
+    }
   },
   "integrations": {
     "title": "Integrations",

@@ -1604,6 +1604,7 @@ export interface VmSettings {
 /** Small web apps agents build in a chat (artifacts.ts): the Artifacts page and the artifact_* tools. */
 export interface ArtifactSettings {
   enabled: boolean;
+  builderModel: string;
 }
 
 /** Composio apps, API tools and MCP servers: agents get them only while this is on. */

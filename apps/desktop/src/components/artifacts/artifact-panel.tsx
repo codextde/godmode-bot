@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef } from "react";
 import { Link } from "react-router";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import type { MessageBlock } from "@godmode/shared";
@@ -11,6 +11,7 @@ import { useArtifact, useChatArtifacts } from "@/lib/hooks";
 import { cn } from "@/lib/utils";
 import { PANEL, useReduceAnimations } from "@/lib/motion";
 import { ArtifactView, ago } from "./artifact-view";
+import { LivePreview, hasLivePreview, type LiveInput } from "./live-preview";
 
 type ToolUseBlock = Extract<MessageBlock, { type: "tool_use" }>;
 
@@ -63,8 +64,9 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
         : t("card.updated");
   const open = scope && id ? () => show(scope.conversationId, id) : null;
   const isOpen = !!scope && scope.openId === id;
+  const live = pending && !failed && hasLivePreview(input as LiveInput);
 
-  return (
+  const card = (
     <motion.div
       initial={reduce ? false : { opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
@@ -113,6 +115,25 @@ export function ArtifactCard({ block, streaming }: { block: ToolUseBlock; stream
         )
       )}
     </motion.div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {card}
+      <AnimatePresence initial={false}>
+        {live && (
+          <motion.div
+            key="live"
+            initial={reduce ? false : { opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={{ duration: reduce ? 0 : 0.2 }}
+          >
+            <LivePreview input={input as LiveInput} title={title} className="h-[360px]" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 

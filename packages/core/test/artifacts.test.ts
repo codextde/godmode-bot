@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Agent, Artifact, ArtifactSummary, ArtifactVersion } from "@godmode/shared";
 import { invocations, makeAgent, setupEnv, type TestEnv } from "./fixtures/runner-harness";
-import { callTool } from "../src/mcp/tools";
+import { callTool, listToolsFor } from "../src/mcp/tools";
+import { __setArtifactCheckForTests } from "../src/services/artifactCheck";
+import { getAgent } from "../src/agents/service";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { deleteConversation, getConversation, startChat } from "../src/services/conversations";
 import { applyEdits, getArtifact, listArtifacts, listArtifactVersions } from "../src/services/artifacts";
 import { listActiveRuns, listRuns, waitForRun } from "../src/runner/runner";
@@ -15,11 +20,13 @@ let other: Agent;
 beforeAll(async () => {
   env = await setupEnv("godmode-artifacts-");
   updateSettings({ artifacts: { enabled: true } });
+  __setArtifactCheckForTests(async (html) => ({ image: "aW1n", errors: html.includes("boom") ? ["ReferenceError: boom is not defined"] : [], warnings: [], height: 800 }));
   agent = await makeAgent({ name: "Builder" });
   other = await makeAgent({ name: "Other" });
 });
 
 afterAll(async () => {
+  __setArtifactCheckForTests(null);
   for (const r of listActiveRuns()) await waitForRun(r.runId, 10_000).catch(() => undefined);
   await env.close();
 });
@@ -130,6 +137,65 @@ describe("an agent builds an artifact", () => {
     const out = await callTool(ctxFor(conversationId), "artifact_list", { thisChat: true });
     const list = JSON.parse(out.content[0]!.text) as { id: string; thisChat?: boolean }[];
     expect(list).toEqual([expect.objectContaining({ id: a.id, thisChat: true })]);
+  });
+});
+
+describe("fast ways to build one", () => {
+  const SPEC = { type: "page", title: "Sales", children: [{ type: "kpi", label: "Revenue", value: "$.total", format: "money:EUR" }] };
+
+  test("a spec becomes a kit page, and the result carries the render check", async () => {
+    const conversationId = await chat();
+    const out = await callTool(ctxFor(conversationId), "artifact_create", { title: "Sales", spec: SPEC, data: { total: 1200 } });
+    expect(out.isError).toBeFalsy();
+    expect(out.content[0]!.text).toContain("rendered without errors");
+    expect(out.images).toEqual([{ data: "aW1n", mimeType: "image/jpeg" }]);
+    const id = /\(id (art_\w+)/.exec(out.content[0]!.text)![1]!;
+    const a = getArtifact(id);
+    expect(a.html).toContain('id="gm-spec"');
+    expect(a.html).toContain('"label": "Revenue"');
+    expect(a.html).toContain("gm.mount(");
+  });
+
+  test("errors from the page come back to the agent; check: false skips the check", async () => {
+    const conversationId = await chat();
+    const broken = await callTool(ctxFor(conversationId), "artifact_create", { title: "Broken", html: "<script>boom()</script>" });
+    expect(broken.content[0]!.text).toContain("ReferenceError: boom is not defined");
+    const quiet = await callTool(ctxFor(conversationId), "artifact_create", { title: "Quiet", html: "<p>x</p>", check: false });
+    expect(quiet.images).toBeUndefined();
+    expect(quiet.content[0]!.text).not.toContain("screenshot");
+  });
+
+  test("htmlPath and dataPath read files the agent already wrote", async () => {
+    const conversationId = await chat();
+    const dir = mkdtempSync(join(tmpdir(), "gm-art-"));
+    writeFileSync(join(dir, "page.html"), "<h1>From disk</h1>");
+    writeFileSync(join(dir, "data.json"), JSON.stringify({ total: 7 }));
+    const out = await callTool(ctxFor(conversationId), "artifact_create", { title: "Disk", htmlPath: join(dir, "page.html"), dataPath: join(dir, "data.json") });
+    expect(out.isError).toBeFalsy();
+    const id = /\(id (art_\w+)/.exec(out.content[0]!.text)![1]!;
+    expect(getArtifact(id)).toMatchObject({ html: "<h1>From disk</h1>", data: { total: 7 } });
+    const relative = await callTool(ctxFor(conversationId), "artifact_create", { title: "Rel", htmlPath: "page.html" });
+    expect(relative.isError).toBe(true);
+    const both = await callTool(ctxFor(conversationId), "artifact_create", { title: "Both", html: "<p>x</p>", spec: SPEC });
+    expect(both.content[0]!.text).toContain("only one of spec, html and htmlPath");
+    const none = await callTool(ctxFor(conversationId), "artifact_create", { title: "None" });
+    expect(none.isError).toBe(true);
+  });
+
+  test("a new spec is a new version", async () => {
+    const conversationId = await chat();
+    const a = await created(conversationId);
+    const out = await callTool(ctxFor(conversationId), "artifact_update", { id: a.id, spec: SPEC, note: "Kit page" });
+    expect(out.content[0]!.text).toContain("version 2");
+    expect(getArtifact(a.id).html).toContain('id="gm-spec"');
+  });
+
+  test("artifact tools are loaded up front, not behind tool search", async () => {
+    const conversationId = await chat();
+    const tools = listToolsFor(getAgent(agent.id), ctxFor(conversationId));
+    const create = tools.find((t) => t.name === "artifact_create")!;
+    expect(create._meta).toEqual({ "anthropic/alwaysLoad": true });
+    expect(tools.find((t) => t.name === "artifact_list")!._meta).toBeUndefined();
   });
 });
 

@@ -57,6 +57,7 @@ export interface PromptContext {
   privateChat?: boolean;
   /** The run can build artifacts (artifact_create): small web apps shown in Godmode. */
   artifacts?: boolean;
+  artifactBuilder?: string | null;
   /** Phone calls are set up: the run may place them (`owner`: and call the human). */
   calls?: { owner: boolean } | null;
   /** No raw secrets in this chat, whatever the agent may read: its task came from an agent that could not read them. */
@@ -400,7 +401,8 @@ ${human} can add Claude Code plugins under Plugins; they load into the runs of t
 
   if (ctx.artifacts) {
     out.push(`### Artifacts
-When ${human} asks for a dashboard, a tracker, a small tool or app, or a page to look at numbers (a sales dashboard, KPIs, a deal board, a budget planner, a calculator), build an artifact with \`artifact_create\`: one HTML document plus its data as JSON. It opens next to this chat and on the Artifacts page, runs in a sandbox and reads its data through \`window.godmode\` (the tool says how). ${human} changes it by chatting: messages about one start with \`[About the artifact "…" (art_…)]\` — read it with \`artifact_get\`, change it with \`artifact_update\` (small \`edits\` for small changes), never rebuild it as a new artifact. Keep numbers in the data, not the code, and give it a \`refreshPrompt\` when the data can be fetched again; a refresh saves new \`data\` only. Use real data you can reach (browser, API tools, files); sample data only when you can't, clearly marked.`);
+When ${human} asks for a dashboard, a tracker, a small tool or app, or a page to look at numbers (a sales dashboard, KPIs, a deal board, a budget planner, a calculator), build an artifact with \`artifact_create\`: its code plus its data as JSON. It opens next to this chat and on the Artifacts page, runs in a sandbox and reads its data through \`window.godmode\` (the tool says how). ${human} changes it by chatting: messages about one start with \`[About the artifact "…" (art_…)]\` — read it with \`artifact_get\`, change it with \`artifact_update\` (small \`edits\` for small changes), never rebuild it as a new artifact. Keep numbers in the data, not the code, and give it a \`refreshPrompt\` when the data can be fetched again; a refresh saves new \`data\` only. Use real data you can reach (browser, API tools, files); sample data only when you can't, clearly marked.
+Speed matters: ${human} waits while you type. Use \`spec\` (the built-in kit) unless the page needs custom interaction, write the artifact straight into the tool call (no draft file, no preview of your own, no chart skill — the kit already follows good chart design), and pass \`dataPath\` when the data already is in a JSON file. The result shows you a screenshot and the page's errors.${ctx.artifactBuilder ? ` For a new artifact or a big rebuild, hand the writing to the \`artifact-builder\` subagent (Agent tool) with a short brief: title, what to show, the data file path and, for a change, the artifact id; it types faster. Gather and save the data yourself first.` : ""}`);
   }
 
   if (!ctx.check) out.push(`### Notifications

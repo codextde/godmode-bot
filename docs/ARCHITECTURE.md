@@ -1203,11 +1203,31 @@ Small web apps agents build in a chat (a sales dashboard, a KPI tracker, a deal 
   versioned: the agent writes it (a refresh) and so does the app (`godmode.setData`). Artifacts move with their workspace
   (`SCOPE_ITEMS`), stay on the computer they were made on (not replicated in a device group) and are not offered on a
   runner.
-* **Tools** (every agent, in chats; not in condition checks or dreams): `artifact_create({ title, description, html,
-  data, refreshPrompt })`, `artifact_update({ id, html | edits, data, title, description, refreshPrompt, note })` — `edits`
-  are exact find/replace pairs, each found exactly once unless `all` — `artifact_get({ id, part })` and
-  `artifact_list({ thisChat })`. Agents change their own, managers anyone's. The system prompt's *Artifacts* section
-  tells agents when to build one and to keep numbers in the data.
+* **Tools** (every agent, in chats; not in condition checks or dreams): `artifact_create({ title, description, spec |
+  html | htmlPath, data | dataPath, refreshPrompt, check })`, `artifact_update({ id, spec | html | htmlPath | edits, data |
+  dataPath, title, description, refreshPrompt, note, check })` — `edits` are exact find/replace pairs, each found exactly
+  once unless `all` — `artifact_get({ id, part })` and `artifact_list({ thisChat })`. Agents change their own, managers
+  anyone's. `artifact_create` and `artifact_update` carry `_meta["anthropic/alwaysLoad"]`, so Claude Code never hides them
+  behind tool search. The system prompt's *Artifacts* section tells agents when to build one, to keep numbers in the data
+  and to write it straight into the call.
+* **Speed.** What costs time is the model typing code, so the tools cut what it types:
+  * *Kit* (`@godmode/shared` `artifactKit.ts`): CSS classes (`.gm-*`, light and dark, a validated chart palette) and
+    `window.gm` (formatters, tables, bars, SVG charts with tooltips, `gm.mount(root, spec)`) are part of every artifact's
+    document. A `spec` is a JSON component tree (`page`, `row`, `card`, `kpi`, `chart`, `table`, … with `"$.path"` bindings
+    into the data); `specDocument` stores it as indented JSON inside a small HTML page, so `edits`, versions and the
+    download keep working.
+  * *Files*: `htmlPath` / `dataPath` take an absolute path of a file the agent already wrote instead of typing it again.
+  * *Render check* (`services/artifactCheck.ts`): after a code change the core renders the artifact in a headless
+    Chromium of its own (no profile; closed after 3 idle minutes) exactly as the app does (`standaloneDocument`) and
+    returns a JPEG screenshot (as MCP image content), the errors it threw or logged, an empty-page and a phone-overflow
+    warning. Agents stop building previews of their own. `check: false` skips it; without Chrome the tool says so.
+  * *Live preview*: runs with artifacts set `CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING=1`, so tool input arrives as
+    it is typed. `StreamAccumulator` turns the input of an artifact tool into `{ _streaming, title, html, specText,
+    dataText }` every 1.5k characters (`runner/partialArtifact.ts`); the chat card shows it in two stacked frames that
+    swap once the newer page is in (at most one reload per 700 ms, half-typed `<script>`/`<style>` cut off, partial JSON
+    repaired).
+  * *Builder*: with Settings → Artifacts → Artifact builder set to a model, runs get an `artifact-builder` subagent on that
+    model (`runner/artifactBuilder.ts`): the agent gathers the data and hands over a brief; the faster model types.
 * **Talking to the agent.** `POST /api/artifacts/:id/message` sends the human's words to the artifact's chat (queued while
   the agent works there; a new chat with its agent when that one is gone) with a first line
   `[About the artifact "…" (art_…)]`; `/refresh` sends the refresh prompt; `POST /api/artifacts/start {prompt, agentId}`
@@ -1217,8 +1237,8 @@ Small web apps agents build in a chat (a sales dashboard, a KPI tracker, a deal 
   allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads` — an opaque origin,
   no cookies (the core's are `SameSite=Strict`), no storage — with scripts, styles and fonts from https, `connect-src
   https: wss:` (never the core on http) and `form-action 'none'`. The app frames it (Tauri's CSP allows `frame-src` to the
-  core on 127.0.0.1/localhost) and posts `{type: "gm:load", doc}`: the bridge script plus the artifact's HTML, which
-  the page writes into itself. Messages are only taken from that frame's window and carry a per-load token.
+  core on 127.0.0.1/localhost) and posts `{type: "gm:load", doc}`: the bridge script and the kit plus the artifact's
+  HTML (`artifactDocument` in `@godmode/shared`), which the page writes into itself. Messages are only taken from that frame's window and carry a per-load token.
 * **Bridge** (`window.godmode`, `ARTIFACT_BRIDGE_DOC`): `data`, `onData(fn)`, `setData(next)` (saved with
   `PUT /api/artifacts/:id/data`, answered so the promise resolves or fails), `ask(text)` (the app shows "Send to …" and
   the human confirms), `refresh()`, `theme` / `onTheme(fn)` and `--gm-*` CSS variables for light and dark. New data from

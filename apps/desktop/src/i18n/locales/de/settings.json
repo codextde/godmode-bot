@@ -90,7 +90,13 @@
     "summary": "Agenten bauen Dashboards und kleine Apps, die du direkt in Godmode öffnest, und ändern sie, wenn du es in einfachen Worten sagst.",
     "pointKinds": "Dashboards, Tracker, Planer und Rechner",
     "pointPanel": "Öffnet sich neben dem Chat, in dem es entstanden ist",
-    "pointVersions": "Jede Änderung ist eine Version, zu der du zurückkannst"
+    "pointVersions": "Jede Änderung ist eine Version, zu der du zurückkannst",
+    "speed": {
+      "title": "Tempo",
+      "builder": "Artefakt-Builder",
+      "builderDescription": "Ein schnelles Modell schreibt den Code des Artefakts, während der Agent es plant und die Daten sammelt.",
+      "builderOff": "Aus (der Agent schreibt es selbst)"
+    }
   },
   "integrations": {
     "title": "Integrationen",

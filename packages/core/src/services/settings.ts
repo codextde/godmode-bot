@@ -77,7 +77,7 @@ export const DEFAULT_SETTINGS: Settings = {
     vaultFill: false,
     adbPath: "",
   },
-  artifacts: { enabled: false },
+  artifacts: { enabled: false, builderModel: "" },
   integrations: { enabled: false },
   messaging: { enabled: false },
   activity: { enabled: true },
