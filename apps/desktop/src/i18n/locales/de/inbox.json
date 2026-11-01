@@ -21,7 +21,27 @@
     "inBacklog_other": "{{count}} im Backlog",
     "onlyBacklog_one": "Gerade nichts zu tun · {{count}} im Backlog für später.",
     "onlyBacklog_other": "Gerade nichts zu tun · {{count}} im Backlog für später.",
-    "empty": "Deine To-dos als Board: was Agenten dir übergeben und was du dir selbst notierst. Leg eins auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat."
+    "empty": "Deine To-dos als Board: was Agenten dir übergeben und was du dir selbst notierst. Leg eins auf „Erledigt“ und sein Agent macht dort weiter, wo er aufgehört hat.",
+    "offBoard": {
+      "lead": "Wartet auch, nicht auf dem Board:",
+      "show": "In der Liste zeigen",
+      "question_one": "{{count}} Frage",
+      "question_other": "{{count}} Fragen",
+      "login_one": "{{count}} Login fehlt",
+      "login_other": "{{count}} Logins fehlen",
+      "review_one": "{{count}} Ticket zum Prüfen",
+      "review_other": "{{count}} Tickets zum Prüfen",
+      "blocked_one": "{{count}} blockiertes Ticket",
+      "blocked_other": "{{count}} blockierte Tickets",
+      "paused_one": "{{count}} pausierter Chat",
+      "paused_other": "{{count}} pausierte Chats",
+      "failed_one": "{{count}} Chat mit Fehler",
+      "failed_other": "{{count}} Chats mit Fehler",
+      "automation_one": "{{count}} kaputte Automation",
+      "automation_other": "{{count}} kaputte Automationen",
+      "access_one": "{{count}} Zugriffsanfrage",
+      "access_other": "{{count}} Zugriffsanfragen"
+    }
   },
   "list": {
     "title": "Braucht deine Aufmerksamkeit",

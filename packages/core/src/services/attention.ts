@@ -21,7 +21,11 @@ export function listAttention(): AttentionItem[] {
   const agentNames = new Map(all<{ id: string; name: string }>("SELECT id, name FROM agents").map((a) => [a.id, a.name]));
   const nameOf = (id: string | null) => (id ? (agentNames.get(id) ?? "An agent") : "An agent");
 
+  const humanTasks = listHumanTasks({ status: "active" });
+  // A question whose card the human parked in the backlog waits like any parked to-do: not now.
+  const parkedQuestions = new Set(humanTasks.filter((h) => h.status === "backlog" && h.questionId).map((h) => h.questionId));
   for (const q of listQuestions({ status: "open", limit: 200 })) {
+    if (parkedQuestions.has(q.id)) continue;
     items.push({
       id: `question:${q.id}`,
       kind: "question",
@@ -38,7 +42,7 @@ export function listAttention(): AttentionItem[] {
 
   // What agents gave the human to do. A ticket that waits for one shows as the task, not also as blocked.
   const waitingTickets = new Set<string>();
-  for (const h of listHumanTasks({ status: "active" })) {
+  for (const h of humanTasks) {
     // A ticket that stands for a question shows as the question.
     if (h.questionId) continue;
     if (h.taskId && !h.fromAnswer) waitingTickets.add(h.taskId);
