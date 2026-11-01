@@ -141,5 +141,7 @@ export function useSpeaker() {
 
   const supported = (settings?.ttsProvider ?? "browser") !== "browser" || canSpeakInBrowser();
 
-  return { speak, stop, speakingKey, speaking: speakingKey !== null, levelRef, supported };
+  const enabled = settings?.enabled ?? true;
+
+  return { speak, stop, speakingKey, speaking: speakingKey !== null, levelRef, supported, enabled };
 }

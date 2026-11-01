@@ -471,7 +471,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
         if (e.type !== "run.finished" || e.run.conversationId !== conversationId) return;
         if (useUi.getState().voiceMode || e.run.status !== "succeeded") return;
         const wasVoice = !!useVoiceSession.getState().voiceRunIds[e.run.id];
-        const wanted = wasVoice && (settingsRef.current?.autoSpeak ?? true);
+        const wanted = wasVoice && (settingsRef.current?.enabled ?? true) && (settingsRef.current?.autoSpeak ?? true);
         if (!wanted) return;
         const runId = e.run.id;
         void qc
@@ -525,7 +525,7 @@ function ConversationView({ conversationId }: { conversationId: string }) {
           conversation={conv}
           agent={agent}
           mood={mood}
-          onVoiceMode={dreamLog ? undefined : onVoiceMode}
+          onVoiceMode={dreamLog || voiceSettings?.enabled === false ? undefined : onVoiceMode}
           move={(onRunner || inGroup) && moveTargets.length ? { onSelect: () => openMove(onRunner ? (placeOf(hereId) ?? moveTargets[0]!) : moveTargets[0]!), blocked: null, label: onRunner ? undefined : t("conv.moveToAnother") } : undefined}
           browserToggle={
             <>
