@@ -130,7 +130,13 @@
     "minutes": "{{m}} min",
     "stale": "Couldn't refresh just now — showing the last reading",
     "hint": "Outer ring: 5 hours · inner ring: week. Click to refresh.",
-    "hintWeek": "Your plan has no 5-hour limit, only a weekly one. Click to refresh."
+    "hintWeek": "Your plan has no 5-hour limit, only a weekly one. Click to refresh.",
+    "thisComputer": "This computer",
+    "account": "Claude account",
+    "default": "Default",
+    "signedOut": "Signed out — sign in again in Settings",
+    "noReading": "No reading yet",
+    "hintAccounts": "The ring shows {{name}}. Click to refresh."
   },
   "claudeSignedOut": {
     "keyRefused": "Claude refused your Anthropic API key.",
