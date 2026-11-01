@@ -71,6 +71,21 @@ export function App() {
   useEffect(() => syncUpdater(), []);
 
   useEffect(() => {
+    if (!isTauri) return;
+    let stopped = false;
+    let unlisten: (() => void) | undefined;
+    void import("@tauri-apps/api/event").then(async ({ listen }) => {
+      const off = await listen<string>("navigate", (e) => navigate(e.payload));
+      if (stopped) off();
+      else unlisten = off;
+    });
+    return () => {
+      stopped = true;
+      unlisten?.();
+    };
+  }, [navigate]);
+
+  useEffect(() => {
     setUnauthorizedHandler(() => qc.invalidateQueries({ queryKey: qk.authStatus }));
     // Cloud mode: an offline computer or a used-up plan replaces the whole dashboard until it clears.
     setCloudIssueHandler((issue) => setCloudIssue((prev) => (prev?.kind === issue.kind ? prev : issue)));
