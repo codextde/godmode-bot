@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { chatProject, useAllAgents, useAttention, useConversations, useScopeProject } from "@/lib/hooks";
 import { qk } from "@/lib/queryKeys";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 
 export interface WorkspaceActivity {
@@ -30,7 +30,7 @@ export function useWorkspaceActivity(): { of: (scope: string | null) => Workspac
   const { data: conversations } = useConversations();
   const { data: attention } = useAttention();
   const { data: tasks } = useQuery({ queryKey: qk.taskList("all"), queryFn: () => api.tasks.list({ workspaceId: "all" }), staleTime: 30_000 });
-  const runs = useLive((s) => s.runs);
+  const runs = useLiveRunsMap();
 
   const map = useMemo(() => {
     const out = new Map<string, WorkspaceActivity>();

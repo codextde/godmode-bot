@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useDebouncedValue } from "@/components/vault/use-debounced-value";
 import { errorMessage } from "@/lib/api";
 import { useAllAgents, useArchivedConversations } from "@/lib/hooks";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { useUi } from "@/stores/ui";
 import { dateLocale, t } from "@/i18n";
 import { useLocale } from "@/i18n/language";
@@ -43,7 +43,7 @@ export default function ArchivedPage() {
   const archived = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope });
   // Archiving only files a chat: these still work, wait or come back on their own.
   const { data: ongoing = [] } = useArchivedConversations(agentId, q, { limit: LIMIT, workspaceId: scope, ongoing: true });
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const live = (c: Conversation) => {
     const statuses = Object.values(liveRuns).flatMap((r) => (r.conversationId === c.id ? [r.status] : []));
     const queued = !statuses.includes("running") && statuses.includes("queued");

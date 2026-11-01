@@ -38,7 +38,7 @@ import { useProjectIndex } from "@/components/projects/project-utils";
 import { qk } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { isMac, modKey } from "@/lib/desktop";
-import { useLive } from "@/stores/live";
+import { useLiveRunsMap } from "@/stores/live";
 import { type RecentSource, type RecentTab, useUi } from "@/stores/ui";
 import { useReduceAnimations } from "@/lib/motion";
 import { dateLocale, intlLocale, t as translate } from "@/i18n";
@@ -81,7 +81,7 @@ export function RecentChats() {
   const { data: workspaces = [] } = useWorkspaces();
   const conversationId = useMatch("/chat/:conversationId")?.params.conversationId;
   const { pathname } = useLocation();
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const runningConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "running" ? [r.conversationId] : [])));
   const queuedConversations = new Set(Object.values(liveRuns).flatMap((r) => (r.status === "queued" ? [r.conversationId] : [])));
   const { setArchived } = useArchiveChat();

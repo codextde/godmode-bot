@@ -8,7 +8,7 @@ import type { Agent, Run, RunStatus, RunTrigger } from "@godmode/shared";
 import { useAllAgents, useRuns } from "@/lib/hooks";
 import { dateLocale, t as translate } from "@/i18n";
 import { errorMessage } from "@/lib/api";
-import { useLive, type LiveRun } from "@/stores/live";
+import { useLiveRunsMap, type LiveRun } from "@/stores/live";
 import { cn } from "@/lib/utils";
 import { AgentAvatar, EmptyState } from "@/components/common";
 import { Orb } from "@/components/aicss/Orb";
@@ -46,7 +46,7 @@ export function ActivityOverview() {
   const runsQ = useRuns(agentFilter, statusFilter);
   const { data: agents = [] } = useAllAgents();
   const agentById = useMemo(() => new Map(agents.map((a) => [a.id, a])), [agents]);
-  const liveRuns = useLive((s) => s.runs);
+  const liveRuns = useLiveRunsMap();
   const liveList = useMemo(
     // Working right now; a queued run shows in the list below as queued.
     () => Object.values(liveRuns).filter((r) => r.status === "running" && (agentFilter === "all" || r.agentId === agentFilter)),
