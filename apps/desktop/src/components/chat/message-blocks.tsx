@@ -24,6 +24,7 @@ import { useEasyMode } from "@/lib/mode";
 import { cn } from "@/lib/utils";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
 import { useLive } from "@/stores/live";
+import { intlLocale, t as translate } from "@/i18n";
 import { useLocale } from "@/i18n/language";
 import { Markdown } from "./markdown";
 import { UserBubble } from "./user-bubble";
@@ -439,6 +440,32 @@ function stepRunning(block: ToolUseBlock, streaming: boolean) {
   return streaming && block.result === undefined && !block.isError;
 }
 
+type SummaryKey = "commands" | "read" | "searched" | "edited" | "browser" | "web" | "plan" | "other";
+
+function summaryKey(meta: ToolMeta): SummaryKey {
+  if (meta.kind === "shell") return "commands";
+  if (meta.kind === "browser") return "browser";
+  if (meta.kind === "plan") return "plan";
+  if (meta.tool === "WebSearch" || meta.tool === "WebFetch") return "web";
+  if (meta.kind === "file") {
+    if (/^(Glob|Grep)$/.test(meta.tool)) return "searched";
+    if (/^(Edit|MultiEdit|NotebookEdit|Write|edit_file|write_file)$/.test(meta.tool)) return "edited";
+    if (/^(Read|read_file|LS)$/.test(meta.tool)) return "read";
+  }
+  return "other";
+}
+
+function summarize(metas: ToolMeta[]): string {
+  const counts = new Map<SummaryKey, number>();
+  for (const m of metas) {
+    const k = summaryKey(m);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  const parts = [...counts].map(([k, count]) => (k === "plan" ? translate("chat:blocks.summary.plan") : translate(`chat:blocks.summary.${k}`, { count })));
+  const text = new Intl.ListFormat(intlLocale(), { type: "conjunction" }).format(parts);
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext; streaming: boolean }) {
   const { t } = useTranslation(["chat", "common"]);
   const easy = useEasyMode();
@@ -449,9 +476,8 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   const runningIdx = streaming ? tools.findIndex((s) => stepRunning(s.block, true)) : -1;
   const failed = tools.filter((s) => s.block.isError).length;
   const images = tools.filter((s) => s.block.image).map((s) => s.block.image!);
-  // Easy mode stays a one-line summary while it works; the steps unfold on request.
-  const expanded = manual ?? (streaming && !easy);
-  const single = tools.length === 1 && steps.length === 1;
+  const expanded = manual ?? false;
+  const single = tools.length === 1;
 
   if (tools.length === 0) {
     // Only thoughts — render them plainly
@@ -463,68 +489,41 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
   }
 
   const current = runningIdx >= 0 ? metas[runningIdx] : metas[metas.length - 1];
-  const uniqueIcons = Array.from(new Map(metas.map((m) => [m.icon, m])).values()).slice(-3);
-
-  if (single) {
-    return <ToolStep block={tools[0].block} meta={metas[0]} running={runningIdx === 0} easy={easy} standalone />;
-  }
+  const label =
+    runningIdx >= 0
+      ? easy
+        ? t("blocks.workingStep", { n: runningIdx + 1, title: current.title })
+        : `${current.title}…`
+      : single
+        ? metas[0].title
+        : easy
+          ? t("blocks.workedThrough", { count: tools.length })
+          : summarize(metas);
+  const detail = single && !easy && runningIdx < 0 ? metas[0].detail : undefined;
 
   return (
-    <div className={cn("rounded-xl border bg-card shadow-card", runningIdx >= 0 && "full-motion:glow-border")}>
+    <div className="min-w-0">
       <button
         type="button"
         onClick={() => setManual(!expanded)}
         aria-expanded={expanded}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-accent/40"
+        className="group flex max-w-full items-center gap-1.5 rounded-md py-0.5 text-left text-sm text-muted-foreground transition hover:text-foreground"
       >
-        <span className="flex -space-x-1.5">
-          {uniqueIcons.map((m, i) => {
-            const Icon = m.icon;
-            return (
-              <span key={i} className={cn("grid size-6 place-items-center rounded-full border ring-2 ring-card", toneFor(m.kind))}>
-                <Icon className="size-3" />
-              </span>
-            );
-          })}
-        </span>
-        {easy ? (
-          <span className="min-w-0 flex-1">
-            <span className={cn("block truncate text-sm font-medium", streaming && "text-shimmer")}>
-              {streaming
-                ? t("blocks.workingStep", { n: runningIdx >= 0 ? runningIdx + 1 : tools.length, title: current.title })
-                : t("blocks.workedThrough", { count: tools.length })}
-            </span>
-            {failed > 0 && (
-              <span className="block text-xs text-muted-foreground">{t("blocks.stepsDidntWork", { count: failed })}</span>
-            )}
-          </span>
-        ) : (
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2 text-sm">
-              {runningIdx >= 0 ? (
-                <span className="text-shimmer truncate font-medium">{current.title}…</span>
-              ) : (
-                <span className="truncate font-medium">{current.title}</span>
-              )}
-            </span>
-            <span className="block text-xs text-muted-foreground">
-              {t("blocks.steps", { count: tools.length })}
-              {failed > 0 && <span className="text-destructive"> · {t("blocks.failedCount", { count: failed })}</span>}
-            </span>
-          </span>
-        )}
-        {!expanded && images.length > 0 && (
-          <span className="hidden gap-1 @lg:flex">
-            {images.slice(-3).map((img, i) => (
-              <img key={i} src={imageSrc(img)} alt="" className="h-8 w-12 rounded-md border object-cover object-top" />
-            ))}
-          </span>
-        )}
-        {runningIdx >= 0 && <Orb variant="S3" size={16} label={current.title} />}
-        <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", expanded && "rotate-90")} />
+        <span className={cn("min-w-0 truncate", runningIdx >= 0 && "text-shimmer")}>{label}</span>
+        {detail && <span className="hidden min-w-0 shrink truncate font-mono text-xs opacity-70 @md:inline">{detail}</span>}
+        {failed > 0 && <span className="shrink-0 text-xs text-destructive">· {easy ? t("blocks.stepsDidntWork", { count: failed }) : t("blocks.failedCount", { count: failed })}</span>}
+        {runningIdx >= 0 && <Orb variant="S3" size={14} label={current.title} />}
+        <ChevronRight className={cn("size-3.5 shrink-0 opacity-60 transition group-hover:opacity-100", expanded && "rotate-90")} />
       </button>
+      {!expanded && images.length > 0 && (
+        <span className="mt-1 flex gap-1">
+          {images.slice(-3).map((img, i) => (
+            <img key={i} src={imageSrc(img)} alt="" className="h-10 w-16 rounded-md border object-cover object-top" />
+          ))}
+        </span>
+      )}
       <Collapse open={expanded}>
-        <ol className="space-y-0.5 px-3 pt-1 pb-3">
+        <ol className="mt-1.5 space-y-0.5 rounded-xl border bg-card px-3 pt-2 pb-2.5 shadow-card">
           {steps.map((s, i) => {
             const last = i === steps.length - 1;
             if (s.type === "thought") {
@@ -540,6 +539,7 @@ function ToolGroup({ steps, ctx, streaming }: { steps: Step[]; ctx: ToolContext;
                 running={toolIdx === runningIdx}
                 easy={easy}
                 last={last}
+                defaultOpen={single}
                 incomplete={!streaming && s.block.result === undefined && !s.block.isError}
               />
             );
@@ -576,7 +576,7 @@ function ToolStep({
   running,
   easy = false,
   last = true,
-  standalone = false,
+  defaultOpen = false,
   incomplete = false,
 }: {
   block: ToolUseBlock;
@@ -584,11 +584,11 @@ function ToolStep({
   running: boolean;
   easy?: boolean;
   last?: boolean;
-  standalone?: boolean;
+  defaultOpen?: boolean;
   incomplete?: boolean;
 }) {
   const { t } = useTranslation(["chat", "common"]);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const Icon = meta.icon;
   const failed = !!block.isError;
   const iconEl = (
@@ -610,9 +610,8 @@ function ToolStep({
       type="button"
       onClick={() => setOpen((o) => !o)}
       aria-expanded={open}
-      className={cn("group flex w-full items-center gap-2.5 text-left", standalone ? "px-3 py-2.5" : "py-1.5")}
+      className="group flex w-full items-center gap-2.5 py-1.5 text-left"
     >
-      {standalone && iconEl}
       <span className="min-w-0 flex-1">
         <span className={cn("block truncate text-sm", failed && "text-destructive", running && "text-shimmer font-medium")}>
           {meta.title}
@@ -638,15 +637,6 @@ function ToolStep({
       <Collapse open={open}>{easy ? <EasyStepDetails block={block} edit={edit} /> : <ToolDetails block={block} edit={edit} />}</Collapse>
     </>
   );
-
-  if (standalone) {
-    return (
-      <div className={cn("rounded-xl border bg-card shadow-card transition", failed && "border-destructive/30", running && "full-motion:glow-border")}>
-        {header}
-        <div className={cn((block.image || open) && "px-3 pb-3")}>{body}</div>
-      </div>
-    );
-  }
 
   return (
     <li className="relative pl-9">
