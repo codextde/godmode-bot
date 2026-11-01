@@ -27,6 +27,7 @@ const log = logger("composio");
 
 export const COMPOSIO_BASE_URL = "https://backend.composio.dev";
 export const COMPOSIO_API_KEY_SECRET = "composio_api_key";
+export const COMPOSIO_USER_API_KEY_SECRET = "composio_user_api_key";
 export const COMPOSIO_SERVER_NAMES = ["composio-global", "composio-workspace", "composio-agent"] as const;
 
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -156,14 +157,14 @@ type Query = Record<string, string | number | boolean | null | undefined>;
 export async function composioRequest<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
-  opts: { query?: Query; body?: unknown; apiKey?: string; timeoutMs?: number } = {},
+  opts: { query?: Query; body?: unknown; apiKey?: string; userApiKey?: string; timeoutMs?: number } = {},
 ): Promise<T> {
-  const key = opts.apiKey ?? requireApiKey();
+  const key = opts.userApiKey ?? opts.apiKey ?? requireApiKey();
   const url = new URL(path, COMPOSIO_BASE_URL);
   for (const [k, v] of Object.entries(opts.query ?? {})) {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   }
-  const headers: Record<string, string> = { "x-api-key": key, accept: "application/json" };
+  const headers: Record<string, string> = { [opts.userApiKey ? "x-user-api-key" : "x-api-key"]: key, accept: "application/json" };
   if (opts.body !== undefined) headers["content-type"] = "application/json";
 
   for (let attempt = 0; ; attempt++) {

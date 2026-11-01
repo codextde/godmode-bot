@@ -22,9 +22,11 @@ import { issueGrant, requireGrant, verifyVaultPassphrase } from "../grants";
 import { body, z } from "../validate";
 import { badRequest, HttpError } from "../../util";
 import { noteAnthropicKeyChanged } from "../../services/claudeLogin";
+import { COMPOSIO_USER_API_KEY_SECRET } from "../../integrations/composio";
+import { requestAppTriggerSync } from "../../integrations/composioTriggers";
 
 /** App-level secrets the UI always lists (set or not). */
-const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "browser_use_api_key", ...CAPTCHA_SECRETS];
+const WELL_KNOWN_SECRETS = ["anthropic_api_key", "zai_api_key", "openai_api_key", "elevenlabs_api_key", "composio_api_key", "composio_user_api_key", "browser_use_api_key", ...CAPTCHA_SECRETS];
 const SECRET_KEY = /^[a-z0-9_]{2,64}$/;
 
 /**
@@ -225,6 +227,7 @@ export function registerVaultRoutes(app: Hono): void {
     const trimmed = value.trim();
     vault.setAppSecret(key, trimmed || null);
     if (key === "anthropic_api_key") noteAnthropicKeyChanged();
+    if (key === COMPOSIO_USER_API_KEY_SECRET) requestAppTriggerSync();
     audit("user", trimmed ? "secret.set" : "secret.delete", key);
     return c.json({ ok: true as const });
   });
@@ -233,6 +236,7 @@ export function registerVaultRoutes(app: Hono): void {
     const key = secretKeyParam(c);
     vault.setAppSecret(key, null);
     if (key === "anthropic_api_key") noteAnthropicKeyChanged();
+    if (key === COMPOSIO_USER_API_KEY_SECRET) requestAppTriggerSync();
     audit("user", "secret.delete", key);
     return c.json({ ok: true as const });
   });

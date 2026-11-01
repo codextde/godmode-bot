@@ -318,7 +318,8 @@
       "elevenlabs": "Voice: premium text-to-speech voices when ElevenLabs is selected.",
       "browserUse": "Lets profile-use sync your Chrome cookies to a browser-use Cloud profile.",
       "captcha": "CAPTCHA solving for agents. Saving a key turns it on with this service if none is picked (Settings → Browser).",
-      "composio": "Connects hundreds of apps through Composio."
+      "composio": "Connects hundreds of apps through Composio.",
+      "composioUser": "Optional — lets app automations receive events when Composio refuses the regular event channel (error 4009). Your personal user API key (uak_…) from Composio's account settings."
     },
     "encryptedTitle": "Encrypted, write-only",
     "encryptedDescription": "Keys are sealed in your vault with AES-256-GCM and are never displayed again. Godmode injects them where they're needed — agents don't see them.",

@@ -16,7 +16,7 @@ import { notify } from "../services/notifications";
 import * as vault from "../vault/vault";
 import { sha256 } from "../vault/crypto";
 import { HttpError, parseJson } from "../util";
-import { COMPOSIO_API_KEY_SECRET, composioRequest, upstreamStatus } from "./composio";
+import { COMPOSIO_API_KEY_SECRET, COMPOSIO_USER_API_KEY_SECRET, composioRequest, upstreamStatus } from "./composio";
 import { PusherConnection, type PusherOptions } from "./pusher";
 
 const log = logger("composio-triggers");
@@ -36,6 +36,8 @@ const INSTANCES_META = "composio.trigger_instances";
 /** Composio SDK realtime endpoints (not versioned like the public API). */
 const REALTIME_CREDENTIALS_PATH = "/api/v3/internal/sdk/realtime/credentials";
 const REALTIME_AUTH_PATH = "/api/v3/internal/sdk/realtime/auth";
+const CLI_REALTIME_CREDENTIALS_PATH = "/api/v3.1/cli/realtime/credentials";
+const CLI_REALTIME_AUTH_PATH = "/api/v3.1/cli/realtime/auth";
 
 /* ------------------------------------------------------------------ */
 /* Trigger catalog                                                      */
@@ -310,21 +312,35 @@ function onRealtimeEvent(event: string, data: unknown) {
   }
 }
 
+function userApiKey(): string | undefined {
+  if (!vault.isUnlocked() || !vault.hasAppSecret(COMPOSIO_USER_API_KEY_SECRET)) return undefined;
+  return vault.getAppSecret(COMPOSIO_USER_API_KEY_SECRET) || undefined;
+}
+
+function listenerFingerprint(keyFingerprint: string): string {
+  const user = userApiKey();
+  return user ? `${keyFingerprint}:${sha256(user).slice(0, 12)}` : keyFingerprint;
+}
+
 async function startListener(keyFingerprint: string) {
   if (listener || listenerStarting) return;
   listenerStarting = true;
   setListenerState({ state: "connecting", message: null });
   try {
-    const creds = await composioRequest<{ pusher_key?: string; pusher_cluster?: string; project_id?: string }>("GET", REALTIME_CREDENTIALS_PATH);
+    const user = userApiKey();
+    const realtime = user
+      ? { credentials: CLI_REALTIME_CREDENTIALS_PATH, auth: CLI_REALTIME_AUTH_PATH, channel: (project: string) => `private-cli-${project}`, opts: { userApiKey: user } }
+      : { credentials: REALTIME_CREDENTIALS_PATH, auth: REALTIME_AUTH_PATH, channel: (project: string) => `private-${project}_triggers`, opts: {} };
+    const creds = await composioRequest<{ pusher_key?: string; pusher_cluster?: string; project_id?: string }>("GET", realtime.credentials, realtime.opts);
     if (!creds?.pusher_key || !creds.pusher_cluster || !creds.project_id) {
       throw new HttpError(502, "Composio returned no realtime credentials", "composio_upstream");
     }
     const connection = new PusherConnection({
       key: creds.pusher_key,
       cluster: creds.pusher_cluster,
-      channel: `private-${creds.project_id}_triggers`,
+      channel: realtime.channel(creds.project_id),
       authorize: async (socketId, channel) => {
-        const res = await composioRequest<{ auth?: string }>("POST", REALTIME_AUTH_PATH, { body: { socket_id: socketId, channel_name: channel } });
+        const res = await composioRequest<{ auth?: string }>("POST", realtime.auth, { ...realtime.opts, body: { socket_id: socketId, channel_name: channel } });
         if (!res?.auth) throw new HttpError(502, "Composio refused the realtime channel", "composio_upstream");
         return res.auth;
       },
@@ -332,7 +348,10 @@ async function startListener(keyFingerprint: string) {
       onStatus: (status, message) => {
         if (listener !== connection) return;
         if (status === "connected") setListenerState({ state: "ok", message: null });
-        else if (status === "error") setListenerState({ state: "error", message: `Can't receive app events: ${message ?? "connection failed"}` });
+        else if (status === "error") {
+          const hint = user ? "" : " — if this keeps happening, add a Composio user API key in Settings → API keys";
+          setListenerState({ state: "error", message: `Can't receive app events: ${message ?? "connection failed"}${hint}` });
+        }
         else if (status === "connecting" && listenerState.state !== "error") setListenerState({ state: "connecting", message: null });
         // Refused for good (bad key, quota…): drop it so a later sync starts over with fresh credentials.
         if (status === "error" && connection.isClosed) {
@@ -344,7 +363,7 @@ async function startListener(keyFingerprint: string) {
       ...pusherOverrides,
     });
     listener = connection;
-    listenerKey = keyFingerprint;
+    listenerKey = listenerFingerprint(keyFingerprint);
     connection.start();
     log.info("listening for Composio trigger events");
   } catch (err) {
@@ -563,7 +582,7 @@ async function syncOnce() {
 
   if (changed) bus.changed("routines");
   if (gen !== generation) return; // stopped meanwhile
-  if (listener && listenerKey !== keyFingerprint) stopListener();
+  if (listener && keyFingerprint && listenerKey !== listenerFingerprint(keyFingerprint)) stopListener();
   if (live.size > 0 && keyFingerprint) {
     if (!listener && !listenerStarting) await startListener(keyFingerprint);
   } else if (listener || listenerState.state !== "off") {
