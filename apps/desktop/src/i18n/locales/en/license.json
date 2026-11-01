@@ -11,6 +11,10 @@
     "dataSafeMac": "Nothing is deleted. Your agents, logins and memory stay on this Mac.",
     "trialOver": "Your free trial is over",
     "endedTitle": "Your licence has ended",
+    "canceledTitle": "Your subscription has ended",
+    "canceledText": "Subscribe again and your agents pick up right where they left off. Everything you set up is still here.",
+    "paymentTitle": "Your payment didn't go through",
+    "paymentText": "Godmode paused new work because the last payment failed. Update your payment method and it unlocks right away.",
     "readyTitle": "Godmode is ready when you are",
     "readyText": "Pick a plan and hand over your first task. Godmode keeps working while you get on with your day.",
     "doneInDays_one": "In {{days}} days, Godmode finished one task for you.",
@@ -35,6 +39,12 @@
       "logins_one": "login saved",
       "logins_other": "logins saved"
     }
+  },
+  "payment": {
+    "button": "Update payment",
+    "hint": "Pay the open invoice with your card or another one. No new plan needed.",
+    "opened": "Finish the payment in your browser. Godmode checks again when you come back.",
+    "unlocked": "Payment received. Godmode is unlocked."
   },
   "banner": {
     "trialEnds": {

@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays } from "date-fns";
 import { motion } from "motion/react";
-import { CalendarClock, Clock, KeyRound, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, CalendarClock, Clock, CreditCard, KeyRound, RefreshCw, ShieldCheck } from "lucide-react";
 import { Trans, useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { MASCOT_CHARACTER, MASCOT_COLOR, type LicenseState, type LicenseUsage } from "@godmode/shared";
@@ -12,10 +12,10 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useLocale } from "@/i18n/language";
 import { api, errorMessage } from "@/lib/api";
-import { isMac } from "@/lib/desktop";
+import { isMac, openExternal } from "@/lib/desktop";
 import { qk } from "@/lib/queryKeys";
 import { EASE_OUT, useReduceAnimations } from "@/lib/motion";
-import { ActivatePanel } from "./activate";
+import { ActivatePanel, KeyDivider, LicenseKeyForm } from "./activate";
 
 interface Stat {
   key: string;
@@ -29,7 +29,10 @@ export function LicenseGate({ state }: { state: LicenseState }) {
   const reduce = useReduceAnimations();
   const { t } = useTranslation("license");
   const qc = useQueryClient();
-  const trialOver = state.status === "missing" && !!state.graceEndsAt;
+  const trialEnded = state.status === "expired" && state.endReason === "trial_ended";
+  const trialOver = (state.status === "missing" && !!state.graceEndsAt) || trialEnded;
+  const paymentFailed = state.status === "expired" && state.endReason === "payment_failed" && !!state.manageUrl;
+  const endedAt = state.graceEndsAt ?? state.trialEndsAt ?? state.checkedAt ?? new Date().toISOString();
   const usage = useQuery({ queryKey: qk.licenseUsage, queryFn: api.license.usage, enabled: trialOver, staleTime: 60_000, retry: 1 });
   const refresh = useMutation({
     mutationFn: api.license.refresh,
@@ -52,10 +55,14 @@ export function LicenseGate({ state }: { state: LicenseState }) {
       <Backdrop />
       <div className="absolute inset-x-0 top-0 h-8" data-tauri-drag-region />
       <div className="relative mx-auto flex min-h-full w-full max-w-[540px] flex-col justify-center px-5 py-10">
-        {trialOver ? <TrialOver usage={usage.data ?? null} endedAt={state.graceEndsAt!} enter={enter} /> : <Refused state={state} enter={enter} />}
+        {trialOver ? <TrialOver usage={usage.data ?? null} endedAt={endedAt} enter={enter} /> : <Refused state={state} enter={enter} />}
 
         <motion.div {...enter(0.16)} className="mt-6 rounded-2xl border bg-card p-6 shadow-float sm:p-7">
-          <ActivatePanel source="gate" cta={trialOver || state.status === "expired" ? "keep" : "subscribe"} />
+          {paymentFailed ? (
+            <PaymentPanel manageUrl={state.manageUrl!} />
+          ) : (
+            <ActivatePanel source="gate" cta={trialOver || (state.status === "expired" && state.endReason !== "canceled") ? "keep" : "subscribe"} />
+          )}
         </motion.div>
 
         <div className="mt-6 flex min-h-8 items-center justify-center gap-3 text-xs text-muted-foreground">
@@ -155,12 +162,69 @@ function TrialOver({ usage, endedAt, enter }: { usage: LicenseUsage | null; ende
 /** A key that doesn't work (any more), or no key and no free trial. */
 function Refused({ state, enter }: { state: LicenseState; enter: Enter }) {
   const { t } = useTranslation("license");
+  const ended = state.status === "expired";
+  const [title, text] =
+    ended && state.endReason === "payment_failed"
+      ? [t("gate.paymentTitle"), t("gate.paymentText")]
+      : ended && state.endReason === "canceled"
+        ? [t("gate.canceledTitle"), t("gate.canceledText")]
+        : [ended ? t("gate.endedTitle") : t("gate.activateTitle"), state.message ?? t("gate.subtitle")];
   return (
     <motion.div {...enter(0)} className="flex flex-col items-center text-center">
       <Character character={MASCOT_CHARACTER} color={MASCOT_COLOR} size={76} mood="idle" follow title="Godmode" />
       <p className="eyebrow mt-7">Godmode Pro</p>
-      <h1 className="heading-display mt-2 text-[32px] sm:text-[36px]">{state.status === "expired" ? t("gate.endedTitle") : t("gate.activateTitle")}</h1>
-      <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-balance text-muted-foreground">{state.message ?? t("gate.subtitle")}</p>
+      <h1 className="heading-display mt-2 text-[32px] text-balance sm:text-[36px]">{title}</h1>
+      <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-balance text-muted-foreground">{text}</p>
     </motion.div>
+  );
+}
+
+/** A payment that failed for good: one way to pay it (the open invoice, or the billing portal), checked again on return. */
+function PaymentPanel({ manageUrl }: { manageUrl: string }) {
+  const { t } = useTranslation("license");
+  const qc = useQueryClient();
+  const [opened, setOpened] = useState(false);
+  const checking = useRef(false);
+
+  useEffect(() => {
+    if (!opened) return;
+    const recheck = () => {
+      if (checking.current) return;
+      checking.current = true;
+      api.license
+        .refresh()
+        .then((next) => {
+          qc.setQueryData(qk.license, next);
+          if (!next.blocked) toast.success(t("payment.unlocked"));
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          checking.current = false;
+        });
+    };
+    window.addEventListener("focus", recheck);
+    return () => window.removeEventListener("focus", recheck);
+  }, [opened, qc, t]);
+
+  return (
+    <div>
+      <Button
+        size="lg"
+        className="h-12 w-full rounded-xl text-[15px]"
+        onClick={() => {
+          setOpened(true);
+          void openExternal(manageUrl);
+        }}
+      >
+        <CreditCard />
+        {t("payment.button")}
+        <ArrowUpRight className="opacity-70" />
+      </Button>
+      <p className="mt-3 text-center text-xs leading-relaxed text-pretty text-muted-foreground">{opened ? t("payment.opened") : t("payment.hint")}</p>
+
+      <KeyDivider className="my-6" />
+
+      <LicenseKeyForm />
+    </div>
   );
 }

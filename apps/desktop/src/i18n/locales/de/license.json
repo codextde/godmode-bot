@@ -11,6 +11,10 @@
     "dataSafeMac": "Nichts wird gelöscht. Deine Agenten, Logins und Erinnerungen bleiben auf diesem Mac.",
     "trialOver": "Deine Testphase ist vorbei",
     "endedTitle": "Deine Lizenz ist abgelaufen",
+    "canceledTitle": "Dein Abo ist beendet",
+    "canceledText": "Abonniere wieder und deine Agenten machen genau dort weiter, wo sie aufgehört haben. Alles, was du eingerichtet hast, ist noch da.",
+    "paymentTitle": "Deine Zahlung ist nicht durchgegangen",
+    "paymentText": "Godmode hat neue Aufgaben pausiert, weil die letzte Zahlung fehlgeschlagen ist. Aktualisiere deine Zahlungsmethode und es geht sofort weiter.",
     "readyTitle": "Godmode ist bereit, wenn du es bist",
     "readyText": "Wähl einen Plan und gib Godmode deine erste Aufgabe. Es arbeitet weiter, während du dich um anderes kümmerst.",
     "doneInDays_one": "In {{days}} Tagen hat Godmode eine Aufgabe für dich erledigt.",
@@ -35,6 +39,12 @@
       "logins_one": "Login gespeichert",
       "logins_other": "Logins gespeichert"
     }
+  },
+  "payment": {
+    "button": "Zahlung aktualisieren",
+    "hint": "Bezahl die offene Rechnung mit deiner Karte oder einer anderen. Kein neuer Plan nötig.",
+    "opened": "Schließ die Zahlung im Browser ab. Godmode prüft erneut, sobald du zurück bist.",
+    "unlocked": "Zahlung erhalten. Godmode ist wieder freigeschaltet."
   },
   "banner": {
     "trialEnds": {
