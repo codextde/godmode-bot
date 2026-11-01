@@ -78,11 +78,10 @@
     "title": "Aktivität",
     "titleEasy": "Verlauf",
     "summary": "Jeder Lauf jedes Agenten an einem Ort: was er gemacht hat, wie lange er gedauert hat und wo er gescheitert ist.",
-    "offNote": "Solange es aus ist, verschwindet es aus der Seitenleiste. Läufe werden weiter aufgezeichnet und Links zu einem Lauf öffnen ihn weiterhin.",
+    "offNote": "Solange es aus ist, werden Läufe weiter aufgezeichnet und Links zu einem Lauf öffnen ihn weiterhin.",
     "pointRuns": "Jeder Lauf, die neuesten zuerst",
     "pointFilter": "Nach Agent, Auslöser oder Ergebnis filtern",
-    "pointSteps": "Öffne einen Lauf, um jeden Schritt zu sehen",
-    "linkDescription": "In der Seitenleiste unter Arbeit."
+    "pointSteps": "Öffne einen Lauf, um jeden Schritt zu sehen"
   },
   "artifacts": {
     "title": "Artefakte",
@@ -140,8 +139,7 @@
     "offNote": "Solange es aus ist, laden Läufe keine Plugins. Deine Plugins und ihre Einstellungen bleiben, wie sie sind.",
     "pointGit": "Installiere jedes Plugin aus einem Git-Repository",
     "pointHooks": "Kleine Hooks, die deine Agenten für dich schreiben",
-    "pointChecked": "Jedes wird geprüft und bleibt aus, bis du es erlaubst",
-    "linkDescription": "Installieren, einschalten und die Agenten wählen, für die jedes Plugin gedacht ist."
+    "pointChecked": "Jedes wird geprüft und bleibt aus, bis du es erlaubst"
   },
   "files": {
     "title": "Dateien",

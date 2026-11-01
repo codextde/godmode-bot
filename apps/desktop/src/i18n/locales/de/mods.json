@@ -1,7 +1,5 @@
 {
   "page": {
-    "title": "Plugins",
-    "description": "Gib deinen Agenten neue Skills, Subagenten, Befehle und Leitplanken. Das sind Claude-Code-Plugins: Installiere sie von GitHub, füge eins von Godmode hinzu oder schreib dein eigenes – und schalte sie jederzeit aus, aktualisiere oder entferne sie.",
     "askPrompt": "Schreib ein Claude-Code-Plugin für Godmode, das ",
     "askGodmode": "Godmode schreiben lassen",
     "addPlugin": "Plugin hinzufügen",

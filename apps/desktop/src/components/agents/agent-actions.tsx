@@ -409,7 +409,7 @@ export function AgentStatus({
   const linkClass = cn("relative z-10 inline-flex min-w-0 items-center gap-1.5 rounded-sm text-xs underline-offset-2 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none", className);
   if (interactive && state === "failed" && agent.failedRunId) {
     return (
-      <Link to={`/activity?run=${agent.failedRunId}`} className={linkClass} title={t("agentActions.status.openFailedRun")} onClick={(e) => e.stopPropagation()}>
+      <Link to={`/settings/activity?run=${agent.failedRunId}`} className={linkClass} title={t("agentActions.status.openFailedRun")} onClick={(e) => e.stopPropagation()}>
         {dot}
         {text}
       </Link>

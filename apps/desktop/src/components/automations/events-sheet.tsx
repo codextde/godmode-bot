@@ -75,7 +75,7 @@ export function EventsSheet({
     const conversationId = conversationByRun.get(e.runId);
     if (conversationId) return { to: `/chat/${conversationId}`, label: t("events.openConversation") };
     if (routine.reuseConversation && routine.conversationId) return { to: `/chat/${routine.conversationId}`, label: t("events.openConversation") };
-    return { to: `/activity?run=${e.runId}`, label: t("events.viewRun") };
+    return { to: `/settings/activity?run=${e.runId}`, label: t("events.viewRun") };
   };
 
   return (

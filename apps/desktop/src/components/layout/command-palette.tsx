@@ -93,7 +93,7 @@ const SETTINGS = [
   { id: "messaging", label: "messaging", icon: MessageCircle, words: "chat apps slack telegram microsoft teams bots feature turn on off" },
   { id: "android", label: "android", icon: Smartphone, words: "adb usb debugging emulator device feature turn on off" },
   { id: "activity", label: "activity", icon: Activity, words: "history runs log feature turn on off" },
-  { id: "plugins", label: "plugins", icon: Puzzle, words: "claude code mods skills hooks add-ons feature turn on off" },
+  { id: "plugins", label: "plugins", icon: Puzzle, words: "claude code mods skills hooks guardrails github install add-ons feature turn on off" },
   { id: "calls", label: "calls", icon: Phone, words: "elevenlabs twilio number call voice agent inbound feature turn on off" },
   { id: "cards", label: "cards", icon: CreditCard, words: "payment credit cards purchases pay feature turn on off" },
   { id: "vms", label: "vms", icon: Box, words: "vm tart macos linux feature turn on off" },
@@ -412,16 +412,6 @@ export function CommandPalette() {
           <CommandItem value={`automations routines schedules triggers webhooks ${t("nav.automations")}`} onSelect={() => go("/automations")}>
             <Workflow /> {t("nav.automations")}
           </CommandItem>
-          {on?.plugins.enabled && (
-            <CommandItem value={`plugins claude code mods skills hooks guardrails github install ${t("nav.plugins")}`} keywords={alias("/plugins", t("nav.plugins"))} onSelect={() => go("/plugins")}>
-              <Puzzle /> {named("/plugins", t("nav.plugins"))}
-            </CommandItem>
-          )}
-          {on?.activity.enabled && (
-            <CommandItem keywords={alias("/activity", t("nav.activity"))} onSelect={() => go("/activity")}>
-              <Activity /> {named("/activity", t("nav.activity"))}
-            </CommandItem>
-          )}
           <CommandItem value={`needs you inbox to-dos questions approvals my tasks ${t("nav.inbox")}`} onSelect={() => go("/inbox")}>
             <Inbox /> {t("nav.inbox")}
           </CommandItem>

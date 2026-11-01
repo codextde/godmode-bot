@@ -42,25 +42,9 @@ export const EASY_PAGES: Record<string, { title?: string; description?: string }
       return t("system:easyPages.files.description");
     },
   },
-  "/activity": {
-    get title() {
-      return t("system:easyPages.activity.title");
-    },
-    get description() {
-      return t("system:easyPages.activity.description");
-    },
-  },
   "/calls": {
     get title() {
       return t("system:easyPages.calls.title");
-    },
-  },
-  "/plugins": {
-    get title() {
-      return t("system:easyPages.plugins.title");
-    },
-    get description() {
-      return t("system:easyPages.plugins.description");
     },
   },
   "/vault/cards": {

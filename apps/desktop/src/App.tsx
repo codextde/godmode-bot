@@ -29,8 +29,6 @@ const AgentDetailPage = lazy(() => import("@/pages/agents/agent-detail"));
 const FilesPage = lazy(() => import("@/pages/files/files-page"));
 const ArtifactPage = lazy(() => import("@/pages/artifacts/artifact-page"));
 const AutomationsPage = lazy(() => import("@/pages/automations/automations-page"));
-const PluginsPage = lazy(() => import("@/pages/plugins/plugins-page"));
-const ActivityPage = lazy(() => import("@/pages/activity/activity-page"));
 const WorkspacesPage = lazy(() => import("@/pages/workspaces/workspaces-page"));
 const TasksPage = lazy(() => import("@/pages/tasks/tasks-page"));
 const LoginsPage = lazy(() => import("@/pages/vault/logins-page"));
@@ -230,9 +228,9 @@ export function App() {
           <Route path="/my-tasks" element={<MyTasksRedirect />} />
           <Route path="/automations" element={<AutomationsPage />} />
           <Route path="/routines" element={<Navigate to="/automations" replace />} />
-          <Route path="/plugins" element={<FeaturePage on={b.settings.plugins.enabled} section="plugins" keep="plugin"><PluginsPage /></FeaturePage>} />
+          <Route path="/plugins" element={<ToSettings section="plugins" />} />
           <Route path="/mods" element={<LegacyModsRedirect />} />
-          <Route path="/activity" element={<FeaturePage on={b.settings.activity.enabled} section="activity" keep="run"><ActivityPage /></FeaturePage>} />
+          <Route path="/activity" element={<ToSettings section="activity" />} />
           <Route path="/workspaces" element={<WorkspacesPage />} />
           <Route path="/vault" element={<Navigate to="/vault/logins" replace />} />
           <Route path="/vault/logins" element={<LoginsPage />} />
@@ -293,7 +291,7 @@ function NotFoundRedirect() {
   return null;
 }
 
-/** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /plugins?plugin=<id>. */
+/** Links from before Mods were Plugins (notifications, chat notes): /mods?mod=<id> → /settings/plugins?plugin=<id>. */
 /** My tasks became the Inbox's board: old links (notifications, tickets) open the same task there. */
 /**
  * A page of a feature the human can turn off: while it's off, its address opens the feature's switch in Settings. A
@@ -327,5 +325,5 @@ function LegacyModsRedirect() {
     params.set("plugin", id);
   }
   const query = params.toString();
-  return <Navigate to={`/plugins${query ? `?${query}` : ""}`} replace />;
+  return <Navigate to={`/settings/plugins${query ? `?${query}` : ""}`} replace />;
 }
