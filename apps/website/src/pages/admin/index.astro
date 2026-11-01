@@ -61,7 +61,7 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
     one(`SELECT COUNT(DISTINCT day || visitor) AS v FROM events WHERE day >= ? AND type = 'pageview'`, sinceDay),
     all(
       `SELECT CASE WHEN type = 'view' THEN 'view:' || label ELSE type END AS step, COUNT(DISTINCT day || visitor) AS v
-       FROM events WHERE day >= ? AND type IN ('view', 'checkout_start', 'purchase_view') GROUP BY step`,
+       FROM events WHERE day >= ? AND type IN ('view', 'checkout_start', 'purchase_view', 'download', 'app_check') GROUP BY step`,
       sinceDay,
     ),
     all(
@@ -139,6 +139,9 @@ const [visitorsRow, stepRows, orderRows, allTime, daily, dailyRev, sources, sour
   ]);
 
 const visitors = n(visitorsRow.v);
+const appsToday = n(
+  (await one(`SELECT COUNT(DISTINCT visitor) AS v FROM events WHERE day = ? AND type = 'app_check'`, new Date().toISOString().slice(0, 10))).v,
+);
 const step = (k: string) => n(stepRows.find((r) => r.step === k)?.v);
 const paidOrders = orderRows.filter((r) => r.status === 'paid');
 const paidCount = paidOrders.reduce((s, r) => s + n(r.c), 0);
@@ -163,6 +166,7 @@ const legacyLifetime = n(allTime.lifetime);
 
 const funnel = [
   { label: 'Visitors', value: visitors },
+  { label: 'Downloaded the app', value: step('download') },
   { label: 'Saw pricing', value: step('view:pricing') },
   { label: 'Started checkout', value: step('checkout_start') },
   { label: 'Created a Stripe session', value: openCheckouts },
@@ -234,9 +238,9 @@ const q = (days: number, mode = live ? 'live' : 'test') => `?days=${days}&mode=$
           <p class="mt-1 text-[12.5px] text-dim">{pct(paidCount, visitors)} of visitors · {refunded} refunded · {n(leads.c)} leads ({n(leads.recent)} new)</p>
         </div>
         <div class="card p-6">
-          <p class="text-[13px] text-muted">In trial</p>
-          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{n(trials.running)}</p>
-          <p class="mt-1 text-[12.5px] text-dim">{pct(converted, converted + dropped)} convert to paid · {n(allTime.comps)} free licenses</p>
+          <p class="text-[13px] text-muted">Downloads · last {range} days</p>
+          <p class="mt-2 text-[34px] font-semibold tracking-[-0.04em]">{step('download')}</p>
+          <p class="mt-1 text-[12.5px] text-dim">{pct(step('download'), visitors)} of visitors · {appsToday} apps checked for updates today · {n(trials.running)} in card trial</p>
         </div>
       </section>
 
